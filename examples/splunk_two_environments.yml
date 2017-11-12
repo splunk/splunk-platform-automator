@@ -1,0 +1,166 @@
+---
+# splunk_config.yml
+
+# General settings
+general:
+  start_ip: 172.16.2.100
+  time_zone: "Europe/Zurich"
+
+# Ansible configs
+ansible:
+  # Verbose
+  #verbose: "v"
+
+# Virtualbox settings
+virtualbox:
+  box: "centos/7"
+  memory: 512
+  cpus: 1
+  # Install vbox guest additions
+  install_vbox_additions: true # true/false
+  # You need to install plugin vagrant-vbguest to mount folders
+  synced_folder:
+#    -  source: "../../Documents/Splunk/Software"
+#       target: "/Splunk_Software"
+
+splunk_basics:
+    # Location of the extracted baseconfig apps
+    splunk_baseconfig_dir: ../Software
+    # This is where the splunk install archives are searched for
+    splunk_software_dir: ../Software
+
+# Splunk general settings
+splunk_environments:
+  - splunk_env_name: splunk1
+    splunk_version: '7.0.0'
+    splunk_admin_password: 'splunklab'
+    # Give a path to a license file. Must be located in splunk_software_dir
+    #splunk_license_file: Splunk_Enterprise.lic
+    # Define some indexes to be created on the indexers
+    splunk_indexes:
+      - test1
+      - test2
+
+  - splunk_env_name: splunk2
+    splunk_version: '7.0.0'
+    splunk_admin_password: 'splunklab'
+    # Give a path to a license file. Must be located in splunk_software_dir
+    splunk_license_file: Splunk_Enterprise.lic
+    # Define some indexes to be created on the indexers
+    splunk_indexes:
+      - test1
+      - test2
+
+# Indexer Cluster settings
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: splunkidxc
+    idxc_replication_port: 9100
+    idxc_site_rf: 'origin:2, total:2'
+    idxc_site_sf: 'origin:1, total:1'
+
+  - idxc_name: idxc2
+    idxc_password: splunkidxc2
+    idxc_replication_port: 9100 
+    idxc_site_rf: 'origin:2, total:2'
+    idxc_site_sf: 'origin:1, total:1'
+
+# Splunk hosts with its settings
+splunk_hosts:
+# Cluster Master
+  - name: cm1
+#    virtualbox:
+#      cpus: 2
+#      memory: 3072
+#   You can also set an ip addr here, which overrides the dynamic one
+#    ip_addr: 192.168.2.210
+    splunk_env: splunk1
+    roles:
+      - cluster_master
+      - license_master
+      - monitoring_console
+    idxcluster: idxc1
+    site: site0
+
+  # Indexer
+  - name: idx11
+    splunk_env: splunk1
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site1
+
+  # Indexer
+  - name: idx12
+    splunk_env: splunk1
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site1
+
+  # Deployment Server
+  - name: ds1
+    splunk_env: splunk1
+    roles:
+      - deployment_server
+    idxcluster: idxc1
+
+  # Search Head
+  - name: sh1
+    splunk_env: splunk1
+    roles:
+      - search_head
+    idxcluster: idxc1
+
+   # Universal Forwarder
+  - name: uf1
+    splunk_env: splunk1
+    roles:
+      - universal_forwarder
+    idxcluster: idxc1
+
+  - name: cm2
+    splunk_env: splunk2
+    roles:
+      - cluster_master
+      - license_master
+      - monitoring_console
+    idxcluster: idxc2
+    site: site0
+
+  # Indexer
+  - name: idx21
+    splunk_env: splunk2
+    roles:
+      - indexer
+    idxcluster: idxc2
+    site: site1
+
+  # Indexer
+  - name: idx22
+    splunk_env: splunk2
+    roles:
+      - indexer
+    idxcluster: idxc2
+    site: site1
+
+  # Deployment Server
+  - name: ds2
+    splunk_env: splunk2
+    roles:
+      - deployment_server
+    idxcluster: idxc2
+
+  # Search Head
+  - name: sh2
+    splunk_env: splunk2
+    roles:
+      - search_head
+    idxcluster: idxc2
+
+   # Universal Forwarder
+  - name: uf2
+    splunk_env: splunk1
+    roles:
+      - universal_forwarder
+    idxcluster: idxc2

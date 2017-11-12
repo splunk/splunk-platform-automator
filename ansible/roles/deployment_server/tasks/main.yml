@@ -1,0 +1,101 @@
+---
+# Main playbook for this role
+
+- name: start role tasks
+  tags:
+    - splunk
+    - deployment_server
+  debug: msg="role '{{ role_name }}' start"
+
+- name: apply baseconfig app org_all_forwarder_outputs
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - org_all_forwarder_outputs
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_forwarder_outputs'
+    app_path: '{{ splunk_home }}/etc/deployment-apps'
+
+- name: apply baseconfig app org_full_license_server
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - org_full_license_server
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_full_license_server'
+    app_path: '{{ splunk_home }}/etc/deployment-apps'
+  when: groups.role_license_master is defined
+
+- name: apply baseconfig app org_cluster_search_base
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - org_cluster_search_base
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_cluster_search_base'
+    app_path: '{{ splunk_home }}/etc/deployment-apps'
+
+- name: apply baseconfig app org_all_deploymentclient
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - org_all_deploymentclient
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_deploymentclient'
+    app_path: '{{ splunk_home }}/etc/deployment-apps'
+
+- name: apply baseconfig app org_all_indexer_base
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - org_all_indexer_base
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_indexer_base'
+    app_path: '{{ splunk_home }}/etc/deployment-apps'
+
+- name: apply baseconfig app org_all_forwarder_outputs
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - org_all_forwarder_outputs
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_forwarder_outputs'
+    app_path: '{{splunk_home}}/etc/apps'
+
+- name: apply baseconfig app org_full_license_server
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - org_full_license_server
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_full_license_server'
+    app_path: '{{splunk_home}}/etc/apps'
+  when: groups.role_license_master is defined and inventory_hostname not in groups.role_license_master
+
+- include: serverclass.yml
+
+- name: update dserver on monitoring_console
+  include_role:
+    name: monitoring_console
+    tasks_from: update_dserver

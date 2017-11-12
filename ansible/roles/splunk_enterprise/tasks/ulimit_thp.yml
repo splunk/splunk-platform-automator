@@ -1,0 +1,89 @@
+---
+# This playbook install the apps required in a server
+
+- name: add disable THP in /etc/rc.local
+  tags:
+    - splunk
+    - splunk_enterprise
+  blockinfile:
+    path: /etc/rc.local
+    marker: "# {mark} ANSIBLE MANAGED BLOCK (THP)"
+    content: |
+      #SPLUNK: disable THP at boot time
+      THP=`find /sys/kernel/mm/ -name transparent_hugepage -type d | tail -n 1`
+      for SETTING in "enabled" "defrag";do
+          if test -f ${THP}/${SETTING}; then
+              echo never > ${THP}/${SETTING}
+          fi
+      done
+
+- name: "install /etc/security/limits.d/80-splunk.conf"
+  tags:
+    - splunk
+    - splunk_enterprise
+  copy:
+    src: "etc/security/limits.d/80-splunk.conf"
+    dest: "/etc/security/limits.d/80-splunk.conf"
+    owner: root
+    group: root
+    mode: 0644
+
+- name: add disable_huge and change_ulimits functions to /etc/init.d/splunk
+  tags:
+    - splunk
+    - splunk_enterprise
+  blockinfile:
+    path: /etc/init.d/splunk
+    marker: "# {mark} ANSIBLE MANAGED BLOCK (functions)"
+    insertafter: ". /etc/init.d/functions"
+    content: |
+      # disable hugepages
+      disable_huge() {
+       echo "disabling huge page support"
+       THP=`find /sys/kernel/mm/ -name transparent_hugepage -type d | tail -n 1`
+       for SETTING in "enabled" "defrag";do
+           if test -f ${THP}/${SETTING}; then
+               echo never > ${THP}/${SETTING}
+           fi
+       done
+      }
+
+      # change ulimits
+      change_ulimit() {
+        ulimit -Hn 65535
+        ulimit -Sn 65535
+        ulimit -Hu 20480
+        ulimit -Su 20480
+        ulimit -Hf unlimited
+        ulimit -Sf unlimited
+      }
+
+- name: enable usage of funtions during start in /etc/init.d/splunk
+  tags:
+    - splunk
+    - splunk_enterprise
+  blockinfile:
+    path: /etc/init.d/splunk
+    marker: "    # {mark} ANSIBLE MANAGED BLOCK (start)"
+    insertbefore: "splunk_start$"
+    content: |2
+          disable_huge
+          change_ulimit
+
+- name: enable usage of funtions during restart in /etc/init.d/splunk
+  tags:
+    - splunk
+    - splunk_enterprise
+  blockinfile:
+    path: /etc/init.d/splunk
+    marker: "    # {mark} ANSIBLE MANAGED BLOCK (restart)"
+    insertbefore: "splunk_restart$"
+    content: |2
+          disable_huge
+          change_ulimit
+
+- name: commit changes to systemctl
+  tags:
+    - splunk
+    - splunk_enterprise
+  shell: systemctl daemon-reload

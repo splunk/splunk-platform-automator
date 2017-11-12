@@ -1,0 +1,6 @@
+---
+# Variables for this role
+
+ldap_root_passwd: ldapsecret
+ldap_dc: dc=splunk,dc=training
+ldap_dc_name: splunk

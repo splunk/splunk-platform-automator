@@ -1,0 +1,47 @@
+---
+# This playbook install the base config app
+
+- name: "({{ app_name }}) setting clustering master_uri"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_indexer_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustering
+    option: master_uri
+    value: "https://{{splunk_idxc_cm}}:8089"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+
+- name: "({{ app_name }}) setting unhashed pass4SymmKey"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_indexer_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustering
+    option: pass4SymmKey
+    value: "{{splunk_idxc_pass}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  when: app_local.stat.exists == false
+
+- name: "({{ app_name }}) setting replication port"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_indexer_base
+  replace:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    regexp: '(<PORT_NUM>)'
+    replace: '{{splunk_idxc_replication_port}}'
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk

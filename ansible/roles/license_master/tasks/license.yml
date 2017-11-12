@@ -1,0 +1,25 @@
+---
+# This playbook install the splunk license
+
+- name: create license/enterprise dir
+  tags:
+    - splunk
+    - license_master
+  file:
+    path: "{{ splunk_home }}/etc/licenses/enterprise"
+    state: directory
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0700
+
+- name: copy license file
+  tags:
+    - splunk
+    - license_master
+  copy:
+    src: "{{ splunk_software }}/{{ splunk_license_file }}"
+    dest: "{{ splunk_home }}/etc/licenses/enterprise/"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk

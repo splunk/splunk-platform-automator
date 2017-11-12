@@ -1,0 +1,20 @@
+---
+# This playbook install the basic time settings
+
+- name: set timezone
+  tags:
+    - common
+    - timezone
+  timezone:
+    name: "{{ time_zone }}"
+
+- name: enable chronyd
+  tags:
+    - common
+    - timezone
+    - ntp
+    - chrony
+  service:
+    name: chronyd
+    state: started
+    enabled: yes

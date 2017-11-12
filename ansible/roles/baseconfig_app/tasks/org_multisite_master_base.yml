@@ -1,0 +1,151 @@
+---
+# This playbook install the base config app
+
+- name: "({{ app_name }}) setting cluster master site"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_multisite_master_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: general
+    option: site
+    value: "{{site}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+
+- name: "({{ app_name }}) setting available sites"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_multisite_master_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustering
+    option: available_sites
+    value: "{{splunk_idxc_available_sites}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+
+- name: "({{ app_name }}) setting site_replication_factor"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_multisite_master_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustering
+    option: site_replication_factor
+    value: "{{splunk_idxc_site_rf}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+
+- name: Check for replication_factor > site_replication_factor
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_multisite_master_base
+  shell: "{{ splunk_home }}/bin/splunk btool server list clustering | grep -w replication_factor | cut -d= -f 2"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  register: replication_factor
+
+# This needs to be done, otherwise splunkd does not start because replication_factor is smaller than site_replication_factor
+- name: "({{ app_name }}) setting replication_factor"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_multisite_master_base
+  vars:
+    site_replication_factor: "{% for rfval in splunk_idxc_site_rf.split(',') %}{% if 'total' in rfval %}{{ rfval.split(':')|last }}{% endif %}{% endfor %}"
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustering
+    option: replication_factor
+    value: "{{site_replication_factor}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  when: site_replication_factor|int < replication_factor.stdout|int
+
+- name: Check for search_factor > site_search_factor
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_multisite_master_base
+  shell: "{{ splunk_home }}/bin/splunk btool server list clustering | grep -w search_factor | cut -d= -f 2"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  register: search_factor
+
+# This needs to be done, otherwise splunkd does not start because search_factor is smaller than site_search_factor
+- name: "({{ app_name }}) setting replication_factor"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_multisite_master_base
+  vars:
+    site_search_factor: "{% for rfval in splunk_idxc_site_sf.split(',') %}{% if 'total' in rfval %}{{ rfval.split(':')|last }}{% endif %}{% endfor %}"
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustering
+    option: search_factor
+    value: "{{site_search_factor}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  when: site_search_factor|int < search_factor.stdout|int
+
+- name: "({{ app_name }}) setting site_search_factor"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_multisite_master_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustering
+    option: site_search_factor
+    value: "{{splunk_idxc_site_sf}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+
+- name: "({{ app_name }}) setting cluster label"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_multisite_master_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustering
+    option: cluster_label
+    value: "{{splunk_idxc_label}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+
+- name: "({{ app_name }}) setting unhashed pass4SymmKey"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_multisite_master_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustering
+    option: pass4SymmKey
+    value: "{{splunk_idxc_pass}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  when: app_local.stat.exists == false

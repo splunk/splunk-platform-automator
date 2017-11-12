@@ -1,0 +1,26 @@
+---
+# This playbook install a basic user with the login keys
+
+- name: Adding splunk aliases
+  tags:
+    - common
+    - bashrc
+  copy:
+    src: home/vagrant/bashrc.splunk
+    dest: /home/vagrant/.bashrc.splunk
+    owner: vagrant
+    group: vagrant
+    mode: 0644
+
+- name: insert/update bashrc for splunk stuff
+  tags:
+    - common
+    - bashrc
+  blockinfile:
+    path: /home/vagrant/.bash_profile
+    marker: "#<!-- {mark} ANSIBLE MANAGED BLOCK -->"
+    insertafter: "export PATH"
+    content: |
+      if [ -f ~/.bashrc.splunk ]; then
+        . ~/.bashrc.splunk
+      fi

@@ -1,0 +1,16 @@
+---
+# Main playbook for this role
+
+- name: start role tasks
+  tags:
+    - splunk
+    - search_head
+  debug: msg="role '{{ role_name }}' start"
+
+- include: shcluster.yml
+  when: shc_name is defined
+
+- include: shsingle.yml
+  when: shc_name is not defined
+
+# Need one more if using deploymentclient

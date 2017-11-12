@@ -1,0 +1,14 @@
+---
+# This playbook install the apps required in my test environment
+
+# Debian SPECIFIC APPS
+
+- name: install unzip package
+  tags:
+    - common
+    - packages
+    - unzip
+  package:
+    name:
+      - unzip
+    state: latest

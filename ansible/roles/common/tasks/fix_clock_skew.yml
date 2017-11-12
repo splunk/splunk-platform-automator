@@ -1,0 +1,42 @@
+---
+# This playbook install the apps required in my test environment
+
+# Fix clock skew problem in virtualbox according to: https://oitibs.com/fix-virtualbox-guest-time-skew/
+
+- name: fix clock skew - alter grub file
+  tags:
+    - common
+    - fix_clock_skew
+  lineinfile:
+    dest: /etc/default/grub
+    regexp: "^GRUB_CMDLINE_LINUX_DEFAULT="
+    line: 'GRUB_CMDLINE_LINUX_DEFAULT="quiet elevator=noop clocksource=pit"'
+  register: grubfile
+
+- name: fix clock skew - update grub
+  tags:
+    - common
+    - fix_clock_skew
+  shell: grub2-mkconfig > /boot/grub2/grub.cfg
+  when: grubfile|changed
+
+# Check this: https://stackoverflow.com/questions/29955605/how-to-reboot-centos-7-with-ansible
+- name: fix clock skew - restart server
+  tags:
+    - common
+    - fix_clock_skew
+  command: /usr/bin/systemd-run --on-active=1 --timer-property=AccuracySec=100ms /usr/bin/systemctl reboot
+  async: 0
+  poll: 0
+  ignore_errors: true
+  become: yes
+  when: grubfile|changed
+
+- name: fix clock skew - wait for server to come back online
+  tags:
+    - common
+    - fix_clock_skew
+  wait_for_connection:
+    delay: 15
+    timeout: 300
+  when: grubfile|changed

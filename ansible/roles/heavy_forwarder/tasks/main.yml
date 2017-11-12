@@ -1,0 +1,94 @@
+---
+# Main playbook for this role
+
+- name: start role tasks
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - heavy_forwarder
+  debug: msg="role '{{ role_name }}' start"
+
+- name: apply baseconfig app org_all_deploymentclient
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - heavy_forwarder
+    - org_all_deploymentclient
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_deploymentclient'
+    app_path: '{{splunk_home}}/etc/apps'
+  notify: restart splunk
+  when: groups.role_deployment_server is defined
+
+- name: check if deployment server is configured
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - heavy_forwarder
+  shell: "{{ splunk_home }}/bin/splunk show deploy-poll -auth admin:{{ splunk_admin_password }}"
+  become: yes
+  become_user: splunk
+  register: need_splunkforwarder_restart
+  check_mode: False
+  changed_when: need_splunkforwarder_restart.stdout.find('is not set') != -1
+
+- name: restart splunk for deployment server configuration
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - heavy_forwarder
+  service: name=splunk state=restarted
+  become: yes
+  become_user: root
+  when: need_splunkforwarder_restart.stdout.find('is not set') != -1 and groups.role_deployment_server is defined
+
+- name: apply baseconfig app org_all_forwarder_outputs
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - heavy_forwarder
+    - org_all_forwarder_outputs
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_forwarder_outputs'
+    app_path: '{{splunk_home}}/etc/apps'
+  when: groups.role_deployment_server is not defined
+
+- name: apply baseconfig app org_full_license_server
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - heavy_forwarder
+    - org_full_license_server
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_full_license_server'
+    app_path: '{{splunk_home}}/etc/apps'
+  when: groups.role_deployment_server is not defined and groups.role_license_master is defined and inventory_hostname not in groups.role_license_master
+
+- name: apply baseconfig app org_all_indexer_base
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - heavy_forwarder
+    - org_all_indexer_base
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_indexer_base'
+    app_path: '{{splunk_home}}/etc/apps'
+  when: groups.role_deployment_server is not defined
+
+- name: update serverclass on deployment_server
+  include_role:
+    name: deployment_server
+    tasks_from: update_serverclass
+
+- name: update dserver on monitoring_console
+  include_role:
+    name: monitoring_console
+    tasks_from: update_dserver

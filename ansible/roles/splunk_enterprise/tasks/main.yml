@@ -1,0 +1,7 @@
+---
+# Main playbook for this role
+
+- include: users.yml
+- include: install.yml
+- include: ulimit_thp.yml
+- include: ui_config.yml

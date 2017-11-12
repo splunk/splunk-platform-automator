@@ -1,0 +1,8 @@
+- name: restart splunk
+  tags:
+    - splunk
+    - splunk_enterprise
+  service: name=splunk state=restarted
+  become: yes
+  become_user: root
+  when: app_path == splunk_home + '/etc/apps'

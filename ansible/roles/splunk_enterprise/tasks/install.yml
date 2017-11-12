@@ -1,0 +1,84 @@
+---
+# This playbook install the apps required in a server
+
+- name: create splunk install dir
+  tags:
+    - splunk
+    - splunk_enterprise
+  file:
+    path: "{{ splunk_install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+- name: checking if splunk is installed
+  tags:
+    - splunk
+    - splunk_enterprise
+  stat:
+    path: "{{ splunk_home }}/bin"
+  register: splunk_path
+
+- name: is splunk installed? 
+  tags:
+    - splunk
+    - splunk_enterprise
+  debug: msg='splunk is already installed under splunk_home/bin'
+  when: splunk_path.stat.exists
+
+- name: create splunk directory
+  tags:
+    - splunk
+    - splunk_enterprise
+  file:
+    path: "{{ splunk_home }}"
+    state: directory
+    owner: "{{ splunk_user }}"
+    group: "{{ splunk_group }}"
+    mode: 0755
+
+- name: find splunk archive file
+  tags:
+    - splunk
+    - splunk_enterprise
+  shell: find {{splunk_software}} -type f -name {{splunk_install_app}}-{{splunk_version}}-\*-Linux-x86_64.tgz
+  become: no
+  register: splunk_archive
+  delegate_to: localhost
+  when: splunk_path.stat.exists == false
+
+- name: install splunk binaries
+  tags:
+    - splunk
+    - splunk_enterprise
+  unarchive: src={{item}} dest="{{ splunk_install_dir }}/" owner={{ splunk_user }} group={{ splunk_group }} creates=yes
+  with_items: "{{ splunk_archive.stdout_lines }}"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  when: splunk_path.stat.exists == false and splunk_archive.rc == 0
+
+- name: accept license and start splunk
+  tags:
+    - splunk
+    - splunk_enterprise
+  shell: "{{ splunk_home }}/bin/splunk start --accept-license"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  when: splunk_path.stat.exists == false
+
+- name: change splunk admin password
+  tags:
+    - splunk
+    - splunk_enterprise
+  shell: "{{ splunk_home }}/bin/splunk edit user admin -password '{{splunk_admin_password}}' -auth admin:changeme"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  when: splunk_path.stat.exists == false
+
+- name: enable boot-start
+  tags:
+    - splunk
+    - splunk_enterprise
+  shell: "{{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }}"
+  when: splunk_path.stat.exists == false

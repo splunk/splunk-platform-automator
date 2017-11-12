@@ -1,0 +1,70 @@
+---
+# This playbook install the base config apps
+
+- name: find path to baseconfig app
+  tags:
+   - splunk
+   - splunk_baseconfig
+  become: no
+  find:
+    path: "{{ splunk_baseconfig }}/"
+    pattern: "{{ app_name }}"
+    file_type: directory
+    recurse: yes
+  register: baseapp_dir
+  ignore_errors: True
+  delegate_to: localhost
+
+- name: "({{ app_name }}) create app directory"
+  tags:
+    - splunk
+    - splunk_baseconfig
+  file:
+    path: "{{ app_path }}/{{ app_name }}"
+    state: directory
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0755
+
+- name: "({{ app_name }}) checking if local dir exists"
+  tags:
+    - splunk
+    - splunk_baseconfig
+  stat: path="{{ app_path }}/{{ app_name }}/local"
+  register: app_local
+
+- name: "({{ app_name }}) copy local files"
+  tags:
+    - splunk
+    - splunk_baseconfig
+  copy:
+    src: "{{ item }}"
+    dest: "{{ app_path }}/{{ app_name }}/local/"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_fileglob:
+    - "{{ baseapp_dir.files.0.path }}/local/*"
+  when: app_local.stat.exists == false
+
+- name: "({{ app_name }}) create metadata directory"
+  tags:
+    - splunk
+    - splunk_baseconfig
+  file:
+    path: "{{ app_path }}/{{ app_name }}/metadata"
+    state: directory
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0755
+
+- name: "({{ app_name }}) copy local.meta"
+  tags:
+    - splunk
+    - splunk_baseconfig
+  copy:
+    src: "{{ baseapp_dir.files.0.path }}/metadata/local.meta"
+    dest: "{{ app_path }}/{{ app_name }}/metadata/local.meta"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644

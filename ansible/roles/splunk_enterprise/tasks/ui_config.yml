@@ -1,0 +1,27 @@
+---
+# This playbook configures splunk user interface
+
+- name: check if splunk first login is turned off
+  tags:
+    - splunk
+    - splunk_enterprise
+    - ui_config
+    - first_login
+  stat: 
+    path: "{{ splunk_home }}/etc/.ui_login"
+  register: splunk_first_login
+  when: splunk_install_app == "splunk"
+
+- name: disable first login page
+  tags:
+    - splunk
+    - splunk_enterprise
+    - ui_config
+    - first_login
+  file:
+    path: "{{ splunk_home }}/etc/.ui_login"
+    state: touch
+    owner: "{{ splunk_user }}"
+    group: "{{ splunk_group }}"
+    mode: 0600
+  when: splunk_install_app == "splunk" and not splunk_first_login.stat.exists

@@ -1,0 +1,215 @@
+---
+# This playbook install the base config app
+
+- name: create system/local directory
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+  file:
+    path: "{{ splunk_home }}/etc/system/local"
+    state: directory
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0755
+
+- name: define org_all_forwarder_outputs server class clients
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_all_forwarder_outputs
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:org_all_forwarder_outputs
+    option: "whitelist.0"
+    value: "*"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  notify: reload deploy-server
+
+- name: define org_all_forwarder_outputs server class apps
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_all_forwarder_outputs
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:org_all_forwarder_outputs:app:org_all_forwarder_outputs
+    option: "{{item.var}}"
+    value: "{{item.value}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_items:
+    - { var: 'restartSplunkWeb', value: '0' }
+    - { var: 'restartSplunkd', value: '1' }
+    - { var: 'stateOnClient', value: 'enabled' }
+  notify: reload deploy-server
+
+- name: define org_all_deploymentclient server class clients
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_all_deploymentclient
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:org_all_deploymentclient
+    option: "whitelist.0"
+    value: "*"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  notify: reload deploy-server
+
+- name: define org_all_deploymentclient server class apps
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_all_deploymentclient
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:org_all_deploymentclient:app:org_all_deploymentclient
+    option: "{{item.var}}"
+    value: "{{item.value}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_items:
+    - { var: 'restartSplunkWeb', value: '0' }
+    - { var: 'restartSplunkd', value: '1' }
+    - { var: 'stateOnClient', value: 'enabled' }
+  notify: reload deploy-server
+
+- name: define org_full_license_server server class clients
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_full_license_server
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:org_full_license_server
+    option: "whitelist.{{item.num}}"
+    value: "{{item.server}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_items: "{{splunk_license_clients}}"
+  notify: reload deploy-server
+  when: groups.role_license_master is defined
+
+- name: define org_full_license_server server class apps
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_full_license_server
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:org_full_license_server:app:org_full_license_server
+    option: "{{item.var}}"
+    value: "{{item.value}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_items:
+    - { var: 'restartSplunkWeb', value: '0' }
+    - { var: 'restartSplunkd', value: '1' }
+    - { var: 'stateOnClient', value: 'enabled' }
+  notify: reload deploy-server
+  when: groups.role_license_master is defined
+
+- name: define org_all_indexer_base server class clients
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_all_indexer_base
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:org_all_indexer_base
+    option: "whitelist.{{item.num}}"
+    value: "{{item.server}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_items: "{{splunk_heavy_forwarder_list}}"
+  notify: reload deploy-server
+  when: groups.role_heavy_forwarder is defined
+
+- name: define org_all_indexer_base server class apps
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_all_indexer_base
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:org_all_indexer_base:app:org_all_indexer_base
+    option: "{{item.var}}"
+    value: "{{item.value}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_items:
+    - { var: 'restartSplunkWeb', value: '0' }
+    - { var: 'restartSplunkd', value: '1' }
+    - { var: 'stateOnClient', value: 'enabled' }
+  notify: reload deploy-server
+  when: groups.role_heavy_forwarder is defined
+
+- name: define org_cluster_search_base server class clients
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_cluster_search_base
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:org_cluster_search_base
+    option: "whitelist.{{item.num}}"
+    value: "{{item.server}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_items: "{{splunk_search_head_list}}"
+  notify: reload deploy-server
+  when: splunk_search_head_list|length > 0
+
+- name: define org_cluster_search_base server class apps
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_cluster_search_base
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:org_cluster_search_base:app:org_cluster_search_base
+    option: "{{item.var}}"
+    value: "{{item.value}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_items:
+    - { var: 'restartSplunkWeb', value: '0' }
+    - { var: 'restartSplunkd', value: '1' }
+    - { var: 'stateOnClient', value: 'enabled' }
+  notify: reload deploy-server
+  when: splunk_search_head_list|length > 0
+

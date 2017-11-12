@@ -1,0 +1,87 @@
+---
+# This playbook deploys splunk enterprise enironments
+
+- name: apply common configurations
+  hosts: all
+  become: yes
+  become_user: root
+  roles:
+    - common
+
+- name: setup cluster master role
+  hosts: role_cluster_master
+  become: yes
+  become_user: root
+  roles:
+    - splunk_enterprise
+    - cluster_master
+
+- name: setup license master role
+  hosts: role_license_master
+  become: yes
+  become_user: root
+  roles:
+    - splunk_enterprise
+    - license_master
+
+- name: setup indexer cluster role
+  hosts: role_indexer
+  become: yes
+  become_user: root
+  roles:
+    - splunk_enterprise
+    - indexer
+
+- name: setup ldeployer role
+  hosts: role_deployer
+  become: yes
+  become_user: root
+  roles:
+    - splunk_enterprise
+    - deployer
+
+- name: setup deployment server role
+  hosts: role_deployment_server
+  become: yes
+  become_user: root
+  roles:
+    - splunk_enterprise
+    - deployment_server
+
+- name: setup search head role
+  hosts: role_search_head
+  become: yes
+  become_user: root
+  roles:
+    - splunk_enterprise
+    - search_head
+
+- name: setup monitoring console role
+  hosts: role_monitoring_console
+  become: yes
+  become_user: root
+  roles:
+    - splunk_enterprise
+    - monitoring_console
+
+- name: setup heavy forwarder role
+  hosts: role_heavy_forwarder
+  become: yes
+  become_user: root
+  roles:
+    - splunk_enterprise
+    - heavy_forwarder
+
+- name: setup universal forwarder role
+  hosts: role_universal_forwarder
+  become: yes
+  become_user: root
+  roles:
+    - universal_forwarder
+
+- name: setup ldap server role
+  hosts: role_ldap_server
+  become: yes
+  become_user: root
+  roles:
+    - ldap_server

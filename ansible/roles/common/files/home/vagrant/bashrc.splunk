@@ -1,0 +1,22 @@
+# Append PATH
+export PATH=$PATH:/opt/splunk/bin:/Splunk_Stuff/bin
+
+# Aliases
+if [ "$USER" = "splunk" ]; then
+	alias cs="cd /opt/splunk"
+	alias ce="cd /opt/splunk/etc"
+	alias ca="cd /opt/splunk/etc/apps"
+	alias cm="cd /opt/splunk/etc/master-apps"
+	alias ch="cd $SPLUNK_HOME/etc/shcluster/apps"
+	alias cdd="cd $SPLUNK_HOME/etc/deployment-apps"
+	alias tl="tail -f /opt/splunk/var/log/splunk/splunkd.log"
+else
+	alias splunk="s splunk"
+	alias s="sudo -i -u splunk"
+	alias r="sudo -i"
+fi
+
+# Splunk SDK
+export SPLUNK_HOME=/opt/splunk
+export PYTHONPATH=~/splunk-sdk-python-1.6.0
+

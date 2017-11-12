@@ -1,0 +1,5 @@
+---
+# Main playbook for this role
+
+- include: "install_app.yml"
+- include: "{{app_name}}.yml"

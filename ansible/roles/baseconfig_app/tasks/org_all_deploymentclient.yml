@@ -1,0 +1,17 @@
+---
+# This playbook install the base config app
+
+- name: "({{ app_name }}) setting deployment server"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_deploymentclient
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/deploymentclient.conf"
+    section: target-broker:deploymentServer
+    option: targetUri
+    value: "{{splunk_deployment_server}}:8089"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  notify: restart splunk

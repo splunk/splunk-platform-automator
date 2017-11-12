@@ -1,0 +1,63 @@
+---
+# This playbook install the base config app
+
+- name: "({{ app_name }}) setting replication factor"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_master_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustering
+    option: replication_factor
+    value: "{{splunk_idxc_rf}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+
+- name: "({{ app_name }}) setting search factor"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_master_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustering
+    option: search_factor
+    value: "{{splunk_idxc_sf}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+
+- name: "({{ app_name }}) setting cluster label"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_master_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustering
+    option: cluster_label
+    value: "{{splunk_idxc_label}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+
+- name: "({{ app_name }}) setting unhashed pass4SymmKey"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_master_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustering
+    option: pass4SymmKey
+    value: "{{splunk_idxc_pass}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  when: app_local.stat.exists == false

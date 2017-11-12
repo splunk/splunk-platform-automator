@@ -1,0 +1,18 @@
+---
+# This playbook install the base config app
+
+- name: "({{ app_name }}) setting unhashed pass4SymmKey"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_deployer_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: shclustering
+    option: pass4SymmKey
+    value: "{{splunk_shc_pass}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  when: app_local.stat.exists == false

@@ -1,0 +1,134 @@
+---
+# This playbook install the base config app
+
+- name: "({{ app_name }}) setting clustering master_uri"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_search_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustering
+    option: master_uri
+    value: "{% set comma = joiner(',') %}{% for cm in splunk_idxc_cm_list %}{{ comma() }}clustermaster:{{ hostvars[cm]['idxc_name'] }}{% endfor %}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+
+- name: "({{ app_name }}) rename clustermaster:one"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_search_base
+  replace:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    regexp: '\[clustermaster:one\]'
+    replace: "[clustermaster:{{ hostvars[item]['idxc_name'] }}]"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  with_items:
+    - "{{ splunk_idxc_cm_list|first }}"
+  notify: restart splunk
+
+- name: "({{ app_name }}) remove clustermaster:two cluster master group"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_search_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustermaster:two
+    state: absent
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+
+- name: "({{ app_name }}) setting pass4SymmKey for hashing on clustermaster stanza"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_search_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustermaster:{{ hostvars[item]['idxc_name'] }}
+    option: pass4SymmKey
+    value: "{{ hostvars[item]['idxc_password'] }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  with_items:
+    - "{{ splunk_idxc_cm_list }}"
+  when: app_local.stat.exists == false and app_path == splunk_home + '/etc/apps'
+
+- name: "({{ app_name }}) setting static unhashed pass4SymmKey on clustermaster stanza"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_search_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustermaster:{{ hostvars[item]['idxc_name'] }}
+    option: pass4SymmKey
+    value: "{{ hostvars[item]['idxc_password'] }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  with_items:
+    - "{{ splunk_idxc_cm_list }}"
+  when: app_local.stat.exists == false and app_path != splunk_home + '/etc/apps'
+
+- name: "({{ app_name }}) setting master_uri in clustermaster stanza"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_search_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustermaster:{{ hostvars[item]['idxc_name'] }}
+    option: master_uri
+    value: "https://{{ item }}:8089"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  with_items:
+    - "{{ splunk_idxc_cm_list }}"
+
+- name: "({{ app_name }}) setting multisite = true on clustermaster stanza"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_search_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: clustermaster:{{ hostvars[item]['idxc_name'] }}
+    option: multisite
+    value: "true"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  with_items:
+    - "{{ splunk_idxc_cm_list }}"
+  when: splunk_idxc_available_sites|length > 0 and "'site' in splunk_idxc_available_sites"
+
+- name: "({{ app_name }}) setting site"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_search_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    section: general
+    option: site
+    value: "{{splunk_shc_site}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  when: splunk_shc_site is defined

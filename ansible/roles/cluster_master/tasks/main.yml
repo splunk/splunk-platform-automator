@@ -1,0 +1,122 @@
+---
+# Main playbook for this role
+
+- name: start role tasks
+  tags:
+    - splunk
+    - cluster_master
+  debug: msg="role '{{ role_name }}' start"
+
+- name: apply baseconfig app org_cluster_master_base
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - cluster_master
+    - org_cluster_master_base
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_cluster_master_base'
+    app_path: '{{splunk_home}}/etc/apps'
+  when: inventory_hostname in groups.role_cluster_master and site is not defined
+
+- name: apply baseconfig app org_cluster_master_base
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - cluster_master
+    - org_cluster_master_base
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_multisite_master_base'
+    app_path: '{{splunk_home}}/etc/apps'
+  when: inventory_hostname in groups.role_cluster_master and site is defined
+
+- name: apply baseconfig app org_all_deploymentclient
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - cluster_master
+    - org_all_deploymentclient
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_deploymentclient'
+    app_path: '{{splunk_home}}/etc/apps'
+  when: groups.role_deployment_server is defined and inventory_hostname not in groups.role_deployment_server
+
+- name: apply baseconfig app org_all_forwarder_outputs
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - cluster_master
+    - org_all_forwarder_outputs
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_forwarder_outputs'
+    app_path: '{{splunk_home}}/etc/apps'
+  when: groups.role_deployment_server is not defined
+
+- name: apply baseconfig app org_full_license_server
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - cluster_master
+    - org_full_license_server
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_full_license_server'
+    app_path: '{{splunk_home}}/etc/apps'
+  when: groups.role_deployment_server is not defined and groups.role_license_master is defined and inventory_hostname not in groups.role_license_master
+
+- name: apply baseconfig app org_indexer_volume_indexes
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - cluster_master
+    - org_indexer_volume_indexes
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_indexer_volume_indexes'
+    app_path: '{{splunk_home}}/etc/master-apps'
+
+- name: apply baseconfig app org_all_indexes
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - cluster_master
+    - org_all_indexes
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_indexes'
+    app_path: '{{splunk_home}}/etc/master-apps'
+
+- name: apply baseconfig app org_full_license_server
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - cluster_master
+    - org_full_license_server
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_full_license_server'
+    app_path: '{{splunk_home}}/etc/master-apps'
+  when: groups.role_license_master is defined
+
+- include: check_pass.yml
+
+- name: update serverclass on deployment_server
+  include_role:
+    name: deployment_server
+    tasks_from: update_serverclass
+
+- name: update dserver on monitoring_console
+  include_role:
+    name: monitoring_console
+    tasks_from: update_dserver

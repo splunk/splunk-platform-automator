@@ -1,0 +1,25 @@
+# Mac OS X
+**/.DS_Store
+# Vagrant
+.vagrant
+# Archives
+**/*.tgz
+**/*.tar
+**/*.tar.gz
+**/*.zip
+# Ansible
+**/.retry
+# Config file
+**/splunk_config.yml
+# Test files
+**/test.yml
+# Vim
+*.swp
+*.swo
+# Sublime
+*.sublime-project
+*.sublime-workspace
+# ignore dynamically created files
+ansible/group_vars/**
+!ansible/group_vars/all
+!ansible/group_vars/all/dynamic.yml

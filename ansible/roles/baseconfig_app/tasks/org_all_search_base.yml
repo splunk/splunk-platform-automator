@@ -1,0 +1,52 @@
+---
+# This playbook install the base config app
+
+# We do not need these files for now, but still put it for future use
+
+- name: "({{ app_name }}) check for authentication.conf.disable"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_search_base
+  stat: path={{ app_path }}/{{ app_name }}/local/authentication.conf.disable
+  register: authentication_stat
+
+- name: "({{ app_name }}) disable authentication.conf"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_search_base
+  command: mv {{ app_path }}/{{ app_name }}/local/authentication.conf {{ app_path }}/{{ app_name }}/local/authentication.conf.disable
+  when: not authentication_stat.stat.exists
+
+- name: "({{ app_name }}) check for authorize.conf.disable"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_search_base
+  stat: path={{ app_path }}/{{ app_name }}/local/authorize.conf.disable
+  register: authorize_stat
+
+- name: "({{ app_name }}) disable authorize.conf"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_search_base
+  command: mv {{ app_path }}/{{ app_name }}/local/authorize.conf {{ app_path }}/{{ app_name }}/local/authorize.conf.disable
+  when: not authorize_stat.stat.exists
+
+- name: "({{ app_name }}) check for web.conf.disable"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_search_base
+  stat: path={{ app_path }}/{{ app_name }}/local/web.conf.disable
+  register: web_stat
+
+- name: "({{ app_name }}) disable web.conf"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_search_base
+  command: mv {{ app_path }}/{{ app_name }}/local/web.conf {{ app_path }}/{{ app_name }}/local/web.conf.disable
+  when: not web_stat.stat.exists

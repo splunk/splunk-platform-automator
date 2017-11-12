@@ -1,0 +1,38 @@
+---
+# This playbook install the apps required in a server
+
+- name: add splunk group
+  tags:
+    - splunk
+    - splunk_enterprise
+  group: name={{ splunk_user }} state=present
+
+- name: add splunk user
+  tags:
+    - splunk
+    - splunk_enterprise
+  user: name={{ splunk_user }} group=splunk comment="Splunk User" shell=/bin/bash createhome=yes
+
+- name: Adding splunk aliases
+  tags:
+    - splunk
+    - splunk_enterprise
+  template:
+    src: home/splunk/bashrc.splunk.j2
+    dest: /home/{{ splunk_user }}/.bashrc.splunk
+    owner: "{{ splunk_user }}"
+    group: "{{ splunk_group }}"
+    mode: 0644
+
+- name: insert/update bashrc for splunk stuff
+  tags:
+    - splunk
+    - splunk_enterprise
+  blockinfile:
+    path: /home/{{ splunk_user }}/.bash_profile
+    marker: "#<!-- {mark} ANSIBLE MANAGED BLOCK -->"
+    insertafter: "export PATH"
+    content: |
+      if [ -f ~/.bashrc.splunk ]; then
+        . ~/.bashrc.splunk
+      fi

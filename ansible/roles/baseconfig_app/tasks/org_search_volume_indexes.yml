@@ -1,0 +1,32 @@
+---
+# This playbook install the base config app
+
+- name: "({{ app_name }}) setting volume:primary"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_search_volume_indexes
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/indexes.conf"
+    section: volume:primary
+    option: path
+    value: "{{splunk_home}}/var/lib/splunk"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  notify: restart splunk
+
+- name: "({{ app_name }}) remove volume:secondary"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_search_volume_indexes
+  ini_file:
+    path: "{{ app_path }}/{{ app_name }}/local/indexes.conf"
+    section: volume:secondary
+    state: absent
+    value: "{{splunk_home}}/var/lib/splunk"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  notify: restart splunk

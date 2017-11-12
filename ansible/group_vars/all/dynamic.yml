@@ -1,0 +1,83 @@
+---
+
+# Calculated during run
+
+# Software source directory
+splunk_software: "{% if splunk_software_dir | regex_search('^/') %}{{ splunk_software_dir }}{% else %}{{ playbook_dir }}/../{{ splunk_software_dir }}{% endif %}"
+
+# Baseconfig apps directory
+splunk_baseconfig: "{% if splunk_baseconfig_dir | regex_search('^/') %}{{ plunk_baseconfig_dir }}{% else %}{{ playbook_dir }}/../{{ splunk_baseconfig_dir }}{% endif %}"
+
+# Indexer Cluster
+splunk_idxc_list_all: "{{ groups | map('regex_search','idxcluster_.*') | select('string') | list }}"
+splunk_idxc_label: "{{ idxc_name }}"
+splunk_idxc_pass: "{{ idxc_password }}"
+splunk_idxc_replication_port: "{{ idxc_replication_port }}"
+splunk_idxc_rf: "{{ idxc_rf }}"
+splunk_idxc_sf: "{{ idxc_sf }}"
+splunk_idxc_host_list: "{{ groups['idxcluster_'+idxc_name]|intersect(groups.role_indexer|default())|union(idxc_members) }}"
+splunk_idxc_server_list: "{% set comma = joiner(',') %}{% for idx in splunk_idxc_host_list %}{{ comma() }}{{ idx }}:9997{% endfor %}"
+splunk_idxc_cm: "{% for cm in groups.role_cluster_master %}{% if cm in groups['idxcluster_'+idxc_name] %}{{ cm }}{% endif %}{% endfor %}"
+splunk_idxc_cm_find: "{%- for idxc in splunk_idxc_list_all -%}
+                        {%- if inventory_hostname in groups[idxc] -%}
+                          {%- for member in groups[idxc] -%}
+                            {% if member in groups['role_cluster_master'] %}
+                              {{ member }}
+                            {% endif %}
+                          {%- endfor -%}
+                        {%- endif -%}
+                      {%- endfor -%}"
+splunk_idxc_cm_list: "{{ splunk_idxc_cm_find.split() }}"
+splunk_idxc_master_uri: "{% set comma = joiner(',') %}{% for cm in splunk_idxc_cm_list %}{{ comma() }}clustermaster:{{ hostvars[cm]['idxc_name'] }}{% endfor %}"
+
+# Multisite Indexer Cluster
+splunk_idxc_available_sites: "{{ idxc_available_sites|default()|join(',') }}"
+splunk_idxc_site_rf: "{{ idxc_site_rf }}"
+splunk_idxc_site_sf: "{{ idxc_site_sf }}"
+
+# Single Search Head
+splunk_shc_name_list: "{{ groups|map('regex_search','shcluster_.*')|select('string')|list }}"
+splunk_shc_all_host_list: |
+          {% set res = [] -%}
+          {%- for group in splunk_shc_name_list -%}
+            {% set ignored = res.extend(
+              groups[group]|list
+              ) -%}
+          {%- endfor %}
+          {{ res|unique|intersect(groups.role_search_head|default()) }}
+splunk_search_head_list: |
+          {% set res = [] -%}
+          {%- for ds_client in groups.role_search_head|difference(splunk_shc_all_host_list)|intersect(groups['splunk_env_'+splunk_env_name]) -%}
+            {% set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
+          {%- endfor %}
+          {{ res }}
+
+# Search Head Cluster
+splunk_shc_label: "{{ shc_name }}"
+splunk_shc_site: "{%- if shc_site is defined -%}{{ shc_site }}{%- else -%}site0{%- endif -%}"
+splunk_shc_pass: "{{ shc_password }}"
+splunk_shc_replication_port: "{{ shc_replication_port }}"
+splunk_shc_deployer: "{% for dp in groups.role_deployer %}{% if dp in groups['shcluster_'+shc_name] %}{{ dp }}{% endif %}{% endfor %}"
+splunk_shc_host_list: "{{ groups['shcluster_'+shc_name]|intersect(groups.role_search_head|default()) }}"
+splunk_shc_captain: "{{ shc_captain }}"
+splunk_shc_server_list: "{% set comma = joiner(',') %}{% for sh in splunk_shc_host_list %}{{ comma() }}https://{{ sh }}:8089{% endfor %}"
+
+# Splunk Monitoring Console
+splunk_dservers: "{{ groups.all|intersect(groups['splunk_env_'+splunk_env_name])|unique|difference(groups.role_indexer|default())|difference(groups.role_monitoring_console|default())|difference(groups.role_universal_forwarder|default()) }}"
+#splunk_dservers: "{{ groups.all|intersect(groups['splunk_env_'+splunk_env_name])|unique|difference(groups.role_indexer)|difference(groups.role_monitoring_console) }}"
+
+# License Server
+splunk_license_clients: |
+          {% set res = [] -%}
+          {%- for ds_client in groups.all|intersect(groups['splunk_env_'+splunk_env_name])|unique|difference(groups.role_indexer|default())|difference(splunk_shc_all_host_list|default())|difference(groups.role_license_master|default())|difference(groups.role_universal_forwarder|default()) -%}
+            {% set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
+          {%- endfor %}
+          {{ res }}
+
+# Heavy Forwarder
+splunk_heavy_forwarder_list: |
+          {% set res = [] -%}
+          {%- for ds_client in groups.role_heavy_forwarder|intersect(groups['splunk_env_'+splunk_env_name]) -%}
+            {% set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
+          {%- endfor %}
+          {{ res }}

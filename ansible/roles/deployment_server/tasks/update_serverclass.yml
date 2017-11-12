@@ -1,0 +1,22 @@
+---
+# This playbook contains common tasks in this role
+
+- name: check if deployment_server is available
+  wait_for:
+    host: '{{splunk_deployment_server}}'
+    port: 22
+    timeout: 1
+  register: host_check
+  check_mode: False
+  failed_when: host_check.msg is defined and "error" in host_check.msg
+  changed_when: host_check.state is defined and host_check.state == 'started'
+  when: groups.role_deployment_server is defined and inventory_hostname not in groups.role_deployment_server
+
+- name: update serverclass on deployment_server
+  include_role:
+    name: deployment_server
+    tasks_from: serverclass
+  delegate_to: '{{splunk_deployment_server}}'
+  vars:
+    splunk_install_app: splunk
+  when: host_check.state is defined and host_check.state == 'started'

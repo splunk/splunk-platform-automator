@@ -1,0 +1,4 @@
+---
+# Main playbook for this role
+
+- include: openldap.yml
