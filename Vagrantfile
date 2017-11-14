@@ -271,7 +271,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       config.vbguest.no_install = true
       if !settings['virtualbox']['install_vbox_additions'].nil? and settings['virtualbox']['install_vbox_additions']
         if !Vagrant.has_plugin?("vagrant-vbguest")
-          print "ERROR: You need to install the vagrant plugin vagrant-vbguest, to have guest additions install automatically.\n"
+          print "ERROR: Plugin vagrant-vbguest missing, install with 'vagrant plugin install vagrant-vbguest'.\n"
           exit 2
         end
         config.vbguest.no_install = false       
