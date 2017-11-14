@@ -1,5 +1,5 @@
 
-&#x1F534; There is currently an issue with ansible 2.4.1.0, which breaks some stuff. I will fix as soon as possible!
+&#x1F534; Due to the bug [#31755](https://github.com/ansible/ansible/issues/31755) ansible 2.4.1.0 does not work with Splunkenizer! Please use a lower version!
 
 # Splunkenizer
 
