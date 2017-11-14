@@ -10,7 +10,7 @@
     path: "{{ app_path }}/{{ app_name }}/local/server.conf"
     section: clustering
     option: master_uri
-    value: "{% set comma = joiner(',') %}{% for cm in splunk_idxc_cm_list %}{{ comma() }}clustermaster:{{ hostvars[cm]['idxc_name'] }}{% endfor %}"
+    value: "{{splunk_idxc_master_uri}}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
