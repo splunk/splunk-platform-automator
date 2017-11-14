@@ -8,7 +8,7 @@
 **/*.tar.gz
 **/*.zip
 # Ansible
-**/.retry
+**/*.retry
 # Config file
 **/splunk_config.yml
 # Test files
