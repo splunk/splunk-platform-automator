@@ -49,8 +49,17 @@ The Framework is currently only tested on Mac OSX, but any other Unix, which is 
 
 * Download and install Virtualbox and Vagrant from their websites. Both are coming with a simple installer in the package.
 * Install Ansible: I personally prefer [Brew](https://brew.sh) for that, which is as simple as `brew install ansible`. Current ansible 2.4.1.0 has a bug. You have to use the previous version. Install in brew with `brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/10ca339c7cba7eac1473012691d084aca62f1881/Formula/ansible.rb`
-* Download the framework and make it available in a terminal
-* Download the prerequisites and put them in folder called `Software`, just beside the `Splunkenizer` folder.
+* Download the framework in a folder of your choice with `git clone git@github.com:thesplunker/Splunkenizer.git`
+* Download the prerequisites and put them in folder called `Software`, just beside the `Splunkenizer` folder. Folder structure should look like this, if you have the stuff ex. in a folder called `Vagrant`.
+
+```
+./Vagrant/Splunkenizer/...
+./Vagrant/Software/Configurations - Base/...
+./Vagrant/Software/Configurations - Index Replication/...
+./Vagrant/Software/splunk-7.0.0-c8a78efdd40f-Linux-x86_64.tgz
+./Vagrant/Software/Splunk_Enterprise.lic
+./Vagrant/Software/splunkforwarder-7.0.0-c8a78efdd40f-Linux-x86_64.tgz
+```
 
 # Framework Usage
 
