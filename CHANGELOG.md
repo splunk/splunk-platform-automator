@@ -1,6 +1,10 @@
 Splunkenizer Changes By Release
 ===============================
 
+## 0.9.devel - ongoing
+
+* Remove disable of time sync, as leftover from fix clock skew try
+
 ## 0.8 - 2017-11-12
 
 * Check for site affinity in search head clusters
