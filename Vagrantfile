@@ -314,8 +314,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
           vb.memory = server['virtualbox']['memory'] if !server['virtualbox']['memory'].nil?
           vb.cpus = server['virtualbox']['cpus'] if !server['virtualbox']['cpus'].nil?
         end
-        # Fix clock skew problem
-        vb.customize ["setextradata", :id, "VBoxInternal/Devices/VMMDev/0/Config/GetHostTimeDisabled", "1"]
       end
 
       srv.vm.provision "ansible" do |ansible|
