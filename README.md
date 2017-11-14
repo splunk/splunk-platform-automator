@@ -1,5 +1,5 @@
 
-&#x1F534; Due to the bug [#31755](https://github.com/ansible/ansible/issues/31755) ansible 2.4.1.0 does not work with Splunkenizer! Please use a lower version!
+&#x1F534; Due to the bug [#31755](https://github.com/ansible/ansible/issues/31755) ansible 2.4.1.0 does not work with Splunkenizer! Please use a lower version! See the Install section on how to install.
 
 # Splunkenizer
 
@@ -48,7 +48,7 @@ You can download the framework on [GitHub](https://github.com/thesplunker/Splunk
 The Framework is currently only tested on Mac OSX, but any other Unix, which is supported by Virtualbox, should work.
 
 * Download and install Virtualbox and Vagrant from their websites. Both are coming with a simple installer in the package.
-* Install Ansible: I personally prefer [Brew](https://brew.sh) for that, which is as simple as `brew install ansible`
+* Install Ansible: I personally prefer [Brew](https://brew.sh) for that, which is as simple as `brew install ansible`. Current ansible 2.4.1.0 has a bug. You have to use the previous version. Install in brew with `brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/10ca339c7cba7eac1473012691d084aca62f1881/Formula/ansible.rb`
 * Download the framework and make it available in a terminal
 * Download the prerequisites and put them in folder called `Software`, just beside the `Splunkenizer` folder.
 
