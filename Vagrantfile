@@ -63,6 +63,7 @@ groups = {}
 idxc_list = {}
 idxc_sites = {}
 shc_list = {}
+envs = {}
 # Create inventory host groups
 settings['splunk_hosts'].each do |splunk_host|
   splunk_host['roles'].each do |role|
@@ -81,11 +82,11 @@ settings['splunk_hosts'].each do |splunk_host|
           exit 2
         end
         var_obj["splunk_"+role_def] = splunk_host['name']
-        groupname = "splunk_env_"+splunk_host['splunk_env'] +":vars"
-        if groups.has_key?(groupname)
-          groups[groupname] = groups[groupname].merge(var_obj)
+        groupname = "splunk_env_"+splunk_host['splunk_env']
+        if envs.has_key?(groupname)
+          envs[groupname] = envs[groupname].merge(var_obj)
         else
-          groups[groupname] = var_obj
+          envs[groupname] = var_obj
         end
       end
     end
@@ -164,9 +165,8 @@ end
 if !settings['splunk_environments'].nil?
   settings['splunk_environments'].each do |splunkenv|
     group_name = "splunk_env_"+splunkenv['splunk_env_name']
-    env_vars = group_name+":vars"
-    if groups.has_key?(env_vars)
-      splunkenv = splunkenv.merge(groups[env_vars])
+    if envs.has_key?(group_name)
+      splunkenv = splunkenv.merge(envs[group_name])
     end
     File.open("ansible/group_vars/#{group_name}.yml", "w") do |f|
       f.write(splunkenv.to_yaml)
