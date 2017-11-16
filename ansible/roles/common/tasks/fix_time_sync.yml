@@ -1,0 +1,15 @@
+---
+# This playbook does setup a time sync fix
+
+- name: setup time sync cronjob
+  tags:
+    - common
+    - fix_time_sync
+    - ntp
+    - chrony
+  cron:
+    name: "sync time"
+    minute: "*/5"
+    job: "/bin/chronyc makestep >/dev/null"
+  become: yes
+  become_user: root

@@ -13,4 +13,4 @@
 
 - include: hosts.yml
 
-- include: fix_clock_skew.yml
+- include: fix_time_sync.yml
