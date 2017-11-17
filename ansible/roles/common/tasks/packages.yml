@@ -12,3 +12,4 @@
   package:
     name: "{{ packages }}" 
     state: latest
+  when: packages|default()
