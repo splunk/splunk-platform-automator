@@ -10,6 +10,7 @@
 # Ansible
 **/*.retry
 # Config file
+config
 **/splunk_config.yml
 # Test files
 **/test.yml
@@ -23,3 +24,4 @@
 ansible/group_vars/**
 !ansible/group_vars/all
 !ansible/group_vars/all/dynamic.yml
+ansible/host_vars
