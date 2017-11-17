@@ -3,7 +3,11 @@ Splunkenizer Changes By Release
 
 ## 0.9.devel - ongoing
 
-* Remove disable of time sync, as leftover from fix clock skew try
+* Removed [splunk_env_name:vars] from the ansible inventory
+* Added time sync workaround for the clock skew without virtualbox additions
+* Configuration variables can now also be set on splunk_hosts level
+  * Ansible vars are configurable in the config file (ex. skip_tags)
+  * Allow to install additional os packages
 
 ## 0.8 - 2017-11-12
 

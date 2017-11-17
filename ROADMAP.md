@@ -4,6 +4,7 @@
 
 Note: The order for implementation may change
 
+* Create defaults config file to reduce common stuff in all the configurations
 * Support single indexers
 * Support multiple indexer clusters in org_all_forwarder_outputs (use idxc name in stanza)
 * separate output conf on DS for HF, separate cluster, single indexer
@@ -13,7 +14,6 @@ Note: The order for implementation may change
 * Create HTML link page for all roles
 * Support config options for indexes (ex. new metrics index type)
 * Make 'org_' for apps changeable
-* make ansible vars configurable in the config file (ex. skip_tags)
 * Make destname for apps changeable (ex. org_site_n_indexer_base)
 * option to have master_deployment_client or org_all_deploymentclient on cm
 * Splunk generic app deployment
@@ -29,9 +29,7 @@ Note: The order for implementation may change
 
 ## Fixes
 
-* Find a propre fix/workaround for the clock skew without virtualbox additions
 * org_all_forwarder_outputs should output to all indexers. does only use first cluster in multicluster config
-* remove [splunk_env_name:vars] from the ansible inventory
 * Better error handling and logic checking for config file
   * Check in Vagrantfile, if listed idxc is defined
 * Output of ansible for /etc/hosts has to much in it, find better way

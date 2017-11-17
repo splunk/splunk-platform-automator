@@ -3,13 +3,15 @@
 
 # General settings
 general:
-  start_ip: 172.16.2.100
-  time_zone: "Europe/Zurich"
+  start_ip: 172.16.1.100
 
 # Ansible configs
 ansible:
   # Verbose
-  #verbose: "v"
+#  verbose: "v"
+  # Skip ansible tags, ex. skip whole splunk install/config
+  skip_tags:
+#    - splunk
 
 # Virtualbox settings
 virtualbox:
@@ -17,11 +19,20 @@ virtualbox:
   memory: 512
   cpus: 1
   # Install vbox guest additions
-  install_vbox_additions: true # true/false
-  # You need to install plugin vagrant-vbguest to mount folders
+  install_vbox_additions: false # true/false
+  # You need to install vagrant plugin vagrant-vbguest to mount folders
   synced_folder:
 #    -  source: "../../Documents/Splunk/Software"
 #       target: "/Splunk_Software"
+
+# Operating System definitions
+os:
+  time_zone: "Europe/Zurich"
+  # Install additional packages
+  packages:
+#    - unzip
+#    - epel-release
+#    - lsof
 
 splunk_basics:
     # Location of the extracted baseconfig apps
