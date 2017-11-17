@@ -1,11 +1,7 @@
 ---
 # Main playbook for this role
 
-- include: pkgs_redhat.yml
-  when: ansible_os_family == "RedHat"
-
-- include: pkgs_debian.yml
-  when: ansible_os_family == "Debian"
+- include: packages.yml
 
 - include: users.yml
 

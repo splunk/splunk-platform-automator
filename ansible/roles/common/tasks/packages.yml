@@ -1,0 +1,14 @@
+---
+# This playbook install the apps required in my test environment
+
+#CENTOS SPECIFIC APPS
+
+- debug: var=packages
+
+- name: install additional os packages
+  tags:
+    - common
+    - packages
+  package:
+    name: "{{ packages }}" 
+    state: latest
