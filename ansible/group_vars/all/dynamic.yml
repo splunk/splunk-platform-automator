@@ -64,7 +64,6 @@ splunk_shc_server_list: "{% set comma = joiner(',') %}{% for sh in splunk_shc_ho
 
 # Splunk Monitoring Console
 splunk_dservers: "{{ groups.all|intersect(groups['splunk_env_'+splunk_env_name])|unique|difference(groups.role_indexer|default())|difference(groups.role_monitoring_console|default())|difference(groups.role_universal_forwarder|default()) }}"
-#splunk_dservers: "{{ groups.all|intersect(groups['splunk_env_'+splunk_env_name])|unique|difference(groups.role_indexer)|difference(groups.role_monitoring_console) }}"
 
 # License Server
 splunk_license_clients: |
