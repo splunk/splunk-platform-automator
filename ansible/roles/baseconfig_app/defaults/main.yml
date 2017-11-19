@@ -1,0 +1,4 @@
+---
+# Variables for this role
+
+app_dest_name: "{{app_name|replace('org_', splunk_app_prefix+'_')|replace('site_n',site|default('site_n'))}}"
