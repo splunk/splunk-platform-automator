@@ -12,5 +12,3 @@
 
 - include: shsingle.yml
   when: shc_name is not defined
-
-# Need one more if using deploymentclient
