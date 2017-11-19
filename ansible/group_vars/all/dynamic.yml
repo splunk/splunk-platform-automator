@@ -7,6 +7,7 @@ splunk_software: "{% if splunk_software_dir | regex_search('^/') %}{{ splunk_sof
 
 # Baseconfig apps directory
 splunk_baseconfig: "{% if splunk_baseconfig_dir | regex_search('^/') %}{{ plunk_baseconfig_dir }}{% else %}{{ playbook_dir }}/../{{ splunk_baseconfig_dir }}{% endif %}"
+splunk_app_prefix: "{{ splunk_env_name|default('splunk') }}"
 
 # Indexer Cluster
 splunk_idxc_list_all: "{{ groups | map('regex_search','idxcluster_.*') | select('string') | list }}"

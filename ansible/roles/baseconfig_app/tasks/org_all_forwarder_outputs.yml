@@ -7,7 +7,7 @@
     - splunk_baseconfig
     - org_all_forwarder_outputs
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/outputs.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     section: tcpout:primary_indexers
     option: server
     value: "{{splunk_idxc_server_list}}"

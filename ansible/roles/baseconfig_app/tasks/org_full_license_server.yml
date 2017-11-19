@@ -7,7 +7,7 @@
     - splunk_baseconfig
     - org_full_license_server
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: license
     option: master_uri
     value: "https://{{splunk_license_master}}:8089"

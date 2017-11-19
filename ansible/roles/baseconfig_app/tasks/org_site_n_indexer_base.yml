@@ -7,7 +7,7 @@
     - splunk_baseconfig
     - org_site_n_indexer_base
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: general
     option: site
     value: "{{site}}"

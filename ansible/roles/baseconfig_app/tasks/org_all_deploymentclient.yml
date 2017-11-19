@@ -7,7 +7,7 @@
     - splunk_baseconfig
     - org_all_deploymentclient
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/deploymentclient.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/deploymentclient.conf"
     section: target-broker:deploymentServer
     option: targetUri
     value: "{{splunk_deployment_server}}:8089"

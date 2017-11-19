@@ -7,7 +7,7 @@
     - splunk_baseconfig
     - org_cluster_master_base
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
     option: replication_factor
     value: "{{splunk_idxc_rf}}"
@@ -22,7 +22,7 @@
     - splunk_baseconfig
     - org_cluster_master_base
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
     option: search_factor
     value: "{{splunk_idxc_sf}}"
@@ -37,7 +37,7 @@
     - splunk_baseconfig
     - org_cluster_master_base
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
     option: cluster_label
     value: "{{splunk_idxc_label}}"
@@ -52,7 +52,7 @@
     - splunk_baseconfig
     - org_cluster_master_base
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
     option: pass4SymmKey
     value: "{{splunk_idxc_pass}}"

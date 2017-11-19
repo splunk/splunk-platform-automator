@@ -7,7 +7,7 @@
     - splunk_baseconfig
     - org_cluster_indexer_base
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
     option: master_uri
     value: "https://{{splunk_idxc_cm}}:8089"
@@ -22,7 +22,7 @@
     - splunk_baseconfig
     - org_cluster_indexer_base
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
     option: pass4SymmKey
     value: "{{splunk_idxc_pass}}"
@@ -38,7 +38,7 @@
     - splunk_baseconfig
     - org_cluster_indexer_base
   replace:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     regexp: '(<PORT_NUM>)'
     replace: '{{splunk_idxc_replication_port}}'
     owner: "{{splunk_user}}"

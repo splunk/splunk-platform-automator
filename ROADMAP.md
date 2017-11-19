@@ -4,17 +4,15 @@
 
 Note: The order for implementation may change
 
-* Create defaults config file to reduce common stuff in all the configurations
 * Support single indexers
 * Support multiple indexer clusters in org_all_forwarder_outputs (use idxc name in stanza)
 * separate output conf on DS for HF, separate cluster, single indexer
+* Create defaults config file to reduce common stuff in all the configurations
 * Add note about hostname and roles to login page
 * Disable THP in grub config
 * allow mixed splunk versions -> add version var at splunk_hosts
 * Create HTML link page for all roles
 * Support config options for indexes (ex. new metrics index type)
-* Make 'org_' for apps changeable
-* Make destname for apps changeable (ex. org_site_n_indexer_base)
 * option to have master_deployment_client or org_all_deploymentclient on cm
 * Splunk generic app deployment
   * Add unix_TA: (needs this packages: net-tools lsof sysstat)
@@ -29,6 +27,8 @@ Note: The order for implementation may change
 
 ## Fixes
 
+* not all apps on single search head are deployed from deployment server
+* add tags to the dserver and serverclass tasks 
 * org_all_forwarder_outputs should output to all indexers. does only use first cluster in multicluster config
 * Better error handling and logic checking for config file
   * Check in Vagrantfile, if listed idxc is defined

@@ -7,7 +7,7 @@
     - splunk_baseconfig
     - org_search_volume_indexes
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/indexes.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
     section: volume:primary
     option: path
     value: "{{splunk_home}}/var/lib/splunk"
@@ -22,7 +22,7 @@
     - splunk_baseconfig
     - org_search_volume_indexes
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/indexes.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
     section: volume:secondary
     state: absent
     value: "{{splunk_home}}/var/lib/splunk"

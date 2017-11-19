@@ -7,7 +7,7 @@
     - splunk_baseconfig
     - org_cluster_search_base
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
     option: master_uri
     value: "{{splunk_idxc_master_uri}}"
@@ -22,7 +22,7 @@
     - splunk_baseconfig
     - org_cluster_search_base
   replace:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     regexp: '\[clustermaster:one\]'
     replace: "[clustermaster:{{ hostvars[item]['idxc_name'] }}]"
     owner: "{{splunk_user}}"
@@ -38,7 +38,7 @@
     - splunk_baseconfig
     - org_cluster_search_base
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustermaster:two
     state: absent
     owner: "{{splunk_user}}"
@@ -52,7 +52,7 @@
     - splunk_baseconfig
     - org_cluster_search_base
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustermaster:{{ hostvars[item]['idxc_name'] }}
     option: pass4SymmKey
     value: "{{ hostvars[item]['idxc_password'] }}"
@@ -70,7 +70,7 @@
     - splunk_baseconfig
     - org_cluster_search_base
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustermaster:{{ hostvars[item]['idxc_name'] }}
     option: pass4SymmKey
     value: "{{ hostvars[item]['idxc_password'] }}"
@@ -88,7 +88,7 @@
     - splunk_baseconfig
     - org_cluster_search_base
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustermaster:{{ hostvars[item]['idxc_name'] }}
     option: master_uri
     value: "https://{{ item }}:8089"
@@ -105,7 +105,7 @@
     - splunk_baseconfig
     - org_cluster_search_base
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustermaster:{{ hostvars[item]['idxc_name'] }}
     option: multisite
     value: "true"
@@ -123,7 +123,7 @@
     - splunk_baseconfig
     - org_cluster_search_base
   ini_file:
-    path: "{{ app_path }}/{{ app_name }}/local/server.conf"
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: general
     option: site
     value: "{{splunk_shc_site}}"

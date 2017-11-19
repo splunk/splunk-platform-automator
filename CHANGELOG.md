@@ -8,6 +8,8 @@ Splunkenizer Changes By Release
 * Configuration variables can now also be set on splunk_hosts level
   * Ansible vars are configurable in the config file (ex. skip_tags)
   * Allow to install additional os packages
+* Make 'org_' for apps changeable, does set to splunk_env_name
+* Make destname for apps changeable (ex. org_site_n_indexer_base)
 
 ## 0.8 - 2017-11-12
 
