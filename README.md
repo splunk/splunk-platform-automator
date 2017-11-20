@@ -50,7 +50,7 @@ The Framework is currently only tested on Mac OSX, but any other Unix, which is 
 * Download and install Virtualbox and Vagrant from their websites. Both are coming with a simple installer in the package.
 * Install Ansible: I personally prefer [Brew](https://brew.sh) for that, which is as simple as `brew install ansible`. Current ansible 2.4.1.0 has a bug. You have to use the previous version. Install in brew with `brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/10ca339c7cba7eac1473012691d084aca62f1881/Formula/ansible.rb`
 * Download the framework in a folder of your choice with `git clone git@github.com:thesplunker/Splunkenizer.git`
-* Download the prerequisites and put them in folder called `Software`, just beside the `Splunkenizer` folder. Folder structure should look like this, if you have the stuff ex. in a folder called `Vagrant`.
+* Download the prerequisites and put them in folder called `Software`, just beside the `Splunkenizer` folder. Folder structure should look like this, if you have the stuff extracted in a folder called `Vagrant`.
 
 ```
 ./Vagrant/Splunkenizer/...
@@ -67,7 +67,7 @@ The Framework is currently only tested on Mac OSX, but any other Unix, which is 
 There on single configuration file, where all settings for your deployment are stored. If you run `vagrant` the first time, you will get a `config` directory created. Copy one configuration file from the [examples](examples) to `config/splunk_config.yml` and adjust the setting to your needs. You should get the idea with the comments found in the examples.
 
 ## Start the deployment
-The whole framework is managed by vagrant. You have to be in the top directory, where the `Vagrantfile` sits and just run thi build command. It will pul an os image from the internet, when run the first time.
+The whole framework is managed by vagrant. You have to be in the top directory, where the `Vagrantfile` sits and just run the build command. It will pull an os image from the internet, when run the first time.
 
 ```
 vagrant up
