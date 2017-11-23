@@ -1,29 +1,14 @@
 ---
 # Main playbook for this role
 
-- name: apply baseconfig app org_cluster_indexer_base
+- name: start role tasks
   tags:
     - splunk
-    - splunk_baseconfig
     - indexer
-    - org_cluster_indexer_base
-  include_role:
-    name: baseconfig_app
-  vars:
-    app_name: 'org_cluster_indexer_base'
-    app_path: '{{splunk_home}}/etc/apps'
+  debug: msg="role '{{ role_name }}' start"
 
-- name: apply baseconfig app org_site_n_indexer_base
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - indexer
-    - org_site_n_indexer_base
-  include_role:
-    name: baseconfig_app
-  vars:
-    app_name: 'org_site_n_indexer_base'
-    app_path: '{{splunk_home}}/etc/apps'
-  when: site is defined and "'site' in site"
+- include: idxcluster.yml
+  when: idxc_name is defined
 
-- include: check_pass.yml
+- include: idxsingle.yml
+  when: idxc_name is not defined

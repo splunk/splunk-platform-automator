@@ -1,0 +1,89 @@
+---
+# Main playbook for this role
+
+- debug: msg="Configuring single indexer"
+
+- name: apply baseconfig app org_all_deploymentclient
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - indexer
+    - idxsingle
+    - org_all_deploymentclient
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_deploymentclient'
+    app_path: '{{splunk_home}}/etc/apps'
+  notify: restart splunk
+  when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server
+
+- name: apply baseconfig app org_full_license_server
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - indexer
+    - idxsingle
+    - org_full_license_server
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_full_license_server'
+    app_path: '{{splunk_home}}/etc/apps'
+  notify: restart splunk
+  when: splunk_deployment_server|default()|length == 0 and splunk_license_master|default()|length > 0 and inventory_hostname not in groups.role_license_master
+
+- name: apply baseconfig app org_all_indexer_base
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - indexer
+    - idxsingle
+    - org_all_indexer_base
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_indexer_base'
+    app_path: '{{splunk_home}}/etc/apps'
+  notify: restart splunk
+  when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
+
+- name: apply baseconfig app org_indexer_volume_indexes
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - indexer
+    - idxsingle
+    - org_indexer_volume_indexes
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_indexer_volume_indexes'
+    app_path: '{{splunk_home}}/etc/apps'
+  notify: restart splunk
+  when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
+
+- name: apply baseconfig app org_all_indexes
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - indexer
+    - idxsingle
+    - org_all_indexes
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_indexes'
+    app_path: '{{splunk_home}}/etc/apps'
+  notify: restart splunk
+  when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
+
+- name: update serverclass on deployment_server
+  include_role:
+    name: deployment_server
+    tasks_from: update_serverclass
+
+- name: update dserver on monitoring_console
+  include_role:
+    name: monitoring_console
+    tasks_from: update_dserver

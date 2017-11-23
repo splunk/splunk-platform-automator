@@ -6,6 +6,8 @@
     - splunk
     - splunk_baseconfig
     - indexer
+    - idxsingle
+    - idxcluster
   shell: "{{ splunk_home }}/bin/splunk btool server list clustering | egrep -e '^pass4SymmKey = {{splunk_idxc_pass}}$'"
   register: grep_result
   check_mode: False
@@ -17,6 +19,8 @@
     - splunk
     - splunk_baseconfig
     - indexer
+    - idxsingle
+    - idxcluster
   service: name=splunk state=restarted
   become: yes
   become_user: root
