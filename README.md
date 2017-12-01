@@ -1,5 +1,9 @@
 
-&#x1F534; Due to the bug [#31755](https://github.com/ansible/ansible/issues/31755) ansible 2.4.1.0 does not work with Splunkenizer! Please use a lower version! See the Install section on how to install.
+&#x1F534; Due to the bug [#31755](https://github.com/ansible/ansible/issues/31755) ansible 2.4.1.0 does not work with Splunkenizer!
+
+&#x1F534; Due to the bug [#23609](https://github.com/ansible/ansible/issues/23609) ansible 2.4.2.0 does also not work.
+
+Please use a lower version! See the Install section on how to install ansible version 2.4.0.0
 
 # Splunkenizer
 
