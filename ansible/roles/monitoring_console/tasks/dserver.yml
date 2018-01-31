@@ -6,6 +6,7 @@
     - splunk
     - splunk_baseconfig
     - monitoring_console
+    - search_peers
   shell: sed -n '/^\[distributedSearch\]$/,+1p' {{ splunk_home }}/etc/system/local/distsearch.conf | grep servers | awk -F= '{print $2}' | sed -e 's%https\://\([a-Z0-9_]*\)\:[0-9]*%\1%g' | tr -d " "
   register: current_dservers
   args:
@@ -16,6 +17,7 @@
     - splunk
     - splunk_baseconfig
     - monitoring_console
+    - search_peers
   command: "{{ splunk_home }}/bin/splunk add search-server {{ item }}:8089 -remoteUsername admin -remotePassword {{splunk_admin_password}} -auth admin:{{splunk_admin_password}}"
   with_items:
     - "{{ splunk_dservers | difference(current_dservers.stdout.split(',')|list) }}"
