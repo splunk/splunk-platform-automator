@@ -6,7 +6,7 @@
     - splunk
     - splunk_enterprise
     - ui_config
-    - first_login
+    - first_login_off
   stat: 
     path: "{{ splunk_home }}/etc/.ui_login"
   register: splunk_first_login
@@ -17,7 +17,7 @@
     - splunk
     - splunk_enterprise
     - ui_config
-    - first_login
+    - first_login_off
   file:
     path: "{{ splunk_home }}/etc/.ui_login"
     state: touch
@@ -25,3 +25,19 @@
     group: "{{ splunk_group }}"
     mode: 0600
   when: splunk_install_app == "splunk" and not splunk_first_login.stat.exists
+
+- name: add username and password info to login page
+  tags:
+    - splunk
+    - splunk_enterprise
+    - ui_config
+    - login_page_info
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/web.conf"
+    section: settings
+    option: "login_content"
+    value: "<big><b>Hostname: </b>{{inventory_hostname}}<br><b>User: </b>admin<br><b>Password: </b>{{splunk_admin_password}}<br><br><b>Splunk Roles: </b>{{splunk_roles}}</big>"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  when: splunk_install_app == "splunk"
