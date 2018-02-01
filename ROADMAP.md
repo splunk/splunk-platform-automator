@@ -4,13 +4,9 @@
 
 Note: The order for implementation may change
 
-* Support single indexers
-* Support multiple indexer clusters in org_all_forwarder_outputs (use idxc name in stanza)
+* Config options for forwarding to single indexers and heavy forwarders
 * separate output conf on DS for HF, separate cluster, single indexer
-* Create defaults config file to reduce common stuff in all the configurations
-* Add note about hostname and roles to login page
 * Disable THP in grub config
-* allow mixed splunk versions -> add version var at splunk_hosts
 * Create HTML link page for all roles
 * Support config options for indexes (ex. new metrics index type)
 * option to have master_deployment_client or org_all_deploymentclient on cm
@@ -27,9 +23,6 @@ Note: The order for implementation may change
 
 ## Fixes
 
-* not all apps on single search head are deployed from deployment server
-* add tags to the dserver and serverclass tasks 
-* org_all_forwarder_outputs should output to all indexers. does only use first cluster in multicluster config
 * Better error handling and logic checking for config file
   * Check in Vagrantfile, if listed idxc is defined
 * Output of ansible for /etc/hosts has to much in it, find better way

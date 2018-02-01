@@ -10,6 +10,22 @@ Splunkenizer Changes By Release
   * Allow to install additional os packages
 * Make 'org_' for apps changeable, does set to splunk_env_name
 * Make destname for apps changeable (ex. org_site_n_indexer_base)
+* Added single indexer playbook, forwarding config to it not yet implemented
+* Added ansible.cfg to turn off deprecation warnings on ansible 2.4+
+* Add note about hostname, roles, user/pw on login page
+* Simplifyed the configuration file. Established default values for most of the settings
+* Support multiple indexer clusters in org_all_forwarder_outputs (use idxc name in stanza)
+* Allow mixed splunk versions. Can be set per splunk_env or host level
+* Reworked outputs and search_peer configuration
+* Support single indexers
+* Support single search heads
+
+### Fixes
+
+* not all apps on single search head are deployed from deployment server
+* add tags to the dserver and serverclass tasks 
+* volume and indexes should be deployed to single search head (create serverclass)
+* org_all_forwarder_outputs should output to all indexers. does only use first cluster in multicluster config
 
 ## 0.8 - 2017-11-12
 
