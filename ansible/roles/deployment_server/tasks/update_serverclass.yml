@@ -2,6 +2,11 @@
 # This playbook contains common tasks in this role
 
 - name: check if deployment_server is available
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
   wait_for:
     host: '{{splunk_deployment_server}}'
     port: 22
@@ -13,6 +18,11 @@
   when: groups.role_deployment_server is defined and inventory_hostname not in groups.role_deployment_server
 
 - name: update serverclass on deployment_server
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
   include_role:
     name: deployment_server
     tasks_from: serverclass
