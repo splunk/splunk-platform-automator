@@ -27,30 +27,8 @@
   vars:
     app_name: 'org_all_deploymentclient'
     app_path: '{{splunk_home}}/etc/apps'
-  notify: restart splunk
-  when: groups.role_deployment_server is defined
-
-- name: check if deployment server is configured
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - universal_forwarder
-  shell: "{{ splunk_home }}/bin/splunk show deploy-poll -auth admin:{{ splunk_admin_password }}"
-  become: yes
-  become_user: splunk
-  register: need_splunkforwarder_restart
-  check_mode: False
-  changed_when: need_splunkforwarder_restart.stdout.find('is not set') != -1
-
-- name: restart splunk for deployment server configuration
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - universal_forwarder
-  service: name=splunk state=restarted
-  become: yes
-  become_user: root
-  when: need_splunkforwarder_restart.stdout.find('is not set') != -1 and groups.role_deployment_server is defined
+  notify: verify deploymentclient
+  when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server
 
 - name: apply baseconfig app org_all_forwarder_outputs
   tags:
@@ -63,9 +41,15 @@
   vars:
     app_name: 'org_all_forwarder_outputs'
     app_path: '{{splunk_home}}/etc/apps'
-  when: groups.role_deployment_server is not defined
+  notify: restart splunk
+  when: splunk_deployment_server|default()|length == 0 
 
 - name: update serverclass on deployment_server
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
   include_role:
     name: deployment_server
     tasks_from: update_serverclass
