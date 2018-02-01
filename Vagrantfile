@@ -10,6 +10,37 @@ dir = File.dirname(File.expand_path(__FILE__))
 config_file = "splunk_config.yml"
 config_dir = "config"
 
+# Default values
+defaults = {
+  "ansible"=>{
+    "verbose"=>"", 
+    "skip_tags"=>[]
+    },
+  "virtualbox"=>{
+    "box"=>"centos/7",
+    "memory"=>512,
+    "cpus"=>1,
+    "install_vbox_additions"=>false,
+    "synced_folder"=>nil
+    },
+  "os"=>{
+    "time_zone"=>"Europe/Zurich",
+    "packages"=>nil
+    },
+  "splunk_dirs"=>{
+    "splunk_baseconfig_dir"=>"../Software",
+    "splunk_software_dir"=>"../Software"
+    },
+  "splunk_defaults"=>{
+    "splunk_env_name"=>"splk",
+    "splunk_version"=>"7.0.2",
+    "splunk_admin_password"=>"splunklab",
+    "splunk_outputs"=>"all",
+    "splunk_search_peers"=>"all"
+    }
+  }
+#puts JSON.pretty_generate(defaults)
+
 if !File.directory?("#{dir}/#{config_dir}")
   FileUtils.mkdir_p("#{dir}/#{config_dir}")
 end
@@ -28,30 +59,52 @@ end
 # Edit the config file to change VM and environment configuration details
 settings = YAML.load_file("#{dir}/#{config_dir}/#{config_file}")
 
+splunk_dirs = defaults['splunk_dirs'].dup
+if !settings['splunk_dirs'].nil?
+  splunk_dirs = splunk_dirs.merge(settings['splunk_dirs'])
+end
+
+# Create splunk_defaults variables
+splunk_defaults = defaults['splunk_defaults'].dup
+if !settings['splunk_defaults'].nil?
+  splunk_defaults = splunk_defaults.merge(settings['splunk_defaults'])
+end
+
+# Create splunk_environments group_vars
+splunk_environments = []
+if !settings['splunk_environments'].nil?
+  settings['splunk_environments'].each do |splunkenv|
+    env_obj = splunk_defaults.merge(splunkenv)
+    splunk_environments.push(env_obj)
+  end
+else
+  splunk_environments.push(splunk_defaults)
+end
+
 # Check for Splunk baseconfig apps
-check_base = Dir.glob(dir+"/"+settings['splunk_basics']['splunk_baseconfig_dir']+"/*/org_all_indexer_base")
-check_cluster = Dir.glob(dir+"/"+settings['splunk_basics']['splunk_baseconfig_dir']+"/*/org_cluster_indexer_base")
+check_base = Dir.glob(dir+"/"+splunk_dirs['splunk_baseconfig_dir']+"/*/org_all_indexer_base")
+check_cluster = Dir.glob(dir+"/"+splunk_dirs['splunk_baseconfig_dir']+"/*/org_cluster_indexer_base")
 if check_base.length < 1 or check_cluster.length < 1
-  print "ERROR: Please download the Splunk baseconfig apps here and extract it into #{dir}/#{settings['splunk_basics']['splunk_baseconfig_dir']} \n\n"
+  print "ERROR: Please download the Splunk baseconfig apps here and extract it into #{dir}/#{splunk_dirs['splunk_baseconfig_dir']} \n\n"
   print "Configurations Base:      https://splunk.app.box.com/ConfigurationsBase\n"
   print "Configurations Cluster:   https://splunk.app.box.com/ConfigurationsCluster\n"
   exit 2
 end
 
-# Check for Splunk installer archives
-settings['splunk_environments'].each do |splunkenv|
+## Check for Splunk installer archives
+splunk_environments.each do |splunkenv|
   ['splunk','splunkforwarder'].each do |splunk_arch|
-    check_arch = Dir.glob(dir+"/"+settings['splunk_basics']['splunk_software_dir']+"/"+splunk_arch+"-"+splunkenv['splunk_version']+"-*Linux-x86_64.tgz")
+    check_arch = Dir.glob(dir+"/"+splunk_dirs['splunk_software_dir']+"/"+splunk_arch+"-"+splunkenv['splunk_version']+"-*Linux-x86_64.tgz")
     if check_arch.length < 1
-      print "ERROR: Splunk Enterprise version #{splunkenv['splunk_version']} missing in #{dir}/#{settings['splunk_basics']['splunk_software_dir']}\n\n"
+      print "ERROR: Splunk Enterprise version #{splunkenv['splunk_version']} missing in #{dir}/#{splunk_dirs['splunk_software_dir']}\n\n"
       print "Download "+splunk_arch+"-"+splunkenv['splunk_version']+"-...-Linux-x86_64.tgz at https://www.splunk.com\n"
       exit 2
     end
   end
   # Check for Splunk license file
   if !splunkenv['splunk_license_file'].nil?
-    if !File.file?(dir+"/"+settings['splunk_basics']['splunk_software_dir']+"/"+splunkenv['splunk_license_file'])
-      print "ERROR: Cannot find license file #{settings['splunk_basics']['splunk_software_dir']+"/"+splunkenv['splunk_license_file']} \n\n"
+    if !File.file?(dir+"/"+splunk_dirs['splunk_software_dir']+"/"+splunkenv['splunk_license_file'])
+      print "ERROR: Cannot find license file #{splunk_dirs['splunk_software_dir']+"/"+splunkenv['splunk_license_file']} \n\n"
       print "Comment variable 'splunk_license_file' in #{dir}/#{config_dir}/#{config_file} if no license available\n"
       exit 2
     end
@@ -63,28 +116,12 @@ groups = {}
 idxc_list = {}
 idxc_sites = {}
 shc_list = {}
+outputs_list = {}
+outputs_groups = {}
+search_peer_list = {}
+search_peer_groups = {}
 envs = {}
 special_host_vars = {}
-
-# Default values
-defaults = {
-  "ansible"=>{
-    "verbose"=>"", 
-    "skip_tags"=>[]
-    },
-  "virtualbox"=>{
-    "box"=>"centos/7",
-    "memory"=>512,
-    "cpus"=>1,
-    "install_vbox_additions"=>false,
-    "synced_folder"=>nil
-    },
-  "os"=>{
-    "time_zone"=>"Europe/Zurich",
-    "packages"=>nil
-    }
-  }
-#puts JSON.pretty_generate(defaults)
 
 # Clean up host_vars directory
 if File.directory?("#{dir}/ansible/host_vars")
@@ -115,6 +152,22 @@ settings['splunk_hosts'].each do |splunk_host|
     end
   end
 
+  # Create splunk_env host_vars
+  splunk_env = {}
+  ['splunk_version','splunk_admin_password','splunk_license_file','splunk_indexes','splunk_outputs','splunk_search_peers'].each do |splunk_var|
+    if !splunk_host[splunk_var].nil?
+      splunk_env[splunk_var] = splunk_host[splunk_var]
+    end
+  end
+  if splunk_env.length > 0
+    if !File.directory?("#{dir}/ansible/host_vars/#{splunk_host['name']}")
+      FileUtils.mkdir_p("#{dir}/ansible/host_vars/#{splunk_host['name']}")
+    end  
+    File.open("#{dir}/ansible/host_vars/#{splunk_host['name']}/splunk_env.yml", "w") do |f|
+      f.write(splunk_env.to_yaml)
+    end
+  end
+
   # Build the ansible groups
   splunk_host['roles'].each do |role|
     if groups.has_key?("role_"+role)
@@ -123,11 +176,20 @@ settings['splunk_hosts'].each do |splunk_host|
       groups["role_"+role] = [splunk_host['name']]
     end
     var_obj = {}
+    if !splunk_host['splunk_env'].nil?
+      if splunk_environments.find {|i| i["splunk_env_name"] == splunk_host['splunk_env']}.nil?
+        print "ERROR: Cannot find splunk_env_name #{splunk_host['splunk_env']} from host #{splunk_host['name']} in config! \n\n"
+        exit 2
+      end
+    else
+      splunk_host['splunk_env'] = splunk_environments[0]['splunk_env_name']
+    end
+
     # Add the management nodes here as well, since the role_* groups are not completely populated from the beginning
     ['deployment_server','monitoring_console', 'license_master'].each do |role_def|
       if role == role_def
         # Check if license file is available for license master
-        if role_def == "license_master" and settings['splunk_environments'].find {|i| i["splunk_env_name"] == splunk_host['splunk_env']}["splunk_license_file"].nil?
+        if role_def == "license_master" and splunk_environments.find {|i| i["splunk_env_name"] == splunk_host['splunk_env']}["splunk_license_file"].nil?
           print "ERROR: Role 'license_master' on Splunk host '#{splunk_host['name']}' is not allowed if no license file available! \n\n"
           exit 2
         end
@@ -141,6 +203,7 @@ settings['splunk_hosts'].each do |splunk_host|
         end
       end
     end
+
     # Create indexer cluster member list
     if role == 'indexer' and splunk_host['idxcluster']
       if idxc_list.has_key?(splunk_host['idxcluster'])
@@ -150,6 +213,7 @@ settings['splunk_hosts'].each do |splunk_host|
       else
         idxc_list[splunk_host['idxcluster']] = [splunk_host['name']]
       end
+      # Create the site list
       if splunk_host['site']
         if idxc_sites.has_key?(splunk_host['idxcluster'])
           if not idxc_sites[splunk_host['idxcluster']].include?(splunk_host['site'])
@@ -160,6 +224,51 @@ settings['splunk_hosts'].each do |splunk_host|
         end
       end
     end
+
+    # Build the outputs list
+    if role == 'indexer' or role == 'heavy_forwarder'
+      if not outputs_list.has_key?(splunk_host['splunk_env'])
+        outputs_list[splunk_host['splunk_env']] = {} 
+      end
+      if splunk_host['idxcluster']
+        if not outputs_list[splunk_host['splunk_env']].has_key?('idxcluster')
+          outputs_list[splunk_host['splunk_env']]['idxcluster'] = {}
+        end
+        if not outputs_list[splunk_host['splunk_env']]['idxcluster'].has_key?(splunk_host['idxcluster'])
+          outputs_list[splunk_host['splunk_env']]['idxcluster'][splunk_host['idxcluster']] = idxc_list[splunk_host['idxcluster']]
+        end
+      else
+        if not outputs_list[splunk_host['splunk_env']].has_key?(role)
+          outputs_list[splunk_host['splunk_env']][role] = [] 
+        end
+        if not outputs_list[splunk_host['splunk_env']][role].include?(splunk_host['name'])
+          outputs_list[splunk_host['splunk_env']][role].push(splunk_host['name'])
+        end
+      end
+    end
+
+    # Build the search_peer list
+    if role == 'indexer' or role == 'cluster_master'
+      if not search_peer_list.has_key?(splunk_host['splunk_env'])
+        search_peer_list[splunk_host['splunk_env']] = {} 
+      end
+      if role == 'cluster_master' and splunk_host['idxcluster']
+        if not search_peer_list[splunk_host['splunk_env']].has_key?('idxcluster')
+          search_peer_list[splunk_host['splunk_env']]['idxcluster'] = {}
+        end
+        if not search_peer_list[splunk_host['splunk_env']]['idxcluster'].has_key?(splunk_host['idxcluster'])
+          search_peer_list[splunk_host['splunk_env']]['idxcluster'][splunk_host['idxcluster']] = splunk_host['name']
+        end
+      elsif role == 'indexer' and not splunk_host['idxcluster']
+        if not search_peer_list[splunk_host['splunk_env']].has_key?(role)
+          search_peer_list[splunk_host['splunk_env']][role] = [] 
+        end
+        if not search_peer_list[splunk_host['splunk_env']][role].include?(splunk_host['name'])
+          search_peer_list[splunk_host['splunk_env']][role].push(splunk_host['name'])
+        end
+      end
+    end
+
     # Create search head cluster member list
     if role == 'search_head' and splunk_host['shcluster']
       if shc_list.has_key?(splunk_host['shcluster'])
@@ -193,28 +302,94 @@ settings['splunk_hosts'].each do |splunk_host|
   end
 end
 
+# Create the output groups
+settings['splunk_hosts'].each do |splunk_host|
+  splunk_host['roles'].each do |role|
+    if role != 'indexer'
+      if splunk_host.has_key?('splunk_outputs')
+        output = splunk_host['splunk_outputs']
+      else
+        output = splunk_environments.find {|i| i["splunk_env_name"] == splunk_host['splunk_env']}["splunk_outputs"]
+      end
+      groupname = "output_"+splunk_host['splunk_env']+"_"+output
+      if not outputs_groups.has_key?(groupname)
+        outputs_groups[groupname] = {}
+        if output == 'all'
+          if outputs_list[splunk_host['splunk_env']].has_key?('idxcluster')
+            outputs_groups[groupname]['idxcluster'] = outputs_list[splunk_host['splunk_env']]['idxcluster']
+          end
+          if outputs_list[splunk_host['splunk_env']].has_key?('indexer')
+            outputs_groups[groupname]['indexer'] = outputs_list[splunk_host['splunk_env']]['indexer']
+          end
+        end
+      end
+      if groups.has_key?(groupname)
+        if not groups[groupname].include?(splunk_host['name'])
+          groups[groupname].push(splunk_host['name'])
+        end
+      else
+        groups[groupname] = [splunk_host['name']]
+      end
+    end
+  end
+end
+
+# Create the search_peer groups
+settings['splunk_hosts'].each do |splunk_host|
+  splunk_host['roles'].each do |role|
+    if ['search_head','monitoring_console'].include?(role)
+      if splunk_host.has_key?('splunk_search_peers')
+        search_peer = splunk_host['splunk_search_peers']
+      else
+        search_peer = splunk_environments.find {|i| i["splunk_env_name"] == splunk_host['splunk_env']}["splunk_search_peers"]
+      end
+      groupname = "search_peer_"+splunk_host['splunk_env']+"_"+search_peer
+      if not search_peer_groups.has_key?(groupname)
+        search_peer_groups[groupname] = {}
+        if search_peer == 'all'
+          if search_peer_list[splunk_host['splunk_env']].has_key?('idxcluster')
+            search_peer_groups[groupname]['idxcluster'] = search_peer_list[splunk_host['splunk_env']]['idxcluster']
+          end
+          if search_peer_list[splunk_host['splunk_env']].has_key?('indexer')
+            search_peer_groups[groupname]['indexer'] = search_peer_list[splunk_host['splunk_env']]['indexer']
+          end
+        end
+      end
+      if groups.has_key?(groupname)
+        if not groups[groupname].include?(splunk_host['name'])
+          groups[groupname].push(splunk_host['name'])
+        end
+      else
+        groups[groupname] = [splunk_host['name']]
+      end
+    end
+  end
+end
+
 # Cleanup old group_vars files
 Dir['ansible/group_vars/**/*'].select{|f| File.file?(f) }.each do |filepath|
   File.delete(filepath) if File.basename(filepath) != "dynamic.yml"
 end
 
 # Create os group_vars
+os_defaults = defaults['os'].dup
 if !settings['os'].nil?
-  File.open("ansible/group_vars/all/os.yml", "w") do |f|
-    f.write(settings['os'].to_yaml)
-  end
+  os_defaults = os_defaults.merge(settings['os'])
+end
+File.open("ansible/group_vars/all/os.yml", "w") do |f|
+  f.write(os_defaults.to_yaml)
 end
 
 # Create splunk_basics group_vars
-if !settings['splunk_basics'].nil?
-  File.open("ansible/group_vars/all/splunk_basics.yml", "w") do |f|
-    f.write(settings['splunk_basics'].to_yaml)
+if !splunk_dirs.nil?
+  File.open("ansible/group_vars/all/splunk_dirs.yml", "w") do |f|
+    f.write(splunk_dirs.to_yaml)
   end
 end
 
 # Create splunk environment group_vars
-if !settings['splunk_environments'].nil?
-  settings['splunk_environments'].each do |splunkenv|
+if !splunk_environments.nil?
+  splunk_environments.each do |splunkenv|
     group_name = "splunk_env_"+splunkenv['splunk_env_name']
     if envs.has_key?(group_name)
       splunkenv = splunkenv.merge(envs[group_name])
@@ -232,7 +407,6 @@ if !settings['splunk_idxclusters'].nil?
     if idxc_sites[idxcluster['idxc_name']]
       idxcluster['idxc_available_sites'] = idxc_sites[idxcluster['idxc_name']]
     end
-    idxcluster['idxc_members'] = idxc_list[idxcluster['idxc_name']]
     File.open("ansible/group_vars/#{group_name}.yml", "w") do |f|
       f.write(idxcluster.to_yaml)
     end
@@ -244,9 +418,30 @@ if !settings['splunk_shclusters'].nil?
   settings['splunk_shclusters'].each do |shcluster|
     group_name = "shcluster_"+shcluster['shc_name']
     shcluster['shc_captain'] = shc_list[shcluster['shc_name']].last
-    shcluster['shc_members'] = shc_list[shcluster['shc_name']]
     File.open("ansible/group_vars/#{group_name}.yml", "w") do |f|
       f.write(shcluster.to_yaml)
+    end
+  end
+end
+
+# Create splunk outputs group_vars
+if !outputs_groups.nil?
+  outputs_groups.each do |group_name, group_content|
+    outputs = {}
+    outputs['splunk_outputs_list'] = group_content.dup
+    File.open("ansible/group_vars/#{group_name}.yml", "w") do |f|
+      f.write(outputs.to_yaml)
+    end
+  end
+end
+
+# Create splunk search_peers group_vars
+if !search_peer_groups.nil?
+  search_peer_groups.each do |group_name, group_content|
+    search_peers = {}
+    search_peers['splunk_search_peer_list'] = group_content.dup
+    File.open("ansible/group_vars/#{group_name}.yml", "w") do |f|
+      f.write(search_peers.to_yaml)
     end
   end
 end
@@ -345,11 +540,21 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       srv.vm.network :private_network, ip: server['ip_addr']
       #srv.vm.network "forwarded_port", guest: 8000, host: 8000, auto_correct: true
 
+# If we need a second disk for testing
+#      dataDisk1 = srv.vm.hostname+'dataDisk1.vdi'
+
       # Set per-server VirtualBox provider configuration/overrides
       srv.vm.provider 'virtualbox' do |vb, override|
         #override.vm.box = server['box']['vb']
         vb.memory = special_host_vars[server['name']]['virtualbox']['memory']
         vb.cpus = special_host_vars[server['name']]['virtualbox']['cpus']
+
+# If we need a second disk for testing
+#
+#        if not File.exists?(dataDisk1)
+#          vb.customize ['createmedium', '--filename', dataDisk1, '--variant', 'Standard', '--size', 10 * 1024]
+#        end
+#        vb.customize ['storageattach', :id, '--storagectl', 'IDE', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', dataDisk1]
       end
 
       srv.vm.provision "ansible" do |ansible|

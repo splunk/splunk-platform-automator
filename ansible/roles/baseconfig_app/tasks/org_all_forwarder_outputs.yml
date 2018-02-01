@@ -1,17 +1,80 @@
 ---
 # This playbook install the base config app
 
-- name: "({{ app_name }}) setting tcpout:primary_indexers"
+- name: "({{ app_name }}) remove defaultGroup value"
   tags:
     - splunk
     - splunk_baseconfig
     - org_all_forwarder_outputs
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
-    section: tcpout:primary_indexers
-    option: server
-    value: "{{splunk_idxc_server_list}}"
+    section: tcpout
+    option: defaultGroup
+    state: absent
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
   notify: restart splunk
+
+- name: "({{ app_name }}) rename tcpout:primary_indexers"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_forwarder_outputs
+  replace:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+    regexp: '\[tcpout:primary_indexers\]'
+    replace: "[tcpout:{{ splunk_outputs_idxc_list|first+'_indexers' }}]"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  notify: restart splunk
+  when: splunk_outputs_idxc_list|length > 0
+
+- name: "({{ app_name }}) setting server in tcpout stanza for clustered indexers"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_forwarder_outputs
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+    section: tcpout:{{ item.key+'_indexers' }}
+    option: server
+    value: "{% set comma = joiner(',') %}{% for idx in item.value %}{{ comma() }}{{ idx }}:9997{% endfor %}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  notify: restart splunk
+  with_dict: "{{ splunk_outputs_idxc_list }}"
+  when: splunk_outputs_idxc_list|length > 0
+
+- name: "({{ app_name }}) rename tcpout:primary_indexers"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_forwarder_outputs
+  replace:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+    regexp: '\[tcpout:primary_indexers\]'
+    replace: "[tcpout:all_indexers]"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  notify: restart splunk
+  when: splunk_outputs_idxc_list|length == 0 and splunk_outputs_idx_list|length > 0
+
+- name: "({{ app_name }}) setting server in tcpout stanza for non clustered indexers"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_forwarder_outputs
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+    section: tcpout:all_indexers
+    option: server
+    value: "{% set comma = joiner(',') %}{% for idx in splunk_outputs_idx_list %}{{ comma() }}{{ idx }}:9997{% endfor %}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  notify: restart splunk
+  when: splunk_outputs_idx_list|length > 0
