@@ -35,7 +35,7 @@ splunk_shclusters:
 
 # Splunk hosts with its settings
 splunk_hosts:
-# Cluster Master
+  # Cluster Master
   - name: cm
     roles:
       - cluster_master

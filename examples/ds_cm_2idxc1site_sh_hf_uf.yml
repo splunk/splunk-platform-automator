@@ -28,8 +28,14 @@ splunk_idxclusters:
 
 # Splunk hosts with its settings
 splunk_hosts:
-# Cluster Master
-  - name: cm1
+
+  # Deployment Server
+  - name: ds
+    roles:
+      - deployment_server
+
+  # Cluster Master
+  - name: cm
     roles:
       - cluster_master
       - monitoring_console
@@ -38,35 +44,30 @@ splunk_hosts:
     site: site0
 
   # Cluster Indexer
-  - name: idx11
+  - name: idx1
     roles:
       - indexer
     idxcluster: idxc1
     site: site1
 
   # Cluster Indexer
-  - name: idx12
+  - name: idx2
     roles:
       - indexer
     idxcluster: idxc1
     site: site1
 
-  # Deployment Server
-  - name: ds1
-    roles:
-      - deployment_server
-
   # Search Head
-  - name: sh1
+  - name: sh
     roles:
       - search_head
 
   # Search Head
-  - name: hf1
+  - name: hf
     roles:
       - heavy_forwarder
 
    # Universal Forwarder
-  - name: uf1
+  - name: uf
     roles:
       - universal_forwarder

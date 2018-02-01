@@ -28,7 +28,7 @@ splunk_idxclusters:
 
 # Splunk hosts with its settings
 splunk_hosts:
-# Cluster Master
+  # Cluster Master
   - name: cm
     roles:
       - cluster_master
@@ -37,13 +37,13 @@ splunk_hosts:
       #- license_master
     idxcluster: idxc1
 
-  # Indexer
+  # Cluster Indexer
   - name: idx1
     roles:
       - indexer
     idxcluster: idxc1
 
-  # Indexer
+  # Cluster Indexer
   - name: idx2
     roles:
       - indexer
