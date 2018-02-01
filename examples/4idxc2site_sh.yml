@@ -1,0 +1,74 @@
+---
+# splunk_config.yml
+
+# General settings
+general:
+  start_ip: 172.16.1.100
+
+os:
+#  time_zone: "Europe/Zurich"
+
+# Splunk default settings
+splunk_defaults:
+#  splunk_env_name: splk
+#  splunk_version: '6.5.7'
+#  splunk_admin_password: 'splunklab'
+#  splunk_license_file: Splunk_Enterprise1.lic
+#  splunk_indexes:
+#    - test1
+#    - test2
+
+# Indexer Cluster settings
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: splunkidxc
+    idxc_replication_port: 9100
+    idxc_site_rf: 'origin:2, total:3'
+    idxc_site_sf: 'origin:1, total:2'
+
+# Splunk hosts with its settings
+splunk_hosts:
+# Cluster Master
+  - name: cm
+    roles:
+      - cluster_master
+      - monitoring_console
+#      - license_master
+#      - deployment_server
+#      - deployer
+    idxcluster: idxc1
+    site: site0
+
+  # Indexer
+  - name: idx1
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site1
+
+  # Indexer
+  - name: idx2
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site1
+
+  # Indexer
+  - name: idx3
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site2
+
+  # Indexer
+  - name: idx4
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site2
+
+  # Search Head
+  - name: sh
+    roles:
+      - search_head
+    idxcluster: idxc1
