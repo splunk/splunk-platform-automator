@@ -1,7 +1,23 @@
 ---
 # Main playbook for this role
 
+- name: "check for splunk fresh install"
+  tags:
+    - splunk
+    - splunk_enterprise
+  stat: path={{ splunk_home }}
+  register: splunk_stat
+
 - include: users.yml
 - include: install.yml
 - include: ulimit_thp.yml
 - include: ui_config.yml
+
+- name: final splunk restart after base install
+  tags:
+    - splunk
+    - splunk_enterprise
+  service: name=splunk state=restarted
+  become: yes
+  become_user: root
+  when: not splunk_stat.stat.exists
