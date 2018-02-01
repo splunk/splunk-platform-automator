@@ -1,0 +1,17 @@
+---
+# This playbook contains common tasks in this role
+
+- name: loop through all search heads and add single indexers as search peers
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - search_head
+    - search_peers
+  include_role:
+    name: search_head
+    tasks_from: add_search_peers
+  with_items:
+    - "{{ splunk_shc_all_host_list + splunk_search_head_list }}"
+  loop_control:
+    loop_var: search_head
+  when: splunk_shc_all_host_list|default([])|length > 0 OR splunk_search_head_list|default([])|length > 0

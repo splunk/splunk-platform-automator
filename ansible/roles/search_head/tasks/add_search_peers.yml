@@ -1,0 +1,32 @@
+---
+# This playbook contains common tasks in this role
+
+- name: check if search_head {{search_head}} is available
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - search_head
+    - search_peers
+  wait_for:
+    host: '{{search_head}}'
+    port: 22
+    timeout: 1
+  register: host_check
+  check_mode: False
+  failed_when: host_check.msg is defined and "error" in host_check.msg
+  changed_when: host_check.state is defined and host_check.state == 'started'
+  when: search_head|default()|length > 0
+
+- name: add search peers on search head
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - search_head
+    - search_peers
+  include_role:
+    name: search_head
+    tasks_from: search_peers
+  delegate_to: '{{search_head}}'
+  vars:
+    splunk_search_peer_idx_list: "{{ hostvars[search_head]['splunk_search_peer_list']['indexer'] }}"
+  when: search_head|default()|length > 0 and host_check.state is defined and host_check.state == 'started'
