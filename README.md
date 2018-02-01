@@ -52,7 +52,7 @@ You can download the framework on [GitHub](https://github.com/thesplunker/Splunk
 The Framework is currently only tested on Mac OSX, but any other Unix, which is supported by Virtualbox, should work.
 
 * Download and install Virtualbox and Vagrant from their websites. Both are coming with a simple installer in the package.
-* Install Ansible: I personally prefer [Brew](https://brew.sh) for that, which is as simple as `brew install ansible`. Current ansible 2.4.1.0 has a bug. You have to use the previous version. Install in brew with `brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/10ca339c7cba7eac1473012691d084aca62f1881/Formula/ansible.rb`
+* Install Ansible: I personally prefer [Brew](https://brew.sh) for that, which is as simple as `brew install ansible`. Current ansible 2.4+ has bugs. You have to use the previous version. Install in brew with `brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/10ca339c7cba7eac1473012691d084aca62f1881/Formula/ansible.rb`
 * Download the framework in a folder of your choice with `git clone git@github.com:thesplunker/Splunkenizer.git`
 * Download the prerequisites and put them in folder called `Software`, just beside the `Splunkenizer` folder. Folder structure should look like this, if you have the stuff extracted in a folder called `Vagrant`.
 
@@ -68,7 +68,7 @@ The Framework is currently only tested on Mac OSX, but any other Unix, which is 
 # Framework Usage
 
 ## Configuration file
-There on single configuration file, where all settings for your deployment are stored. If you run `vagrant` the first time, you will get a `config` directory created. Copy one configuration file from the [examples](examples) to `config/splunk_config.yml` and adjust the setting to your needs. You should get the idea with the comments found in the examples.
+There is one single configuration file, where all settings for your deployment are stored. If you run `vagrant` the first time, you will get a `config` directory created. Copy one configuration file from the [examples](examples) to `config/splunk_config.yml` and adjust the setting to your needs. For standard setup you should be fine with most of the default settings, but there are a lot of things you can adjust for secial needs. See the [configuration description](examples/configuration_description.yml) for all the possibilities.
 
 ## Start the deployment
 The whole framework is managed by vagrant. You have to be in the top directory, where the `Vagrantfile` sits and just run the build command. It will pull an os image from the internet, when run the first time.
@@ -131,11 +131,10 @@ Vagrant dynamically creates the ansible inventory. The file is located in `.vagr
 
 # Known issues, limitations
 
-* Single Indexer is not yet implemented
-* Universal forwarders output is not configured correctly, when having more than one cluster in the environment. Will be improved later.
+* Configuration from universal forwarder to heavy forwarder not yet implemented. Must be done manually after installation.
 * Virtual host startup does not respond sometimes, if it fails, recreate the host again.
 * If using ansible 2.4+, you will get some warnings
-* Virtualbox has some issues with clock time skew, when not using virtualbox additions. Haven't found a working fix for that so far. Best solution is to install the virtualbox additions into the VMs by setting `install_vbox_additions: true` (default) in the config. This will increase the time per vm installation and you need an internet connection during vm setup. If the clock skew is to big, Splunk fails to talk to each other. Restart the nodes to sync the time: `vagrant reload`.
+* Virtualbox has some issues with clock time skew, when not using virtualbox additions. I added a workaround with forcing time clock sync every 5 minutes. A working internet connection on the Virtualbox host is needed.
 
 # Authors
 
