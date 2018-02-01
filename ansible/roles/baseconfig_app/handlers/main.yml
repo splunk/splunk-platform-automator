@@ -1,0 +1,7 @@
+
+- name: verify deploymentclient
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_deploymentclient
+  include_tasks: check_deploymentclient.yml
