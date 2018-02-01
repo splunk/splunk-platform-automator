@@ -32,7 +32,7 @@ splunk_hosts:
     roles:
       - indexer
 
-  # Monitoring Console
+  # Deployer
   - name: dpl
     roles:
       - deployer

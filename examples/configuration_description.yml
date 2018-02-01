@@ -81,7 +81,7 @@ splunk_shclusters:
 
 # Splunk hosts with its settings
 splunk_hosts:
-# Cluster Master
+  # Cluster Master
   - name: cm
 # You can set ansible settings here as well
 #    ansible:
