@@ -1,7 +1,12 @@
 ---
 # Main playbook for this role
 
-- debug: msg="Configuring single indexer"
+- name: start indexer cluster node
+  tags:
+    - splunk
+    - indexer
+    - idxsingle
+  debug: msg="Configuring single indexer"
 
 - name: apply baseconfig app org_all_deploymentclient
   tags:
@@ -15,7 +20,7 @@
   vars:
     app_name: 'org_all_deploymentclient'
     app_path: '{{splunk_home}}/etc/apps'
-  notify: restart splunk
+  notify: verify deploymentclient
   when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server
 
 - name: apply baseconfig app org_full_license_server
@@ -79,11 +84,37 @@
   when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
 
 - name: update serverclass on deployment_server
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - indexer
+    - idxsingle
+    - deployment_server
+    - serverclass
   include_role:
     name: deployment_server
     tasks_from: update_serverclass
 
 - name: update dserver on monitoring_console
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - indexer
+    - idxsingle
+    - monitoring_console
+    - search_peers
   include_role:
     name: monitoring_console
     tasks_from: update_dserver
+
+- name: add as search peer on search head
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - indexer
+    - idxsingle
+    - search_head
+    - search_peers
+  include_role:
+    name: search_head
+    tasks_from: loop_search_heads

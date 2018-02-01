@@ -1,6 +1,13 @@
 ---
 # This playbook install the base config app
 
+- name: start search head cluster node
+  tags:
+    - splunk
+    - search_head
+    - shcluster
+  debug: msg="Configuring search head cluster node"
+
 - name: check if shcluster config is initialized
   tags:
     - splunk
@@ -17,7 +24,7 @@
     - splunk
     - search_head
     - shcluster
-  shell: "{{ splunk_home }}/bin/splunk init shcluster-config -shcluster_label {{ splunk_shc_label }} -mgmt_uri https://{{ ansible_hostname }}:8089 -replication_port {{splunk_shc_replication_port}} -secret {{splunk_shc_pass}} -auth admin:{{splunk_admin_password}}"
+  shell: "{{ splunk_home }}/bin/splunk init shcluster-config -shcluster_label {{ splunk_shc_label }} -mgmt_uri https://{{ ansible_hostname }}:8089 -replication_port {{splunk_shc_replication_port}} -secret {{splunk_shc_pass}} -conf_deploy_fetch_url https://{{splunk_shc_deployer}}:8089 -auth admin:{{splunk_admin_password}}"
   become: yes
   become_user: splunk
   when: need_shcluster_init.rc == 0
@@ -32,20 +39,6 @@
   become_user: root
   when: need_shcluster_init.rc == 0
 
-- name: setting conf_deploy_fetch_url
-  tags:
-    - splunk
-    - search_head
-    - shcluster
-  ini_file:
-    path: "{{ splunk_home }}/etc/system/local/server.conf"
-    section: shclustering
-    option: conf_deploy_fetch_url
-    value: "https://{{splunk_shc_deployer}}:8089"
-    owner: splunk
-    group: splunk
-    mode: 0600
-
 - name: restart splunk before bootstrapping
   tags:
     - splunk
@@ -55,6 +48,36 @@
   become: yes
   become_user: root
   when: need_shcluster_init.rc == 0
+
+- name: create org_cluster_search_base on deployer
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - shcluster
+    - deployer
+    - org_cluster_search_base
+  include_role:
+    name: deployer
+    tasks_from: add_org_cluster_search_base
+
+- name: apply baseconfig app org_cluster_search_base on deployer
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - shcluster
+    - deployer
+    - org_cluster_search_base
+  include_role:
+    name: baseconfig_app
+  delegate_to: '{{splunk_shc_deployer}}'
+  vars:
+    app_name: 'org_cluster_search_base'
+    app_path: '{{splunk_home}}/etc/shcluster/apps'
+    splunk_search_peer_list: "{{ hostvars[groups['search_peer_'+splunk_env_name+'_'+search_peer_name][0]]['splunk_search_peer_list'] }}"
+  with_items: "{{ splunk_search_peer_name_list }}"
+  loop_control:
+    loop_var: search_peer_name
+  when: splunk_search_peer_idxc_list|default([])|length > 0
 
 - name: check if shcluster is bootstrapped
   tags:
@@ -98,7 +121,14 @@
   delay: 10
   when: ansible_hostname == splunk_shc_captain and need_shcluster_bootstrap.rc == 22
 
+- include: search_peers.yml
+
 - name: update dserver on monitoring_console
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - monitoring_console
+    - search_peers
   include_role:
     name: monitoring_console
     tasks_from: update_dserver

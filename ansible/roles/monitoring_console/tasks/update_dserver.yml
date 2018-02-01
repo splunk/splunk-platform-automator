@@ -2,6 +2,10 @@
 # This playbook contains common tasks in this role
 
 - name: check if monitoring_console is available
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - monitoring_console
   wait_for:
     host: '{{splunk_monitoring_console}}'
     port: 22
@@ -10,11 +14,16 @@
   check_mode: False
   failed_when: host_check.msg is defined and "error" in host_check.msg
   changed_when: host_check.state is defined and host_check.state == 'started'
-  when: groups.role_monitoring_console is defined and inventory_hostname not in groups.role_monitoring_console
+  when: splunk_monitoring_console|default()|length > 0 and inventory_hostname not in groups.role_monitoring_console
 
 - name: update dserver on monitoring_console
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - monitoring_console
+    - search_peers
   include_role:
     name: monitoring_console
     tasks_from: dserver
   delegate_to: '{{splunk_monitoring_console}}'
-  when: host_check.state is defined and host_check.state == 'started'
+  when: splunk_monitoring_console|default()|length > 0 and host_check.state is defined and host_check.state == 'started'

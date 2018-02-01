@@ -31,6 +31,25 @@
     mode: 0644
   notify: reload deploy-server
 
+- name: blacklist org_all_forwarder_outputs server class clients
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_all_forwarder_outputs
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:{{splunk_app_prefix}}_all_forwarder_outputs
+    option: "blacklist.{{item.num}}"
+    value: "{{item.server}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_items: "{{splunk_idx_dsclients}}"
+  notify: reload deploy-server
+  when: splunk_idx_dsclients|default()|length > 0
+
 - name: define org_all_forwarder_outputs server class apps
   tags:
     - splunk
@@ -107,7 +126,7 @@
     mode: 0644
   with_items: "{{splunk_license_clients}}"
   notify: reload deploy-server
-  when: groups.role_license_master is defined
+  when: splunk_license_master|default()|length > 0
 
 - name: define org_full_license_server server class apps
   tags:
@@ -129,7 +148,7 @@
     - { var: 'restartSplunkd', value: '1' }
     - { var: 'stateOnClient', value: 'enabled' }
   notify: reload deploy-server
-  when: groups.role_license_master is defined
+  when: splunk_license_master|default()|length > 0
 
 - name: define org_all_indexer_base server class clients
   tags:
@@ -146,9 +165,9 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  with_items: "{{splunk_heavy_forwarder_list}}"
+  with_items: "{{splunk_idx_hf_dsclients}}"
   notify: reload deploy-server
-  when: groups.role_heavy_forwarder is defined
+  when: splunk_idx_hf_dsclients|default()|length > 0
 
 - name: define org_all_indexer_base server class apps
   tags:
@@ -170,7 +189,89 @@
     - { var: 'restartSplunkd', value: '1' }
     - { var: 'stateOnClient', value: 'enabled' }
   notify: reload deploy-server
-  when: groups.role_heavy_forwarder is defined
+  when: splunk_idx_hf_dsclients|default()|length > 0
+
+- name: define org_indexer_volume_indexes server class clients
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_indexer_volume_indexes
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:{{splunk_app_prefix}}_indexer_volume_indexes
+    option: "whitelist.{{item.num}}"
+    value: "{{item.server}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_items: "{{splunk_idx_dsclients}}"
+  notify: reload deploy-server
+  when: splunk_idx_dsclients|default()|length > 0
+
+- name: define org_indexer_volume_indexes server class apps
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_indexer_volume_indexes
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:{{splunk_app_prefix}}_indexer_volume_indexes:app:{{splunk_app_prefix}}_indexer_volume_indexes
+    option: "{{item.var}}"
+    value: "{{item.value}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_items:
+    - { var: 'restartSplunkWeb', value: '0' }
+    - { var: 'restartSplunkd', value: '1' }
+    - { var: 'stateOnClient', value: 'enabled' }
+  notify: reload deploy-server
+  when: splunk_idx_dsclients|default()|length > 0
+
+- name: define org_all_indexes server class clients
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_all_indexes
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:{{splunk_app_prefix}}_all_indexes
+    option: "whitelist.{{item.num}}"
+    value: "{{item.server}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_items: "{{splunk_idx_dsclients}}"
+  notify: reload deploy-server
+  when: splunk_idx_dsclients|default()|length > 0
+
+- name: define org_all_indexes server class apps
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_all_indexes
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:{{splunk_app_prefix}}_all_indexes:app:{{splunk_app_prefix}}_all_indexes
+    option: "{{item.var}}"
+    value: "{{item.value}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_items:
+    - { var: 'restartSplunkWeb', value: '0' }
+    - { var: 'restartSplunkd', value: '1' }
+    - { var: 'stateOnClient', value: 'enabled' }
+  notify: reload deploy-server
+  when: splunk_idx_dsclients|default()|length > 0
 
 - name: define org_cluster_search_base server class clients
   tags:
@@ -187,9 +288,9 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  with_items: "{{splunk_search_head_list}}"
+  with_items: "{{splunk_sh_dsclients}}"
   notify: reload deploy-server
-  when: splunk_search_head_list|length > 0
+  when: splunk_sh_dsclients|default()|length > 0
 
 - name: define org_cluster_search_base server class apps
   tags:
@@ -211,5 +312,5 @@
     - { var: 'restartSplunkd', value: '1' }
     - { var: 'stateOnClient', value: 'enabled' }
   notify: reload deploy-server
-  when: splunk_search_head_list|length > 0
+  when: splunk_sh_dsclients|default()|length > 0
 
