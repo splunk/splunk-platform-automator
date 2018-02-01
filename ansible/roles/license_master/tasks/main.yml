@@ -12,7 +12,8 @@
   vars:
     app_name: 'org_all_deploymentclient'
     app_path: '{{splunk_home}}/etc/apps'
-  when: groups.role_deployment_server is defined and inventory_hostname not in groups.role_deployment_server
+  notify: verify deploymentclient
+  when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server
 
 - name: apply baseconfig app org_all_forwarder_outputs
   tags:
@@ -25,16 +26,27 @@
   vars:
     app_name: 'org_all_forwarder_outputs'
     app_path: '{{splunk_home}}/etc/apps'
-  when: groups.role_deployment_server is not defined
+  notify: restart splunk
+  when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
 
 - include: license.yml
 
 - name: update serverclass on deployment_server
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
   include_role:
     name: deployment_server
     tasks_from: update_serverclass
 
 - name: update dserver on monitoring_console
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - monitoring_console
+    - search_peers
   include_role:
     name: monitoring_console
     tasks_from: update_dserver

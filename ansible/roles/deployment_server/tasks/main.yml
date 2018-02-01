@@ -17,7 +17,39 @@
     name: baseconfig_app
   vars:
     app_name: 'org_all_forwarder_outputs'
+    app_path: '{{splunk_home}}/etc/apps'
+  notify: restart splunk
+
+- name: apply baseconfig app org_full_license_server
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - org_full_license_server
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_full_license_server'
+    app_path: '{{splunk_home}}/etc/apps'
+  notify: restart splunk
+  when: splunk_license_master|default()|length > 0 and inventory_hostname not in groups.role_license_master
+
+- name: apply baseconfig app org_all_forwarder_outputs
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - org_all_forwarder_outputs
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_forwarder_outputs'
     app_path: '{{ splunk_home }}/etc/deployment-apps'
+    splunk_outputs_list: "{{ hostvars[groups['output_'+splunk_env_name+'_'+output_name][0]]['splunk_outputs_list'] }}"
+  with_items: "{{ splunk_outputs_name_list }}"
+  loop_control:
+    loop_var: output_name
+
 
 - name: apply baseconfig app org_full_license_server
   tags:
@@ -30,19 +62,23 @@
   vars:
     app_name: 'org_full_license_server'
     app_path: '{{ splunk_home }}/etc/deployment-apps'
-  when: groups.role_license_master is defined
+  when: splunk_license_master|default()|length > 0
 
-- name: apply baseconfig app org_cluster_search_base
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - deployment_server
-    - org_cluster_search_base
-  include_role:
-    name: baseconfig_app
-  vars:
-    app_name: 'org_cluster_search_base'
-    app_path: '{{ splunk_home }}/etc/deployment-apps'
+#- name: apply baseconfig app org_cluster_search_base
+#  tags:
+#    - splunk
+#    - splunk_baseconfig
+#    - deployment_server
+#    - org_cluster_search_base
+#  include_role:
+#    name: baseconfig_app
+#  vars:
+#    app_name: 'org_cluster_search_base'
+#    app_path: '{{ splunk_home }}/etc/deployment-apps'
+#    splunk_search_peer_list: "{{ hostvars[groups['search_peer_'+splunk_env_name+'_'+search_peer_name][0]]['splunk_search_peer_list'] }}"
+#  with_items: "{{ splunk_search_peer_name_list }}"
+#  loop_control:
+#    loop_var: search_peer_name
 
 - name: apply baseconfig app org_all_deploymentclient
   tags:
@@ -68,34 +104,38 @@
     app_name: 'org_all_indexer_base'
     app_path: '{{ splunk_home }}/etc/deployment-apps'
 
-- name: apply baseconfig app org_all_forwarder_outputs
+- name: apply baseconfig app org_indexer_volume_indexes
   tags:
     - splunk
     - splunk_baseconfig
     - deployment_server
-    - org_all_forwarder_outputs
+    - org_indexer_volume_indexes
   include_role:
     name: baseconfig_app
   vars:
-    app_name: 'org_all_forwarder_outputs'
-    app_path: '{{splunk_home}}/etc/apps'
+    app_name: 'org_indexer_volume_indexes'
+    app_path: '{{splunk_home}}/etc/deployment-apps'
 
-- name: apply baseconfig app org_full_license_server
+- name: apply baseconfig app org_all_indexes
   tags:
     - splunk
     - splunk_baseconfig
     - deployment_server
-    - org_full_license_server
+    - org_all_indexes
   include_role:
     name: baseconfig_app
   vars:
-    app_name: 'org_full_license_server'
-    app_path: '{{splunk_home}}/etc/apps'
-  when: groups.role_license_master is defined and inventory_hostname not in groups.role_license_master
+    app_name: 'org_all_indexes'
+    app_path: '{{splunk_home}}/etc/deployment-apps'
 
 - include: serverclass.yml
 
 - name: update dserver on monitoring_console
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - monitoring_console
+    - search_peers
   include_role:
     name: monitoring_console
     tasks_from: update_dserver

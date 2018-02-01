@@ -57,7 +57,8 @@
   vars:
     app_name: 'org_all_deploymentclient'
     app_path: '{{splunk_home}}/etc/apps'
-  when: groups.role_deployment_server is defined and inventory_hostname not in groups.role_deployment_server
+  notify: verify deploymentclient
+  when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server
 
 - name: apply baseconfig app org_all_forwarder_outputs
   tags:
@@ -70,7 +71,8 @@
   vars:
     app_name: 'org_all_forwarder_outputs'
     app_path: '{{splunk_home}}/etc/apps'
-  when: groups.role_deployment_server is not defined
+  notify: restart splunk
+  when: splunk_deployment_server|default()|length == 0
 
 - name: apply baseconfig app org_full_license_server
   tags:
@@ -83,7 +85,8 @@
   vars:
     app_name: 'org_full_license_server'
     app_path: '{{splunk_home}}/etc/apps'
-  when: groups.role_deployment_server is not defined and groups.role_license_master is defined and inventory_hostname not in groups.role_license_master
+  notify: restart splunk
+  when: splunk_deployment_server|default()|length == 0 and splunk_license_master|default()|length > 0 and inventory_hostname not in groups.role_license_master
 
 - name: apply baseconfig app org_search_volume_indexes
   tags:
@@ -121,18 +124,6 @@
     app_name: 'org_all_search_base'
     app_path: '{{splunk_home}}/etc/shcluster/apps'
 
-- name: apply baseconfig app org_cluster_search_base
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - deployer
-    - org_cluster_search_base
-  include_role:
-    name: baseconfig_app
-  vars:
-    app_name: 'org_cluster_search_base'
-    app_path: '{{splunk_home}}/etc/shcluster/apps'
-
 - name: apply baseconfig app org_all_forwarder_outputs
   tags:
     - splunk
@@ -144,6 +135,10 @@
   vars:
     app_name: 'org_all_forwarder_outputs'
     app_path: '{{splunk_home}}/etc/shcluster/apps'
+    splunk_outputs_list: "{{ hostvars[groups['output_'+splunk_env_name+'_'+output_name][0]]['splunk_outputs_list'] }}"
+  with_items: "{{ splunk_outputs_name_list }}"
+  loop_control:
+    loop_var: output_name
 
 - name: apply baseconfig app org_full_license_server
   tags:
@@ -156,16 +151,26 @@
   vars:
     app_name: 'org_full_license_server'
     app_path: '{{splunk_home}}/etc/shcluster/apps'
-  when: groups.role_license_master is defined
+  when: splunk_license_master|default()|length > 0
 
 - include: check_pass.yml
 
 - name: update serverclass on deployment_server
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
   include_role:
     name: deployment_server
     tasks_from: update_serverclass
 
 - name: update dserver on monitoring_console
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - monitoring_console
+    - search_peers
   include_role:
     name: monitoring_console
     tasks_from: update_dserver
