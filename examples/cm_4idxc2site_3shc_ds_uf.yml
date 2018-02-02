@@ -35,6 +35,13 @@ splunk_shclusters:
 
 # Splunk hosts with its settings
 splunk_hosts:
+  # Deployment Server
+  - name: ds
+    roles:
+      - deployment_server
+      - deployer
+    shcluster: shc1
+
   # Cluster Master
   - name: cm
     roles:
@@ -71,13 +78,6 @@ splunk_hosts:
       - indexer
     idxcluster: idxc1
     site: site2
-
-  # Deployment Server
-  - name: ds
-    roles:
-      - deployment_server
-      - deployer
-    shcluster: shc1
 
   # Search Head
   - name: sh1
