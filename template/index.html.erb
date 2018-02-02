@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Splunkenizer Host List</title>
+</head>
+<body>
+<h3 class="title">Splunkenizer Host List</h3>
+<% settings['splunk_hosts'].each do |host| %>
+  <h4><%= host['name']%> (<%= host['ip_addr']%>)</h4>
+  <ul>
+    <% host['roles'].each do |role| %>
+    <li>
+      <% case role
+        when 'cluster_master' %>
+          <a target="_blank" href="http://<%= host['ip_addr'] %>:8000/en-GB/manager/system/clustering">Cluster Master</a>
+        <% when 'deployer' %>
+          <a target="_blank" href="http://<%= host['ip_addr'] %>:8000/en-GB/">Deployer</a>
+        <% when 'deployment_server' %>
+          <a target="_blank" href="http://<%= host['ip_addr'] %>:8000/en-GB/manager/system/deploymentserver">Deployment Server</a>
+        <% when 'heavy_forwarder' %>
+          <a target="_blank" href="http://<%= host['ip_addr'] %>:8000/en-GB/app/launcher/home">Heavy Forwarder</a>
+        <% when 'indexer' %>
+          Indexer
+        <% when 'license_master' %>
+          <a target="_blank" href="http://<%= host['ip_addr'] %>:8000/en-GB/manager/system/licensing">License Master</a>
+        <% when 'monitoring_console' %>
+          <a target="_blank" href="http://<%= host['ip_addr'] %>:8000/en-GB/app/splunk_monitoring_console">Monitoring Console</a>
+        <% when 'search_head' %>
+          <a target="_blank" href="http://<%= host['ip_addr'] %>:8000/en-GB/app/launcher/home">Search Head</a>
+        <% when 'universal_forwarder' %>
+          Universal Forwarder
+        <% end %>
+      <% end %></li>
+  </ul>
+<% end %>
+</body>
+</html>

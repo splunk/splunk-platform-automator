@@ -19,6 +19,7 @@ Splunkenizer Changes By Release
 * Reworked outputs and search_peer configuration
 * Support single indexers
 * Support single search heads
+* Create HTML link page for all roles
 
 ### Fixes
 

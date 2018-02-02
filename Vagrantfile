@@ -486,6 +486,14 @@ File.open("ansible/group_vars/all/hosts.yml", "w") do |f|
   f.write(splunk_hosts.to_yaml)
 end
 
+# Create HTML link page for all the roles
+require 'erb'
+template = File.read("#{dir}/template/index.html.erb")
+result = ERB.new(template).result(binding)
+File.open("#{dir}/#{config_dir}/index.html", 'w+') do |f|
+  f.write result
+end
+
 # Create and configure the specified systems
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 

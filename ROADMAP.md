@@ -7,7 +7,6 @@ Note: The order for implementation may change
 * Config options for forwarding to single indexers and heavy forwarders
 * separate output conf on DS for HF, separate cluster, single indexer
 * Disable THP in grub config
-* Create HTML link page for all roles
 * Support config options for indexes (ex. new metrics index type)
 * option to have master_deployment_client or org_all_deploymentclient on cm
 * Splunk generic app deployment
