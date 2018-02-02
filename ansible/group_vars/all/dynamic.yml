@@ -83,7 +83,7 @@ splunk_shc_all_host_list: >-
               ) -%}
           {%- endfor -%}
           {{ res|unique|intersect(groups.role_search_head|default([]))|intersect(groups['splunk_env_'+splunk_env_name]) }}
-splunk_search_head_list: "{{ groups.role_search_head|default([])|union(groups.role_monitoring_console|default([]))|difference(splunk_shc_all_host_list|default([]))|intersect(groups['splunk_env_'+splunk_env_name]) }}"
+splunk_search_head_list: "{{ groups.role_search_head|default([])|union(groups.role_monitoring_console|default([]))|difference(splunk_shc_all_host_list|default([]))|difference(groups.role_cluster_master|default([]))|intersect(groups['splunk_env_'+splunk_env_name]) }}"
 
 # Search Head Cluster
 splunk_shc_label: "{{ shc_name }}"
