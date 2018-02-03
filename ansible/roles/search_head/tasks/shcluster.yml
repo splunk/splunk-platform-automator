@@ -49,17 +49,6 @@
   become_user: root
   when: need_shcluster_init.rc == 0
 
-- name: create org_cluster_search_base on deployer
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - shcluster
-    - deployer
-    - org_cluster_search_base
-  include_role:
-    name: deployer
-    tasks_from: add_org_cluster_search_base
-
 - name: apply baseconfig app org_cluster_search_base on deployer
   tags:
     - splunk
