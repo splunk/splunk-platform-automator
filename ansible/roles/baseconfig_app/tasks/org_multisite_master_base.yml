@@ -14,7 +14,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
 
 - name: "({{ app_name }}) setting available sites"
   tags:
@@ -29,7 +28,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
 
 - name: "({{ app_name }}) setting site_replication_factor"
   tags:
@@ -44,7 +42,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
 
 - name: Check for replication_factor > site_replication_factor
   tags:
@@ -72,7 +69,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
   when: site_replication_factor|int < replication_factor.stdout|int
 
 - name: Check for search_factor > site_search_factor
@@ -101,7 +97,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
   when: site_search_factor|int < search_factor.stdout|int
 
 - name: "({{ app_name }}) setting site_search_factor"
@@ -117,7 +112,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
 
 - name: "({{ app_name }}) setting cluster label"
   tags:
@@ -132,7 +126,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
 
 - name: "({{ app_name }}) setting unhashed pass4SymmKey"
   tags:
@@ -147,5 +140,4 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
   when: app_local.stat.exists == false

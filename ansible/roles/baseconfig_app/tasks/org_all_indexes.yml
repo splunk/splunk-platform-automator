@@ -16,4 +16,3 @@
       coldPath   = volume:primary/{{ item }}/colddb
       thawedPath = $SPLUNK_DB/{{ item }}/thaweddb
   with_items: "{{ splunk_indexes | default('test') }}"
-  notify: restart splunk

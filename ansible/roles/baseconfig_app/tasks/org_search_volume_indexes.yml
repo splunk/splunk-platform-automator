@@ -14,7 +14,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
 
 - name: "({{ app_name }}) remove volume:secondary"
   tags:
@@ -29,4 +28,3 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk

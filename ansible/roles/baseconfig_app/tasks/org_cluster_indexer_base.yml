@@ -14,7 +14,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
 
 - name: "({{ app_name }}) setting unhashed pass4SymmKey"
   tags:
@@ -29,7 +28,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
   when: app_local.stat.exists == false
 
 - name: "({{ app_name }}) setting replication port"
@@ -44,4 +42,3 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk

@@ -14,7 +14,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
   when: splunk_search_peer_idxc_list|length > 0
 
 - name: "({{ app_name }}) rename clustermaster:one"
@@ -29,7 +28,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
 
 - name: "({{ app_name }}) remove clustermaster:two cluster master group"
   tags:
@@ -43,7 +41,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
 
 - name: "({{ app_name }}) setting pass4SymmKey for hashing on clustermaster stanza"
   tags:
@@ -58,7 +55,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
   with_dict: "{{ splunk_search_peer_idxc_list }}"
   when: app_local.stat.exists == false and app_path == splunk_home + '/etc/apps'
 
@@ -75,7 +71,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
   with_dict: "{{ splunk_search_peer_idxc_list }}"
   when: app_path != splunk_home + '/etc/apps'
 
@@ -92,7 +87,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
   with_dict: "{{ splunk_search_peer_idxc_list }}"
 
 - name: "({{ app_name }}) setting multisite on clustermaster stanza"
@@ -108,7 +102,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
   with_dict: "{{ splunk_search_peer_idxc_list }}"
 
 - name: "({{ app_name }}) setting site"
@@ -124,5 +117,4 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
   when: splunk_shc_site is defined

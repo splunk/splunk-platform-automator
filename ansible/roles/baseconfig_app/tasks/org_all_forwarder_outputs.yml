@@ -14,7 +14,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
 
 - name: "({{ app_name }}) rename tcpout:primary_indexers"
   tags:
@@ -28,7 +27,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
   when: splunk_outputs_idxc_list|length > 0
 
 - name: "({{ app_name }}) setting server in tcpout stanza for clustered indexers"
@@ -44,7 +42,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
   with_dict: "{{ splunk_outputs_idxc_list }}"
   when: splunk_outputs_idxc_list|length > 0
 
@@ -60,7 +57,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
   when: splunk_outputs_idxc_list|length == 0 and splunk_outputs_idx_list|length > 0
 
 - name: "({{ app_name }}) setting server in tcpout stanza for non clustered indexers"
@@ -76,5 +72,4 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
   when: splunk_outputs_idx_list|length > 0

@@ -14,7 +14,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
 
 - name: "({{ app_name }}) setting search factor"
   tags:
@@ -29,7 +28,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
 
 - name: "({{ app_name }}) setting cluster label"
   tags:
@@ -44,7 +42,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
 
 - name: "({{ app_name }}) setting unhashed pass4SymmKey"
   tags:
@@ -59,5 +56,4 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
   when: app_local.stat.exists == false
