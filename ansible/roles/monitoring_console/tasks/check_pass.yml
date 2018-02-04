@@ -25,7 +25,7 @@
     - splunk
     - splunk_baseconfig
     - monitoring_console
-  service: name=splunk state=restarted
+  shell: "{{ splunk_home }}/bin/splunk restart"
   become: yes
-  become_user: root
+  become_user: "{{ splunk_user }}"
   when: "grep_result.rc == 0"
