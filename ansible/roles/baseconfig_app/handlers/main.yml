@@ -6,10 +6,3 @@
   become: yes
   become_user: "{{ splunk_user }}"
   when: app_path == splunk_home + '/etc/apps'
-
-- name: verify deploymentclient
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - org_all_deploymentclient
-  include_tasks: check_deploymentclient.yml

@@ -18,7 +18,6 @@
   vars:
     app_name: 'org_all_deploymentclient'
     app_path: '{{splunk_home}}/etc/apps'
-  notify: verify deploymentclient
   when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server
 
 - name: apply baseconfig app org_all_forwarder_outputs
