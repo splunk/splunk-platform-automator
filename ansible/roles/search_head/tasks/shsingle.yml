@@ -66,7 +66,7 @@
     app_name: 'org_search_volume_indexes'
     app_path: '{{splunk_home}}/etc/apps'
   notify: restart splunk
-  when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
+  when: splunk_deployment_server|default()|length == 0
 
 - name: apply baseconfig app org_all_indexes
   tags:
@@ -81,7 +81,7 @@
     app_name: 'org_all_indexes'
     app_path: '{{splunk_home}}/etc/apps'
   notify: restart splunk
-  when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
+  when: splunk_deployment_server|default()|length == 0
 
 - name: apply baseconfig app org_all_search_base
   tags:
@@ -96,7 +96,7 @@
     app_name: 'org_all_search_base'
     app_path: '{{splunk_home}}/etc/apps'
   notify: restart splunk
-  when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
+  when: splunk_deployment_server|default()|length == 0
 
 - name: apply baseconfig app org_cluster_search_base on deployment_server
   tags:
@@ -130,7 +130,7 @@
     app_name: 'org_cluster_search_base'
     app_path: '{{splunk_home}}/etc/apps'
   notify: restart splunk
-  when: (splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server) and splunk_search_peer_idxc_list|length > 0
+  when: splunk_deployment_server|default()|length == 0 and splunk_search_peer_idxc_list|length > 0
 
 - include: check_pass.yml
   with_items: 

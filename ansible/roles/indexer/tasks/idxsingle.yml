@@ -51,7 +51,7 @@
     app_name: 'org_all_indexer_base'
     app_path: '{{splunk_home}}/etc/apps'
   notify: restart splunk
-  when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
+  when: splunk_deployment_server|default()|length == 0
 
 - name: apply baseconfig app org_indexer_volume_indexes
   tags:
@@ -66,7 +66,7 @@
     app_name: 'org_indexer_volume_indexes'
     app_path: '{{splunk_home}}/etc/apps'
   notify: restart splunk
-  when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
+  when: splunk_deployment_server|default()|length == 0
 
 - name: apply baseconfig app org_all_indexes
   tags:
@@ -81,7 +81,7 @@
     app_name: 'org_all_indexes'
     app_path: '{{splunk_home}}/etc/apps'
   notify: restart splunk
-  when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
+  when: splunk_deployment_server|default()|length == 0
 
 - name: update serverclass on deployment_server
   tags:

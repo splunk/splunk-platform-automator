@@ -62,7 +62,7 @@
     app_name: 'org_all_indexer_base'
     app_path: '{{splunk_home}}/etc/apps'
   notify: restart splunk
-  when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
+  when: splunk_deployment_server|default()|length == 0
 
 - name: update serverclass on deployment_server
   tags:
