@@ -8,7 +8,7 @@
     - org_all_deploymentclient
   shell: "{{ splunk_home }}/bin/splunk show deploy-poll -auth admin:{{ splunk_admin_password }}"
   become: yes
-  become_user: splunk
+  become_user: "{{ splunk_user }}"
   register: need_splunk_restart
   check_mode: False
   changed_when: need_splunk_restart.stdout.find('is not set') != -1

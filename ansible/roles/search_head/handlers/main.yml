@@ -6,5 +6,5 @@
     - shsingle
   shell: "{{ splunk_home }}/bin/splunk apply shcluster-bundle -target https://{{splunk_shc_captain}}:8089 -auth admin:{{ splunk_admin_password }} --skip-validation --answer-yes"
   become: yes
-  become_user: splunk
+  become_user: "{{ splunk_user }}"
   delegate_to: "{{ splunk_shc_deployer }}"
