@@ -4,6 +4,7 @@
 
 Note: The order for implementation may change
 
+* Allow Splunk Version 'latest' to use the latest found splunk version in the directory
 * Config options for forwarding to single indexers and heavy forwarders
 * separate output conf on DS for HF, separate cluster, single indexer
 * Disable THP in grub config
