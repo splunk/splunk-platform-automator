@@ -49,11 +49,10 @@ splunk_hosts:
       - indexer
     idxcluster: idxc1
 
-  # Search Head
+  # Single Search Head
   - name: sh
     roles:
       - search_head
-    idxcluster: idxc1
 
   # Universal Forwarder
   - name: uf
