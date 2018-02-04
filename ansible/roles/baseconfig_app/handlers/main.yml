@@ -1,3 +1,11 @@
+- name: restart splunk
+  tags:
+    - splunk
+    - splunk_enterprise
+  shell: "{{ splunk_home }}/bin/splunk restart"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  when: app_path == splunk_home + '/etc/apps'
 
 - name: verify deploymentclient
   tags:
