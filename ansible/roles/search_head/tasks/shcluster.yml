@@ -34,19 +34,9 @@
     - splunk
     - search_head
     - shcluster
-  service: name=splunk state=restarted
+  shell: "{{ splunk_home }}/bin/splunk restart"
   become: yes
-  become_user: root
-  when: need_shcluster_init.rc == 0
-
-- name: restart splunk before bootstrapping
-  tags:
-    - splunk
-    - search_head
-    - shcluster
-  service: name=splunk state=restarted
-  become: yes
-  become_user: root
+  become_user: "{{ splunk_user }}"
   when: need_shcluster_init.rc == 0
 
 - name: apply baseconfig app org_cluster_search_base on deployer
@@ -66,7 +56,7 @@
   with_items: "{{ splunk_search_peer_name_list }}"
   loop_control:
     loop_var: search_peer_name
-  when: splunk_search_peer_idxc_list|default([])|length > 0
+  when: ansible_hostname == splunk_shc_captain and splunk_search_peer_idxc_list|default([])|length > 0
 
 - name: check if shcluster is bootstrapped
   tags:
