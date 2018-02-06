@@ -56,7 +56,7 @@
   with_items: "{{ splunk_search_peer_name_list }}"
   loop_control:
     loop_var: search_peer_name
-  when: ansible_hostname == splunk_shc_captain and splunk_search_peer_idxc_list|default([])|length > 0
+  when: ansible_hostname == splunk_shc_host_list|first and splunk_search_peer_idxc_list|default([])|length > 0
 
 - name: check if shcluster is bootstrapped
   tags:
