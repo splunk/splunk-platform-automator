@@ -97,11 +97,10 @@ vagrant provision <hostname>
 ```
 
 ## Login to Splunk Browser Interface
-Splunk runs on port 8000 by default: http://<ip>:8000
-example: http://172.16.2.100:8000 (Username: admin, Password defined in config file, default: splunklab)
+Splunk runs on port 8000 by default. Example: http://172.16.2.100:8000 (Username: admin, Password: splunklab)
 
 ## Login to the hosts
-To login to one of the hosts just open the index.html file crated in the top Splunkenizer directory. You will find links to every role.
+To login to one of the hosts just open the index.html file crated in the Splunkenizer/config directory. You will find links to every role.
 
 Login with SSH:
 
