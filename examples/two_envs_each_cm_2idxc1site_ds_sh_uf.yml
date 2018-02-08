@@ -8,18 +8,25 @@ general:
 os:
 #  time_zone: "Europe/Zurich"
 
+# Splunk default settings
+splunk_defaults:
+#    splunk_license_file: Splunk_Enterprise.lic
+
 # Splunk general settings
 splunk_environments:
   - splunk_env_name: splk1
 #  splunk_version: '6.5.7'
 #    splunk_admin_password: 'splunklab'
-#    splunk_license_file: Splunk_Enterprise.lic
 #    splunk_indexes:
 #      - test1
 #      - test2
 
   - splunk_env_name: splk2
-    #splunk_license_file: Splunk_Enterprise.lic
+#  splunk_version: '6.5.7'
+#    splunk_admin_password: 'splunklab'
+#    splunk_indexes:
+#      - test1
+#      - test2
 
 # Indexer Cluster settings
 splunk_idxclusters:
@@ -89,7 +96,7 @@ splunk_hosts:
 
   # Cluster Master
   - name: cm2
-    splunk_env: splunk2
+    splunk_env: splk2
     roles:
       - cluster_master
       - license_master
