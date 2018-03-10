@@ -86,4 +86,4 @@
   tags:
     - splunk
     - splunk_enterprise
-  shell: systemctl daemon-reload
+  command: systemctl daemon-reload

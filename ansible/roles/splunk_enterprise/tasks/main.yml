@@ -17,7 +17,7 @@
   tags:
     - splunk
     - splunk_enterprise
-  shell: "{{ splunk_home }}/bin/splunk restart"
+  command: "{{ splunk_home }}/bin/splunk restart"
   become: yes
   become_user: "{{ splunk_user }}"
   when: not splunk_stat.stat.exists

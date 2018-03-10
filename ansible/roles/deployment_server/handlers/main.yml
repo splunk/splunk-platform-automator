@@ -2,7 +2,7 @@
   tags:
     - splunk
     - deployment_server
-  shell: "{{ splunk_home }}/bin/splunk reload deploy-server -auth admin:{{splunk_admin_password}}"
+  command: "{{ splunk_home }}/bin/splunk reload deploy-server -auth admin:{{splunk_admin_password}}"
   become: yes
   become_user: "{{ splunk_user }}"
   delegate_to: "{{splunk_deployment_server}}"
