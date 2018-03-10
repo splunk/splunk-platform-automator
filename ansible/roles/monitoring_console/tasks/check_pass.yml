@@ -1,31 +1,14 @@
 ---
 # This playbook contains common tasks in this role
 
-- name: set password variable
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - monitoring_console
-  set_fact:
-    splunk_idxc_password: "{{ hostvars[cm_outer]['idxc_password'] }}"
-
 - name: check if pass4SymmKey is not hashed
   tags:
     - splunk
     - splunk_baseconfig
     - monitoring_console
-  shell: "{{ splunk_home }}/bin/splunk btool server list clustermaster:{{ hostvars[cm_outer]['idxc_name'] }} | egrep -e '^pass4SymmKey = {{ splunk_idxc_password }}$'"
+  shell: "{{ splunk_home }}/bin/splunk btool server list clustermaster:{{ hostvars[cm_outer]['idxc_name'] }} | egrep -e '^pass4SymmKey = \\$1\\$'"
   register: grep_result
   check_mode: False
   failed_when: "grep_result.rc > 1"
-  changed_when: "grep_result.rc == 0"
-
-- name: restart splunk for password hashing
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - monitoring_console
-  shell: "{{ splunk_home }}/bin/splunk restart"
-  become: yes
-  become_user: "{{ splunk_user }}"
-  when: "grep_result.rc == 0"
+  changed_when: "grep_result.rc != 0"
+  notify: restart splunk
