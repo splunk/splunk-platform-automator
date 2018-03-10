@@ -1,6 +1,6 @@
-:white_check_mark: Ansible 2.4.0.0 is good to go with Splunkenizer!
+:white_check_mark: Ansible 2.4.3.0_2 seems to be stable with Splunkenizer!
 
-:bangbang: Due to a not yet known bug ansible 2.4.3.0 does not work with Splunkenizer!
+:white_check_mark: Ansible 2.4.0.0 is good to go with Splunkenizer!
 
 :bangbang: Due to the bug [#23609](https://github.com/ansible/ansible/issues/23609) ansible 2.4.2.0 does not work with Splunkenizer!
 
@@ -60,7 +60,7 @@ The Framework is currently only tested on Mac OSX, but any other Unix, which is 
 ## OSX Instructions
 
 * Download and install Virtualbox and Vagrant from their websites. Both are coming with a simple installer in the package.
-* Install Ansible: I personally prefer [Brew](https://brew.sh) for that, which is as simple as `brew install ansible`. Current ansible 2.4+ has bugs. You have to use the previous version. Install with `brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/10ca339c7cba7eac1473012691d084aca62f1881/Formula/ansible.rb`
+* Install Ansible: I personally prefer [Brew](https://brew.sh) for that, which is as simple as `brew install ansible`. Current ansible 2.4+ has bugs. You have to use the previous version.
 * Download the framework in a folder of your choice with `git clone git@github.com:thesplunker/Splunkenizer.git`
 * Download the prerequisites and put them in folder called `Software`, just beside the `Splunkenizer` folder. Folder structure should look like this, if you have the stuff extracted in a folder called `Vagrant`.
 
