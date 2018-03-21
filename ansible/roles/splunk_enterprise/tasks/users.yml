@@ -5,12 +5,14 @@
   tags:
     - splunk
     - splunk_enterprise
+    - splunk_group
   group: name={{ splunk_user }} state=present
 
 - name: add splunk user
   tags:
     - splunk
     - splunk_enterprise
+    - splunk_user
   user: name={{ splunk_user }} group=splunk comment="Splunk User" shell=/bin/bash createhome=yes
 
 - name: Adding splunk aliases
