@@ -22,7 +22,7 @@ splunk_defaults:
 splunk_idxclusters:
   - idxc_name: idxc1
     idxc_password: splunkidxc1
-    idxc_replication_port: 9100
+    idxc_replication_port: 9887
     idxc_site_rf: 'origin:2, total:2'
     idxc_site_sf: 'origin:1, total:1'
 

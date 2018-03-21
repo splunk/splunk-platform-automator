@@ -13,7 +13,7 @@ splunk_defaults:
 #  splunk_env_name: splk
 #  splunk_version: '6.5.7'
 #  splunk_admin_password: 'splunklab'
-#  splunk_license_file: Splunk_Enterprise1.lic
+#  splunk_license_file: Splunk_Enterprise.lic
 #  splunk_indexes:
 #    - test1
 #    - test2
@@ -22,7 +22,7 @@ splunk_defaults:
 splunk_idxclusters:
   - idxc_name: idxc1
     idxc_password: splunkidxc
-    idxc_replication_port: 9100
+    idxc_replication_port: 9887
     idxc_site_rf: 'origin:2, total:3'
     idxc_site_sf: 'origin:1, total:2'
 

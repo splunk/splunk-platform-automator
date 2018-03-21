@@ -22,13 +22,13 @@ splunk_defaults:
 splunk_idxclusters:
   - idxc_name: idxc1
     idxc_password: splunkidxc
-    idxc_replication_port: 9100
+    idxc_replication_port: 9887
     idxc_site_rf: 'origin:2, total:2'
     idxc_site_sf: 'origin:1, total:1'
 
   - idxc_name: idxc2
     idxc_password: splunkidxc2
-    idxc_replication_port: 9100 
+    idxc_replication_port: 9887 
     idxc_site_rf: 'origin:2, total:2'
     idxc_site_sf: 'origin:1, total:1'
 
@@ -37,7 +37,7 @@ splunk_shclusters:
   - shc_name: shc1
     shc_site: site0 # No site affinity
     shc_password: splunkshc
-    shc_replication_port: 9200
+    shc_replication_port: 9887
 
 # Splunk hosts with its settings
 splunk_hosts:

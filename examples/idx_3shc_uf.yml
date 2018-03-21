@@ -23,7 +23,7 @@ splunk_shclusters:
   - shc_name: shc1
     shc_site: site0
     shc_password: splunkshc
-    shc_replication_port: 9200
+    shc_replication_port: 9887
 
 # Splunk hosts with its settings
 splunk_hosts:
