@@ -1,4 +1,4 @@
-:white_check_mark: Ansible 2.4.3.0_2 seems to be stable with Splunkenizer!
+:white_check_mark: Ansible 2.4.3.0 seems to be stable with Splunkenizer!
 
 :white_check_mark: Ansible 2.4.0.0 is good to go with Splunkenizer!
 
