@@ -24,7 +24,7 @@
     - splunk
     - search_head
     - shcluster
-  command: "{{ splunk_home }}/bin/splunk init shcluster-config -shcluster_label {{ splunk_shc_label }} -mgmt_uri https://{{ ansible_hostname }}:8089 -replication_port {{splunk_shc_replication_port}} -secret {{splunk_shc_pass}} -conf_deploy_fetch_url https://{{splunk_shc_deployer}}:8089 -auth admin:{{splunk_admin_password}}"
+  command: "{{ splunk_home }}/bin/splunk init shcluster-config -shcluster_label {{ splunk_shc_label }} -mgmt_uri https://{{ inventory_hostname }}:8089 -replication_port {{splunk_shc_replication_port}} -secret {{splunk_shc_pass}} -conf_deploy_fetch_url https://{{splunk_shc_deployer}}:8089 -auth admin:{{splunk_admin_password}}"
   become: yes
   become_user: "{{ splunk_user }}"
   when: need_shcluster_init.rc == 0
@@ -56,7 +56,7 @@
   with_items: "{{ splunk_search_peer_name_list }}"
   loop_control:
     loop_var: search_peer_name
-  when: ansible_hostname == splunk_shc_host_list|first and splunk_search_peer_idxc_list|default([])|length > 0
+  when: inventory_hostname == splunk_shc_host_list|first and splunk_search_peer_idxc_list|default([])|length > 0
 
 - name: check if shcluster is bootstrapped
   tags:
@@ -71,7 +71,7 @@
   check_mode: False
   failed_when: need_shcluster_bootstrap.rc != 0 and need_shcluster_bootstrap.rc != 22
   changed_when: need_shcluster_bootstrap.rc == 22
-  when: ansible_hostname == splunk_shc_captain
+  when: inventory_hostname == splunk_shc_captain
 
 - name: bootstrap search head cluster
   tags:
@@ -83,7 +83,7 @@
   become: yes
   become_user: "{{ splunk_user }}"
   notify: push shcluster bundle
-  when: ansible_hostname == splunk_shc_captain and need_shcluster_bootstrap.rc == 22
+  when: inventory_hostname == splunk_shc_captain and need_shcluster_bootstrap.rc == 22
 
 - name: check if shcluster is service ready
   tags:
@@ -98,7 +98,7 @@
   until: "result.stdout.find('service_ready_flag : 1') != -1"
   retries: 15
   delay: 10
-  when: ansible_hostname == splunk_shc_captain and need_shcluster_bootstrap.rc == 22
+  when: inventory_hostname == splunk_shc_captain and need_shcluster_bootstrap.rc == 22
 
 - include: search_peers.yml
 
