@@ -1,8 +1,6 @@
 ---
 # add a certain dserver, if available
 
-- debug: var=dserver_name
-
 - name: check if dserver is available
   tags:
     - splunk
