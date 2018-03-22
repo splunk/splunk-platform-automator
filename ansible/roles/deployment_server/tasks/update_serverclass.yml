@@ -9,7 +9,7 @@
     - serverclass
   wait_for:
     host: '{{splunk_deployment_server}}'
-    port: 22
+    port: 8089
     timeout: 1
   register: host_check
   check_mode: False
