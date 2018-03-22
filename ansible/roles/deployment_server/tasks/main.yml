@@ -99,6 +99,18 @@
     app_name: 'org_indexer_volume_indexes'
     app_path: '{{splunk_home}}/etc/deployment-apps'
 
+- name: apply baseconfig app org_search_volume_indexes
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - org_search_volume_indexes
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_search_volume_indexes'
+    app_path: '{{splunk_home}}/etc/deployment-apps'
+
 - name: apply baseconfig app org_all_indexes
   tags:
     - splunk
