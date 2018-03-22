@@ -8,10 +8,30 @@
   stat: path={{ splunk_home }}
   register: splunk_stat
 
-- include: users.yml
-- include: install.yml
-- include: ulimit_thp.yml
-- include: ui_config.yml
+- name: "create splunk user and group"
+  tags:
+    - splunk
+    - splunk_enterprise
+  include_tasks: users.yml
+
+- name: "install the splunk software"
+  tags:
+    - splunk
+    - splunk_enterprise
+  include_tasks: install.yml
+
+- name: "set ulimits and disable THP"
+  tags:
+    - splunk
+    - splunk_enterprise
+  include_tasks: ulimit_thp.yml
+  when: splunk_install_app == 'splunk'
+
+- name: "user interface configuration"
+  tags:
+    - splunk
+    - splunk_enterprise
+  include_tasks: ui_config.yml
 
 - name: final splunk restart after base install
   tags:
