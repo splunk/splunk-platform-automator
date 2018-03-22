@@ -1,7 +1,16 @@
 Splunkenizer Changes By Release
 ===============================
 
-## 0.9.devel - ongoing
+## 1.0.devel - ongoing
+
+* Support index volume definitions 
+
+### Fixes
+
+* Allow fgdn hosts
+* Added missing org_search_volume_indexes to DS
+
+## 0.9 - 2018-02-09
 
 * Removed [splunk_env_name:vars] from the ansible inventory
 * Added time sync workaround for the clock skew without virtualbox additions
