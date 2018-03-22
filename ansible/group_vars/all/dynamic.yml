@@ -71,7 +71,9 @@ splunk_idxc_all_host_list: >-
           {%- endfor -%}
           {{ res|unique|intersect(groups.role_indexer|default([])) }}
 splunk_indexer_list: "{{ groups.role_indexer|default([])|difference(splunk_idxc_all_host_list|default([]))|intersect(groups['splunk_env_'+splunk_env_name]) }}"
-splunk_indexer_hf_list: "{{ groups.role_heavy_forwarder|default([])|union(groups.role_indexer|default([]))|difference(splunk_idxc_all_host_list|default([]))|intersect(groups['splunk_env_'+splunk_env_name]) }}"
+
+# Heavy Forwarder
+splunk_heavy_forwarder_list: "{{ groups.role_heavy_forwarder|default([])|intersect(groups['splunk_env_'+splunk_env_name]) }}"
 
 # Single Search Head
 splunk_shc_name_list: "{{ groups|map('regex_search','shcluster_.*')|select('string')|list }}"
@@ -105,7 +107,7 @@ splunk_idx_dsclients: >-
           {{ res }}
 splunk_idx_hf_dsclients: >-
           {%- set res = [] -%}
-          {%- for ds_client in splunk_indexer_hf_list -%}
+          {%- for ds_client in splunk_indexer_list|union(splunk_heavy_forwarder_list) -%}
             {% set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res }}
@@ -113,6 +115,18 @@ splunk_sh_dsclients: >-
           {%- set res = [] -%}
           {%- for ds_client in splunk_search_head_list -%}
             {%- set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
+          {%- endfor -%}
+          {{ res }}
+splunk_sh_hf_dsclients: >-
+          {%- set res = [] -%}
+          {%- for ds_client in splunk_search_head_list|union(splunk_heavy_forwarder_list) -%}
+            {%- set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
+          {%- endfor -%}
+          {{ res }}
+splunk_idx_hf_sh_dsclients: >-
+          {%- set res = [] -%}
+          {%- for ds_client in splunk_indexer_list|union(splunk_heavy_forwarder_list)|union(splunk_search_head_list) -%}
+            {% set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res }}
 
