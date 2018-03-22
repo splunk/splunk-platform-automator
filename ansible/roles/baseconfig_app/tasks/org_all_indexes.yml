@@ -12,8 +12,30 @@
     marker: "# {mark} ANSIBLE MANAGED BLOCK Index: {{ item }}"
     content: |
       [{{ item }}]
-      homePath   = volume:primary/{{ item }}/db
-      coldPath   = volume:primary/{{ item }}/colddb
+      homePath   = volume:{{splunk_volume_defaults.homePath}}/{{ item }}/db
+      coldPath   = volume:{{splunk_volume_defaults.coldPath}}/{{ item }}/colddb
       thawedPath = $SPLUNK_DB/{{ item }}/thaweddb
   with_items: "{{ splunk_indexes | default('test') }}"
+  notify: restart splunk
+
+- name: "({{ app_name }}) configure volume for homePath"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_indexes
+  replace:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
+    regexp: '^(homePath\s*=\s*)volume:\w*'
+    replace: '\1volume:{{splunk_volume_defaults.homePath}}'
+  notify: restart splunk
+
+- name: "({{ app_name }}) configure volume for coldPath"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_indexes
+  replace:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
+    regexp: '^(coldPath\s*=\s*)volume:\w*'
+    replace: '\1volume:{{splunk_volume_defaults.coldPath}}'
   notify: restart splunk

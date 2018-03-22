@@ -7,6 +7,32 @@
     - indexer
   debug: msg="role '{{ role_name }}' start"
 
+#- name: create volume directories
+#  tags:
+#    - splunk
+#    - indexer
+#    - create_volume_path
+#  file:
+#    path: "{{ item.value.path }}"
+#    state: directory
+#    owner: "{{splunk_user}}"
+#    group: "{{splunk_group}}"
+#    mode: 0755
+#  with_dict: "{{ splunk_indexer_volumes }}"
+#  when: splunk_indexer_volumes is defined
+
+- name: "({{ app_name }}) check volume pathes"
+  tags:
+    - splunk
+    - indexer
+    - check_volume_path
+  include_tasks: check_volume_path.yml
+  with_dict: "{{ splunk_indexer_volumes }}"
+  vars:
+    volume_name: "{{ item.key }}"
+    volume_path: "{{ item.value.path }}"
+  when: splunk_indexer_volumes is defined
+
 - include: idxcluster.yml
   when: idxc_name is defined
 

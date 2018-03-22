@@ -1,6 +1,29 @@
 ---
 # This playbook install the base config app
 
+- name: "({{ app_name }}) rename volume:primary"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_indexer_volume_indexes
+  replace:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
+    regexp: '^\[volume:primary\]'
+    replace: '[volume:{{splunk_indexer_volumes|first|default(primary)}}]'
+  when: splunk_indexer_volumes is defined
+
+- name: "({{ app_name }}) set indexer volume variables"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_indexer_volume_indexes
+  include_tasks: set_indexer_volume_vars.yml
+  with_dict: "{{ splunk_indexer_volumes }}"
+  vars:
+    volume_name: "{{ item.key }}"
+    volume_vars: "{{ item.value }}"
+  when: splunk_indexer_volumes is defined
+
 - name: "({{ app_name }}) setting volume:primary"
   tags:
     - splunk
@@ -15,3 +38,4 @@
     group: "{{splunk_group}}"
     mode: 0644
   notify: restart splunk
+  when: splunk_indexer_volumes is not defined
