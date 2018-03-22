@@ -4,7 +4,6 @@
 - name: enable chronyd
   tags:
     - common
-    - timezone
     - ntp
     - chrony
   service:
