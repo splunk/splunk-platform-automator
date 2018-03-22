@@ -87,6 +87,7 @@
     - "{{ splunk_idxc_cm_list }}"
   loop_control:
     loop_var: cm_outer
+  when: splunk_deployment_server|default()|length == 0 and splunk_search_peer_idxc_list|length > 0 and inventory_hostname not in groups.role_cluster_master
 
 - name: update serverclass on deployment_server
   tags:
