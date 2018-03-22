@@ -7,6 +7,7 @@
     - splunk_enterprise
   blockinfile:
     path: /etc/rc.local
+    insertafter: "touch /var/lock/subsys/local"
     marker: "# {mark} ANSIBLE MANAGED BLOCK (THP)"
     content: |
       #SPLUNK: disable THP at boot time
