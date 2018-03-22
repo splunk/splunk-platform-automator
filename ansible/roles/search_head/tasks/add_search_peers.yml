@@ -9,7 +9,7 @@
     - search_peers
   wait_for:
     host: '{{search_head}}'
-    port: 22
+    port: 8089
     timeout: 1
   register: host_check
   check_mode: False
