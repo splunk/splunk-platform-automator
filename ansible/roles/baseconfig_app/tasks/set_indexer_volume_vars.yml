@@ -1,0 +1,20 @@
+---
+# This playbook configures additional settings for volumes
+
+- name: "setting volume variable"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_indexer_volume_indexes
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
+    section: volume:{{ volume_name }}
+    option: "{{ volume_var.key }}"
+    value: "{{ volume_var.value }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_dict: "{{ volume_vars }}"
+  loop_control:
+    loop_var: volume_var
+  notify: restart splunk
