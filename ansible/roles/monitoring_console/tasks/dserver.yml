@@ -1,12 +1,12 @@
 ---
-# This playbook install the apps required in a server
+# get the list of existing dservers and add the missing ones
 
 - name: get list of current distributedSearch servers
   tags:
     - splunk
     - splunk_baseconfig
     - monitoring_console
-    - search_peers
+    - dservers
   shell: sed -n '/^\[distributedSearch\]$/,+1p' {{ splunk_home }}/etc/system/local/distsearch.conf | grep servers | awk -F= '{print $2}' | sed -e 's%https\://\([a-Z0-9_\.-]*\)\:[0-9]*%\1%g' | tr -d " "
   register: current_dservers
   args:
@@ -17,10 +17,10 @@
     - splunk
     - splunk_baseconfig
     - monitoring_console
-    - search_peers
-  command: "{{ splunk_home }}/bin/splunk add search-server {{ item }}:8089 -remoteUsername admin -remotePassword {{splunk_admin_password}} -auth admin:{{splunk_admin_password}}"
+    - dservers
+  include_tasks: add_dserver.yml
   with_items:
     - "{{ splunk_dservers | difference(current_dservers.stdout.split(',')|list) }}"
-  become: yes
-  become_user: "{{ splunk_user }}"
+  loop_control:
+    loop_var: dserver_name
   when: "splunk_dservers|difference(current_dservers.stdout.split(',')|list)|length > 0"

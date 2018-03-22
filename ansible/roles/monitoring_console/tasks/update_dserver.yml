@@ -1,14 +1,15 @@
 ---
-# This playbook contains common tasks in this role
+# update dservers if needed
 
 - name: check if monitoring_console is available
   tags:
     - splunk
     - splunk_baseconfig
     - monitoring_console
+    - dservers
   wait_for:
     host: '{{splunk_monitoring_console}}'
-    port: 22
+    port: 8089
     timeout: 1
   register: host_check
   check_mode: False
@@ -21,7 +22,7 @@
     - splunk
     - splunk_baseconfig
     - monitoring_console
-    - search_peers
+    - dservers
   include_role:
     name: monitoring_console
     tasks_from: dserver

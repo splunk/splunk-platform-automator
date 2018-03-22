@@ -1,0 +1,30 @@
+---
+# add a certain dserver, if available
+
+- debug: var=dserver_name
+
+- name: check if dserver is available
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - monitoring_console
+    - dservers
+  wait_for:
+    host: '{{ dserver_name }}'
+    port: 8089
+    timeout: 1
+  register: dserver_check
+  check_mode: False
+  failed_when: dserver_check.msg is defined and "error" in dserver_check.msg
+  changed_when: dserver_check.state is defined and dserver_check.state == 'started'
+
+- name: adding new dserver
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - monitoring_console
+    - dservers
+  command: "{{ splunk_home }}/bin/splunk add search-server {{ dserver_name }}:8089 -remoteUsername admin -remotePassword {{splunk_admin_password}} -auth admin:{{splunk_admin_password}}"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  when: dserver_check.state is defined and dserver_check.state == 'started'
