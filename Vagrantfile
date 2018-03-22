@@ -36,9 +36,13 @@ defaults = {
     "splunk_version"=>"7.0.2",
     "splunk_admin_password"=>"splunklab",
     "splunk_outputs"=>"all",
-    "splunk_search_peers"=>"all"
+    "splunk_search_peers"=>"all",
+    "splunk_volume_defaults"=>{
+      "homePath"=>"primary",
+      "coldPath"=>"primary"
     }
   }
+}
 #puts JSON.pretty_generate(defaults)
 
 if !File.directory?("#{dir}/#{config_dir}")
