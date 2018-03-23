@@ -66,6 +66,10 @@
     loop_var: search_peer_name
   when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server
 
+# Reload reploy server (should find a way only do it on a change)
+- import_tasks: roles/deployment_server/handlers/main.yml
+  when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server
+
 - name: apply baseconfig app org_cluster_search_base
   tags:
     - splunk
