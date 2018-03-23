@@ -2,9 +2,7 @@
   tags:
     - splunk
     - splunk_enterprise
-  service:
-    name: splunk
-    state: restarted
+  shell: "{{ splunk_home }}/bin/splunk restart"
   become: yes
-  become_user: root
+  become_user: "{{ splunk_user }}"
   when: app_path == splunk_home + '/etc/apps'
