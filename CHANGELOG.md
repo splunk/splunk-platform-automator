@@ -3,7 +3,8 @@ Splunkenizer Changes By Release
 
 ## 1.0.devel - ongoing
 
-* Support index volume definitions 
+* Support index volume definitions
+* Support to use Ansible playbooks without vagrant
 
 ### Fixes
 
