@@ -42,6 +42,7 @@
     - org_all_search_base
   stat: path={{ app_path }}/{{ app_dest_name }}/local/web.conf.disable
   register: web_stat
+  when: splunk_ssl.web.enable != true
 
 - name: "({{ app_name }}) disable web.conf"
   tags:
@@ -49,4 +50,21 @@
     - splunk_baseconfig
     - org_all_search_base
   command: mv {{ app_path }}/{{ app_dest_name }}/local/web.conf {{ app_path }}/{{ app_dest_name }}/local/web.conf.disable
-  when: not web_stat.stat.exists
+  when: splunk_ssl.web.enable != true and not web_stat.stat.exists
+
+- name: "({{ app_name }}) enable ssl in web.conf"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_search_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/web.conf"
+    section: settings
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  with_dict: "{{ splunk_ssl.web.config }}"
+  when: splunk_ssl.web.enable == true
