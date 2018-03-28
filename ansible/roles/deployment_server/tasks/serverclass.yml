@@ -370,7 +370,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  with_items: "{{splunk_sh_hf_dsclients}}"
+  with_items: "{{splunk_hf_sh_lm_cm_ds_dp_mc_dsclients}}"
   notify: reload deploy-server
   when: splunk_hf_sh_lm_cm_ds_dp_mc_dsclients|default()|length > 0
 
