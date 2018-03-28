@@ -40,6 +40,14 @@ defaults = {
     "splunk_volume_defaults"=>{
       "homePath"=>"primary",
       "coldPath"=>"primary"
+    },
+    "splunk_ssl"=>{
+      "web"=>{
+        "enable"=>false,
+        "config"=>{
+          "enableSplunkWebSSL"=>true
+        }
+      }
     }
   }
 }
