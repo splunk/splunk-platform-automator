@@ -34,6 +34,20 @@
   notify: restart splunk
   when: splunk_deployment_server|default()|length == 0
 
+- name: apply baseconfig app org_all_search_base
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - monitoring_console
+    - org_all_search_base
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_search_base'
+    app_path: '{{splunk_home}}/etc/apps'
+  notify: restart splunk
+  when: splunk_deployment_server|default()|length == 0
+
 - name: apply baseconfig app org_full_license_server
   tags:
     - splunk

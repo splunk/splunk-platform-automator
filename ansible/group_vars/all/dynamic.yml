@@ -92,10 +92,19 @@ splunk_shc_label: "{{ shc_name }}"
 splunk_shc_site: "{%- if shc_site is defined -%}{{ shc_site }}{%- else -%}site0{%- endif -%}"
 splunk_shc_pass: "{{ shc_password }}"
 splunk_shc_replication_port: "{{ shc_replication_port }}"
-splunk_shc_deployer: "{% for dp in groups.role_deployer %}{% if dp in groups['shcluster_'+shc_name] %}{{ dp }}{% endif %}{% endfor %}"
 splunk_shc_host_list: "{{ groups['shcluster_'+shc_name]|intersect(groups.role_search_head|default([])) }}"
 splunk_shc_captain: "{{ shc_captain }}"
 splunk_shc_server_list: "{% set comma = joiner(',') %}{% for sh in splunk_shc_host_list %}{{ comma() }}https://{{ sh }}:8089{% endfor %}"
+splunk_shc_deployer: "{% for dp in groups.role_deployer|default([]) %}{% if dp in groups['shcluster_'+shc_name] %}{{ dp }}{% endif %}{% endfor %}"
+splunk_shc_dp_list: >-
+           {% set res = [] -%}
+           {%- for shc in splunk_shc_name_list -%}
+             {%- if shc_name|default() == idxc|replace("shcluster_", "") -%}
+               {% set ignored = res.extend(groups[shc]|list) -%}
+             {%- endif -%}
+           {%- endfor -%}
+           {{ res|intersect(groups.role_deployer|default([]))|intersect(groups['splunk_env_'+splunk_env_name]) }}
+
 
 # Deployment Server
 splunk_deployment_server: "{{groups.role_deployment_server|default([])|intersect(groups['splunk_env_'+splunk_env_name])|first|default()}}"
@@ -126,6 +135,12 @@ splunk_sh_hf_dsclients: >-
 splunk_idx_hf_sh_dsclients: >-
           {%- set res = [] -%}
           {%- for ds_client in splunk_indexer_list|union(splunk_heavy_forwarder_list)|union(splunk_search_head_list) -%}
+            {% set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
+          {%- endfor -%}
+          {{ res }}
+splunk_hf_sh_lm_cm_ds_dp_mc_dsclients: >-
+          {%- set res = [] -%}
+          {%- for ds_client in splunk_heavy_forwarder_list|union(splunk_search_head_list)|union([splunk_license_master])|union(splunk_idxc_cm_list)|union([splunk_deployment_server])|union(splunk_shc_dp_list)|union([splunk_monitoring_console]) -%}
             {% set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res }}

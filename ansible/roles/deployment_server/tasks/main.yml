@@ -20,6 +20,19 @@
     app_path: '{{splunk_home}}/etc/apps'
   notify: restart splunk
 
+- name: apply baseconfig app org_all_search_base
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - org_all_search_base
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_search_base'
+    app_path: '{{splunk_home}}/etc/apps'
+  notify: restart splunk
+
 - name: apply baseconfig app org_full_license_server
   tags:
     - splunk
@@ -121,6 +134,18 @@
     name: baseconfig_app
   vars:
     app_name: 'org_all_indexes'
+    app_path: '{{splunk_home}}/etc/deployment-apps'
+
+- name: apply baseconfig app org_all_search_base
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - org_all_search_base
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_search_base'
     app_path: '{{splunk_home}}/etc/deployment-apps'
 
 - include: serverclass.yml

@@ -354,3 +354,44 @@
     - { var: 'stateOnClient', value: 'enabled' }
   notify: reload deploy-server
   when: splunk_sh_hf_dsclients|default()|length > 0
+
+- name: define org_all_search_base server class clients
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_all_search_base
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:{{splunk_app_prefix}}_all_search_base
+    option: "whitelist.{{item.num}}"
+    value: "{{item.server}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_items: "{{splunk_sh_hf_dsclients}}"
+  notify: reload deploy-server
+  when: splunk_hf_sh_lm_cm_ds_dp_mc_dsclients|default()|length > 0
+
+- name: define org_all_search_base server class apps
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - org_all_search_base
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+    section: serverClass:{{splunk_app_prefix}}_all_search_base:app:{{splunk_app_prefix}}_all_search_base
+    option: "{{item.var}}"
+    value: "{{item.value}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_items:
+    - { var: 'restartSplunkWeb', value: '0' }
+    - { var: 'restartSplunkd', value: '1' }
+    - { var: 'stateOnClient', value: 'enabled' }
+  notify: reload deploy-server
+  when: splunk_hf_sh_lm_cm_ds_dp_mc_dsclients|default()|length > 0
