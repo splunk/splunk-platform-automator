@@ -99,7 +99,7 @@ splunk_shc_deployer: "{% for dp in groups.role_deployer|default([]) %}{% if dp i
 splunk_shc_dp_list: >-
            {% set res = [] -%}
            {%- for shc in splunk_shc_name_list -%}
-             {%- if shc_name|default() == idxc|replace("shcluster_", "") -%}
+             {%- if shc_name|default() == shc|replace("shcluster_", "") -%}
                {% set ignored = res.extend(groups[shc]|list) -%}
              {%- endif -%}
            {%- endfor -%}
