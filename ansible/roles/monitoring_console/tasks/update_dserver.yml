@@ -8,7 +8,7 @@
     - monitoring_console
     - dservers
   wait_for:
-    host: '{{splunk_monitoring_console}}'
+    host: '{{splunk_monitoring_console|first}}'
     port: 8089
     timeout: 1
   register: host_check
@@ -26,5 +26,5 @@
   include_role:
     name: monitoring_console
     tasks_from: dserver
-  delegate_to: '{{splunk_monitoring_console}}'
+  delegate_to: '{{splunk_monitoring_console|first}}'
   when: splunk_monitoring_console|default()|length > 0 and host_check.state is defined and host_check.state == 'started'

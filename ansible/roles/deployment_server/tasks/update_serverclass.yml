@@ -8,7 +8,7 @@
     - deployment_server
     - serverclass
   wait_for:
-    host: '{{splunk_deployment_server}}'
+    host: '{{splunk_deployment_server|first}}'
     port: 8089
     timeout: 1
   register: host_check
@@ -26,7 +26,7 @@
   include_role:
     name: deployment_server
     tasks_from: serverclass
-  delegate_to: '{{splunk_deployment_server}}'
+  delegate_to: '{{splunk_deployment_server|first}}'
   vars:
     splunk_install_app: splunk
   when: host_check.state is defined and host_check.state == 'started'

@@ -106,7 +106,7 @@
     - org_cluster_search_base
   include_role:
     name: baseconfig_app
-  delegate_to: '{{splunk_deployment_server}}'
+  delegate_to: '{{splunk_deployment_server|first}}'
   vars:
     app_name: 'org_cluster_search_base'
     app_path: '{{ splunk_home }}/etc/deployment-apps'
