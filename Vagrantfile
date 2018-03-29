@@ -206,7 +206,7 @@ settings['splunk_hosts'].each do |splunk_host|
           exit 2
         end
         # Needs to be defined, because not all hosts are populated to the ansible inventory from the start
-        var_obj["splunk_"+role_def] = splunk_host['name']
+        var_obj["vagrant_splunk_"+role_def] = [splunk_host['name']]
         groupname = "splunk_env_"+splunk_host['splunk_env']
         if envs.has_key?(groupname)
           envs[groupname] = envs[groupname].merge(var_obj)
@@ -470,7 +470,7 @@ host_vars = {}
 splunk_host_list = []
 settings['splunk_hosts'].each do |splunk_host|
   per_host_vars = {}
-  ['ip_addr', 'site'].each do |var|
+  ['ip_addr', 'site', 'cname'].each do |var|
     if !settings['general']['start_ip'].nil?
       # Keep the ip, if defined
       if splunk_host['ip_addr'].nil?
