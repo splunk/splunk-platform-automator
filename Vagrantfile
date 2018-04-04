@@ -9,6 +9,7 @@ require 'yaml'
 dir = File.dirname(File.expand_path(__FILE__))
 config_file = "splunk_config.yml"
 config_dir = "config"
+certs_dir = "certs"
 
 # Default values
 defaults = {
@@ -44,8 +45,11 @@ defaults = {
     "splunk_ssl"=>{
       "web"=>{
         "enable"=>false,
+        "own_certs"=>false,
         "config"=>{
-          "enableSplunkWebSSL"=>true
+          "enableSplunkWebSSL"=>true,
+          "privKeyPath"=>"etc/auth/{{splunk_env_name}}/privkey.web.key",
+          "serverCert"=>"etc/auth/{{splunk_env_name}}/cacert.pem"
         }
       }
     }
@@ -55,6 +59,9 @@ defaults = {
 
 if !File.directory?("#{dir}/#{config_dir}")
   FileUtils.mkdir_p("#{dir}/#{config_dir}")
+end
+if !File.directory?("#{dir}/#{certs_dir}")
+  FileUtils.mkdir_p("#{dir}/#{certs_dir}")
 end
 
 if !File.file?("Vagrantfile")
@@ -80,6 +87,12 @@ end
 splunk_defaults = defaults['splunk_defaults'].dup
 if !settings['splunk_defaults'].nil?
   splunk_defaults = splunk_defaults.merge(settings['splunk_defaults'])
+  web_config = defaults['splunk_defaults']['splunk_ssl']['web']['config'].dup
+  # Merging of splunk_ssl.web.config does not work, need to do it separatly
+  if not settings['splunk_defaults']['splunk_ssl'].nil? and not settings['splunk_defaults']['splunk_ssl']['web'] and not settings['splunk_defaults']['splunk_ssl']['web']['config'].nil?
+    web_config = web_config.merge(settings['splunk_defaults']['splunk_ssl']['web']['config'])
+  end
+  splunk_defaults['splunk_ssl']['web']['config'] = web_config
 end
 
 # Create splunk_environments group_vars

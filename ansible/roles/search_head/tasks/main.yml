@@ -7,6 +7,18 @@
     - search_head
   debug: msg="role '{{ role_name }}' start"
 
+- name: install certs for web ssl
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - search_head
+    - org_all_search_base
+    - web_ssl
+  include_role:
+    name: baseconfig_app
+    tasks_from: org_all_search_base_certs
+  when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
+
 - include: shcluster.yml
   when: shc_name is defined
 

@@ -9,8 +9,10 @@
 **/*.zip
 # Ansible
 **/*.retry
-# Config file
+# Config directory
 config
+# Certs directory
+certs
 **/splunk_config.yml
 # Test files
 **/test.yml

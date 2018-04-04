@@ -5,6 +5,7 @@ Splunkenizer Changes By Release
 
 * Support index volume definitions
 * Support to use Ansible playbooks without vagrant
+* Support encrypted splunk web (including custom certs)
 
 ### Fixes
 

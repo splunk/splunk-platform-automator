@@ -1,0 +1,115 @@
+---
+# This playbook installs certs for ssl on web
+
+- name: check key filename to copy
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_search_base
+    - web_ssl
+  stat:
+    path: "../certs/{{ item }}.key"
+  with_items:
+    - '{{ cname }}'
+    - '{{ inventory_hostname }}'
+    - '{{ ip_addr }}'
+  register: cert_keys
+  delegate_to: localhost
+  become: no
+  when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
+
+- name: check cacert filename to copy
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_search_base
+    - web_ssl
+  stat:
+    path: "../certs/{{ item }}.pem"
+  with_items:
+    - '{{ cname }}'
+    - '{{ inventory_hostname }}'
+    - '{{ ip_addr }}'
+  register: cert_pems
+  delegate_to: localhost
+  become: no
+  when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
+
+- name: set cert file names
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_search_base
+    - web_ssl
+  set_fact:
+    key_file: "{% for result in cert_keys.results %}{% if result.stat.exists == true %}{{ result.item }}.key{% endif %}{% endfor %}"
+    pem_file: "{% for result in cert_pems.results %}{% if result.stat.exists == true %}{{ result.item }}.pem{% endif %}{% endfor %}"
+  when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
+
+- name:
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_search_base
+    - web_ssl
+  fail:
+    msg: "Cannot find a .key file for host '{{ inventory_hostname }}' in the 'certs' directory!"
+  when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true and key_file == ""
+
+- fail:
+    msg: "Cannot find a .pem file for host '{{ inventory_hostname }}' in the 'certs' directory!"
+  when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true and pem_file == ""
+
+- name: create path for custom certs
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_search_base
+    - web_ssl
+  file:
+    state: directory
+    recurse: true
+    path: "{{ splunk_home }}/{{ item|dirname }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+  with_items:
+    - '{{ splunk_ssl.web.config.privKeyPath }}'
+    - '{{ splunk_ssl.web.config.serverCert }}'
+  notify: restart splunk
+  when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
+
+- name: copy certs file for web ssl
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_search_base
+    - web_ssl
+  copy:
+    src: "../certs/{{ item.src }}"
+    dest: "{{ splunk_home }}/{{ item.dest|dirname }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  with_items:
+    - { src: '{{ key_file }}', dest: '{{ splunk_ssl.web.config.privKeyPath }}' }
+    - { src: '{{ pem_file }}', dest: '{{ splunk_ssl.web.config.serverCert }}' }
+  notify: restart splunk
+  when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
+
+- name: link certs file for web ssl
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_search_base
+    - web_ssl
+  file:
+    state: link
+    src: "{{ item.src }}"
+    dest: "{{ splunk_home }}/{{ item.dest }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+  with_items:
+    - { src: '{{ key_file }}', dest: '{{ splunk_ssl.web.config.privKeyPath }}' }
+    - { src: '{{ pem_file }}', dest: '{{ splunk_ssl.web.config.serverCert }}' }
+  notify: restart splunk
+  when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true

@@ -38,9 +38,14 @@ os:
 #  splunk_env_name: splunk1
 #  splunk_version: '7.0.0'
 #  splunk_admin_password: 'splunklab1'
-#  # Give a path to a license file. Must be located in splunk_software_dir
+  # Give a path to a license file. Must be located in splunk_software_dir
 #  splunk_license_file: Splunk_Enterprise1.lic
-#  # Define some indexes to be created on the indexers
+  # Enable https for Splunk web 
+#  splunk_ssl:
+#    web:
+#      enable: true
+#      own_certs: true
+  # Define some indexes to be created on the indexers
 #  splunk_indexes:
 #    - test1
 #    - test2
