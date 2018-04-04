@@ -9,16 +9,18 @@
     - web_ssl
   stat:
     path: "../certs/{{ item }}.key"
+  vars:
+    cname_tmp: "{{ cname|default() }}"
   with_items:
-    - '{{ cname }}'
-    - '{{ inventory_hostname }}'
-    - '{{ ip_addr }}'
+    - "{{ cname_tmp.split(',')|list }}"
+    - "{{ inventory_hostname }}"
+    - "{{ ip_addr|default() }}"
   register: cert_keys
   delegate_to: localhost
   become: no
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
-- name: check cacert filename to copy
+- name: check pem filename to copy
   tags:
     - splunk
     - splunk_baseconfig
@@ -26,10 +28,12 @@
     - web_ssl
   stat:
     path: "../certs/{{ item }}.pem"
+  vars:
+    cname_tmp: "{{ cname|default() }}"
   with_items:
-    - '{{ cname }}'
-    - '{{ inventory_hostname }}'
-    - '{{ ip_addr }}'
+    - "{{ cname_tmp.split(',')|list }}"
+    - "{{ inventory_hostname }}"
+    - "{{ ip_addr|default() }}"
   register: cert_pems
   delegate_to: localhost
   become: no
