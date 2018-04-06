@@ -1,0 +1,40 @@
+---
+# This playbook install the base config app
+
+- name: "({{ app_name }}) setting ssl vars in tcpout stanza for clustered indexers"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_forwarder_outputs
+    - outputs_ssl
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+    section: tcpout:{{ index_cluster_name+'_indexers' }}
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  with_dict: "{{ splunk_ssl.outputs.config }}"
+  when: splunk_ssl.outputs.enable == true
+
+- name: "({{ app_name }}) setting ssl cert path in tcpout stanza for clustered indexers"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_forwarder_outputs
+    - outputs_ssl
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+    section: tcpout:{{ index_cluster_name+'_indexers' }}
+    option: "{{ item.varkey }}"
+    value: "$SPLUNK_HOME/etc/apps/{{ app_dest_name }}/default/{{ item.varvalue|basename }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  with_items: 
+    - { varkey: "sslRootCAPath", varvalue: "{{ splunk_ssl.outputs.config.sslRootCAPath|default('cacert.pem') }}" }
+    - { varkey: "sslCertPath", varvalue: "{{ splunk_ssl.outputs.config.sslCertPath|default('client.pem') }}" }
+  when: splunk_ssl.outputs.enable == true

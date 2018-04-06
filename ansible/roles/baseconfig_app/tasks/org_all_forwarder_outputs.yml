@@ -31,6 +31,25 @@
   notify: restart splunk
   when: splunk_outputs_idxc_list|length > 0
 
+- set_fact:
+    idx_port: "{{ inputs_port }}"
+  when: splunk_ssl.outputs.enable != true
+
+- set_fact:
+    idx_port: "{{ inputs_port_ssl }}"
+  when: splunk_ssl.outputs.enable == true
+
+- name: install certs for outputs ssl
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_forwarder_outputs
+    - outputs_ssl
+  include_role:
+    name: baseconfig_app
+    tasks_from: splunk_ssl_outputs_certs
+  when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true
+
 - name: "({{ app_name }}) setting server in tcpout stanza for clustered indexers"
   tags:
     - splunk
@@ -40,13 +59,27 @@
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     section: tcpout:{{ item.key+'_indexers' }}
     option: server
-    value: "{% set comma = joiner(',') %}{% for idx in item.value %}{{ comma() }}{{ idx }}:9997{% endfor %}"
+    value: "{% set comma = joiner(',') %}{% for idx in item.value %}{{ comma() }}{{ idx }}:{{idx_port}}{% endfor %}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
   notify: restart splunk
   with_dict: "{{ splunk_outputs_idxc_list }}"
   when: splunk_outputs_idxc_list|length > 0
+
+- name: "({{ app_name }}) setting ssl in tcpout stanza for clustered indexers"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - outputs_ssl
+    - org_all_forwarder_outputs
+  include_role:
+    name: baseconfig_app
+    tasks_from: org_all_forwarder_outputs_idxc_ssl
+  with_items: "{{ splunk_outputs_idxc_list }}"
+  loop_control:
+    loop_var: index_cluster_name
+  when: splunk_outputs_idxc_list|length > 0 and splunk_ssl.outputs.enable == true
 
 - name: "({{ app_name }}) rename tcpout:primary_indexers"
   tags:
@@ -72,9 +105,26 @@
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     section: tcpout:all_indexers
     option: server
-    value: "{% set comma = joiner(',') %}{% for idx in splunk_outputs_idx_list %}{{ comma() }}{{ idx }}:9997{% endfor %}"
+    value: "{% set comma = joiner(',') %}{% for idx in splunk_outputs_idx_list %}{{ comma() }}{{ idx }}:{{idx_port}}{% endfor %}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
   notify: restart splunk
   when: splunk_outputs_idx_list|length > 0
+
+- name: "({{ app_name }}) setting ssl in tcpout stanza for non clustered indexers"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_forwarder_outputs
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+    section: tcpout:all_indexers
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  with_dict: "{{ splunk_ssl.outputs.config }}"
+  when: splunk_outputs_idx_list|length > 0 and splunk_ssl.outputs.enable == true
