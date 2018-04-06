@@ -75,6 +75,18 @@
   notify: restart splunk
   when: splunk_deployment_server|default()|length == 0 and splunk_license_master|default()|length > 0 and inventory_hostname not in groups.role_license_master
 
+- name: install certs for inputs ssl
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - heavy_forwarder
+    - org_all_indexer_base
+    - inputs_ssl
+  include_role:
+    name: baseconfig_app
+    tasks_from: splunk_ssl_inputs_certs
+  when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
+
 - name: apply baseconfig app org_all_indexer_base
   tags:
     - splunk

@@ -33,6 +33,19 @@
     volume_path: "{{ item.value.path }}"
   when: splunk_indexer_volumes is defined
 
+- name: install certs for inputs ssl
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - indexer
+    - idxsingle
+    - idxcluster
+    - inputs_ssl
+  include_role:
+    name: baseconfig_app
+    tasks_from: splunk_ssl_inputs_certs
+  when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
+
 - include: idxcluster.yml
   when: idxc_name is defined
 

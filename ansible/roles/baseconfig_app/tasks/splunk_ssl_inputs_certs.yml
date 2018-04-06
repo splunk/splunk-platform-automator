@@ -1,0 +1,87 @@
+---
+# This playbook installs certs for ssl on inputs
+
+- name: check rootCA filename to copy
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - inputs_ssl
+  stat:
+    path: "../certs/{{ item }}"
+  with_items:
+    - "{{ splunk_ssl.inputs.config.rootCA|basename|default('cacert.pem') }}"
+  register: cacert_pems
+  delegate_to: localhost
+  become: no
+  when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
+
+- name: check serverCert filename to copy
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - inputs_ssl
+  stat:
+    path: "../certs/{{ item }}"
+  with_items:
+    - "{{ splunk_ssl.inputs.config.serverCert|basename|default('server.pem') }}"
+  register: server_pems
+  delegate_to: localhost
+  become: no
+  when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
+
+- name: set cert file names
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - inputs_ssl
+  set_fact:
+    cacert_pem: "{% for result in cacert_pems.results %}{% if result.stat.exists == true %}{{ result.item }}{% endif %}{% endfor %}"
+    server_pem: "{% for result in server_pems.results %}{% if result.stat.exists == true %}{{ result.item }}{% endif %}{% endfor %}"
+  when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
+
+- name:
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - inputs_ssl
+  fail:
+    msg: "Cannot find a cacert.pem file for host '{{ inventory_hostname }}' in the 'certs' directory!"
+  when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true and cacert_pem == ""
+
+- fail:
+    msg: "Cannot find a .pem file for host '{{ inventory_hostname }}' in the 'certs' directory!"
+  when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true and server_pem == ""
+
+- name: create path for custom certs
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - inputs_ssl
+  file:
+    state: directory
+    recurse: true
+    path: "{{ splunk_home }}/{{ item|dirname }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+  with_items:
+    - "{{ splunk_ssl.inputs.config.rootCA|replace('$SPLUNK_HOME/', '') }}"
+    - "{{ splunk_ssl.inputs.config.serverCert|replace('$SPLUNK_HOME/', '') }}"
+  notify: restart splunk
+  when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
+
+- name: copy certs file for inputs ssl
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - inputs_ssl
+  copy:
+    src: "../certs/{{ item.src }}"
+    dest: "{{ splunk_home }}/{{ item.dest|dirname }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  with_items:
+    - { src: '{{ cacert_pem }}', dest: "{{ splunk_ssl.inputs.config.rootCA|replace('$SPLUNK_HOME/', '') }}" }
+    - { src: '{{ server_pem }}', dest: "{{ splunk_ssl.inputs.config.serverCert|replace('$SPLUNK_HOME/', '') }}" }
+  notify: restart splunk
+  when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true

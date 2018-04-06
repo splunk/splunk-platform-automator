@@ -45,3 +45,57 @@
     group: "{{splunk_group}}"
     mode: 0600
   notify: restart splunk
+
+- name: "({{ app_name }}) disable none-ssl in inputs.conf"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_indexer_base
+    - inputs_ssl
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/inputs.conf"
+    section: "splunktcp://{{inputs_port}}"
+    option: "disabled"
+    value: "1"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  with_dict: "{{ splunk_ssl.inputs.config }}"
+  when: splunk_ssl.inputs.enable == true
+
+- name: "({{ app_name }}) enable ssl in inputs.conf"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_indexer_base
+    - inputs_ssl
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/inputs.conf"
+    section: "splunktcp-ssl://{{inputs_port_ssl}}"
+    option: "disabled"
+    value: "0"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  with_dict: "{{ splunk_ssl.inputs.config }}"
+  when: splunk_ssl.inputs.enable == true
+
+- name: "({{ app_name }}) setting ssl configs in inputs.conf"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_indexer_base
+    - inputs_ssl
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/inputs.conf"
+    section: "SSL"
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  with_dict: "{{ splunk_ssl.inputs.config }}"
+  when: splunk_ssl.inputs.enable == true
