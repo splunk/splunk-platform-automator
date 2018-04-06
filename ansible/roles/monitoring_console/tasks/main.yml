@@ -43,7 +43,7 @@
     - web_ssl
   include_role:
     name: baseconfig_app
-    tasks_from: org_all_search_base_certs
+    tasks_from: splunk_ssl_web_certs
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
 - name: apply baseconfig app org_all_search_base
