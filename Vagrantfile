@@ -34,14 +34,14 @@ defaults = {
     },
   "splunk_defaults"=>{
     "splunk_env_name"=>"splk",
-    "splunk_version"=>"7.0.2",
+    "splunk_version"=>"7.0.3",
     "splunk_admin_password"=>"splunklab",
     "splunk_outputs"=>"all",
     "splunk_search_peers"=>"all",
     "splunk_volume_defaults"=>{
       "homePath"=>"primary",
       "coldPath"=>"primary"
-    },
+      },
     "splunk_ssl"=>{
       "web"=>{
         "enable"=>false,
@@ -49,7 +49,24 @@ defaults = {
         "config"=>{
           "enableSplunkWebSSL"=>true,
           "privKeyPath"=>"etc/auth/{{splunk_env_name}}/privkey.web.key",
-          "serverCert"=>"etc/auth/{{splunk_env_name}}/cacert.pem"
+          "serverCert"=>"etc/auth/{{splunk_env_name}}/cacert.web.pem"
+        },
+      },
+      "inputs"=>{
+        "enable"=>false,
+        "own_certs"=>false,
+        "config"=>{
+          "rootCA"=>"$SPLUNK_HOME/etc/auth/cacert.pem",
+          "serverCert"=>"$SPLUNK_HOME/etc/auth/server.pem"
+        }
+      },
+      "outputs"=>{
+        "enable"=>false,
+        "own_certs"=>false,
+        "config"=>{
+          "sslRootCAPath"=>"$SPLUNK_HOME/etc/auth/cacert.pem",
+          "sslCertPath"=>"$SPLUNK_HOME/etc/auth/client.pem",
+          "sslPassword"=>"password"
         }
       }
     }
