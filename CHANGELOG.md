@@ -5,12 +5,14 @@ Splunkenizer Changes By Release
 
 * Support index volume definitions
 * Support to use Ansible playbooks without vagrant
-* Support encrypted splunk web (including custom certs)
+* Support ssl for splunk web (including custom certs)
+* Support ssl for forwarder->indexer communicaion (including custom certs)
 
 ### Fixes
 
 * Allow fgdn hosts
 * Added missing org_search_volume_indexes to DS
+* Added org_all_search_base to all roles with web enabled
 
 ## 0.9 - 2018-02-09
 
