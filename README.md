@@ -41,7 +41,7 @@ Implemented changes are to be found in the [Changelog](CHANGELOG.md)
 
 # Download from
 
-You can download the framework on [GitHub](https://github.com/thesplunker/Splunkenizer/)
+You can download the framework on [GitHub](https://github.com/splunkenizer/Splunkenizer)
 
 # Software Dependencies
 
@@ -104,13 +104,13 @@ Ansible playbooks can be run over and over again. If you need to start the playb
 vagrant provision <hostname>
 ```
 
-## Login to Splunk Browser Interface
-Splunk runs on port 8000 by default. Example: http://172.16.2.100:8000 (Username: admin, Password: splunklab)
-
 ## Login to the hosts
+
+### Login to Splunk Browser Interface
 To login to one of the hosts just open the index.html file crated in the Splunkenizer/config directory. You will find links to every role.
 
-Login with SSH:
+### Login by SSH
+Vagrant enables the vagrant user to login without a password:
 
 ```
 vagrant ssh <hostname>
@@ -133,12 +133,11 @@ vagrant scp <file> <hostname>:/destdir
 ```
 
 ## Ansible playbooks only
-I designed the ansible playbooks to be used without vagrant, just on its own. Till now I haven't tested this scenario so far.
-Vagrant dynamically creates the ansible inventory. The file is located in `.vagrant/provisioners/ansible/inventory/vagrant_ansible_inventory`. If you would like to use the ansible playbooks without vagrant, you have to create the inventory accordingly with the same groups. The Vagrant script also dynamically creates group_vars for the used config file. In `ansible/group_vars/all` you can find the `general` and `splunk_basics` sections from the config file. In `ansible/group_vars` the indexer-, search head cluster and splunk_env configs are placed.
+You can also use the ansible playbooks without vagrant. Like that you can deploy Splunk to an existing set of hosts. To do that, you have to create some config files, which is normally done by vagrant. Vagrant dynamically creates the ansible inventory. The file is located in `.vagrant/provisioners/ansible/inventory/vagrant_ansible_inventory`. If you would like to use the ansible playbooks without vagrant, you have to create the inventory yourself with the same groups. The Vagrant script also dynamically creates files in `ansible/group_vars` for your configuration. In `ansible/group_vars/all` you can find the `os` and `splunk_dirs` sections from the config file. In `ansible/group_vars` the indexer-, search head cluster and splunk_env configs are placed. The easiest way would be to create the same configuration with vagrant (ex. on your laptop) and use the created files in your other Ansible environment. 
 
 # Known issues, limitations
 
-* Configuration from universal forwarder to heavy forwarder not yet implemented. Must be done manually after installation.
+* Forwardingd data from a universal forwarder to a heavy forwarder cannot be configured in the config file. This must be done manually after installation.
 * Virtual host startup does not respond sometimes, if it fails, recreate the host again.
 * If using ansible 2.4+, you will get some warnings
 * Virtualbox has some issues with clock time skew, when not using virtualbox additions. I added a workaround with forcing time clock sync every 5 minutes. A working internet connection on the Virtualbox host is needed.
