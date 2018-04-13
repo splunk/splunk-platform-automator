@@ -1,11 +1,12 @@
-:white_check_mark: Ansible 2.4.3.0 seems to be stable with Splunkenizer!
+:bangbang: Ansible 2.5.0 seems to have an issue with Splunkenizer! I need to investigate.
 
-:white_check_mark: Ansible 2.4.0.0 is good to go with Splunkenizer!
+:white_check_mark: Ansible 2.4.3.0 is good to go with Splunkenizer.
 
 :bangbang: Due to the bug [#23609](https://github.com/ansible/ansible/issues/23609) ansible 2.4.2.0 does not work with Splunkenizer!
 
 :bangbang: Due to the bug [#31755](https://github.com/ansible/ansible/issues/31755) ansible 2.4.1.0 does not work with Splunkenizer!
 
+:white_check_mark: Ansible 2.4.0.0 is good to go with Splunkenizer.
 
 ![Splunkenizer Overview](https://github.com/thesplunker/Splunkenizer/blob/master/pic/splunkenizer_overview.png)
 
@@ -39,30 +40,28 @@ See the upcoming features in the [Roadmap](ROADMAP.md)
 
 Implemented changes are to be found in the [Changelog](CHANGELOG.md)
 
-# Download from
-
-You can download the framework on [GitHub](https://github.com/splunkenizer/Splunkenizer)
-
-# Software Dependencies
-
-## Splunk Software
-* [Splunk Enterprise](http://www.splunk.com/en_us/download/splunk-enterprise.html)
-* [Splunk Universal Forwarder](http://www.splunk.com/en_us/download/universal-forwarder.html)
-
-## Splunk Professional Services Best Practices Base Config Apps:
-* [Configurations Base Apps](https://splunk.app.box.com/ConfigurationsBase)
-* [Configurations Cluster Apps](https://splunk.app.box.com/ConfigurationsCluster)
-
 # Installation
 
 The Framework is currently only tested on Mac OSX, but any other Unix, which is supported by Virtualbox, should work.
 
-## OSX Instructions
+## Mac OSX Installation Instructions
 
-* Download and install Virtualbox and Vagrant from their websites. Both are coming with a simple installer in the package.
-* Install Ansible: I personally prefer [Brew](https://brew.sh) for that, which is as simple as `brew install ansible`. Current ansible 2.4+ has bugs. You have to use the previous version.
-* Download the framework in a folder of your choice with `git clone git@github.com:thesplunker/Splunkenizer.git`
-* Download the prerequisites and put them in folder called `Software`, just beside the `Splunkenizer` folder. Folder structure should look like this, if you have the stuff extracted in a folder called `Vagrant`.
+1. Download and install [Virtualbox](https://www.virtualbox.org/wiki/Downloads).
+1. Download and install [Vagrant](https://www.vagrantup.com).
+1. Install the Virtualbox plugin for Vagrant: `vagrant plugin install vagrant-vbguest`
+1. Install Ansible, I personally prefer [Brew](https://brew.sh) which makes it as easy as `brew install ansible`.
+1. Create a folder called `Vagrant` and change into it.
+1. Clone Splunkenizer from GitHub: `git clone git@github.com:thesplunker/Splunkenizer.git`
+1. Create a folder called `Software` and download the prerequisites
+1. Download the tgz. file for the Splunk Software
+   1. [Splunk Enterprise](http://www.splunk.com/en_us/download/splunk-enterprise.html)
+   1. [Splunk Universal Forwarder](http://www.splunk.com/en_us/download/universal-forwarder.html)
+1. Download Splunk Professional Services Best Practices Base Config Apps and extract them into `Software`
+   1. [Configurations Base Apps](https://splunk.app.box.com/ConfigurationsBase)
+   1. [Configurations Cluster Apps](https://splunk.app.box.com/ConfigurationsCluster)
+1. If you have a Splunk License copy it here to. You can link it to the name `Splunk_Enterprise.lic`, which makes it very easy to use by uncommenting the line in the configuration file.
+
+If you have downloaded everything, the folder structure should look like this:
 
 ```
 ./Vagrant/Splunkenizer/...
@@ -133,7 +132,7 @@ vagrant scp <file> <hostname>:/destdir
 ```
 
 ## Ansible playbooks only
-You can also use the ansible playbooks without vagrant. Like that you can deploy Splunk to an existing set of hosts. To do that, you have to create some config files, which is normally done by vagrant. Vagrant dynamically creates the ansible inventory. The file is located in `.vagrant/provisioners/ansible/inventory/vagrant_ansible_inventory`. If you would like to use the ansible playbooks without vagrant, you have to create the inventory yourself with the same groups. The Vagrant script also dynamically creates files in `ansible/group_vars` for your configuration. In `ansible/group_vars/all` you can find the `os` and `splunk_dirs` sections from the config file. In `ansible/group_vars` the indexer-, search head cluster and splunk_env configs are placed. The easiest way would be to create the same configuration with vagrant (ex. on your laptop) and use the created files in your other Ansible environment. 
+You can also use the ansible playbooks without vagrant. Like that you can deploy Splunk to an existing set of hosts. To do that, you have to create some config files, which is normally done by vagrant. Vagrant dynamically creates the ansible inventory. The file is located in `.vagrant/provisioners/ansible/inventory/vagrant_ansible_inventory`. If you would like to use the ansible playbooks without vagrant, you have to create the inventory yourself with the same groups. The Vagrant script also dynamically creates files in `ansible/group_vars` for your configuration. In `ansible/group_vars/all` you can find the `os` and `splunk_dirs` sections from the config file. In `ansible/group_vars` the indexer-, search head cluster and splunk_env configs are placed. The easiest way would be to create the same configuration with vagrant (ex. on your laptop) and use the created files in your other Ansible environment.
 
 # Known issues, limitations
 
