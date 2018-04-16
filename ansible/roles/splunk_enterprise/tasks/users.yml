@@ -31,7 +31,7 @@
     - splunk
     - splunk_enterprise
   blockinfile:
-    path: /home/{{ splunk_user }}/.bash_profile
+    path: /home/{{ splunk_user }}/.bashrc
     marker: "#<!-- {mark} ANSIBLE MANAGED BLOCK -->"
     insertafter: "export PATH"
     content: |

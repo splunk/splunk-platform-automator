@@ -17,7 +17,7 @@
     - common
     - bashrc
   blockinfile:
-    path: /home/vagrant/.bash_profile
+    path: /home/vagrant/.bashrc
     marker: "#<!-- {mark} ANSIBLE MANAGED BLOCK -->"
     insertafter: "export PATH"
     content: |
