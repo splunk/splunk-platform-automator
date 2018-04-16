@@ -1,6 +1,24 @@
 ---
 # Main playbook for this role
 
+- name: start role tasks
+  tags:
+    - splunk
+    - search_head
+  debug: msg="role '{{ role_name }}' start"
+
+- name: "check for systemctl"
+  tags:
+    - splunk
+    - splunk_enterprise
+  stat: path=/bin/systemctl
+  register: systemctl
+
+- set_fact:
+    use_systemctl: false
+    splunk_service_name: splunk
+  when: systemctl.stat.exists == false
+
 - name: "check for splunk fresh install"
   tags:
     - splunk
@@ -38,7 +56,7 @@
     - splunk
     - splunk_enterprise
   service:
-    name: splunk
+    name: "{{ splunk_service_name }}"
     state: restarted
   become: yes
   become_user: root
