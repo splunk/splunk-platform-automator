@@ -27,6 +27,7 @@ virtualbox:
 
 # Operating System definitions
 os:
+  # The timezone defaults to the vagrant host timezone, but you can set another one here
   time_zone: "Europe/Zurich"
   # Install additional packages
   packages:
@@ -40,7 +41,7 @@ os:
 #  splunk_admin_password: 'splunklab1'
   # Give a path to a license file. Must be located in splunk_software_dir
 #  splunk_license_file: Splunk_Enterprise1.lic
-  # Enable https for Splunk web 
+  # Enable https for Splunk web
 #  splunk_ssl:
 #    web:
 #      enable: true
@@ -73,7 +74,7 @@ splunk_environments:
 splunk_idxclusters:
   - idxc_name: idxc1
     idxc_password: splunkidxc
-    idxc_replication_port: 9887 
+    idxc_replication_port: 9887
     idxc_site_rf: 'origin:2, total:2'
     idxc_site_sf: 'origin:2, total:2'
 
