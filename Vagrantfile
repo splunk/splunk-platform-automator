@@ -14,7 +14,7 @@ certs_dir = "certs"
 # Default values
 defaults = {
   "ansible"=>{
-    "verbose"=>"", 
+    "verbose"=>"",
     "skip_tags"=>[]
     },
   "virtualbox"=>{
@@ -99,6 +99,9 @@ splunk_dirs = defaults['splunk_dirs'].dup
 if !settings['splunk_dirs'].nil?
   splunk_dirs = splunk_dirs.merge(settings['splunk_dirs'])
 end
+
+# Get timezone from the vagrant host as default for the virtual machines
+defaults['os']['time_zone'] = `ls -l /etc/localtime | sed -e 's%.*zoneinfo/%%' | tr -d '\n'`
 
 # Create splunk_defaults variables
 splunk_defaults = defaults['splunk_defaults'].dup
@@ -188,7 +191,7 @@ settings['splunk_hosts'].each do |splunk_host|
   if !splunk_host['os'].nil?
     if !File.directory?("#{dir}/ansible/host_vars/#{splunk_host['name']}")
       FileUtils.mkdir_p("#{dir}/ansible/host_vars/#{splunk_host['name']}")
-    end  
+    end
     File.open("#{dir}/ansible/host_vars/#{splunk_host['name']}/os.yml", "w") do |f|
       f.write(splunk_host['os'].to_yaml)
     end
@@ -204,7 +207,7 @@ settings['splunk_hosts'].each do |splunk_host|
   if splunk_env.length > 0
     if !File.directory?("#{dir}/ansible/host_vars/#{splunk_host['name']}")
       FileUtils.mkdir_p("#{dir}/ansible/host_vars/#{splunk_host['name']}")
-    end  
+    end
     File.open("#{dir}/ansible/host_vars/#{splunk_host['name']}/splunk_env.yml", "w") do |f|
       f.write(splunk_env.to_yaml)
     end
@@ -270,7 +273,7 @@ settings['splunk_hosts'].each do |splunk_host|
     # Build the outputs list
     if role == 'indexer' or role == 'heavy_forwarder'
       if not outputs_list.has_key?(splunk_host['splunk_env'])
-        outputs_list[splunk_host['splunk_env']] = {} 
+        outputs_list[splunk_host['splunk_env']] = {}
       end
       if splunk_host['idxcluster']
         if not outputs_list[splunk_host['splunk_env']].has_key?('idxcluster')
@@ -281,7 +284,7 @@ settings['splunk_hosts'].each do |splunk_host|
         end
       else
         if not outputs_list[splunk_host['splunk_env']].has_key?(role)
-          outputs_list[splunk_host['splunk_env']][role] = [] 
+          outputs_list[splunk_host['splunk_env']][role] = []
         end
         if not outputs_list[splunk_host['splunk_env']][role].include?(splunk_host['name'])
           outputs_list[splunk_host['splunk_env']][role].push(splunk_host['name'])
@@ -292,7 +295,7 @@ settings['splunk_hosts'].each do |splunk_host|
     # Build the search_peer list
     if role == 'indexer' or role == 'cluster_master'
       if not search_peer_list.has_key?(splunk_host['splunk_env'])
-        search_peer_list[splunk_host['splunk_env']] = {} 
+        search_peer_list[splunk_host['splunk_env']] = {}
       end
       if role == 'cluster_master' and splunk_host['idxcluster']
         if not search_peer_list[splunk_host['splunk_env']].has_key?('idxcluster')
@@ -303,7 +306,7 @@ settings['splunk_hosts'].each do |splunk_host|
         end
       elsif role == 'indexer' and not splunk_host['idxcluster']
         if not search_peer_list[splunk_host['splunk_env']].has_key?(role)
-          search_peer_list[splunk_host['splunk_env']][role] = [] 
+          search_peer_list[splunk_host['splunk_env']][role] = []
         end
         if not search_peer_list[splunk_host['splunk_env']][role].include?(splunk_host['name'])
           search_peer_list[splunk_host['splunk_env']][role].push(splunk_host['name'])
@@ -552,7 +555,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       # Don't check for box updates
       #srv.vm.box_check_update = false
 
-      # Splunk need some time to shutdown 
+      # Splunk need some time to shutdown
       srv.vm.boot_timeout = 600
       srv.vm.graceful_halt_timeout = 600
 
@@ -586,7 +589,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
       # Disable default shared folder
       srv.vm.synced_folder '.', '/vagrant', disabled: true
-  
+
       srv.vm.network :private_network, ip: server['ip_addr']
       #srv.vm.network "forwarded_port", guest: 8000, host: 8000, auto_correct: true
 
@@ -606,6 +609,9 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 #        end
 #        vb.customize ['storageattach', :id, '--storagectl', 'IDE', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', dataDisk1]
       end
+
+      # Workaround for missing python in ubuntu/xenial64
+      srv.vm.provision "shell", inline: "which python || sudo apt-get -y install python"
 
       srv.vm.provision "ansible" do |ansible|
         ansible.compatibility_mode = "2.0"
