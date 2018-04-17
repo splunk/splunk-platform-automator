@@ -3,6 +3,9 @@ Splunkenizer Changes By Release
 
 ## 1.0.devel - ongoing
 
+* Using systemd for splunk services, where available
+* Timezone taken from vagrant host per default
+* Support Ubuntu
 * Support index volume definitions
 * Support to use Ansible playbooks without vagrant
 * Support ssl for splunk web (including custom certs)
@@ -37,7 +40,7 @@ Splunkenizer Changes By Release
 ### Fixes
 
 * not all apps on single search head are deployed from deployment server
-* add tags to the dserver and serverclass tasks 
+* add tags to the dserver and serverclass tasks
 * volume and indexes should be deployed to single search head (create serverclass)
 * org_all_forwarder_outputs should output to all indexers. does only use first cluster in multicluster config
 
