@@ -29,7 +29,7 @@
   become_user: "{{ splunk_user }}"
   when: need_shcluster_init.rc == 0
 
-- name: restart splunk for cluster init
+- name: "restart splunk for cluster init (splunk restart)"
   tags:
     - splunk
     - search_head
@@ -37,7 +37,19 @@
   command: "{{ splunk_home }}/bin/splunk restart"
   become: yes
   become_user: "{{ splunk_user }}"
-  when: need_shcluster_init.rc == 0
+  when: need_shcluster_init.rc == 0 and use_systemctl != true
+
+- name: "restart splunk for cluster init (service restart)"
+  tags:
+    - splunk
+    - search_head
+    - shcluster
+  service:
+    name: "{{splunk_service_name}}"
+    state: restarted
+  become: yes
+  become_user: root
+  when: need_shcluster_init.rc == 0 and use_systemctl == true
 
 - name: apply baseconfig app org_cluster_search_base on deployer
   tags:

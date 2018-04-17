@@ -11,7 +11,8 @@
   tags:
     - splunk
     - splunk_enterprise
-  stat: path=/bin/systemctl
+  stat:
+    path: /bin/systemctl
   register: systemctl
 
 - set_fact:

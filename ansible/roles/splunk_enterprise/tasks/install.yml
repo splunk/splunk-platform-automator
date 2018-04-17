@@ -20,7 +20,7 @@
     path: "{{ splunk_home }}/bin"
   register: splunk_path
 
-- name: splunk is installed here 
+- name: splunk is installed here
   tags:
     - splunk
     - splunk_enterprise
@@ -81,4 +81,32 @@
     - splunk
     - splunk_enterprise
   command: "{{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }}"
-  when: splunk_path.stat.exists == false
+  when: splunk_path.stat.exists == false and use_systemctl != true
+
+- name: Install splunk service
+  tags:
+    - splunk
+    - splunk_enterprise
+  template:
+    src: "etc/systemd/system/{{ splunk_service_name }}.service.j2"
+    dest: "/etc/systemd/system/{{ splunk_service_name }}.service"
+    owner: root
+    group: root
+    mode: 0644
+  when: use_systemctl == true
+
+- name: commit changes to systemctl
+  tags:
+    - splunk
+    - splunk_enterprise
+  command: systemctl daemon-reload
+  when: use_systemctl == true
+
+- name: enable and start splunk service
+  tags:
+    - splunk
+    - splunk_enterprise
+  service:
+    name: "{{ splunk_service_name }}"
+    state: started
+    enabled: yes

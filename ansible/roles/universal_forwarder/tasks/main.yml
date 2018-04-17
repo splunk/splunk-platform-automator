@@ -7,6 +7,10 @@
     - universal_forwarder
   debug: msg="role '{{ role_name }}' start"
 
+- set_fact:
+    splunk_service_name: splunk
+  when: use_systemctl != true
+
 - name: call splunk enterprise for UF
   tags:
     - splunk
@@ -41,7 +45,7 @@
     app_name: 'org_all_forwarder_outputs'
     app_path: '{{splunk_home}}/etc/apps'
   notify: restart splunk
-  when: splunk_deployment_server|default()|length == 0 
+  when: splunk_deployment_server|default()|length == 0
 
 - name: update serverclass on deployment_server
   tags:

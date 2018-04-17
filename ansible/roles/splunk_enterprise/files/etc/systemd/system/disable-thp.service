@@ -1,0 +1,11 @@
+[Unit]
+Description = Disable Transparent Huge Pages SYSTEMD Service
+ 
+[Service]
+Type = oneshot
+RemainAfterExit = True
+ExecStart = /bin/sh -c "echo never >/sys/kernel/mm/transparent_hugepage/enabled"
+ExecStart = /bin/sh -c "echo never >/sys/kernel/mm/transparent_hugepage/defrag"
+ 
+[Install]
+WantedBy = multi-user.target

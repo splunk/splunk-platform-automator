@@ -1,0 +1,27 @@
+[Unit]
+Description = Splunk Enterprise SYSTEMD Service
+After = network.target remote-fs.target syslog.target auditd.service sshd.service
+Wants = network.target remote-fs.target syslog.target auditd.service sshd.service
+
+[Service]
+Type = forking
+RemainAfterExit = False
+StandardOutput = journal
+StandardError = journal
+Restart = always
+User = {{ splunk_user }}
+Group = {{ splunk_group }}
+LimitCORE = 0
+LimitFSIZE = infinity
+LimitDATA = infinity
+LimitNPROC = 20480
+LimitNOFILE = 65536
+TimeoutSec = 300
+RestartSec = 15
+ExecStart = {{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt
+ExecStop = {{ splunk_home }}/bin/splunk stop
+ExecReload = {{ splunk_home }}/bin/splunk restart
+PIDFile = {{ splunk_home }}/var/run/splunk/splunkd.pid
+
+[Install]
+WantedBy = multi-user.target
