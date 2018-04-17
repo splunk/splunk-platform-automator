@@ -8,6 +8,10 @@ general:
 os:
 #  time_zone: "Europe/Zurich"
 
+virtualbox:
+#  box: "centos/7" # Default
+#  box: "ubuntu/xenial64"
+
 # Splunk default settings
 splunk_defaults:
 #  splunk_env_name: splk

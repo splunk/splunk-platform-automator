@@ -8,6 +8,10 @@ general:
 os:
 #  time_zone: "Europe/Zurich"
 
+virtualbox:
+#  box: "centos/7" # Default
+#  box: "ubuntu/xenial64"
+
 # Splunk default settings
 splunk_defaults:
 #  splunk_env_name: splk
@@ -22,7 +26,7 @@ splunk_defaults:
 splunk_idxclusters:
   - idxc_name: idxc1
     idxc_password: splunkidxc
-    idxc_replication_port: 9887 
+    idxc_replication_port: 9887
     idxc_site_rf: 'origin:2, total:2'
     idxc_site_sf: 'origin:2, total:2'
 
