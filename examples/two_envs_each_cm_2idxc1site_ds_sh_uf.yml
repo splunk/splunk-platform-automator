@@ -51,6 +51,12 @@ splunk_hosts:
   # First Environment
   # ==================
 
+  # Deployment Server
+  - name: ds1
+    splunk_env: splk1
+    roles:
+      - deployment_server
+
   # Cluster Master
   - name: cm1
     splunk_env: splk1
@@ -77,12 +83,6 @@ splunk_hosts:
     idxcluster: idxc1
     site: site1
 
-  # Deployment Server
-  - name: ds1
-    splunk_env: splk1
-    roles:
-      - deployment_server
-
   # Single Search Head
   - name: sh1
     splunk_env: splk1
@@ -97,6 +97,12 @@ splunk_hosts:
 
   # Second Environment
   # ==================
+
+  # Deployment Server
+  - name: ds2
+    splunk_env: splk2
+    roles:
+      - deployment_server
 
   # Cluster Master
   - name: cm2
@@ -123,12 +129,6 @@ splunk_hosts:
       - indexer
     idxcluster: idxc2
     site: site1
-
-  # Deployment Server
-  - name: ds2
-    splunk_env: splk2
-    roles:
-      - deployment_server
 
   # Single Search Head
   - name: sh2
