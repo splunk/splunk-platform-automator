@@ -1,4 +1,4 @@
-:bangbang: Ansible 2.5.0 seems to have an issue with Splunkenizer! I need to investigate.
+:bangbang: Due to the bug [#35398](https://github.com/ansible/ansible/issues/35398) Ansible 2.5+ does not work with Splunkenizer!
 
 :white_check_mark: Ansible 2.4.3.0 is good to go with Splunkenizer. Install with this and switch back to good version. Switch also needed when doing `brew upgrade`.
 ```
@@ -6,9 +6,9 @@ brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/0e387d83c4
 brew switch ansible 2.4.3.0_4
 ```
 
-:bangbang: Due to the bug [#23609](https://github.com/ansible/ansible/issues/23609) ansible 2.4.2.0 does not work with Splunkenizer!
+:bangbang: Due to the bug [#23609](https://github.com/ansible/ansible/issues/23609) Ansible 2.4.2.0 does not work with Splunkenizer!
 
-:bangbang: Due to the bug [#31755](https://github.com/ansible/ansible/issues/31755) ansible 2.4.1.0 does not work with Splunkenizer!
+:bangbang: Due to the bug [#31755](https://github.com/ansible/ansible/issues/31755) Ansible 2.4.1.0 does not work with Splunkenizer!
 
 :white_check_mark: Ansible 2.4.0.0 is good to go with Splunkenizer.
 
