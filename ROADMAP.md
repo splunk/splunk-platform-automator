@@ -34,3 +34,4 @@ Note: The order for implementation may change
 * Make vagrant user configurable
 * Make splunk user configurable
 * User vagrant host-manager to update host ips: https://github.com/devopsgroup-io/vagrant-hostmanager https://github.com/akeeba/vagrant/blob/master/Vagrantfile
+* Run Bind server on one node: https://github.com/bertvv/ansible-role-bind
