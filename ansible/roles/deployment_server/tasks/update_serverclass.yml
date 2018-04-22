@@ -17,7 +17,7 @@
   changed_when: host_check.state is defined and host_check.state == 'started'
   when: groups.role_deployment_server is defined and inventory_hostname not in groups.role_deployment_server
 
-- name: update serverclass on deployment_server
+- name: call serverclass tasks on deployment_server
   tags:
     - splunk
     - splunk_baseconfig
