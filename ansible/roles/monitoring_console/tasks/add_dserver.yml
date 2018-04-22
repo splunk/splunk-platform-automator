@@ -16,6 +16,8 @@
   failed_when: dserver_check.msg is defined and "error" in dserver_check.msg
   changed_when: dserver_check.state is defined and dserver_check.state == 'started'
 
+# delegate_to with include_role and loops run on current host in ansible 2.5+ so we need to delegate here again:
+# See: https://medium.com/opsops/ansible-2-5-delegate-to-and-include-role-20cd7e67008e
 - name: adding new dserver
   tags:
     - splunk
@@ -23,6 +25,7 @@
     - monitoring_console
     - dservers
   command: "{{ splunk_home }}/bin/splunk add search-server {{ dserver_name }}:8089 -remoteUsername admin -remotePassword {{splunk_admin_password}} -auth admin:{{splunk_admin_password}}"
+  delegate_to: '{{splunk_monitoring_console|first}}'
   become: yes
   become_user: "{{ splunk_user }}"
   when: dserver_check.state is defined and dserver_check.state == 'started'

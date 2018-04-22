@@ -23,7 +23,7 @@
     - splunk_baseconfig
     - monitoring_console
     - dservers
-  include_role:
+  import_role:
     name: monitoring_console
     tasks_from: dserver
   delegate_to: '{{splunk_monitoring_console|first}}'

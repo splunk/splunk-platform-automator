@@ -23,7 +23,7 @@
     - splunk_baseconfig
     - deployment_server
     - serverclass
-  include_role:
+  import_role:
     name: deployment_server
     tasks_from: serverclass
   delegate_to: '{{splunk_deployment_server|first}}'

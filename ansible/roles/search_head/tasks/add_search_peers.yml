@@ -23,7 +23,7 @@
     - splunk_baseconfig
     - search_head
     - search_peers
-  include_role:
+  import_role:
     name: search_head
     tasks_from: search_peers
   delegate_to: '{{search_head}}'
