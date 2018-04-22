@@ -160,7 +160,7 @@
     app_name: 'org_all_search_base'
     app_path: '{{splunk_home}}/etc/deployment-apps'
 
-- include: serverclass.yml
+- include_tasks: serverclass.yml
 
 - name: update dserver on monitoring_console
   tags:
@@ -171,3 +171,4 @@
   include_role:
     name: monitoring_console
     tasks_from: update_dserver
+  when: splunk_monitoring_console|default()|length > 0 and inventory_hostname not in groups.role_monitoring_console

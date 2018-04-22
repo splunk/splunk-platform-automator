@@ -1,12 +1,12 @@
 ---
 # Main playbook for this role
 
-- include: packages.yml
+- include_tasks: packages.yml
 
-- include: users.yml
+- include_tasks: users.yml
 
-- include: time.yml
+- include_tasks: time.yml
 
-- include: hosts.yml
+- include_tasks: hosts.yml
 
-- include: fix_time_sync.yml
+- include_tasks: fix_time_sync.yml

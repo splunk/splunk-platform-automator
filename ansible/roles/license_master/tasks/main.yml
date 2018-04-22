@@ -54,7 +54,7 @@
   notify: restart splunk
   when: splunk_deployment_server|default()|length == 0
 
-- include: license.yml
+- include_tasks: license.yml
 
 - name: update serverclass on deployment_server
   tags:
@@ -65,6 +65,7 @@
   include_role:
     name: deployment_server
     tasks_from: update_serverclass
+  when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server
 
 - name: update dserver on monitoring_console
   tags:
@@ -75,3 +76,4 @@
   include_role:
     name: monitoring_console
     tasks_from: update_dserver
+  when: splunk_monitoring_console|default()|length > 0 and inventory_hostname not in groups.role_monitoring_console

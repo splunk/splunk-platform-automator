@@ -112,7 +112,7 @@
   delay: 10
   when: inventory_hostname == splunk_shc_captain and need_shcluster_bootstrap.rc == 22
 
-- include: search_peers.yml
+- include_tasks: search_peers.yml
 
 - name: update dserver on monitoring_console
   tags:
@@ -123,3 +123,4 @@
   include_role:
     name: monitoring_console
     tasks_from: update_dserver
+  when: splunk_monitoring_console|default()|length > 0 and inventory_hostname not in groups.role_monitoring_console

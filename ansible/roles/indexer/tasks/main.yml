@@ -46,8 +46,8 @@
     tasks_from: splunk_ssl_inputs_certs
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
 
-- include: idxcluster.yml
+- include_tasks: idxcluster.yml
   when: idxc_name is defined
 
-- include: idxsingle.yml
+- include_tasks: idxsingle.yml
   when: idxc_name is not defined

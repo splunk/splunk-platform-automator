@@ -56,3 +56,4 @@
   include_role:
     name: deployment_server
     tasks_from: update_serverclass
+  when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server

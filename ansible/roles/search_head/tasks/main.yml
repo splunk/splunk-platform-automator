@@ -19,8 +19,8 @@
     tasks_from: splunk_ssl_web_certs
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
-- include: shcluster.yml
+- include_tasks: shcluster.yml
   when: shc_name is defined
 
-- include: shsingle.yml
+- include_tasks: shsingle.yml
   when: shc_name is not defined
