@@ -1,4 +1,4 @@
-:bangbang: Due to the bug [#35398](https://github.com/ansible/ansible/issues/35398) Ansible 2.5+ does not work with Splunkenizer!
+:bangbang: Ansible 2.5+ not yet supported with Splunkenizer! Due to changes in 2.5+ I need to rework some code. See [#35398](https://github.com/ansible/ansible/issues/35398) and [delegate_to, include_role with loops](https://medium.com/opsops/ansible-2-5-delegate-to-and-include-role-20cd7e67008e)
 
 :white_check_mark: Ansible 2.4.3.0 is good to go with Splunkenizer. Install with this and switch back to good version. Switch also needed when doing `brew upgrade`.
 ```
