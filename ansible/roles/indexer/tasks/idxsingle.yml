@@ -119,3 +119,4 @@
   include_role:
     name: search_head
     tasks_from: loop_search_heads
+  when: inventory_hostname not in groups.role_search_head
