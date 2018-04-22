@@ -114,8 +114,7 @@
   with_items: "{{ splunk_search_peer_name_list }}"
   loop_control:
     loop_var: search_peer_name
-  when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server
-
+  when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server and splunk_search_peer_idxc_list|length > 0
 - name: apply baseconfig app org_cluster_search_base
   tags:
     - splunk
