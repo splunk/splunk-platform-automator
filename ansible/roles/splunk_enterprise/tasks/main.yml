@@ -33,11 +33,27 @@
     - splunk_enterprise
   include_tasks: users.yml
 
+- name: checking if splunk is installed
+  tags:
+    - splunk
+    - splunk_enterprise
+  stat:
+    path: "{{ splunk_home }}/bin"
+  register: splunk_path
+
+- name: splunk is installed here
+  tags:
+    - splunk
+    - splunk_enterprise
+  debug: msg='splunk is already installed under {{ splunk_home }}/bin/splunk'
+  when: splunk_path.stat.exists
+
 - name: "install the splunk software"
   tags:
     - splunk
     - splunk_enterprise
   include_tasks: install.yml
+  when: splunk_path.stat.exists == false
 
 - name: "set ulimits and disable THP"
   tags:

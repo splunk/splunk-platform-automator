@@ -12,21 +12,6 @@
     group: root
     mode: 0755
 
-- name: checking if splunk is installed
-  tags:
-    - splunk
-    - splunk_enterprise
-  stat:
-    path: "{{ splunk_home }}/bin"
-  register: splunk_path
-
-- name: splunk is installed here
-  tags:
-    - splunk
-    - splunk_enterprise
-  debug: msg='splunk is already installed under {{ splunk_home }}/bin'
-  when: splunk_path.stat.exists
-
 - name: create splunk directory
   tags:
     - splunk
@@ -46,7 +31,6 @@
   become: no
   register: splunk_archive
   delegate_to: localhost
-  when: splunk_path.stat.exists == false
 
 - name: install splunk binaries
   tags:
@@ -56,32 +40,7 @@
   with_items: "{{ splunk_archive.stdout_lines }}"
   become: yes
   become_user: "{{ splunk_user }}"
-  when: splunk_path.stat.exists == false and splunk_archive.rc == 0
-
-- name: accept license and start splunk
-  tags:
-    - splunk
-    - splunk_enterprise
-  command: "{{ splunk_home }}/bin/splunk start --accept-license"
-  become: yes
-  become_user: "{{ splunk_user }}"
-  when: splunk_path.stat.exists == false
-
-- name: change splunk admin password
-  tags:
-    - splunk
-    - splunk_enterprise
-  command: "{{ splunk_home }}/bin/splunk edit user admin -password '{{splunk_admin_password}}' -auth admin:changeme"
-  become: yes
-  become_user: "{{ splunk_user }}"
-  when: splunk_path.stat.exists == false
-
-- name: enable boot-start
-  tags:
-    - splunk
-    - splunk_enterprise
-  command: "{{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }}"
-  when: splunk_path.stat.exists == false and use_systemctl != true
+  when: splunk_archive.rc == 0
 
 - name: Install splunk service
   tags:
@@ -110,3 +69,28 @@
     name: "{{ splunk_service_name }}"
     state: started
     enabled: yes
+  when: use_systemctl == true
+
+- name: accept license and start splunk
+  tags:
+    - splunk
+    - splunk_enterprise
+  command: "{{ splunk_home }}/bin/splunk start --accept-license"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  when: use_systemctl != true
+
+- name: enable boot-start
+  tags:
+    - splunk
+    - splunk_enterprise
+  command: "{{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }}"
+  when: use_systemctl != true
+
+- name: change splunk admin password
+  tags:
+    - splunk
+    - splunk_enterprise
+  command: "{{ splunk_home }}/bin/splunk edit user admin -password '{{splunk_admin_password}}' -auth admin:changeme"
+  become: yes
+  become_user: "{{ splunk_user }}"
