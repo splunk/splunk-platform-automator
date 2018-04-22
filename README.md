@@ -140,14 +140,15 @@ You can also use the ansible playbooks without vagrant. Like that you can deploy
 
 # Known issues, limitations
 
-* Forwardingd data from a universal forwarder to a heavy forwarder cannot be configured in the config file. This must be done manually after installation.
+* ulimit settings not working on Ubuntu 14 (without systemd)
+* Forwarding data from a universal forwarder to a heavy forwarder cannot be configured in the config file. This must be done manually after installation.
 * Virtual host startup does not respond sometimes, if it fails, recreate the host again.
-* If using ansible 2.4+, you will get some warnings
+* If using Ansible 2.4+, you will get some warnings
 * Virtualbox has some issues with clock time skew, when not using virtualbox additions. I added a workaround with forcing time clock sync every 5 minutes. A working internet connection on the Virtualbox host is needed.
 
 # Authors
 
-Splunkenizer was created by [Marco Stadler](https://github.com/thesplunker) - a passionate Splunker.
+Splunkenizer was created by [Marco Stadler](https://github.com/splunkenizer) - a passionate Splunker.
 
 # License
 
