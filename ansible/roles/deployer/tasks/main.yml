@@ -178,17 +178,6 @@
     app_path: '{{splunk_home}}/etc/shcluster/apps'
   when: splunk_license_master|default()|length > 0
 
-- name: check pass4SymmKey not hashed
-  tags:
-    - splunk
-    - deployer
-  shell: "{{ splunk_home }}/bin/splunk btool server list shclustering | egrep -e '^pass4SymmKey = \\$1\\$'"
-  register: grep_result
-  check_mode: False
-  failed_when: "grep_result.rc > 1"
-  changed_when: "grep_result.rc != 0"
-  notify: restart splunk
-
 - name: update serverclass on deployment_server
   tags:
     - splunk
@@ -198,6 +187,7 @@
   include_role:
     name: deployment_server
     tasks_from: update_serverclass
+  when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server
 
 - name: update dserver on monitoring_console
   tags:
@@ -208,3 +198,4 @@
   include_role:
     name: monitoring_console
     tasks_from: update_dserver
+  when: splunk_monitoring_console|default()|length > 0 and inventory_hostname not in groups.role_monitoring_console

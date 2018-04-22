@@ -34,16 +34,3 @@
     app_name: 'org_site_n_indexer_base'
     app_path: '{{splunk_home}}/etc/apps'
   when: site is defined and "'site' in site"
-
-- name: check pass4SymmKey not hashed
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - indexer
-    - idxcluster
-  shell: "{{ splunk_home }}/bin/splunk btool server list clustering | egrep -e '^pass4SymmKey = \\$1\\$'"
-  register: grep_result
-  check_mode: False
-  failed_when: "grep_result.rc > 1"
-  changed_when: "grep_result.rc != 0"
-  notify: restart splunk
