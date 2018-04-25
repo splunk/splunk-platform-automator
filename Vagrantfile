@@ -34,7 +34,7 @@ defaults = {
     },
   "splunk_defaults"=>{
     "splunk_env_name"=>"splk",
-    "splunk_version"=>"7.0.3",
+    "splunk_version"=>"latest",
     "splunk_admin_password"=>"splunklab",
     "splunk_outputs"=>"all",
     "splunk_search_peers"=>"all",
@@ -139,10 +139,15 @@ end
 ## Check for Splunk installer archives
 splunk_environments.each do |splunkenv|
   ['splunk','splunkforwarder'].each do |splunk_arch|
-    check_arch = Dir.glob(dir+"/"+splunk_dirs['splunk_software_dir']+"/"+splunk_arch+"-"+splunkenv['splunk_version']+"-*Linux-x86_64.tgz")
+    if splunkenv['splunk_version'] == 'latest'
+      search_version = "*"
+    else
+      search_version = splunkenv['splunk_version']
+    end
+    check_arch = Dir.glob(dir+"/"+splunk_dirs['splunk_software_dir']+"/"+splunk_arch+"-"+search_version+"-*Linux-x86_64.tgz")
     if check_arch.length < 1
-      print "ERROR: Splunk Enterprise version #{splunkenv['splunk_version']} missing in #{dir}/#{splunk_dirs['splunk_software_dir']}\n\n"
-      print "Download "+splunk_arch+"-"+splunkenv['splunk_version']+"-...-Linux-x86_64.tgz at https://www.splunk.com\n"
+      print "ERROR: #{splunk_arch} version '#{splunkenv['splunk_version']}' missing in #{dir}/#{splunk_dirs['splunk_software_dir']}\n\n"
+      print "Download "+splunk_arch+"-"+search_version+"-...-Linux-x86_64.tgz at https://www.splunk.com/download\n"
       exit 2
     end
   end

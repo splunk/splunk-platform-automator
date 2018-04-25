@@ -3,6 +3,7 @@ Splunkenizer Changes By Release
 
 ## 1.0.devel - ongoing
 
+* Allow Splunk Version 'latest' to use the latest found splunk version in the directory
 * Support for single node system
 * Using systemd for splunk services, where available
 * Timezone taken from vagrant host per default

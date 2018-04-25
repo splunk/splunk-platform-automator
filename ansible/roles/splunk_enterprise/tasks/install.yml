@@ -23,26 +23,42 @@
     group: "{{ splunk_group }}"
     mode: 0755
 
-- name: find splunk archive file
+- name: find splunk archive files
   tags:
     - splunk
     - splunk_enterprise
-  command: find {{splunk_software}} -type f -name {{splunk_install_app}}-{{splunk_version}}-\*-Linux-x86_64.tgz
-  become: no
-  register: splunk_archive
+  find:
+    path: "{{splunk_software}}/"
+    pattern: "{{splunk_install_app}}-*-Linux-x86_64.tgz"
+    file_type: file
+    recurse: no
+  register: splunk_archive_files
   delegate_to: localhost
+  become: no
+
+- set_fact:
+    splunk_version: "{{splunk_archive_files.files|map(attribute='path')|list|last|basename|regex_replace('.*-([0-9]+.[0-9]+.[0-9]+)-.*', '\\1')}}"
+  when: splunk_version == 'latest'
+
+- set_fact:
+    splunk_archive: '{{splunk_archive_files.files|map(attribute="path")|list|select("match",".*"+splunk_version+".*")|list}}'
+
+- name:
+  tags:
+    - splunk
+    - splunk_enterprise
+  debug:
+    msg: "Using Splunk archive: {{splunk_archive.0}}"
 
 - name: install splunk binaries
   tags:
     - splunk
     - splunk_enterprise
-  unarchive: src={{item}} dest="{{ splunk_install_dir }}/" owner={{ splunk_user }} group={{ splunk_group }} creates=yes
-  with_items: "{{ splunk_archive.stdout_lines }}"
+  unarchive: src="{{splunk_archive.0}}" dest="{{ splunk_install_dir }}/" owner={{ splunk_user }} group={{ splunk_group }} creates=yes
   become: yes
   become_user: "{{ splunk_user }}"
-  when: splunk_archive.rc == 0
 
-- name: Install splunk service
+- name: install splunk service
   tags:
     - splunk
     - splunk_enterprise
@@ -87,6 +103,33 @@
   command: "{{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }}"
   when: use_systemctl != true
 
+- name: created hashed password for new password policy
+  tags:
+    - splunk
+    - splunk_enterprise
+  shell: "{{ splunk_home }}/bin/splunk hash-passwd '{{splunk_admin_password}}'"
+  register: admin_hash_pw
+  check_mode: False
+  failed_when: admin_hash_pw.rc != 4 and admin_hash_pw.rc != 0
+  changed_when: admin_hash_pw.rc == 0
+
+- name: "creating user-seed.conf"
+  tags:
+    - splunk
+    - splunk_enterprise
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/user-seed.conf"
+    section: user_info
+    option: "{{ item.varkey }}"
+    value: "{{ item.varvalue }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  when: admin_hash_pw.rc == 0
+  with_items:
+    - { varkey: "USERNAME", varvalue: "admin" }
+    - { varkey: "HASHED_PASSWORD", varvalue: "{{ admin_hash_pw.stdout }}" }
+
 - name: change splunk admin password
   tags:
     - splunk
@@ -94,3 +137,4 @@
   command: "{{ splunk_home }}/bin/splunk edit user admin -password '{{splunk_admin_password}}' -auth admin:changeme"
   become: yes
   become_user: "{{ splunk_user }}"
+  when: admin_hash_pw.rc != 0
