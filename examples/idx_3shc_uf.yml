@@ -31,11 +31,6 @@ splunk_shclusters:
 
 # Splunk hosts with its settings
 splunk_hosts:
-  # Single Indexer
-  - name: idx
-    roles:
-      - indexer
-
   # Deployer
   - name: dpl
     roles:
@@ -44,6 +39,11 @@ splunk_hosts:
       - monitoring_console
 #      - license_master
     shcluster: shc1
+
+  # Single Indexer
+  - name: idx
+    roles:
+      - indexer
 
  # Cluster Search Head
   - name: sh1
