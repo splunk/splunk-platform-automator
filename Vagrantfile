@@ -82,7 +82,7 @@ if $?.exitstatus != 0
 end
 
 # Check for supported ansible version
-ansible_version_supported = '2.4.3.*'
+ansible_version_supported = '2.4.0.*|2.4.3.*'
 ansible_version = `ansible --version | head -1 | awk '{print $2}' | tr -d '\n'`
 if !ansible_version.match(ansible_version_supported)
   print "ERROR: Ansible version #{ansible_version} not supported with Splunkenizer\n"
@@ -484,7 +484,6 @@ end
 if !settings['splunk_shclusters'].nil?
   settings['splunk_shclusters'].each do |shcluster|
     group_name = "shcluster_"+shcluster['shc_name']
-    shcluster['shc_captain'] = shc_list[shcluster['shc_name']].last
     File.open("ansible/group_vars/#{group_name}.yml", "w") do |f|
       f.write(shcluster.to_yaml)
     end

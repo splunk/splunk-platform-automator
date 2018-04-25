@@ -70,47 +70,67 @@
     loop_var: search_peer_name
   when: inventory_hostname == splunk_shc_host_list|first and splunk_search_peer_idxc_list|default([])|length > 0
 
-- name: check if shcluster is bootstrapped
+- name: check shcluster status
   tags:
     - splunk
     - search_head
     - shcluster
-    - bootstrap
   command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
   become: yes
   become_user: "{{ splunk_user }}"
-  register: need_shcluster_bootstrap
+  register: shcluster_status
   check_mode: False
-  failed_when: need_shcluster_bootstrap.rc != 0 and need_shcluster_bootstrap.rc != 22
-  changed_when: need_shcluster_bootstrap.rc == 22
-  when: inventory_hostname == splunk_shc_captain
+  failed_when: shcluster_status.rc != 0 and shcluster_status.rc != 22
+  changed_when: shcluster_status.stdout.find('service_ready_flag') == -1
 
 - name: bootstrap search head cluster
   tags:
     - splunk
     - search_head
     - shcluster
-    - bootstrap
-  command: "{{ splunk_home }}/bin/splunk bootstrap shcluster-captain -servers_list {{splunk_shc_server_list}} -auth admin:{{ splunk_admin_password }}"
+    - shc_bootstrap
+  command: "{{ splunk_home }}/bin/splunk bootstrap shcluster-captain -auth admin:{{ splunk_admin_password }}"
   become: yes
   become_user: "{{ splunk_user }}"
-  notify: push shcluster bundle
-  when: inventory_hostname == splunk_shc_captain and need_shcluster_bootstrap.rc == 22
+  when: inventory_hostname == splunk_shc_host_list|first and shcluster_status.changed == true
 
-- name: check if shcluster is service ready
+- name: wait for the cluster captain to be ready
   tags:
     - splunk
     - search_head
     - shcluster
-    - bootstrap
   command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
   become: yes
   become_user: "{{ splunk_user }}"
   register: result
-  until: "result.stdout.find('service_ready_flag : 1') != -1"
+  until: "result.stdout.find('status : Up') != -1"
   retries: 15
   delay: 10
-  when: inventory_hostname == splunk_shc_captain and need_shcluster_bootstrap.rc == 22
+  when: inventory_hostname == splunk_shc_host_list|first and shcluster_status.changed == true
+
+- name: "push shcluster bundle"
+  tags:
+    - splunk
+    - search_head
+    - shcluster
+  shell: "{{ splunk_home }}/bin/splunk apply shcluster-bundle -target https://{{splunk_shc_host_list|first}}:8089 -auth admin:{{ splunk_admin_password }} --answer-yes"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  delegate_to: "{{ splunk_shc_deployer }}"
+  notify: restart splunk
+  when: inventory_hostname == splunk_shc_host_list|first and shcluster_status.changed == true
+
+- name: add node to search head cluster
+  tags:
+    - splunk
+    - search_head
+    - shcluster
+    - shc_add_member
+  command: "{{ splunk_home }}/bin/splunk add shcluster-member -current_member_uri https://{{splunk_shc_host_list|first}}:8089 -auth admin:{{ splunk_admin_password }}"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  notify: restart splunk
+  when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
 
 - include_tasks: search_peers.yml
 

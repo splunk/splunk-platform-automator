@@ -91,8 +91,6 @@ splunk_shc_site: "{%- if shc_site is defined -%}{{ shc_site }}{%- else -%}site0{
 splunk_shc_pass: "{{ shc_password }}"
 splunk_shc_replication_port: "{{ shc_replication_port }}"
 splunk_shc_host_list: "{{ groups['shcluster_'+shc_name]|intersect(groups.role_search_head|default([])) }}"
-splunk_shc_captain: "{{ shc_captain }}"
-splunk_shc_server_list: "{% set comma = joiner(',') %}{% for sh in splunk_shc_host_list %}{{ comma() }}https://{{ sh }}:8089{% endfor %}"
 splunk_shc_deployer: "{% for dp in groups.role_deployer|default([]) %}{% if dp in groups['shcluster_'+shc_name] %}{{ dp }}{% endif %}{% endfor %}"
 splunk_shc_dp_list: >-
            {% set res = [] -%}

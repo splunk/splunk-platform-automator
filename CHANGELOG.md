@@ -3,6 +3,7 @@ Splunkenizer Changes By Release
 
 ## 1.0.devel - ongoing
 
+* Reworked shcluster setup. Better support for adding shc nodes.
 * Allow Splunk Version 'latest' to use the latest found splunk version in the directory
 * Support for single node system
 * Using systemd for splunk services, where available
