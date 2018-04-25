@@ -74,6 +74,23 @@ defaults = {
 }
 #puts JSON.pretty_generate(defaults)
 
+# Check for Ansible binary
+system("type ansible > /dev/null 2>&1")
+if $?.exitstatus != 0
+  print "ERROR: Cannot find ansible binary\n"
+  exit 2
+end
+
+# Check for supported ansible version
+ansible_version_supported = '2.4.3.*'
+ansible_version = `ansible --version | head -1 | awk '{print $2}' | tr -d '\n'`
+if !ansible_version.match(ansible_version_supported)
+  print "ERROR: Ansible version #{ansible_version} not supported with Splunkenizer\n"
+  print "Support versions are: #{ansible_version_supported}\n"
+  exit 2
+end
+
+# Create needed directories
 if !File.directory?("#{dir}/#{config_dir}")
   FileUtils.mkdir_p("#{dir}/#{config_dir}")
 end
