@@ -114,6 +114,8 @@ splunk_hosts:
     # Name the indexer cluster to be master of
     idxcluster: idxc1
     site: site0
+    # Specify different version fot this host
+    splunk_version: '6.5.3'
 
   # Cluster Indexer
   - name: idx1
