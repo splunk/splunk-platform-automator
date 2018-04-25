@@ -36,11 +36,13 @@
   delegate_to: localhost
   become: no
 
-- set_fact:
+- name: find latest splunk version
+  set_fact:
     splunk_version: "{{splunk_archive_files.files|map(attribute='path')|list|last|basename|regex_replace('.*-([0-9]+.[0-9]+.[0-9]+)-.*', '\\1')}}"
   when: splunk_version == 'latest'
 
-- set_fact:
+- name: get splunk archive for given version
+  set_fact:
     splunk_archive: '{{splunk_archive_files.files|map(attribute="path")|list|select("match",".*"+splunk_version+".*")|list}}'
 
 - name:
