@@ -11,8 +11,8 @@
 **/*.retry
 # Config directory
 config
-# Certs directory
-certs
+# Auth directory
+auth
 **/splunk_config.yml
 # Test files
 **/test.yml

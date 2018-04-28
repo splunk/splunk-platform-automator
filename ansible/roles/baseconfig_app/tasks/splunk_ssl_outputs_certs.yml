@@ -7,7 +7,7 @@
     - splunk_baseconfig
     - outputs_ssl
   stat:
-    path: "../certs/{{ item }}"
+    path: "{{ splunk_auth_dir }}/{{ item }}"
   with_items:
     - "{{ splunk_ssl.outputs.config.sslRootCAPath|basename|default('cacert.pem') }}"
   register: cacert_pems
@@ -21,7 +21,7 @@
     - splunk_baseconfig
     - outputs_ssl
   stat:
-    path: "../certs/{{ item }}"
+    path: "{{ splunk_auth_dir }}/{{ item }}"
   with_items:
     - "{{ splunk_ssl.outputs.config.sslCertPath|basename|default('client.pem') }}"
   register: client_pems
@@ -45,11 +45,11 @@
     - splunk_baseconfig
     - outputs_ssl
   fail:
-    msg: "Cannot find a cacert.pem file for host '{{ inventory_hostname }}' in the 'certs' directory!"
+    msg: "Cannot find a cacert.pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true and cacert_pem == ""
 
 - fail:
-    msg: "Cannot find a .pem file for host '{{ inventory_hostname }}' in the 'certs' directory!"
+    msg: "Cannot find a .pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true and client_pem == ""
 
 - name: create path for custom certs
@@ -72,7 +72,7 @@
     - splunk_baseconfig
     - outputs_ssl
   copy:
-    src: "../certs/{{ item.src }}"
+    src: "{{ splunk_auth_dir }}/{{ item.src }}"
     dest: "{{ item.dest }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"

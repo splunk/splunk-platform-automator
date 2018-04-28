@@ -9,7 +9,6 @@ require 'yaml'
 dir = File.dirname(File.expand_path(__FILE__))
 config_file = "splunk_config.yml"
 config_dir = "config"
-certs_dir = "certs"
 
 # Default values
 defaults = {
@@ -30,7 +29,8 @@ defaults = {
     },
   "splunk_dirs"=>{
     "splunk_baseconfig_dir"=>"../Software",
-    "splunk_software_dir"=>"../Software"
+    "splunk_software_dir"=>"../Software",
+    "splunk_auth_dir"=>"../auth",
     },
   "splunk_defaults"=>{
     "splunk_env_name"=>"splk",
@@ -90,17 +90,14 @@ if !ansible_version.match(ansible_version_supported)
   exit 2
 end
 
-# Create needed directories
-if !File.directory?("#{dir}/#{config_dir}")
-  FileUtils.mkdir_p("#{dir}/#{config_dir}")
-end
-if !File.directory?("#{dir}/#{certs_dir}")
-  FileUtils.mkdir_p("#{dir}/#{certs_dir}")
-end
-
 if !File.file?("Vagrantfile")
   print "ERROR: Run the command from the top directory, where 'Vagrantfile' is located!\n"
   exit 2
+end
+
+# Create config_dir
+if !File.directory?("#{dir}/#{config_dir}")
+  FileUtils.mkdir_p("#{dir}/#{config_dir}")
 end
 
 if !File.file?("#{dir}/#{config_dir}/#{config_file}")
@@ -115,6 +112,10 @@ settings = YAML.load_file("#{dir}/#{config_dir}/#{config_file}")
 splunk_dirs = defaults['splunk_dirs'].dup
 if !settings['splunk_dirs'].nil?
   splunk_dirs = splunk_dirs.merge(settings['splunk_dirs'])
+end
+# Create auth_dir
+if !File.directory?("#{dir}/ansible/#{splunk_dirs['splunk_auth_dir']}")
+  FileUtils.mkdir_p("#{dir}/ansible/#{splunk_dirs['splunk_auth_dir']}")
 end
 
 # Get timezone from the vagrant host as default for the virtual machines
