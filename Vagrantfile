@@ -38,6 +38,11 @@ defaults = {
     "splunk_admin_password"=>"splunklab",
     "splunk_outputs"=>"all",
     "splunk_search_peers"=>"all",
+    "splunk_secret_share"=>{
+      "splunk"=>false,
+      "splunkforwarder"=>false,
+      "equal"=>false
+      },
     "splunk_volume_defaults"=>{
       "homePath"=>"primary",
       "coldPath"=>"primary"

@@ -11,6 +11,7 @@ ansible:
   verbose: "v"
   # Skip ansible tags, ex. skip whole splunk install/config
   skip_tags:
+#    - common
 #    - splunk
 
 # Virtualbox settings
@@ -36,7 +37,7 @@ os:
     - epel-release
 #    - lsof
 
-#splunk_defaults:
+splunk_defaults:
 #  splunk_env_name: splunk1
 #  splunk_version: '7.0.0'
 #  splunk_admin_password: 'splunklab1'
@@ -51,6 +52,15 @@ os:
 #  splunk_indexes:
 #    - test1
 #    - test2
+
+# Share the same splunk.secret file for all installations.
+  splunk_secret_share:
+    # for Splunk Enterprise
+    splunk: true
+    # for Splunk Universal Forwarders
+    splunkforwarder: true
+    # use the same for both install types
+    equal: true
 
 splunk_basics:
     # Location of the extracted baseconfig apps

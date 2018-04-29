@@ -37,19 +37,22 @@
   command: "{{ splunk_home }}/bin/splunk restart"
   become: yes
   become_user: "{{ splunk_user }}"
-  when: need_shcluster_init.rc == 0 and use_systemctl != true
+  # Deployer does deploy apps after restart and restart splunk again, which fails the restart checker
+  check_mode: False
+  ignore_errors: yes
+  when: need_shcluster_init.rc == 0
 
-- name: "restart splunk for cluster init (service restart)"
+- name: "wait for splunkd to come back"
   tags:
     - splunk
     - search_head
     - shcluster
-  service:
-    name: "{{splunk_service_name}}"
-    state: restarted
-  become: yes
-  become_user: root
-  when: need_shcluster_init.rc == 0 and use_systemctl == true
+  wait_for:
+    timeout: 500
+    port: 8089
+    delay: 10
+    state: started
+  when: need_shcluster_init.rc == 0
 
 - name: apply baseconfig app org_cluster_search_base on deployer
   tags:

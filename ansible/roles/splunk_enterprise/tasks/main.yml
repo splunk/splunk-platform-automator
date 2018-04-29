@@ -15,7 +15,11 @@
     path: /bin/systemctl
   register: systemctl
 
-- set_fact:
+- name: set splunk service name
+  tags:
+    - splunk
+    - splunk_enterprise
+  set_fact:
     use_systemctl: false
     splunk_service_name: splunk
   when: systemctl.stat.exists == false
@@ -48,6 +52,18 @@
   debug: msg='splunk is already installed under {{ splunk_home }}/bin/splunk'
   when: splunk_path.stat.exists
 
+- name: check for existing splunk.secret file
+  tags:
+    - splunk
+    - splunk_enterprise
+    - splunk_secret
+  stat:
+    path: "{{ splunk_auth_dir }}/{{ splunk_install_app }}_splunk.secret"
+  become: no
+  register: splunk_secret_file
+  delegate_to: localhost
+  when: splunk_secret_share[splunk_install_app] == true
+
 - name: "install the splunk software"
   tags:
     - splunk
@@ -78,3 +94,33 @@
   become: yes
   become_user: root
   when: not splunk_stat.stat.exists
+
+- name: save shared splunk.secret file
+  tags:
+    - splunk
+    - splunk_enterprise
+    - splunk_secret
+  synchronize:
+    src: "{{ splunk_home }}/etc/auth/splunk.secret"
+    dest: "{{ splunk_auth_dir }}/{{ splunk_install_app }}_splunk.secret"
+    rsync_path: "{{ become_method|default('sudo') }} -u {{splunk_user}} rsync"
+    mode: pull
+  become: no
+  when: splunk_secret_share[splunk_install_app] == true and splunk_secret_file.stat.exists == false
+
+- name: link splunkforwarder to splunk secret file
+  tags:
+    - splunk
+    - splunk_enterprise
+    - splunk_secret
+  file:
+    state: link
+    src: "splunk_splunk.secret"
+    dest: "{{ splunk_auth_dir }}/splunkforwarder_splunk.secret"
+  become: no
+  delegate_to: localhost
+  when:
+    - splunk_secret_share.splunk == true
+    - splunk_secret_share.splunkforwarder == true
+    - splunk_secret_share.equal == true
+    - splunk_secret_file.stat.exists == false
