@@ -31,11 +31,21 @@
   notify: restart splunk
   when: splunk_outputs_idxc_list|length > 0
 
-- set_fact:
+- name: set input port
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_forwarder_outputs
+  set_fact:
     idx_port: "{{ inputs_port }}"
   when: splunk_ssl.outputs.enable != true
 
-- set_fact:
+- name: set ssl input port
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_forwarder_outputs
+  set_fact:
     idx_port: "{{ inputs_port_ssl }}"
   when: splunk_ssl.outputs.enable == true
 
