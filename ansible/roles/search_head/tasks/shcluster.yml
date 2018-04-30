@@ -24,7 +24,7 @@
     - splunk
     - search_head
     - shcluster
-  command: "{{ splunk_home }}/bin/splunk init shcluster-config -shcluster_label {{ splunk_shc_label }} -mgmt_uri https://{{ inventory_hostname }}:8089 -replication_port {{splunk_shc_replication_port}} -secret {{splunk_shc_pass}} -conf_deploy_fetch_url https://{{splunk_shc_deployer}}:8089 -auth admin:{{splunk_admin_password}}"
+  command: "{{ splunk_home }}/bin/splunk init shcluster-config -shcluster_label {{ splunk_shc_label }} -mgmt_uri https://{{ inventory_hostname }}:8089 -replication_port {{splunk_shc_replication_port}} -secret '{{splunk_shc_pass}}' -conf_deploy_fetch_url https://{{splunk_shc_deployer}}:8089 -auth admin:{{splunk_admin_password}}"
   become: yes
   become_user: "{{ splunk_user }}"
   when: need_shcluster_init.rc == 0
