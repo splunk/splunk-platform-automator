@@ -3,6 +3,7 @@ Splunkenizer Changes By Release
 
 ## 1.0.devel - ongoing
 
+* Support for using the same splunk.secret file
 * Support new password policy of Splunk 7.1 during install
 * Reworked shcluster setup. Better support for adding shc nodes.
 * Allow Splunk Version 'latest' to use the latest found splunk version in the directory
