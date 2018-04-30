@@ -35,11 +35,14 @@
     - search_head
     - shcluster
   command: "{{ splunk_home }}/bin/splunk restart"
+  register: shcluster_restart
   become: yes
   become_user: "{{ splunk_user }}"
   # Deployer does deploy apps after restart and restart splunk again, which fails the restart checker
   check_mode: False
   ignore_errors: yes
+  failed_when: shcluster_restart.rc > 1
+  changed_when: shcluster_restart.rc <= 1
   when: need_shcluster_init.rc == 0
 
 - name: "wait for splunkd to come back"
