@@ -18,7 +18,7 @@
 
 # delegate_to with include_role and loops run on current host in ansible 2.5+ so we need to delegate here again:
 # See: https://medium.com/opsops/ansible-2-5-delegate-to-and-include-role-20cd7e67008e
-- name: adding new dserver
+- name: add new dserver
   tags:
     - splunk
     - splunk_baseconfig

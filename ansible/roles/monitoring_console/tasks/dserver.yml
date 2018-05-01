@@ -12,7 +12,7 @@
   args:
     warn: false
 
-- name: adding new distributedSearch servers
+- name: call add_dserver
   tags:
     - splunk
     - splunk_baseconfig

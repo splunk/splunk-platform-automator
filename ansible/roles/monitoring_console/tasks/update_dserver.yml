@@ -17,7 +17,7 @@
   changed_when: host_check.state is defined and host_check.state == 'started'
   when: splunk_monitoring_console|default()|length > 0 and inventory_hostname not in groups.role_monitoring_console
 
-- name: call dserver tasks on monitoring_console
+- name: call dserver from role monitoring_console
   tags:
     - splunk
     - splunk_baseconfig
