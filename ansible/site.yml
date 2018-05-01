@@ -50,6 +50,7 @@
 
 - name: setup search head role
   hosts: role_search_head
+  serial: 1
   become: yes
   become_user: root
   roles:
