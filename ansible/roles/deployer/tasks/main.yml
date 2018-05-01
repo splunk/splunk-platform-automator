@@ -7,7 +7,7 @@
     - deployer
   debug: msg="role '{{ role_name }}' start"
 
-- name: "(deployer) check if shclustering pass4SymmKey exists"
+- name: "check if shclustering pass4SymmKey exists"
   tags:
     - splunk
     - deployer
@@ -17,7 +17,7 @@
   failed_when: "grep_result.rc > 1"
   changed_when: "grep_result.rc == 1"
 
-- name: "(deployer) setting unhashed pass4SymmKey"
+- name: "setting pass4SymmKey"
   tags:
     - splunk
     - deployer
@@ -32,7 +32,7 @@
   notify: restart splunk
   when: "grep_result.rc == 1"
 
-- name: "(deployer) setting shclustering label"
+- name: "setting shclustering label"
   tags:
     - splunk
     - deployer
