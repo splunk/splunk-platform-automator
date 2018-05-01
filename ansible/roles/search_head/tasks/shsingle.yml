@@ -151,7 +151,7 @@
     tasks_from: update_serverclass
   when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server
 
-- name: update dserver on monitoring_console
+- name: call update_dserver from role monitoring_console
   tags:
     - splunk
     - splunk_baseconfig
@@ -160,4 +160,6 @@
   include_role:
     name: monitoring_console
     tasks_from: update_dserver
+  vars:
+    splunk_dservers: "[ '{{ inventory_hostname }}' ]"
   when: splunk_monitoring_console|default()|length > 0 and inventory_hostname not in groups.role_monitoring_console
