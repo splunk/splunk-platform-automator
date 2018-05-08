@@ -1,16 +1,3 @@
-:bangbang: Ansible 2.5+ not yet supported with Splunkenizer! Due to changes in 2.5+ I need to rework some code. See [#35398](https://github.com/ansible/ansible/issues/35398) and [delegate_to, include_role with loops](https://medium.com/opsops/ansible-2-5-delegate-to-and-include-role-20cd7e67008e)
-
-:white_check_mark: Ansible 2.4.3.0 is good to go with Splunkenizer. Install with this and switch back to good version. Switch also needed when doing `brew upgrade`.
-```
-brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/0e387d83c4cad6214108dd4937ac34ee845665d7/Formula/ansible.rb
-brew switch ansible 2.4.3.0_4
-```
-
-:bangbang: Due to the bug [#23609](https://github.com/ansible/ansible/issues/23609) Ansible 2.4.2.0 does not work with Splunkenizer!
-
-:bangbang: Due to the bug [#31755](https://github.com/ansible/ansible/issues/31755) Ansible 2.4.1.0 does not work with Splunkenizer!
-
-:white_check_mark: Ansible 2.4.0.0 is good to go with Splunkenizer.
 
 ![Splunkenizer Overview](https://github.com/thesplunker/Splunkenizer/blob/master/pic/splunkenizer_overview.png)
 
@@ -53,7 +40,7 @@ The Framework is currently only tested on Mac OSX, but any other Unix, which is 
 1. Download and install [Virtualbox](https://www.virtualbox.org/wiki/Downloads).
 1. Download and install [Vagrant](https://www.vagrantup.com).
 1. Install the Virtualbox plugin for Vagrant: `vagrant plugin install vagrant-vbguest`
-1. Install Ansible, I personally prefer [Brew](https://brew.sh) which makes it as easy as `brew install ansible`.
+1. Install Ansible, I personally prefer [Brew](https://brew.sh) which makes it as easy as `brew install ansible`. Currently the newest Ansible version is not yet supported, so you have to install an older one like 2.4.3.0. Check [here](#suported-ansible-versions) for the instructions with brew. 
 1. Create a folder called `Vagrant` and change into it.
 1. Clone Splunkenizer from GitHub: `git clone git@github.com:thesplunker/Splunkenizer.git`
 1. Create a folder called `Software` and download the prerequisites
@@ -75,6 +62,8 @@ If you have downloaded everything, the folder structure should look like this:
 ./Vagrant/Software/Splunk_Enterprise.lic
 ./Vagrant/Software/splunkforwarder-7.0.0-c8a78efdd40f-Linux-x86_64.tgz
 ```
+
+## Suported Ansible Versions
 
 # Framework Usage
 
@@ -145,6 +134,18 @@ You can also use the ansible playbooks without vagrant. Like that you can deploy
 * Virtual host startup does not respond sometimes, if it fails, recreate the host again.
 * If using Ansible 2.4+, you will get some warnings
 * Virtualbox has some issues with clock time skew, when not using virtualbox additions. I added a workaround with forcing time clock sync every 5 minutes. A working internet connection on the Virtualbox host is needed.
+
+## Supported Ansible Versions
+
+:bangbang: Ansible 2.5+ not yet supported with Splunkenizer! Due to changes in 2.5+ I need to rework some code. See [#35398](https://github.com/ansible/ansible/issues/35398) and [delegate_to, include_role with loops](https://medium.com/opsops/ansible-2-5-delegate-to-and-include-role-20cd7e67008e)
+
+:white_check_mark: Ansible 2.4.3.0 is good to go with Splunkenizer. Install with this and switch back to good version. Switch also needed when doing `brew upgrade`.
+```
+brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/0e387d83c4cad6214108dd4937ac34ee845665d7/Formula/ansible.rb
+brew switch ansible 2.4.3.0_4
+```
+
+:white_check_mark: Ansible 2.4.0.0 is also good to go with Splunkenizer.
 
 # Authors
 
