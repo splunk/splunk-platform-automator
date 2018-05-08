@@ -40,7 +40,7 @@ The Framework is currently only tested on Mac OSX, but any other Unix, which is 
 1. Download and install [Virtualbox](https://www.virtualbox.org/wiki/Downloads).
 1. Download and install [Vagrant](https://www.vagrantup.com).
 1. Install the Virtualbox plugin for Vagrant: `vagrant plugin install vagrant-vbguest`
-1. Install Ansible, I personally prefer [Brew](https://brew.sh) which makes it as easy as `brew install ansible`. Currently the newest Ansible version is not yet supported, so you have to install an older one like 2.4.3.0. Check [here](#suported-ansible-versions) for the instructions with brew. 
+1. Install Ansible, I personally prefer [Brew](https://brew.sh) which makes it as easy as `brew install ansible`. Currently the newest Ansible version is not yet supported, so you have to install an older one like 2.4.3.0. Check [Supported Ansible Versions](#supported-ansible-versions) for the instructions with brew. 
 1. Create a folder called `Vagrant` and change into it.
 1. Clone Splunkenizer from GitHub: `git clone git@github.com:thesplunker/Splunkenizer.git`
 1. Create a folder called `Software` and download the prerequisites
@@ -135,7 +135,7 @@ You can also use the ansible playbooks without vagrant. Like that you can deploy
 * If using Ansible 2.4+, you will get some warnings
 * Virtualbox has some issues with clock time skew, when not using virtualbox additions. I added a workaround with forcing time clock sync every 5 minutes. A working internet connection on the Virtualbox host is needed.
 
-## Supported Ansible Versions
+## Supported Ansible versions
 
 :bangbang: Ansible 2.5+ not yet supported with Splunkenizer! Due to changes in 2.5+ I need to rework some code. See [#35398](https://github.com/ansible/ansible/issues/35398) and [delegate_to, include_role with loops](https://medium.com/opsops/ansible-2-5-delegate-to-and-include-role-20cd7e67008e)
 
