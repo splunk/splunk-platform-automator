@@ -63,8 +63,6 @@ If you have downloaded everything, the folder structure should look like this:
 ./Vagrant/Software/splunkforwarder-7.0.0-c8a78efdd40f-Linux-x86_64.tgz
 ```
 
-## Supported Ansible Versions
-
 # Framework Usage
 
 ## Configuration file
@@ -135,7 +133,7 @@ You can also use the ansible playbooks without vagrant. Like that you can deploy
 * If using Ansible 2.4+, you will get some warnings
 * Virtualbox has some issues with clock time skew, when not using virtualbox additions. I added a workaround with forcing time clock sync every 5 minutes. A working internet connection on the Virtualbox host is needed.
 
-## Supported Ansible versions
+## Supported Ansible Versions
 
 :bangbang: Ansible 2.5+ not yet supported with Splunkenizer! Due to changes in 2.5+ I need to rework some code. See [#35398](https://github.com/ansible/ansible/issues/35398) and [delegate_to, include_role with loops](https://medium.com/opsops/ansible-2-5-delegate-to-and-include-role-20cd7e67008e)
 
