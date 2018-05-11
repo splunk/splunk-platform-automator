@@ -1,5 +1,5 @@
 
-![Splunkenizer Overview](https://github.com/thesplunker/Splunkenizer/blob/master/pic/splunkenizer_overview.png)
+![Splunkenizer Overview](https://github.com/splunkenizer/Splunkenizer/blob/master/pic/splunkenizer_overview.png)
 
 
 
@@ -40,10 +40,10 @@ The Framework is currently only tested on Mac OSX, but any other Unix, which is 
 1. Download and install [Virtualbox](https://www.virtualbox.org/wiki/Downloads).
 1. Download and install [Vagrant](https://www.vagrantup.com).
 1. Install the Virtualbox plugin for Vagrant: `vagrant plugin install vagrant-vbguest`
-1. Install Ansible, I personally prefer [Brew](https://brew.sh) which makes it as easy as `brew install ansible`. Currently the newest Ansible version is not yet supported, so you have to install an older one like 2.4.3.0. Check [Supported Ansible Versions](#supported-ansible-versions) for the instructions with brew. 
+1. Install Ansible, I personally prefer [Brew](https://brew.sh) which makes it as easy as `brew install ansible`. Currently the newest Ansible version is not yet supported, so you have to install an older one like 2.4.3.0. Check [Supported Ansible Versions](#supported-ansible-versions) for the instructions with brew.
 1. Create a folder called `Vagrant` and change into it.
-1. Clone Splunkenizer from GitHub: `git clone git@github.com:thesplunker/Splunkenizer.git`
-1. Create a folder called `Software` and download the prerequisites
+1. Clone Splunkenizer from GitHub: `git clone https://github.com/splunkenizer/Splunkenizer.git`
+1. Create a folder called `Software` and download the prerequisites mentioned in the following steps.
 1. Download the tgz. file for the Splunk Software
    1. [Splunk Enterprise](http://www.splunk.com/en_us/download/splunk-enterprise.html)
    1. [Splunk Universal Forwarder](http://www.splunk.com/en_us/download/universal-forwarder.html)
@@ -63,7 +63,7 @@ If you have downloaded everything, the folder structure should look like this:
 ./Vagrant/Software/splunkforwarder-7.0.0-c8a78efdd40f-Linux-x86_64.tgz
 ```
 
-## Suported Ansible Versions
+## Supported Ansible Versions
 
 # Framework Usage
 
