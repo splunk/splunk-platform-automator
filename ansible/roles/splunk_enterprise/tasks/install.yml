@@ -130,7 +130,7 @@
     - splunk_enterprise
   shell: "{{ splunk_home }}/bin/splunk hash-passwd '{{splunk_admin_password}}'"
   register: admin_hash_pw
-  when: splunk_version is version_compare('7.1', '>=')
+  when: splunk_version is version_compare('7.1', '>=') and splunk_install_app == "splunk"
 
 - name: "creating user-seed.conf"
   tags:
@@ -147,7 +147,7 @@
   with_items:
     - { varkey: "USERNAME", varvalue: "admin" }
     - { varkey: "HASHED_PASSWORD", varvalue: "{{ admin_hash_pw.stdout }}" }
-  when: splunk_version is version_compare('7.1', '>=')
+  when: splunk_version is version_compare('7.1', '>=') and splunk_install_app == "splunk"
 
 - name: change splunk admin password
   tags:
@@ -156,4 +156,4 @@
   command: "{{ splunk_home }}/bin/splunk edit user admin -password '{{splunk_admin_password}}' -auth admin:changeme"
   become: yes
   become_user: "{{ splunk_user }}"
-  when: splunk_version is version_compare('7.1', '<')
+  when: splunk_version is version_compare('7.1', '<') and splunk_install_app == "splunk"
