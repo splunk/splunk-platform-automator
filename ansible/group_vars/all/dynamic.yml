@@ -104,38 +104,44 @@ splunk_shc_dp_list: >-
 splunk_deployment_server: "{{groups.role_deployment_server|default([])|intersect(groups['splunk_env_'+splunk_env_name])|union(vagrant_splunk_deployment_server|default([]))|default([])}}"
 splunk_idx_dsclients: >-
           {%- set res = [] -%}
-          {%- for ds_client in splunk_indexer_list -%}
+          {%- for ds_client in splunk_indexer_list|difference([splunk_deployment_server|first]) -%}
             {% set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res|unique }}
 splunk_idx_hf_dsclients: >-
           {%- set res = [] -%}
-          {%- for ds_client in splunk_indexer_list|union(splunk_heavy_forwarder_list) -%}
+          {%- for ds_client in splunk_indexer_list|union(splunk_heavy_forwarder_list)|difference([splunk_deployment_server|first]) -%}
             {% set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res|unique }}
 splunk_sh_dsclients: >-
           {%- set res = [] -%}
-          {%- for ds_client in splunk_search_head_list -%}
+          {%- for ds_client in splunk_search_head_list|difference([splunk_deployment_server|first]) -%}
             {%- set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res|unique }}
 splunk_sh_hf_dsclients: >-
           {%- set res = [] -%}
-          {%- for ds_client in splunk_search_head_list|union(splunk_heavy_forwarder_list) -%}
+          {%- for ds_client in splunk_search_head_list|union(splunk_heavy_forwarder_list)|difference([splunk_deployment_server|first]) -%}
             {%- set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res|unique }}
 splunk_idx_hf_sh_dsclients: >-
           {%- set res = [] -%}
-          {%- for ds_client in splunk_indexer_list|union(splunk_heavy_forwarder_list)|union(splunk_search_head_list) -%}
+          {%- for ds_client in splunk_indexer_list|union(splunk_heavy_forwarder_list)|union(splunk_search_head_list)|difference([splunk_deployment_server|first]) -%}
             {% set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res|unique }}
 splunk_hf_sh_lm_cm_ds_dp_mc_dsclients: >-
           {%- set res = [] -%}
-          {%- for ds_client in splunk_heavy_forwarder_list|union(splunk_search_head_list)|union(splunk_license_master)|union(splunk_idxc_cm_list)|union(splunk_deployment_server)|union(splunk_shc_dp_list)|union(splunk_monitoring_console) -%}
+          {%- for ds_client in splunk_heavy_forwarder_list|union(splunk_search_head_list)|union(splunk_license_master)|union(splunk_idxc_cm_list)|union(splunk_deployment_server)|union(splunk_shc_dp_list)|union(splunk_monitoring_console)|difference([splunk_deployment_server|first]) -%}
             {% set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
+          {%- endfor -%}
+          {{ res|unique }}
+splunk_license_dsclients: >-
+          {%- set res = [] -%}
+          {%- for ds_client in groups.all|intersect(groups['splunk_env_'+splunk_env_name])|unique|difference(splunk_idxc_all_host_list)|difference(splunk_shc_all_host_list|default([]))|difference(groups.role_license_master|default([]))|difference(groups.role_universal_forwarder|default([]))|difference([splunk_deployment_server|first]) -%}
+            {%- set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res|unique }}
 
@@ -145,9 +151,3 @@ splunk_dservers: "{{ groups.all|intersect(groups['splunk_env_'+splunk_env_name])
 
 # License Server
 splunk_license_master: "{{groups.role_license_master|default([])|intersect(groups['splunk_env_'+splunk_env_name])|union(vagrant_splunk_license_master|default([]))|default([])}}"
-splunk_license_clients: >-
-          {%- set res = [] -%}
-          {%- for ds_client in groups.all|intersect(groups['splunk_env_'+splunk_env_name])|unique|difference(splunk_idxc_all_host_list)|difference(splunk_shc_all_host_list|default([]))|difference(groups.role_license_master|default([]))|difference(groups.role_universal_forwarder|default([])) -%}
-            {%- set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
-          {%- endfor -%}
-          {{ res|unique }}

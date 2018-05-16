@@ -124,7 +124,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  with_items: "{{splunk_license_clients}}"
+  with_items: "{{splunk_license_dsclients}}"
   notify: reload deploy-server
   when: splunk_license_master|default()|length > 0
 
