@@ -160,7 +160,13 @@
     app_name: 'org_all_search_base'
     app_path: '{{splunk_home}}/etc/deployment-apps'
 
-- include_tasks: serverclass.yml
+- name: call serverclass
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+  include_tasks: serverclass.yml
 
 - name: call update_dserver from role monitoring_console
   tags:
