@@ -1,7 +1,7 @@
-Splunkenizer Changes By Release
+Splunkenizer changes by release
 ===============================
 
-## 1.0.devel - ongoing
+## 1.0 - 2018-05-21
 
 * Support hashed config values for cluster and ssl cert passwords
 * Support for using the same splunk.secret file
@@ -19,6 +19,7 @@ Splunkenizer Changes By Release
 
 ### Fixes
 
+* Remove deployment server from the host lists generated for serverclasses
 * Allow fgdn hosts
 * Added missing org_search_volume_indexes to DS
 * Added org_all_search_base to all roles with web enabled
