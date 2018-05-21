@@ -65,30 +65,41 @@ If you have downloaded everything, the folder structure should look like this:
 
 # Framework Usage
 
-## Configuration file
-There is one single configuration file, where all settings for your deployment are stored. If you run `vagrant` the first time, you will get a `config` directory created. Copy one configuration file from the [examples](examples) to `config/splunk_config.yml` and adjust the setting to your needs. For standard setup you should be fine with most of the default settings, but there are a lot of things you can adjust for secial needs. See the [configuration description](examples/configuration_description.yml) for all the possibilities.
+## First start and initialization
+
+Run vagrant the first time to initialize itself and create needed directories. You must execute vagrant always in side the Splunkenizer directory where the `Vagrantfile` sits, otherwise it will not work correctly. You will see the usage page, when executing vagrant without options.
+
+```
+cd splunkenizer
+vagrant
+```
+
+## Copy a configuration file
+There is one single configuration file, where all settings for your deployment are defined. Copy one configuration file from the [examples](examples) to `config/splunk_config.yml` and adjust the setting to your needs. For a standard setup you should be fine with most of the default settings, but there are a lot of things you can adjust for special cases. See the [configuration description](examples/configuration_description.yml) file, where all existing values are described.
 
 ## Start the deployment
-The whole framework is managed by vagrant. You have to be in the top directory, where the `Vagrantfile` sits and just run the build command. It will pull an os image from the internet, when run the first time.
+When building virtual machines the first time it will pull an os image from the internet. The box images are cached here: `~/.vagrant.d/boxes`.
 
 ```
 vagrant up
 ```
 
 ## Stop hosts
+This will gracefully shutdown all the virtual machines.
 
 ```
 vagrant halt
 ```
 
 ## Destroy hosts
+You can destroy all the virtual machines with one command.
 
 ```
 vagrant destroy [-f] [<hostname>]
 ```
 
 ## Rerun provisioning
-Ansible playbooks can be run over and over again. If you need to start the playbooks on a certain host again run this:
+Ansible playbooks can be run over and over again. IF the virtual machine is already built and you need to start the playbooks on a certain host, you can call the provisioner again. This can be needed if something fails and you fixed the error.
 
 ```
 vagrant provision <hostname>
@@ -97,10 +108,10 @@ vagrant provision <hostname>
 ## Login to the hosts
 
 ### Login to Splunk Browser Interface
-To login to one of the hosts just open the index.html file crated in the Splunkenizer/config directory. You will find links to every role.
+To login to one of the hosts just open the `index.html` file created in the Splunkenizer/config directory. You will find links to every role of your deployment.
 
 ### Login by SSH
-Vagrant enables the vagrant user to login without a password:
+Vagrant deployes an ssh key for the vagrant user to login without a password.
 
 ```
 vagrant ssh <hostname>
@@ -112,7 +123,11 @@ vagrant ssh <hostname>
 Vagrant uses a dedicated user to work inside the virtual machines. The user name is `vagrant` and has sudo rights to switch to root or other users.
 
 ### User splunk
-Splunk Enterprise is installed and run as user `splunk`. You can switch to this user by `sudo su - splunk`. For convenience, I have added some command aliases to the user `vagrant` and user `splunk`
+Splunk Enterprise is installed and run as user `splunk`. You can switch to this user by `sudo su - splunk`. For convenience, I have added some command aliases to the user `vagrant` and user `splunk`.
+
+```
+alias
+```
 
 ## Copy files
 
@@ -123,14 +138,13 @@ vagrant scp <file> <hostname>:/destdir
 ```
 
 ## Ansible playbooks only
-You can also use the ansible playbooks without vagrant. Like that you can deploy Splunk to an existing set of hosts. To do that, you have to create some config files, which is normally done by vagrant. Vagrant dynamically creates the ansible inventory. The file is located in `.vagrant/provisioners/ansible/inventory/vagrant_ansible_inventory`. If you would like to use the ansible playbooks without vagrant, you have to create the inventory yourself with the same groups. The Vagrant script also dynamically creates files in `ansible/group_vars` for your configuration. In `ansible/group_vars/all` you can find the `os` and `splunk_dirs` sections from the config file. In `ansible/group_vars` the indexer-, search head cluster and splunk_env configs are placed. The easiest way would be to create the same configuration with vagrant (ex. on your laptop) and use the created files in your other Ansible environment.
+You can also use the ansible playbooks without vagrant. Like that you can deploy Splunk to an existing set of hosts. You have to create some config files, which is normally done by vagrant. Vagrant dynamically creates the ansible inventory. The file is located in `.vagrant/provisioners/ansible/inventory/vagrant_ansible_inventory`. If you would like to use the ansible playbooks without vagrant, you have to create the inventory yourself with the same groups. The Vagrant script also dynamically creates files in `ansible/group_vars` for your configuration. In `ansible/group_vars/all` you can find the `os` and `splunk_dirs` sections from the config file. In `ansible/group_vars` the indexer-, search head cluster and splunk_env configs are placed. The easiest way would be to create the same configuration with vagrant (ex. on your laptop) and use the created files in your other Ansible environment.
 
 # Known issues, limitations
 
 * ulimit settings not working on Ubuntu 14 (without systemd)
 * Forwarding data from a universal forwarder to a heavy forwarder cannot be configured in the config file. This must be done manually after installation.
 * Virtual host startup does not respond sometimes, if it fails, recreate the host again.
-* If using Ansible 2.4+, you will get some warnings
 * Virtualbox has some issues with clock time skew, when not using virtualbox additions. I added a workaround with forcing time clock sync every 5 minutes. A working internet connection on the Virtualbox host is needed.
 
 ## Supported Ansible Versions
@@ -147,7 +161,7 @@ brew switch ansible 2.4.3.0_4
 
 # Authors
 
-Splunkenizer was created by [Marco Stadler](https://github.com/splunkenizer) - a passionate Splunker.
+Splunkenizer is created by [Marco Stadler](https://github.com/splunkenizer) - a passionate Splunker.
 
 # License
 
