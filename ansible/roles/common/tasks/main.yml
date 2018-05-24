@@ -7,6 +7,6 @@
 
 - include_tasks: time.yml
 
-- include_tasks: hosts.yml
+#- include_tasks: hosts.yml
 
 - include_tasks: fix_time_sync.yml

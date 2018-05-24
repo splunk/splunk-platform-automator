@@ -13,6 +13,8 @@
 config
 # Auth directory
 auth
+# Inventory directory
+inventory
 **/splunk_config.yml
 # Test files
 **/test.yml
@@ -23,8 +25,3 @@ auth
 # Sublime
 *.sublime-project
 *.sublime-workspace
-# ignore dynamically created files
-ansible/group_vars/**
-!ansible/group_vars/all
-!ansible/group_vars/all/dynamic.yml
-ansible/host_vars

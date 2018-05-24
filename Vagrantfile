@@ -24,8 +24,11 @@ VAGRANTFILE_API_VERSION = '2'
 
 require 'yaml'
 dir = File.dirname(File.expand_path(__FILE__))
-config_file = "splunk_config.yml"
-config_dir = "config"
+config_dir = "#{dir}/config"
+config_file = "#{config_dir}/splunk_config.yml"
+inventory_dir = "#{dir}/inventory"
+group_vars_dir = "#{inventory_dir}/group_vars"
+host_vars_dir = "#{inventory_dir}/host_vars"
 
 # Default values
 defaults = {
@@ -118,18 +121,18 @@ if !File.file?("Vagrantfile")
 end
 
 # Create config_dir
-if !File.directory?("#{dir}/#{config_dir}")
-  FileUtils.mkdir_p("#{dir}/#{config_dir}")
+if !File.directory?("#{config_dir}")
+  FileUtils.mkdir_p("#{config_dir}")
 end
 
-if !File.file?("#{dir}/#{config_dir}/#{config_file}")
-  print "ERROR: Please copy a config file from the examples dir to #{dir}/#{config_dir}/#{config_file} to continue\n"
+if !File.file?("#{config_file}")
+  print "ERROR: Please copy a config file from the examples dir to #{config_file} to continue\n"
   exit 2
 end
 
 # Read YAML file with instance information (box, CPU, RAM, IP addresses)
 # Edit the config file to change VM and environment configuration details
-settings = YAML.load_file("#{dir}/#{config_dir}/#{config_file}")
+settings = YAML.load_file("#{config_file}")
 
 splunk_dirs = defaults['splunk_dirs'].dup
 if !settings['splunk_dirs'].nil?
@@ -195,7 +198,7 @@ splunk_environments.each do |splunkenv|
   if !splunkenv['splunk_license_file'].nil?
     if !File.file?(dir+"/"+splunk_dirs['splunk_software_dir']+"/"+splunkenv['splunk_license_file'])
       print "ERROR: Cannot find license file #{splunk_dirs['splunk_software_dir']+"/"+splunkenv['splunk_license_file']} \n\n"
-      print "Comment variable 'splunk_license_file' in #{dir}/#{config_dir}/#{config_file} if no license available\n"
+      print "Comment variable 'splunk_license_file' in #{config_file} if no license available\n"
       exit 2
     end
   end
@@ -212,12 +215,21 @@ search_peer_list = {}
 search_peer_groups = {}
 envs = {}
 special_host_vars = {}
+ip_addr_list = {}
 
+# Remove this in the future, cause only needed during upgrades
 # Clean up host_vars directory
 if File.directory?("#{dir}/ansible/host_vars")
   FileUtils.rm_r("#{dir}/ansible/host_vars")
 end
-FileUtils.mkdir_p("#{dir}/ansible/host_vars")
+
+# Clean up inventory/group_vars directory
+if File.directory?("#{group_vars_dir}")
+  FileUtils.rm_r("#{group_vars_dir}")
+end
+# Create up inventory/group_vars/all and inventory/host_vars directory
+FileUtils.mkdir_p("#{group_vars_dir}/all")
+FileUtils.mkdir_p("#{host_vars_dir}")
 
 # Create inventory host groups
 settings['splunk_hosts'].each do |splunk_host|
@@ -234,10 +246,10 @@ settings['splunk_hosts'].each do |splunk_host|
 
   # Create os host_vars
   if !splunk_host['os'].nil?
-    if !File.directory?("#{dir}/ansible/host_vars/#{splunk_host['name']}")
-      FileUtils.mkdir_p("#{dir}/ansible/host_vars/#{splunk_host['name']}")
+    if !File.directory?("#{host_vars_dir}/#{splunk_host['name']}")
+      FileUtils.mkdir_p("#{host_vars_dir}/#{splunk_host['name']}")
     end
-    File.open("#{dir}/ansible/host_vars/#{splunk_host['name']}/os.yml", "w") do |f|
+    File.open("#{host_vars_dir}/#{splunk_host['name']}/os.yml", "w") do |f|
       f.write(splunk_host['os'].to_yaml)
     end
   end
@@ -250,10 +262,10 @@ settings['splunk_hosts'].each do |splunk_host|
     end
   end
   if splunk_env.length > 0
-    if !File.directory?("#{dir}/ansible/host_vars/#{splunk_host['name']}")
-      FileUtils.mkdir_p("#{dir}/ansible/host_vars/#{splunk_host['name']}")
+    if !File.directory?("#{host_vars_dir}/#{splunk_host['name']}")
+      FileUtils.mkdir_p("#{host_vars_dir}/#{splunk_host['name']}")
     end
-    File.open("#{dir}/ansible/host_vars/#{splunk_host['name']}/splunk_env.yml", "w") do |f|
+    File.open("#{host_vars_dir}/#{splunk_host['name']}/splunk_env.yml", "w") do |f|
       f.write(splunk_env.to_yaml)
     end
   end
@@ -456,6 +468,7 @@ settings['splunk_hosts'].each do |splunk_host|
   end
 end
 
+# Remove this in the future, cause only needed during upgrades
 # Cleanup old group_vars files
 Dir['ansible/group_vars/**/*'].select{|f| File.file?(f) }.each do |filepath|
   File.delete(filepath) if File.basename(filepath) != "dynamic.yml"
@@ -466,13 +479,13 @@ os_defaults = defaults['os'].dup
 if !settings['os'].nil?
   os_defaults = os_defaults.merge(settings['os'])
 end
-File.open("ansible/group_vars/all/os.yml", "w") do |f|
+File.open("#{group_vars_dir}/all/os.yml", "w") do |f|
   f.write(os_defaults.to_yaml)
 end
 
 # Create splunk_basics group_vars
 if !splunk_dirs.nil?
-  File.open("ansible/group_vars/all/splunk_dirs.yml", "w") do |f|
+  File.open("#{group_vars_dir}/all/splunk_dirs.yml", "w") do |f|
     f.write(splunk_dirs.to_yaml)
   end
 end
@@ -484,7 +497,7 @@ if !splunk_environments.nil?
     if envs.has_key?(group_name)
       splunkenv = splunkenv.merge(envs[group_name])
     end
-    File.open("ansible/group_vars/#{group_name}.yml", "w") do |f|
+    File.open("#{group_vars_dir}/#{group_name}.yml", "w") do |f|
       f.write(splunkenv.to_yaml)
     end
   end
@@ -497,7 +510,7 @@ if !settings['splunk_idxclusters'].nil?
     if idxc_sites[idxcluster['idxc_name']]
       idxcluster['idxc_available_sites'] = idxc_sites[idxcluster['idxc_name']]
     end
-    File.open("ansible/group_vars/#{group_name}.yml", "w") do |f|
+    File.open("#{group_vars_dir}/#{group_name}.yml", "w") do |f|
       f.write(idxcluster.to_yaml)
     end
   end
@@ -507,7 +520,7 @@ end
 if !settings['splunk_shclusters'].nil?
   settings['splunk_shclusters'].each do |shcluster|
     group_name = "shcluster_"+shcluster['shc_name']
-    File.open("ansible/group_vars/#{group_name}.yml", "w") do |f|
+    File.open("#{group_vars_dir}/#{group_name}.yml", "w") do |f|
       f.write(shcluster.to_yaml)
     end
   end
@@ -518,7 +531,7 @@ if !outputs_groups.nil?
   outputs_groups.each do |group_name, group_content|
     outputs = {}
     outputs['splunk_outputs_list'] = group_content.dup
-    File.open("ansible/group_vars/#{group_name}.yml", "w") do |f|
+    File.open("#{group_vars_dir}/#{group_name}.yml", "w") do |f|
       f.write(outputs.to_yaml)
     end
   end
@@ -529,7 +542,7 @@ if !search_peer_groups.nil?
   search_peer_groups.each do |group_name, group_content|
     search_peers = {}
     search_peers['splunk_search_peer_list'] = group_content.dup
-    File.open("ansible/group_vars/#{group_name}.yml", "w") do |f|
+    File.open("#{group_vars_dir}/#{group_name}.yml", "w") do |f|
       f.write(search_peers.to_yaml)
     end
   end
@@ -571,7 +584,7 @@ end
 # Write out hosts content to build /etc/hosts file
 splunk_hosts = {}
 splunk_hosts['splunk_hosts'] = splunk_host_list
-File.open("ansible/group_vars/all/hosts.yml", "w") do |f|
+File.open("#{group_vars_dir}/all/hosts.yml", "w") do |f|
   f.write(splunk_hosts.to_yaml)
 end
 
@@ -579,12 +592,16 @@ end
 require 'erb'
 template = File.read("#{dir}/template/index.html.erb")
 result = ERB.new(template).result(binding)
-File.open("#{dir}/#{config_dir}/index.html", 'w+') do |f|
+File.open("#{config_dir}/index.html", 'w+') do |f|
   f.write result
 end
 
 # Create and configure the specified systems
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+
+  config.hostmanager.enabled = false
+  config.hostmanager.manage_guest = true
+  config.hostmanager.include_offline = true
 
   # Loop through YAML file and set per-VM information
   settings['splunk_hosts'].each do |server|
@@ -654,13 +671,73 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 #        vb.customize ['storageattach', :id, '--storagectl', 'IDE', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', dataDisk1]
       end
 
+      # Create ansible inventory/hosts
+      if !host_vars.nil?
+        File.open("inventory/hosts" ,'w') do |f|
+          host_vars.each do |host_name, host_var_list|
+            host_vars_conf = "#{host_name}"
+            host_var_list.each do |host_var_name, host_var_value|
+              host_vars_conf += " #{host_var_name}=#{host_var_value}"
+            end
+            f.write "#{host_vars_conf}\n"
+          end
+        end
+      end
+      # Create ansible inventory/groups
+      if !groups.nil?
+        File.open("inventory/groups" ,'w') do |f|
+          groups.each do |group_name, group_hosts|
+            f.write "[#{group_name}]\n"
+            group_hosts.each do |group_host|
+              f.write "#{group_host}\n"
+            end
+            f.write "\n"
+          end
+        end
+      end
+
+      # Remove host_vars dir for this host
+      srv.trigger.after :destroy do |trigger|
+        if File.directory?("#{host_vars_dir}/#{server['name']}")
+          trigger.run = {inline: "rm -r #{host_vars_dir}/#{server['name']}"}
+        else
+          trigger.info = "Nothing to do."
+        end
+      end
+
+      # Update ansible inventory/hosts with ansible variables
+      srv.vm.provision :hostmanager
+      srv.hostmanager.ip_resolver = proc do |vm, resolving_vm|
+        vmname = vm.name.to_s
+        if !host_vars[vmname]['ip_addr'].nil? and ip_addr_list[vmname].nil?
+          ip_addr_list[vmname] = host_vars[vmname]['ip_addr']
+        end
+        if !File.directory?("#{host_vars_dir}/#{vm.name}")
+          if ssh_info = (vm.ssh_info && vm.ssh_info.dup)
+            #ssh_info = vm.ssh_info.dup
+            ansible_ssh_info = {}
+            ansible_ssh_info['ansible_host'] = ssh_info[:host]
+            ansible_ssh_info['ansible_port'] = ssh_info[:port]
+            ansible_ssh_info['ansible_user'] = ssh_info[:username]
+            ansible_ssh_info['ansible_ssh_private_key_file'] = ssh_info[:private_key_path].first
+            FileUtils.mkdir_p("#{host_vars_dir}/#{vm.name}")
+            File.open("#{host_vars_dir}/#{vm.name}/ansible_ssh_info.yml", "w") do |f|
+              f.write(ansible_ssh_info.to_yaml)
+            end
+          end
+        end
+        ip_addr_list[vmname]
+      end
+
       # Workaround for missing python in ubuntu/xenial64
       srv.vm.provision "shell", inline: "which python || sudo apt-get -y install python"
 
+      #print "Special host vars:\n"
+      #puts special_host_vars
+
       srv.vm.provision "ansible" do |ansible|
         ansible.compatibility_mode = "2.0"
-        ansible.groups = groups
-        ansible.host_vars = host_vars
+        ansible.inventory_path = "inventory"
         ansible.skip_tags = special_host_vars[server['name']]['ansible']['skip_tags']
         ansible.verbose = special_host_vars[server['name']]['ansible']['verbose']
         ansible.playbook = "ansible/site.yml"
