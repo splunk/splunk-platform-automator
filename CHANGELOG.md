@@ -1,6 +1,14 @@
 Splunkenizer changes by release
 ===============================
 
+## 1.1devel - ongoing
+
+* tbd
+
+### Fixes
+
+* Fixed wrong systemd service name for universal forwarder
+
 ## 1.0 - 2018-05-21
 
 * Support hashed config values for cluster and ssl cert passwords

@@ -12,7 +12,7 @@
     - splunk
     - universal_forwarder
   set_fact:
-    splunk_service_name: splunk
+    splunk_service_name: splunkforwarder
   when: use_systemctl != true
 
 - name: call splunk enterprise for UF
