@@ -1,5 +1,5 @@
 ---
-# This playbook deploys splunk enterprise enironments
+# This playbook deploys splunk enterprise environments
 
 - name: apply common configurations
   hosts: all
