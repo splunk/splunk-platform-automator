@@ -6,10 +6,10 @@
     - common
     - bashrc
   copy:
-    src: home/vagrant/bashrc.splunk
-    dest: /home/vagrant/.bashrc.splunk
-    owner: vagrant
-    group: vagrant
+    src: home/ansible_user/bashrc.splunk
+    dest: "/home/{{ ansible_user }}/.bashrc.splunk"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: 0644
 
 - name: insert/update bashrc for splunk stuff
@@ -17,7 +17,7 @@
     - common
     - bashrc
   blockinfile:
-    path: /home/vagrant/.bashrc
+    path: "/home/{{ ansible_user }}/.bashrc"
     marker: "#<!-- {mark} ANSIBLE MANAGED BLOCK -->"
     insertafter: "export PATH"
     content: |
