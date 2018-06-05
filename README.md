@@ -146,16 +146,16 @@ Splunkenizer can talk to the AWS cloud and create virtual machines with Splunk i
 1. Download the vagrant dummy box for aws: `vagrant box add aws-dummy https://github.com/mitchellh/vagrant-aws/raw/master/dummy.box`
 1. Generate AWS ACCESS Keys, described [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)
 1. Optional, but recommended:
-  1. Add AWS_ACCESS_KEY_ID=<your access key ID> as environment variable
-  1. Add AWS_SECRET_ACCESS_KEY=<your secret access key> as environment variable
+   1. Add AWS_ACCESS_KEY_ID=<your access key ID> as environment variable
+   1. Add AWS_SECRET_ACCESS_KEY=<your secret access key> as environment variable
 1. Create an ssh key pair described [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair) and store the public key on your disk for later reference in the config file
 1. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it ex. Splunk and add the following TCP incoming ports: 22,8000,9887,8191,8065,8089,9997-9998
 1. Take the [AWS example](examples/splunk_config_aws.yml) and fill in the values you like in the 'aws' section. You need at least:
-  1. access_key_id, secret_access_key if not specified as ENV vars.
-  1. keypair_name
-  1. ssh_private_key_path
-  1. security_groups
-  1. you can use the new 'splunk_download' section in 'splunk_defaults', if you do not want to upload the splunk binaries from your host all the time. This will download them from splunk.com instead.
+   1. access_key_id, secret_access_key if not specified as ENV vars.
+   1. keypair_name
+   1. ssh_private_key_path
+   1. security_groups
+   1. you can use the new 'splunk_download' section in 'splunk_defaults', if you do not want to upload the splunk binaries from your host all the time. This will download them from splunk.com instead.
 
 You can copy splunk_hosts and cluster configs from other example files to the AWS template to create more complex environments. There can be all configuration option used, which are described in the vargant-aws plugin. They can also set individually on the splunk hosts, if needed. Just add a aws: section to the host.
 
