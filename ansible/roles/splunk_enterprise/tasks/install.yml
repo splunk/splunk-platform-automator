@@ -35,6 +35,9 @@
   register: splunk_archive_files
   delegate_to: localhost
   become: no
+  when: splunk_download is not defined or
+        (splunk_install_app == "splunk" and splunk_download.splunk is not defined) or
+        (splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder is not defined)
 
 - name: find latest splunk version
   tags:
@@ -42,7 +45,7 @@
     - splunk_enterprise
   set_fact:
     splunk_version: "{{splunk_archive_files.files|map(attribute='path')|list|last|basename|regex_replace('.*-([0-9]+.[0-9]+.[0-9]+)-.*', '\\1')}}"
-  when: splunk_version == 'latest'
+  when: splunk_version == 'latest' and splunk_archive_files.files is defined
 
 - name: get splunk archive for given version
   tags:
@@ -50,6 +53,7 @@
     - splunk_enterprise
   set_fact:
     splunk_archive: '{{splunk_archive_files.files|map(attribute="path")|list|select("match",".*"+splunk_version+".*")|list}}'
+  when: splunk_archive_files.files is defined
 
 - name:
   tags:
@@ -57,14 +61,50 @@
     - splunk_enterprise
   debug:
     msg: "Using Splunk archive: {{splunk_archive.0}}"
+  when: splunk_archive is defined
 
-- name: install splunk binaries
+- name: upload and unarchive splunk binaries
   tags:
     - splunk
     - splunk_enterprise
   unarchive: src="{{splunk_archive.0}}" dest="{{ splunk_install_dir }}/" owner={{ splunk_user }} group={{ splunk_group }} creates=yes
   become: yes
   become_user: "{{ splunk_user }}"
+  when: splunk_archive is defined
+
+- name: download and unarchive splunk binaries
+  tags:
+    - splunk
+    - splunk_enterprise
+  unarchive: src="{{splunk_download.splunk}}" dest="{{ splunk_install_dir }}/" owner={{ splunk_user }} group={{ splunk_group }} creates=yes remote_src=yes
+  become: yes
+  become_user: "{{ splunk_user }}"
+  when: splunk_install_app == "splunk" and splunk_download is defined and splunk_download.splunk is defined
+
+- name: download and unarchive splunkforwarder binaries
+  tags:
+    - splunk
+    - splunk_enterprise
+  unarchive: src="{{splunk_download.splunkforwarder}}" dest="{{ splunk_install_dir }}/" owner={{ splunk_user }} group={{ splunk_group }} creates=yes remote_src=yes
+  become: yes
+  become_user: "{{ splunk_user }}"
+  when: splunk_install_app == "splunkforwarder" and splunk_download is defined and splunk_download.splunkforwarder is defined
+
+- name: find installed splunk version
+  tags:
+    - splunk
+    - splunk_enterprise
+  shell: 'grep -w VERSION {{ splunk_home }}/etc/splunk.version | cut -d= -f 2'
+  register: version_output
+  when: splunk_archive_files.files is not defined
+
+- name: set splunk_version variable
+  tags:
+    - splunk
+    - splunk_enterprise
+  set_fact:
+    splunk_version: '{{ version_output.stdout }}'
+  when: version_output.stdout is defined
 
 - name: copy shared splunk.secret file
   tags:

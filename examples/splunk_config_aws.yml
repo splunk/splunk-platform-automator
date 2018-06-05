@@ -1,0 +1,67 @@
+---
+# splunk_config.yml
+
+# General settings
+
+#os:
+#  time_zone: "Europe/Zurich"
+
+ansible:
+#  verbose: "v"
+  skip_tags:
+    - fix_time_sync
+    - login_page_info
+#    - common
+#    - splunk
+
+#virtualbox:
+aws:
+  #access_key_id: '' # defaults to ENV['AWS_ACCESS_KEY_ID']
+  #secret_access_key: '' # ENV['AWS_SECRET_ACCESS_KEY']
+  keypair_name: 'aws_key'
+  #region: 'eu-central-1'
+  #ami: 'ami-e3381508' # Ubuntu 16.04
+  #ssh_username: 'ubuntu' # ami-e3381508
+  ami: 'ami-c86c3f23' # Redhat 7.5
+  ssh_username: 'ec2-user' # ami-c86c3f23
+  #instance_type: 't2.micro'
+  ssh_private_key_path: '~/.ssh/aws_key.pem'
+  security_groups: ['Splunk']
+
+# Splunk default settings
+splunk_defaults:
+#  splunk_env_name: splk
+#  splunk_version: '7.0.4'
+#  splunk_download:
+    # Add the URL from the Splunk wget command here, which you can get from the splunk.com download page.
+#    splunk: '<splunk_url>'
+#    splunkforwarder: '<splunkforwarder_url>'
+#  splunk_admin_password: 'splunklab'
+#  splunk_license_file: Splunk_Enterprise.lic
+#  splunk_indexes:
+#    - test1
+#    - test2
+  splunk_ssl:
+    web:
+      enable: true
+    inputs:
+      enable: true
+    outputs:
+      enable: true
+
+# Splunk hosts with its settings
+splunk_hosts:
+  # Indexer
+  - name: idx
+    roles:
+      - indexer
+
+  # Search Head
+  - name: sh
+    roles:
+      - search_head
+
+   # Universal Forwarder
+  - name: uf
+    roles:
+      - universal_forwarder

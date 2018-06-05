@@ -3,11 +3,15 @@ Splunkenizer changes by release
 
 ## 1.1devel - ongoing
 
-* tbd
+* Support virtual machines in AWS
+* Replaced internal hosts file maintenance with the vagrant hostmanager plugin
+* Improved standalone ansible playbook usage
+* Option to download splunk binaries from splunk.com during install
 
 ### Fixes
 
 * Fixed wrong systemd service name for universal forwarder
+* Changed systemd restart policy to on-failure
 
 ## 1.0 - 2018-05-21
 

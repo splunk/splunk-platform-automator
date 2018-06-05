@@ -35,23 +35,29 @@ defaults = {
   "ansible"=>{
     "verbose"=>"",
     "skip_tags"=>[]
-    },
+  },
   "virtualbox"=>{
     "box"=>"centos/7",
     "memory"=>512,
     "cpus"=>1,
     "install_vbox_additions"=>false,
     "synced_folder"=>nil
-    },
+  },
+  "aws"=>{
+    "access_key_id"=>ENV['AWS_ACCESS_KEY_ID'],
+    "secret_access_key"=>ENV['AWS_SECRET_ACCESS_KEY'],
+    "region"=>"eu-central-1",
+    "instance_type"=>"t2.micro"
+  },
   "os"=>{
     "time_zone"=>"Europe/Zurich",
     "packages"=>nil
-    },
+  },
   "splunk_dirs"=>{
     "splunk_baseconfig_dir"=>"../Software",
     "splunk_software_dir"=>"../Software",
     "splunk_auth_dir"=>"../auth",
-    },
+  },
   "splunk_defaults"=>{
     "splunk_env_name"=>"splk",
     "splunk_version"=>"latest",
@@ -62,42 +68,52 @@ defaults = {
       "splunk"=>false,
       "splunkforwarder"=>false,
       "equal"=>false
-      },
+    },
     "splunk_volume_defaults"=>{
       "homePath"=>"primary",
       "coldPath"=>"primary"
-      },
+    },
     "splunk_ssl"=>{
       "web"=>{
         "enable"=>false,
-        "own_certs"=>false,
-        "config"=>{
-          "enableSplunkWebSSL"=>true,
-          "privKeyPath"=>"etc/auth/{{splunk_env_name}}/privkey.web.key",
-          "serverCert"=>"etc/auth/{{splunk_env_name}}/cacert.web.pem"
-        },
+        "own_certs"=>false
       },
       "inputs"=>{
         "enable"=>false,
-        "own_certs"=>false,
-        "config"=>{
-          "rootCA"=>"$SPLUNK_HOME/etc/auth/cacert.pem",
-          "serverCert"=>"$SPLUNK_HOME/etc/auth/server.pem"
-        }
+        "own_certs"=>false
       },
       "outputs"=>{
         "enable"=>false,
-        "own_certs"=>false,
-        "config"=>{
-          "sslRootCAPath"=>"$SPLUNK_HOME/etc/auth/cacert.pem",
-          "sslCertPath"=>"$SPLUNK_HOME/etc/auth/client.pem",
-          "sslPassword"=>"password"
-        }
+        "own_certs"=>false
       }
     }
   }
 }
-#puts JSON.pretty_generate(defaults)
+
+# Default ssl settings
+defaults_splunk_ssl = {
+  "web"=>{
+    "config"=>{
+      "enableSplunkWebSSL"=>true,
+      "privKeyPath"=>"etc/auth/{{splunk_env_name}}/privkey.web.key",
+      "serverCert"=>"etc/auth/{{splunk_env_name}}/cacert.web.pem"
+    }
+  },
+  "inputs"=>{
+    "config"=>{
+      "rootCA"=>"$SPLUNK_HOME/etc/auth/cacert.pem",
+      "serverCert"=>"$SPLUNK_HOME/etc/auth/server.pem",
+      "sslPassword"=>"password"
+    }
+  },
+  "outputs"=>{
+    "config"=>{
+      "sslRootCAPath"=>"$SPLUNK_HOME/etc/auth/cacert.pem",
+      "sslCertPath"=>"$SPLUNK_HOME/etc/auth/server.pem",
+      "sslPassword"=>"password"
+    }
+  }
+}
 
 # Check for Ansible binary
 system("type ansible > /dev/null 2>&1")
@@ -150,12 +166,24 @@ defaults['os']['time_zone'] = `ls -l /etc/localtime | sed -e 's%.*zoneinfo/%%' |
 splunk_defaults = defaults['splunk_defaults'].dup
 if !settings['splunk_defaults'].nil?
   splunk_defaults = splunk_defaults.merge(settings['splunk_defaults'])
-  web_config = defaults['splunk_defaults']['splunk_ssl']['web']['config'].dup
-  # Merging of splunk_ssl.web.config does not work, need to do it separatly
-  if not settings['splunk_defaults']['splunk_ssl'].nil? and not settings['splunk_defaults']['splunk_ssl']['web'] and not settings['splunk_defaults']['splunk_ssl']['web']['config'].nil?
-    web_config = web_config.merge(settings['splunk_defaults']['splunk_ssl']['web']['config'])
+  # Treat ssl config individually, cause merging does not work for this deep levels
+  defaults['splunk_defaults']['splunk_ssl'].each do |ssl_type, ssl_config|
+    if !settings['splunk_defaults']['splunk_ssl'][ssl_type].nil?
+      splunk_defaults['splunk_ssl'][ssl_type] = ssl_config.merge(settings['splunk_defaults']['splunk_ssl'][ssl_type])
+    else
+      splunk_defaults['splunk_ssl'][ssl_type] = ssl_config.dup
+    end
+    if !settings['splunk_defaults']['splunk_ssl'].nil? and !settings['splunk_defaults']['splunk_ssl'][ssl_type].nil? and settings['splunk_defaults']['splunk_ssl'][ssl_type]['enable'] == true
+      if !settings['splunk_defaults']['splunk_ssl'][ssl_type]['config'].nil?
+        splunk_defaults['splunk_ssl'][ssl_type]['config'] = defaults_splunk_ssl[ssl_type]['config'].merge(settings['splunk_defaults']['splunk_ssl'][ssl_type]['config'])
+      else
+        splunk_defaults['splunk_ssl'][ssl_type]['config'] = defaults_splunk_ssl[ssl_type]['config'].dup
+      end
+    end
+    if ssl_type == "web" and splunk_defaults['splunk_ssl'][ssl_type]['own_certs'] == false
+      splunk_defaults['splunk_ssl'][ssl_type]['config'] = {"enableSplunkWebSSL"=>true}
+    end
   end
-  splunk_defaults['splunk_ssl']['web']['config'] = web_config
 end
 
 # Create splunk_environments group_vars
@@ -204,6 +232,38 @@ splunk_environments.each do |splunkenv|
   end
 end
 
+
+# Check for virtualization provider
+if !settings.has_key?("virtualbox") and !settings.has_key?("aws")
+    print "ERROR: No virtualization provider defined in #{config_file} \n\n"
+    print "Supported types are virtualbox or aws\n"
+    exit 2
+end
+if settings.has_key?("virtualbox")
+  provider = "virtualbox"
+  if !Vagrant.has_plugin?("vagrant-vbguest")
+    print "ERROR: Plugin for virtualbox provider is missing, install with 'vagrant plugin install vagrant-vbguest'.\n"
+    exit 2
+  end
+elsif settings.has_key?("aws")
+  provider = "aws"
+  if !Vagrant.has_plugin?("vagrant-aws")
+    print "ERROR: Plugin for AWS provider missing, install with 'vagrant plugin install vagrant-aws'.\n"
+    exit 2
+  end
+  if !settings['general'].nil? and settings['general'].has_key?("start_ip")
+    print "WARN: Ignoring general.start_ip setting for AWS provider.\n"
+    print "INFO: You can remove this setting from the config file.\n"
+    settings['general'].delete("start_ip")
+  end
+end
+
+# Check for hostmanager plugin
+if !Vagrant.has_plugin?("vagrant-hostmanager")
+  print "ERROR: Plugin 'vagrant-hostmanager' is missing, install with 'vagrant plugin install vagrant-hostmanager'.\n"
+  exit 2
+end
+
 # Create ansible inventory from the config file
 groups = {}
 idxc_list = {}
@@ -216,6 +276,7 @@ search_peer_groups = {}
 envs = {}
 special_host_vars = {}
 ip_addr_list = {}
+network = {}
 
 # Remove this in the future, cause only needed during upgrades
 # Clean up host_vars directory
@@ -234,7 +295,7 @@ FileUtils.mkdir_p("#{host_vars_dir}")
 # Create inventory host groups
 settings['splunk_hosts'].each do |splunk_host|
   var_obj = defaults.dup
-  ['ansible','virtualbox'].each do |config_group|
+  ['ansible','virtualbox','aws'].each do |config_group|
     if !settings[config_group].nil?
       var_obj[config_group] = var_obj[config_group].merge(settings[config_group])
     end
@@ -549,7 +610,7 @@ if !search_peer_groups.nil?
 end
 
 # If dynamic IPs are used, calculate the start number
-if !settings['general']['start_ip'].nil?
+if !settings['general'].nil? and !settings['general']['start_ip'].nil?
   ip_array = settings['general']['start_ip'].split(".")
   base_ip = ip_array[0..2].join(".")
   start_num = ip_array[3].to_i
@@ -561,10 +622,12 @@ splunk_host_list = []
 settings['splunk_hosts'].each do |splunk_host|
   per_host_vars = {}
   ['ip_addr', 'site', 'cname'].each do |var|
-    if !settings['general']['start_ip'].nil?
+    if !settings['general'].nil? and !settings['general']['start_ip'].nil?
       # Keep the ip, if defined
-      if splunk_host['ip_addr'].nil?
-        splunk_host['ip_addr'] = base_ip+"."+start_num.to_s
+      if provider == "virtualbox"
+        if splunk_host['ip_addr'].nil?
+          splunk_host['ip_addr'] = base_ip+"."+start_num.to_s
+        end
       end
     end
     if splunk_host[var]
@@ -574,10 +637,19 @@ settings['splunk_hosts'].each do |splunk_host|
     end
   end
   host_vars[splunk_host['name']] = per_host_vars
-  start_num += 1
+  if start_num
+    start_num += 1
+  end
   hosts_entry = {}
   hosts_entry['name'] = splunk_host['name']
-  hosts_entry['ip_addr'] = splunk_host['ip_addr']
+  if provider == "virtualbox"
+    hosts_entry['ip_addr'] = splunk_host['ip_addr']
+  end
+  if !splunk_host['ip_addr'].nil?
+    network[splunk_host['name']] = { 'ip_addr' => splunk_host['ip_addr'] }
+  else
+    network[splunk_host['name']] = { 'ip_addr' => "undef" }
+  end
   splunk_host_list.push(hosts_entry)
 end
 
@@ -588,20 +660,15 @@ File.open("#{group_vars_dir}/all/hosts.yml", "w") do |f|
   f.write(splunk_hosts.to_yaml)
 end
 
-# Create HTML link page for all the roles
-require 'erb'
-template = File.read("#{dir}/template/index.html.erb")
-result = ERB.new(template).result(binding)
-File.open("#{config_dir}/index.html", 'w+') do |f|
-  f.write result
-end
-
 # Create and configure the specified systems
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
-  config.hostmanager.enabled = false
+  config.hostmanager.enabled = true
   config.hostmanager.manage_guest = true
   config.hostmanager.include_offline = true
+  if provider == "aws"
+    config.hostmanager.include_offline = false
+  end
 
   # Loop through YAML file and set per-VM information
   settings['splunk_hosts'].each do |server|
@@ -610,8 +677,13 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       srv.vm.hostname = server['name']
 
       # Box image to use
-      srv.vm.box = special_host_vars[server['name']]['virtualbox']['box']
-      #srv.vm.box = settings['virtualbox']['box']
+      if provider == "virtualbox"
+        srv.vm.box = special_host_vars[server['name']]['virtualbox']['box']
+        #srv.vm.box = settings['virtualbox']['box']
+      elsif provider == "aws"
+        # Use dummy AWS box
+        srv.vm.box = 'aws-dummy'
+      end
 
       # Don't check for box updates
       #srv.vm.box_check_update = false
@@ -651,17 +723,19 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       # Disable default shared folder
       srv.vm.synced_folder '.', '/vagrant', disabled: true
 
-      srv.vm.network :private_network, ip: server['ip_addr']
-      #srv.vm.network "forwarded_port", guest: 8000, host: 8000, auto_correct: true
+      if provider == "virtualbox"
+        srv.vm.network :private_network, ip: server['ip_addr']
+      end
 
 # If we need a second disk for testing
 #      dataDisk1 = srv.vm.hostname+'dataDisk1.vdi'
 
       # Set per-server VirtualBox provider configuration/overrides
-      srv.vm.provider 'virtualbox' do |vb, override|
-        #override.vm.box = server['box']['vb']
-        vb.memory = special_host_vars[server['name']]['virtualbox']['memory']
-        vb.cpus = special_host_vars[server['name']]['virtualbox']['cpus']
+      if provider == "virtualbox"
+        srv.vm.provider :virtualbox do |vb, override|
+          #override.vm.box = server['box']['vb']
+          vb.memory = special_host_vars[server['name']]['virtualbox']['memory']
+          vb.cpus = special_host_vars[server['name']]['virtualbox']['cpus']
 
 # If we need a second disk for testing
 #
@@ -669,6 +743,23 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 #          vb.customize ['createmedium', '--filename', dataDisk1, '--variant', 'Standard', '--size', 10 * 1024]
 #        end
 #        vb.customize ['storageattach', :id, '--storagectl', 'IDE', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', dataDisk1]
+        end
+      elsif provider == "aws"
+
+        # Force serial execution for now until the playbooks are reworked
+        ENV['VAGRANT_NO_PARALLEL'] = 'yes'
+
+        # Add all config attributes to the AWS config class
+        srv.vm.provider :aws do |aws, override|
+          special_host_vars[server['name']]['aws'].each do |k,v|
+            next if k == "ssh_username" or k == "ssh_private_key_path"
+            aws.send("#{k}=", v)
+          end
+
+          # Specify username and private key path
+          override.ssh.username = special_host_vars[server['name']]['aws']['ssh_username']
+          override.ssh.private_key_path = special_host_vars[server['name']]['aws']['ssh_private_key_path']
+        end
       end
 
       # Create ansible inventory/hosts
@@ -683,6 +774,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
           end
         end
       end
+
       # Create ansible inventory/groups
       if !groups.nil?
         File.open("inventory/groups" ,'w') do |f|
@@ -709,14 +801,25 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       srv.vm.provision :hostmanager
       srv.hostmanager.ip_resolver = proc do |vm, resolving_vm|
         vmname = vm.name.to_s
-        if !host_vars[vmname]['ip_addr'].nil? and ip_addr_list[vmname].nil?
+        network_info = {}
+        if vm.provider_name == :virtualbox and !host_vars[vmname]['ip_addr'].nil? and ip_addr_list[vmname].nil?
           ip_addr_list[vmname] = host_vars[vmname]['ip_addr']
+        elsif vm.provider_name == :aws and ip_addr_list[vmname].nil?
+          vm.communicate.execute('hostname --all-ip-addresses') do |type, privat_ip|
+            allips = privat_ip.strip().split(' ')
+            ip_addr_list[vmname] = allips[0]
+            network_info['ip_addr'] = allips[0]
+          end
         end
+
         if !File.directory?("#{host_vars_dir}/#{vm.name}")
           if ssh_info = (vm.ssh_info && vm.ssh_info.dup)
             #ssh_info = vm.ssh_info.dup
             ansible_ssh_info = {}
             ansible_ssh_info['ansible_host'] = ssh_info[:host]
+            if vm.provider_name == :aws
+              network_info['dns_name'] = ssh_info[:host]
+            end
             ansible_ssh_info['ansible_port'] = ssh_info[:port]
             ansible_ssh_info['ansible_user'] = ssh_info[:username]
             ansible_ssh_info['ansible_ssh_private_key_file'] = ssh_info[:private_key_path].first
@@ -725,9 +828,30 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
               f.write(ansible_ssh_info.to_yaml)
             end
           end
+          if vm.provider_name == :aws
+            File.open("#{host_vars_dir}/#{vm.name}/network.yml", "w") do |f|
+              f.write(network_info.to_yaml)
+            end
+          end
+        end
+
+        # Create HTML link page for all the roles
+        require 'erb'
+        settings['splunk_hosts'].each do |host|
+          network_file = {}
+          if File.file?("#{host_vars_dir}/#{host['name']}/network.yml")
+            network_file[host['name']] = YAML.load_file("#{host_vars_dir}/#{host['name']}/network.yml")
+            network = network.merge(network_file)
+          end
+        end
+        template = File.read("#{dir}/template/index.html.erb")
+        result = ERB.new(template).result(binding)
+        File.open("#{config_dir}/index.html", 'w+') do |f|
+          f.write result
         end
         ip_addr_list[vmname]
       end
+
 
       # Workaround for missing python in ubuntu/xenial64
       srv.vm.provision "shell", inline: "which python || sudo apt-get -y install python"

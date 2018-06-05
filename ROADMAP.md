@@ -4,8 +4,6 @@
 
 Note: The order for implementation may change
 
-* Support virtual machines in AWS
-* Improve standalone ansible playbook usage
 * Config options for forwarding to single indexers and heavy forwarders
 * Separate output conf on DS for HF, separate cluster, single indexer
 * Support config options for indexes (ex. new metrics index type)
@@ -24,7 +22,6 @@ Note: The order for implementation may change
 
 * Better error handling and logic checking for config file
   * Check in Vagrantfile, if listed idxc is defined
-* Output of ansible for /etc/hosts has to much in it, find better way
 
 ## Low prio, but still worth notable
 
