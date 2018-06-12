@@ -48,7 +48,12 @@
     msg: "Cannot find a cacert.pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true and cacert_pem == ""
 
-- fail:
+- name:
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - outputs_ssl
+  fail:
     msg: "Cannot find a .pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true and client_pem == ""
 
