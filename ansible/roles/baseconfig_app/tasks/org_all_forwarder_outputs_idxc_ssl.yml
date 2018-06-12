@@ -34,7 +34,7 @@
     group: "{{splunk_group}}"
     mode: 0600
   notify: restart splunk
-  with_items: 
+  with_items:
     - { varkey: "sslRootCAPath", varvalue: "{{ splunk_ssl.outputs.config.sslRootCAPath|default('cacert.pem') }}" }
     - { varkey: "sslCertPath", varvalue: "{{ splunk_ssl.outputs.config.sslCertPath|default('client.pem') }}" }
-  when: splunk_ssl.outputs.enable == true
+  when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true
