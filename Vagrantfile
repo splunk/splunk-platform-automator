@@ -168,7 +168,7 @@ if !settings['splunk_defaults'].nil?
   splunk_defaults = splunk_defaults.merge(settings['splunk_defaults'])
   # Treat ssl config individually, cause merging does not work for this deep levels
   defaults['splunk_defaults']['splunk_ssl'].each do |ssl_type, ssl_config|
-    if !settings['splunk_defaults']['splunk_ssl'][ssl_type].nil?
+    if !settings['splunk_defaults']['splunk_ssl'].nil? and !settings['splunk_defaults']['splunk_ssl'][ssl_type].nil?
       splunk_defaults['splunk_ssl'][ssl_type] = ssl_config.merge(settings['splunk_defaults']['splunk_ssl'][ssl_type])
     else
       splunk_defaults['splunk_ssl'][ssl_type] = ssl_config.dup
