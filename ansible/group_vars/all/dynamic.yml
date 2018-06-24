@@ -116,7 +116,7 @@ splunk_idx_hf_dsclients: >-
           {{ res|unique }}
 splunk_sh_dsclients: >-
           {%- set res = [] -%}
-          {%- for ds_client in splunk_search_head_list|difference([splunk_deployment_server|first]) -%}
+          {%- for ds_client in splunk_search_head_list|union(splunk_monitoring_console)|difference([splunk_deployment_server|first])|difference(groups.role_cluster_master|default([])) -%}
             {%- set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res|unique }}
