@@ -12,7 +12,7 @@ Note: The order for implementation may change
   * Add unix_TA: (needs this packages: net-tools lsof sysstat)
   * playbooks for common splunkbase apps
 * org_all_deploymentclient for ds -> cm app deployment
-* Disable all the tour and other info wizzards after login
+* Disable all the tour and other info wizards after login
 * Add dns_server role and configure nodes to get the host names from dns
 * Finish ldap_server role to be usable in Splunk (new config file needed)
 * Implement config syntax for host series (ex. idx1..16) for mass node deployment
@@ -26,8 +26,6 @@ Note: The order for implementation may change
 ## Low prio, but still worth notable
 
 * Download baseconfigs from internet (https://developer.box.com/docs/)
-* Download Splunk from Internet
 * Make vagrant user configurable
 * Make splunk user configurable
-* User vagrant host-manager to update host ips: https://github.com/devopsgroup-io/vagrant-hostmanager https://github.com/akeeba/vagrant/blob/master/Vagrantfile
 * Run Bind server on one node: https://github.com/bertvv/ansible-role-bind
