@@ -356,14 +356,6 @@ settings['splunk_hosts'].each do |splunk_host|
           print "ERROR: Role 'license_master' on Splunk host '#{splunk_host['name']}' is not allowed if no license file available! \n\n"
           exit 2
         end
-        # Needs to be defined, because not all hosts are populated to the ansible inventory from the start
-        var_obj["vagrant_splunk_"+role_def] = [splunk_host['name']]
-        groupname = "splunk_env_"+splunk_host['splunk_env']
-        if envs.has_key?(groupname)
-          envs[groupname] = envs[groupname].merge(var_obj)
-        else
-          envs[groupname] = var_obj
-        end
       end
     end
 
