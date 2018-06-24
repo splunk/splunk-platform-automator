@@ -160,6 +160,23 @@
     app_name: 'org_all_search_base'
     app_path: '{{splunk_home}}/etc/deployment-apps'
 
+- name: apply baseconfig app org_cluster_search_base
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - monitoring_console
+    - org_cluster_search_base
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_cluster_search_base'
+    app_path: '{{ splunk_home }}/etc/deployment-apps'
+    splunk_search_peer_list: "{{ hostvars[groups['search_peer_'+splunk_env_name+'_'+search_peer_name][0]]['splunk_search_peer_list'] }}"
+  with_items: "{{ splunk_search_peer_name_list }}"
+  loop_control:
+    loop_var: search_peer_name
+  when: splunk_idxc_cm_list|length > 0
+
 - name: call serverclass
   tags:
     - splunk

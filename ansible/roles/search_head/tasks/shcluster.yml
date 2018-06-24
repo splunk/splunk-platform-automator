@@ -57,25 +57,6 @@
     state: started
   when: need_shcluster_init.rc == 0
 
-- name: apply baseconfig app org_cluster_search_base on deployer
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - shcluster
-    - deployer
-    - org_cluster_search_base
-  include_role:
-    name: baseconfig_app
-  delegate_to: '{{splunk_shc_deployer}}'
-  vars:
-    app_name: 'org_cluster_search_base'
-    app_path: '{{splunk_home}}/etc/shcluster/apps'
-    splunk_search_peer_list: "{{ hostvars[groups['search_peer_'+splunk_env_name+'_'+search_peer_name][0]]['splunk_search_peer_list'] }}"
-  with_items: "{{ splunk_search_peer_name_list }}"
-  loop_control:
-    loop_var: search_peer_name
-  when: inventory_hostname == splunk_shc_host_list|first and splunk_search_peer_idxc_list|default([])|length > 0
-
 - name: check shcluster status
   tags:
     - splunk

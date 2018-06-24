@@ -97,25 +97,6 @@
   notify: restart splunk
   when: splunk_deployment_server|default()|length == 0
 
-- name: apply baseconfig app org_cluster_search_base on deployment_server
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - search_head
-    - shsingle
-    - org_cluster_search_base
-  include_role:
-    name: baseconfig_app
-  delegate_to: '{{splunk_deployment_server|first}}'
-  vars:
-    app_name: 'org_cluster_search_base'
-    app_path: '{{ splunk_home }}/etc/deployment-apps'
-    splunk_search_peer_list: "{{ hostvars[groups['search_peer_'+splunk_env_name+'_'+search_peer_name][0]]['splunk_search_peer_list'] }}"
-  with_items: "{{ splunk_search_peer_name_list }}"
-  loop_control:
-    loop_var: search_peer_name
-  when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server and splunk_search_peer_idxc_list|length > 0
-
 - name: apply baseconfig app org_cluster_search_base
   tags:
     - splunk
