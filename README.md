@@ -33,36 +33,50 @@ Implemented changes are to be found in the [Changelog](CHANGELOG.md)
 
 # Installation
 
-The Framework is currently only tested on Mac OSX, but any other Unix, which is supported by Virtualbox, should work.
+The Framework is currently tested on Mac OSX and Linux, but any other Unix, which is supported by Virtualbox, should work too.
 
-## Mac OSX Installation Instructions
+## Framework Installation (Mac OSX)
 
-1. Download and install [Virtualbox](https://www.virtualbox.org/wiki/Downloads).
 1. Download and install [Vagrant](https://www.vagrantup.com).
-1. Install the Virtualbox plugin for Vagrant: `vagrant plugin install vagrant-vbguest`
 1. Install the hostmanager plugin for Vagrant: `vagrant plugin install vagrant-hostmanager`
-1. Install Ansible, I personally prefer [Brew](https://brew.sh) which makes it as easy as `brew install ansible`. Currently the newest Ansible version is not yet supported, so you have to install an older one like 2.4.3.0. Check [Supported Ansible Versions](#supported-ansible-versions) for the instructions with brew.
+1. Install Ansible, I personally prefer [Brew](https://brew.sh) which makes it as easy as `brew install ansible`. For [supported Ansible versions check here](#supported-ansible-versions)
 1. Create a folder called `Vagrant` and change into it.
-1. Clone Splunkenizer from GitHub: `git clone https://github.com/splunkenizer/Splunkenizer.git`
-1. Create a folder called `Software` and download the prerequisites mentioned in the following steps.
-1. Download the tgz. file for the Splunk Software
+1. Download and extract a [Splunkenizer release here](https://github.com/splunkenizer/Splunkenizer/releases) or clone from GitHub when using the master branch: `git clone https://github.com/splunkenizer/Splunkenizer.git`
+1. Create a folder called `Software`.
+1. Download the tgz. archive for the Splunk Software and put in the `Software` directory
    1. [Splunk Enterprise](http://www.splunk.com/en_us/download/splunk-enterprise.html)
    1. [Splunk Universal Forwarder](http://www.splunk.com/en_us/download/universal-forwarder.html)
-1. Download Splunk Professional Services Best Practices Base Config Apps and extract them into `Software`
+1. Download Splunk Professional Services Best Practices Base Config Apps and extract them into the `Software` directory
    1. [Configurations Base Apps](https://splunk.app.box.com/ConfigurationsBase)
    1. [Configurations Cluster Apps](https://splunk.app.box.com/ConfigurationsCluster)
-1. If you have a Splunk License copy it here to. You can link it to the name `Splunk_Enterprise.lic`, which makes it very easy to use by uncommenting the line in the configuration file.
+1. If you have a Splunk License file, link it to the name `Splunk_Enterprise.lic` inside the `Software` directory.
 
-If you have downloaded everything, the folder structure should look like this:
+Your directory structure should now look like this:
 
 ```
 ./Vagrant/Splunkenizer/...
 ./Vagrant/Software/Configurations - Base/...
 ./Vagrant/Software/Configurations - Index Replication/...
-./Vagrant/Software/splunk-7.0.0-c8a78efdd40f-Linux-x86_64.tgz
+./Vagrant/Software/splunk-7.1.1-8f0ead9ec3db-Linux-x86_64.tgz
+./Vagrant/Software/splunkforwarder-7.1.1-8f0ead9ec3db-Linux-x86_64.tgz
 ./Vagrant/Software/Splunk_Enterprise.lic
-./Vagrant/Software/splunkforwarder-7.0.0-c8a78efdd40f-Linux-x86_64.tgz
 ```
+
+## Install Virtualbox support (optional)
+
+1. Download and install [Virtualbox](https://www.virtualbox.org/wiki/Downloads).
+1. Install the Virtualbox plugin for Vagrant: `vagrant plugin install vagrant-vbguest`
+
+## Install and configure AWS support (optional)
+
+1. Install the aws vagrant plugin: `vagrant plugin install vagrant-aws`
+1. Download the vagrant dummy box for aws: `vagrant box add aws-dummy https://github.com/mitchellh/vagrant-aws/raw/master/dummy.box`
+1. Generate AWS ACCESS Keys, described [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)
+1. Optional, but recommended:
+   1. Add AWS_ACCESS_KEY_ID=<your access key ID> as environment variable
+   1. Add AWS_SECRET_ACCESS_KEY=<your secret access key> as environment variable
+1. Create an ssh key pair described [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair) and store the public key on your disk for later reference in the config file
+1. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it ex. Splunk and add the following TCP incoming ports: 22,8000,9887,8191,8065,8089,9997-9998
 
 # Framework Usage
 
@@ -71,15 +85,17 @@ If you have downloaded everything, the folder structure should look like this:
 Run vagrant the first time to initialize itself and create needed directories. You must execute vagrant always in side the Splunkenizer directory where the `Vagrantfile` sits, otherwise it will not work correctly. You will see the usage page, when executing vagrant without options.
 
 ```
-cd splunkenizer
+cd Splunkenizer
 vagrant
 ```
 
 ## Copy a configuration file
 There is one single configuration file, where all settings for your deployment are defined. Copy one configuration file from the [examples](examples) to `config/splunk_config.yml` and adjust the setting to your needs. For a standard setup you should be fine with most of the default settings, but there are a lot of things you can adjust for special cases. See the [configuration description](examples/configuration_description.yml) file, where all existing values are described.
 
+See [instruction here](#deploying-on-amazon-cloud) when deploying into Amazon Cloud
+
 ## Start the deployment
-When building virtual machines the first time it will pull an os image from the internet. The box images are cached here: `~/.vagrant.d/boxes`.
+When building virtual machines (for virtualbox) the first time it will pull an os image from the internet. The box images are cached here: `~/.vagrant.d/boxes`.
 
 ```
 vagrant up
@@ -138,50 +154,41 @@ You can copy files from your host system to the virtual nodes with the vagrant c
 vagrant scp <file> <hostname>:/destdir
 ```
 
-## Deploy in AWS (beta support and not fully tested)
+## Deploying on Amazon Cloud
 
 Splunkenizer can talk to the AWS cloud and create virtual machines with Splunk in the cloud. Vagrant is using the plugin [vagrant-aws](https://github.com/mitchellh/vagrant-aws) for that. Follow these steps to setup Splunkenizer for AWS. In the exmaple there is a simple network setup, with only one Security group, covering all ports. More complex network setups should be possible, but make sure the host, where Splunkenizer is running does have ssh access to all instances.
 
-1. install aws vagrant plugin: `vagrant plugin install vagrant-aws`
-1. Download the vagrant dummy box for aws: `vagrant box add aws-dummy https://github.com/mitchellh/vagrant-aws/raw/master/dummy.box`
-1. Generate AWS ACCESS Keys, described [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)
-1. Optional, but recommended:
-   1. Add AWS_ACCESS_KEY_ID=<your access key ID> as environment variable
-   1. Add AWS_SECRET_ACCESS_KEY=<your secret access key> as environment variable
-1. Create an ssh key pair described [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair) and store the public key on your disk for later reference in the config file
-1. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it ex. Splunk and add the following TCP incoming ports: 22,8000,9887,8191,8065,8089,9997-9998
-1. Take the [AWS example](examples/splunk_config_aws.yml) and fill in the values you like in the 'aws' section. You need at least:
-   1. access_key_id, secret_access_key if not specified as ENV vars.
-   1. keypair_name
-   1. ssh_private_key_path
-   1. security_groups
-   1. you can use the new 'splunk_download' section in 'splunk_defaults', if you do not want to upload the splunk binaries from your host all the time. This will download them from splunk.com instead.
+To prepare the configuration file for Amazon deployments
+
+* Take the [AWS example](examples/splunk_config_aws.yml) and fill in the values you like in the 'aws' section. You need at least:
+   * access_key_id, secret_access_key if not specified as ENV vars.
+   * keypair_name
+   * ssh_private_key_path
+   * security_groups
+   * you can use the new 'splunk_download' section in 'splunk_defaults', if you do not want to upload the splunk binaries from your host all the time. This will download them from splunk.com instead.
 
 You can copy splunk_hosts and cluster configs from other example files to the AWS template to create more complex environments. There can be all configuration option used, which are described in the vargant-aws plugin. They can also set individually on the splunk hosts, if needed. Just add a aws: section to the host.
 
-Note: Due to security the login page with the admin password information has been disabled and https is enabled with splunk's own self signed certs. Also not, that the AWS OS images do not have ntp configured by default. This will be added in Splunkenizer later.
-
 ## Ansible playbooks only
+
 You can also use the ansible playbooks without vagrant. Like that you can deploy Splunk to an existing set of hosts. You have to create some config files, which is normally done by vagrant. Vagrant dynamically creates the ansible inventory. The file is located in `.vagrant/provisioners/ansible/inventory/vagrant_ansible_inventory`. If you would like to use the ansible playbooks without vagrant, you have to create the inventory yourself with the same groups. The Vagrant script also dynamically creates files in `ansible/group_vars` for your configuration. In `ansible/group_vars/all` you can find the `os` and `splunk_dirs` sections from the config file. In `ansible/group_vars` the indexer-, search head cluster and splunk_env configs are placed. The easiest way would be to create the same configuration with vagrant (ex. on your laptop) and use the created files in your other Ansible environment.
 
 # Known issues, limitations
 
 * ulimit settings not working on Ubuntu 14 (without systemd)
 * Forwarding data from a universal forwarder to a heavy forwarder cannot be configured in the config file. This must be done manually after installation.
-* Virtual host startup does not respond sometimes, if it fails, recreate the host again.
+* Virtualbox: Virtual host startup does not respond sometimes, if it fails, recreate the host again.
 * Virtualbox has some issues with clock time skew, when not using virtualbox additions. I added a workaround with forcing time clock sync every 5 minutes. A working internet connection on the Virtualbox host is needed.
+* AWS: Due to security reasons the login page with the admin password information has been disabled and https is enabled with splunk's own self signed certs.
+* AWS: OS images do not have ntp configured by default. This will be added in Splunkenizer later.
 
 ## Supported Ansible Versions
 
-:bangbang: Ansible 2.5+ not yet supported with Splunkenizer! Due to changes in 2.5+ I need to rework some code. See [#35398](https://github.com/ansible/ansible/issues/35398) and [delegate_to, include_role with loops](https://medium.com/opsops/ansible-2-5-delegate-to-and-include-role-20cd7e67008e)
+The following Ansible versions are supported
 
-:white_check_mark: Ansible 2.4.3.0 is good to go with Splunkenizer. Install with this and switch back to good version. Switch also needed when doing `brew upgrade`.
-```
-brew install https://raw.githubusercontent.com/Homebrew/homebrew-core/0e387d83c4cad6214108dd4937ac34ee845665d7/Formula/ansible.rb
-brew switch ansible 2.4.3.0_4
-```
-
-:white_check_mark: Ansible 2.4.0.0 is also good to go with Splunkenizer.
+:white_check_mark: Ansible 2.4.0.x
+:white_check_mark: Ansible 2.4.3.x
+:white_check_mark: Ansible 2.5.x
 
 # Authors
 
