@@ -92,7 +92,7 @@ vagrant
 ## Copy a configuration file
 There is one single configuration file, where all settings for your deployment are defined. Copy one configuration file from the [examples](examples) to `config/splunk_config.yml` and adjust the setting to your needs. For a standard setup you should be fine with most of the default settings, but there are a lot of things you can adjust for special cases. See the [configuration description](examples/configuration_description.yml) file, where all existing values are described.
 
-AWS: See [instruction here](#deploying-on-amazon-cloud) when deploying into Amazon Cloud. You can start with [splunk_config_aws.yml](examples/splunk_config_aws.yml) for a simple environment. Copy `splunk_idxclusters`, `splunk_shclusters` and `splunk_hosts` sections from other examples for more complex deployments. 
+AWS: See [instruction here](#deploying-on-amazon-cloud) when deploying into Amazon Cloud. You can start with [splunk_config_aws.yml](examples/splunk_config_aws.yml) for a simple environment. Copy `splunk_idxclusters`, `splunk_shclusters` and `splunk_hosts` sections from other examples for more complex deployments.
 
 ## Start the deployment
 When building virtual machines (for virtualbox) the first time it will pull an os image from the internet. The box images are cached here: `~/.vagrant.d/boxes`.
@@ -171,7 +171,7 @@ You can copy splunk_hosts and cluster configs from other example files to the AW
 
 ## Ansible playbooks only
 
-You can also use the ansible playbooks without vagrant. Like that you can deploy Splunk to an existing set of hosts. You have to create some config files, which is normally done by vagrant. Vagrant dynamically creates the ansible inventory. The file is located in `.vagrant/provisioners/ansible/inventory/vagrant_ansible_inventory`. If you would like to use the ansible playbooks without vagrant, you have to create the inventory yourself with the same groups. The Vagrant script also dynamically creates files in `ansible/group_vars` for your configuration. In `ansible/group_vars/all` you can find the `os` and `splunk_dirs` sections from the config file. In `ansible/group_vars` the indexer-, search head cluster and splunk_env configs are placed. The easiest way would be to create the same configuration with vagrant (ex. on your laptop) and use the created files in your other Ansible environment.
+You can also use the ansible playbooks without vagrant. Like that you can deploy Splunk to an existing set of hosts. You have to create some config files, which is normally done by vagrant. Vagrant dynamically creates the ansible inventory file with the host and group variables for your configuration. Everything can be found in the `inventory` directory. The easiest way would be to create the same configuration with vagrant (ex. on your laptop) and copy the created files to your other Ansible environment.
 
 # Known issues, limitations
 
@@ -180,7 +180,7 @@ You can also use the ansible playbooks without vagrant. Like that you can deploy
 * Virtualbox: Virtual host startup does not respond sometimes, if it fails, recreate the host again.
 * Virtualbox has some issues with clock time skew, when not using virtualbox additions. I added a workaround with forcing time clock sync every 5 minutes. A working internet connection on the Virtualbox host is needed.
 * AWS: Due to security reasons the login page with the admin password information has been disabled and https is enabled with splunk's own self signed certs.
-* AWS: OS images do not have ntp configured by default. This will be added in Splunkenizer later.
+* AWS: OS images (AMI) do not have ntp configured by default. This will be added in Splunkenizer later.
 
 ## Supported Ansible Versions
 
