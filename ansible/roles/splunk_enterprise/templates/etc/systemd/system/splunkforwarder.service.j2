@@ -21,7 +21,7 @@ RestartSec = 15
 ExecStart = {{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt
 ExecStop = {{ splunk_home }}/bin/splunk stop
 ExecReload = {{ splunk_home }}/bin/splunk restart
-#PIDFile = {{ splunk_home }}/var/run/splunk/splunkd.pid
+PIDFile = {{ splunk_home }}/var/run/splunk/splunkd.pid
 
 [Install]
 WantedBy = multi-user.target
