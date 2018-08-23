@@ -804,7 +804,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
           end
         end
 
-        if !File.directory?("#{host_vars_dir}/#{vm.name}")
+        if !File.file?("#{host_vars_dir}/#{vm.name}/ansible_ssh_info.yml")
           if ssh_info = (vm.ssh_info && vm.ssh_info.dup)
             #ssh_info = vm.ssh_info.dup
             ansible_ssh_info = {}
