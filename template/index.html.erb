@@ -34,23 +34,23 @@
       <% @host['roles'].each do |role| %>
         <% case role
           when 'cluster_master' %>
-            <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8000/en-GB/manager/system/clustering">Cluster Master</a>
+            <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8000/manager/system/clustering">Cluster Master</a>
           <% when 'deployer' %>
-            <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8000/en-GB/">Deployer</a>
+            <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8000/">Deployer</a>
           <% when 'deployment_server' %>
-            <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8000/en-GB/manager/system/deploymentserver">Deployment Server</a>
+            <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8000/manager/system/deploymentserver">Deployment Server</a>
           <% when 'heavy_forwarder' %>
-            <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8000/en-GB/app/launcher/home">Heavy Forwarder</a>
+            <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8000/app/launcher/home">Heavy Forwarder</a>
           <% when 'indexer' %>
             <span class="d-inline-block" tabindex="0" data-toggle="tooltip" title="No web access on indexer">
               <button class="btn btn-primary" style="pointer-events: none;" type="button" disabled="">Indexer</button>
             </span>
           <% when 'license_master' %>
-            <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8000/en-GB/manager/system/licensing">License Master</a>
+            <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8000/manager/system/licensing">License Master</a>
           <% when 'monitoring_console' %>
-            <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8000/en-GB/app/splunk_monitoring_console">Monitoring Console</a>
+            <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8000/app/splunk_monitoring_console">Monitoring Console</a>
           <% when 'search_head' %>
-            <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8000/en-GB/app/launcher/home">Search Head</a>
+            <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8000/app/launcher/home">Search Head</a>
           <% when 'universal_forwarder' %>
             <span class="d-inline-block" tabindex="0" data-toggle="tooltip" title="No web access on universal forwarder">
               <button class="btn btn-primary" style="pointer-events: none;" type="button" disabled="">Universal Forwarder</button>
