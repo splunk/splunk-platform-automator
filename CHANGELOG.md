@@ -8,11 +8,12 @@ Splunkenizer changes by release
 * Replaced internal hosts file maintenance with the vagrant hostmanager plugin
 * Improved standalone ansible playbook usage
 * Added option to download splunk binaries from splunk.com during install
+* Removed locale (en_GB) in the links of node link page
 
 ### Fixes
 
 * Fixed wrong systemd service name for universal forwarder
-* Removed Deployment Server from serverclasses 
+* Removed Deployment Server from serverclasses
 
 ## 1.0 - 2018-05-21
 
