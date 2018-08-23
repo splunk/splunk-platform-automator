@@ -7,7 +7,8 @@
     - splunk_baseconfig
     - search_head
     - search_peers
-  shell: sed -n '/^\[distributedSearch\]$/,+1p' {{ splunk_home }}/etc/system/local/distsearch.conf | grep servers | awk -F= '{print $2}' | sed -e 's%https\://\([a-Z0-9_]*\)\:[0-9]*%\1%g' | tr -d " "
+  # Same command is in monitoring_console/tasks/dserver.yml
+  shell: sed -n '/^\[distributedSearch\]$/,+1p' {{ splunk_home }}/etc/system/local/distsearch.conf | grep servers | awk -F= '{print $2}' | sed -e 's%https\://%%g' -e 's/\:[0-9]*//g' | tr -d " "
   register: current_dservers
   args:
     warn: false
