@@ -53,6 +53,37 @@ splunk_defaults:
 #    - test1
 #    - test2
 
+# Enable SSL for web, inputs and outputs. Own certs can be provided and have to be put
+# inside Splunkenizer/auth directory. If own_certs=false the Splunk internal self-signed
+# ones are used.
+  splunk_ssl:
+    web:
+      enable: true
+      own_certs: true
+      # For web private keys the cert filename must match
+      # the systems name given in the splunk_hosts section.
+      # Example: cm -> cm.pem
+      config:
+        enableSplunkWebSSL: true
+        privKeyPath: etc/auth/{{splunk_env_name}}/custom_privkey.web.pem
+        serverCert: etc/auth/{{splunk_env_name}}/custom_cacert.pem
+    inputs:
+      enable: true
+      own_certs: true
+      # If own certs are provided, they must match the filename given here
+      config:
+        rootCA: "$SPLUNK_HOME/etc/auth/{{splunk_env_name}}/custom_cacert.pem"
+        serverCert: "$SPLUNK_HOME/etc/auth/{{splunk_env_name}}/custom_inputs_server.pem"
+        password: "password"
+    outputs:
+      enable: true
+      own_certs: true
+      # If own certs are provided, they must match the filename given here
+      config:
+        sslRootCAPath: "custom_cacert.pem"
+        sslCertPath: "custom_outputs_server.pem"
+        sslPassword: "password"
+
 # Share the same splunk.secret file for all installations.
   splunk_secret_share:
     # for Splunk Enterprise
