@@ -4,6 +4,7 @@
 
 Note: The order for implementation may change
 
+* Add support for Windows hosts with Universal Forwarder
 * Config options for forwarding to single indexers and heavy forwarders
 * Separate output conf on DS for HF, separate cluster, single indexer
 * Support config options for indexes (ex. new metrics index type)
