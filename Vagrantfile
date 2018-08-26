@@ -648,9 +648,9 @@ end
 # Write out hosts content to build /etc/hosts file
 splunk_hosts = {}
 splunk_hosts['splunk_hosts'] = splunk_host_list
-File.open("#{group_vars_dir}/all/hosts.yml", "w") do |f|
-  f.write(splunk_hosts.to_yaml)
-end
+#File.open("#{group_vars_dir}/all/hosts.yml", "w") do |f|
+#  f.write(splunk_hosts.to_yaml)
+#end
 
 # Create and configure the specified systems
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
