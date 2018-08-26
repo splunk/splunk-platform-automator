@@ -3,7 +3,7 @@ Splunkenizer changes by release
 
 ## 1.1devel - ongoing
 
-* Support for Ansible version 2.5.x
+* Added support for Ansible versions 2.5.x and 2.6.x
 * Support virtual machines in the Amazon Cloud (AWS)
 * Replaced internal hosts file maintenance with the vagrant hostmanager plugin
 * Improved standalone ansible playbook usage
