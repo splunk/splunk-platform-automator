@@ -35,9 +35,6 @@
   register: splunk_archive_files
   delegate_to: localhost
   become: no
-  when: splunk_download is not defined or
-        (splunk_install_app == "splunk" and splunk_download.splunk is not defined) or
-        (splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder is not defined)
 
 - name: find latest splunk version
   tags:
@@ -63,32 +60,28 @@
     msg: "Using Splunk archive: {{splunk_archive.0}}"
   when: splunk_archive is defined
 
-- name: upload and unarchive splunk binaries
+- name: upload and unarchive splunk archive from ansible host
   tags:
     - splunk
     - splunk_enterprise
   unarchive: src="{{splunk_archive.0}}" dest="{{ splunk_install_dir }}/" owner={{ splunk_user }} group={{ splunk_group }} creates=yes
   become: yes
   become_user: "{{ splunk_user }}"
-  when: splunk_archive is defined
+  when: splunk_download is not defined or
+        (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == false) or
+        (splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == false)
 
-- name: define splunk download url
+- name: define splunk archive download url
   tags:
     - splunk
     - splunk_enterprise
   set_fact:
-    splunk_url: "{{splunk_download.splunk}}"
-  when: splunk_install_app == "splunk" and splunk_download is defined and splunk_download.splunk is defined
+    splunk_url: 'https://www.splunk.com/bin/splunk/DownloadActivityServlet?architecture=x86_64&platform=linux&version={{splunk_version}}&product={%- if splunk_install_app == "splunk" -%}splunk{%- else -%}universalforwarder{%- endif -%}&filename={{splunk_archive.0|basename}}&wget=true'
+  when: splunk_download is defined and
+        (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
+        splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
 
-- name: define splunkforwarder download url
-  tags:
-    - splunk
-    - splunk_enterprise
-  set_fact:
-    splunk_url: "{{splunk_download.splunkforwarder}}"
-  when: splunk_install_app == "splunkforwarder" and splunk_download is defined and splunk_download.splunkforwarder is defined
-
-- name: download the splunk binaries
+- name: download the splunk archive from splunk.com
   tags:
     - splunk
     - splunk_enterprise
@@ -100,12 +93,11 @@
     force: yes
   become: yes
   become_user: "{{ splunk_user }}"
-  when:
-    - splunk_install_app == "splunk" or splunk_install_app == "splunkforwarder"
-    - splunk_download is defined
-    - splunk_download.splunk is defined or splunk_download.splunkforwarder is defined
+  when: splunk_download is defined and
+        (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
+        splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
 
-- name: extract splunk binaries from archive
+- name: extract splunk archive
   tags:
     - splunk
     - splunk_enterprise
@@ -115,10 +107,9 @@
     remote_src: yes
   become: yes
   become_user: "{{ splunk_user }}"
-  when:
-    - splunk_install_app == "splunk" or splunk_install_app == "splunkforwarder"
-    - splunk_download is defined
-    - splunk_download.splunk is defined or splunk_download.splunkforwarder is defined
+  when: splunk_download is defined and
+        (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
+        splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
 
 - name: remove splunk install archive
   tags:
@@ -129,10 +120,9 @@
     state: absent
   become: yes
   become_user: "{{ splunk_user }}"
-  when:
-    - splunk_install_app == "splunk" or splunk_install_app == "splunkforwarder"
-    - splunk_download is defined
-    - splunk_download.splunk is defined or splunk_download.splunkforwarder is defined
+  when: splunk_download is defined and
+        (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
+        splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
 
 - name: find installed splunk version
   tags:

@@ -32,10 +32,9 @@ aws:
 splunk_defaults:
 #  splunk_env_name: splk
 #  splunk_version: '7.0.4'
-#  splunk_download:
-    # Add the URL from the Splunk wget command here, which you can get from the splunk.com download page.
-#    splunk: '<splunk_url>'
-#    splunkforwarder: '<splunkforwarder_url>'
+  splunk_download:
+    splunk: true
+    splunkforwarder: true
 #  splunk_admin_password: 'splunklab'
 #  splunk_license_file: Splunk_Enterprise.lic
 #  splunk_indexes:

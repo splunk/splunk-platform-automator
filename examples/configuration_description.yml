@@ -39,15 +39,16 @@ os:
 
 splunk_defaults:
 #  splunk_env_name: splunk1
+  # Specify a Splunk version. Will use the latest found when not set
 #  splunk_version: '7.0.0'
+  # Download Splunk archive from splunk.com. The archive must still be found in the
+  # local Software directory to fullfill the software download agreement
+#  splunk_download:
+#    splunk: true
+#    splunkforwarder: true
 #  splunk_admin_password: 'splunklab1'
   # Give a path to a license file. Must be located in splunk_software_dir
 #  splunk_license_file: Splunk_Enterprise1.lic
-  # Enable https for Splunk web
-#  splunk_ssl:
-#    web:
-#      enable: true
-#      own_certs: true
   # Define some indexes to be created on the indexers
 #  splunk_indexes:
 #    - test1
