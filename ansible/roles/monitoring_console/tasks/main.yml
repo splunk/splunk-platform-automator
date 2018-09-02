@@ -89,14 +89,3 @@
   when: splunk_deployment_server|default()|length == 0 and splunk_search_peer_idxc_list|length > 0 and inventory_hostname not in groups.role_cluster_master
 
 - include_tasks: dserver.yml
-
-- name: update serverclass on deployment_server
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - deployment_server
-    - serverclass
-  include_role:
-    name: deployment_server
-    tasks_from: update_serverclass
-  when: splunk_deployment_server|default()|length == 0 and inventory_hostname not in groups.role_deployment_server

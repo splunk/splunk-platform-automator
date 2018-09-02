@@ -195,17 +195,6 @@
     app_path: '{{splunk_home}}/etc/shcluster/apps'
   when: splunk_license_master|default()|length > 0
 
-- name: update serverclass on deployment_server
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - deployment_server
-    - serverclass
-  include_role:
-    name: deployment_server
-    tasks_from: update_serverclass
-  when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server
-
 - name: call update_dserver from role monitoring_console
   tags:
     - splunk
