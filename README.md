@@ -37,7 +37,7 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 
 ## Framework Installation (Mac OSX)
 
-1. Download and install [Vagrant](https://www.vagrantup.com).
+1. Download and install [Vagrant](https://www.vagrantup.com). Vagrant 2.1.4 is broken because of bug [Vagrant.has_plugin?("vagrant-vbguest") always returns false after upgrade to 2.1.4 #10161](https://github.com/hashicorp/vagrant/issues/10161). Please downgrade to 2.1.2!
 1. Install the hostmanager plugin for Vagrant: `vagrant plugin install vagrant-hostmanager`
 1. Install Ansible, I personally prefer [Brew](https://brew.sh) which makes it as easy as `brew install ansible`. For [supported Ansible versions check here](#supported-ansible-versions)
 1. Create a folder called `Vagrant` and change into it.
