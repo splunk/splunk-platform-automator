@@ -94,7 +94,7 @@ splunk_defaults:
     # use the same for both install types
     equal: true
 
-splunk_basics:
+splunk_dirs:
     # Location of the extracted baseconfig apps
     splunk_baseconfig_dir: ../Software
     # This is where the splunk install archives are searched for
