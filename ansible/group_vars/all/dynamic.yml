@@ -48,8 +48,8 @@ splunk_idxc_rf: "{{ idxc_rf }}"
 splunk_idxc_sf: "{{ idxc_sf }}"
 splunk_idxc_cm: "{% for cm in groups.role_cluster_master|default([]) %}{% if cm in groups['idxcluster_'+idxc_name] %}{{ cm }}{% endif %}{% endfor %}"
 splunk_idxc_cm_list: >-
-           {% set res = [] -%}
-           {%- for idxc in splunk_idxc_name_list -%}
+           {%- set res = [] -%}
+           {%- for idxc in splunk_idxc_name_list_all_env -%}
              {% set ignored = res.extend(groups[idxc]|list) -%}
            {%- endfor -%}
            {{ res|unique|intersect(groups.role_cluster_master|default([]))|intersect(groups['splunk_env_'+splunk_env_name]) }}
@@ -62,7 +62,7 @@ splunk_idxc_site_sf: "{{ idxc_site_sf }}"
 # Single Indexer
 splunk_idxc_all_host_list: >-
           {%- set res = [] -%}
-          {%- for group in splunk_idxc_name_list -%}
+          {%- for group in splunk_idxc_name_list_all_env -%}
             {%- set ignored = res.extend(
               groups[group]
               ) -%}
@@ -93,9 +93,9 @@ splunk_shc_replication_port: "{{ shc_replication_port }}"
 splunk_shc_host_list: "{{ groups['shcluster_'+shc_name]|intersect(groups.role_search_head|default([])) }}"
 splunk_shc_deployer: "{% for dp in groups.role_deployer|default([]) %}{% if dp in groups['shcluster_'+shc_name] %}{{ dp }}{% endif %}{% endfor %}"
 splunk_shc_dp_list: >-
-           {% set res = [] -%}
+           {%- set res = [] -%}
            {%- for shc in splunk_shc_name_list -%}
-            {% set ignored = res.extend(groups[shc]|list) -%}
+            {%- set ignored = res.extend(groups[shc]|list) -%}
            {%- endfor -%}
            {{ res|unique|intersect(groups.role_deployer|default([]))|intersect(groups['splunk_env_'+splunk_env_name]) }}
 
@@ -105,13 +105,13 @@ splunk_deployment_server: "{{groups.role_deployment_server|default([])|intersect
 splunk_idx_dsclients: >-
           {%- set res = [] -%}
           {%- for ds_client in splunk_indexer_list|difference([splunk_deployment_server|first]) -%}
-            {% set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
+            {%- set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res|unique }}
 splunk_idx_hf_dsclients: >-
           {%- set res = [] -%}
           {%- for ds_client in splunk_indexer_list|union(splunk_heavy_forwarder_list)|difference([splunk_deployment_server|first]) -%}
-            {% set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
+            {%- set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res|unique }}
 splunk_sh_dsclients: >-
@@ -129,13 +129,13 @@ splunk_sh_hf_dsclients: >-
 splunk_idx_hf_sh_dsclients: >-
           {%- set res = [] -%}
           {%- for ds_client in splunk_indexer_list|union(splunk_heavy_forwarder_list)|union(splunk_search_head_list)|difference([splunk_deployment_server|first]) -%}
-            {% set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
+            {%- set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res|unique }}
 splunk_hf_sh_lm_cm_ds_dp_mc_dsclients: >-
           {%- set res = [] -%}
           {%- for ds_client in splunk_heavy_forwarder_list|union(splunk_search_head_list)|union(splunk_license_master)|union(splunk_idxc_cm_list)|union(splunk_deployment_server)|union(splunk_shc_dp_list)|union(splunk_monitoring_console)|difference([splunk_deployment_server|first]) -%}
-            {% set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
+            {%- set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res|unique }}
 splunk_license_dsclients: >-
