@@ -9,11 +9,13 @@ Splunkenizer changes by release
 * Improved standalone ansible playbook usage
 * Added option to download splunk binaries from splunk.com during install
 * Removed locale (en_GB) in the links of node link page
+* Add hf_host field to heavy_forwarder
 
 ### Fixes
 
 * Fixed wrong systemd service name for universal forwarder
 * Removed Deployment Server from serverclasses
+* Do not install splk_all_forwarder_outputs on a single box, when adding LM, MC or such
 
 ## 1.0 - 2018-05-21
 

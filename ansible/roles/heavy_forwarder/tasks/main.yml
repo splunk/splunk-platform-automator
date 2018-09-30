@@ -34,6 +34,7 @@
     app_path: '{{splunk_home}}/etc/apps'
   notify: restart splunk
   when: splunk_deployment_server|default()|length == 0
+  when: splunk_deployment_server|default()|length == 0 and inventory_hostname not in groups.role_indexer
 
 - name: install certs for web ssl
   tags:
