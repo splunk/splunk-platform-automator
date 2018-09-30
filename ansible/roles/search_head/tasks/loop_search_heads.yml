@@ -14,4 +14,4 @@
     - "{{ splunk_shc_all_host_list + splunk_search_head_list }}"
   loop_control:
     loop_var: search_head
-  when: splunk_shc_all_host_list|default([])|length > 0 OR splunk_search_head_list|default([])|length > 0
+  when: splunk_shc_all_host_list|default([])|length > 0 or splunk_search_head_list|default([])|length > 0
