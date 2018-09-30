@@ -20,14 +20,28 @@ splunk_roles: >-
           {{ res|join(', ') }}
 
 # Output Definitions
-splunk_outputs_idxc_list: "{{ splunk_outputs_list['idxcluster']|default({}) }}"
-splunk_outputs_idx_list: "{{ splunk_outputs_list['indexer']|default([]) }}"
+splunk_outputs_idxc_list: >-
+          {%- set res = {} -%}
+          {%- for idxc in splunk_idxc_name_list -%}
+            {%- set ignored = res.update({idxc: splunk_outputs_list['idxcluster'][idxc]}) -%}
+          {%- endfor -%}
+          {{ res }}
+splunk_outputs_idx_list: "{{ splunk_outputs_list['indexer']|default([])|intersect(groups['splunk_env_'+splunk_env_name]) }}"
 splunk_outputs_name_list: >-
           {%- set res = [] -%}
           {%- for host in groups['all']|intersect(groups['splunk_env_'+splunk_env_name]) -%}
             {%- set ignored = res.extend([hostvars[host]['splunk_outputs']]) -%}
           {%- endfor -%}
           {{ res|unique }}
+splunk_outputs_tcpout_list: >-
+          {%- set res = [] -%}
+          {%- for idxc in splunk_outputs_idxc_list.keys() -%}
+            {%- set ignored = res.extend([idxc]) -%}
+          {%- endfor -%}
+          {%- if splunk_outputs_idx_list|length > 0 -%}
+            {%- set ignored = res.extend(['all']) -%}
+          {%- endif -%}
+          {{ res }}
 
 # Search Peer Definitions
 splunk_search_peer_idxc_list: "{{ splunk_search_peer_list['idxcluster']|default([]) }}"
@@ -40,7 +54,7 @@ splunk_search_peer_name_list: >-
           {{ res|unique }}
 
 # Indexer Cluster
-splunk_idxc_name_list: "{{ groups|map('regex_search','idxcluster_.*')|select('string')|list }}"
+splunk_idxc_name_list_all_env: "{{ groups|map('regex_search','idxcluster_.*')|select('string')|list }}"
 splunk_idxc_label: "{{ idxc_name }}"
 splunk_idxc_pass: "{{ idxc_password }}"
 splunk_idxc_replication_port: "{{ idxc_replication_port }}"
@@ -53,6 +67,16 @@ splunk_idxc_cm_list: >-
              {% set ignored = res.extend(groups[idxc]|list) -%}
            {%- endfor -%}
            {{ res|unique|intersect(groups.role_cluster_master|default([]))|intersect(groups['splunk_env_'+splunk_env_name]) }}
+splunk_idxc_name_list: >-
+           {%- set res = [] -%}
+           {%- for idxc in splunk_idxc_name_list_all_env -%}
+             {%- for cm in splunk_idxc_cm_list -%}
+               {%- if cm in groups[idxc] -%}
+                 {%- set ignored = res.extend([idxc|regex_replace('idxcluster_','')]) -%}
+               {%- endif -%}
+             {%- endfor -%}
+           {%- endfor -%}
+           {{ res|unique }}
 
 # Multisite Indexer Cluster
 splunk_idxc_available_sites: "{{ idxc_available_sites|default([])|join(',') }}"
