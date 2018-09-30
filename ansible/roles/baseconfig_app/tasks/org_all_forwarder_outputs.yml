@@ -1,7 +1,7 @@
 ---
 # This playbook install the base config app
 
-- name: "({{ app_name }}) remove defaultGroup value"
+- name: "({{ app_name }}) setting defaultGroup value"
   tags:
     - splunk
     - splunk_baseconfig
@@ -10,13 +10,14 @@
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     section: tcpout
     option: defaultGroup
-    state: absent
+    value: "{{ splunk_outputs_tcpout_list|map('regex_replace','^(.*)$','\\1_indexers')|join(',') }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
   notify: restart splunk
+  when: splunk_outputs_idxc_list|length > 0 or splunk_outputs_idx_list|length > 0
 
-- name: "({{ app_name }}) rename tcpout:primary_indexers"
+- name: "({{ app_name }}) rename tcpout:primary_indexers if clustered indexers"
   tags:
     - splunk
     - splunk_baseconfig
@@ -91,7 +92,7 @@
     loop_var: index_cluster_name
   when: splunk_outputs_idxc_list|length > 0 and splunk_ssl.outputs.enable == true
 
-- name: "({{ app_name }}) rename tcpout:primary_indexers"
+- name: "({{ app_name }}) rename tcpout:primary_indexers if non clustered indexers"
   tags:
     - splunk
     - splunk_baseconfig
