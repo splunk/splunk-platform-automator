@@ -1,0 +1,27 @@
+---
+# This playbook saves a copy of the app on the ansible host
+
+- name: create hostname and app dir on ansible host
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - save_baseconfig
+    - save_baseconfig_apps
+  file:
+    path: "../{{splunk_save_baseconfig_apps_dir|default('apps')}}/{{inventory_hostname}}/{{ app_path }}/{{ app_dest_name }}"
+    state: directory
+  become: no
+  delegate_to: localhost
+
+- name: save app content to ansible host
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - save_baseconfig
+    - save_baseconfig_apps
+  synchronize:
+    src: "{{ app_path }}/{{ app_dest_name }}"
+    dest: "../{{splunk_save_baseconfig_apps_dir|default('apps')}}/{{inventory_hostname}}/{{ app_path }}/"
+    rsync_path: "sudo -u {{splunk_user}} rsync"
+    mode: pull
+  become: no

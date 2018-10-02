@@ -3,3 +3,12 @@
 
 - import_tasks: "install_app.yml"
 - import_tasks: "{{app_name}}.yml"
+
+- name: call save_app
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - save_baseconfig
+    - save_baseconfig_apps
+  include_tasks: "save_app.yml"
+  when: splunk_save_baseconfig_apps|default(false) == true

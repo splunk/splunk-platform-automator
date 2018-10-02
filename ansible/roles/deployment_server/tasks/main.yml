@@ -185,6 +185,17 @@
     - serverclass
   include_tasks: serverclass.yml
 
+- name: call save_serverclass
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - save_baseconfig
+    - save_serverclass
+  include_tasks: "save_serverclass.yml"
+  when: splunk_save_serverclass|default(false) == true
+
 - name: call update_dserver from role monitoring_console
   tags:
     - splunk

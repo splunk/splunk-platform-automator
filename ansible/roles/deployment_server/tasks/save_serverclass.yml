@@ -1,0 +1,31 @@
+---
+# This playbook saves a copy of the serverclass.conf on the ansible host
+
+- name: create hostname and system/local dir on ansible host
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - save_baseconfig
+    - save_serverclass
+  file:
+    path: "../{{splunk_save_baseconfig_apps_dir|default('apps')}}/{{inventory_hostname}}/{{ splunk_install_dir }}/splunk/etc/system/local/"
+    state: directory
+  become: no
+  delegate_to: localhost
+
+- name: save serverclass file to ansible host
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - deployment_server
+    - serverclass
+    - save_baseconfig
+    - save_serverclass
+  synchronize:
+    src: "{{ splunk_install_dir }}/splunk/etc/system/local/serverclass.conf"
+    dest: "../{{splunk_save_baseconfig_apps_dir|default('apps')}}/{{splunk_deployment_server|first}}/{{ splunk_install_dir }}/splunk/etc/system/local/"
+    rsync_path: "{{ become_method|default('sudo') }} -u {{splunk_user}} rsync"
+    mode: pull
+  become: no

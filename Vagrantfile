@@ -87,7 +87,12 @@ defaults = {
         "own_certs"=>false
       }
     }
-  }
+  },
+  "splunk_apps"=>{
+    "splunk_save_baseconfig_apps_dirs"=>"apps",
+    "splunk_save_baseconfig_apps"=>false,
+    "splunk_save_serverclass"=>false
+  },
 }
 
 # Default ssl settings
@@ -150,10 +155,18 @@ end
 # Edit the config file to change VM and environment configuration details
 settings = YAML.load_file("#{config_file}")
 
+# Create splunk_dirs variables
 splunk_dirs = defaults['splunk_dirs'].dup
 if !settings['splunk_dirs'].nil?
   splunk_dirs = splunk_dirs.merge(settings['splunk_dirs'])
 end
+
+# Create splunk_apps variables
+splunk_apps = defaults['splunk_apps'].dup
+if !settings['splunk_apps'].nil?
+  splunk_apps = splunk_apps.merge(settings['splunk_apps'])
+end
+
 # Create auth_dir
 if !File.directory?("#{dir}/ansible/#{splunk_dirs['splunk_auth_dir']}")
   FileUtils.mkdir_p("#{dir}/ansible/#{splunk_dirs['splunk_auth_dir']}")
@@ -543,6 +556,13 @@ if !splunk_dirs.nil?
   end
 end
 
+# Create splunk_apps group_vars
+if !splunk_apps.nil?
+  File.open("#{group_vars_dir}/all/splunk_apps.yml", "w") do |f|
+    f.write(splunk_apps.to_yaml)
+  end
+end
+
 # Create splunk environment group_vars
 if !splunk_environments.nil?
   splunk_environments.each do |splunkenv|
@@ -781,11 +801,18 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       end
 
       # Remove host_vars dir for this host
+      destroy_trigger = []
       srv.trigger.after :destroy do |trigger|
         if File.directory?("#{host_vars_dir}/#{server['name']}")
-          trigger.run = {inline: "rm -r #{host_vars_dir}/#{server['name']}"}
-        else
-          trigger.info = "Nothing to do."
+          # Remove host_vars dir for this host
+          destroy_trigger.push("#{host_vars_dir}/#{server['name']}")
+        end
+        if File.directory?("#{splunk_apps['splunk_save_baseconfig_apps_dirs']}/#{server['name']}")
+          # Remove apps dir for this host
+          destroy_trigger.push("#{splunk_apps['splunk_save_baseconfig_apps_dirs']}/#{server['name']}")
+        end
+        if destroy_trigger.length > 0
+          trigger.run = { inline: "rm -r #{destroy_trigger.join(" ")}" }
         end
       end
 

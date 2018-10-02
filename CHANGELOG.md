@@ -10,6 +10,7 @@ Splunkenizer changes by release
 * Added option to download splunk binaries from splunk.com during install
 * Removed locale (en_GB) in the links of node link page
 * Add hf_host field to heavy_forwarder
+* Save a copy of the base_config apps on the Ansible host
 
 ### Fixes
 

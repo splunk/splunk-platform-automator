@@ -39,7 +39,7 @@ os:
 
 splunk_defaults:
 #  splunk_env_name: splunk1
-  # Specify a Splunk version. Will use the latest found when not set
+  # Specify a Splunk version. Will use the latest found when not set or set to 'latest'
 #  splunk_version: '7.0.0'
   # Download Splunk archive from splunk.com. The archive must still be found in the
   # local Software directory to fullfill the software download agreement
@@ -99,6 +99,14 @@ splunk_dirs:
     splunk_baseconfig_dir: ../Software
     # This is where the splunk install archives are searched for
     splunk_software_dir: ../Software
+
+splunk_apps:
+  # Location where to save the base config apps on the Ansible host.
+  #splunk_save_baseconfig_apps_dirs: apps
+  # Save a copy of all the baseconfig apps
+  splunk_save_baseconfig_apps: true
+  # Save a copy of the serverclass file
+  splunk_save_serverclass: true
 
 # Splunk general settings
 splunk_environments:
