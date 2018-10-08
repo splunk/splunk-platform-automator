@@ -5,13 +5,17 @@
 Note: The order for implementation may change
 
 * Add support for Windows hosts with Universal Forwarder
+* Improve deployment speed
+  * Create VM first without Ansible and run playbooks in parallel on the nodes
+* Splunk generic app deployment
+  * Like unix_TA: (needs this packages: net-tools lsof sysstat)
+  * Playbooks for common splunkbase apps
+* Splunk Premium App deployment like ITSI and ES
+* Support for upgrading Splunk on all the nodes
 * Config options for forwarding to single indexers and heavy forwarders
 * Separate output conf on DS for HF, separate cluster, single indexer
 * Support config options for indexes (ex. new metrics index type)
 * Option to have master_deployment_client or org_all_deploymentclient on cm
-* Splunk generic app deployment
-  * Add unix_TA: (needs this packages: net-tools lsof sysstat)
-  * playbooks for common splunkbase apps
 * org_all_deploymentclient for ds -> cm app deployment
 * Disable all the tour and other info wizards after login
 * Add dns_server role and configure nodes to get the host names from dns
