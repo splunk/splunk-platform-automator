@@ -1,22 +1,22 @@
 Splunkenizer changes by release
 ===============================
 
-## 1.1devel - ongoing
+## 1.1 - 2018-10-08
 
 * Added support for Ansible versions 2.5.x and 2.6.x
-* Support virtual machines in the Amazon Cloud (AWS)
+* Added support for creating virtual machines in the Amazon Cloud (AWS)
 * Replaced internal hosts file maintenance with the vagrant hostmanager plugin
-* Improved standalone ansible playbook usage
+* Improved standalone Ansible playbook usage
 * Added option to download splunk binaries from splunk.com during install
-* Removed locale (en_GB) in the links of node link page
-* Add hf_host field to heavy_forwarder
-* Save a copy of the base_config apps on the Ansible host
+* Added hf_host field to heavy_forwarder
+* Added feature to save a copy of the base_config apps on the Ansible host
 
 ### Fixes
 
+* Removed locale (en_GB) in the links of node link page (index.html)
 * Fixed wrong systemd service name for universal forwarder
-* Removed Deployment Server from serverclasses
-* Do not install splk_all_forwarder_outputs on a single box, when adding LM, MC or such
+* Removed Deployment Server from serverclasses whitelists
+* Do not install splk_all_forwarder_outputs on a single box, when adding LM, MC roles
 
 ## 1.0 - 2018-05-21
 
