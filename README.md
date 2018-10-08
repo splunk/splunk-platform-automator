@@ -18,10 +18,10 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
 * Configuration done according best practices with configuration apps
 * Splunk environment definition stored in one simple [yaml](http://docs.ansible.com/ansible/latest/YAMLSyntax.html) file
 * [Example configuration files](examples) for different setups included
-* MacOSX and Linux Support
+* Deployment and configuration done with [Ansible](https://www.ansible.com)
 * Controlled by [Vagrant](https://www.vagrantup.com)
-* Virtualized by [Virtualbox](https://www.virtualbox.org). It can be extended to other technologies like VMWare, Docker, AWS and such in the future.
-* Deployment done with [Ansible](https://www.ansible.com), should be ready to use without vagrant (not tested yet)
+* Virtualized by [Virtualbox](https://www.virtualbox.org) or in [AWS Cloud](https://aws.amazon.com). It can be extended to other technologies like VMWare, Docker and such in the future.
+* Tested on MacOSX and Linux as vagrant and virtualbox host
 
 ## Roadmap
 
@@ -77,6 +77,7 @@ Your directory structure should now look like this:
    1. Add AWS_SECRET_ACCESS_KEY=<your secret access key> as environment variable
 1. Create an ssh key pair described [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair) and store the public key on your disk for later reference in the config file
 1. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it ex. Splunk and add the following TCP incoming ports: 22,8000,9887,8191,8065,8089,9997-9998
+1. [See AWS usage instructions here](#supported-ansible-versions)
 
 # Framework Usage
 
@@ -156,7 +157,7 @@ vagrant scp <file> <hostname>:/destdir
 
 ## Deploying on Amazon Cloud
 
-Splunkenizer can talk to the AWS cloud and create virtual machines with Splunk in the cloud. Vagrant is using the plugin [vagrant-aws](https://github.com/mitchellh/vagrant-aws) for that. Follow these steps to setup Splunkenizer for AWS. In the exmaple there is a simple network setup, with only one Security group, covering all ports. More complex network setups should be possible, but make sure the host, where Splunkenizer is running does have ssh access to all instances.
+Splunkenizer can talk to the AWS cloud and create virtual machines with Splunk in the cloud. Vagrant is using the plugin [vagrant-aws](https://github.com/mitchellh/vagrant-aws) for that. Follow these steps to setup Splunkenizer for AWS. In the example there is a simple network setup, with only one Security group, covering all ports. More complex network setups should be possible, but make sure the host, where Splunkenizer is running does have ssh access to all instances.
 
 To prepare the configuration file for Amazon deployments
 
@@ -171,7 +172,7 @@ You can copy splunk_hosts and cluster configs from other example files to the AW
 
 ## Ansible playbooks only
 
-You can also use the ansible playbooks without vagrant. Like that you can deploy Splunk to an existing set of hosts. You have to create some config files, which is normally done by vagrant. Vagrant dynamically creates the ansible inventory file with the host and group variables for your configuration. Everything can be found in the `inventory` directory. The easiest way would be to create the same configuration with vagrant (ex. on your laptop) and copy the created files to your other Ansible environment.
+You can also use the ansible playbooks without vagrant. Like that you can deploy Splunk to an existing set of hosts (virtual or physical). You have to create some config files, which is normally done by vagrant. Vagrant dynamically creates the ansible inventory file with the host and group variables for your configuration. Everything can be found in the `inventory` directory. The easiest way would be to create the same configuration with vagrant (ex. on your laptop) and copy the created files to your other Ansible environment.
 
 # Known issues, limitations
 
