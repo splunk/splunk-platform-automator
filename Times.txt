@@ -1,6 +1,0 @@
-Times
-=====
-
-
-18 min: cm_2idxc_sh_uf.yml
-30 min: cm_2idxc1site_3shc_uf.yml
