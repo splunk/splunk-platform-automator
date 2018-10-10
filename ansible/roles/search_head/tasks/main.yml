@@ -20,7 +20,15 @@
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
 - include_tasks: shcluster.yml
+  tags:
+    - splunk
+    - search_head
+    - shcluster
   when: shc_name is defined
 
 - include_tasks: shsingle.yml
+  tags:
+    - splunk
+    - search_head
+    - shsingle
   when: shc_name is not defined
