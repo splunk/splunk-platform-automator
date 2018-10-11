@@ -831,7 +831,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
           end
         end
 
-        if !File.file?("#{host_vars_dir}/#{vm.name}/ansible_ssh_info.yml")
+        if !File.file?("#{host_vars_dir}/#{vm.name}/ansible_ssh_info.yml") or vm.provider_name == :aws
           if ssh_info = (vm.ssh_info && vm.ssh_info.dup)
             #ssh_info = vm.ssh_info.dup
             ansible_ssh_info = {}
@@ -870,7 +870,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         end
         ip_addr_list[vmname]
       end
-
 
       # Workaround for missing python in ubuntu/xenial64
       srv.vm.provision "shell", inline: "which python || sudo apt-get -y install python"
