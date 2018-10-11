@@ -4,7 +4,7 @@
 - name: start role tasks
   tags:
     - splunk
-    - search_head
+    - splunk_enterprise
   debug: msg="role '{{ role_name }}' start"
 
 - name: "check for systemctl"
