@@ -1,6 +1,13 @@
 Splunkenizer changes by release
 ===============================
 
+## 1.1.1 - ongoing
+
+### Fixes
+
+* Fixed SHC setup for Splunk 7.2
+* Fixed updating the index.html, after restart AWS instances
+
 ## 1.1 - 2018-10-08
 
 * Added support for Ansible versions 2.5.x and 2.6.x
