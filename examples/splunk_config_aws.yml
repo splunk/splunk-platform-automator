@@ -27,6 +27,13 @@ aws:
   #instance_type: 't2.micro'
   ssh_private_key_path: '~/.ssh/aws_key.pem'
   security_groups: ['Splunk']
+  # AWS Storage
+  block_device_mapping:
+    - # do not remove this, it is part of the format
+      DeviceName: "/dev/sda1"
+      Ebs.VolumeSize: 50 # Size in GB
+      #Ebs.DeleteOnTermination: true
+      #Ebs.VolumeType: "GP2" # General performance - you might want something faster
 
 # Splunk default settings
 splunk_defaults:
