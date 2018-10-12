@@ -288,7 +288,6 @@ search_peer_list = {}
 search_peer_groups = {}
 envs = {}
 special_host_vars = {}
-ip_addr_list = {}
 network = {}
 
 # Remove this in the future, cause only needed during upgrades
@@ -818,17 +817,30 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
       # Update ansible inventory/hosts with ansible variables
       srv.vm.provision :hostmanager
+      ip_addr_list = {}
       srv.hostmanager.ip_resolver = proc do |vm, resolving_vm|
         vmname = vm.name.to_s
         network_info = {}
+        update_file = false
+        update_index_html = false
         if vm.provider_name == :virtualbox and !host_vars[vmname]['ip_addr'].nil? and ip_addr_list[vmname].nil?
           ip_addr_list[vmname] = host_vars[vmname]['ip_addr']
-        elsif vm.provider_name == :aws and ip_addr_list[vmname].nil?
-          vm.communicate.execute('hostname --all-ip-addresses') do |type, privat_ip|
-            allips = privat_ip.strip().split(' ')
-            ip_addr_list[vmname] = allips[0]
-            network_info['ip_addr'] = allips[0]
+        elsif vm.provider_name == :aws
+          if File.file?("#{host_vars_dir}/#{vm.name}/network.yml")
+            network_info = YAML.load_file("#{host_vars_dir}/#{vm.name}/network.yml")
+            ip_addr_list[vmname] = network_info['ip_addr']
+          elsif ip_addr_list[vmname].nil?
+            if vm.communicate.ready?
+              vm.communicate.execute('hostname --all-ip-addresses') do |type, privat_ip|
+                allips = privat_ip.strip().split(' ')
+                ip_addr_list[vmname] = allips[0]
+                #network_info['ip_addr'] = allips[0]
+              end
+            end
           end
+        end
+        if !ip_addr_list[vmname].nil?
+          network_info['ip_addr'] = ip_addr_list[vmname]
         end
 
         if !File.file?("#{host_vars_dir}/#{vm.name}/ansible_ssh_info.yml") or vm.provider_name == :aws
@@ -836,18 +848,22 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
             #ssh_info = vm.ssh_info.dup
             ansible_ssh_info = {}
             ansible_ssh_info['ansible_host'] = ssh_info[:host]
-            if vm.provider_name == :aws
+            if vm.provider_name == :aws and network_info['dns_name'] != ssh_info[:host]
               network_info['dns_name'] = ssh_info[:host]
+              update_file = true
             end
             ansible_ssh_info['ansible_port'] = ssh_info[:port]
             ansible_ssh_info['ansible_user'] = ssh_info[:username]
             ansible_ssh_info['ansible_ssh_private_key_file'] = ssh_info[:private_key_path].first
             FileUtils.mkdir_p("#{host_vars_dir}/#{vm.name}")
-            File.open("#{host_vars_dir}/#{vm.name}/ansible_ssh_info.yml", "w") do |f|
-              f.write(ansible_ssh_info.to_yaml)
+            if vm.provider_name == :virtualbox or update_file == true
+              File.open("#{host_vars_dir}/#{vm.name}/ansible_ssh_info.yml", "w") do |f|
+                f.write(ansible_ssh_info.to_yaml)
+              end
+              update_index_html = true
             end
           end
-          if vm.provider_name == :aws
+          if update_file == true
             File.open("#{host_vars_dir}/#{vm.name}/network.yml", "w") do |f|
               f.write(network_info.to_yaml)
             end
@@ -855,22 +871,23 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         end
 
         # Create HTML link page for all the roles
-        require 'erb'
-        settings['splunk_hosts'].each do |host|
-          network_file = {}
-          if File.file?("#{host_vars_dir}/#{host['name']}/network.yml")
-            network_file[host['name']] = YAML.load_file("#{host_vars_dir}/#{host['name']}/network.yml")
-            network = network.merge(network_file)
+        if update_index_html == true
+          require 'erb'
+          settings['splunk_hosts'].each do |host|
+            network_file = {}
+            if File.file?("#{host_vars_dir}/#{host['name']}/network.yml")
+              network_file[host['name']] = YAML.load_file("#{host_vars_dir}/#{host['name']}/network.yml")
+              network = network.merge(network_file)
+            end
           end
-        end
-        template = File.read("#{dir}/template/index.html.erb")
-        result = ERB.new(template).result(binding)
-        File.open("#{config_dir}/index.html", 'w+') do |f|
-          f.write result
+          template = File.read("#{dir}/template/index.html.erb")
+          result = ERB.new(template).result(binding)
+          File.open("#{config_dir}/index.html", 'w+') do |f|
+            f.write result
+          end
         end
         ip_addr_list[vmname]
       end
-
       # Workaround for missing python in ubuntu/xenial64
       srv.vm.provision "shell", inline: "which python || sudo apt-get -y install python"
 
