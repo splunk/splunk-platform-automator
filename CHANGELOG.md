@@ -1,7 +1,9 @@
 Splunkenizer changes by release
 ===============================
 
-## 1.1.1 - ongoing
+## 1.1.1 - 2018-10-18
+
+* Optimized network config file upates for AWS instances
 
 ### Fixes
 
