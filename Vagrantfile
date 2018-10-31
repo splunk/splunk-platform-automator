@@ -704,8 +704,10 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       srv.vm.graceful_halt_timeout = 600
 
       # Install vbguest additions
-      config.vbguest.no_install = true
-      if special_host_vars[server['name']]['virtualbox']['install_vbox_additions'] == true
+      if Vagrant.has_plugin?("vagrant-vbguest")
+        config.vbguest.no_install = true
+      end
+      if provider == "virtualbox" and special_host_vars[server['name']]['virtualbox']['install_vbox_additions'] == true
         if !Vagrant.has_plugin?("vagrant-vbguest")
           print "ERROR: Plugin vagrant-vbguest missing, install with 'vagrant plugin install vagrant-vbguest'.\n"
           exit 2
