@@ -128,7 +128,7 @@ if $?.exitstatus != 0
 end
 
 # Check for supported ansible version
-ansible_version_supported = '2.4.0.*|2.4.3.*|2.5.*|2.6.*'
+ansible_version_supported = '2.4.0.*|2.4.3.*|2.5.*|2.6.*|2.7.*'
 ansible_version = `ansible --version | head -1 | awk '{print $2}' | tr -d '\n'`
 if !ansible_version.match(ansible_version_supported)
   print "ERROR: Ansible version #{ansible_version} not supported with Splunkenizer\n"

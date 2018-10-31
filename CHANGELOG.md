@@ -1,6 +1,10 @@
 Splunkenizer changes by release
 ===============================
 
+## 1.2 - ongoing
+
+* Added support for Ansible versions 2.7.x
+
 ## 1.1.1 - 2018-10-18
 
 * Optimized network config file upates for AWS instances
