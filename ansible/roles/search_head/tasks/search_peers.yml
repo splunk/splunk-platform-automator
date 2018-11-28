@@ -6,7 +6,7 @@
     - splunk
     - splunk_baseconfig
     - search_head
-    - search_peers
+    - search_peer
   # Same command is in monitoring_console/tasks/dserver.yml
   shell: sed -n '/^\[distributedSearch\]$/,+1p' {{ splunk_home }}/etc/system/local/distsearch.conf | grep servers | awk -F= '{print $2}' | sed -e 's%https\://%%g' -e 's/\:[0-9]*//g' | tr -d " "
   register: current_dservers
@@ -18,7 +18,7 @@
     - splunk
     - splunk_baseconfig
     - search_head
-    - search_peers
+    - search_peer
   command: "{{ splunk_home }}/bin/splunk add search-server {{ item }}:8089 -remoteUsername admin -remotePassword {{splunk_admin_password}} -auth admin:{{splunk_admin_password}}"
   with_items:
     - "{{ splunk_search_peer_idx_list | difference(current_dservers.stdout.split(',')|list) }}"

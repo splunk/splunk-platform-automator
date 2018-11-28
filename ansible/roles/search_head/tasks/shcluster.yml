@@ -146,9 +146,11 @@
 - name: call update_dserver from role monitoring_console
   tags:
     - splunk
+    - search_head
+    - shcluster
     - splunk_baseconfig
     - monitoring_console
-    - search_peers
+    - dserver
   include_role:
     name: monitoring_console
     tasks_from: update_dserver

@@ -6,7 +6,7 @@
     - splunk
     - splunk_baseconfig
     - search_head
-    - search_peers
+    - search_peer
   wait_for:
     host: '{{search_head}}'
     port: 8089
@@ -22,7 +22,7 @@
     - splunk
     - splunk_baseconfig
     - search_head
-    - search_peers
+    - search_peer
   import_role:
     name: search_head
     tasks_from: search_peers

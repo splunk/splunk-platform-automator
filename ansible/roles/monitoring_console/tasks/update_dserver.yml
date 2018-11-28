@@ -6,7 +6,7 @@
     - splunk
     - splunk_baseconfig
     - monitoring_console
-    - dservers
+    - dserver
   wait_for:
     host: '{{splunk_monitoring_console|first}}'
     port: 8089
@@ -22,7 +22,7 @@
     - splunk
     - splunk_baseconfig
     - monitoring_console
-    - dservers
+    - dserver
   import_role:
     name: monitoring_console
     tasks_from: dserver

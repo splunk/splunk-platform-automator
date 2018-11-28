@@ -6,7 +6,7 @@
     - splunk
     - splunk_baseconfig
     - search_head
-    - search_peers
+    - search_peer
   include_role:
     name: search_head
     tasks_from: add_search_peers

@@ -201,7 +201,7 @@
     - splunk
     - splunk_baseconfig
     - monitoring_console
-    - search_peers
+    - dserver
   include_role:
     name: monitoring_console
     tasks_from: update_dserver

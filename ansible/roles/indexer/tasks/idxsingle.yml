@@ -89,7 +89,7 @@
     - indexer
     - idxsingle
     - monitoring_console
-    - search_peers
+    - dserver
   include_role:
     name: monitoring_console
     tasks_from: update_dserver
@@ -104,7 +104,7 @@
     - indexer
     - idxsingle
     - search_head
-    - search_peers
+    - dserver
   include_role:
     name: search_head
     tasks_from: loop_search_heads
