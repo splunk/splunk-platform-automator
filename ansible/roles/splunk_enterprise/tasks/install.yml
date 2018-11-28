@@ -186,7 +186,7 @@
   tags:
     - splunk
     - splunk_enterprise
-  command: "{{ splunk_home }}/bin/splunk start --accept-license"
+  command: "{{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt"
   become: yes
   become_user: "{{ splunk_user }}"
   when: use_systemctl != true
