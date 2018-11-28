@@ -242,3 +242,9 @@ splunk_hosts:
   - name: uf1
     roles:
       - universal_forwarder
+    os:
+      # packages needed for Unix TA
+      packages:
+        - net-tools
+        - lsof
+        - sysstat
