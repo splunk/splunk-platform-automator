@@ -19,6 +19,7 @@
     app_name: 'org_all_forwarder_outputs'
     app_path: '{{splunk_home}}/etc/apps'
   notify: restart splunk
+  when: inventory_hostname not in groups.role_indexer
 
 - name: install certs for web ssl
   tags:
