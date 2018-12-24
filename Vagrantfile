@@ -907,8 +907,21 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         end
         ip_addr_list[vmname]
       end
-      # Workaround for missing python in ubuntu/xenial64
-      srv.vm.provision "shell", inline: "which python || sudo apt-get -y install python"
+
+      # Allow remote commands, for example workaround for missing python in ubuntu/xenial64
+      # Use this command to install python: 'which python || sudo apt-get -y install python'
+      if File.file?("#{group_vars_dir}/all/os.yml")
+          os_info = YAML.load_file("#{group_vars_dir}/all/os.yml")
+          if os_info['remote_command']
+            srv.vm.provision "shell", inline: "#{os_info['remote_command']}"
+          end
+      end
+      if File.file?("#{host_vars_dir}/#{server['name']}/os.yml")
+          os_info = YAML.load_file("#{host_vars_dir}/#{server['name']}/os.yml")
+          if os_info['remote_command']
+            srv.vm.provision "shell", inline: "#{os_info['remote_command']}"
+          end
+      end
 
       #print "Special host vars:\n"
       #puts special_host_vars
