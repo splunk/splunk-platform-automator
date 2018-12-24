@@ -88,6 +88,19 @@ defaults = {
       }
     }
   },
+  "splunk_systemd"=>{
+    "splunk_systemd_services"=>{
+      "splunk"=>{
+        "Service"=>{
+          "LimitCORE"=>0,
+          "LimitFSIZE"=>"infinity",
+          "LimitDATA"=>"infinity",
+          "LimitNPROC"=>20480,
+          "LimitNOFILE"=>65536
+        }
+      }
+    }
+  },
   "splunk_apps"=>{
     "splunk_save_baseconfig_apps_dirs"=>"apps",
     "splunk_save_baseconfig_apps"=>false,
@@ -165,6 +178,12 @@ end
 splunk_apps = defaults['splunk_apps'].dup
 if !settings['splunk_apps'].nil?
   splunk_apps = splunk_apps.merge(settings['splunk_apps'])
+end
+
+# Create splunk_systemd variables
+splunk_systemd = defaults['splunk_systemd'].dup
+if !settings['splunk_systemd'].nil?
+  splunk_systemd = splunk_systemd.merge(settings['splunk_systemd'])
 end
 
 # Create auth_dir
@@ -552,6 +571,13 @@ end
 if !splunk_dirs.nil?
   File.open("#{group_vars_dir}/all/splunk_dirs.yml", "w") do |f|
     f.write(splunk_dirs.to_yaml)
+  end
+end
+
+# Create splunk_systemd group_vars
+if !splunk_systemd.nil?
+  File.open("#{group_vars_dir}/all/splunk_systemd.yml", "w") do |f|
+    f.write(splunk_systemd.to_yaml)
   end
 end
 

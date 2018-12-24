@@ -1,0 +1,17 @@
+---
+
+- name: "check for systemctl"
+  tags:
+    - splunk
+    - splunk_common
+  stat:
+    path: /bin/systemctl
+  register: systemctl
+
+- name: set systemctl
+  tags:
+    - splunk
+    - splunk_common
+  set_fact:
+    use_systemctl: true
+  when: systemctl.stat.exists == true

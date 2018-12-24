@@ -1,0 +1,28 @@
+---
+
+- name: set splunk version
+  tags:
+    - splunk
+    - splunk_enterprise
+  include_role:
+    name: splunk_common
+    tasks_from: set_splunk_version
+
+- name: set splunk systemd service name
+  tags:
+    - splunk
+    - splunk_enterprise
+  set_fact:
+    splunk_service_name: "splunkforwarder"
+  when: use_systemctl == true
+        and version_output.stdout is defined
+        and splunk_version is version_compare('7.2.2', '>=')
+        and splunk_install_app == "splunkforwarder"
+
+- name: set splunk systemd service file name
+  tags:
+    - splunk
+    - splunk_enterprise
+  set_fact:
+    splunk_unit_file_name: "-systemd-unit-file-name {{splunk_service_name}}"
+  when: use_systemctl == true and version_output.stdout is defined and splunk_version is version_compare('7.2.2', '>=')

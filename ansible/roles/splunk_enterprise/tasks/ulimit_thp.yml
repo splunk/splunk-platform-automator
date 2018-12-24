@@ -1,6 +1,21 @@
 ---
 # This playbook install the apps required in a server
 
+- name: checking if splunk init.d file is installed
+  tags:
+    - splunk
+    - splunk_enterprise
+  stat:
+    path: "/etc/init.d/splunk"
+  register: splunk_initd
+
+- name: splunk is installed here
+  tags:
+    - splunk
+    - splunk_enterprise
+  set_fact:
+  when: splunk_path.stat.exists
+
 - name: add disable THP in /etc/rc.local
   tags:
     - splunk
@@ -29,7 +44,7 @@
     owner: root
     group: root
     mode: 0644
-  when: use_systemctl == true
+  when: use_systemctl == true and splunk_initd.stat.exists != true
 
 - name: "install /etc/security/limits.d/splunk.conf"
   tags:
@@ -71,7 +86,7 @@
         ulimit -Hf unlimited
         ulimit -Sf unlimited
       }
-  when: use_systemctl != true
+  when: splunk_initd.stat.exists == true
 
 - name: enable usage of funtions during start in /etc/init.d/splunk
   tags:
@@ -84,7 +99,7 @@
     content: |2
           disable_huge
           change_ulimit
-  when: use_systemctl != true
+  when: splunk_initd.stat.exists == true
 
 - name: enable usage of funtions during restart in /etc/init.d/splunk
   tags:
@@ -97,7 +112,22 @@
     content: |2
           disable_huge
           change_ulimit
-  when: use_systemctl != true
+  when: splunk_initd.stat.exists == true
+
+- name: "update systemd service file"
+  tags:
+    - splunk
+    - splunk_enterprise
+  ini_file:
+    path: "/etc/systemd/system/{{splunk_service_name}}.service"
+    section: "{{ item.section }}"
+    option: "{{ item.var }}"
+    value: "{{ item.val }}"
+    owner: root
+    group: root
+    mode: 0700
+  with_items: "{{ splunk_systemd_services_updates }}"
+  when: use_systemctl == true and splunk_initd.stat.exists != true and splunk_systemd_services_updates is defined
 
 - name: commit changes to systemctl
   tags:
@@ -114,4 +144,4 @@
     name: disable-thp
     state: started
     enabled: yes
-  when: use_systemctl == true
+  when: use_systemctl == true and splunk_initd.stat.exists != true

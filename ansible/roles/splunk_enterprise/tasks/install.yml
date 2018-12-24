@@ -124,21 +124,7 @@
         (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
         splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
 
-- name: find installed splunk version
-  tags:
-    - splunk
-    - splunk_enterprise
-  shell: 'grep -w VERSION {{ splunk_home }}/etc/splunk.version | cut -d= -f 2'
-  register: version_output
-  when: splunk_archive_files.files is not defined
-
-- name: set splunk_version variable
-  tags:
-    - splunk
-    - splunk_enterprise
-  set_fact:
-    splunk_version: '{{ version_output.stdout }}'
-  when: version_output.stdout is defined
+- include_tasks: set_splunk_service_name.yml
 
 - name: copy shared splunk.secret file
   tags:
@@ -153,56 +139,13 @@
     mode: 0400
   when: splunk_secret_share[splunk_install_app] == true and splunk_secret_file.stat.exists == true
 
-- name: install splunk service
-  tags:
-    - splunk
-    - splunk_enterprise
-  template:
-    src: "etc/systemd/system/{{ splunk_service_name }}.service.j2"
-    dest: "/etc/systemd/system/{{ splunk_service_name }}.service"
-    owner: root
-    group: root
-    mode: 0644
-  when: use_systemctl == true
-
-- name: commit changes to systemctl
-  tags:
-    - splunk
-    - splunk_enterprise
-  command: systemctl daemon-reload
-  when: use_systemctl == true
-
-- name: enable and start splunk service
-  tags:
-    - splunk
-    - splunk_enterprise
-  service:
-    name: "{{ splunk_service_name }}"
-    state: started
-    enabled: yes
-  when: use_systemctl == true
-
-- name: accept license and start splunk
-  tags:
-    - splunk
-    - splunk_enterprise
-  command: "{{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt"
-  become: yes
-  become_user: "{{ splunk_user }}"
-  when: use_systemctl != true
-
-- name: enable boot-start
-  tags:
-    - splunk
-    - splunk_enterprise
-  command: "{{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }}"
-  when: use_systemctl != true
-
 - name: create hashed password for new password policy
   tags:
     - splunk
     - splunk_enterprise
-  shell: "{{ splunk_home }}/bin/splunk hash-passwd '{{splunk_admin_password}}'"
+  command: "{{ splunk_home }}/bin/splunk hash-passwd '{{splunk_admin_password}}'"
+  become: yes
+  become_user: "{{ splunk_user }}"
   register: admin_hash_pw
   when: splunk_version is version_compare('7.1', '>=') and splunk_install_app == "splunk"
 
@@ -222,6 +165,47 @@
     - { varkey: "USERNAME", varvalue: "admin" }
     - { varkey: "HASHED_PASSWORD", varvalue: "{{ admin_hash_pw.stdout }}" }
   when: splunk_version is version_compare('7.1', '>=') and splunk_install_app == "splunk"
+
+- name: accept license and start splunk
+  tags:
+    - splunk
+    - splunk_enterprise
+  command: "{{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt"
+  become: yes
+  become_user: "{{ splunk_user }}"
+#  when: use_systemctl != true
+
+- name: stop splunk
+  tags:
+    - splunk
+    - splunk_enterprise
+  command: "{{ splunk_home }}/bin/splunk stop --answer-yes --no-prompt"
+  become: yes
+  become_user: "{{ splunk_user }}"
+
+- name: enable boot-start
+  tags:
+    - splunk
+    - splunk_enterprise
+  command: "{{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }} {{splunk_unit_file_name|default()}}"
+#  when: use_systemctl != true
+
+- name: enable and start splunk service
+  tags:
+    - splunk
+    - splunk_enterprise
+  service:
+    name: "{{ splunk_service_name }}"
+    state: started
+    enabled: yes
+  when: use_systemctl == true
+
+- name: commit changes to systemctl
+  tags:
+    - splunk
+    - splunk_enterprise
+  command: systemctl daemon-reload
+  when: use_systemctl == true
 
 - name: change splunk admin password
   tags:
