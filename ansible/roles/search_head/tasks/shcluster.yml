@@ -8,6 +8,16 @@
     - shcluster
   debug: msg="Configuring search head cluster node"
 
+- name: set global permissions for comment macro
+  include_tasks: comment_macro.yml
+  tags:
+    - splunk
+    - search_head
+    - shcluster
+    - shsettings
+    - comment_macro
+  when: inventory_hostname == splunk_shc_host_list|first
+
 - name: check if shcluster config is initialized
   tags:
     - splunk

@@ -1,0 +1,67 @@
+---
+# This playbook contains common settings for search heads
+
+- name: find installed splunk version
+  tags:
+    - splunk
+    - search_head
+    - shsettings
+    - comment_macro
+  shell: 'grep -w VERSION {{ splunk_home }}/etc/splunk.version | cut -d= -f 2'
+  register: version_output
+
+- name: set splunk_version variable
+  tags:
+    - splunk
+    - search_head
+    - shsettings
+    - comment_macro
+  set_fact:
+    splunk_version: '{{ version_output.stdout }}'
+  when: version_output.stdout is defined
+
+- name: check for apps/search/metadata/local.meta
+  tags:
+    - splunk
+    - search_head
+    - shsettings
+    - comment_macro
+  stat: path={{ splunk_home }}/etc/apps/search/metadata/local.meta
+  register: localmeta_result
+
+- name: "check if comment macro exists in local.meta"
+  tags:
+    - splunk
+    - search_head
+    - shsettings
+    - comment_macro
+  shell: 'grep "\[macros\/comment(1)\]" {{ splunk_home }}/etc/apps/search/metadata/local.meta'
+  register: grep_result
+  check_mode: False
+  failed_when: "grep_result.rc > 1"
+  changed_when: "grep_result.rc == 1"
+  when: localmeta_result.stat.exists == true
+
+- name: "allow the comment macro for all apps"
+  tags:
+    - splunk
+    - search_head
+    - shsettings
+    - comment_macro
+  ini_file:
+    path: "{{ app_path }}/search/metadata/local.meta"
+    section: "macros/comment(1)"
+    option: "{{ item.var }}"
+    value: "{{ item.value }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_items:
+    - { var: 'access', value: 'read : [ * ], write : [ admin, power ]' }
+    - { var: 'export', value: 'system' }
+    - { var: 'owner', value: 'nobody' }
+    - { var: 'version', value: '{{ splunk_version }}' }
+    - { var: 'modtime', value: '{{ ansible_date_time.epoch + ".000000000"}}' }
+# don't restart because it dusturbes the SHC configuration
+#  notify: restart splunk
+  when: localmeta_result.stat.exists == false or grep_result.rc == 1
