@@ -1,0 +1,27 @@
+---
+# Main playbook for this role
+
+- name: start role tasks
+  tags:
+    - splunk
+    - splunk_common
+  debug: msg="role '{{ role_name }}' start"
+
+- include_tasks: check_splunk_install.yml
+
+- name: find installed splunk version
+  tags:
+    - splunk
+    - splunk_common
+  shell: 'grep -w VERSION {{ splunk_home }}/etc/splunk.version | cut -d= -f 2'
+  register: version_output
+  when: splunk_stat.stat.exists == true
+
+- name: set splunk_version variable
+  tags:
+    - splunk
+    - splunk_common
+  set_fact:
+    splunk_version: '{{ version_output.stdout }}'
+    splunk_exists: true
+  when: version_output.stdout is defined

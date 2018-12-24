@@ -8,4 +8,3 @@ splunk_install_app: splunk
 splunk_service_name: splunk
 splunk_home: '{{splunk_install_dir}}/{{splunk_install_app}}'
 app_path: '{{splunk_home}}/etc/apps'
-use_systemctl: true

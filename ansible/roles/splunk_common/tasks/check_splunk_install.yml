@@ -1,0 +1,8 @@
+---
+
+- name: "check for existing splunk install"
+  tags:
+    - splunk
+    - splunk_common
+  stat: path={{ splunk_home }}
+  register: splunk_stat

@@ -7,14 +7,6 @@
     - universal_forwarder
   debug: msg="role '{{ role_name }}' start"
 
-- name: set splunk service name
-  tags:
-    - splunk
-    - universal_forwarder
-  set_fact:
-    splunk_service_name: splunkforwarder
-  when: use_systemctl != true
-
 - name: call splunk enterprise for UF
   tags:
     - splunk

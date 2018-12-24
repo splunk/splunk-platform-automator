@@ -1,11 +1,5 @@
 ---
 # Variables for this role
 
-splunk_user: splunk
-splunk_group: splunk
-splunk_install_dir: /opt
 splunk_install_app: splunkforwarder
-splunk_service_name: splunkforwarder
-splunk_home: '{{splunk_install_dir}}/{{splunk_install_app}}'
-app_path: '{{splunk_home}}/etc/apps'
-use_systemctl: false
+splunk_service_name: splunk

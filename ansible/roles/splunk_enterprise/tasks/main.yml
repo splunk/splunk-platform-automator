@@ -7,29 +7,29 @@
     - splunk_enterprise
   debug: msg="role '{{ role_name }}' start"
 
-- name: "check for systemctl"
-  tags:
-    - splunk
-    - splunk_enterprise
-  stat:
-    path: /bin/systemctl
-  register: systemctl
+#- name: "check for systemctl"
+#  tags:
+#    - splunk
+#    - splunk_enterprise
+#  stat:
+#    path: /bin/systemctl
+#  register: systemctl
 
-- name: set splunk service name
-  tags:
-    - splunk
-    - splunk_enterprise
-  set_fact:
-    use_systemctl: false
-    splunk_service_name: splunk
-  when: systemctl.stat.exists == false
+#- name: set splunk service name
+#  tags:
+#    - splunk
+#    - splunk_enterprise
+#  set_fact:
+#    use_systemctl: false
+#    splunk_service_name: splunk
+#  when: systemctl.stat.exists == false
 
-- name: "check for splunk fresh install"
-  tags:
-    - splunk
-    - splunk_enterprise
-  stat: path={{ splunk_home }}
-  register: splunk_stat
+#- name: "check for splunk fresh install"
+#  tags:
+#    - splunk
+#    - splunk_enterprise
+#  stat: path={{ splunk_home }}
+#  register: splunk_stat
 
 - name: "create splunk user and group"
   tags:

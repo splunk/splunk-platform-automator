@@ -1,4 +1,0 @@
----
-# Variables for this role
-
-app_path: "{{splunk_home}}/etc/apps"
