@@ -140,15 +140,6 @@ if $?.exitstatus != 0
   exit 2
 end
 
-# Check for supported ansible version
-ansible_version_supported = '2.4.0.*|2.4.3.*|2.5.*|2.6.*|2.7.*'
-ansible_version = `ansible --version | head -1 | awk '{print $2}' | tr -d '\n'`
-if !ansible_version.match(ansible_version_supported)
-  print "ERROR: Ansible version #{ansible_version} not supported with Splunkenizer\n"
-  print "Support versions are: #{ansible_version_supported}\n"
-  exit 2
-end
-
 if !File.file?("Vagrantfile")
   print "ERROR: Run the command from the top directory, where 'Vagrantfile' is located!\n"
   exit 2
