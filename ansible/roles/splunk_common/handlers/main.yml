@@ -1,6 +1,32 @@
+---
+# Handlers are run in the order they are listed, not in the order that they are notified
+# See: https://docs.ansible.com/ansible/latest/reference_appendices/glossary.html#Notify
+
+- name: push shcluster bundle
+  tags:
+    - splunk
+    - splunk_common
+    - search_head
+    - shcluster
+  shell: "{{ splunk_home }}/bin/splunk apply shcluster-bundle -target https://{{splunk_shc_host_list|first}}:8089 -auth admin:{{ splunk_admin_password }} --answer-yes"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  delegate_to: "{{ splunk_shc_deployer }}"
+
+- name: reload deploy-server
+  tags:
+    - splunk
+    - splunk_common
+    - deployment_server
+  command: "{{ splunk_home }}/bin/splunk reload deploy-server -auth admin:{{splunk_admin_password}}"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  delegate_to: "{{splunk_deployment_server|first}}"
+
 - name: restart splunk
   tags:
     - splunk
+    - splunk_common
     - splunk_enterprise
   service:
     name: "{{splunk_service_name}}"

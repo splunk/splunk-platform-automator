@@ -1,0 +1,17 @@
+---
+
+- name: "check for splunk systemd service file"
+  tags:
+    - splunk
+    - splunk_common
+  stat:
+    path: "/etc/systemd/system/{{splunk_service_name}}.service"
+  register: check_splunk_systemd
+
+- name: set use_splunk_systemd
+  tags:
+    - splunk
+    - splunk_common
+  set_fact:
+    use_splunk_systemd: true
+  when: check_splunk_systemd.stat.exists == true
