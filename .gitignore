@@ -17,6 +17,8 @@ auth
 inventory
 # Apps directory
 apps
+# Helpers directory
+helpers
 **/splunk_config.yml
 # Test files
 **/test.yml
