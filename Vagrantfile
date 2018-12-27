@@ -938,12 +938,14 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       #print "Special host vars:\n"
       #puts special_host_vars
 
-      srv.vm.provision "ansible" do |ansible|
-        ansible.compatibility_mode = "2.0"
-        ansible.inventory_path = "inventory"
-        ansible.skip_tags = special_host_vars[server['name']]['ansible']['skip_tags']
-        ansible.verbose = special_host_vars[server['name']]['ansible']['verbose']
-        ansible.playbook = "ansible/splunk.yml"
+      if !File.file?("#{config_dir}/no_vagrant_ansible")
+        srv.vm.provision "ansible" do |ansible|
+          ansible.compatibility_mode = "2.0"
+          ansible.inventory_path = "inventory"
+          ansible.skip_tags = special_host_vars[server['name']]['ansible']['skip_tags']
+          ansible.verbose = special_host_vars[server['name']]['ansible']['verbose']
+          ansible.playbook = "ansible/splunk.yml"
+        end
       end
     end
   end

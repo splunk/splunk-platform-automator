@@ -5,8 +5,6 @@
 Note: The order for implementation may change
 
 * Add support for Windows hosts with Universal Forwarder
-* Improve deployment speed
-  * Create VM first without Ansible and run playbooks in parallel on the nodes
 * Splunk generic app deployment
   * Like unix_TA: (needs this packages: net-tools lsof sysstat)
   * Playbooks for common splunkbase apps
