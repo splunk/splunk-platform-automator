@@ -1,0 +1,92 @@
+---
+# This playbook deploys splunk enterprise environments
+
+- name: apply common configurations
+  hosts: all:!role_universal_forwarder_windows
+  become: yes
+  become_user: root
+  roles:
+    - common
+
+- name: install splunk enterprise
+  hosts: all:!role_universal_forwarder:!role_universal_forwarder_windows:!role_ldap_server
+  become: yes
+  become_user: root
+  roles:
+    - splunk_enterprise
+
+- name: setup deployment server role
+  hosts: role_deployment_server
+  become: yes
+  become_user: root
+  roles:
+    - deployment_server
+
+- name: setup license master role
+  hosts: role_license_master
+  become: yes
+  become_user: root
+  roles:
+    - license_master
+
+- name: setup cluster master role
+  hosts: role_cluster_master
+  become: yes
+  become_user: root
+  roles:
+    - cluster_master
+
+- name: setup indexer role
+  hosts: role_indexer
+  become: yes
+  become_user: root
+  roles:
+    - indexer
+
+- name: setup deployer role
+  hosts: role_deployer
+  become: yes
+  become_user: root
+  roles:
+    - deployer
+
+- name: setup search head role
+  hosts: role_search_head
+  serial: 1
+  become: yes
+  become_user: root
+  roles:
+    - search_head
+
+- name: setup monitoring console role
+  hosts: role_monitoring_console
+  become: yes
+  become_user: root
+  roles:
+    - monitoring_console
+
+- name: setup heavy forwarder role
+  hosts: role_heavy_forwarder
+  become: yes
+  become_user: root
+  roles:
+    - heavy_forwarder
+
+- name: setup universal forwarder role
+  hosts: role_universal_forwarder
+  become: yes
+  become_user: root
+  roles:
+    - universal_forwarder
+
+- name: setup universal forwarder role for windows
+  hosts: role_universal_forwarder_windows
+  roles:
+    - universal_forwarder_windows
+
+- name: setup ldap server role
+  hosts: role_ldap_server
+  become: yes
+  become_user: root
+  roles:
+    - ldap_server
