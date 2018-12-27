@@ -105,7 +105,7 @@ defaults = {
     "splunk_save_baseconfig_apps_dirs"=>"apps",
     "splunk_save_baseconfig_apps"=>false,
     "splunk_save_serverclass"=>false
-  },
+  }
 }
 
 # Default ssl settings
@@ -704,8 +704,8 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       # Setting hostname
       srv.vm.hostname = server['name']
 
-      # Box image to use
       if provider == "virtualbox"
+        # Box image to use
         srv.vm.box = special_host_vars[server['name']]['virtualbox']['box']
         #srv.vm.box = settings['virtualbox']['box']
       elsif provider == "aws"
@@ -864,16 +864,28 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
         if !File.file?("#{host_vars_dir}/#{vm.name}/ansible_ssh_info.yml") or vm.provider_name == :aws
           if ssh_info = (vm.ssh_info && vm.ssh_info.dup)
-            #ssh_info = vm.ssh_info.dup
             ansible_ssh_info = {}
             ansible_ssh_info['ansible_host'] = ssh_info[:host]
+            ansible_ssh_info['ansible_port'] = ssh_info[:port]
             if vm.provider_name == :aws and network_info['dns_name'] != ssh_info[:host]
               network_info['dns_name'] = ssh_info[:host]
               update_file = true
             end
-            ansible_ssh_info['ansible_port'] = ssh_info[:port]
             ansible_ssh_info['ansible_user'] = ssh_info[:username]
-            ansible_ssh_info['ansible_ssh_private_key_file'] = ssh_info[:private_key_path].first
+            if vm.provider_name == :virtualbox and !host_vars[vmname]['ip_addr'].nil?
+              ansible_ssh_info['ansible_host'] = host_vars[vmname]['ip_addr']
+              ansible_ssh_info['ansible_port'] = 22
+            end
+            if vm.communicate.ready?
+              # Check for Windows guest
+              if (vm.communicate.test("test -d $Env:SystemRoot"))
+                ansible_ssh_info['ansible_port'] = 5985
+                ansible_ssh_info['ansible_password'] = "vagrant"
+                ansible_ssh_info['ansible_connection'] = "winrm"
+              else
+                ansible_ssh_info['ansible_ssh_private_key_file'] = ssh_info[:private_key_path].first
+              end
+            end
             FileUtils.mkdir_p("#{host_vars_dir}/#{vm.name}")
             if vm.provider_name == :virtualbox or update_file == true
               File.open("#{host_vars_dir}/#{vm.name}/ansible_ssh_info.yml", "w") do |f|
