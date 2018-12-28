@@ -7,6 +7,39 @@
 
 Ever wanted to build a complex Splunk environment for testing, which looks as close as possible to a production deployment? Need to test a Splunk upgrade? See how Splunk indexer- or search head clustering works? Or just need to verify some configuration changes? This is the right place for you! The aim of this framework is to produce a Splunk environment in a fast and convenient way for testing purposes or maybe also for production use. The created Splunk installation and setup follows best practices using base config apps from Splunk. There are many ways to configure a Splunk environment, in terms of configuration file locations, so this is just another example how to do it.
 
+## Table of Contents
+
+   * [Splunkenizer](#splunkenizer)
+   * [Support](#support)
+   * [Features](#features)
+      * [Roadmap](#roadmap)
+      * [Changelog](#changelog)
+   * [Installation](#installation)
+      * [Framework Installation (Mac OSX)](#framework-installation-mac-osx)
+      * [Install Virtualbox support (optional)](#install-virtualbox-support-optional)
+      * [Install and configure AWS support (optional)](#install-and-configure-aws-support-optional)
+   * [Framework Usage](#framework-usage)
+      * [First start and initialization](#first-start-and-initialization)
+      * [Copy a configuration file](#copy-a-configuration-file)
+      * [Start the deployment](#start-the-deployment)
+         * [Experimental: Create VM first without Ansible and run playbooks in parallel on the nodes](#experimental-create-vm-first-without-ansible-and-run-playbooks-in-parallel-on-the-nodes)
+      * [Stop hosts](#stop-hosts)
+      * [Destroy hosts](#destroy-hosts)
+      * [Rerun provisioning](#rerun-provisioning)
+      * [Login to the hosts](#login-to-the-hosts)
+         * [Login to Splunk Browser Interface](#login-to-splunk-browser-interface)
+         * [Login by SSH](#login-by-ssh)
+      * [Environment Users](#environment-users)
+         * [User vagrant](#user-vagrant)
+         * [User splunk](#user-splunk)
+      * [Copy files](#copy-files)
+      * [Deploying on Amazon Cloud](#deploying-on-amazon-cloud)
+      * [Ansible playbooks only](#ansible-playbooks-only)
+   * [Known issues, limitations](#known-issues-limitations)
+      * [Supported Ansible Versions](#supported-ansible-versions)
+   * [Authors](#authors)
+   * [License](#license)
+
 # Support
 
 **Note: This framework is not officially supported by Splunk. I develop this on best effort in my spare time.**
