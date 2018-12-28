@@ -4,7 +4,7 @@ Splunkenizer changes by release
 ## 1.2 - ongoing
 
 * Added option to run ansible independent from vagrant.
-  * Create VM first without Ansible and run playbooks in parallel on the nodes. See readme file.
+  * Create VM first without Ansible and run playbooks in parallel on the nodes. See [README.md](README.md#experimental-create-vm-first-without-ansible-and-run-playbooks-in-parallel-on-the-nodes)
 * Support native systemd support introduced with Splunk Version 7.2.2
 * Added support for Ansible versions 2.7.x and removed Ansible version check
 * Update permissions of comment macro to be global
