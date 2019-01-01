@@ -1,12 +1,6 @@
 ---
 # Main playbook for this role
 
-- name: start role tasks
-  tags:
-    - splunk
-    - splunk_common
-  debug: msg="role '{{ role_name }}' start"
-
 - include_tasks: check_splunk_install.yml
 
 - name: find installed splunk version
@@ -25,3 +19,14 @@
     splunk_version: '{{ version_output.stdout }}'
     splunk_exists: true
   when: version_output.stdout is defined
+
+- name: set splunk systemd service name
+  tags:
+    - splunk
+    - splunk_enterprise
+  set_fact:
+    splunk_service_name: "splunkforwarder"
+  when: use_systemctl == true
+        and version_output.stdout is defined
+        and splunk_version is version_compare('7.2.2', '>=')
+        and splunk_install_app == "splunkforwarder"

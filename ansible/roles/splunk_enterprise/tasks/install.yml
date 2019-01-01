@@ -173,7 +173,6 @@
   command: "{{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt"
   become: yes
   become_user: "{{ splunk_user }}"
-#  when: use_systemctl != true
 
 - name: stop splunk
   tags:
@@ -188,7 +187,6 @@
     - splunk
     - splunk_enterprise
   command: "{{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }} {{splunk_unit_file_name|default()}}"
-#  when: use_systemctl != true
 
 - name: enable and start splunk service
   tags:
@@ -206,6 +204,14 @@
     - splunk_enterprise
   command: systemctl daemon-reload
   when: use_systemctl == true
+
+- name: call check_systemd_file from splunk_common
+  tags:
+    - splunk
+    - splunk_enterprise
+  include_role:
+    name: splunk_common
+    tasks_from: check_systemd_file
 
 - name: change splunk admin password
   tags:

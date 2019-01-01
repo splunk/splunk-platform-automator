@@ -4,5 +4,5 @@
   tags:
     - splunk
     - splunk_common
-  stat: path={{ splunk_home }}
+  stat: path={{ splunk_home }}/bin/splunk
   register: splunk_stat

@@ -1,0 +1,25 @@
+---
+
+- name: "install disable-thp systemd service"
+  tags:
+    - splunk
+    - splunk_enterprise
+    - disable_thp
+  copy:
+    src: "etc/systemd/system/disable-thp.service"
+    dest: "/etc/systemd/system/disable-thp.service"
+    owner: root
+    group: root
+    mode: 0644
+  when: use_systemctl == true
+
+- name: enable and start disable-thp service
+  tags:
+    - splunk
+    - splunk_enterprise
+    - disable_thp
+  service:
+    name: disable-thp
+    state: started
+    enabled: yes
+  when: use_systemctl == true

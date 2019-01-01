@@ -7,30 +7,6 @@
     - splunk_enterprise
   debug: msg="role '{{ role_name }}' start"
 
-#- name: "check for systemctl"
-#  tags:
-#    - splunk
-#    - splunk_enterprise
-#  stat:
-#    path: /bin/systemctl
-#  register: systemctl
-
-#- name: set splunk service name
-#  tags:
-#    - splunk
-#    - splunk_enterprise
-#  set_fact:
-#    use_systemctl: false
-#    splunk_service_name: splunk
-#  when: systemctl.stat.exists == false
-
-#- name: "check for splunk fresh install"
-#  tags:
-#    - splunk
-#    - splunk_enterprise
-#  stat: path={{ splunk_home }}
-#  register: splunk_stat
-
 - name: "create splunk user and group"
   tags:
     - splunk
@@ -42,7 +18,7 @@
     - splunk
     - splunk_enterprise
   stat:
-    path: "{{ splunk_home }}/bin"
+    path: "{{ splunk_home }}/bin/splunk"
   register: splunk_path
 
 - name: splunk is installed here
@@ -71,12 +47,35 @@
   include_tasks: install.yml
   when: splunk_path.stat.exists == false
 
-- name: "set ulimits and disable THP"
+- name: call ulimit_thp
   tags:
     - splunk
     - splunk_enterprise
   include_tasks: ulimit_thp.yml
-  when: splunk_install_app == 'splunk'
+  when:
+    - splunk_install_app == 'splunk'
+    - use_systemctl == true
+    - use_splunk_systemd|default(false) == false
+
+- name: call add_disable_thp_service
+  tags:
+    - splunk
+    - splunk_enterprise
+  include_tasks: add_disable_thp_service.yml
+  when:
+    - splunk_install_app == 'splunk'
+    - use_systemctl == true
+    - use_splunk_systemd|default(false) == true
+
+- name: call update_splunk_service
+  tags:
+    - splunk
+    - splunk_enterprise
+  include_tasks: update_splunk_service.yml
+  when:
+    - splunk_install_app == 'splunk'
+    - use_systemctl == true
+    - use_splunk_systemd|default(false) == true
 
 - name: "user interface configuration"
   tags:
@@ -93,7 +92,7 @@
     state: restarted
   become: yes
   become_user: root
-  when: not splunk_stat.stat.exists
+  when: splunk_path.stat.exists == false
 
 - name: save shared splunk.secret file
   tags:
