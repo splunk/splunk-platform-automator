@@ -1,0 +1,12 @@
+---
+
+- name: Adding splunk sudoers file
+  tags:
+    - splunk
+    - splunk_sudoers
+  template:
+    src: etc/sudoers.d/splunk.j2
+    dest: /etc/sudoers.d/splunk
+    owner: "root"
+    group: "root"
+    mode: 0440

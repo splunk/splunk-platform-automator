@@ -6,6 +6,8 @@ Splunkenizer changes by release
 * Added option to run ansible independent from vagrant.
   * Create VM first without Ansible and run playbooks in parallel on the nodes. See [README.md](README.md#experimental-create-vm-first-without-ansible-and-run-playbooks-in-parallel-on-the-nodes)
 * Support native systemd support introduced with Splunk Version 7.2.2
+  * Added ulimit settings to native systemd service file
+  * Added suoders file to allow splunk user restart splunk service
 * Added support for Ansible versions 2.7.x and removed Ansible version check
 * Update permissions of comment macro to be global
 * Moved python install on ubuntu to splunk_config file
@@ -14,7 +16,6 @@ Splunkenizer changes by release
 ### Fixes
 
 * Fixed 'vbguest' error, when using AWS only
-* Added ulimit settings to native systemd service file
 * Fixed some base_config installations on single node configs with additional roles
 
 ## 1.1.1 - 2018-10-18
