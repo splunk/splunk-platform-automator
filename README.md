@@ -152,7 +152,7 @@ ansible-playbook ansible/splunk.yml
 To run both steps with one command use:
 
 ```
-vagrant up; ansible-playbook ansible/splunk.yml
+vagrant up; ansible-playbook ansible/deploy_site.yml
 ```
 
 ## Stop hosts
