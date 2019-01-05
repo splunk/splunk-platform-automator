@@ -1,19 +1,5 @@
 ---
-# This playbook deploys splunk enterprise environments
-
-- name: apply common configurations
-  hosts: all:!role_universal_forwarder_windows
-  become: yes
-  become_user: root
-  roles:
-    - common
-
-- name: install splunk enterprise
-  hosts: all:!role_universal_forwarder:!role_universal_forwarder_windows:!role_ldap_server
-  become: yes
-  become_user: root
-  roles:
-    - splunk_enterprise
+# This playbook configures the splunk roles
 
 - name: setup deployment server role
   hosts: role_deployment_server
@@ -83,10 +69,3 @@
   hosts: role_universal_forwarder_windows
   roles:
     - universal_forwarder_windows
-
-- name: setup ldap server role
-  hosts: role_ldap_server
-  become: yes
-  become_user: root
-  roles:
-    - ldap_server

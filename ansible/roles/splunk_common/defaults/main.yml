@@ -1,10 +1,14 @@
 ---
 # Variables for this role
 
+# default, but will be overwritten, when found
+splunk_is_installed: false
+
 splunk_user: splunk
 splunk_group: splunk
 splunk_install_dir: /opt
-splunk_install_app: splunk
+# This var is coming from the calling role, otherwise it will determined
+#splunk_install_app: splunk
 splunk_service_name: splunk
 splunk_home: '{{splunk_install_dir}}/{{splunk_install_app}}'
 app_path: '{{splunk_home}}/etc/apps'

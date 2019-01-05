@@ -944,7 +944,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
           ansible.inventory_path = "inventory"
           ansible.skip_tags = special_host_vars[server['name']]['ansible']['skip_tags']
           ansible.verbose = special_host_vars[server['name']]['ansible']['verbose']
-          ansible.playbook = "ansible/splunk.yml"
+          ansible.playbook = "ansible/deploy_site.yml"
         end
       end
     end

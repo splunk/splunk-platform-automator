@@ -15,6 +15,7 @@
     name: splunk_enterprise
   vars:
     splunk_install_app: splunkforwarder
+    skip_splunk_common: true
 
 - name: apply baseconfig app org_all_deploymentclient
   tags:

@@ -1,8 +1,61 @@
 ---
 
+- name: "check for existing {{splunk_install_dir}}/{{splunk_install_app_var}} dir"
+  tags:
+    - splunk
+    - splunk_common
+  stat:
+    path: "{{splunk_install_dir}}/{{splunk_install_app_var}}"
+  vars:
+    splunk_install_app_var: splunk
+  register: splunk_install_app_dir
+  when: splunk_install_app is not defined
+
+- name: "check for existing {{splunk_install_dir}}/{{splunk_install_app_var}} dir"
+  tags:
+    - splunk
+    - splunk_common
+  stat:
+    path: "{{splunk_install_dir}}/{{splunk_install_app_var}}"
+  vars:
+    splunk_install_app_var: splunkforwarder
+  register: splunkforwarder_install_app_dir
+  when: splunk_install_app is not defined
+
+- name: set var splunk_install_app=splunk
+  tags:
+    - splunk
+    - splunk_common
+  set_fact:
+    splunk_install_app: splunk
+  when:
+    - splunk_install_app is not defined
+    - splunk_install_app_dir is defined
+    - splunk_install_app_dir.stat.exists == true
+
+- name: set var splunk_install_app=splunkforwarder
+  tags:
+    - splunk
+    - splunk_common
+  set_fact:
+    splunk_install_app: splunkforwarder
+  when:
+    - splunk_install_app is not defined
+    - splunkforwarder_install_app_dir is defined
+    - splunkforwarder_install_app_dir.stat.exists == true
+
 - name: "check for existing splunk install"
   tags:
     - splunk
     - splunk_common
-  stat: path={{ splunk_home }}/bin/splunk
-  register: splunk_stat
+  stat:
+    path: "{{splunk_install_dir}}/{{splunk_install_app}}/bin/splunk"
+  register: splunk_bin_stat
+
+- name: set var splunk_is_installed=true
+  tags:
+    - splunk
+    - splunk_common
+  set_fact:
+    splunk_is_installed: true
+  when: splunk_bin_stat.stat.exists == true

@@ -1,0 +1,10 @@
+---
+# This playbook configures other roles
+
+- name: setup ldap server role
+  hosts: role_ldap_server
+  become: yes
+  become_user: root
+  roles:
+    - ldap_server
+
