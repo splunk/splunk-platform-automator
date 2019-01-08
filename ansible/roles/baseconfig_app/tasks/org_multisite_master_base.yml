@@ -134,7 +134,7 @@
     mode: 0600
   notify: restart splunk
 
-- name: "({{ app_name }}) setting unhashed pass4SymmKey"
+- name: "({{ app_name }}) setting unhashed clustering pass4SymmKey"
   tags:
     - splunk
     - splunk_baseconfig
@@ -149,3 +149,19 @@
     mode: 0600
   notify: restart splunk
   when: app_local.stat.exists == false
+
+- name: "({{ app_name }}) setting unhashed indexer discovery pass4SymmKey"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_multisite_master_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
+    section: indexer_discovery
+    option: pass4SymmKey
+    value: "{{idxc_discovery_password}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  when: app_local.stat.exists == false and idxc_discovery_password is defined

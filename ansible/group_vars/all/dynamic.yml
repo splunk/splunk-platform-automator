@@ -42,6 +42,14 @@ splunk_outputs_tcpout_list: >-
             {%- set ignored = res.extend(['all']) -%}
           {%- endif -%}
           {{ res }}
+splunk_outputs_discovery_idxc_list: >-
+          {%- set res = [] -%}
+          {%- for cm in splunk_idxc_cm_list -%}
+            {%- if 'idxc_discovery_password' in hostvars[cm] -%}
+              {%- set ignored = res.extend([{'master': cm, 'idxc_name': hostvars[cm]['idxc_name'], 'password': hostvars[cm]['idxc_discovery_password'] }]) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ res }}
 
 # Search Peer Definitions
 splunk_search_peer_idxc_list: "{{ splunk_search_peer_list['idxcluster']|default([]) }}"

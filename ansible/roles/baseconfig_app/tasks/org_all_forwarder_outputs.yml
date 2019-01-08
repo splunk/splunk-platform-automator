@@ -78,6 +78,57 @@
   with_dict: "{{ splunk_outputs_idxc_list }}"
   when: splunk_outputs_idxc_list|length > 0
 
+- name: "({{ app_name }}) setting indexerDiscovery for indexer clusters"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_forwarder_outputs
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+    section: tcpout:{{ item.idxc_name+'_indexers' }}
+    option: indexerDiscovery
+    value: "{{ item.idxc_name+'_indexers' }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  notify: restart splunk
+  with_items: "{{ splunk_outputs_discovery_idxc_list }}"
+  when: splunk_outputs_discovery_idxc_list|length > 0
+
+- name: "({{ app_name }}) setting indexer discovery password"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_forwarder_outputs
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+    section: indexer_discovery:{{ item.idxc_name+'_indexers' }}
+    option: pass4SymmKey
+    value: "{{ item.password }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  notify: restart splunk
+  with_items: "{{ splunk_outputs_discovery_idxc_list }}"
+  when: splunk_outputs_discovery_idxc_list|length > 0
+
+- name: "({{ app_name }}) setting indexer discovery master_uri"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_forwarder_outputs
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+    section: indexer_discovery:{{ item.idxc_name+'_indexers' }}
+    option: master_uri
+    value: "https://{{item.master }}:8089"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  notify: restart splunk
+  with_items: "{{ splunk_outputs_discovery_idxc_list }}"
+  when: splunk_outputs_discovery_idxc_list|length > 0
+
 - name: "({{ app_name }}) setting ssl in tcpout stanza for clustered indexers"
   tags:
     - splunk

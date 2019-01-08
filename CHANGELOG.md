@@ -13,6 +13,7 @@ Splunkenizer changes by release
 * Update permissions of comment macro to be global
 * Moved python install on ubuntu to splunk_config file
 * Prepare support for windows nodes
+* Added option 'idxc_discovery_password' to setup indexer discovery
 
 ### Fixes
 

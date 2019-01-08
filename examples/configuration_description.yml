@@ -131,6 +131,8 @@ splunk_idxclusters:
     idxc_replication_port: 9887
     idxc_site_rf: 'origin:2, total:2'
     idxc_site_sf: 'origin:2, total:2'
+    # Enable indexer discovery
+    #idxc_discovery_password: idxdisco
 
 # Search Head Cluster settings
 splunk_shclusters:
