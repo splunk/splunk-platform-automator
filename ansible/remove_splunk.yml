@@ -8,9 +8,7 @@
 
   tasks:
 
-    - name: call uninstall from role splunk_enterprise
+    - name: call uninstall from role splunk_software
       include_role:
-        name: splunk_enterprise
+        name: splunk_software
         tasks_from: uninstall
-      vars:
-        detect_splunk_install: true

@@ -1,6 +1,0 @@
----
-dependencies:
-  - role: splunk_common
-    vars:
-      splunk_install_app: splunk
-    when: skip_splunk_common|default(false) != true

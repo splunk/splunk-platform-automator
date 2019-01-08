@@ -27,7 +27,7 @@
   tags:
     - splunk
     - splunk_common
-    - splunk_enterprise
+    - splunk_software
   service:
     name: "{{splunk_service_name}}"
     state: restarted

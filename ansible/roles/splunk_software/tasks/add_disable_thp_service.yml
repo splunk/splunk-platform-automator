@@ -3,7 +3,7 @@
 - name: "install disable-thp systemd service"
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
     - disable_thp
   copy:
     src: "etc/systemd/system/disable-thp.service"
@@ -16,7 +16,7 @@
 - name: enable and start disable-thp service
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
     - disable_thp
   service:
     name: disable-thp

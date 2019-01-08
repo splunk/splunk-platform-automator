@@ -4,7 +4,7 @@
 - name: check if splunk first login is turned off
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
     - ui_config
     - first_login_off
   stat: 
@@ -15,7 +15,7 @@
 - name: disable first login page
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
     - ui_config
     - first_login_off
   file:
@@ -29,7 +29,7 @@
 - name: add username and password info to login page
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
     - ui_config
     - login_page_info
   ini_file:

@@ -9,7 +9,7 @@
   vars:
     splunk_install_app_var: splunk
   register: splunk_install_app_dir
-  when: detect_splunk_install|default(false) == true or splunk_install_app is not defined
+  when: splunk_install_app is not defined
 
 - name: "check for existing {{splunk_install_dir}}/{{splunk_install_app_var}} dir"
   tags:
@@ -20,7 +20,7 @@
   vars:
     splunk_install_app_var: splunkforwarder
   register: splunkforwarder_install_app_dir
-  when: detect_splunk_install|default(false) == true or splunk_install_app is not defined
+  when: splunk_install_app is not defined
 
 - name: set var splunk_install_app=splunk
   tags:

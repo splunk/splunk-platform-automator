@@ -3,7 +3,7 @@
 - name: "update systemd service file"
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   ini_file:
     path: "/etc/systemd/system/{{splunk_service_name}}.service"
     section: "{{ item.section }}"
@@ -18,6 +18,6 @@
 - name: commit changes to systemctl
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   command: systemctl daemon-reload
   when: use_systemctl == true

@@ -1,9 +1,20 @@
 ---
 # This playbook installs the splunk software
 
-- name: install splunk enterprise
-  hosts: all:!role_universal_forwarder:!role_universal_forwarder_windows:!role_ldap_server
+- name: install the splunk enterprise software
+  hosts: role_cluster_master,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_master,role_monitoring_console,role_search_head
   become: yes
   become_user: root
   roles:
-    - splunk_enterprise
+    - role: splunk_software
+      vars:
+        splunk_install_app: splunk
+
+- name: install the splunk universal forwarder software
+  hosts: role_universal_forwarder
+  become: yes
+  become_user: root
+  roles:
+    - role: splunk_software
+      vars:
+        splunk_install_app: splunkforwarder

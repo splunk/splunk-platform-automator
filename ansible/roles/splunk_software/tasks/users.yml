@@ -4,21 +4,21 @@
 - name: add splunk group
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
     - splunk_group
   group: name={{ splunk_user }} state=present
 
 - name: add splunk user
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
     - splunk_user
   user: name={{ splunk_user }} group=splunk comment="Splunk User" shell=/bin/bash createhome=yes
 
 - name: Adding splunk aliases
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   template:
     src: home/splunk/bashrc.splunk.j2
     dest: /home/{{ splunk_user }}/.bashrc.splunk
@@ -29,7 +29,7 @@
 - name: insert/update bashrc for splunk stuff
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   blockinfile:
     path: /home/{{ splunk_user }}/.bashrc
     marker: "#<!-- {mark} ANSIBLE MANAGED BLOCK -->"

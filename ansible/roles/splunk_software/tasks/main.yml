@@ -4,19 +4,19 @@
 - name: start role tasks
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   debug: msg="role '{{ role_name }}' start"
 
 - name: "create splunk user and group"
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   include_tasks: users.yml
 
 - name: checking if splunk is installed
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   stat:
     path: "{{ splunk_home }}/bin/splunk"
   register: splunk_path
@@ -24,14 +24,14 @@
 - name: splunk is installed here
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   debug: msg='splunk is already installed under {{ splunk_home }}/bin/splunk'
   when: splunk_path.stat.exists
 
 - name: check for existing splunk.secret file
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
     - splunk_secret
   stat:
     path: "{{ splunk_auth_dir }}/{{ splunk_install_app }}_splunk.secret"
@@ -43,14 +43,14 @@
 - name: "install the splunk software"
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   include_tasks: install.yml
   when: splunk_path.stat.exists == false
 
 - name: call ulimit_thp
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   include_tasks: ulimit_thp.yml
   when:
     - splunk_install_app == 'splunk'
@@ -60,7 +60,7 @@
 - name: call add_disable_thp_service
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   include_tasks: add_disable_thp_service.yml
   when:
     - splunk_install_app == 'splunk'
@@ -70,7 +70,7 @@
 - name: call update_splunk_service
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   include_tasks: update_splunk_service.yml
   when:
     - splunk_install_app == 'splunk'
@@ -80,13 +80,13 @@
 - name: "user interface configuration"
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   include_tasks: ui_config.yml
 
 - name: final splunk restart after base install
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   service:
     name: "{{ splunk_service_name }}"
     state: restarted
@@ -97,7 +97,7 @@
 - name: save shared splunk.secret file
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
     - splunk_secret
   synchronize:
     src: "{{ splunk_home }}/etc/auth/splunk.secret"
@@ -110,7 +110,7 @@
 - name: link splunkforwarder to splunk secret file
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
     - splunk_secret
   file:
     state: link

@@ -4,7 +4,7 @@
 - name: create splunk install dir
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   file:
     path: "{{ splunk_install_dir }}"
     state: directory
@@ -15,7 +15,7 @@
 - name: create splunk directory
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   file:
     path: "{{ splunk_home }}"
     state: directory
@@ -26,7 +26,7 @@
 - name: find splunk archive files
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   find:
     path: "{{splunk_software}}/"
     pattern: "{{splunk_install_app}}-*-Linux-x86_64.tgz"
@@ -39,7 +39,7 @@
 - name: find latest splunk version
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   set_fact:
     splunk_version: "{{splunk_archive_files.files|sort(attribute='path')|map(attribute='path')|list|last|basename|regex_replace('.*-([0-9]+.[0-9]+.[0-9]+)-.*', '\\1')}}"
   when: splunk_version == 'latest' and splunk_archive_files.files is defined
@@ -47,7 +47,7 @@
 - name: get splunk archive for given version
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   set_fact:
     splunk_archive: '{{splunk_archive_files.files|map(attribute="path")|list|select("match",".*"+splunk_version+".*")|list}}'
   when: splunk_archive_files.files is defined
@@ -55,7 +55,7 @@
 - name:
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   debug:
     msg: "Using Splunk archive: {{splunk_archive.0}}"
   when: splunk_archive is defined
@@ -63,7 +63,7 @@
 - name: upload and unarchive splunk archive from ansible host
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   unarchive: src="{{splunk_archive.0}}" dest="{{ splunk_install_dir }}/" owner={{ splunk_user }} group={{ splunk_group }} creates=yes
   become: yes
   become_user: "{{ splunk_user }}"
@@ -74,7 +74,7 @@
 - name: define splunk archive download url
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   set_fact:
     splunk_url: 'https://www.splunk.com/bin/splunk/DownloadActivityServlet?architecture=x86_64&platform=linux&version={{splunk_version}}&product={%- if splunk_install_app == "splunk" -%}splunk{%- else -%}universalforwarder{%- endif -%}&filename={{splunk_archive.0|basename}}&wget=true'
   when: splunk_download is defined and
@@ -84,7 +84,7 @@
 - name: download the splunk archive from splunk.com
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   get_url:
     url: "{{ splunk_url }}"
     dest: "/tmp/splunk.tar.gz"
@@ -100,7 +100,7 @@
 - name: extract splunk archive
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   unarchive:
     src: "/tmp/splunk.tar.gz"
     dest: "{{ splunk_install_dir }}"
@@ -114,7 +114,7 @@
 - name: remove splunk install archive
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   file:
     path: "/tmp/splunk.tar.gz"
     state: absent
@@ -129,7 +129,7 @@
 - name: copy shared splunk.secret file
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
     - splunk_secret
   copy:
     src: "{{ splunk_auth_dir }}/{{ splunk_install_app }}_splunk.secret"
@@ -142,7 +142,7 @@
 - name: create hashed password for new password policy
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   command: "{{ splunk_home }}/bin/splunk hash-passwd '{{splunk_admin_password}}'"
   become: yes
   become_user: "{{ splunk_user }}"
@@ -152,7 +152,7 @@
 - name: "creating user-seed.conf"
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   ini_file:
     path: "{{ splunk_home }}/etc/system/local/user-seed.conf"
     section: user_info
@@ -169,7 +169,7 @@
 - name: accept license and start splunk
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   command: "{{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt"
   become: yes
   become_user: "{{ splunk_user }}"
@@ -177,7 +177,7 @@
 - name: stop splunk
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   command: "{{ splunk_home }}/bin/splunk stop --answer-yes --no-prompt"
   become: yes
   become_user: "{{ splunk_user }}"
@@ -185,13 +185,13 @@
 - name: enable boot-start
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   command: "{{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }} {{splunk_unit_file_name|default()}}"
 
 - name: enable and start splunk service
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   service:
     name: "{{ splunk_service_name }}"
     state: started
@@ -201,14 +201,14 @@
 - name: commit changes to systemctl
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   command: systemctl daemon-reload
   when: use_systemctl == true
 
 - name: call check_systemd_file from splunk_common
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   include_role:
     name: splunk_common
     tasks_from: check_systemd_file
@@ -216,7 +216,7 @@
 - name: change splunk admin password
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   command: "{{ splunk_home }}/bin/splunk edit user admin -password '{{splunk_admin_password}}' -auth admin:changeme"
   become: yes
   become_user: "{{ splunk_user }}"
@@ -225,6 +225,6 @@
 - name: call add_splunk_sudoers
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   include_tasks: add_splunk_sudoers.yml
   when: use_systemctl == true and use_splunk_systemd|default(false) == true

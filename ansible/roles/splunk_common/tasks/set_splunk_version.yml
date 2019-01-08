@@ -30,7 +30,7 @@
 - name: set splunk systemd service name
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   set_fact:
     splunk_service_name: "splunkforwarder"
   when: use_systemctl == true

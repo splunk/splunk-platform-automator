@@ -9,7 +9,7 @@
 - name: install the splunk software
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   import_playbook: install_splunk.yml
 
 - name: setup splunk roles

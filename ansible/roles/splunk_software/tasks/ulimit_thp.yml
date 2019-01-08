@@ -4,7 +4,7 @@
 - name: checking if splunk init.d file is installed
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   stat:
     path: "/etc/init.d/splunk"
   register: splunk_initd
@@ -12,14 +12,14 @@
 - name: splunk is installed here
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   set_fact:
   when: splunk_path.stat.exists
 
 - name: add disable THP in /etc/rc.local
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   blockinfile:
     path: /etc/rc.local
     insertbefore: "^exit 0"
@@ -37,7 +37,7 @@
 - name: "install /etc/security/limits.d/splunk.conf"
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   template:
     src: "etc/security/limits.d/splunk.conf.j2"
     dest: "/etc/security/limits.d/splunk.conf"
@@ -49,7 +49,7 @@
 - name: add disable_huge and change_ulimits functions to /etc/init.d/splunk
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   blockinfile:
     path: /etc/init.d/splunk
     marker: "# {mark} ANSIBLE MANAGED BLOCK (functions)"
@@ -80,7 +80,7 @@
 - name: enable usage of functions during start in /etc/init.d/splunk
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   blockinfile:
     path: /etc/init.d/splunk
     marker: "    # {mark} ANSIBLE MANAGED BLOCK (start)"
@@ -93,7 +93,7 @@
 - name: enable usage of functions during restart in /etc/init.d/splunk
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   blockinfile:
     path: /etc/init.d/splunk
     marker: "    # {mark} ANSIBLE MANAGED BLOCK (restart)"
@@ -106,6 +106,6 @@
 - name: commit changes to systemctl
   tags:
     - splunk
-    - splunk_enterprise
+    - splunk_software
   command: systemctl daemon-reload
   when: use_systemctl == true and splunk_initd.stat.exists == true

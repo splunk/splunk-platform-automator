@@ -7,16 +7,6 @@
     - universal_forwarder
   debug: msg="role '{{ role_name }}' start"
 
-- name: call splunk enterprise for UF
-  tags:
-    - splunk
-    - universal_forwarder
-  include_role:
-    name: splunk_enterprise
-  vars:
-    splunk_install_app: splunkforwarder
-    skip_splunk_common: true
-
 - name: apply baseconfig app org_all_deploymentclient
   tags:
     - splunk
