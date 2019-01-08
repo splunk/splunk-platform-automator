@@ -1,0 +1,16 @@
+---
+# remove the splunk installation
+
+- name: remove the complete splunk installation
+  hosts: all
+  become: yes
+  become_user: root
+
+  tasks:
+
+    - name: call uninstall from role splunk_enterprise
+      include_role:
+        name: splunk_enterprise
+        tasks_from: uninstall
+      vars:
+        detect_splunk_install: true

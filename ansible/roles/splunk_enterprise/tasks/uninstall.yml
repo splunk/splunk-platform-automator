@@ -1,0 +1,93 @@
+---
+# This playbook uninstalls splunk enterprise or splunk universal forwarder
+
+- name: stop and disable splunk service
+  service:
+    name: "{{ item }}"
+    state: stopped
+    enabled: no
+  with_items:
+    - "{{splunk_service_name}}.service"
+  when: use_systemctl == true and use_splunk_systemd|default(false) == true
+
+- name: check for thp service file
+  stat:
+    path: "/etc/systemd/system/disable-thp.service"
+  register: check_thp_systemd
+
+- name: stop and disable thp service
+  service:
+    name: "disable-thp.service"
+    state: stopped
+    enabled: no
+  when: use_systemctl == true and check_thp_systemd.stat.exists == true
+
+- name: check if splunk is running
+  shell: "pgrep splunkd"
+  register: grep_result
+  check_mode: False
+  failed_when: "grep_result.rc > 1"
+  changed_when: "grep_result.rc != 0"
+
+- name: stop splunk
+  shell: "{{splunk_home}}/bin/splunk stop"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  when: grep_result.rc == 0
+
+- name: disable boot-start
+  command: "{{ splunk_home }}/bin/splunk disable boot-start"
+  when: use_systemctl == true and use_splunk_systemd|default(false) == true
+
+- name: remove systemd files
+  file:
+    path: /etc/systemd/system/{{item}}
+    state: absent
+  with_items:
+    - "{{splunk_service_name}}.service"
+    - "disable-thp.service"
+
+- name: commit changes to systemctl
+  command: systemctl daemon-reload
+  when: use_systemctl == true
+
+- name: remove disable THP in /etc/rc.local
+  blockinfile:
+    path: /etc/rc.local
+    state: absent
+    marker: "# {mark} ANSIBLE MANAGED BLOCK (THP)"
+
+- name: "remove /etc/security/limits.d/splunk.conf"
+  file:
+    path: "/etc/security/limits.d/splunk.conf"
+    state: absent
+
+- name: "remove /etc/sudoers.d/splunk"
+  file:
+    path: "/etc/sudoers.d/splunk"
+    state: absent
+
+# Find all directories to remove, except lost+found
+- name: find files to remove all under {{splunk_home}}/
+  find:
+    paths: "{{splunk_home}}/"
+    file_type: any
+    recurse: no
+    patterns: '.*(?<!lost\+found)$'
+    use_regex: yes
+  register: files_to_delete
+
+# Remove as user splunk to prevent removing mounted directories
+- name: remove all under {{splunk_home}}/
+  file:
+    path: "{{item.path}}"
+    state: absent
+  with_items: "{{ files_to_delete.files }}"
+  become: yes
+  become_user: "{{ splunk_user }}"
+
+# Do not remove this directory, since a mounted filesystem could be inside
+#- name: "remove {{ splunk_home }}"
+#  file:
+#    path: "{{ splunk_home }}"
+#    state: absent

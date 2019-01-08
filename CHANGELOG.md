@@ -14,6 +14,7 @@ Splunkenizer changes by release
 * Moved python install on ubuntu to splunk_config file
 * Prepare support for windows nodes
 * Added option 'idxc_discovery_password' to setup indexer discovery
+* Added playbook to remove the Splunk installation from nodes
 
 ### Fixes
 
