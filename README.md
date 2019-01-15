@@ -146,7 +146,7 @@ touch config/no_vagrant_ansible
 The `vagrant up` command only creates the virtual machines. To deploy Splunk afterwards, run this command:
 
 ```
-ansible-playbook ansible/splunk.yml
+ansible-playbook ansible/deploy_site.yml
 ```
 
 To run both steps with one command use:
