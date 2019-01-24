@@ -65,7 +65,7 @@
   roles:
     - universal_forwarder
 
-- name: setup universal forwarder role for windows
-  hosts: role_universal_forwarder_windows
-  roles:
-    - universal_forwarder_windows
+#- name: setup universal forwarder role for windows
+#  hosts: role_universal_forwarder_windows
+#  roles:
+#    - universal_forwarder_windows
