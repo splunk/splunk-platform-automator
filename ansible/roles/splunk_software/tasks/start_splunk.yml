@@ -1,0 +1,11 @@
+---
+
+- name: start splunk
+  tags:
+    - splunk
+    - splunk_common
+  service:
+    name: "{{splunk_service_name}}"
+    state: started
+  become: yes
+  become_user: root
