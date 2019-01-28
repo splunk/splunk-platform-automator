@@ -1,25 +1,6 @@
 ---
 # This playbook contains common settings for search heads
 
-- name: find installed splunk version
-  tags:
-    - splunk
-    - search_head
-    - shsettings
-    - comment_macro
-  shell: 'grep -w VERSION {{ splunk_home }}/etc/splunk.version | cut -d= -f 2'
-  register: version_output
-
-- name: set splunk_version variable
-  tags:
-    - splunk
-    - search_head
-    - shsettings
-    - comment_macro
-  set_fact:
-    splunk_version: '{{ version_output.stdout }}'
-  when: version_output.stdout is defined
-
 - name: check for apps/search/metadata/local.meta
   tags:
     - splunk
@@ -60,7 +41,7 @@
     - { var: 'access', value: 'read : [ * ], write : [ admin, power ]' }
     - { var: 'export', value: 'system' }
     - { var: 'owner', value: 'nobody' }
-    - { var: 'version', value: '{{ splunk_version }}' }
+    - { var: 'version', value: '{{ splunk_installed_version }}' }
     - { var: 'modtime', value: '{{ ansible_date_time.epoch + ".000000000"}}' }
 # don't restart because it dusturbes the SHC configuration
 #  notify: restart splunk

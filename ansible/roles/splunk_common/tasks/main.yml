@@ -9,6 +9,6 @@
 
 - include_tasks: check_systemctl.yml
 
-- include_tasks: set_splunk_version.yml
+- include_tasks: set_splunk_installed_version.yml
 
 - include_tasks: check_systemd_file.yml

@@ -1,12 +1,12 @@
 ---
 
-- name: call set_splunk_version from splunk_common
+- name: call set_splunk_installed_version from splunk_common
   tags:
     - splunk
     - splunk_software
   include_role:
     name: splunk_common
-    tasks_from: set_splunk_version
+    tasks_from: set_splunk_installed_version
 
 - name: set splunk systemd service file name
   tags:
@@ -14,4 +14,4 @@
     - splunk_software
   set_fact:
     splunk_unit_file_name: "-systemd-unit-file-name {{splunk_service_name}}"
-  when: use_systemctl == true and version_output.stdout is defined and splunk_version is version_compare('7.2.2', '>=')
+  when: use_systemctl == true and version_output.stdout is defined and splunk_installed_version is version_compare('7.2.2', '>=')

@@ -1,0 +1,78 @@
+---
+
+- name: check /etc/init.d/splunk
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_remove_init
+  stat:
+    path: "/etc/init.d/splunk"
+  register: check_splunk_init
+
+- name: disable boot-start
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_remove_init
+  command: "{{ splunk_home }}/bin/splunk disable boot-start"
+  when: check_splunk_init.stat.exists == true
+
+- name: find rc.d file to remove
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_remove_init
+  find:
+    paths: "/etc"
+    file_type: any
+    recurse: yes
+    follow: yes
+    patterns: '[KS][0-9]+splunk$'
+    use_regex: yes
+  register: init_files_to_delete
+
+- name: remove all rc.d files
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_remove_init
+  file:
+    path: "{{item.path}}"
+    state: absent
+  with_items: "{{ init_files_to_delete.files }}"
+
+- name: remove /etc/init.d/splunk
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_remove_init
+  file:
+    path: /etc/init.d/splunk
+    state: absent
+
+- name: commit changes to systemctl
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_remove_init
+  command: systemctl daemon-reload
+  when: use_systemctl == true
+
+- name: remove disable THP in /etc/rc.local
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_remove_init
+  blockinfile:
+    path: /etc/rc.local
+    state: absent
+    marker: "# {mark} ANSIBLE MANAGED BLOCK (THP)"
+
+- name: "remove /etc/security/limits.d/splunk.conf"
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_remove_init
+  file:
+    path: "/etc/security/limits.d/splunk.conf"
+    state: absent

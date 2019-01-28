@@ -1,7 +1,21 @@
 ---
 # This playbook uninstalls splunk enterprise or splunk universal forwarder
 
+- name: check for splunk systemd unit file {{splunk_service_name}}.service
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
+  stat:
+    path: "{{splunk_service_name}}.service"
+  register: check_systemd_unit_file
+  when: use_systemctl == true and use_splunk_systemd|default(false) == true
+
 - name: stop and disable splunk service
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
   service:
     name: "{{ item }}"
     state: stopped
@@ -10,12 +24,35 @@
     - "{{splunk_service_name}}.service"
   when: use_systemctl == true and use_splunk_systemd|default(false) == true
 
+- name: stop and disable {{splunk_service_name}} service
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
+  service:
+    name: "{{splunk_service_name}}.service"
+    state: stopped
+    enabled: no
+  when: use_systemctl == true and use_splunk_systemd|default(false) == true and check_systemd_unit_file.stat.exists == true
+
+- name: remove init.d scripts
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
+    - splunk_remove_init
+  include_tasks: remove_init_and_ulimit.yml
+
 - name: check for thp service file
   stat:
     path: "/etc/systemd/system/disable-thp.service"
   register: check_thp_systemd
 
 - name: stop and disable thp service
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
   service:
     name: "disable-thp.service"
     state: stopped
@@ -23,6 +60,10 @@
   when: use_systemctl == true and check_thp_systemd.stat.exists == true
 
 - name: check if splunk is running
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
   shell: "pgrep splunkd"
   register: grep_result
   check_mode: False
@@ -30,16 +71,28 @@
   changed_when: "grep_result.rc != 0"
 
 - name: stop splunk
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
   shell: "{{splunk_home}}/bin/splunk stop"
   become: yes
   become_user: "{{ splunk_user }}"
   when: grep_result.rc == 0
 
 - name: disable boot-start
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
   command: "{{ splunk_home }}/bin/splunk disable boot-start"
   when: use_systemctl == true and use_splunk_systemd|default(false) == true
 
 - name: remove systemd files
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
   file:
     path: /etc/systemd/system/{{item}}
     state: absent
@@ -48,27 +101,28 @@
     - "disable-thp.service"
 
 - name: commit changes to systemctl
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
   command: systemctl daemon-reload
   when: use_systemctl == true
 
-- name: remove disable THP in /etc/rc.local
-  blockinfile:
-    path: /etc/rc.local
-    state: absent
-    marker: "# {mark} ANSIBLE MANAGED BLOCK (THP)"
-
-- name: "remove /etc/security/limits.d/splunk.conf"
-  file:
-    path: "/etc/security/limits.d/splunk.conf"
-    state: absent
-
 - name: "remove /etc/sudoers.d/splunk"
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
   file:
     path: "/etc/sudoers.d/splunk"
     state: absent
 
 # Find all directories to remove, except lost+found
 - name: find files to remove all under {{splunk_home}}/
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
   find:
     paths: "{{splunk_home}}/"
     file_type: any
@@ -79,6 +133,10 @@
 
 # Remove as user splunk to prevent removing mounted directories
 - name: remove all under {{splunk_home}}/
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
   file:
     path: "{{item.path}}"
     state: absent
@@ -87,6 +145,10 @@
   become_user: "{{ splunk_user }}"
 
 # Do not remove this directory, since a mounted filesystem could be inside
+#  tags:
+#    - splunk
+#    - splunk_software
+#    - splunk_uninstall
 #- name: "remove {{ splunk_home }}"
 #  file:
 #    path: "{{ splunk_home }}"
