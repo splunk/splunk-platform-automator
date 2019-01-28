@@ -474,6 +474,14 @@ settings['splunk_hosts'].each do |splunk_host|
         else
           groups[groupname] = [splunk_host['name']]
         end
+        if (var == 'idxcluster' or var == 'shcluster') and splunk_host['site'] and (splunk_host['roles'].include? 'indexer' or splunk_host['roles'].include? 'search_head')
+          groupname = var+"_"+item+"_"+splunk_host['site']
+          if groups.has_key?(groupname)
+            groups[groupname].push(splunk_host['name'])
+          else
+            groups[groupname] = [splunk_host['name']]
+          end
+        end
       end
     end
   end
