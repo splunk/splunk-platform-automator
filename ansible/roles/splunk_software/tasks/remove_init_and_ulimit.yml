@@ -58,6 +58,15 @@
   command: systemctl daemon-reload
   when: use_systemctl == true
 
+- name: check /etc/rc.local
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_remove_init
+  stat:
+    path: "/etc/rc.local"
+  register: check_rc_local
+
 - name: remove disable THP in /etc/rc.local
   tags:
     - splunk
@@ -67,6 +76,7 @@
     path: /etc/rc.local
     state: absent
     marker: "# {mark} ANSIBLE MANAGED BLOCK (THP)"
+  when: check_rc_local.stat.exists == true
 
 - name: "remove /etc/security/limits.d/splunk.conf"
   tags:
