@@ -4,6 +4,7 @@
   tags:
     - splunk
     - splunk_software
+    - splunk_unit_file
   ini_file:
     path: "/etc/systemd/system/{{splunk_service_name}}.service"
     section: "{{ item.section }}"
@@ -19,5 +20,6 @@
   tags:
     - splunk
     - splunk_software
+    - splunk_unit_file
   command: systemctl daemon-reload
   when: use_systemctl == true

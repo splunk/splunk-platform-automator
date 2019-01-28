@@ -4,7 +4,7 @@
   tags:
     - splunk
     - splunk_software
-    - disable_thp
+    - splunk_disable_thp
   copy:
     src: "etc/systemd/system/disable-thp.service"
     dest: "/etc/systemd/system/disable-thp.service"
@@ -17,7 +17,7 @@
   tags:
     - splunk
     - splunk_software
-    - disable_thp
+    - splunk_disable_thp
   service:
     name: disable-thp
     state: started

@@ -3,6 +3,7 @@
 - name: Adding splunk sudoers file
   tags:
     - splunk
+    - splunk_software
     - splunk_sudoers
   template:
     src: etc/sudoers.d/splunk.j2

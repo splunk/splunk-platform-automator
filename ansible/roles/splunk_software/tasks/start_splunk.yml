@@ -4,6 +4,7 @@
   tags:
     - splunk
     - splunk_common
+    - splunk_start
   service:
     name: "{{splunk_service_name}}"
     state: started

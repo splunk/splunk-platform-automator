@@ -20,6 +20,7 @@
   tags:
     - splunk
     - splunk_software
+    - splunk_disable_thp
   blockinfile:
     path: /etc/rc.local
     insertbefore: "^exit 0"
@@ -38,6 +39,7 @@
   tags:
     - splunk
     - splunk_software
+    - splunk_ulimits
   template:
     src: "etc/security/limits.d/splunk.conf.j2"
     dest: "/etc/security/limits.d/splunk.conf"
@@ -50,6 +52,8 @@
   tags:
     - splunk
     - splunk_software
+    - splunk_ulimits
+    - splunk_disable_thp
   blockinfile:
     path: /etc/init.d/splunk
     marker: "# {mark} ANSIBLE MANAGED BLOCK (functions)"
@@ -81,6 +85,8 @@
   tags:
     - splunk
     - splunk_software
+    - splunk_ulimits
+    - splunk_disable_thp
   blockinfile:
     path: /etc/init.d/splunk
     marker: "    # {mark} ANSIBLE MANAGED BLOCK (start)"
@@ -94,6 +100,8 @@
   tags:
     - splunk
     - splunk_software
+    - splunk_ulimits
+    - splunk_disable_thp
   blockinfile:
     path: /etc/init.d/splunk
     marker: "    # {mark} ANSIBLE MANAGED BLOCK (restart)"

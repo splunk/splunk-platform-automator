@@ -4,6 +4,7 @@
   tags:
     - splunk
     - splunk_common
+    - splunk_stop
   service:
     name: "{{splunk_service_name}}"
     state: stopped
