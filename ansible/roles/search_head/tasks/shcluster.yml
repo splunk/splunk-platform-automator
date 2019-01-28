@@ -45,7 +45,7 @@
     - search_head
     - shcluster
   include_role:
-    name: splunk_common
+    name: splunk_software
     tasks_from: restart_splunk
   when: need_shcluster_init.rc == 0
 
