@@ -24,6 +24,7 @@
   blockinfile:
     path: /etc/rc.local
     insertbefore: "^exit 0"
+    create: yes
     marker: "# {mark} ANSIBLE MANAGED BLOCK (THP)"
     content: |
       #SPLUNK: disable THP at boot time
