@@ -1,0 +1,48 @@
+---
+
+- name: find systemd version
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_polkit
+    - splunk_sudoers
+  shell: "systemctl --version | grep -w systemd | cut -d' ' -f 2"
+  register: systemd_version_output
+
+- debug: var=systemd_version_output
+
+- name: add splunk polkit rules file
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_polkit
+  template:
+    src: etc/polkit-1/rules.d/10-splunk.rules.j2
+    dest: /etc/polkit-1/rules.d/10-{{ splunk_service_name }}.rules
+    owner: "root"
+    group: "root"
+    mode: 0644
+  when: systemd_version_output.stdout|int >= 226
+
+- name: remove splunk sudoers file
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_sudoers
+  file:
+    path: /etc/sudoers.d/splunk
+    state: absent
+  when: systemd_version_output.stdout|int >= 226
+
+- name: add splunk sudoers file
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_sudoers
+  template:
+    src: etc/sudoers.d/splunk.j2
+    dest: /etc/sudoers.d/splunk
+    owner: "root"
+    group: "root"
+    mode: 0440
+  when: systemd_version_output.stdout|int < 226
