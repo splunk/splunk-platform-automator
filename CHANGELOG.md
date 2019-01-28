@@ -6,15 +6,18 @@ Splunkenizer changes by release
 * Added option to run ansible independent from vagrant.
   * Create VM first without Ansible and run playbooks in parallel on the nodes. See [README.md](README.md#experimental-create-vm-first-without-ansible-and-run-playbooks-in-parallel-on-the-nodes)
   * More modularization in the code and playbooks
+  * Added playbook to remove the Splunk installation from nodes
+  * Added playbooks to stop/start/restart splunk
+  * Added playbook to uninstall the splunk software along with THP and ulimit settings
 * Support native systemd support introduced with Splunk Version 7.2.2
   * Added ulimit settings to native systemd service file
-  * Added suoders file to allow splunk user restart splunk service
+  * Create policy kit rule if systemd version 226 is available
+  * Create suoders file as workaround to allow splunk user restart splunk service, if systemd version is too low.
 * Added support for Ansible versions 2.7.x and removed Ansible version check
 * Update permissions of comment macro to be global
 * Moved python install on ubuntu to splunk_config file
 * Prepare support for windows nodes
 * Added option 'idxc_discovery_password' to setup indexer discovery
-* Added playbook to remove the Splunk installation from nodes
 
 ### Fixes
 
