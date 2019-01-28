@@ -7,6 +7,7 @@ splunk_is_installed: false
 splunk_user: splunk
 splunk_group: splunk
 splunk_install_dir: /opt
+splunk_backup_dir: '{{ splunk_install_dir }}/splunk_backup'
 # This var is coming from the calling role, otherwise it will determined
 #splunk_install_app: splunk
 splunk_service_name: splunk
