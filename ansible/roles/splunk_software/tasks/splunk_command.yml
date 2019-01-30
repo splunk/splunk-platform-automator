@@ -1,0 +1,19 @@
+---
+
+- name: "run Splunk command: 'splunk {{ splunk_command }}'"
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_command
+  command: '{{ splunk_home }}/bin/splunk {{ splunk_command|default("help") }} --answer-yes --no-prompt -auth {{splunk_admin_user|default("admin")}}:{{splunk_admin_password}}'
+  become: yes
+  become_user: "{{ splunk_user }}"
+  register: splunk_command_output
+
+- name: output from command
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_command
+  debug:
+    var: splunk_command_output.stdout_lines
