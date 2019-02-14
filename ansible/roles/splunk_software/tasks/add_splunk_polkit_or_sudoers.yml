@@ -9,8 +9,6 @@
   shell: "systemctl --version | grep -w systemd | cut -d' ' -f 2"
   register: systemd_version_output
 
-- debug: var=systemd_version_output
-
 - name: add splunk polkit rules file
   tags:
     - splunk
