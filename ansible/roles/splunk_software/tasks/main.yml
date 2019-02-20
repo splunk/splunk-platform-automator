@@ -25,7 +25,7 @@
   tags:
     - splunk
     - splunk_software
-  debug: msg='splunk is already installed under {{ splunk_home }}/bin/splunk'
+  debug: msg='splunk found as {{ splunk_home }}/bin/splunk'
   when: splunk_path.stat.exists
 
 - name: check for existing splunk.secret file
@@ -73,7 +73,6 @@
     - splunk_software
   include_tasks: update_splunk_service.yml
   when:
-    - splunk_install_app == 'splunk'
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
 
