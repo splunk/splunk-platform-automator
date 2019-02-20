@@ -92,11 +92,17 @@ defaults = {
     "splunk_systemd_services"=>{
       "splunk"=>{
         "Service"=>{
+          "ExecStart"=>"{{splunk_home}}/bin/splunk _internal_launch_under_systemd --accept-license --answer-yes --no-prompt",
           "LimitCORE"=>0,
           "LimitFSIZE"=>"infinity",
           "LimitDATA"=>"infinity",
           "LimitNPROC"=>20480,
           "LimitNOFILE"=>65536
+        }
+      },
+      "splunkforwarder"=>{
+        "Service"=>{
+          "ExecStart"=>"{{splunk_home}}/bin/splunk _internal_launch_under_systemd --accept-license --answer-yes --no-prompt"
         }
       }
     }

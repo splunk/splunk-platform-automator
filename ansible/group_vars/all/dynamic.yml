@@ -187,9 +187,9 @@ splunk_license_master: "{{groups.role_license_master|default([])|intersect(group
 # Systemd
 splunk_systemd_services_updates: >-
           {%- set res = [] -%}
-          {%- for section in splunk_systemd_services.splunk.keys()|list -%}
-            {%- for var in splunk_systemd_services.splunk[section].keys()|list -%}
-              {%- set ignored = res.extend([{'section': section, 'var': var, 'val': splunk_systemd_services.splunk[section][var] }]) -%}
-            {%- endfor -%}
-          {%- endfor -%}
-          {{ res }}
+          {%- for section in splunk_systemd_services[splunk_service_name].keys()|list -%}
+            {%- for var in splunk_systemd_services[splunk_service_name][section].keys()|list -%}
+              {%- set ignored = res.extend([{'section': section, 'var': var, 'val': splunk_systemd_services[splunk_service_name][section][var] }]) -%}
+              {%- endfor -%}
+              {%- endfor -%}
+              {{ res }}
