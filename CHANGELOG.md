@@ -20,6 +20,7 @@ Splunkenizer changes by release
 * Prepare support for windows nodes
 * Added option 'idxc_discovery_password' to setup indexer discovery
 * Support for multiple license files
+* Add option general.url_locale (ex. en-US) to be added in index.html
 
 ### Fixes
 
