@@ -1,0 +1,14 @@
+---
+# add a splunk license if not existing
+
+- name: add splunk license to license master
+  hosts: role_license_master
+  become: yes
+  become_user: root
+
+  tasks:
+
+    - name: call license from role license_master
+      include_role:
+        name: license_master
+        tasks_from: license

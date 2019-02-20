@@ -247,10 +247,18 @@ splunk_environments.each do |splunkenv|
   end
   # Check for Splunk license file
   if !splunkenv['splunk_license_file'].nil?
-    if !File.file?(dir+"/"+splunk_dirs['splunk_software_dir']+"/"+splunkenv['splunk_license_file'])
-      print "ERROR: Cannot find license file #{splunk_dirs['splunk_software_dir']+"/"+splunkenv['splunk_license_file']} \n\n"
-      print "Comment variable 'splunk_license_file' in #{config_file} if no license available\n"
-      exit 2
+    tmparray = []
+    if splunkenv['splunk_license_file'].kind_of?(Array)
+      tmparray = splunkenv['splunk_license_file']
+    else
+      tmparray = [splunkenv['splunk_license_file']]
+    end
+    tmparray.each do |license_file|
+      if !File.file?(dir+"/"+splunk_dirs['splunk_software_dir']+"/"+license_file)
+        print "ERROR: Cannot find license file #{splunk_dirs['splunk_software_dir']+"/"+license_file} \n\n"
+        print "Comment variable 'splunk_license_file' in #{config_file} if no license available\n"
+        exit 2
+      end
     end
   end
 end

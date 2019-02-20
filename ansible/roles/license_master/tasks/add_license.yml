@@ -1,0 +1,54 @@
+---
+# This playbook installs a splunk license
+
+- name: get guid of source license file
+  tags:
+    - splunk
+    - license_master
+  xml:
+    path: "{{ splunk_software }}/{{ splunk_license_file_name }}"
+    xpath: /license/payload/guid
+    content: 'text'
+  register: lic_guid_src
+  delegate_to: localhost
+  become: no
+
+- name: "check for license guid {{ lic_guid_src.matches[0].guid }} in splunk"
+  tags:
+    - splunk
+    - license_master
+  shell: "{{ splunk_home }}/bin/splunk list license -auth admin:{{splunk_admin_password}} | grep {{ lic_guid_src.matches[0].guid }}"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  register: grep_result
+  check_mode: False
+  failed_when: "grep_result.rc > 1"
+  changed_when: "grep_result.rc == 1"
+
+- name: copy license file to tmp location
+  tags:
+    - splunk
+    - license_master
+  copy:
+    src: "{{ splunk_software }}/{{ splunk_license_file_name }}"
+    dest: "/tmp/{{ splunk_license_file_name }}"
+  when: "grep_result.rc == 1"
+
+- name: add license file to splunk
+  tags:
+    - splunk
+    - license_master
+  command: "{{ splunk_home }}/bin/splunk add license /tmp/{{ splunk_license_file_name }} -auth admin:{{splunk_admin_password}}"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  when: "grep_result.rc == 1"
+  notify: restart splunk
+
+- name: remove license file from tmp location
+  tags:
+    - splunk
+    - license_master
+  file:
+    path: "/tmp/{{ splunk_license_file_name }}"
+    state: absent
+  when: "grep_result.rc == 1"
