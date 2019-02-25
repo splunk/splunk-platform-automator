@@ -108,9 +108,10 @@ defaults = {
     }
   },
   "splunk_apps"=>{
-    "splunk_save_baseconfig_apps_dirs"=>"apps",
+    "splunk_save_baseconfig_apps_dir"=>"apps",
     "splunk_save_baseconfig_apps"=>false,
-    "splunk_save_serverclass"=>false
+    "splunk_save_serverclass"=>false,
+    "splunk_apps_dir"=>"../app_repo"
   }
 }
 
