@@ -80,8 +80,13 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
    1. [Splunk Enterprise](http://www.splunk.com/en_us/download/splunk-enterprise.html)
    1. [Splunk Universal Forwarder](http://www.splunk.com/en_us/download/universal-forwarder.html)
 1. Download Splunk Professional Services Best Practices Base Config Apps and extract them into the `Software` directory
+<<<<<<< HEAD
    1. [Configurations Base Apps](https://drive.google.com/open?id=107qWrfsv17j5bLxc21ymTagjtHG0AobF)
    1. [Configurations Cluster Apps](https://drive.google.com/open?id=10aVQXjbgQC99b9InTvncrLFWUrXci3gz)
+=======
+  1. [Configurations Base Apps](https://drive.google.com/open?id=107qWrfsv17j5bLxc21ymTagjtHG0AobF)
+  1. [Configurations Cluster Apps](https://drive.google.com/open?id=10aVQXjbgQC99b9InTvncrLFWUrXci3gz)
+>>>>>>> 690137e6f08870bff287dcc80db87c998b517e58
 1. If you have a Splunk License file, link it to the name `Splunk_Enterprise.lic` inside the `Software` directory.
 
 Your directory structure should now look like this:
