@@ -13,6 +13,7 @@ Splunkenizer changes by release
 * Support native systemd support introduced with Splunk Version 7.2.2
   * Added ulimit settings to native systemd service file
   * Create policy kit rule if systemd version 226 is available
+  * Support polkit version 0.105 policy file.
   * Create suoders file as workaround to allow splunk user restart splunk service, if systemd version is too low.
 * Added support for Ansible versions 2.7.x and removed Ansible version check
 * Update permissions of comment macro to be global
