@@ -1,5 +1,5 @@
 polkit.addRule(function(action, subject) {
-    if (action.id == "org.freedesktop.systemd1.manage-units") {
+    if (action.id == "org.freedesktop.systemd1.manage-units" && subject.user == "{{ splunk_user }}") {
         if (action.lookup("unit") == "{{ splunk_service_name }}.service") {
             var verb = action.lookup("verb");
             if (verb == "start" || verb == "stop" || verb == "restart") {
