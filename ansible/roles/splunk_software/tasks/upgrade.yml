@@ -1,0 +1,288 @@
+---
+# playbook fot upgrading splunk
+
+- name: checking if splunk is installed
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  stat:
+    path: "{{ splunk_home }}/bin/splunk"
+  register: splunk_path
+
+- name: splunk is installed here
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  debug: msg='splunk found as {{ splunk_home }}/bin/splunk'
+  when: splunk_path.stat.exists
+
+- name:
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  block:
+    - name: "end play if splunk is not installed"
+      debug:
+        msg: "No Splunk installation found, ending"
+
+    - meta: end_play
+  when: splunk_path.stat.exists == false
+
+- name: find target version
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  include_tasks: find_target_version.yml
+
+- name:
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  block:
+    - name: "end play if nothing to upgrade"
+      debug:
+        msg: "Installed version '{{ splunk_installed_version }}' is equal to upgrade version '{{ splunk_target_version }}' -> nothing to upgrade, ending"
+
+    - meta: end_play
+  when: splunk_installed_version == splunk_target_version
+
+- name:
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  debug:
+    msg: "Upgrade {{ splunk_install_app }} from version '{{ splunk_installed_version }}' to version '{{ splunk_target_version }}'"
+
+- name: backup splunk etc
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  include_tasks: backup_splunk_etc.yml
+
+- name: stop splunk by service control
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  include_tasks: stop_splunk.yml
+
+#- name: disable systemd control
+#  tags:
+#    - splunk
+#    - splunk_software
+#    - splunk_upgrade
+#  lineinfile:
+#    path: "{{ splunk_home }}/etc/splunk-launch.conf"
+#    regexp: '^(SPLUNK_SERVER_NAME=\w+)$'
+#    line: '#\1'
+#    backrefs: yes
+#  become: yes
+#  become_user: "{{ splunk_user }}"
+#  when:
+#    - use_systemctl == true
+#    - use_splunk_systemd|default(false) == true
+
+#- name: accept license and start splunk to run upgrade procedures
+#  tags:
+#    - splunk
+#    - splunk_software
+#    - splunk_upgrade
+#  command: "{{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt"
+#  register: splunk_upgrade_output
+#  become: yes
+#  become_user: "{{ splunk_user }}"
+
+#- name: output from splunk upgrade
+#  tags:
+#    - splunk
+#    - splunk_software
+#    - splunk_upgrade
+#  debug:
+#    var: splunk_upgrade_output.stdout_lines
+
+#- name: "write upgrade output into file in {{ splunk_backup_dir }}"
+#  tags:
+#    - splunk
+#    - splunk_software
+#    - splunk_command
+#  copy:
+#    dest: "{{ splunk_backup_dir }}/upgrade_{{ splunk_install_app }}_v{{ splunk_installed_version }}_to_v{{ splunk_target_version }}_{{ansible_date_time.date|replace('-','')}}_{{ansible_date_time.time|replace(':','')}}.txt"
+#    content: "{{ splunk_upgrade_output.stdout }}"
+
+#- name: stop splunk
+#  tags:
+#    - splunk
+#    - splunk_software
+#    - splunk_upgrade
+#  command: "{{ splunk_home }}/bin/splunk stop --answer-yes --no-prompt"
+#  become: yes
+#  become_user: "{{ splunk_user }}"
+
+#- name: enable systemd control
+#  tags:
+#    - splunk
+#    - splunk_software
+#    - splunk_upgrade
+#  lineinfile:
+#    path: "{{ splunk_home }}/etc/splunk-launch.conf"
+#    regexp: '^#(SPLUNK_SERVER_NAME=\w+)$'
+#    line: '\1'
+#    backrefs: yes
+#  become: yes
+#  become_user: "{{ splunk_user }}"
+#  when:
+#    - use_systemctl == true
+#    - use_splunk_systemd|default(false) == true
+
+- name: check /etc/init.d/splunk
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  stat:
+    path: "/etc/init.d/splunk"
+  register: check_splunk_init
+
+- name: set boot_start_migration variable
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  set_fact:
+    boot_start_migration: true
+  when:
+    - check_splunk_init.stat.exists == true
+    - splunk_target_version is version_compare('7.2.2', '>=')
+
+- name: add --accept-license start function in /etc/init.d/splunk
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  lineinfile:
+    path: "/etc/init.d/splunk"
+    regexp: '^(.* start --no-prompt --answer-yes)$'
+    line: '\1 --accept-license'
+    backrefs: yes
+  when:
+    - check_splunk_init.stat.exists == true
+    - use_splunk_systemd|default(false) == false
+    - boot_start_migration|default(false) == false
+
+- name: commit changes to systemctl
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  command: systemctl daemon-reload
+  when:
+    - use_systemctl == true
+    - check_splunk_init.stat.exists == true
+    - use_splunk_systemd|default(false) == false
+    - boot_start_migration|default(false) == false
+
+- name: remove init.d, ulimit settings and THP scripts
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  include_tasks: remove_init_and_ulimit.yml
+  when: boot_start_migration|default(false) == true
+
+- name: upload and extract the splunk software
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  include_tasks: upload_and_extract.yml
+  when: splunk_path.stat.exists == true
+
+- name: set splunk service name
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  include_tasks: set_splunk_service_name.yml
+
+- name: one time manual start to run upgrade procedures
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  command: "{{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  when: boot_start_migration|default(false) == true
+
+- name: stop again to let systemd take over
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  command: "{{ splunk_home }}/bin/splunk stop"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  when: boot_start_migration|default(false) == true
+
+- name: enable boot-start
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  command: "{{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }} {{splunk_unit_file_name|default()}} --accept-license --answer-yes --no-prompt"
+  when: boot_start_migration|default(false) == true
+
+- name: call check_systemd_file from splunk_common
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  include_role:
+    name: splunk_common
+    tasks_from: check_systemd_file
+
+- name: call update_splunk_service
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  include_tasks: update_splunk_service.yml
+  when:
+    - use_systemctl == true
+    - use_splunk_systemd|default(false) == true
+
+- name: call add_disable_thp_service
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_disable_thp
+  include_tasks: add_disable_thp_service.yml
+  when:
+    - splunk_install_app == 'splunk'
+    - use_systemctl == true
+    - use_splunk_systemd|default(false) == true
+
+- name: call add_splunk_polkit_or_sudoers
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  include_tasks: add_splunk_polkit_or_sudoers.yml
+  when:
+    - use_systemctl == true
+    - use_splunk_systemd|default(false) == true
+
+- name: start splunk by service control
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  include_tasks: start_splunk.yml

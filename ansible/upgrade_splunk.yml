@@ -1,0 +1,14 @@
+---
+# This playbook upgrades the splunk software
+
+- name: upgrade splunk software
+  hosts: role_cluster_master,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_master,role_monitoring_console,role_search_head,role_universal_forwarder
+  become: yes
+  become_user: root
+
+  tasks:
+
+    - name: call upgrade splunk from role splunk_software
+      include_role:
+        name: splunk_software
+        tasks_from: upgrade

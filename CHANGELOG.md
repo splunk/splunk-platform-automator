@@ -10,6 +10,7 @@ Splunkenizer changes by release
   * Added playbooks to stop/start/restart splunk
   * Added playbook to uninstall the splunk software along with THP and ulimit settings
   * Added playbook to run splunk commands
+  * Added playbook to upgrade the Splunk software (not cluster aware)
 * Support native systemd support introduced with Splunk Version 7.2.2
   * Added ulimit settings to native systemd service file
   * Create policy kit rule if systemd version 226 is available
