@@ -1,21 +1,13 @@
 # Append PATH
 export SPLUNK_HOME={{ splunk_home }}
-export PATH=$PATH:$SPLUNK_HOME/bin:/Splunk_Stuff/bin
+export PATH=$PATH:$SPLUNK_HOME/bin
 
 # Aliases
-if [ "$USER" = "{{ splunk_user }}" ]; then
-	alias cs="cd $SPLUNK_HOME"
-	alias ce="cd $SPLUNK_HOME/etc"
-	alias ca="cd $SPLUNK_HOME/etc/apps"
-	alias cm="cd $SPLUNK_HOME/etc/master-apps"
-	alias ch="cd $SPLUNK_HOME/etc/shcluster/apps"
-	alias cdd="cd $SPLUNK_HOME/etc/deployment-apps"
-	alias tl="tail -f $SPLUNK_HOME/var/log/splunk/splunkd.log"
-else
-	alias splunk="s {{ splunk_user }}"
-	alias s="sudo -i -u {{ splunk_user }}"
-fi
-
-# Splunk SDK
-export PYTHONPATH=~/splunk-sdk-python-1.6.0
-
+alias cs="cd $SPLUNK_HOME"
+alias ce="cd $SPLUNK_HOME/etc"
+alias ca="cd $SPLUNK_HOME/etc/apps"
+alias cm="cd $SPLUNK_HOME/etc/master-apps"
+alias ch="cd $SPLUNK_HOME/etc/shcluster/apps"
+alias cdd="cd $SPLUNK_HOME/etc/deployment-apps"
+alias cdl="cd $SPLUNK_HOME/var/log/splunk"
+alias tl="tail -f $SPLUNK_HOME/var/log/splunk/splunkd.log"
