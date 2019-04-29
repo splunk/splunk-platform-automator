@@ -13,7 +13,7 @@
     - deployer
   shell: "{{ splunk_home }}/bin/splunk btool server list shclustering | egrep -e '^pass4SymmKey'"
   register: grep_result
-  check_mode: False
+  check_mode: no
   failed_when: "grep_result.rc > 1"
   changed_when: "grep_result.rc == 1"
 

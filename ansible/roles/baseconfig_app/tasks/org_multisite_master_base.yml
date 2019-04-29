@@ -52,6 +52,7 @@
     - splunk_baseconfig
     - org_multisite_master_base
   shell: "{{ splunk_home }}/bin/splunk btool server list clustering | grep -w replication_factor | cut -d= -f 2"
+  check_mode: no
   become: yes
   become_user: "{{ splunk_user }}"
   register: replication_factor
@@ -81,6 +82,7 @@
     - splunk_baseconfig
     - org_multisite_master_base
   shell: "{{ splunk_home }}/bin/splunk btool server list clustering | grep -w search_factor | cut -d= -f 2"
+  check_mode: no
   become: yes
   become_user: "{{ splunk_user }}"
   register: search_factor

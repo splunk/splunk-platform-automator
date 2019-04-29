@@ -101,6 +101,7 @@
     - shcluster
     - shc_add_member
   shell: "{{ splunk_home }}/bin/splunk show servername -auth admin:{{ splunk_admin_password }} | cut -d: -f 2 | tr -d ' '"
+  check_mode: False
   register: splunk_servername
   when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
 
