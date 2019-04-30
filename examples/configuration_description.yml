@@ -58,6 +58,10 @@ splunk_defaults:
 #  splunk_indexes:
 #    - test1
 #    - test2
+# If you deploy to a cloud like AWS you may want to set the serverName variable
+# and/or default-hostname to the inventory name
+#  splunk_set_servername: true
+#  splunk_set_default_hostname: true
 # Turn of loginpage info, if not needed
 #  splunk_loginpage_print_userpw: false
 #  splunk_loginpage_print_roles: false

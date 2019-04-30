@@ -47,6 +47,8 @@ splunk_defaults:
 #  splunk_indexes:
 #    - test1
 #    - test2
+  splunk_set_servername: true
+  splunk_set_default_hostname: true
   splunk_loginpage_print_userpw: false
 #  splunk_loginpage_print_roles: false
 

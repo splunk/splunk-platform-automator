@@ -82,6 +82,12 @@
     - splunk_software
   include_tasks: ui_config.yml
 
+- name: "host and servername settings"
+  tags:
+    - splunk
+    - splunk_software
+  include_tasks: host_servername_config.yml
+
 - name: final splunk restart after base install
   tags:
     - splunk

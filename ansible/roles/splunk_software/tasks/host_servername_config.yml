@@ -1,0 +1,34 @@
+---
+# This playbook configures host and servername settings
+
+- name: set serverName to {{inventory_hostname}}
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_set_servername
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/server.conf"
+    section: general
+    option: "serverName"
+    value: "{{inventory_hostname}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  when: splunk_set_servername|default(false) == true
+
+- name: set default-hostname to {{inventory_hostname}}
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_set_default_hostname
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/inputs.conf"
+    section: default
+    option: "host"
+    value: "{{inventory_hostname}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  when: splunk_set_default_hostname|default(false) == true
