@@ -283,6 +283,7 @@ if settings.has_key?("virtualbox")
     print "ERROR: Plugin for virtualbox provider is missing, install with 'vagrant plugin install vagrant-vbguest'.\n"
     exit 2
   end
+  defaults['os']['enable_time_sync_cron'] = true
 elsif settings.has_key?("aws")
   provider = "aws"
   if !Vagrant.has_plugin?("vagrant-aws")

@@ -36,6 +36,8 @@ os:
   remote_command: 'which python || (sudo apt-get update; sudo apt-get -y install python)'
   # The timezone defaults to the vagrant host timezone, but you can set another one here
   time_zone: "Europe/Zurich"
+  # If you want to manually control the time sync cron
+#  enable_time_sync_cron: false # Default true for virtualbox
   # Install additional packages
   packages:
     - unzip

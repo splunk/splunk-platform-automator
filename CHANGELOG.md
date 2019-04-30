@@ -30,6 +30,7 @@ Splunkenizer changes by release
 
 * Fixed 'vbguest' error, when using AWS only
 * Fixed some base_config installations on single node configs with additional roles
+* Disable time sync cron for AWS by default
 
 ## 1.1.1 - 2018-10-18
 

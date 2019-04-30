@@ -17,4 +17,6 @@
 
 - name:
   import_tasks: fix_time_sync.yml
-  when: ansible_os_family|lower != 'windows'
+  when:
+    - ansible_os_family|lower != 'windows'
+    - enable_time_sync_cron|default(false) == true
