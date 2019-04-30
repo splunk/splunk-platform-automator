@@ -852,9 +852,9 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
           # Remove host_vars dir for this host
           destroy_trigger.push("#{host_vars_dir}/#{server['name']}")
         end
-        if File.directory?("#{splunk_apps['splunk_save_baseconfig_apps_dirs']}/#{server['name']}")
+        if File.directory?("#{splunk_apps['splunk_save_baseconfig_apps_dir']}/#{server['name']}")
           # Remove apps dir for this host
-          destroy_trigger.push("#{splunk_apps['splunk_save_baseconfig_apps_dirs']}/#{server['name']}")
+          destroy_trigger.push("#{splunk_apps['splunk_save_baseconfig_apps_dir']}/#{server['name']}")
         end
         if destroy_trigger.length > 0
           trigger.run = { inline: "rm -r #{destroy_trigger.join(" ")}" }
