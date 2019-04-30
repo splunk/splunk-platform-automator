@@ -97,7 +97,10 @@ defaults = {
           "LimitFSIZE"=>"infinity",
           "LimitDATA"=>"infinity",
           "LimitNPROC"=>20480,
-          "LimitNOFILE"=>65536
+          "LimitNOFILE"=>65536,
+          "KillMode"=>"mixed",
+          "KillSignal"=>"SIGINT",
+          "TimeoutStopSec"=>"10min"
         }
       },
       "splunkforwarder"=>{
