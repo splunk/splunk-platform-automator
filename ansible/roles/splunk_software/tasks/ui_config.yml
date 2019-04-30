@@ -7,7 +7,7 @@
     - splunk_software
     - ui_config
     - first_login_off
-  stat: 
+  stat:
     path: "{{ splunk_home }}/etc/.ui_login"
   register: splunk_first_login
   when: splunk_install_app == "splunk"
@@ -26,7 +26,27 @@
     mode: 0600
   when: splunk_install_app == "splunk" and not splunk_first_login.stat.exists
 
-- name: add username and password info to login page
+- name: set user/passwd info to login page
+  tags:
+    - splunk
+    - splunk_software
+    - ui_config
+    - splunk_user_password
+  set_fact:
+    splunk_loginpage_user_info: "<br><br><b>User: </b>admin<br><b>Password: </b>{{splunk_admin_password}}"
+  when: splunk_loginpage_print_userpw|default(true) == true
+
+- name: set splunk roles info to login page
+  tags:
+    - splunk
+    - splunk_software
+    - ui_config
+    - splunk_roles_info
+  set_fact:
+    splunk_loginpage_role_info: "<br><b>Splunk Roles: </b>{{splunk_roles}}"
+  when: splunk_loginpage_print_roles|default(true) == true
+
+- name: add user and roles info to login page
   tags:
     - splunk
     - splunk_software
@@ -36,8 +56,9 @@
     path: "{{ splunk_home }}/etc/system/local/web.conf"
     section: settings
     option: "login_content"
-    value: "<big><b>Hostname: </b>{{inventory_hostname}}<br><b>User: </b>admin<br><b>Password: </b>{{splunk_admin_password}}<br><br><b>Splunk Roles: </b>{{splunk_roles}}</big>"
+    value: "<big><b>Hostname: </b>{{inventory_hostname}}{{splunk_loginpage_role_info|default()}}{{splunk_loginpage_user_info|default()}}</big>"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
+  notify: restart splunk
   when: splunk_install_app == "splunk"

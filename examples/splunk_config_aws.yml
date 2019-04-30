@@ -47,6 +47,8 @@ splunk_defaults:
 #  splunk_indexes:
 #    - test1
 #    - test2
+  splunk_loginpage_print_userpw: false
+#  splunk_loginpage_print_roles: false
 
   # Enable ssl by default to secure internet facing connections.
   splunk_ssl:

@@ -23,6 +23,7 @@ Splunkenizer changes by release
 * Added option 'idxc_discovery_password' to setup indexer discovery
 * Support for multiple license files
 * Add option general.url_locale (ex. en-US) to be added in index.html
+* Added options to turn off login page info (ex. in AWS)
 
 ### Fixes
 

@@ -58,6 +58,9 @@ splunk_defaults:
 #  splunk_indexes:
 #    - test1
 #    - test2
+# Turn of loginpage info, if not needed
+#  splunk_loginpage_print_userpw: false
+#  splunk_loginpage_print_roles: false
 
 # Enable SSL for web, inputs and outputs. Own certs can be provided and have to be put
 # inside Splunkenizer/auth directory. If own_certs=false the Splunk internal self-signed
