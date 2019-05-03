@@ -25,6 +25,7 @@ Splunkenizer changes by release
 * Add option general.url_locale (ex. en-US) to be added in index.html
 * Added options to turn off login page info (ex. in AWS)
 * Added options to force inventory name set as serverName and/or host (ex. in AWS)
+* Added option to set os hostname (ex. in AWS)
 
 ### Fixes
 

@@ -2,6 +2,10 @@
 # Main playbook for this role
 
 - name:
+  import_tasks: set_hostname.yml
+  when: ansible_os_family|lower != 'windows'
+
+- name:
   import_tasks: packages.yml
   when: ansible_os_family|lower != 'windows'
 

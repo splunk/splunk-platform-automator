@@ -1,0 +1,10 @@
+---
+# This playbook sets the os hostname
+
+- name: set os hostname to {{ inventory_hostname }}
+  tags:
+    - common
+    - hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+  when: set_hostname|default(false) == true
