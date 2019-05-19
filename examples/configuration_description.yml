@@ -116,7 +116,7 @@ splunk_dirs:
 
 splunk_apps:
   # Location where to save the base config apps on the Ansible host.
-  #splunk_save_baseconfig_apps_dirs: apps
+  #splunk_save_baseconfig_apps_dir: apps
   # Save a copy of all the baseconfig apps
   splunk_save_baseconfig_apps: true
   # Save a copy of the serverclass file
