@@ -134,7 +134,7 @@ When building virtual machines (for virtualbox) the first time it will pull an o
 vagrant up
 ```
 
-### Experimental: Create VM first without Ansible and run playbooks in parallel on the nodes
+### Optional, but recommended: Create VM first without Ansible and run playbooks in parallel on the nodes
 Since Splunkenizer can be used for existing servers as well, the creation of the virtual machines and the installation/configuration of Splunk will be separated in future versions. I started this in the code now and you can already make use of this to speed up the process even more.
 
 To disable running Ansible from vagrant directly, touch this file:
@@ -148,6 +148,8 @@ The `vagrant up` command only creates the virtual machines. To deploy Splunk aft
 ```
 ansible-playbook ansible/deploy_site.yml
 ```
+
+**Important Note:** Always run `vagrant status` after updating the `splunk_config.yml` file, otherwise the changes are not populated to the Ansible inventory.
 
 To run both steps with one command use:
 
