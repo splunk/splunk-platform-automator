@@ -113,7 +113,7 @@ Your directory structure should now look like this:
 
 # Building Windows Virtual Machine Template
 
-To build your own windows vagrant image follow the [AWS example](docs/Setup_Windows_Box.md)
+To build your own windows vagrant image follow [Setup Windows Vagrant image](docs/Setup_Windows_Box.md)
 
 # Framework Usage
 
