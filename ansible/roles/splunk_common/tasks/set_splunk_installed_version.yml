@@ -28,7 +28,7 @@
   debug: msg='found {{ splunk_install_app }} version {{ splunk_installed_version }}'
   when: version_output.stdout is defined
 
-- name: set splunk systemd service name
+- name: set splunkforwarder systemd service name
   tags:
     - splunk
     - splunk_software
