@@ -1,0 +1,127 @@
+---
+# This playbook installs the windows universal forwarder
+
+- name: find splunk archive files
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  find:
+    path: "{{splunk_software}}/"
+    pattern: "splunkforwarder-*-*-x64-release.msi"
+    file_type: file
+    recurse: no
+  register: splunk_archive_files
+  delegate_to: localhost
+  become: no
+
+- name: find latest splunk version
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  set_fact:
+    splunk_version: "{{splunk_archive_files.files|sort(attribute='path')|map(attribute='path')|list|last|basename|regex_replace('.*-([0-9]+.[0-9]+.[0-9]+)-.*', '\\1')}}"
+  when: splunk_version == 'latest' and splunk_archive_files.files is defined
+
+- name: get splunk archive for given version
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  set_fact:
+    splunk_archive: '{{splunk_archive_files.files|map(attribute="path")|list|select("match",".*"+splunk_version+".*")|list}}'
+  when: splunk_archive_files.files is defined
+
+- name:
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  debug:
+    msg: "Using Splunk archive: {{splunk_archive.0}}"
+  when: splunk_archive is defined
+
+- name: upload splunk archive from ansible host
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  win_copy:
+    src: "{{splunk_archive.0}}"
+    dest: 'C:\tmp\splunkforwarder.msi'
+  when: splunk_download is not defined or
+        (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == false) or
+        (splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == false)
+
+- name: define splunk archive download url
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  set_fact:
+    splunk_url: 'https://www.splunk.com/bin/splunk/DownloadActivityServlet?architecture=x86_64&platform=windows&version={{splunk_version}}&product={%- if splunk_install_app == "splunk" -%}splunk{%- else -%}universalforwarder{%- endif -%}&filename={{splunk_archive.0|basename}}&wget=true'
+  when: splunk_download is defined and
+        (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
+        splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
+
+- name: download the splunk archive from splunk.com
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  win_get_url:
+    url: "{{ splunk_url }}"
+    dest: 'C:\tmp\splunkforwarder.msi'
+  when: splunk_download is defined and
+        (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
+        splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
+
+- name: install splunk archive
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  win_package:
+    path: 'C:\tmp\splunkforwarder.msi'
+    state: present
+    arguments:
+    - AGREETOLICENSE=yes
+    - /quiet
+    - LAUNCHSPLUNK=0
+#    - INSTALLDIR="{{ splunk_home }}"
+
+- name: remove splunk install archive
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  win_file:
+    path: 'C:\tmp\splunkforwarder.msi'
+    state: absent
+
+#- name: find installed splunk version
+#  tags:
+#    - splunk
+#    - splunk_enterprise
+#  shell: 'grep -w VERSION {{ splunk_home }}/etc/splunk.version | cut -d= -f 2'
+#  register: version_output
+#  when: splunk_archive_files.files is not defined
+
+#- name: set splunk_version variable
+#  tags:
+#    - splunk
+#    - splunk_enterprise
+#  set_fact:
+#    splunk_version: '{{ version_output.stdout }}'
+#  when: version_output.stdout is defined
+
+- name: copy shared splunk.secret file
+  tags:
+    - splunk
+    - universal_forwarder_windows
+    - splunk_secret
+  win_copy:
+    src: "{{ splunk_auth_dir }}/{{ splunk_install_app }}_splunk.secret"
+    dest: "{{ splunk_home }}/etc/auth/splunk.secret"
+  when: splunk_secret_share[splunk_install_app] == true and splunk_secret_file.stat.exists == true
+
+- name: enable and start splunk service
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  win_service:
+    name: "{{ splunk_service_name }}"
+    start_mode: auto
+    state: started

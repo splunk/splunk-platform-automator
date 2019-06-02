@@ -1,0 +1,11 @@
+---
+# Variables for this role
+
+splunk_install_dir: 'C:\Program Files'
+splunk_install_app: splunkforwarder
+splunk_service_name: 'SplunkForwarder Service'
+splunk_home: '{{splunk_install_dir}}/SplunkUniversalForwarder'
+app_path: '{{splunk_home}}/etc/apps'
+splunk_user: splunk
+splunk_group: splunk
+app_dest_name: "{{app_name|replace('org_', splunk_app_prefix+'_')}}"

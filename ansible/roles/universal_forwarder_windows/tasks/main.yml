@@ -1,0 +1,68 @@
+---
+# Main playbook for this role
+
+- name: start role tasks
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  debug: msg="role '{{ role_name }}' start"
+
+- name: enable remote desktop
+  tags:
+    - universal_forwarder_windows
+    - enable_rdp
+  include_tasks: enable_rdp.yml
+
+- name: "check for splunk fresh install"
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  win_stat: path={{ splunk_home }}
+  register: splunk_stat
+
+- name: checking if splunk is installed
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  win_stat:
+    path: "{{ splunk_home }}/bin"
+  register: splunk_path
+
+- name: splunk is installed here
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  debug: msg='splunk is already installed under {{ splunk_home }}/bin/splunk'
+  when: splunk_path.stat.exists
+
+- name: "install the splunk software"
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  include_tasks: install.yml
+  when: splunk_path.stat.exists == false
+
+- name: "config the splunk software"
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  include_tasks: config.yml
+
+#- name: create staging dir
+#  file:
+#    path: '{{splunk_save_baseconfig_apps_dir}}/stage'
+#    state: directory
+#  delegate_to: localhost
+
+#- name: stage baseconfig app org_all_deploymentclient
+#  tags:
+#    - splunk
+#    - splunk_baseconfig
+#    - universal_forwarder
+#    - org_all_deploymentclient
+#  include_role:
+#    name: baseconfig_app
+#  vars:
+#    app_name: 'org_all_deploymentclient'
+#    app_path: '{{splunk_save_baseconfig_apps_dirs}}/stage'
+#  delegate_to: localhost

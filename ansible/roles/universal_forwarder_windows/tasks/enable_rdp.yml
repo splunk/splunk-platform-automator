@@ -1,0 +1,28 @@
+---
+# This playbook installs the windows universal forwarder
+
+- name: Firewall rule to allow RDP on TCP port 3389
+  tags:
+    - splunk
+    - universal_forwarder_windows
+    - enable_rdp
+  win_firewall_rule:
+    name: Remote Desktop
+    localport: 3389
+    action: allow
+    direction: in
+    protocol: tcp
+    profiles: private
+    state: present
+    enabled: yes
+
+- name: enable remote desktop service
+  tags:
+    - splunk
+    - universal_forwarder_windows
+    - enable_rdp
+  win_regedit:
+    path: 'HKLM:\System\CurrentControlSet\Control\Terminal Server'
+    name: fDenyTSConnections
+    data:
+    type: dword

@@ -1,0 +1,47 @@
+---
+# This playbook configures the windows universal forwarder
+
+- name: find path to baseconfig app
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - universal_forwarder_windows
+    - org_all_deploymentclient
+  become: no
+  find:
+    path: "{{ splunk_baseconfig }}/"
+    pattern: "org_all_deploymentclient"
+    file_type: directory
+    recurse: yes
+  register: baseapp_dir
+  ignore_errors: True
+  delegate_to: localhost
+
+- name: apply baseconfig app org_all_deploymentclient
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - universal_forwarder_windows
+    - org_all_deploymentclient
+  win_copy:
+    src: "{{ baseapp_dir.files.0.path }}/"
+    dest: "{{ app_path }}/{{ app_dest_name }}"
+  vars:
+    app_name: 'org_all_deploymentclient'
+    app_path: '{{splunk_home}}/etc/apps'
+  notify: restart splunk
+
+- name: "(org_all_deploymentclient) setting deployment server"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - universal_forwarder_windows
+    - org_all_deploymentclient
+  win_lineinfile:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/deploymentclient.conf"
+    regexp: '^targetUri ='
+    line: 'targetUri = {{splunk_deployment_server|first}}:8089'
+  vars:
+    app_name: 'org_all_deploymentclient'
+    app_path: '{{splunk_home}}/etc/apps'
+  notify: restart splunk

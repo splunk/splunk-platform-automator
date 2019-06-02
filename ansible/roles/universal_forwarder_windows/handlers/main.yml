@@ -1,0 +1,7 @@
+- name: restart splunk
+  tags:
+    - splunk
+    - universal_forwarder_windows
+  win_service:
+    name: "{{splunk_service_name}}"
+    state: restarted

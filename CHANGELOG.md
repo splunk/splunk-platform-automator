@@ -27,6 +27,8 @@ Splunkenizer changes by release
 * Added options to turn off login page info (ex. in AWS)
 * Added options to force inventory name set as serverName and/or host (ex. in AWS)
 * Added option to set os hostname (ex. in AWS)
+* Support for windows virtual machine setup in Virtualbox
+  * Installation and configuration of windows universal forwarder (deployment server needed for now)
 
 ### Fixes
 
