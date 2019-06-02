@@ -20,7 +20,6 @@ Splunkenizer changes by release
 * Added support for Ansible versions 2.8.x
 * Update permissions of comment macro to be global
 * Moved python install on ubuntu to splunk_config file
-* Prepare support for windows nodes
 * Added option 'idxc_discovery_password' to setup indexer discovery
 * Support for multiple license files
 * Add option general.url_locale (ex. en-US) to be added in index.html
