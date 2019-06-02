@@ -34,7 +34,6 @@
   vars:
     app_name: 'org_full_license_server'
     app_path: '{{splunk_home}}/etc/apps'
-  notify: restart splunk
   when: splunk_deployment_server|default()|length == 0 and splunk_license_master|default()|length > 0 and inventory_hostname not in groups.role_license_master
 
 - name: apply baseconfig app org_all_indexer_base
@@ -49,7 +48,6 @@
   vars:
     app_name: 'org_all_indexer_base'
     app_path: '{{splunk_home}}/etc/apps'
-  notify: restart splunk
   when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
 
 - name: apply baseconfig app org_indexer_volume_indexes
@@ -64,7 +62,6 @@
   vars:
     app_name: 'org_indexer_volume_indexes'
     app_path: '{{splunk_home}}/etc/apps'
-  notify: restart splunk
   when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
 
 - name: apply baseconfig app org_all_indexes
@@ -79,7 +76,6 @@
   vars:
     app_name: 'org_all_indexes'
     app_path: '{{splunk_home}}/etc/apps'
-  notify: restart splunk
   when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
 
 - name: call update_dserver from role monitoring_console

@@ -17,6 +17,7 @@ Splunkenizer changes by release
   * Support polkit version 0.105 policy file.
   * Create suoders file as workaround to allow splunk user restart splunk service, if systemd version is too low.
 * Added support for Ansible versions 2.7.x and removed Ansible version check
+* Added support for Ansible versions 2.8.x
 * Update permissions of comment macro to be global
 * Moved python install on ubuntu to splunk_config file
 * Prepare support for windows nodes

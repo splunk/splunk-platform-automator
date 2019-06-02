@@ -31,5 +31,4 @@
   vars:
     app_name: 'org_all_forwarder_outputs'
     app_path: '{{splunk_home}}/etc/apps'
-  notify: restart splunk
   when: splunk_deployment_server|default()|length == 0

@@ -70,7 +70,6 @@
   vars:
     app_name: 'org_all_forwarder_outputs'
     app_path: '{{splunk_home}}/etc/apps'
-  notify: restart splunk
   when: splunk_deployment_server|default()|length == 0 and inventory_hostname not in groups.role_indexer
 
 - name: install certs for web ssl
@@ -96,7 +95,6 @@
   vars:
     app_name: 'org_all_search_base'
     app_path: '{{splunk_home}}/etc/apps'
-  notify: restart splunk
   when: splunk_deployment_server|default()|length == 0
 
 - name: apply baseconfig app org_full_license_server
@@ -110,7 +108,6 @@
   vars:
     app_name: 'org_full_license_server'
     app_path: '{{splunk_home}}/etc/apps'
-  notify: restart splunk
   when: splunk_deployment_server|default()|length == 0 and splunk_license_master|default()|length > 0 and inventory_hostname not in groups.role_license_master
 
 - name: apply baseconfig app org_search_volume_indexes
