@@ -4,7 +4,7 @@ Splunkenizer changes by release
 ## 1.2 - 2019-06-02
 
 * Added option to run ansible independent from vagrant.
-  * Create VM first without Ansible and run playbooks in parallel on the nodes. See [README.md](README.md#experimental-create-vm-first-without-ansible-and-run-playbooks-in-parallel-on-the-nodes)
+  * Create VM first without Ansible and run playbooks in parallel on the nodes. See [README.md](README.md#optional-but-recommended-create-vm-first-without-ansible-and-run-playbooks-in-parallel-on-the-nodes)
   * More modularization in the code and playbooks
   * Added playbook to remove the Splunk installation from nodes
   * Added playbooks to stop/start/restart splunk
