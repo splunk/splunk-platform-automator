@@ -1,7 +1,5 @@
 # Setup Windows Vagrant image
 
-Source: http://huestones.co.uk/node/305 (not found anymore)
-
 ## Install and configure Windows in VirtualBox
 
 Create a VirtualBox machine and install Windows 10 in it. Here we call it `Windows 10 (Vagrant Template)`. Follow the next steps to configure it for Vagrant use.
