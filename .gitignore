@@ -3,14 +3,14 @@
 # Vagrant
 .vagrant
 # Archives
-**/*.tgz
-**/*.tar
-**/*.tar.gz
-**/*.zip
+*.tgz
+*.tar
+*.tar.gz
+*.zip
 # Ansible
-**/*.retry
+*.retry
 # Any log file
-**/*.log
+*.log
 # Config directory
 config
 # Auth directory
