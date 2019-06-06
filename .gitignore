@@ -9,6 +9,8 @@
 **/*.zip
 # Ansible
 **/*.retry
+# Any log file
+**/*.log
 # Config directory
 config
 # Auth directory
