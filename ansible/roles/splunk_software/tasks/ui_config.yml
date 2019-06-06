@@ -46,6 +46,16 @@
     splunk_loginpage_role_info: "<br><b>Splunk Roles: </b>{{splunk_roles}}"
   when: splunk_loginpage_print_roles|default(true) == true
 
+- name: set hostname info to login page
+  tags:
+    - splunk
+    - splunk_software
+    - ui_config
+    - splunk_roles_info
+  set_fact:
+    splunk_loginpage_hostname_info: "<b>Hostname: </b>{{inventory_hostname}}"
+  when: splunk_loginpage_print_hostname|default(true) == true
+
 - name: add user and roles info to login page
   tags:
     - splunk
@@ -56,9 +66,11 @@
     path: "{{ splunk_home }}/etc/system/local/web.conf"
     section: settings
     option: "login_content"
-    value: "<big><b>Hostname: </b>{{inventory_hostname}}{{splunk_loginpage_role_info|default()}}{{splunk_loginpage_user_info|default()}}</big>"
+    value: "<big>{{splunk_loginpage_hostname_info|default()}}{{splunk_loginpage_role_info|default()}}{{splunk_loginpage_user_info|default()}}</big>"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
   notify: restart splunk
-  when: splunk_install_app == "splunk"
+  when:
+    - splunk_install_app == "splunk"
+    - splunk_loginpage_print_userpw|default(true) == true or splunk_loginpage_print_roles|default(true) == true or splunk_loginpage_print_hostname|default(true) == true
