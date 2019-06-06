@@ -168,7 +168,8 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  command: "{{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }} {{splunk_unit_file_name|default()}} --accept-license --answer-yes --no-prompt"
+  command: "{{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }} {{splunk_systemd_managed|default()}} {{splunk_unit_file_name|default()}} --accept-license --answer-yes --no-prompt"
+
   when: boot_start_migration|default(false) == true
 
 - name: call check_systemd_file from splunk_common

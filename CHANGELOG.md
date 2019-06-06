@@ -1,6 +1,15 @@
 Splunkenizer changes by release
 ===============================
 
+## 1.3devel - ongoing
+
+
+
+### Fixes
+
+* Enable systemd-managed by default with Splunk 7.3.x
+  * Fixes broken universal forwarder install with 7.3.x
+
 ## 1.2 - 2019-06-02
 
 * Added option to run ansible independent from vagrant.

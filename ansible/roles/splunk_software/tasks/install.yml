@@ -114,7 +114,7 @@
     - splunk
     - splunk_software
     - splunk_install
-  command: "{{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }} {{splunk_unit_file_name|default()}}"
+  command: "{{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }} {{splunk_systemd_managed|default()}} {{splunk_unit_file_name|default()}}"
 
 - name: enable and start splunk service
   tags:

@@ -8,6 +8,14 @@
     name: splunk_common
     tasks_from: set_splunk_installed_version
 
+- name: set splunk systemd-managed to 1
+  tags:
+    - splunk
+    - splunk_software
+  set_fact:
+    splunk_systemd_managed: "-systemd-managed 1"
+  when: use_systemctl == true and version_output.stdout is defined and splunk_installed_version is version_compare('7.2.2', '>=')
+
 - name: set splunk systemd service file name
   tags:
     - splunk
