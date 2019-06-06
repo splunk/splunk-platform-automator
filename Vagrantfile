@@ -234,9 +234,7 @@ end
 check_base = Dir.glob(dir+"/"+splunk_dirs['splunk_baseconfig_dir']+"/*/org_all_indexer_base")
 check_cluster = Dir.glob(dir+"/"+splunk_dirs['splunk_baseconfig_dir']+"/*/org_cluster_indexer_base")
 if check_base.length < 1 or check_cluster.length < 1
-  print "ERROR: Please download the Splunk baseconfig apps here and extract it into #{dir}/#{splunk_dirs['splunk_baseconfig_dir']} \n\n"
-  print "Configurations Base:      https://splunk.app.box.com/ConfigurationsBase\n"
-  print "Configurations Cluster:   https://splunk.app.box.com/ConfigurationsCluster\n"
+  print "ERROR: Please download the Splunk baseconfig apps mentioned in the README.md and extract it into #{dir}/#{splunk_dirs['splunk_baseconfig_dir']} \n\n"
   exit 2
 end
 
