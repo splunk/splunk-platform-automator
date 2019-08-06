@@ -1,0 +1,9 @@
+---
+# This playbook installs the spark software
+
+- name: install the spark software
+  hosts: role_spark_master,role_spark_slave
+  become: yes
+  become_user: root
+  roles:
+    - role: spark_software

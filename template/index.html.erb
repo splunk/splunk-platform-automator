@@ -52,6 +52,10 @@
             <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8000<%= @locale %>/app/splunk_monitoring_console">Monitoring Console</a>
           <% when 'search_head' %>
             <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8000<%= @locale %>/app/launcher/home">Search Head</a>
+          <% when 'spark_master' %>
+            <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8080<%= @locale %>">Spark Master</a>
+          <% when 'spark_slave' %>
+            <a class="btn btn-success" target="_blank" href="<%= @url %><%= network[hostname]['dns_name'] || network[hostname]['ip_addr'] %>:8081<%= @locale %>">Spark Slave</a>
           <% when 'universal_forwarder' %>
             <span class="d-inline-block" tabindex="0" data-toggle="tooltip" title="No web access on universal forwarder">
               <button class="btn btn-primary" style="pointer-events: none;" type="button" disabled="">Universal Forwarder</button>

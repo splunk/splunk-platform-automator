@@ -1,0 +1,54 @@
+---
+# This playbook uninstalls the spark software
+
+- name: "check for existing {{spark_home}} dir"
+  tags:
+    - spark
+    - spark_software
+    - spark_uninstall
+  stat:
+    path: "{{spark_home}}"
+  register: spark_home_dir
+
+- name: stop spark master
+  tags:
+    - spark
+    - spark_software
+    - spark_uninstall
+  shell: "{{spark_home}}/sbin/stop-master.sh"
+  become: yes
+  become_user: "{{ spark_user }}"
+  ignore_errors: yes
+  when: spark_home_dir.stat.exists == true
+
+- name: stop spark slave
+  tags:
+    - spark
+    - spark_software
+    - spark_uninstall
+  shell: "{{spark_home}}/sbin/stop-slave.sh"
+  become: yes
+  become_user: "{{ spark_user }}"
+  ignore_errors: yes
+  when: spark_home_dir.stat.exists == true
+
+- name: check if spark is running
+  tags:
+    - spark
+    - spark_software
+    - spark_uninstall
+  shell: "pgrep sparkd"
+  register: grep_result
+  check_mode: False
+  failed_when: "grep_result.rc > 1"
+  changed_when: "grep_result.rc != 0"
+
+# Do not remove this directory, since a mounted filesystem could be inside
+  tags:
+    - spark
+    - spark_software
+    - spark_uninstall
+- name: "remove {{ spark_home }}"
+  file:
+    path: "{{ spark_home }}"
+    state: absent

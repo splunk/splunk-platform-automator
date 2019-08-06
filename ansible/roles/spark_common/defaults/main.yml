@@ -1,0 +1,8 @@
+---
+# Variables for this role
+
+spark_user: spark
+spark_group: spark
+spark_install_dir: /opt
+spark_target_version: "{{spark_version}}"
+spark_home: "{{spark_install_dir}}/spark/{{spark_target_version}}"

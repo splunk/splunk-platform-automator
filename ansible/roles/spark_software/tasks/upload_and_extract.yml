@@ -1,0 +1,55 @@
+---
+
+- name: upload and unarchive spark archive from ansible host
+  tags:
+    - spark
+    - spark_software
+  unarchive: src="{{spark_archive.0}}" dest="{{spark_install_dir}}/spark/" owner={{ spark_user }} group={{ spark_group }} creates=yes
+  become: yes
+  become_user: "{{ spark_user }}"
+  when: spark_download is not defined
+
+- name: define spark archive download url
+  tags:
+    - spark
+    - spark_software
+  set_fact:
+    spark_url: 'https://archive.apache.org/dist/spark/spark-2.3.0/spark-2.3.0-bin-hadoop2.7.tgz'
+  when: spark_download is defined
+
+- name: download the spark archive from apache.org
+  tags:
+    - spark
+    - spark_software
+  get_url:
+    url: "{{ spark_url }}"
+    dest: "/tmp/spark.tar.gz"
+    owner: "{{ spark_user }}"
+    group: "{{ spark_group }}"
+    force: yes
+  become: yes
+  become_user: "{{ spark_user }}"
+  when: spark_download is defined
+
+- name: extract spark archive
+  tags:
+    - spark
+    - spark_software
+  unarchive:
+    src: "/tmp/spark.tar.gz"
+    dest: "{{spark_install_dir}}/spark/"
+    remote_src: yes
+  become: yes
+  become_user: "{{ spark_user }}"
+  when: spark_download is defined
+
+- name: remove spark install archive
+  tags:
+    - spark
+    - spark_software
+  file:
+    path: "/tmp/spark.tar.gz"
+    state: absent
+  become: yes
+  become_user: "{{ spark_user }}"
+  when: spark_download is defined

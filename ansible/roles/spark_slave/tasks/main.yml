@@ -1,0 +1,6 @@
+- name: start spark slave
+  shell: "./start-slave.sh spark://{{spark_sparkc_master}}:7077"
+  args:
+    chdir: "/{{spark_home}}/sbin"
+  become: yes
+  become_user: "{{spark_user}}"

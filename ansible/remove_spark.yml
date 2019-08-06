@@ -1,0 +1,14 @@
+---
+# remove the spark installation
+
+- name: remove the complete spark installation
+  hosts: all
+  become: yes
+  become_user: root
+
+  tasks:
+
+    - name: call uninstall from role spark_software
+      include_role:
+        name: spark_software
+        tasks_from: uninstall

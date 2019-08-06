@@ -1,0 +1,16 @@
+---
+# This playbook install the apps required in a server
+
+- name: add spark group
+  tags:
+    - spark
+    - spark_software
+    - spark_user
+  group: name={{ spark_user }} state=present
+
+- name: add spark user
+  tags:
+    - spark
+    - spark_software
+    - spark_user
+  user: name={{ spark_user }} group=spark comment="Spark User" shell=/bin/bash createhome=yes

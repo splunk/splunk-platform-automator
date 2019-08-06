@@ -1,0 +1,16 @@
+---
+# This playbook configures the spark roles
+
+- name: setup spark master role
+  hosts: role_spark_master
+  become: yes
+  become_user: root
+  roles:
+    - spark_master
+
+- name: setup spark slave role
+  hosts: role_spark_slave
+  become: yes
+  become_user: root
+  roles:
+    - spark_slave

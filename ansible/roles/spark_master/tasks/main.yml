@@ -1,0 +1,27 @@
+- name: Add the slaves into spark /conf/slaves
+  tags:
+    - spark
+    - spark_master
+    - spark_master_conf_slaves
+  lineinfile:
+    dest: "{{spark_home}}/conf/slaves"
+    regexp: ".*{{ hostvars[item]['ip_addr'] }}$"
+    line: "{{ hostvars[item]['ip_addr'] }}"
+    state: present
+    owner: "{{spark_user}}"
+    group: "{{spark_group}}"
+    create: yes
+  with_items:
+    - "{{spark_sparkc_slave_list}}"
+  when: spark_sparkc_slave_list|default()|length > 0
+
+- name: start spark master
+  tags:
+    - spark
+    - spark_master
+    - spark_master_start
+  shell: "./start-master.sh"
+  args:
+    chdir: "/{{spark_home}}/sbin"
+  become: yes
+  become_user: "{{spark_user}}"

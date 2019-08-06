@@ -115,7 +115,14 @@ defaults = {
     "splunk_save_baseconfig_apps"=>false,
     "splunk_save_serverclass"=>false,
     "splunk_apps_dir"=>"../app_repo"
-  }
+  },
+  "spark_dirs"=>{
+    "spark_software_dir"=>"../Software",
+  },
+  "spark_defaults"=>{
+    "spark_env_name"=>"spark",
+    "spark_version"=>"spark-2.3.0-bin-hadoop2.7",
+    },
 }
 
 # Default ssl settings
@@ -175,6 +182,12 @@ if !settings['splunk_dirs'].nil?
   splunk_dirs = splunk_dirs.merge(settings['splunk_dirs'])
 end
 
+# Create spark_dirs variables
+spark_dirs = defaults['spark_dirs'].dup
+if !settings['spark_dirs'].nil?
+  spark_dirs = spark_dirs.merge(settings['spark_dirs'])
+end
+
 # Create splunk_apps variables
 splunk_apps = defaults['splunk_apps'].dup
 if !settings['splunk_apps'].nil?
@@ -219,6 +232,12 @@ if !settings['splunk_defaults'].nil?
   end
 end
 
+# Create spark_defaults variables
+spark_defaults = defaults['spark_defaults'].dup
+if !settings['spark_defaults'].nil?
+  spark_defaults = spark_defaults.merge(settings['spark_defaults'])
+end
+
 # Create splunk_environments group_vars
 splunk_environments = []
 if !settings['splunk_environments'].nil?
@@ -228,6 +247,17 @@ if !settings['splunk_environments'].nil?
   end
 else
   splunk_environments.push(splunk_defaults)
+end
+
+# Create spark_environments group_vars
+spark_environments = []
+if !settings['spark_environments'].nil?
+  settings['spark_environments'].each do |sparkenv|
+    env_obj = spark_defaults.merge(sparkenv)
+    spark_environments.push(env_obj)
+  end
+else
+  spark_environments.push(spark_defaults)
 end
 
 # Check for Splunk baseconfig apps
@@ -316,6 +346,7 @@ search_peer_groups = {}
 envs = {}
 special_host_vars = {}
 network = {}
+sparkc_list = {}
 
 # Remove this in the future, cause only needed during upgrades
 # Clean up host_vars directory
@@ -370,6 +401,14 @@ settings['splunk_hosts'].each do |splunk_host|
     end
   end
 
+  # Create spark_env host_vars
+  spark_env = {}
+  ['spark_version'].each do |spark_var|
+    if !splunk_host[spark_var].nil?
+      splunk_env[spark_var] = splunk_host[spark_var]
+    end
+  end
+
   # Build the ansible groups
   splunk_host['roles'].each do |role|
     if groups.has_key?("role_"+role)
@@ -378,6 +417,8 @@ settings['splunk_hosts'].each do |splunk_host|
       groups["role_"+role] = [splunk_host['name']]
     end
     var_obj = {}
+
+    # Splunk Environment Hosts
     if !splunk_host['splunk_env'].nil?
       if splunk_environments.find {|i| i["splunk_env_name"] == splunk_host['splunk_env']}.nil?
         print "ERROR: Cannot find splunk_env_name #{splunk_host['splunk_env']} from host #{splunk_host['name']} in config! \n\n"
@@ -385,6 +426,16 @@ settings['splunk_hosts'].each do |splunk_host|
       end
     else
       splunk_host['splunk_env'] = splunk_environments[0]['splunk_env_name']
+    end
+
+    # Spark Environment Hosts
+    if !splunk_host['spark_env'].nil?
+      if spark_environments.find {|i| i["spark_env_name"] == splunk_host['spark_env']}.nil?
+        print "ERROR: Cannot find spark_env_name #{splunk_host['spark_env']} from host #{spark_host['name']} in config! \n\n"
+        exit 2
+      end
+    else
+      splunk_host['spark_env'] = spark_environments[0]['spark_env_name']
     end
 
     # Add the management nodes here as well, since the role_* groups are not completely populated from the beginning
@@ -476,7 +527,7 @@ settings['splunk_hosts'].each do |splunk_host|
   end
 
   # Splunk environment and cluster groups
-  ['splunk_env','idxcluster','shcluster'].each do |var|
+  ['splunk_env','idxcluster','shcluster','spark_env','sparkcluster'].each do |var|
     tmparray = []
     if splunk_host[var].kind_of?(Array)
       tmparray = splunk_host[var]
@@ -517,11 +568,13 @@ settings['splunk_hosts'].each do |splunk_host|
       if not outputs_groups.has_key?(groupname)
         outputs_groups[groupname] = {}
         if output == 'all'
-          if outputs_list[splunk_host['splunk_env']].has_key?('idxcluster')
-            outputs_groups[groupname]['idxcluster'] = outputs_list[splunk_host['splunk_env']]['idxcluster']
-          end
-          if outputs_list[splunk_host['splunk_env']].has_key?('indexer')
-            outputs_groups[groupname]['indexer'] = outputs_list[splunk_host['splunk_env']]['indexer']
+          if not outputs_list.empty?
+            if outputs_list[splunk_host['splunk_env']].has_key?('idxcluster')
+              outputs_groups[groupname]['idxcluster'] = outputs_list[splunk_host['splunk_env']]['idxcluster']
+            end
+            if outputs_list[splunk_host['splunk_env']].has_key?('indexer')
+              outputs_groups[groupname]['indexer'] = outputs_list[splunk_host['splunk_env']]['indexer']
+            end
           end
         end
       end
@@ -570,9 +623,9 @@ end
 
 # Remove this in the future, cause only needed during upgrades
 # Cleanup old group_vars files
-Dir['ansible/group_vars/**/*'].select{|f| File.file?(f) }.each do |filepath|
-  File.delete(filepath) if File.basename(filepath) != "dynamic.yml"
-end
+#Dir['ansible/group_vars/**/*'].select{|f| File.file?(f) }.each do |filepath|
+#  File.delete(filepath) if File.basename(filepath) != "dynamic.yml"
+#end
 
 # Create os group_vars
 os_defaults = defaults['os'].dup
@@ -587,6 +640,13 @@ end
 if !splunk_dirs.nil?
   File.open("#{group_vars_dir}/all/splunk_dirs.yml", "w") do |f|
     f.write(splunk_dirs.to_yaml)
+  end
+end
+
+# Create spark_dirs group_vars
+if !spark_dirs.nil?
+  File.open("#{group_vars_dir}/all/spark_dirs.yml", "w") do |f|
+    f.write(spark_dirs.to_yaml)
   end
 end
 
@@ -626,6 +686,29 @@ if !settings['splunk_idxclusters'].nil?
     end
     File.open("#{group_vars_dir}/#{group_name}.yml", "w") do |f|
       f.write(idxcluster.to_yaml)
+    end
+  end
+end
+
+# Create spark environment group_vars
+if !spark_environments.nil?
+  spark_environments.each do |sparkenv|
+    group_name = "spark_env_"+sparkenv['spark_env_name']
+    if envs.has_key?(group_name)
+      sparkenv = sparkenv.merge(envs[group_name])
+    end
+    File.open("#{group_vars_dir}/#{group_name}.yml", "w") do |f|
+      f.write(sparkenv.to_yaml)
+    end
+  end
+end
+
+# Create spark cluster group_vars
+if !settings['spark_clusters'].nil?
+  settings['spark_clusters'].each do |sparkcluster|
+    group_name = "sparkcluster_"+sparkcluster['sparkc_name']
+    File.open("#{group_vars_dir}/#{group_name}.yml", "w") do |f|
+      f.write(sparkcluster.to_yaml)
     end
   end
 end

@@ -1,0 +1,52 @@
+---
+# This playbook install the apps required in a server
+
+- name: create spark install dir
+  tags:
+    - spark
+    - spark_software
+    - spark_install
+  file:
+    path: "{{ spark_install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+- name: create spark directory
+  tags:
+    - spark
+    - spark_software
+    - spark_install
+  file:
+    path: "{{ spark_home }}"
+    state: directory
+    owner: "{{ spark_user }}"
+    group: "{{ spark_group }}"
+    mode: 0755
+
+- name: find target version
+  tags:
+    - spark
+    - spark_software
+    - spark_install
+  include_tasks: find_target_version.yml
+
+- name: upload and extract the spark software
+  tags:
+    - spark
+    - spark_software
+    - spark_install
+  include_tasks: upload_and_extract.yml
+
+- name: Configure spark-env.sh
+  tags:
+    - spark
+    - spark_software
+    - spark_install
+  template:
+    src: spark/conf/spark-env.sh.j2
+    dest: "{{ spark_home }}/conf/spark-env.sh"
+    owner: "{{ spark_user }}"
+    group: "{{ spark_group }}"
+    mode: 0644

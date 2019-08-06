@@ -18,6 +18,18 @@
     - splunk_roles
   import_playbook: setup_splunk_roles.yml
 
+- name: install the spark software
+  tags:
+    - spark
+    - spark_software
+  import_playbook: install_spark.yml
+
+- name: setup spark roles
+  tags:
+    - spark
+    - spark_roles
+  import_playbook: setup_spark_roles.yml
+
 - name: setup other roles
   tags:
     - other_roles

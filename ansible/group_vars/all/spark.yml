@@ -1,0 +1,18 @@
+---
+
+# Calculated variables during playbook run
+
+# Software source directory
+spark_software: "{% if spark_software_dir | regex_search('^/') %}{{ spark_software_dir }}{% else %}{{ playbook_dir }}/../{{ spark_software_dir }}{% endif %}"
+
+# Spark Cluster
+spark_sparkc_name_list_all_env: "{{ groups|map('regex_search','sparkcluster_.*')|select('string')|list }}"
+spark_sparkc_label: "{{ sparkc_name }}"
+spark_sparkc_master: "{% for sm in groups.role_spark_master|default([]) %}{% if sm in groups['sparkcluster_'+sparkc_name] %}{{ sm }}{% endif %}{% endfor %}"
+spark_sparkc_master_list: >-
+           {%- set res = [] -%}
+           {%- for sparkc in spark_sparkc_name_list_all_env -%}
+             {% set ignored = res.extend(groups[sparkc]|list) -%}
+           {%- endfor -%}
+           {{ res|unique|intersect(groups.role_spark_master|default([]))|intersect(groups['spark_env_'+spark_env_name]) }}
+spark_sparkc_slave_list: "{{ groups['sparkcluster_'+sparkc_name]|intersect(groups.role_spark_slave|default([])) }}"

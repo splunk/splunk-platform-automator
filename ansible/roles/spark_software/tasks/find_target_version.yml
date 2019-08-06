@@ -1,0 +1,62 @@
+---
+
+- name: find spark archive files
+  tags:
+    - spark
+    - spark_software
+  find:
+    path: "{{spark_software}}/"
+    pattern: "spark-*.tgz"
+    file_type: file
+    recurse: no
+  register: spark_archive_files
+  delegate_to: localhost
+  become: no
+
+- name: find latest spark version
+  tags:
+    - spark
+    - spark_software
+  set_fact:
+    spark_target_version: "{{spark_archive_files.files|sort(attribute='path')|map(attribute='path')|list|last|basename|regex_replace('spark-.*).tgz', '\\1')}}"
+  when: spark_version == 'latest' and spark_archive_files.files|length > 0
+
+- name:
+  tags:
+    - spark
+    - spark_software
+  fail:
+    msg: "Cannot find latest spark binaries in directory {{spark_software}}"
+  when: spark_version == 'latest' and spark_target_version is not defined
+
+- name: set spark_target_version
+  tags:
+    - spark
+    - spark_software
+  set_fact:
+    spark_target_version: "{{ spark_version }}"
+  when: spark_version != 'latest'
+
+- name: get spark archive for given version
+  tags:
+    - spark
+    - spark_software
+  set_fact:
+    spark_archive: '{{spark_archive_files.files|map(attribute="path")|list|select("match",".*"+spark_target_version+".*")|list}}'
+  when: spark_archive_files.files is defined
+
+- name:
+  tags:
+    - spark
+    - spark_software
+  fail:
+    msg: "Cannot find spark binary for version '{{ spark_target_version }}' in directory {{spark_software}}"
+  when: spark_archive is not defined or spark_archive|length == 0
+
+- name:
+  tags:
+    - spark
+    - spark_software
+  debug:
+    msg: "Using spark archive: {{spark_archive.0}}"
+  when: spark_archive is defined

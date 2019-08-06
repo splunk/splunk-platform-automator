@@ -1,0 +1,33 @@
+- name: start role tasks
+  tags:
+    - spark
+    - spark_software
+  debug: msg="role '{{ role_name }}' start"
+
+- name: "create spark user and group"
+  tags:
+    - spark
+    - spark_software
+  include_tasks: users.yml
+
+- name: checking if spark is installed
+  tags:
+    - spark
+    - spark_software
+  stat:
+    path: "{{ spark_home }}/sbin/start-all.sh"
+  register: spark_path
+
+- name: spark is installed here
+  tags:
+    - spark
+    - spark_software
+  debug: msg='spark found as {{ spark_home }}/sbin/start-all.sh'
+  when: spark_path.stat.exists
+
+- name: "install the spark software"
+  tags:
+    - spark
+    - spark_software
+  include_tasks: install.yml
+  when: spark_path.stat.exists == false
