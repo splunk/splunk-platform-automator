@@ -1,0 +1,43 @@
+---
+# splunk_config.yml
+
+# General settings
+general:
+  start_ip: 172.16.1.100
+
+os:
+#  time_zone: "Europe/Zurich"
+  packages:
+    - java-1.8.0-openjdk
+
+virtualbox:
+
+spark_defaults:
+#  spark_version: spark-2.3.0-bin-hadoop2.7
+#  spark_download: true
+
+#spark_dirs:
+#    spark_software_dir: ../Software
+
+spark_clusters:
+  - sparkc_name: dfs
+
+# Splunk hosts with its settings
+splunk_hosts:
+  # Spark Master
+  - name: master
+    roles:
+      - spark_master
+    sparkcluster: dfs
+
+  # Spark Slave
+  - name: slave1
+    roles:
+      - spark_slave
+    sparkcluster: dfs
+
+  # Spark Slave
+  - name: slave2
+    roles:
+      - spark_slave
+    sparkcluster: dfs
