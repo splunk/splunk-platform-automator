@@ -176,6 +176,16 @@ end
 # Edit the config file to change VM and environment configuration details
 settings = YAML.load_file("#{config_file}")
 
+# Run quick check for Splunk roles
+have_splunk_roles = false
+settings['splunk_hosts'].each do |splunk_host|
+  splunk_host['roles'].each do |role|
+    if ['deployer', 'deployment_server', 'heavy_forwarder', 'indexer', 'license_master', 'monitoring_console', 'search_head',].include? role
+      have_splunk_roles = true
+    end
+  end
+end
+
 # Create splunk_dirs variables
 splunk_dirs = defaults['splunk_dirs'].dup
 if !settings['splunk_dirs'].nil?
@@ -261,46 +271,49 @@ else
 end
 
 # Check for Splunk baseconfig apps
-check_base = Dir.glob(dir+"/"+splunk_dirs['splunk_baseconfig_dir']+"/*/org_all_indexer_base")
-check_cluster = Dir.glob(dir+"/"+splunk_dirs['splunk_baseconfig_dir']+"/*/org_cluster_indexer_base")
-if check_base.length < 1 or check_cluster.length < 1
-  print "ERROR: Please download the Splunk baseconfig apps mentioned in the README.md and extract it into #{dir}/#{splunk_dirs['splunk_baseconfig_dir']} \n\n"
-  exit 2
+if have_splunk_roles == true
+  check_base = Dir.glob(dir+"/"+splunk_dirs['splunk_baseconfig_dir']+"/*/org_all_indexer_base")
+  check_cluster = Dir.glob(dir+"/"+splunk_dirs['splunk_baseconfig_dir']+"/*/org_cluster_indexer_base")
+  if check_base.length < 1 or check_cluster.length < 1
+    print "ERROR: Please download the Splunk baseconfig apps mentioned in the README.md and extract it into #{dir}/#{splunk_dirs['splunk_baseconfig_dir']} \n\n"
+    exit 2
+  end
 end
 
 ## Check for Splunk installer archives
-splunk_environments.each do |splunkenv|
-  ['splunk','splunkforwarder'].each do |splunk_arch|
-    if splunkenv['splunk_version'] == 'latest'
-      search_version = "*"
-    else
-      search_version = splunkenv['splunk_version']
-    end
-    check_arch = Dir.glob(dir+"/"+splunk_dirs['splunk_software_dir']+"/"+splunk_arch+"-"+search_version+"-*Linux-x86_64.tgz")
-    if check_arch.length < 1
-      print "ERROR: #{splunk_arch} version '#{splunkenv['splunk_version']}' missing in #{dir}/#{splunk_dirs['splunk_software_dir']}\n\n"
-      print "Download "+splunk_arch+"-"+search_version+"-...-Linux-x86_64.tgz at https://www.splunk.com/download\n"
-      exit 2
-    end
-  end
-  # Check for Splunk license file
-  if !splunkenv['splunk_license_file'].nil?
-    tmparray = []
-    if splunkenv['splunk_license_file'].kind_of?(Array)
-      tmparray = splunkenv['splunk_license_file']
-    else
-      tmparray = [splunkenv['splunk_license_file']]
-    end
-    tmparray.each do |license_file|
-      if !File.file?(dir+"/"+splunk_dirs['splunk_software_dir']+"/"+license_file)
-        print "ERROR: Cannot find license file #{splunk_dirs['splunk_software_dir']+"/"+license_file} \n\n"
-        print "Comment variable 'splunk_license_file' in #{config_file} if no license available\n"
+if have_splunk_roles == true
+  splunk_environments.each do |splunkenv|
+    ['splunk','splunkforwarder'].each do |splunk_arch|
+      if splunkenv['splunk_version'] == 'latest'
+        search_version = "*"
+      else
+        search_version = splunkenv['splunk_version']
+      end
+      check_arch = Dir.glob(dir+"/"+splunk_dirs['splunk_software_dir']+"/"+splunk_arch+"-"+search_version+"-*Linux-x86_64.tgz")
+      if check_arch.length < 1
+        print "ERROR: #{splunk_arch} version '#{splunkenv['splunk_version']}' missing in #{dir}/#{splunk_dirs['splunk_software_dir']}\n\n"
+        print "Download "+splunk_arch+"-"+search_version+"-...-Linux-x86_64.tgz at https://www.splunk.com/download\n"
         exit 2
+      end
+    end
+    # Check for Splunk license file
+    if !splunkenv['splunk_license_file'].nil?
+      tmparray = []
+      if splunkenv['splunk_license_file'].kind_of?(Array)
+        tmparray = splunkenv['splunk_license_file']
+      else
+        tmparray = [splunkenv['splunk_license_file']]
+      end
+      tmparray.each do |license_file|
+        if !File.file?(dir+"/"+splunk_dirs['splunk_software_dir']+"/"+license_file)
+          print "ERROR: Cannot find license file #{splunk_dirs['splunk_software_dir']+"/"+license_file} \n\n"
+          print "Comment variable 'splunk_license_file' in #{config_file} if no license available\n"
+          exit 2
+        end
       end
     end
   end
 end
-
 
 # Check for virtualization provider
 if !settings.has_key?("virtualbox") and !settings.has_key?("aws")
