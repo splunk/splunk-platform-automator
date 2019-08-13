@@ -3,3 +3,4 @@ dependencies:
   - role: splunk_common
     vars:
       splunk_install_app: splunk
+  - role: spark_common

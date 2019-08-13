@@ -1,0 +1,56 @@
+---
+# This playbook configures dfs
+
+- name: set JAVA_HOME in splunk-launch.conf
+  tags:
+    - splunk
+    - search_head
+    - dfs
+  blockinfile:
+    path: "{{ splunk_home }}/etc/splunk-launch.conf"
+    insertafter: EOF
+    marker: "# {mark} ANSIBLE MANAGED BLOCK (DFS)"
+    content: |
+      # Variables for dfs
+      JAVA_HOME=/usr/lib/jvm/jre-1.8.0-openjdk
+      SPARK_HOME={{ spark_home }}
+  notify: restart splunk
+
+#TODO: To be replaced by a base_config app dfs
+- name: add [dfs] settings to server.conf
+  tags:
+    - splunk
+    - search_head
+    - dfs
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/server.conf"
+    section: dfs
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  with_items:
+    - { option: 'disabled', value: 'false' }
+    - { option: 'dfc_ip_address', value: '{{ ip_addr }}' }
+    - { option: 'spark_home', value: '{{ spark_home }}' }
+    - { option: 'spark_master_host', value: "{{ hostvars[spark_sparkc_master]['ip_addr'] }}" }
+
+#TODO: To be replaced by a base_config app for dfs
+- name: add [dfs] settings to server.conf
+  tags:
+    - splunk
+    - search_head
+    - dfs
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/limits.conf"
+    section: search
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  notify: restart splunk
+  with_items:
+    - { option: 'max_searches_per_process', value: '1' }

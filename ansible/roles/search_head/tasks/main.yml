@@ -32,3 +32,10 @@
     - search_head
     - shsingle
   when: shc_name is not defined
+
+- include_tasks: setup_dfs.yml
+  tags:
+    - splunk
+    - search_head
+    - dfs
+  when: sparkc_name is defined
