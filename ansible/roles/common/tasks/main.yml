@@ -24,3 +24,7 @@
   when:
     - ansible_os_family|lower != 'windows'
     - enable_time_sync_cron|default(false) == true
+
+- name:
+  import_tasks: fix_hosts_file.yml
+  when: ansible_os_family|lower != 'windows'

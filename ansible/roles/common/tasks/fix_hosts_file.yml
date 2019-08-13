@@ -1,0 +1,12 @@
+---
+# This playbook removes hostname with 127.0.0.1 ip set
+
+- name: Remove 127.0.0.1 for hostname {{inventory_hostname}} in /etc/hosts
+  tags:
+  tags:
+    - common
+    - hosts
+  lineinfile:
+    dest: "/etc/hosts"
+    regexp: "^127.0.0.1\\s+{{ inventory_hostname }}.*"
+    state: absent
