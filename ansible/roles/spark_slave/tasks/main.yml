@@ -1,6 +1,21 @@
-- name: start spark slave
-  shell: "./start-slave.sh spark://{{spark_sparkc_master}}:7077"
-  args:
-    chdir: "/{{spark_home}}/sbin"
-  become: yes
-  become_user: "{{spark_user}}"
+---
+
+- name: install the sparkslave systemd service
+  tags:
+    - spark
+    - spark_slave
+  template:
+    src: etc/systemd/system/sparkslave.service.j2
+    dest: /etc/systemd/system/sparkslave.service
+    owner: root
+    group: root
+    mode: 0644
+
+- name: enable and start sparkslave service
+  tags:
+    - spark
+    - spark_slave
+  service:
+    name: sparkslave
+    state: started
+    enabled: yes

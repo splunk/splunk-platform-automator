@@ -1,0 +1,15 @@
+[Unit]
+Description = Apache Spark Master Server
+After = network.target
+After = systemd-user-sessions.service
+
+[Service]
+User = {{spark_user}}
+Group = {{ spark_group }}
+Type = forking
+#EnvironmentFile = ~/etc/environment
+ExecStart = {{spark_home}}/sbin/start-master.sh
+ExecStop = {{spark_home}}/sbin/stop-master.sh
+
+[Install]
+WantedBy = multi-user.target
