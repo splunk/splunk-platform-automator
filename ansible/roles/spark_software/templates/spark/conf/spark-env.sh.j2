@@ -6,3 +6,5 @@ export SPARK_MASTER_HOST={{ hostvars[spark_sparkc_master]['ip_addr'] }}
 export SPLUNK_HOME=/opt/splunk
 export PATH=${SPARK_HOME}/sbin:${SPARK_HOME}/bin:${JAVA_HOME}/bin:$PATH:${SPLUNK_HOME}/bin
 export SPARK_LOCAL_IP={{ ip_addr }}
+#export SPARK_WORKER_CORES=1
+#export SPARK_WORKER_MEMORY=200M
