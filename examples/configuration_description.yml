@@ -6,6 +6,8 @@ general:
   start_ip: 172.16.1.100
   # Force a certain language in the created links in index.html
   url_locale: en-GB
+  # Set hostname to ansible_inventory name
+  set_hostname: true
 
 # Ansible configs
 ansible:

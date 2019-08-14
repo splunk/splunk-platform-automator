@@ -3,8 +3,10 @@
 
 # General settings
 
-#os:
+os:
 #  time_zone: "Europe/Zurich"
+  # Set hostname to ansible_inventory name
+  set_hostname: true
 
 ansible:
 #  verbose: "v"
