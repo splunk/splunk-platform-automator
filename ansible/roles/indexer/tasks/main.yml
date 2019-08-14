@@ -21,7 +21,7 @@
 #  with_dict: "{{ splunk_indexer_volumes }}"
 #  when: splunk_indexer_volumes is defined
 
-- name: "({{ app_name }}) check volume pathes"
+- name: check volume pathes
   tags:
     - splunk
     - indexer
