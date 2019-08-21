@@ -8,7 +8,8 @@ Splunkenizer changes by release
 ### Fixes
 
 * Enable systemd-managed by default with Splunk 7.3.x
-  * Fixes broken universal forwarder install with 7.3.x
+* Fixes broken universal forwarder install with 7.3.x
+* Fixed search head cluster setup for 7.3.x
 
 ## 1.2 - 2019-06-02
 
