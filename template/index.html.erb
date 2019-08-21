@@ -19,7 +19,7 @@
 <div class="container-fluid">
 <div class="row">
 
-<% if !settings['general'].nil? and !settings['general']['splunk_url_locale'].nil? %><% @locale = "/" + settings['general']['splunk_url_locale'] %><% end %>
+<% if !settings['general'].nil? and !settings['general']['url_locale'].nil? %><% @locale = "/" + settings['general']['url_locale'] %><% end %>
 <% splunk_environments.each do |splunkenv| %>
   <% @group_name = "splunk_env_"+splunkenv['splunk_env_name'] %>
   <% groups[@group_name].each do |hostname| %>
