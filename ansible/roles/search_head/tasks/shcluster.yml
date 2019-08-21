@@ -83,6 +83,21 @@
   become_user: "{{ splunk_user }}"
   when: inventory_hostname == splunk_shc_host_list|first and shcluster_status.changed == true
 
+- name: wait for the search head cluster status to be available
+  tags:
+    - splunk
+    - search_head
+    - shcluster
+  command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
+  become: yes
+  become_user: "{{ splunk_user }}"
+  register: shcluster_ready
+  until: "shcluster_ready.stdout.find('service_ready_flag') != -1"
+  retries: 15
+  delay: 10
+  delegate_to: "{{splunk_shc_host_list|first}}"
+  when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
+
 - name: add node to search head cluster
   tags:
     - splunk
