@@ -88,16 +88,17 @@
     - splunk_software
   include_tasks: host_servername_config.yml
 
-- name: final splunk restart after base install
-  tags:
-    - splunk
-    - splunk_software
-  service:
-    name: "{{ splunk_service_name }}"
-    state: restarted
-  become: yes
-  become_user: root
-  when: splunk_path.stat.exists == false
+#FIXME: Probably not needed and disturbing the handlers restart
+#- name: final splunk restart after base install
+#  tags:
+#    - splunk
+#    - splunk_software
+#  service:
+#    name: "{{ splunk_service_name }}"
+#    state: restarted
+#  become: yes
+#  become_user: root
+#  when: splunk_path.stat.exists == false
 
 - name: save shared splunk.secret file
   tags:
