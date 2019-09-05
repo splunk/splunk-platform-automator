@@ -9,6 +9,7 @@
     - spark
     - spark_software
   include_tasks: users.yml
+  when: sparkc_name is defined
 
 - name: checking if spark is installed
   tags:
@@ -17,6 +18,7 @@
   stat:
     path: "{{ spark_home }}/sbin/start-all.sh"
   register: spark_path
+  when: sparkc_name is defined
 
 - name: spark is installed here
   tags:
@@ -24,10 +26,11 @@
     - spark_software
   debug: msg='spark found as {{ spark_home }}/sbin/start-all.sh'
   when: spark_path.stat.exists
+  when: sparkc_name is defined
 
 - name: "install the spark software"
   tags:
     - spark
     - spark_software
   include_tasks: install.yml
-  when: spark_path.stat.exists == false
+  when: sparkc_name is defined and spark_path.stat.exists == false
