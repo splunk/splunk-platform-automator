@@ -7,7 +7,7 @@
     - bashrc
   copy:
     src: home/ansible_user/bashrc.splunk
-    dest: "/home/{{ ansible_user }}/.bashrc.splunk"
+    dest: "~{{ ansible_user }}/.bashrc.splunk"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: 0644
@@ -17,7 +17,8 @@
     - common
     - bashrc
   blockinfile:
-    path: "/home/{{ ansible_user }}/.bashrc"
+    create: yes
+    path: "~{{ ansible_user }}/.bashrc"
     marker: "#<!-- {mark} ANSIBLE MANAGED BLOCK -->"
     insertafter: "export PATH"
     content: |
