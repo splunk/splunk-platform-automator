@@ -9,15 +9,6 @@ general:
   # Set hostname to ansible_inventory name
   set_hostname: true
 
-# Ansible configs
-ansible:
-  # Verbose output
-  verbose: "v"
-  # Skip ansible tags, ex. skip whole splunk install/config
-  skip_tags:
-#    - common
-#    - splunk
-
 # Virtualbox settings
 virtualbox:
   box: "centos/7"
