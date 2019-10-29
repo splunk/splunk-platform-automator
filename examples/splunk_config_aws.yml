@@ -2,19 +2,13 @@
 # splunk_config.yml
 
 # General settings
+general:
+#  url_locale: en-GB
 
 os:
 #  time_zone: "Europe/Zurich"
   # Set hostname to ansible_inventory name
   set_hostname: true
-
-ansible:
-#  verbose: "v"
-  skip_tags:
-    - fix_time_sync
-    - login_page_info
-#    - common
-#    - splunk
 
 #virtualbox:
 aws:
