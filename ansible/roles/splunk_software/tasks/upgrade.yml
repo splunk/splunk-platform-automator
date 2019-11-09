@@ -43,12 +43,8 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  block:
-    - name: "end play if nothing to upgrade"
-      debug:
-        msg: "Installed version '{{ splunk_installed_version }}' is equal to upgrade version '{{ splunk_target_version }}' -> nothing to upgrade, ending"
-
-    - meta: end_play
+  debug:
+    msg: "Installed version '{{ splunk_installed_version }}' is equal to upgrade version '{{ splunk_target_version }}' -> nothing to upgrade, ending"
   when: splunk_installed_version == splunk_target_version
 
 - name:
@@ -56,8 +52,24 @@
     - splunk
     - splunk_software
     - splunk_upgrade
+  meta: end_play
+  when: splunk_installed_version == splunk_target_version
+
+- name: set splunk_current_version
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  set_fact:
+    splunk_current_version: "{{ splunk_installed_version }}"
+
+- name:
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
   debug:
-    msg: "Upgrade {{ splunk_install_app }} from version '{{ splunk_installed_version }}' to version '{{ splunk_target_version }}'"
+    msg: "Upgrade {{ splunk_install_app }} from version '{{ splunk_current_version }}' to version '{{ splunk_target_version }}'"
 
 - name: backup splunk etc
   tags:
@@ -143,7 +155,7 @@
     - splunk_upgrade
   include_tasks: set_splunk_service_name.yml
 
-- name: one time manual start to run upgrade procedures
+- name: one time manual start to run upgrade procedures (init.d->systemd migration)
   tags:
     - splunk
     - splunk_software
@@ -153,7 +165,7 @@
   become_user: "{{ splunk_user }}"
   when: boot_start_migration|default(false) == true
 
-- name: stop again to let systemd take over
+- name: stop again to let systemd take over (init.d->systemd migration)
   tags:
     - splunk
     - splunk_software
@@ -169,7 +181,6 @@
     - splunk_software
     - splunk_upgrade
   command: "{{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }} {{splunk_systemd_managed|default()}} {{splunk_unit_file_name|default()}} --accept-license --answer-yes --no-prompt"
-
   when: boot_start_migration|default(false) == true
 
 - name: call check_systemd_file from splunk_common
@@ -212,6 +223,17 @@
   when:
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
+
+- name: manual start for Splunk 7->8 upgrade and systemd update
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  command: "{{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt"
+  when:
+    - boot_start_migration|default(false) == false
+    - splunk_current_version is version_compare('8.0.0', '<')
+    - splunk_target_version is version_compare('8.0.0', '>=')
 
 - name: start splunk by service control
   tags:

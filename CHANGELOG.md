@@ -3,7 +3,7 @@ Splunkenizer changes by release
 
 ## 1.3devel - ongoing
 
-
+* Support upgrades to Splunk 8.x
 
 ### Fixes
 
