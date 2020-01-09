@@ -11,6 +11,7 @@ Splunkenizer changes by release
 * Fixes broken universal forwarder install with 7.3.x
 * Fixed search head cluster setup for 7.3.x
 * Fixed hard coded ansible user home location
+* Fixed issue: Special characters in Splunk password #6
 
 ## 1.2 - 2019-06-02
 

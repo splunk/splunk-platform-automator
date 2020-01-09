@@ -115,7 +115,9 @@
     - search_head
     - shcluster
     - shc_add_member
-  shell: "{{ splunk_home }}/bin/splunk show servername -auth admin:{{ splunk_admin_password }} | cut -d: -f 2 | tr -d ' '"
+  command: "{{ splunk_home }}/bin/splunk show servername -auth admin:{{ splunk_admin_password }}"
+  become: yes
+  become_user: "{{ splunk_user }}"
   check_mode: False
   register: splunk_servername
   when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
@@ -129,7 +131,7 @@
   become: yes
   become_user: "{{ splunk_user }}"
   register: shcluster_join
-  until: "shcluster_join.stdout.find('label : ' + splunk_servername.stdout) != -1"
+  until: "shcluster_join.stdout.find('label :' + splunk_servername.stdout.split(':')[1]) != -1"
   retries: 15
   delay: 10
   when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
