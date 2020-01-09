@@ -48,7 +48,7 @@ splunk_defaults:
 #    splunkforwarder: true
 #  splunk_admin_password: 'splunklab1'
   # Give a path to a license file. Must be located in splunk_software_dir
-#  splunk_license_file: Splunk_Enterprise1.lic
+#  splunk_license_file: Splunk_Enterprise.lic
   # Define some indexes to be created on the indexers
 #  splunk_indexes:
 #    - test1
