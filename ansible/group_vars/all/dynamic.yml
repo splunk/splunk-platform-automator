@@ -190,6 +190,27 @@ splunk_systemd_services_updates: >-
           {%- for section in splunk_systemd_services[splunk_service_name].keys()|list -%}
             {%- for var in splunk_systemd_services[splunk_service_name][section].keys()|list -%}
               {%- set ignored = res.extend([{'section': section, 'var': var, 'val': splunk_systemd_services[splunk_service_name][section][var] }]) -%}
+            {%- endfor -%}
+          {%- endfor -%}
+          {{ res }}
+
+# Splunk Config Settings
+splunk_conf_settings_list: >-
+          {%- set res = [] -%}
+          {%- for splunk_conf_sections in splunk_conf_list_items.value -%}
+            {%- for splunk_conf_section in splunk_conf_sections -%}
+              {%- for section_items in splunk_conf_sections[splunk_conf_section] -%}
+                {%- set ignored = res.extend([{'section': splunk_conf_section, 'key': section_items.keys()|first, 'value': section_items.values()|first, }]) -%}
               {%- endfor -%}
-              {%- endfor -%}
-              {{ res }}
+            {%- endfor -%}
+          {%- endfor -%}
+          {{ res }}
+
+# App Deployment
+splunk_all_roles_list: "{{groups|map('regex_search','role_.*')|select('string')|list|replace('role_', '')}}"
+splunk_app_roles_host_list: >-
+          {%- set res = [] -%}
+          {%- for role in splunk_apps_list_item.pkg.roles|default(splunk_all_roles_list) -%}
+            {%- set ignored = res.extend(groups['role_'+role]) -%}
+          {%- endfor -%}
+          {{ res|unique }}

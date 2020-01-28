@@ -356,8 +356,13 @@ settings['splunk_hosts'].each do |splunk_host|
 
   # Create splunk_env host_vars
   splunk_env = {}
-  ['splunk_version','splunk_admin_password','splunk_license_file','splunk_indexes','splunk_outputs','splunk_search_peers'].each do |splunk_var|
+  ['splunk_version','splunk_admin_password','splunk_license_file','splunk_indexes','splunk_outputs','splunk_search_peers','splunk_conf'].each do |splunk_var|
     if !splunk_host[splunk_var].nil?
+#TODO: Merging does not fully work, only merges different file settings, but not things from same file
+      # Merge splunk_conf settings from the global one
+      if !settings['splunk_defaults']['splunk_conf'].nil?
+        splunk_host[splunk_var] = settings['splunk_defaults']['splunk_conf'].merge(splunk_host[splunk_var])
+      end
       splunk_env[splunk_var] = splunk_host[splunk_var]
     end
   end

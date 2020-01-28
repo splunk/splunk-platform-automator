@@ -4,6 +4,7 @@ Splunkenizer changes by release
 ## 1.3devel - ongoing
 
 * Support upgrades to Splunk 8.x
+* Allow to set system/local config file settings (splunk_conf)
 
 ### Fixes
 

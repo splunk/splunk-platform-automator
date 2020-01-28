@@ -62,6 +62,12 @@ splunk_defaults:
 #  splunk_loginpage_print_userpw: false
 #  splunk_loginpage_print_roles: false
 
+  # Add Splunk config settings to be set in system/local
+  splunk_conf:
+    server: # Conf file name (server.conf)
+      - diskUsage: # Stanza name [diskUsage]
+        - minFreeSpace: 500 # value to be set
+
 # Enable SSL for web, inputs and outputs. Own certs can be provided and have to be put
 # inside Splunkenizer/auth directory. If own_certs=false the Splunk internal self-signed
 # ones are used.

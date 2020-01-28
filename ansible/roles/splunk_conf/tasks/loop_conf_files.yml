@@ -1,0 +1,13 @@
+---
+# This playbook installs splunk apps
+
+- name: loop through the config files
+  tags:
+    - splunk
+    - splunk_conf
+  include_tasks:
+    file: add_splunk_conf.yml
+  with_dict: "{{ splunk_conf }}"
+  loop_control:
+    loop_var: splunk_conf_list_items
+  when: splunk_conf is defined

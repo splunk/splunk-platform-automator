@@ -1,0 +1,12 @@
+---
+# This playbook add/updates splunk config file settings
+
+- name: run splunk_conf role
+  hosts: all
+  become: yes
+  become_user: root
+
+  tasks:
+    - name: call splunk_conf role
+      include_role:
+        name: splunk_conf

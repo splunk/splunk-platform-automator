@@ -18,6 +18,12 @@
     - splunk_roles
   import_playbook: setup_splunk_roles.yml
 
+- name: configure splunk conf settings
+  tags:
+    - splunk
+    - splunk_conf
+  import_playbook: setup_splunk_conf.yml
+
 - name: setup other roles
   tags:
     - other_roles

@@ -1,0 +1,4 @@
+---
+# Main playbook for this role
+
+- import_tasks: "loop_conf_files.yml"
