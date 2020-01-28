@@ -39,6 +39,7 @@
     client_pem: "{% for result in client_pems.results %}{% if result.stat.exists == true %}{{ result.item }}{% endif %}{% endfor %}"
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true
 
+#FIXME: Fix the error message to include the correct filename
 - name:
   tags:
     - splunk
@@ -48,6 +49,7 @@
     msg: "Cannot find a cacert.pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true and cacert_pem == ""
 
+#FIXME: Fix the error message to include the correct filename
 - name:
   tags:
     - splunk
