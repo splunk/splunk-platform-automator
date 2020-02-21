@@ -6,8 +6,6 @@ general:
   start_ip: 172.16.1.100
   # Force a certain language in the created links in index.html
   url_locale: en-GB
-  # Set hostname to ansible_inventory name
-  set_hostname: true
 
 # Virtualbox settings
 virtualbox:
@@ -36,6 +34,10 @@ os:
     - unzip
     - epel-release
 #    - lsof
+  # Set hostname to ansible_inventory name
+  set_hostname: true
+  # Disable selinux
+  disable_selinux: true
 
 splunk_defaults:
 #  splunk_env_name: splunk1
@@ -180,7 +182,7 @@ splunk_hosts:
     # Name the indexer cluster to be master of
     idxcluster: idxc1
     site: site0
-    # Specify different version fot this host
+    # Specify different version for this host
     splunk_version: '6.5.3'
 
   # Cluster Indexer

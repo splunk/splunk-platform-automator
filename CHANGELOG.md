@@ -5,6 +5,7 @@ Splunkenizer changes by release
 
 * Support upgrades to Splunk 8.x
 * Allow to set system/local config file settings (splunk_conf)
+* Option the 'os' section to disable SELinux (needs Ansible 2.7)
 
 ### Fixes
 

@@ -1,0 +1,15 @@
+---
+# This playbook disables selinux
+
+- name: Disable SELinux
+  tags:
+    - common
+    - selinux
+  selinux:
+    state: disabled
+  register: need_reboot
+  when: disable_selinux|default(false) == true
+
+- name: Reboot the server and wait for it to come back up.
+  reboot:
+  when: need_reboot.reboot_required|default(false) == true
