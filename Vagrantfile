@@ -50,7 +50,7 @@ defaults = {
     "skip_tags"=>[]
   },
   "virtualbox"=>{
-    "box"=>"centos/7",
+    "box"=>"centos/8",
     "memory"=>512,
     "cpus"=>1,
     "install_vbox_additions"=>false,
