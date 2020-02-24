@@ -14,6 +14,7 @@ Splunkenizer changes by release
 * Fixed search head cluster setup for 7.3.x
 * Fixed hard coded ansible user home location
 * Fixed issue: Special characters in Splunk password #6
+* Added workaround for bug in vagrant 2.2.7
 
 ## 1.2 - 2019-06-02
 
