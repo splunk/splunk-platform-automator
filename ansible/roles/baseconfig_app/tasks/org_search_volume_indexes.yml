@@ -9,7 +9,7 @@
   replace:
     path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
     regexp: '^\[volume:primary\]'
-    replace: '[volume:{{splunk_indexer_volumes|first|default(primary)}}]'
+    replace: '[volume:{{splunk_indexer_volumes|first|default(["primary"])}}]'
   when: splunk_indexer_volumes is defined
 
 - name: "({{ app_name }}) setting volume:primary"

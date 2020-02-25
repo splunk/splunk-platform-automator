@@ -6,6 +6,7 @@ Splunkenizer changes by release
 * Support upgrades to Splunk 8.x
 * Allow to set system/local config file settings (splunk_conf)
 * Option the 'os' section to disable SELinux (needs Ansible 2.7)
+* Option to allow maxVolumeDataSizeMB for volumes to be calculated from the available filesystem free space
 
 ### Fixes
 

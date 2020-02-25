@@ -30,7 +30,7 @@
   with_dict: "{{ splunk_indexer_volumes }}"
   vars:
     volume_name: "{{ item.key }}"
-    volume_path: "{{ item.value.path }}"
+    volume_path: "{{ item.value.path|default(splunk_home+'/var/lib/splunk') }}"
   when: splunk_indexer_volumes is defined
 
 - name: install certs for inputs ssl

@@ -51,10 +51,6 @@ splunk_defaults:
 #  splunk_admin_password: 'splunklab1'
   # Give a path to a license file. Must be located in splunk_software_dir
 #  splunk_license_file: Splunk_Enterprise.lic
-  # Define some indexes to be created on the indexers
-#  splunk_indexes:
-#    - test1
-#    - test2
 # If you deploy to a cloud like AWS you may want to set the serverName variable
 # and/or default-hostname to the inventory name
 #  splunk_set_servername: true
@@ -69,6 +65,29 @@ splunk_defaults:
     server: # Conf file name (server.conf)
       - diskUsage: # Stanza name [diskUsage]
         - minFreeSpace: 500 # value to be set
+
+  # Define some indexes to be created on the indexers
+  # Volume definitions can be set in the splunk_indexer_volumes section. otherwise creates a 'primary' volume
+  splunk_indexes:
+    - test1
+    - test2
+
+  # Define Indexer Volumes (filesystem must exist)
+  splunk_indexer_volumes:
+    primary:
+      path: "/splunkdata/hot" # Defaults to "{{splunk_home}}/var/lib/splunk" otherwise
+      maxVolumeDataSizeMB: 50000 # Will ignore VolumeDataSize_Free_MB, if set directly here
+    cold:
+      path: "/splunkdata/cold"
+      maxVolumeDataSizeMB: 50000
+    # _splunk_summaries:
+    #     path: /splunk/dma
+  # Set the default for volumes
+  splunk_volume_defaults:
+    VolumeDataSize_Free_MB: 800 # Will calculate maxVolumeDataSizeMB as 'fs_free - VolumeDataSize_Free_MB'
+    # Define the volumes to be used for the indexes
+    homePath: primary 
+    coldPath: cold
 
 # Enable SSL for web, inputs and outputs. Own certs can be provided and have to be put
 # inside Splunkenizer/auth directory. If own_certs=false the Splunk internal self-signed

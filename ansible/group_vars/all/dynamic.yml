@@ -85,6 +85,7 @@ splunk_idxc_name_list: >-
              {%- endfor -%}
            {%- endfor -%}
            {{ res|unique }}
+splunk_idxc_indexer_list: "{{ groups.role_indexer|default([])|intersect(splunk_idxc_all_host_list|default([]))|intersect(groups['splunk_env_'+splunk_env_name]) }}"
 
 # Multisite Indexer Cluster
 splunk_idxc_available_sites: "{{ idxc_available_sites|default([])|join(',') }}"

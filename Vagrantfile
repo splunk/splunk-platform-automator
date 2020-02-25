@@ -86,6 +86,9 @@ defaults = {
       "homePath"=>"primary",
       "coldPath"=>"primary"
     },
+    "splunk_indexer_volumes"=>{
+      "primary"=>nil
+    },
     "splunk_ssl"=>{
       "web"=>{
         "enable"=>false,
@@ -228,6 +231,20 @@ if !settings['splunk_defaults'].nil?
     end
     if ssl_type == "web" and splunk_defaults['splunk_ssl'][ssl_type]['own_certs'] == false
       splunk_defaults['splunk_ssl'][ssl_type]['config'] = {"enableSplunkWebSSL"=>true}
+    end
+  end
+  
+  #Add volumes to splunk_indexer_volumes from splunk_volume_defaults home and cold path, if not defined in the config
+  if !settings['splunk_defaults']['splunk_volume_defaults'].nil?
+    ['homePath','coldPath'].each do |vol_path_type|
+      if !settings['splunk_defaults']['splunk_volume_defaults'][vol_path_type].nil?
+        if settings['splunk_defaults']['splunk_indexer_volumes'].nil?
+          settings['splunk_defaults']['splunk_indexer_volumes'] = {}
+        end
+        if not settings['splunk_defaults']['splunk_indexer_volumes'].has_key?(settings['splunk_defaults']['splunk_volume_defaults'][vol_path_type])
+          settings['splunk_defaults']['splunk_indexer_volumes'][settings['splunk_defaults']['splunk_volume_defaults'][vol_path_type]] = nil
+        end
+      end
     end
   end
 end
