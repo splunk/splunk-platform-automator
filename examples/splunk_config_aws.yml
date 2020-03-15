@@ -30,6 +30,12 @@ aws:
       Ebs.VolumeSize: 50 # Size in GB
       #Ebs.DeleteOnTermination: true
       #Ebs.VolumeType: "GP2" # General performance - you might want something faster
+    - # do not remove this, it is part of the format
+      DeviceName: "/dev/sdg" # Additional Disk
+      Ebs.VolumeSize: 20 # Size in GB
+    - # do not remove this, it is part of the format
+      DeviceName: "/dev/sdh" # Additional Disk
+      Ebs.VolumeSize: 30 # Size in GB
 
 # Splunk default settings
 splunk_defaults:
