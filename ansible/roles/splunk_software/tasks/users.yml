@@ -6,14 +6,24 @@
     - splunk
     - splunk_software
     - splunk_group
-  group: name={{ splunk_user }} state=present
+  group:
+    name: "{{ splunk_group }}"
+    state: present
+  when: splunk_group_create|default(true) == true
 
 - name: add splunk user
   tags:
     - splunk
     - splunk_software
     - splunk_user
-  user: name={{ splunk_user }} group=splunk comment="Splunk User" shell=/bin/bash createhome=yes
+  user:
+    name: "{{ splunk_user }}"
+    group: "{{ splunk_group }}"
+    comment: "Splunk User"
+    shell: /bin/bash
+    create_home: yes
+    state: present
+  when: splunk_user_create|default(true) == true
 
 - name: Adding splunk aliases
   tags:
