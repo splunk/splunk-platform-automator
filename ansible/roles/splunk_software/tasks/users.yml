@@ -21,7 +21,7 @@
     - splunk_software
   template:
     src: home/splunk/bashrc.splunk.j2
-    dest: /home/{{ splunk_user }}/.bashrc.splunk
+    dest: "~{{ splunk_user }}/.bashrc.splunk"
     owner: "{{ splunk_user }}"
     group: "{{ splunk_group }}"
     mode: 0644
@@ -31,7 +31,7 @@
     - splunk
     - splunk_software
   blockinfile:
-    path: /home/{{ splunk_user }}/.bashrc
+    path: "~{{ splunk_user }}/.bashrc"
     marker: "#<!-- {mark} ANSIBLE MANAGED BLOCK -->"
     insertafter: "export PATH"
     content: |
