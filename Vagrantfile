@@ -403,6 +403,10 @@ settings['splunk_hosts'].each do |splunk_host|
     File.open("#{host_vars_dir}/#{splunk_host['name']}/splunk_env.yml", "w") do |f|
       f.write(splunk_env.to_yaml)
     end
+  else
+    if File.file?("#{host_vars_dir}/#{splunk_host['name']}/splunk_env.yml")
+      File.delete("#{host_vars_dir}/#{splunk_host['name']}/splunk_env.yml")
+    end
   end
 
   # Build the ansible groups

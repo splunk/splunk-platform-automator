@@ -60,11 +60,18 @@ splunk_defaults:
 #  splunk_loginpage_print_userpw: false
 #  splunk_loginpage_print_roles: false
 
-  # Add Splunk config settings to be set in system/local
+  # Add Splunk config settings to a file location relative to $SPLUNK_HOME/etc
+  # This will be applied to all Splunk Enterprise Instances
   splunk_conf:
-    server: # Conf file name (server.conf)
-      - diskUsage: # Stanza name [diskUsage]
-        - minFreeSpace: 500 # value to be set
+    apps/splunk_all_server/local/server.conf: # Conf file name in an app
+      diskUsage: # Stanza name [diskUsage]
+        minFreeSpace: 500 # value to be set
+        otherthing: othervalue
+      otherstanza:
+        key: value
+    system/local/limits.conf: # File in system/local
+      stanzaname:
+        key: value
 
   # Define some indexes to be created on the indexers
   # Volume definitions can be set in the splunk_indexer_volumes section. otherwise creates a 'primary' volume
@@ -203,6 +210,19 @@ splunk_hosts:
     site: site0
     # Specify different version for this host
     splunk_version: '6.5.3'
+
+    # Special settings can be set for one host only
+    # Other file definitions will be merged with the global settings
+    splunk_conf:
+      apps/splunk_all_server/local/server.conf: # Conf file name in an app
+        diskUsage: # Stanza name [diskUsage]
+          minFreeSpace: 500 # value to be set
+          otherthing: othervalue
+        otherstanza:
+          key: value
+      system/local/limits.conf: # File in system/local
+        stanzaname:
+          key: value
 
   # Cluster Indexer
   - name: idx1

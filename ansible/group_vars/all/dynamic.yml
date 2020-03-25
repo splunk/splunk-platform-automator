@@ -198,11 +198,9 @@ splunk_systemd_services_updates: >-
 # Splunk Config Settings
 splunk_conf_settings_list: >-
           {%- set res = [] -%}
-          {%- for splunk_conf_sections in splunk_conf_list_items.value -%}
-            {%- for splunk_conf_section in splunk_conf_sections -%}
-              {%- for section_items in splunk_conf_sections[splunk_conf_section] -%}
-                {%- set ignored = res.extend([{'section': splunk_conf_section, 'key': section_items.keys()|first, 'value': section_items.values()|first, }]) -%}
-              {%- endfor -%}
+          {%- for section_name in splunk_conf_list_items.value.keys()|list -%}
+            {%- for section_item_key in splunk_conf_list_items.value[section_name].keys()|list -%}
+              {%- set ignored = res.extend([{'section': section_name, 'key': section_item_key, 'value': splunk_conf_list_items.value[section_name][section_item_key] }]) -%}
             {%- endfor -%}
           {%- endfor -%}
           {{ res }}
