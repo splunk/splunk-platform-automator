@@ -39,7 +39,7 @@
     server_pem: "{% for result in server_pems.results %}{% if result.stat.exists == true %}{{ result.item }}{% endif %}{% endfor %}"
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
 
-- name:
+- name: fail if no cacert found
   tags:
     - splunk
     - splunk_baseconfig
@@ -48,7 +48,12 @@
     msg: "Cannot find a cacert.pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true and cacert_pem == ""
 
-- fail:
+- name: fail if no pem cert found
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - inputs_ssl
+  fail: 
     msg: "Cannot find a .pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true and server_pem == ""
 
@@ -60,12 +65,12 @@
   file:
     state: directory
     recurse: true
-    path: "{{ splunk_home }}/{{ item|dirname }}"
+    path: "{{ splunk_home }}/{{ item }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
   with_items:
-    - "{{ splunk_ssl.inputs.config.rootCA|replace('$SPLUNK_HOME/', '') }}"
-    - "{{ splunk_ssl.inputs.config.serverCert|replace('$SPLUNK_HOME/', '') }}"
+    - "{{ splunk_ssl.inputs.config.rootCA|replace('$SPLUNK_HOME/', '')|dirname }}"
+    - "{{ splunk_ssl.inputs.config.serverCert|replace('$SPLUNK_HOME/', '')|dirname }}"
   notify: restart splunk
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
 
@@ -76,12 +81,12 @@
     - inputs_ssl
   copy:
     src: "{{ splunk_auth_dir }}/{{ item.src }}"
-    dest: "{{ splunk_home }}/{{ item.dest|dirname }}"
+    dest: "{{ splunk_home }}/{{ item.dest }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
   with_items:
-    - { src: '{{ cacert_pem }}', dest: "{{ splunk_ssl.inputs.config.rootCA|replace('$SPLUNK_HOME/', '') }}" }
-    - { src: '{{ server_pem }}', dest: "{{ splunk_ssl.inputs.config.serverCert|replace('$SPLUNK_HOME/', '') }}" }
+    - { src: '{{ cacert_pem }}', dest: "{{ splunk_ssl.inputs.config.rootCA|replace('$SPLUNK_HOME/', '')|dirname }}" }
+    - { src: '{{ server_pem }}', dest: "{{ splunk_ssl.inputs.config.serverCert|replace('$SPLUNK_HOME/', '')|dirname }}" }
   notify: restart splunk
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true

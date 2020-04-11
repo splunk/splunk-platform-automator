@@ -40,7 +40,7 @@
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true
 
 #FIXME: Fix the error message to include the correct filename
-- name:
+- name: fail if no cacert found
   tags:
     - splunk
     - splunk_baseconfig
@@ -50,7 +50,7 @@
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true and cacert_pem == ""
 
 #FIXME: Fix the error message to include the correct filename
-- name:
+- name: fail if no pem cert found
   tags:
     - splunk
     - splunk_baseconfig

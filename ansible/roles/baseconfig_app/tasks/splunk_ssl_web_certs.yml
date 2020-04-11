@@ -50,7 +50,7 @@
     pem_file: "{% for result in cert_pems.results %}{% if result.stat.exists == true %}{{ result.item }}.pem{% endif %}{% endfor %}"
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
-- name:
+- name: fail if no cacert found
   tags:
     - splunk
     - splunk_baseconfig
@@ -60,7 +60,13 @@
     msg: "Cannot find a .key file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true and key_file == ""
 
-- fail:
+- name: fail if no pem cert found
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_search_base
+    - web_ssl
+  fail:
     msg: "Cannot find a .pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true and pem_file == ""
 
@@ -73,12 +79,12 @@
   file:
     state: directory
     recurse: true
-    path: "{{ splunk_home }}/{{ item|dirname }}"
+    path: "{{ splunk_home }}/{{ item }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
   with_items:
-    - '{{ splunk_ssl.web.config.privKeyPath }}'
-    - '{{ splunk_ssl.web.config.serverCert }}'
+    - '{{ splunk_ssl.web.config.privKeyPath|dirname }}'
+    - '{{ splunk_ssl.web.config.serverCert|dirname }}'
   notify: restart splunk
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
@@ -90,13 +96,13 @@
     - web_ssl
   copy:
     src: "{{ splunk_auth_dir }}/{{ item.src }}"
-    dest: "{{ splunk_home }}/{{ item.dest|dirname }}"
+    dest: "{{ splunk_home }}/{{ item.dest }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
   with_items:
-    - { src: '{{ key_file }}', dest: '{{ splunk_ssl.web.config.privKeyPath }}' }
-    - { src: '{{ pem_file }}', dest: '{{ splunk_ssl.web.config.serverCert }}' }
+    - { src: '{{ key_file }}', dest: '{{ splunk_ssl.web.config.privKeyPath|dirname }}' }
+    - { src: '{{ pem_file }}', dest: '{{ splunk_ssl.web.config.serverCert|dirname }}' }
   notify: restart splunk
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
