@@ -70,7 +70,6 @@
     path: "{{ app_path }}/{{ app_dest_name }}/default"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-  notify: restart splunk
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true
 
 - name: copy certs file for inputs ssl
@@ -87,5 +86,4 @@
   with_items:
     - { src: '{{ cacert_pem }}', dest: "{{ app_path }}/{{ app_dest_name }}/default" }
     - { src: '{{ client_pem }}', dest: "{{ app_path }}/{{ app_dest_name }}/default" }
-  notify: restart splunk
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true

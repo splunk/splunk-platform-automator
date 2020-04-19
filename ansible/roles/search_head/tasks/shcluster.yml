@@ -148,7 +148,7 @@
   until: "shcluster_ready.stdout.find('service_ready_flag : 1') != -1"
   retries: 15
   delay: 10
-  notify: push shcluster bundle
+  notify: wait for SHC service ready and call push bundle
   when: inventory_hostname == splunk_shc_host_list|last and shcluster_status.changed == true
 
 - include_tasks: search_peers.yml

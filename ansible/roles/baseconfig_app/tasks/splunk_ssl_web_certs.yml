@@ -85,7 +85,6 @@
   with_items:
     - '{{ splunk_ssl.web.config.privKeyPath|dirname }}'
     - '{{ splunk_ssl.web.config.serverCert|dirname }}'
-  notify: restart splunk
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
 - name: copy certs file for web ssl
@@ -103,7 +102,6 @@
   with_items:
     - { src: '{{ key_file }}', dest: '{{ splunk_ssl.web.config.privKeyPath|dirname }}' }
     - { src: '{{ pem_file }}', dest: '{{ splunk_ssl.web.config.serverCert|dirname }}' }
-  notify: restart splunk
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
 - name: link certs file for web ssl
@@ -121,5 +119,4 @@
   with_items:
     - { src: '{{ key_file }}', dest: '{{ splunk_ssl.web.config.privKeyPath }}' }
     - { src: '{{ pem_file }}', dest: '{{ splunk_ssl.web.config.serverCert }}' }
-  notify: restart splunk
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true

@@ -71,7 +71,6 @@
   with_items:
     - "{{ splunk_ssl.inputs.config.rootCA|replace('$SPLUNK_HOME/', '')|dirname }}"
     - "{{ splunk_ssl.inputs.config.serverCert|replace('$SPLUNK_HOME/', '')|dirname }}"
-  notify: restart splunk
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
 
 - name: copy certs file for inputs ssl
@@ -88,5 +87,4 @@
   with_items:
     - { src: '{{ cacert_pem }}', dest: "{{ splunk_ssl.inputs.config.rootCA|replace('$SPLUNK_HOME/', '')|dirname }}" }
     - { src: '{{ server_pem }}', dest: "{{ splunk_ssl.inputs.config.serverCert|replace('$SPLUNK_HOME/', '')|dirname }}" }
-  notify: restart splunk
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
