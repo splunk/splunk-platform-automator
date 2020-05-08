@@ -30,7 +30,7 @@
   copy:
     src: "{{ splunk_software }}/{{ splunk_license_file_name }}"
     dest: "/tmp/{{ splunk_license_file_name }}"
-  when: grep_result is not search(lic_guid_src.matches[0].guid)
+  when: grep_result.stdout is not search(lic_guid_src.matches[0].guid)
 
 - name: add license file to splunk
   tags:
@@ -40,7 +40,7 @@
   become: yes
   become_user: "{{ splunk_user }}"
   #when: "grep_result.rc == 1"
-  when: grep_result is not search(lic_guid_src.matches[0].guid)
+  when: grep_result.stdout is not search(lic_guid_src.matches[0].guid)
   notify: restart splunk
 
 - name: remove license file from tmp location
