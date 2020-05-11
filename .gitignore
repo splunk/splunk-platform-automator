@@ -11,8 +11,6 @@
 *.retry
 # Any log file
 *.log
-# Config directory
-config
 # Auth directory
 auth
 # Inventory directory
@@ -31,3 +29,7 @@ helpers
 # Sublime
 *.sublime-project
 *.sublime-workspace
+
+!config/splunk_config.yml
+config/splunk_config.yml.backup
+config/index.html

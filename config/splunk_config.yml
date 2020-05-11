@@ -1,0 +1,34 @@
+---
+
+general:
+  start_ip: 172.16.1.100
+
+os:
+  packages:
+    - git
+    - vim
+    - libselinux-python
+    - unzip
+
+virtualbox:
+  box: "centos/7"
+  cpus: 4
+  memory: 1000
+
+  install_vbox_additions: true
+
+splunk_defaults:
+  splunk_env_name: BGN
+  splunk_license_file: Splunk_Enterprise.lic
+  splunk_version: '7.3.0'
+
+splunk_hosts:
+  - name: idx1
+    roles:
+      - indexer
+      - search_head
+      - license_master
+
+  - name: idx2
+    roles:
+      - search_head
