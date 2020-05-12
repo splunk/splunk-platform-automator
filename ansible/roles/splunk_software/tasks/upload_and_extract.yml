@@ -28,6 +28,7 @@
   get_url:
     url: "{{ splunk_url }}"
     dest: "/tmp/splunk.tar.gz"
+    timeout: 60
     owner: "{{ splunk_user }}"
     group: "{{ splunk_group }}"
     force: yes
