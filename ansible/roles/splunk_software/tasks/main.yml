@@ -5,7 +5,8 @@
   tags:
     - splunk
     - splunk_software
-  debug: msg="role '{{ role_name }}' start"
+  debug:
+    msg: "role '{{ role_name }}' start"
 
 - name: "create splunk user and group"
   tags:
@@ -25,7 +26,8 @@
   tags:
     - splunk
     - splunk_software
-  debug: msg='splunk found as {{ splunk_home }}/bin/splunk'
+  debug:
+    msg: 'splunk found as {{ splunk_home }}/bin/splunk'
   when: splunk_path.stat.exists
 
 - name: check for existing splunk.secret file

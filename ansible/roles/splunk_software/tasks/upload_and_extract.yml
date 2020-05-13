@@ -4,7 +4,11 @@
   tags:
     - splunk
     - splunk_software
-  unarchive: src="{{splunk_archive.0}}" dest="{{ splunk_install_dir }}/" owner={{ splunk_user }} group={{ splunk_group }} creates=yes
+  unarchive:
+    src: "{{splunk_archive.0}}"
+    dest: "{{ splunk_install_dir }}/"
+    owner: "{{ splunk_user }}"
+    group: "{{ splunk_group }}"
   become: yes
   become_user: "{{ splunk_user }}"
   when: splunk_download is not defined or
