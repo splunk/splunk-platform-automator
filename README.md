@@ -246,10 +246,6 @@ You can also use the ansible playbooks without vagrant. Like that you can deploy
 
 The following Ansible versions are tested and working with Splunkenizer, but any newer version should work as well.
 
-:white_check_mark: Ansible 2.4.0.x
-:white_check_mark: Ansible 2.4.3.x
-:white_check_mark: Ansible 2.5.x
-:white_check_mark: Ansible 2.6.x
 :white_check_mark: Ansible 2.7.x
 :white_check_mark: Ansible 2.8.x
 :white_check_mark: Ansible 2.9.x
