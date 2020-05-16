@@ -1,7 +1,7 @@
 
 ![Splunkenizer Overview](https://github.com/splunkenizer/Splunkenizer/blob/master/pic/splunkenizer_overview.png)
 
-
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 # Splunkenizer
 
@@ -250,6 +250,6 @@ Splunkenizer is created by [Marco Stadler](https://github.com/splunkenizer) - a 
 
 # License
 
-Apache License 2.0
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 See [COPYING](COPYING) to see the full text.
