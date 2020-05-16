@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- Added playbook to update splunk web certs
 - Support upgrades to Splunk 8.x
 - Allow to set custom config file settings (splunk_conf)
 - Option the 'os' section to disable SELinux (needs Ansible 2.7)
