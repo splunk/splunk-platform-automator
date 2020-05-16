@@ -1002,7 +1002,8 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       #print "Special host vars:\n"
       #puts special_host_vars
 
-      if !File.file?("#{config_dir}/no_vagrant_ansible")
+      #TODO: Remove in future versions
+      if File.file?("#{config_dir}/vagrant_ansible")
         srv.vm.provision "ansible" do |ansible|
           ansible.compatibility_mode = "2.0"
           ansible.inventory_path = "inventory"

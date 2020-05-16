@@ -22,7 +22,8 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
    * [First start and initialization](#first-start-and-initialization)
    * [Copy a configuration file](#copy-a-configuration-file)
    * [Start the deployment](#start-the-deployment)
-      * [Optional, but recommended: Create VM first without Ansible and run playbooks in parallel on the nodes](#optional-but-recommended-create-vm-first-without-ansible-and-run-playbooks-in-parallel-on-the-nodes)
+      * [Create the Virtual Machines](#create-the-virtual-machines)
+      * [Run Ansible playbooks to deploy and configure the Splunk software](#run-ansible-playbooks-to-deploy-and-configure-the-splunk-software)
    * [Stop hosts](#stop-hosts)
    * [Destroy hosts](#destroy-hosts)
    * [Rerun provisioning](#rerun-provisioning)
@@ -42,7 +43,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
 
 # Support
 
-**Note: This framework is not officially supported by Splunk. I develop this on best effort in my spare time.**
+**Note: This framework is not officially supported by Splunk. I am developing this on best effort in my spare time.**
 
 # Features
 
@@ -90,8 +91,8 @@ Your directory structure should now look like this:
 ./Vagrant/Splunkenizer/...
 ./Vagrant/Software/Configurations - Base/...
 ./Vagrant/Software/Configurations - Index Replication/...
-./Vagrant/Software/splunk-7.1.1-8f0ead9ec3db-Linux-x86_64.tgz
-./Vagrant/Software/splunkforwarder-7.1.1-8f0ead9ec3db-Linux-x86_64.tgz
+./Vagrant/Software/splunk-8.0.3-a6754d8441bf-Linux-x86_64.tgz
+./Vagrant/Software/splunkforwarder-8.0.3-a6754d8441bf-Linux-x86_64.tgz
 ./Vagrant/Software/Splunk_Enterprise.lic
 ```
 
@@ -134,26 +135,17 @@ AWS: See [instruction here](#deploying-on-amazon-cloud) when deploying into Amaz
 ## Start the deployment
 When building virtual machines (for virtualbox) the first time it will pull an os image from the internet. The box images are cached here: `~/.vagrant.d/boxes`.
 
+### Create the Virtual Machines
 ```
 vagrant up
 ```
 
-### Optional, but recommended: Create VM first without Ansible and run playbooks in parallel on the nodes
-Since Splunkenizer can be used for existing servers as well, the creation of the virtual machines and the installation/configuration of Splunk will be separated in future versions. I started this in the code now and you can already make use of this to speed up the process even more.
-
-To disable running Ansible from vagrant directly, touch this file:
-
-```
-touch config/no_vagrant_ansible
-```
-
+### Run Ansible playbooks to deploy and configure the Splunk software 
 The `vagrant up` command only creates the virtual machines. To deploy Splunk afterwards, run this command:
 
 ```
 ansible-playbook ansible/deploy_site.yml
 ```
-
-**Important Note:** Always run `vagrant status` after updating the `splunk_config.yml` file, otherwise the changes are not populated to the Ansible inventory.
 
 To run both steps with one command use:
 
@@ -176,11 +168,13 @@ vagrant destroy [-f] [<hostname>]
 ```
 
 ## Rerun provisioning
-Ansible playbooks can be run over and over again. IF the virtual machine is already built and you need to start the playbooks on a certain host, you can call the provisioner again. This can be needed if something fails and you fixed the error.
+Ansible playbooks can be run over and over again. If the virtual machine is already built, you can rerun the playbooks on a certain host again. This can be needed if something fails and you fixed the error.
 
 ```
-vagrant provision <hostname>
+ansible-playbook ansible/deploy_site.yml [--limit <hostname>]
 ```
+
+**Important Note:** Always run `vagrant status` after updating the `splunk_config.yml` file, otherwise the changes are not populated to the Ansible inventory.
 
 ## Login to the hosts
 
