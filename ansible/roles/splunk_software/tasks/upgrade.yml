@@ -15,10 +15,11 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  debug: msg='splunk found as {{ splunk_home }}/bin/splunk'
+  debug:
+    msg: 'splunk found as {{ splunk_home }}/bin/splunk'
   when: splunk_path.stat.exists
 
-- name:
+- name: no Splunk installation found
   tags:
     - splunk
     - splunk_software

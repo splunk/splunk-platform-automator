@@ -5,7 +5,8 @@
   tags:
     - splunk
     - deployment_server
-  debug: msg="role '{{ role_name }}' start"
+  debug:
+    msg: "role '{{ role_name }}' start"
 
 - name: apply baseconfig app org_all_forwarder_outputs
   tags:

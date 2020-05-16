@@ -6,7 +6,8 @@
     - splunk
     - search_head
     - shsingle
-  debug: msg="Configuring single search head"
+  debug:
+    msg: "Configuring single search head"
 
 - name: apply baseconfig app org_all_deploymentclient
   tags:

@@ -5,7 +5,8 @@
   tags:
     - splunk
     - deployer
-  debug: msg="role '{{ role_name }}' start"
+  debug:
+    msg: "role '{{ role_name }}' start"
 
 - name: "check if shclustering pass4SymmKey exists"
   tags:

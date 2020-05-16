@@ -6,7 +6,8 @@
     - splunk
     - splunk_baseconfig
     - heavy_forwarder
-  debug: msg="role '{{ role_name }}' start"
+  debug:
+    msg: "role '{{ role_name }}' start"
 
 - name: apply baseconfig app org_all_deploymentclient
   tags:

@@ -6,7 +6,8 @@
     - splunk
     - indexer
     - idxsingle
-  debug: msg="Configuring single indexer"
+  debug:
+    msg: "Configuring single indexer"
 
 - name: apply baseconfig app org_all_deploymentclient
   tags:

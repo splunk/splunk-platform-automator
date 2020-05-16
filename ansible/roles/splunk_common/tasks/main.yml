@@ -5,7 +5,8 @@
   tags:
     - splunk
     - splunk_common
-  debug: msg="role '{{ role_name }}' start"
+  debug:
+    msg: "role '{{ role_name }}' start"
 
 - include_tasks: check_systemctl.yml
 

@@ -6,7 +6,8 @@
     - splunk
     - search_head
     - shcluster
-  debug: msg="Configuring search head cluster node"
+  debug:
+    msg: "Configuring search head cluster node"
 
 - name: set global permissions for comment macro
   include_tasks: comment_macro.yml

@@ -5,8 +5,10 @@
   tags:
     - splunk
     - indexer
-  debug: msg="role '{{ role_name }}' start"
+  debug:
+    msg: "role '{{ role_name }}' start"
 
+#TODO: create volume directories
 #- name: create volume directories
 #  tags:
 #    - splunk

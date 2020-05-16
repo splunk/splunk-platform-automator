@@ -5,7 +5,8 @@
   tags:
     - splunk
     - cluster_master
-  debug: msg="role '{{ role_name }}' start"
+  debug:
+    msg: "role '{{ role_name }}' start"
 
 - name: apply baseconfig app org_cluster_master_base
   tags:

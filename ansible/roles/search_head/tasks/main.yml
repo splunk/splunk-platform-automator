@@ -5,7 +5,8 @@
   tags:
     - splunk
     - search_head
-  debug: msg="role '{{ role_name }}' start"
+  debug:
+    msg: "role '{{ role_name }}' start"
 
 - name: install certs for web ssl
   tags:

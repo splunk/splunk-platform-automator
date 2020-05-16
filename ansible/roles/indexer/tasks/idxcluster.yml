@@ -6,7 +6,8 @@
     - splunk
     - indexer
     - idxcluster
-  debug: msg="Configuring indexer cluster"
+  debug:
+    msg: "Configuring indexer cluster"
 
 - name: apply baseconfig app org_cluster_indexer_base
   tags:
