@@ -1,0 +1,17 @@
+---
+# add a splunk web certs if not existing
+
+- name: add splunk web certs
+  hosts: all,!role_indexer,!role_universal_forwarder,!role_universal_forwarder_windows
+  roles:
+    - splunk_common
+  become: yes
+  become_user: root
+
+  tasks:
+
+    - name: install certs for web ssl
+      include_role:
+        name: baseconfig_app
+        tasks_from: splunk_ssl_web_certs
+      when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
