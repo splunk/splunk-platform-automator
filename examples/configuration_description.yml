@@ -184,11 +184,6 @@ splunk_shclusters:
 splunk_hosts:
   # Cluster Master
   - name: cm
-# You can set ansible settings here as well
-#    ansible:
-#      verbose: "v"
-#      skip_tags:
-#        - splunk
 # You can set host specific vbox resources here as well
     virtualbox:
       cpus: 2
