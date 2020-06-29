@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - New default: Do not run ansible from vagrant
+- New default: disable_selinux: true (disables only, if state is 'enforcing')
 
 ### Deprecated
 

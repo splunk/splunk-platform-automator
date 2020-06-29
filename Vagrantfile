@@ -64,7 +64,8 @@ defaults = {
   },
   "os"=>{
     "time_zone"=>"Europe/Zurich",
-    "packages"=>nil
+    "packages"=>nil,
+    "disable_selinux"=>true
   },
   "splunk_dirs"=>{
     "splunk_baseconfig_dir"=>"../Software",

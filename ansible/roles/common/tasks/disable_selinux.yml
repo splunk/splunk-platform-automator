@@ -1,6 +1,11 @@
 ---
 # This playbook disables selinux
 
+- name: Check SELinux state
+  shell: which getenforce > /dev/null 2>&1 && getenforce
+  register: selinux_state
+  when: disable_selinux|default(false) == true
+
 - name: Disable SELinux
   tags:
     - common
@@ -8,7 +13,7 @@
   selinux:
     state: disabled
   register: need_reboot
-  when: disable_selinux|default(false) == true
+  when: disable_selinux|default(false) == true and selinux_state.stdout|lower == "enforcing"
 
 - name: Reboot the server and wait for it to come back up.
   reboot:
