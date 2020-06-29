@@ -39,7 +39,7 @@
     - splunk_upgrade
   include_tasks: find_target_version.yml
 
-- name:
+- name: inform about not upgrading
   tags:
     - splunk
     - splunk_software
@@ -48,7 +48,7 @@
     msg: "Installed version '{{ splunk_installed_version }}' is equal to upgrade version '{{ splunk_target_version }}' -> nothing to upgrade, ending"
   when: splunk_installed_version == splunk_target_version
 
-- name:
+- name: end play
   tags:
     - splunk
     - splunk_software
