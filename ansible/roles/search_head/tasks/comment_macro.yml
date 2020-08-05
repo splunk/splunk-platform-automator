@@ -17,6 +17,8 @@
     - shsettings
     - comment_macro
   shell: 'grep "\[macros\/comment(1)\]" {{ splunk_home }}/etc/apps/search/metadata/local.meta'
+  become: yes
+  become_user: "{{ splunk_user }}"
   register: grep_result
   check_mode: False
   failed_when: "grep_result.rc > 1"

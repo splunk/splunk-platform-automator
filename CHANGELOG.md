@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Fixed splunk command calls to run as user splunk instead of root
 - Do not deploy org_search_volume_indexes on single node instance
 - Fixed search head cluster setup when using own certificates
 - Enable systemd-managed by default with Splunk 7.3.x

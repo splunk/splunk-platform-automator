@@ -9,6 +9,8 @@
     - dserver
   # Same command is in search_head/tasks/search_peers.yml
   shell: sed -n '/^\[distributedSearch\]$/,+1p' {{ splunk_home }}/etc/system/local/distsearch.conf | grep servers | awk -F= '{print $2}' | sed -e 's%https\://%%g' -e 's/\:[0-9]*//g' | tr -d " "
+  become: yes
+  become_user: "{{ splunk_user }}"
   check_mode: no
   register: current_dservers
   args:

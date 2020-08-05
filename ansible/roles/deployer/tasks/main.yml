@@ -13,6 +13,8 @@
     - splunk
     - deployer
   shell: "{{ splunk_home }}/bin/splunk btool server list shclustering | egrep -e '^pass4SymmKey'"
+  become: yes
+  become_user: "{{ splunk_user }}"
   register: grep_result
   check_mode: no
   failed_when: "grep_result.rc > 1"

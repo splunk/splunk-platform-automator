@@ -25,6 +25,8 @@
     - search_head
     - shcluster
   shell: "{{ splunk_home }}/bin/splunk btool server list shclustering | egrep -e '^disabled = true$'"
+  become: yes
+  become_user: "{{ splunk_user }}"
   register: need_shcluster_init
   check_mode: False
   failed_when: "need_shcluster_init.rc > 1"
