@@ -12,6 +12,7 @@
   become: yes
   become_user: "{{ splunk_user }}"
   check_mode: no
+  changed_when: false
   register: current_dservers
   args:
     warn: false

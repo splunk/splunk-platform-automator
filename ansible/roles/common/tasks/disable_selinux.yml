@@ -3,6 +3,8 @@
 
 - name: Check SELinux state
   shell: which getenforce > /dev/null 2>&1 && getenforce
+  check_mode: no
+  changed_when: false
   register: selinux_state
   when: disable_selinux|default(false) == true
 

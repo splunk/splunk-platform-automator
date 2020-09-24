@@ -8,6 +8,7 @@
     - splunk_sudoers
   shell: "systemctl --version | grep -w systemd | cut -d' ' -f 2"
   check_mode: no
+  changed_when: false
   register: systemd_version_output
 
 - name: find polkit version
@@ -17,6 +18,8 @@
     - splunk_polkit
     - splunk_sudoers
   shell: "pkaction --version | grep -w version | cut -d' ' -f 3"
+  check_mode: no
+  changed_when: false
   register: polkit_version_output
 
 - name: add splunk polkit rules file

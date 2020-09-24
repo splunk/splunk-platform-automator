@@ -28,7 +28,7 @@
   become: yes
   become_user: "{{ splunk_user }}"
   register: need_shcluster_init
-  check_mode: False
+  check_mode: no
   failed_when: "need_shcluster_init.rc > 1"
   changed_when: "need_shcluster_init.rc == 0"
 
@@ -71,7 +71,7 @@
   become: yes
   become_user: "{{ splunk_user }}"
   register: shcluster_status
-  check_mode: False
+  check_mode: no
   failed_when: shcluster_status.rc != 0 and shcluster_status.rc != 22
   changed_when: shcluster_status.stdout.find('service_ready_flag') == -1
 
@@ -121,7 +121,8 @@
   command: "{{ splunk_home }}/bin/splunk show servername -auth admin:{{ splunk_admin_password }}"
   become: yes
   become_user: "{{ splunk_user }}"
-  check_mode: False
+  check_mode: no
+  changed_when: false
   register: splunk_servername
   when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
 
@@ -133,6 +134,8 @@
   command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
   become: yes
   become_user: "{{ splunk_user }}"
+  check_mode: no
+  changed_when: false
   register: shcluster_join
   until: "shcluster_join.stdout.find('label :' + splunk_servername.stdout.split(':')[1]) != -1"
   retries: 15
@@ -147,6 +150,8 @@
   command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
   become: yes
   become_user: "{{ splunk_user }}"
+  check_mode: no
+  changed_when: false
   register: shcluster_ready
   until: "shcluster_ready.stdout.find('service_ready_flag : 1') != -1"
   retries: 15

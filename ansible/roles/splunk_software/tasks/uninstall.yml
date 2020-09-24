@@ -66,7 +66,7 @@
     - splunk_uninstall
   shell: "pgrep splunkd"
   register: grep_result
-  check_mode: False
+  check_mode: no
   failed_when: "grep_result.rc > 1"
   changed_when: "grep_result.rc != 0"
 

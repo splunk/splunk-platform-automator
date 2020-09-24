@@ -15,6 +15,7 @@
   become: yes
   become_user: "{{ splunk_user }}"
   check_mode: no
+  changed_when: false
   register: version_output
   when: splunk_is_installed|default(false) == true
 

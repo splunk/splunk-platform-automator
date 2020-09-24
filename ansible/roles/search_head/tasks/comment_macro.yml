@@ -20,7 +20,7 @@
   become: yes
   become_user: "{{ splunk_user }}"
   register: grep_result
-  check_mode: False
+  check_mode: no
   failed_when: "grep_result.rc > 1"
   changed_when: "grep_result.rc == 1"
   when: localmeta_result.stat.exists == true
