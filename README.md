@@ -105,7 +105,7 @@ Your directory structure should now look like this:
 
 1. Install the aws vagrant plugin: `vagrant plugin install vagrant-aws`
 1. Download the vagrant dummy box for aws: `vagrant box add aws-dummy https://github.com/mitchellh/vagrant-aws/raw/master/dummy.box`
-1. Generate AWS ACCESS Keys, described [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)
+1. Generate AWS ACCESS Keys, described [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html#cli-configure-quickstart-creds)
 1. Optional, but recommended:
    1. Add AWS_ACCESS_KEY_ID=<your access key ID> as environment variable
    1. Add AWS_SECRET_ACCESS_KEY=<your secret access key> as environment variable
