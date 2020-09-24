@@ -21,7 +21,8 @@
   become: yes
   become_user: "{{ splunk_user }}"
   register: grep_result
-  check_mode: False
+  check_mode: no
+  changed_when: false
 
 - name: copy license file to tmp location
   tags:
