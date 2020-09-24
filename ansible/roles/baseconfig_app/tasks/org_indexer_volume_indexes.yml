@@ -30,7 +30,7 @@
     - splunk
     - splunk_baseconfig
     - org_indexer_volume_indexes
-  shell: "df --block-size=M --output=avail {{ volume_vars['path']|default(splunk_home+'/var/lib/splunk') }} | tail -1 | tr -d 'M'"
+  shell: "df --block-size=M --output=size {{ volume_vars['path']|default(splunk_home+'/var/lib/splunk') }} | tail -1 | tr -d 'M'"
   check_mode: no
   register: volume_fs_avail
   become: yes
