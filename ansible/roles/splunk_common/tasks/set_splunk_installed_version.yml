@@ -1,7 +1,11 @@
 ---
 # Main playbook for this role
 
-- include_tasks: check_splunk_install.yml
+- name: call check_splunk_install
+  tags:
+    - splunk
+    - splunk_common
+  include_tasks: "check_splunk_install.yml"
 
 - name: find installed splunk version
   tags:
