@@ -17,7 +17,9 @@
     - shcluster
     - shsettings
     - comment_macro
-  when: inventory_hostname == splunk_shc_host_list|first
+  when: 
+    - inventory_hostname == splunk_shc_host_list|first
+    - splunk_installed_version is version_compare('8.1.0', '<')
 
 - name: check if shcluster config is initialized
   tags:

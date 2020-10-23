@@ -136,3 +136,4 @@
     - search_head
     - shsettings
     - comment_macro
+  when: splunk_installed_version is version_compare('8.1.0', '<')

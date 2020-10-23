@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- Do not update comment macro permissions for Splunk 8.1+
 - Added playbook to update splunk web certs
 - Support upgrades to Splunk 8.x
 - Allow to set custom config file settings (splunk_conf)
