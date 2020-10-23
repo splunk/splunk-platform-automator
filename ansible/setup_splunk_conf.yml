@@ -2,7 +2,7 @@
 # This playbook add/updates splunk config file settings
 
 - name: run splunk_conf role
-  hosts: all
+  hosts: all:!role_universal_forwarder_windows
   become: yes
   become_user: root
 
