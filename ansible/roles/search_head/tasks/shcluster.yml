@@ -94,6 +94,7 @@
   command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
   become: yes
   become_user: "{{ splunk_user }}"
+  check_mode: no
   register: shcluster_ready
   until: "shcluster_ready.stdout.find('service_ready_flag') != -1"
   retries: 15
@@ -135,7 +136,6 @@
   become: yes
   become_user: "{{ splunk_user }}"
   check_mode: no
-  changed_when: false
   register: shcluster_join
   until: "shcluster_join.stdout.find('label :' + splunk_servername.stdout.split(':')[1]) != -1"
   retries: 15
@@ -151,7 +151,6 @@
   become: yes
   become_user: "{{ splunk_user }}"
   check_mode: no
-  changed_when: false
   register: shcluster_ready
   until: "shcluster_ready.stdout.find('service_ready_flag : 1') != -1"
   retries: 15
