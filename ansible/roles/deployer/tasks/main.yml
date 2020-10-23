@@ -12,7 +12,7 @@
   tags:
     - splunk
     - deployer
-  shell: "{{ splunk_home }}/bin/splunk btool server list shclustering | egrep -e '^pass4SymmKey'"
+  shell: "{{ splunk_home }}/bin/splunk btool server list shclustering | egrep -we '^pass4SymmKey'"
   become: yes
   become_user: "{{ splunk_user }}"
   register: grep_result
