@@ -243,6 +243,7 @@ The following Ansible versions are tested and working with Splunkenizer, but any
 :white_check_mark: Ansible 2.7.x
 :white_check_mark: Ansible 2.8.x
 :white_check_mark: Ansible 2.9.x
+:white_check_mark: Ansible 2.10.x
 
 # Authors
 
