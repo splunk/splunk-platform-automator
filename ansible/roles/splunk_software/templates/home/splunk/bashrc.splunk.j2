@@ -14,3 +14,6 @@ alias tl="tail -f $SPLUNK_HOME/var/log/splunk/splunkd.log"
 
 # Source the SplunkEnv profile
 . $SPLUNK_HOME/bin/setSplunkEnv
+
+# Prevent broken SSL libs for non splunk commands
+unset LD_LIBRARY_PATH
