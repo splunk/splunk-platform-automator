@@ -99,3 +99,10 @@
   notify: restart splunk
   with_dict: "{{ splunk_ssl.inputs.config }}"
   when: splunk_ssl.inputs.enable == true
+
+- name: "({{ app_name }}) call set_bucket_tunings"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_indexer_base
+  include_tasks: set_bucket_tunings.yml

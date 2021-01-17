@@ -1,0 +1,41 @@
+---
+# This playbook configures additional settings for indexers
+
+- name: "({{ app_name }}) set journalCompression = zstd in indexes.conf"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - bucket_tunings
+    - journalCompression
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
+    section: "default"
+    option: "journalCompression"
+    value: "zstd"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  when: splunk_installed_version is version_compare('7.2', '>=')
+
+- name: "({{ app_name }}) set tsidxWritingLevel = 3 in indexes.conf"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - bucket_tunings
+    - tsidxWritingLevel
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
+    section: "default"
+    option: "tsidxWritingLevel"
+    value: >-
+          {%- if splunk_installed_version is version_compare('8.1', '>=') -%}
+            4
+          {%- else -%}
+            3
+          {%- endif -%}
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  when: splunk_installed_version is version_compare('7.2', '>=')
