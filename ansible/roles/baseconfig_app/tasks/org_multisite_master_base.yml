@@ -169,3 +169,19 @@
     mode: 0600
   notify: restart splunk
   when: app_local.stat.exists == false and idxc_discovery_password is defined
+
+- name: "({{ app_name }}) setting summary_replication = true"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_master_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
+    section: clustering
+    option: summary_replication
+    value: "true"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  when: splunk_installed_version is version_compare('6.4.0', '>=') and splunk_volume_defaults.remotePath is not defined

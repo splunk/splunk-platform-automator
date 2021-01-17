@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- Added setting summary_replication = true
 - Added Bucket tunings for indexers
 - Do not update comment macro permissions for Splunk 8.1+
 - Added playbook to update splunk web certs
