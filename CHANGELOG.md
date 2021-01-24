@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Fixed ansible temp_dir warning during splunk download
 - Fixed SHC setup for Splunk 8.1.x
 - Fixed changed status to be ok for non changing shell and command tasks
 - Fixed splunk command calls to run as user splunk instead of root
