@@ -117,13 +117,22 @@
     path: "/etc/sudoers.d/splunk"
     state: absent
 
-- name: "remove /etc/polkit-1/rules.d/60-{{splunk_service_name}}.rules"
+- name: "remove /etc/polkit-1/rules.d/10-{{splunk_service_name}}.rules"
   tags:
     - splunk
     - splunk_software
     - splunk_uninstall
   file:
     path: "/etc/polkit-1/rules.d/10-{{splunk_service_name}}.rules"
+    state: absent
+
+- name: "remove /etc/polkit-1/rules.d/10-Splunkd.rules"
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
+  file:
+    path: "/etc/polkit-1/rules.d/10-Splunkd.rules"
     state: absent
 
 # Find all directories to remove, except lost+found

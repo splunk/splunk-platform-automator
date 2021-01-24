@@ -114,7 +114,7 @@
     - splunk
     - splunk_software
     - splunk_install
-  command: "{{ splunk_home }}/bin/splunk enable boot-start -user {{ splunk_user }} {{splunk_systemd_managed|default()}} {{splunk_unit_file_name|default()}}"
+  command: "{{ splunk_home }}/bin/splunk enable boot-start {{splunk_systemd_managed|default()}} {{splunk_create_polkit_rules|default()}} -user {{ splunk_user }} {{splunk_unit_file_name|default()}} --answer-yes --no-prompt"
 
 - name: enable and start splunk service
   tags:
@@ -163,4 +163,7 @@
     - splunk_sudoers
     - splunk_polkit
   include_tasks: add_splunk_polkit_or_sudoers.yml
-  when: use_systemctl == true and use_splunk_systemd|default(false) == true
+  when: 
+    - use_systemctl == true
+    - use_splunk_systemd|default(false) == true
+    - splunk_installed_version is version_compare('8.1', '<')
