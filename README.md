@@ -18,6 +18,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
   - [Framework Installation (Mac OSX)](#framework-installation-mac-osx)
   - [Install Virtualbox support (optional)](#install-virtualbox-support-optional)
   - [Install and configure AWS support (optional)](#install-and-configure-aws-support-optional)
+    - [Example Basic AWS Security Group](#example-basic-aws-security-group)
 - [Building Windows Virtual Machine Template](#building-windows-virtual-machine-template)
 - [Framework Usage](#framework-usage)
   - [First start and initialization](#first-start-and-initialization)
@@ -111,7 +112,16 @@ Your directory structure should now look like this:
    1. Add AWS_ACCESS_KEY_ID=<your access key ID> as environment variable
    1. Add AWS_SECRET_ACCESS_KEY=<your secret access key> as environment variable
 1. Create an ssh key pair described [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair) and store the public key on your disk for later reference in the config file
-1. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it ex. Splunk and add the following TCP incoming ports: 22,8000,9887,8191,8065,8089,9997-9998
+2. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it for example 'Splunk' and add the following TCP ports
+
+### Example Basic AWS Security Group
+
+| Type       | Protocol | Port Range | Source        | Description                |
+| ---------- | -------- | ---------- | ------------- | -------------------------- |
+| All TCP    | TCP      | 0 - 65535  | 172.31.0.0/16 | Allow all internal traffic |
+| Custom TCP | TCP      | 8000       | 0.0.0.0/0     | Splunk Web Interface       |
+| SSH        | TCP      | 22         | 0.0.0.0/0     | SSH to all hosts           |
+
 
 # Building Windows Virtual Machine Template
 
