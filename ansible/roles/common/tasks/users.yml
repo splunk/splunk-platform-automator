@@ -8,9 +8,9 @@
   copy:
     src: home/ansible_user/bashrc.splunk
     dest: "~{{ ansible_user }}/.bashrc.splunk"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
     mode: 0644
+  become: yes
+  become_user: "{{ ansible_user }}"
 
 - name: insert/update bashrc for splunk stuff
   tags:
