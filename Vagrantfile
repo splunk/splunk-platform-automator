@@ -915,7 +915,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
             ip_addr_list[vmname] = network_info['ip_addr']
           elsif ip_addr_list[vmname].nil?
             if vm.communicate.ready?
-              vm.communicate.execute('hostname --all-ip-addresses') do |type, privat_ip|
+              vm.communicate.execute('hostname --ip-address') do |type, privat_ip|
                 allips = privat_ip.strip().split(' ')
                 ip_addr_list[vmname] = allips[0]
                 #network_info['ip_addr'] = allips[0]
