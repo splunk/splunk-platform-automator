@@ -1,0 +1,209 @@
+---
+# splunk_config.yml
+
+# General settings
+general:
+  url_locale: en-GB
+
+os:
+  set_hostname: true
+  disable_selinux: true
+
+#virtualbox:
+aws:
+  keypair_name: 'aws_key'
+  #region: 'eu-central-1'
+  ami: 'ami-0badcc5b522737046' # Redhat 8 (may need to disable selinux)
+  ssh_username: 'ec2-user'
+  #instance_type: 't2.micro'
+  instance_type: 'c5.2xlarge'
+  ssh_private_key_path: '~/.ssh/aws_key.pem'
+  security_groups: ['Splunk_Basic']
+  # AWS Storage
+  block_device_mapping:
+    - # do not remove this, it is part of the format
+      DeviceName: "/dev/sda1" # Redhat 8
+      Ebs.VolumeSize: 50 # Size in GB
+      #Ebs.DeleteOnTermination: true
+      #Ebs.VolumeType: "GP2" # General performance - you might want something faster
+
+# Splunk default settings
+splunk_defaults:
+#  splunk_env_name: splk
+#  splunk_version: '8.1.1'
+  splunk_download:
+    splunk: true
+    splunkforwarder: true
+#  splunk_admin_password: 'splunklab'
+  splunk_license_file: Splunk_Enterprise.lic
+#  splunk_indexes:
+#    - test1
+#    - test2
+
+  # Define Indexer Volumes (filesystem must exist)
+  splunk_indexer_volumes:
+    hot:
+    s2volume:
+      path: "s3://<your_s3_bucketname>/<subfolder>"
+      storageType: remote
+
+  splunk_volume_defaults:
+    VolumeDataSize_Free_MB: 800 # Will calculate maxVolumeDataSizeMB as 'fs_free - VolumeDataSize_Free_MB'
+    # Define the volumes to be used for the indexes
+    homePath: hot
+    coldPath: hot
+    remotePath: s2volume
+
+  splunk_set_servername: true
+  splunk_set_default_hostname: true
+  splunk_loginpage_print_userpw: false
+#  splunk_loginpage_print_roles: false
+
+  splunk_ssl:
+    web:
+      enable: true
+    inputs:
+      enable: true
+    outputs:
+      enable: true
+
+# Indexer Cluster settings
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: splunkidxc
+    idxc_replication_port: 9887
+    idxc_site_rf: 'origin:2, total:3'
+    idxc_site_sf: 'origin:2, total:3'
+    idxc_rf: 2
+    idxc_sf: 2
+
+# Search Head Cluster settings
+splunk_shclusters:
+  - shc_name: shc1
+    shc_site: site0
+    shc_password: splunkshc
+    shc_replication_port: 9887
+
+# Splunk hosts with its settings
+splunk_hosts:
+
+  # Deployment Server
+  - name: ds
+    roles:
+      - deployment_server
+      - deployer
+    shcluster: shc1
+    aws:
+      tags:
+        Name: ds
+        Env: SmartStore
+        Role: DS,DP
+
+  # Cluster Master
+  - name: cm
+    roles:
+      - cluster_master
+      - monitoring_console
+      - license_master
+    idxcluster: idxc1
+    site: site0
+    aws:
+      tags:
+        Name: cm
+        Env: SmartStore
+        Role: CM,MC,LM
+
+  # Cluster Indexer
+  - name: idx1
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site1
+    aws:
+      tags:
+        Name: idx1
+        Env: SmartStore
+        Role: IDX
+      iam_instance_profile_name: Splunk_S3-Access
+
+  # Cluster Indexer
+  - name: idx2
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site1
+    aws:
+      tags:
+        Name: idx2
+        Env: SmartStore
+        Role: IDX
+      iam_instance_profile_name: Splunk_S3-Access
+
+  # Cluster Indexer
+  - name: idx3
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site2
+    aws:
+      tags:
+        Name: idx3
+        Env: SmartStore
+        Role: IDX
+      iam_instance_profile_name: Splunk_S3-Access
+
+  # Cluster Indexer
+  - name: idx4
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site2
+    aws:
+      tags:
+        Name: idx4
+        Env: SmartStore
+        Role: IDX
+      iam_instance_profile_name: Splunk_S3-Access
+
+  # Search Head
+  - name: sh1
+    roles:
+      - search_head
+    shcluster: shc1
+    aws:
+      tags:
+        Name: sh1
+        Env: SmartStore
+        Role: SH
+
+  # Search Head
+  - name: sh2
+    roles:
+      - search_head
+    shcluster: shc1
+    aws:
+      tags:
+        Name: sh2
+        Env: SmartStore
+        Role: SH
+
+  # Search Head
+  - name: sh3
+    roles:
+      - search_head
+    shcluster: shc1
+    aws:
+      tags:
+        Name: sh3
+        Env: SmartStore
+        Role: SH
+
+  # Universal Forwarder
+  - name: uf
+    roles:
+      - universal_forwarder
+    aws:
+      tags:
+        Name: uf
+        Env: SmartStore
+        Role: UF

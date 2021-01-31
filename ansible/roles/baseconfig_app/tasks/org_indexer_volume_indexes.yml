@@ -1,6 +1,17 @@
 ---
 # This playbook install the base config app
 
+- name: Fail if homePath != coldPath (SmartStore)
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_indexer_volume_indexes
+  fail:
+    msg: "homePath ({{splunk_volume_defaults.homePath|default('primary')}}) must be equal to coldPath ({{splunk_volume_defaults.coldPath|default('primary')}}) when using SmartStore"
+  when: 
+    - splunk_volume_defaults.remotePath is defined
+    - splunk_volume_defaults.homePath|default("primary") != splunk_volume_defaults.coldPath|default("primary")
+
 - name: "({{ app_name }}) rename volume:primary"
   tags:
     - splunk
@@ -10,20 +21,7 @@
     path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
     regexp: '^\[volume:primary\]'
     replace: "[volume:{{ splunk_volume_defaults['homePath']|default('primary') }}]"
-  when: splunk_indexer_volumes is defined
-
-- name: "({{ app_name }}) setting volume path"
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - org_indexer_volume_indexes
-  set_fact:
-    splunk_indexer_volumes: "{{ splunk_indexer_volumes|default(dict({'primary':{}})) | combine( { volume_name: {'path': volume_vars.path|default(splunk_home+'/var/lib/splunk')} }, recursive=True) }}"
-  with_dict: "{{ splunk_indexer_volumes|default(dict({'primary':{}})) }}"
-  vars:
-    volume_name: "{{ item.key }}"
-    volume_vars: "{{ item.value }}"
-  when: splunk_indexer_volumes is defined
+  when: splunk_indexer_volumes_local|length > 0
 
 - name: "({{ app_name }}) get volume file system available size"
   tags:
@@ -36,7 +34,7 @@
   register: volume_fs_avail
   become: yes
   become_user: "{{splunk_user}}"
-  with_dict: "{{ splunk_indexer_volumes|default(dict({'primary':{}})) }}"
+  with_dict: "{{ splunk_indexer_volumes_local }}"
   vars:
     volume_name: "{{ item.key }}"
     volume_vars: "{{ item.value }}"
@@ -50,26 +48,26 @@
     - org_indexer_volume_indexes
   set_fact:
     splunk_indexer_volumes_tmp: >-
-      {%- set res = splunk_indexer_volumes -%}
+      {%- set res = splunk_indexer_volumes_local -%}
       {%- for volume in volume_fs_avail.results -%}
-        {%- if splunk_indexer_volumes[volume.item.key]['maxVolumeDataSizeMB'] is not defined -%}
+        {%- if splunk_indexer_volumes_local[volume.item.key]['maxVolumeDataSizeMB'] is not defined -%}
           {%- set _ = res[volume.item.key].update({'maxVolumeDataSizeMB': (volume.stdout|int - splunk_volume_defaults.VolumeDataSize_Free_MB|default(800)|int)}) -%}
         {%- endif -%}
       {%- endfor -%}
       {{ res }}
-  when: splunk_volume_defaults.VolumeDataSize_Free_MB is defined
+  when: splunk_volume_defaults.VolumeDataSize_Free_MB is defined and volume_fs_avail is defined
 
-- name: "({{ app_name }}) set indexer volume variables"
+- name: "({{ app_name }}) set indexer volume variables for local volumes"
   tags:
     - splunk
     - splunk_baseconfig
     - org_indexer_volume_indexes
   include_tasks: set_indexer_volume_vars.yml
-  with_dict: "{{ splunk_indexer_volumes_tmp|default(splunk_indexer_volumes) }}"
+  with_dict: "{{ splunk_indexer_volumes_tmp|default(splunk_indexer_volumes_local) }}"
   vars:
     volume_name: "{{ item.key }}"
     volume_vars: "{{ item.value }}"
-  when: splunk_indexer_volumes is defined
+  when: splunk_indexer_volumes_local|length > 0
 
 - name: "({{ app_name }}) setting volume:primary"
   tags:
@@ -85,4 +83,4 @@
     group: "{{splunk_group}}"
     mode: 0644
   notify: restart splunk
-  when: splunk_indexer_volumes is not defined
+  when: splunk_indexer_volumes_local|length < 1 or splunk_volume_defaults.homePath is not defined

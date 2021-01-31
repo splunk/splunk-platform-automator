@@ -213,3 +213,38 @@ splunk_app_roles_host_list: >-
             {%- set ignored = res.extend(groups['role_'+role]) -%}
           {%- endfor -%}
           {{ res|unique }}
+
+# Volume Calculations
+splunk_indexer_volumes_local: >-
+      {%- set defaultpath = splunk_home+'/var/lib/splunk' -%}
+      {%- if splunk_indexer_volumes is mapping -%}
+        {%- set res = {} -%}
+        {%- for volume, properties in splunk_indexer_volumes|default(dict({'primary':{}})) | dictsort -%}
+          {%- if properties is not mapping -%}
+            {%- set properties = {'path': defaultpath} -%}
+          {%- endif -%}
+          {%- if properties.storageType|default("local") != "remote" -%}
+            {%- if properties.path is not defined -%}
+              {%- set ignored = properties.update({'path': defaultpath}) -%}
+            {%- endif -%}
+            {%- set ignored = res.update({volume: properties}) -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- if res.keys()|list|length > 0 -%}
+          {{ res }}
+        {%- else -%}
+          {{ {'primary':{'path': defaultpath}} }}
+        {%- endif -%}
+      {%- else -%}
+        {{ {'primary':{'path': defaultpath}} }}
+      {%- endif -%}
+splunk_indexer_volumes_remote: >-
+      {%- set res = {} -%}
+      {%- if splunk_indexer_volumes is mapping -%}
+        {%- for volume, properties in splunk_indexer_volumes | dictsort -%}
+          {%- if properties.storageType|default("local") == "remote" -%}
+            {%- set ignored = res.update({volume: properties}) -%}
+          {%- endif -%}
+        {%- endfor -%}
+      {%- endif -%}
+      {{ res }}

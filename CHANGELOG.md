@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- Added support for SmartStore (S2)
 - Install Policy Kit Rules by enable boot-start for 8.1.1+
 - Added setting summary_replication = true
 - Added Bucket tunings for indexers

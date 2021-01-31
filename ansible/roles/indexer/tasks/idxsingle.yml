@@ -79,6 +79,22 @@
     app_path: '{{splunk_home}}/etc/apps'
   when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
 
+- name: apply baseconfig app org_s2_indexer_indexes
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - indexer
+    - idxsingle
+    - org_s2_indexer_indexes
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_s2_indexer_indexes'
+    app_path: '{{splunk_home}}/etc/apps'
+  when: 
+    - splunk_volume_defaults.remotePath is defined
+    - splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
+
 - name: call update_dserver from role monitoring_console
   tags:
     - splunk

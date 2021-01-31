@@ -46,7 +46,39 @@
     mode: 0600
   notify: restart splunk
 
-- name: Check for replication_factor > site_replication_factor
+- name: "({{ app_name }}) setting replication factor"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_multisite_master_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
+    section: clustering
+    option: replication_factor
+    value: "{{splunk_idxc_rf}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  when: idxc_rf is defined
+
+- name: "({{ app_name }}) setting search factor"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_multisite_master_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
+    section: clustering
+    option: search_factor
+    value: "{{splunk_idxc_sf}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  when: idxc_sf is defined
+
+- name: Getting for replication_factor
   tags:
     - splunk
     - splunk_baseconfig
@@ -58,8 +90,31 @@
   become_user: "{{ splunk_user }}"
   register: replication_factor
 
+- name: Getting for search_factor
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_multisite_master_base
+  shell: "{{ splunk_home }}/bin/splunk btool server list clustering | grep -w search_factor | cut -d= -f 2"
+  check_mode: no
+  changed_when: false
+  become: yes
+  become_user: "{{ splunk_user }}"
+  register: search_factor
+
+- name: Fail if replication_factor != search_factor (SmartStore)
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_multisite_master_base
+  fail:
+    msg: "replication_factor ({{replication_factor.stdout|int}}) must be equal to search_factor ({{search_factor.stdout|int}}) when using SmartStore"
+  when: 
+    - splunk_volume_defaults.remotePath is defined
+    - search_factor.stdout|int != replication_factor.stdout|int
+
 # This needs to be done, otherwise splunkd does not start because replication_factor is smaller than site_replication_factor
-- name: "({{ app_name }}) setting replication_factor"
+- name: "({{ app_name }}) adjust replication_factor to be >= site_replication_factor"
   tags:
     - splunk
     - splunk_baseconfig

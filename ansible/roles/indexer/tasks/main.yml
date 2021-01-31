@@ -21,7 +21,7 @@
 #    group: "{{splunk_group}}"
 #    mode: 0755
 #  with_dict: "{{ splunk_indexer_volumes }}"
-#  when: splunk_indexer_volumes is defined
+#  when: splunk_indexer_volumes_local|length > 0
 
 - name: check volume pathes
   tags:
@@ -29,11 +29,11 @@
     - indexer
     - check_volume_path
   include_tasks: check_volume_path.yml
-  with_dict: "{{ splunk_indexer_volumes }}"
+  with_dict: "{{ splunk_indexer_volumes_local }}"
   vars:
     volume_name: "{{ item.key }}"
     volume_path: "{{ item.value.path|default(splunk_home+'/var/lib/splunk') }}"
-  when: splunk_indexer_volumes is defined
+  when: splunk_indexer_volumes_local|length > 0
 
 - name: install certs for inputs ssl
   tags:

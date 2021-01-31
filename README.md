@@ -112,7 +112,7 @@ Your directory structure should now look like this:
    1. Add AWS_ACCESS_KEY_ID=<your access key ID> as environment variable
    1. Add AWS_SECRET_ACCESS_KEY=<your secret access key> as environment variable
 1. Create an ssh key pair described [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair) and store the public key on your disk for later reference in the config file
-2. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it for example 'Splunk' and add the following TCP ports
+1. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it for example 'Splunk' and add the following TCP ports
 
 ### Example Basic AWS Security Group
 
@@ -121,7 +121,6 @@ Your directory structure should now look like this:
 | All TCP    | TCP      | 0 - 65535  | 172.31.0.0/16 | Allow all internal traffic |
 | Custom TCP | TCP      | 8000       | 0.0.0.0/0     | Splunk Web Interface       |
 | SSH        | TCP      | 22         | 0.0.0.0/0     | SSH to all hosts           |
-
 
 # Building Windows Virtual Machine Template
 
@@ -139,6 +138,7 @@ vagrant
 ```
 
 ## Copy a configuration file
+
 There is one single configuration file, where all settings for your deployment are defined. Copy one configuration file from the [examples](examples) to `config/splunk_config.yml` and adjust the setting to your needs. For a standard setup you should be fine with most of the default settings, but there are a lot of things you can adjust for special cases. See the [configuration description](examples/configuration_description.yml) file, where all existing values are described.
 
 AWS: See [instruction here](#deploying-on-amazon-cloud) when deploying into Amazon Cloud. You can start with [splunk_config_aws.yml](examples/splunk_config_aws.yml) for a simple environment. Copy `splunk_idxclusters`, `splunk_shclusters` and `splunk_hosts` sections from other examples for more complex deployments.

@@ -122,6 +122,19 @@
     app_name: 'org_all_indexes'
     app_path: '{{splunk_home}}/etc/master-apps'
 
+- name: apply baseconfig app org_s2_indexer_indexes
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - cluster_master
+    - org_s2_indexer_indexes
+  include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_s2_indexer_indexes'
+    app_path: '{{splunk_home}}/etc/master-apps'
+  when: splunk_volume_defaults.remotePath is defined
+
 - name: apply baseconfig app org_full_license_server
   tags:
     - splunk

@@ -1,6 +1,17 @@
 ---
 # This playbook install the base config app
 
+- name: Fail if homePath != coldPath (SmartStore)
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_indexes
+  fail:
+    msg: "homePath ({{splunk_volume_defaults.homePath|default('primary')}}) must be equal to coldPath ({{splunk_volume_defaults.coldPath|default('primary')}}) when using SmartStore"
+  when: 
+    - splunk_volume_defaults.remotePath is defined
+    - splunk_volume_defaults.homePath|default("primary") != splunk_volume_defaults.coldPath|default("primary")
+
 - name: "({{ app_name }}) configure some indexes"
   tags:
     - splunk

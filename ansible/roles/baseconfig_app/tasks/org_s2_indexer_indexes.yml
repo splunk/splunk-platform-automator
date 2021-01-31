@@ -1,0 +1,75 @@
+---
+# This playbook install the base config app
+
+- name: Fail if homePath != coldPath (SmartStore)
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_s2_indexer_indexes
+  fail:
+    msg: "homePath ({{splunk_volume_defaults.homePath|default('primary')}}) must be equal to coldPath ({{splunk_volume_defaults.coldPath|default('primary')}}) when using SmartStore"
+  when: 
+    - splunk_volume_defaults.remotePath is defined
+    - splunk_volume_defaults.homePath|default("primary") != splunk_volume_defaults.coldPath|default("primary")
+
+- name: "({{ app_name }}) remove volume:splunkcloud_vol stanza"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_s2_indexer_indexes
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
+    section: volume:splunkcloud_vol
+    state: "absent"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+
+- name: "({{ app_name }}) remove comments"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_s2_indexer_indexes
+  blockinfile:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
+    block: |
+      # these values will be supplied by cloud ops.
+      # replace with the actual credentials.
+    state: "absent"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+
+- debug: var=splunk_indexer_volumes_remote
+
+- name: "({{ app_name }}) set indexer volume variables for remote volumes"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_s2_indexer_indexes
+  include_tasks: set_indexer_volume_vars.yml
+  with_dict: "{{ splunk_indexer_volumes_remote }}"
+  vars:
+    volume_name: "{{ item.key }}"
+    volume_vars: "{{ item.value }}"
+  when:
+    - splunk_indexer_volumes is defined
+    - splunk_indexer_volumes_remote|length > 0
+
+- name: "({{ app_name }}) configure volume for remotePath"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_s2_indexer_indexes
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
+    section: default
+    option: remotePath
+    value: "volume:{{splunk_volume_defaults.remotePath}}/$_index_name"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  when: splunk_volume_defaults.remotePath is defined
