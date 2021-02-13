@@ -151,6 +151,16 @@ class InventoryModule(BaseInventoryPlugin):
             #print("merged_section: ", merged_section)
             #TODO: maybe self.groups is not needed, can do populate directly
             self.groups['all'].update(merged_section)
+
+        # Check Base Config App availability
+        cwd = os.getcwd()
+        splunk_baseconfig_dir = cwd+"/"+self.groups['all']['splunk_baseconfig_dir']
+        check_base = glob.glob(cwd+"/"+self.groups['all']['splunk_baseconfig_dir']+"/*/org_all_indexer_base")
+        check_cluster = glob.glob(cwd+"/"+self.groups['all']['splunk_baseconfig_dir']+"/*/org_cluster_indexer_base")
+        if len(check_base) < 1 or len(check_cluster) < 1:
+            print("Error: bla")
+            raise AnsibleParserError('Error: Cannot find Splunk baseconfig apps mentioned in the README.md. Extract them under %s' % splunk_baseconfig_dir)
+
         self._populate_groupvars(self.groups['all'], 'all')
 
         # Deal with the environments specific settings
