@@ -80,6 +80,7 @@ DOCUMENTATION = r'''
 from ansible.plugins.inventory import BaseInventoryPlugin
 from ansible.errors import AnsibleError, AnsibleParserError
 import yaml
+import re
 import glob
 import os
 from pathlib import Path
@@ -161,6 +162,15 @@ class InventoryModule(BaseInventoryPlugin):
             print("Error: bla")
             raise AnsibleParserError('Error: Cannot find Splunk baseconfig apps mentioned in the README.md. Extract them under %s' % splunk_baseconfig_dir)
 
+        # Set timezone to my own one, if nothing is specified
+        if 'time_zone' not in self.groups['all']:
+            if os.path.islink('/etc/localtime'):
+                p = re.compile('.*/zoneinfo/')
+                link_dest = os.readlink('/etc/localtime')
+                time_zone = p.sub('', link_dest) 
+                self.groups['all']['time_zone'] = time_zone
+
+        # Populate the variables for all hosts
         self._populate_groupvars(self.groups['all'], 'all')
 
         # Deal with the environments specific settings

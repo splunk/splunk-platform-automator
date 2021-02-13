@@ -204,17 +204,6 @@ end
 #   FileUtils.mkdir_p("#{dir}/ansible/#{splunk_dirs['splunk_auth_dir']}")
 # end
 
-# Get timezone from the vagrant host as default for the virtual machines
-defaults['os']['time_zone'] = `ls -l /etc/localtime | sed -e 's%.*zoneinfo/%%' | tr -d '\n'`
-
-# Check for Splunk baseconfig apps
-check_base = Dir.glob(dir+"/"+splunk_dirs['splunk_baseconfig_dir']+"/*/org_all_indexer_base")
-check_cluster = Dir.glob(dir+"/"+splunk_dirs['splunk_baseconfig_dir']+"/*/org_cluster_indexer_base")
-if check_base.length < 1 or check_cluster.length < 1
-  print "ERROR: Please download the Splunk baseconfig apps mentioned in the README.md and extract it into #{dir}/#{splunk_dirs['splunk_baseconfig_dir']} \n\n"
-  exit 2
-end
-
 #TODO: Move to the plugin
 # ## Check for Splunk installer archives
 # splunk_environments.each do |splunkenv|
