@@ -1,0 +1,10 @@
+# Default values for Indexer Cluster settings
+
+splunk_idxclusters:
+  - idxc_name: idxc
+    idxc_password: splunkidxc
+    idxc_replication_port: 9887
+    idxc_site_rf: 'origin:2, total:3'
+    idxc_site_sf: 'origin:2, total:3'
+    # Enable indexer discovery
+    #idxc_discovery_password: idxdisco

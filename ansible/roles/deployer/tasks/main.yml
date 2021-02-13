@@ -177,7 +177,7 @@
   vars:
     app_name: 'org_all_forwarder_outputs'
     app_path: '{{splunk_home}}/etc/shcluster/apps'
-    splunk_outputs_list: "{{ hostvars[groups['output_'+splunk_env_name+'_'+output_name][0]]['splunk_outputs_list'] }}"
+    splunk_output_list: "{{ hostvars[groups['output_'+splunk_env_name+'_'+output_name][0]]['splunk_output_list'] }}"
   with_items: "{{ splunk_outputs_name_list }}"
   loop_control:
     loop_var: output_name

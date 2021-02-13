@@ -1,0 +1,5 @@
+# Default values for general settings
+
+general:
+  # Force a certain language in the created links in index.html
+  url_locale: en-GB

@@ -1,0 +1,7 @@
+# Default values for os setting
+
+os:
+  time_zone: "Europe/Zurich"
+  #set_hostname: true
+  disable_selinux: true
+  packages:
