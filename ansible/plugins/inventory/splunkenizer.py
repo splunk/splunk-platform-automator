@@ -171,9 +171,9 @@ class InventoryModule(BaseInventoryPlugin):
 
         # Check Base Config App availability
         cwd = os.getcwd()
-        splunk_baseconfig_dir = cwd+"/"+self.groups['all']['splunk_baseconfig_dir']
-        check_base = glob.glob(cwd+"/"+self.groups['all']['splunk_baseconfig_dir']+"/*/org_all_indexer_base")
-        check_cluster = glob.glob(cwd+"/"+self.groups['all']['splunk_baseconfig_dir']+"/*/org_cluster_indexer_base")
+        splunk_baseconfig_dir = os.path.join(cwd,self.groups['all']['splunk_baseconfig_dir'])
+        check_base = glob.glob(os.path.join(cwd,self.groups['all']['splunk_baseconfig_dir']+"/*/org_all_indexer_base"))
+        check_cluster = glob.glob(os.path.join(cwd,self.groups['all']['splunk_baseconfig_dir']+"/*/org_cluster_indexer_base"))
         if len(check_base) < 1 or len(check_cluster) < 1:
             raise AnsibleParserError('Error: Cannot find Splunk baseconfig apps mentioned in the README.md. Extract them under %s' % splunk_baseconfig_dir)
 
@@ -297,7 +297,12 @@ class InventoryModule(BaseInventoryPlugin):
 
                         if role == "license_master":
                             #TODO: Check for license file, if role is license_master
-                            pass
+                            if 'splunk_license_file' not in self.environments[splunk_env]['splunk_defaults']:
+                                raise AnsibleParserError("Error: Missing splunk_license_file variable for role %s in splunk_env %s" % (role,splunk_env))
+                            license_file = os.path.join(cwd, self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'],self.environments[splunk_env]['splunk_defaults']['splunk_license_file'])
+                            if not os.path.isfile(license_file):
+                                raise AnsibleParserError("Error: Cannot read license file %s" % license_file)
+
                         if role == "cluster_master" and 'idxcluster' not in splunkhost:
                             raise AnsibleParserError("Error: idxcluster variable not set for host %s with role %s." % (hostname, role))
                         
@@ -381,12 +386,12 @@ class InventoryModule(BaseInventoryPlugin):
                             splunk_version = splunkhost['splunk_version']
                         else:
                             splunk_version = self.environments[splunk_env]['splunk_defaults']['splunk_version']
-                        directory = cwd+"/"+self.environments[splunk_env]['splunk_defaults']['splunk_software_dir']
+                        directory = os.path.join(cwd, self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'])
                         if role == 'universal_forwarder':
                             arch_type = 'splunkforwarder'
                         elif role == 'universal_forwarder_windows':
                             arch_type = 'windowsforwarder'
-                            directory = cwd+"/"+self.environments[splunk_env]['splunk_defaults']['splunk_software_dir']
+                            directory = os.path.join(cwd,self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'])
                         else:
                             arch_type = 'splunk'
                         self.versions = self._merge_dict(self.versions,{splunk_env: {arch_type+'_'+splunk_version: {'arch_type':arch_type,'splunk_version':splunk_version}}})
@@ -431,7 +436,7 @@ class InventoryModule(BaseInventoryPlugin):
 
         # Check the archive availability for all versions needed
         for splunk_env, versions_combs in self.versions.items():
-            directory = cwd+"/"+self.environments[splunk_env]['splunk_defaults']['splunk_software_dir']
+            directory = os.path.join(cwd,self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'])
             for versions_comb, versions_values in versions_combs.items():
                 arch_type = versions_values['arch_type']
                 splunk_version = versions_values['splunk_version']
