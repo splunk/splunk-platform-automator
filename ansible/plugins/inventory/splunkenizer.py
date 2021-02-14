@@ -118,6 +118,22 @@ class InventoryModule(BaseInventoryPlugin):
 
         return merged_dict
 
+    def _check_splunk_archive(self,arch_type,splunk_version,directory):
+        '''Check if splunk version archive is available'''
+        if splunk_version == 'latest':
+            search_version = "*"
+        else:
+            search_version = splunk_version
+        platform = 'Linux'
+        suffix = platform+'-x86_64.tgz'
+        if arch_type == 'windowsforwarder':
+            arch_type = 'splunkforwarder'
+            suffix = 'x64-release.msi'
+            platform = 'Windows'
+        check_arch = glob.glob(directory+"/"+arch_type+"-"+search_version+"-*-"+suffix)
+        if len(check_arch) < 1:
+            raise AnsibleParserError("Error: %s Archive for %s version %s missing in %s" % (platform,arch_type,splunk_version,directory))
+
     def _populate_defaults(self):
         '''Read all the default values'''
         defaults = {}
@@ -159,7 +175,6 @@ class InventoryModule(BaseInventoryPlugin):
         check_base = glob.glob(cwd+"/"+self.groups['all']['splunk_baseconfig_dir']+"/*/org_all_indexer_base")
         check_cluster = glob.glob(cwd+"/"+self.groups['all']['splunk_baseconfig_dir']+"/*/org_cluster_indexer_base")
         if len(check_base) < 1 or len(check_cluster) < 1:
-            print("Error: bla")
             raise AnsibleParserError('Error: Cannot find Splunk baseconfig apps mentioned in the README.md. Extract them under %s' % splunk_baseconfig_dir)
 
         # Set timezone to my own one, if nothing is specified
@@ -182,6 +197,7 @@ class InventoryModule(BaseInventoryPlugin):
                     groupname = "splunk_env_" + splunk_env['splunk_env_name']
                     self._populate_groupvars(splunk_env, groupname)
                     self.environments[splunk_env['splunk_env_name']] = {}
+                    self.environments[splunk_env['splunk_env_name']]['splunk_defaults'] = self._merge_dict(self.groups['all'],splunk_env)
                 except Exception as e:
                     raise AnsibleParserError('Cannot populate settings for environment. Variable {} not found'.format(e))
         else:
@@ -190,6 +206,7 @@ class InventoryModule(BaseInventoryPlugin):
                 default_splunk_env = "splunk_env_" + self.groups['all']['splunk_env_name']
                 self.inventory.add_group(default_splunk_env)
                 self.environments[self.groups['all']['splunk_env_name']] = {}
+                self.environments[self.groups['all']['splunk_env_name']]['splunk_defaults'] = self.groups['all']
             except Exception as e:
                 raise AnsibleParserError('Error: {}'.format(e))
 
@@ -230,6 +247,7 @@ class InventoryModule(BaseInventoryPlugin):
                 self.environments[environment][topic] = {}
         setattr(self, 'indexer_clusters', {})
         setattr(self, 'search_head_clusters', {})
+        setattr(self, 'versions', {})
         roles = {}
         for role in allowed_roles:
             roles[role] = []
@@ -358,6 +376,21 @@ class InventoryModule(BaseInventoryPlugin):
 
                             self.inventory.add_host(host=hostname, group="shcluster_" + splunkhost['shcluster'])
 
+                        # Collect all version and arch combinations for archive avaiability check later on
+                        if 'splunk_version' in splunkhost:
+                            splunk_version = splunkhost['splunk_version']
+                        else:
+                            splunk_version = self.environments[splunk_env]['splunk_defaults']['splunk_version']
+                        directory = cwd+"/"+self.environments[splunk_env]['splunk_defaults']['splunk_software_dir']
+                        if role == 'universal_forwarder':
+                            arch_type = 'splunkforwarder'
+                        elif role == 'universal_forwarder_windows':
+                            arch_type = 'windowsforwarder'
+                            directory = cwd+"/"+self.environments[splunk_env]['splunk_defaults']['splunk_software_dir']
+                        else:
+                            arch_type = 'splunk'
+                        self.versions = self._merge_dict(self.versions,{splunk_env: {arch_type+'_'+splunk_version: {'arch_type':arch_type,'splunk_version':splunk_version}}})
+
                         # Add host to the roles list from where is will be added to
                         roles[role].append(splunkhost['name'])
                     else:
@@ -373,7 +406,7 @@ class InventoryModule(BaseInventoryPlugin):
 
             # Add the rest of the host variables
             for key, val in splunkhost.items():
-                if key in ['name','splunk_env_name','roles','aws','virtualbox']:
+                if key in ['name','splunk_env','splunk_version','roles','aws','virtualbox']:
                     # Ignore those ones. Either not relevant or already worked on
                     continue
                 if key in ['idxcluster','shcluster']:
@@ -383,6 +416,7 @@ class InventoryModule(BaseInventoryPlugin):
                     #TODO: Handle special vars (site is done already)
                     continue
                 #print("Addind key: %s with values %s" % (key, val))
+
                 if key in allowed_hostvars:
                     # Extract section variables to add them directly
                     #TODO: Check how to deal with splunk_conf host vars
@@ -394,7 +428,15 @@ class InventoryModule(BaseInventoryPlugin):
                         self.inventory.set_variable(hostname, key, val)
                 else:
                     raise AnsibleParserError("Unsupported host_var %s found for host %s. Supported vars are: (%s)" % (key, hostname, ','.join(allowed_hostvars)))
-    
+
+        # Check the archive availability for all versions needed
+        for splunk_env, versions_combs in self.versions.items():
+            directory = cwd+"/"+self.environments[splunk_env]['splunk_defaults']['splunk_software_dir']
+            for versions_comb, versions_values in versions_combs.items():
+                arch_type = versions_values['arch_type']
+                splunk_version = versions_values['splunk_version']
+                self._check_splunk_archive(arch_type,splunk_version,directory)
+
         # Add hosts to role_ ansible groups
         for role in allowed_roles:
             if len(roles[role]) > 0:
@@ -406,6 +448,7 @@ class InventoryModule(BaseInventoryPlugin):
         # Create output and search_peer groups
         for splunk_env, env_values in self.environments.items():
             for type, type_values in env_values.items():
+                if type == 'splunk_defaults': continue
                 for group, group_values in type_values.items():
                     groupname = type + "_" + splunk_env + "_" + group
                     vars = {}
