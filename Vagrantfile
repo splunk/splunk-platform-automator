@@ -149,8 +149,13 @@ settings['splunk_hosts'].each do |splunk_host|
 end
 
 # If dynamic IPs are used, calculate the start number
-if !settings['virtualbox'].nil? and !settings['virtualbox']['start_ip'].nil?
-  ip_array = settings['virtualbox']['start_ip'].split(".")
+if provider == "virtualbox"
+  if !settings['virtualbox'].nil? and !settings['virtualbox']['start_ip'].nil?
+    start_ip = settings['virtualbox']['start_ip']
+  else
+    start_ip = virtualbox['virtualbox']['start_ip']
+  end
+  ip_array = start_ip.split(".")
   base_ip = ip_array[0..2].join(".")
   start_num = ip_array[3].to_i
 end
@@ -161,7 +166,7 @@ splunk_host_list = []
 settings['splunk_hosts'].each do |splunk_host|
   per_host_vars = {}
   ['ip_addr', 'site', 'cname'].each do |var|
-    if !settings['virtualbox'].nil? and !settings['virtualbox']['start_ip'].nil?
+    if !start_ip.nil?
       # Keep the ip, if defined
       if provider == "virtualbox"
         if splunk_host['ip_addr'].nil?
@@ -286,7 +291,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         end
       elsif provider == "aws"
 
-        # Force serial execution for now until the playbooks are reworked
+        # Parallel vm creation does still not work because of the hostmanager
         ENV['VAGRANT_NO_PARALLEL'] = 'yes'
 
         # Add all config attributes to the AWS config class
@@ -328,33 +333,33 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         update_index_html = false
         if vm.provider_name == :virtualbox and !host_vars[vmname]['ip_addr'].nil? and ip_addr_list[vmname].nil?
           ip_addr_list[vmname] = host_vars[vmname]['ip_addr']
-        elsif vm.provider_name == :aws
-          if File.file?("#{host_vars_dir}/#{vm.name}/network.yml")
-            network_info = YAML.load_file("#{host_vars_dir}/#{vm.name}/network.yml")
-            ip_addr_list[vmname] = network_info['ip_addr']
-          elsif ip_addr_list[vmname].nil?
-            if vm.communicate.ready?
-              vm.communicate.execute('hostname --ip-address') do |type, privat_ip|
-                allips = privat_ip.strip().split(' ')
-                ip_addr_list[vmname] = allips[0]
-                #network_info['ip_addr'] = allips[0]
-              end
-            end
-          end
+        # elsif vm.provider_name == :aws
+        #   if File.file?("#{host_vars_dir}/#{vm.name}/network.yml")
+        #     network_info = YAML.load_file("#{host_vars_dir}/#{vm.name}/network.yml")
+        #     ip_addr_list[vmname] = network_info['ip_addr']
+        #   elsif ip_addr_list[vmname].nil?
+        #     if vm.communicate.ready?
+        #       vm.communicate.execute('hostname --ip-address') do |type, privat_ip|
+        #         allips = privat_ip.strip().split(' ')
+        #         ip_addr_list[vmname] = allips[0]
+        #         #network_info['ip_addr'] = allips[0]
+        #       end
+        #     end
+        #   end
         end
         if !ip_addr_list[vmname].nil?
           network_info['ip_addr'] = ip_addr_list[vmname]
         end
 
-        if !File.file?("#{host_vars_dir}/#{vm.name}/ansible_ssh_info.yml") or vm.provider_name == :aws
+        if !File.file?("#{host_vars_dir}/#{vm.name}/ansible_ssh_info.yml") and vm.provider_name == :virtualbox
           if ssh_info = (vm.ssh_info && vm.ssh_info.dup)
             ansible_ssh_info = {}
             ansible_ssh_info['ansible_host'] = ssh_info[:host]
             ansible_ssh_info['ansible_port'] = ssh_info[:port]
-            if vm.provider_name == :aws and network_info['dns_name'] != ssh_info[:host]
-              network_info['dns_name'] = ssh_info[:host]
-              update_file = true
-            end
+            # if vm.provider_name == :aws and network_info['dns_name'] != ssh_info[:host]
+            #   network_info['dns_name'] = ssh_info[:host]
+            #   update_file = true
+            # end
             ansible_ssh_info['ansible_user'] = ssh_info[:username]
             if vm.provider_name == :virtualbox and !host_vars[vmname]['ip_addr'].nil?
               ansible_ssh_info['ansible_host'] = host_vars[vmname]['ip_addr']
@@ -378,11 +383,11 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
               update_index_html = true
             end
           end
-          if update_file == true
-            File.open("#{host_vars_dir}/#{vm.name}/network.yml", "w") do |f|
-              f.write(network_info.to_yaml)
-            end
-          end
+          # if update_file == true
+          #   File.open("#{host_vars_dir}/#{vm.name}/network.yml", "w") do |f|
+          #     f.write(network_info.to_yaml)
+          #   end
+          # end
         end
 
         #TODO: move this to the inventory plugin
