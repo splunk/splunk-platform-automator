@@ -25,10 +25,11 @@ VAGRANTFILE_API_VERSION = '2'
 require 'yaml'
 dir = File.dirname(File.expand_path(__FILE__))
 config_dir = "#{dir}/config"
+defaults_dir = "#{dir}/defaults"
 config_file = "#{config_dir}/splunk_config.yml"
 inventory_dir = "#{dir}/inventory"
-group_vars_dir = "#{inventory_dir}/group_vars"
 host_vars_dir = "#{inventory_dir}/host_vars"
+defaults = {}
 
 # Workaround for bug with vagrant 2.2.7
 # https://github.com/mitchellh/vagrant-aws/issues/566
@@ -42,123 +43,6 @@ class Hash
     slice(*keys - less_keys)
   end unless Hash.method_defined?(:except)
 end
-
-# Default values
-defaults = {
-  "ansible"=>{
-    "verbose"=>"",
-    "skip_tags"=>[]
-  },
-  "virtualbox"=>{
-    "box"=>"centos/7",
-    "memory"=>512,
-    "cpus"=>1,
-    "install_vbox_additions"=>false,
-    "synced_folder"=>nil
-  },
-  "aws"=>{
-    "access_key_id"=>ENV['AWS_ACCESS_KEY_ID'],
-    "secret_access_key"=>ENV['AWS_SECRET_ACCESS_KEY'],
-    "region"=>"eu-central-1",
-    "instance_type"=>"t2.micro"
-  },
-  "os"=>{
-    "time_zone"=>"Europe/Zurich",
-    "packages"=>nil,
-    "disable_selinux"=>true
-  },
-  "splunk_dirs"=>{
-    "splunk_baseconfig_dir"=>"../Software",
-    "splunk_software_dir"=>"../Software",
-    "splunk_auth_dir"=>"../auth",
-  },
-  "splunk_defaults"=>{
-    "splunk_env_name"=>"splk",
-    "splunk_version"=>"latest",
-    "splunk_admin_password"=>"splunklab",
-    "splunk_outputs"=>"all",
-    "splunk_search_peers"=>"all",
-    "splunk_secret_share"=>{
-      "splunk"=>false,
-      "splunkforwarder"=>false,
-      "equal"=>false
-    },
-    "splunk_volume_defaults"=>{
-      "homePath"=>"primary",
-      "coldPath"=>"primary"
-    },
-    "splunk_indexer_volumes"=>{
-      "primary"=>nil
-    },
-    "splunk_ssl"=>{
-      "web"=>{
-        "enable"=>false,
-        "own_certs"=>false
-      },
-      "inputs"=>{
-        "enable"=>false,
-        "own_certs"=>false
-      },
-      "outputs"=>{
-        "enable"=>false,
-        "own_certs"=>false
-      }
-    }
-  },
-  "splunk_systemd"=>{
-    "splunk_systemd_services"=>{
-      "splunk"=>{
-        "Service"=>{
-          "ExecStart"=>"{{splunk_home}}/bin/splunk _internal_launch_under_systemd --accept-license --answer-yes --no-prompt",
-          "LimitCORE"=>0,
-          "LimitFSIZE"=>"infinity",
-          "LimitDATA"=>"infinity",
-          "LimitNPROC"=>20480,
-          "LimitNOFILE"=>65536,
-          "KillMode"=>"mixed",
-          "KillSignal"=>"SIGINT",
-          "TimeoutStopSec"=>"10min"
-        }
-      },
-      "splunkforwarder"=>{
-        "Service"=>{
-          "ExecStart"=>"{{splunk_home}}/bin/splunk _internal_launch_under_systemd --accept-license --answer-yes --no-prompt"
-        }
-      }
-    }
-  },
-  "splunk_apps"=>{
-    "splunk_save_baseconfig_apps_dir"=>"apps",
-    "splunk_save_baseconfig_apps"=>false,
-    "splunk_save_serverclass"=>false,
-    "splunk_apps_dir"=>"../app_repo"
-  }
-}
-
-# Default ssl settings
-defaults_splunk_ssl = {
-  "web"=>{
-    "config"=>{
-      "enableSplunkWebSSL"=>true,
-      "privKeyPath"=>"etc/auth/{{splunk_env_name}}/privkey.web.key",
-      "serverCert"=>"etc/auth/{{splunk_env_name}}/cacert.web.pem"
-    }
-  },
-  "inputs"=>{
-    "config"=>{
-      "rootCA"=>"$SPLUNK_HOME/etc/auth/cacert.pem",
-      "serverCert"=>"$SPLUNK_HOME/etc/auth/server.pem",
-      "sslPassword"=>"password"
-    }
-  },
-  "outputs"=>{
-    "config"=>{
-      "sslRootCAPath"=>"$SPLUNK_HOME/etc/auth/cacert.pem",
-      "sslCertPath"=>"$SPLUNK_HOME/etc/auth/server.pem",
-      "sslPassword"=>"password"
-    }
-  }
-}
 
 # Check for Ansible binary
 system("type ansible > /dev/null 2>&1")
@@ -186,13 +70,9 @@ end
 # Edit the config file to change VM and environment configuration details
 settings = YAML.load_file("#{config_file}")
 
-# Create splunk_dirs variables
-splunk_dirs = defaults['splunk_dirs'].dup
-if !settings['splunk_dirs'].nil?
-  splunk_dirs = splunk_dirs.merge(settings['splunk_dirs'])
-end
-
 # Create splunk_apps variables
+splunk_apps = YAML.load_file("#{defaults_dir}/splunk_apps.yml")
+defaults['splunk_apps'] = splunk_apps['splunk_apps']
 splunk_apps = defaults['splunk_apps'].dup
 if !settings['splunk_apps'].nil?
   splunk_apps = splunk_apps.merge(settings['splunk_apps'])
@@ -204,40 +84,6 @@ end
 #   FileUtils.mkdir_p("#{dir}/ansible/#{splunk_dirs['splunk_auth_dir']}")
 # end
 
-#TODO: Move to the plugin
-# ## Check for Splunk installer archives
-# splunk_environments.each do |splunkenv|
-#   ['splunk','splunkforwarder'].each do |splunk_arch|
-#     if splunkenv['splunk_version'] == 'latest'
-#       search_version = "*"
-#     else
-#       search_version = splunkenv['splunk_version']
-#     end
-#     check_arch = Dir.glob(dir+"/"+splunk_dirs['splunk_software_dir']+"/"+splunk_arch+"-"+search_version+"-*Linux-x86_64.tgz")
-#     if check_arch.length < 1
-#       print "ERROR: #{splunk_arch} version '#{splunkenv['splunk_version']}' missing in #{dir}/#{splunk_dirs['splunk_software_dir']}\n\n"
-#       print "Download "+splunk_arch+"-"+search_version+"-...-Linux-x86_64.tgz at https://www.splunk.com/download\n"
-#       exit 2
-#     end
-#   end
-#   # Check for Splunk license file
-#   if !splunkenv['splunk_license_file'].nil?
-#     tmparray = []
-#     if splunkenv['splunk_license_file'].kind_of?(Array)
-#       tmparray = splunkenv['splunk_license_file']
-#     else
-#       tmparray = [splunkenv['splunk_license_file']]
-#     end
-#     tmparray.each do |license_file|
-#       if !File.file?(dir+"/"+splunk_dirs['splunk_software_dir']+"/"+license_file)
-#         print "ERROR: Cannot find license file #{splunk_dirs['splunk_software_dir']+"/"+license_file} \n\n"
-#         print "Comment variable 'splunk_license_file' in #{config_file} if no license available\n"
-#         exit 2
-#       end
-#     end
-#   end
-# end
-
 # Check for virtualization provider
 if !settings.has_key?("virtualbox") and !settings.has_key?("aws")
     print "ERROR: No virtualization provider defined in #{config_file} \n\n"
@@ -246,13 +92,23 @@ if !settings.has_key?("virtualbox") and !settings.has_key?("aws")
 end
 if settings.has_key?("virtualbox")
   provider = "virtualbox"
+  virtualbox = YAML.load_file("#{defaults_dir}/virtualbox.yml")
+  defaults['virtualbox'] = virtualbox['virtualbox']
   if !Vagrant.has_plugin?("vagrant-vbguest")
     print "ERROR: Plugin for virtualbox provider is missing, install with 'vagrant plugin install vagrant-vbguest'.\n"
     exit 2
   end
-  defaults['os']['enable_time_sync_cron'] = true
 elsif settings.has_key?("aws")
   provider = "aws"
+  aws = YAML.load_file("#{defaults_dir}/aws.yml")
+  defaults['aws'] = aws['aws']
+  # Read access keys from environment variable, if not spcified in settings
+  if !defaults['aws'].has_key?("access_key_id")
+    defaults['aws']['access_key_id'] = ENV['AWS_ACCESS_KEY_ID']
+  end
+  if !defaults['aws'].has_key?("secret_access_key")
+    defaults['aws']['secret_access_key'] = ENV['AWS_SECRET_ACCESS_KEY']
+  end
   if !Vagrant.has_plugin?("vagrant-aws")
     print "ERROR: Plugin for AWS provider missing, install with 'vagrant plugin install vagrant-aws'.\n"
     exit 2
@@ -271,17 +127,9 @@ if !Vagrant.has_plugin?("vagrant-hostmanager")
 end
 
 # Create ansible inventory from the config file
-groups = {}
-idxc_list = {}
-idxc_sites = {}
-shc_list = {}
-outputs_list = {}
-outputs_groups = {}
-search_peer_list = {}
-search_peer_groups = {}
-envs = {}
 special_host_vars = {}
 network = {}
+defaults['os'] = {}
 
 # Create inventory/host_vars directory
 FileUtils.mkdir_p("#{host_vars_dir}")
@@ -289,7 +137,7 @@ FileUtils.mkdir_p("#{host_vars_dir}")
 # Create inventory host groups
 settings['splunk_hosts'].each do |splunk_host|
   var_obj = defaults.dup
-  ['virtualbox','aws'].each do |config_group|
+  ['virtualbox','aws','os'].each do |config_group|
     if !settings[config_group].nil?
       var_obj[config_group] = var_obj[config_group].merge(settings[config_group])
     end
@@ -301,8 +149,8 @@ settings['splunk_hosts'].each do |splunk_host|
 end
 
 # If dynamic IPs are used, calculate the start number
-if !settings['general'].nil? and !settings['general']['start_ip'].nil?
-  ip_array = settings['general']['start_ip'].split(".")
+if !settings['virtualbox'].nil? and !settings['virtualbox']['start_ip'].nil?
+  ip_array = settings['virtualbox']['start_ip'].split(".")
   base_ip = ip_array[0..2].join(".")
   start_num = ip_array[3].to_i
 end
@@ -313,7 +161,7 @@ splunk_host_list = []
 settings['splunk_hosts'].each do |splunk_host|
   per_host_vars = {}
   ['ip_addr', 'site', 'cname'].each do |var|
-    if !settings['general'].nil? and !settings['general']['start_ip'].nil?
+    if !settings['virtualbox'].nil? and !settings['virtualbox']['start_ip'].nil?
       # Keep the ip, if defined
       if provider == "virtualbox"
         if splunk_host['ip_addr'].nil?
@@ -370,7 +218,17 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       if provider == "virtualbox"
         # Box image to use
         srv.vm.box = special_host_vars[server['name']]['virtualbox']['box']
-        #srv.vm.box = settings['virtualbox']['box']
+        # Define synced folders
+        if !special_host_vars[server['name']]['virtualbox']['synced_folder'].nil? and special_host_vars[server['name']]['virtualbox']['synced_folder'].length > 0
+          if config.vbguest.no_install == true
+            print "ERROR: 'install_vbox_additions' must be set to 'true' to enable synced folders!\n"
+            exit 2
+          end
+          special_host_vars[server['name']]['virtualbox']['synced_folder'].each do |folder|
+            srv.vm.synced_folder "#{folder['source']}", "#{folder['target']}"
+          end
+        end
+
       elsif provider == "aws"
         # Use dummy AWS box
         srv.vm.box = 'aws-dummy'
@@ -400,17 +258,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 #        if Vagrant.has_plugin?("vagrant-cachier")
 #          config.cache.scope = :box
 #        end
-      end
-
-      # Define synced folders
-      if !special_host_vars[server['name']]['virtualbox']['synced_folder'].nil? and special_host_vars[server['name']]['virtualbox']['synced_folder'].length > 0
-        if config.vbguest.no_install == true
-          print "ERROR: 'install_vbox_additions' must be set to 'true' to enable synced folders!\n"
-          exit 2
-        end
-        special_host_vars[server['name']]['virtualbox']['synced_folder'].each do |folder|
-          srv.vm.synced_folder "#{folder['source']}", "#{folder['target']}"
-        end
       end
 
       # Disable default shared folder
@@ -538,40 +385,31 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
           end
         end
 
-        # Create HTML link page for all the roles
-        if update_index_html == true
-          require 'erb'
-          settings['splunk_hosts'].each do |host|
-            network_file = {}
-            #TODO: extract this straight out of the config file
-            if File.file?("#{host_vars_dir}/#{host['name']}/network.yml")
-              network_file[host['name']] = YAML.load_file("#{host_vars_dir}/#{host['name']}/network.yml")
-              network = network.merge(network_file)
-            end
-          end
-          template = File.read("#{dir}/template/index.html.erb")
-          result = ERB.new(template).result(binding)
-          File.open("#{config_dir}/index.html", 'w+') do |f|
-            f.write result
-          end
-        end
+        #TODO: move this to the inventory plugin
+        # # Create HTML link page for all the roles
+        # if update_index_html == true
+        #   require 'erb'
+        #   settings['splunk_hosts'].each do |host|
+        #     network_file = {}
+        #     #TODO: extract this straight out of the config file
+        #     if File.file?("#{host_vars_dir}/#{host['name']}/network.yml")
+        #       network_file[host['name']] = YAML.load_file("#{host_vars_dir}/#{host['name']}/network.yml")
+        #       network = network.merge(network_file)
+        #     end
+        #   end
+        #   template = File.read("#{dir}/template/index.html.erb")
+        #   result = ERB.new(template).result(binding)
+        #   File.open("#{config_dir}/index.html", 'w+') do |f|
+        #     f.write result
+        #   end
+        # end
         ip_addr_list[vmname]
       end
 
       # Allow remote commands, for example workaround for missing python in ubuntu/xenial64
       # Use this command to install python: 'which python || sudo apt-get -y install python'
-      #TODO: extract this straight out of the config file
-      if File.file?("#{group_vars_dir}/all/os.yml")
-          os_info = YAML.load_file("#{group_vars_dir}/all/os.yml")
-          if os_info['remote_command']
-            srv.vm.provision "shell", inline: "#{os_info['remote_command']}"
-          end
-      end
-      if File.file?("#{host_vars_dir}/#{server['name']}/os.yml")
-          os_info = YAML.load_file("#{host_vars_dir}/#{server['name']}/os.yml")
-          if os_info['remote_command']
-            srv.vm.provision "shell", inline: "#{os_info['remote_command']}"
-          end
+      if special_host_vars[server['name']]['os'].has_key?("remote_command")
+        srv.vm.provision "shell", inline: "#{special_host_vars[server['name']]['os']['remote_command']}"
       end
 
       #print "Special host vars:\n"

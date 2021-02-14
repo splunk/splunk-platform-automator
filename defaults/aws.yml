@@ -1,8 +1,11 @@
 # Default values for aws hosts
 
 aws:
-  access_key_id: ENV['AWS_ACCESS_KEY_ID']
-  secret_access_key: ENV['AWS_SECRET_ACCESS_KEY']
+  # Access ID and Key are read from environment variables, if not spcified
+  # Access ID: AWS_ACCESS_KEY_ID
+  # Access Key: AWS_SECRET_ACCESS_KEY
+  #access_key_id: <your_AWS_ACCESS_KEY_ID>
+  #secret_access_key: <your_AWS_SECRET_ACCESS_KEY>
   region: 'eu-central-1'
   ssh_username: 'ec2-user'
   instance_type: 't2.micro'
