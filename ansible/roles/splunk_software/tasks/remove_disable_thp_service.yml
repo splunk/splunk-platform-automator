@@ -1,0 +1,30 @@
+---
+
+- name: stop and disable disable-thp service
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_disable_thp
+  service:
+    name: disable-thp
+    state: stopped
+    enabled: no
+  when: use_systemctl == true
+
+- name: remove disable-thp.service systemd file
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
+  file:
+    path: /etc/systemd/system/disable-thp.service
+    state: absent
+  when: use_systemctl == true
+
+- name: commit changes to systemctl
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_install
+  command: systemctl daemon-reload
+  when: use_systemctl == true

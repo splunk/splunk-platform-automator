@@ -1,0 +1,19 @@
+---
+
+- name: accept license and start splunk
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_install
+  command: "{{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt"
+  become: yes
+  become_user: "{{ splunk_user }}"
+
+- name: stop splunk
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_install
+  command: "{{ splunk_home }}/bin/splunk stop --answer-yes --no-prompt"
+  become: yes
+  become_user: "{{ splunk_user }}"

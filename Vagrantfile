@@ -109,7 +109,7 @@ defaults = {
     "splunk_systemd_services"=>{
       "splunk"=>{
         "Service"=>{
-          "ExecStart"=>"{{splunk_home}}/bin/splunk _internal_launch_under_systemd --accept-license --answer-yes --no-prompt",
+#          "ExecStart"=>"{{splunk_home}}/bin/splunk _internal_launch_under_systemd --accept-license --answer-yes --no-prompt",
           "LimitCORE"=>0,
           "LimitFSIZE"=>"infinity",
           "LimitDATA"=>"infinity",
@@ -120,11 +120,11 @@ defaults = {
           "TimeoutStopSec"=>"10min"
         }
       },
-      "splunkforwarder"=>{
-        "Service"=>{
-          "ExecStart"=>"{{splunk_home}}/bin/splunk _internal_launch_under_systemd --accept-license --answer-yes --no-prompt"
-        }
-      }
+#      "splunkforwarder"=>{
+#        "Service"=>{
+#          "ExecStart"=>"{{splunk_home}}/bin/splunk _internal_launch_under_systemd --accept-license --answer-yes --no-prompt"
+#        }
+#      }
     }
   },
   "splunk_apps"=>{

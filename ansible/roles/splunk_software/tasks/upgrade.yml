@@ -64,7 +64,7 @@
   set_fact:
     splunk_current_version: "{{ splunk_installed_version }}"
 
-- name:
+- name: display upgrade version info
   tags:
     - splunk
     - splunk_software
@@ -141,6 +141,37 @@
   include_tasks: remove_init_and_ulimit.yml
   when: boot_start_migration|default(false) == true
 
+- name: call disable_boot-start
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  include_tasks: disable_boot-start.yml
+  when:
+    - use_systemctl == true
+    - use_splunk_systemd|default(false) == true
+
+- name: call remove_splunk_polkit_or_sudoers
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  include_tasks: remove_splunk_polkit_or_sudoers.yml
+  when:
+    - use_systemctl == true
+    - use_splunk_systemd|default(false) == true
+
+- name: call remove_disable_thp_service
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  include_tasks: remove_disable_thp_service.yml
+  when:
+    - splunk_install_app == 'splunk'
+    - use_systemctl == true
+    - use_splunk_systemd|default(false) == true
+
 - name: upload and extract the splunk software
   tags:
     - splunk
@@ -156,33 +187,13 @@
     - splunk_upgrade
   include_tasks: set_splunk_service_name.yml
 
-- name: one time manual start to run upgrade procedures (init.d->systemd migration)
+- name: call enable_boot-start
   tags:
     - splunk
     - splunk_software
-    - splunk_upgrade
-  command: "{{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt"
-  become: yes
-  become_user: "{{ splunk_user }}"
-  when: boot_start_migration|default(false) == true
-
-- name: stop again to let systemd take over (init.d->systemd migration)
-  tags:
-    - splunk
-    - splunk_software
-    - splunk_upgrade
-  command: "{{ splunk_home }}/bin/splunk stop"
-  become: yes
-  become_user: "{{ splunk_user }}"
-  when: boot_start_migration|default(false) == true
-
-- name: enable boot-start
-  tags:
-    - splunk
-    - splunk_software
-    - splunk_upgrade
-  command: "{{ splunk_home }}/bin/splunk enable boot-start {{splunk_systemd_managed|default()}} {{splunk_create_polkit_rules|default()}} -user {{ splunk_user }} {{splunk_unit_file_name|default()}} --answer-yes --no-prompt"
-  when: boot_start_migration|default(false) == true
+    - splunk_install
+  include_tasks: enable_boot-start.yml
+  when: boot_start_migration|default(false) == true or use_systemctl == true and use_splunk_systemd|default(false) == true
 
 - name: call check_systemd_file from splunk_common
   tags:
@@ -202,6 +213,7 @@
   when:
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
+    - splunk_systemd_services[splunk_service_name] is defined
 
 - name: call add_disable_thp_service
   tags:
@@ -224,17 +236,7 @@
   when:
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
-
-- name: manual start for Splunk 7->8 upgrade and systemd update
-  tags:
-    - splunk
-    - splunk_software
-    - splunk_upgrade
-  command: "{{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt"
-  when:
-    - boot_start_migration|default(false) == false
-    - splunk_current_version is version_compare('8.0.0', '<')
-    - splunk_target_version is version_compare('8.0.0', '>=')
+    - splunk_create_polkit_rules is not defined
 
 - name: start splunk by service control
   tags:

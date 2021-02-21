@@ -1,0 +1,29 @@
+---
+
+- name: disable boot-start
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
+  command: "{{ splunk_home }}/bin/splunk disable boot-start"
+  when:
+    - use_systemctl == true
+    - use_splunk_systemd|default(false) == true
+
+- name: remove {{splunk_service_name}}.service file
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
+  file:
+    path: "/etc/systemd/system/{{splunk_service_name}}.service"
+    state: absent
+  when: use_systemctl == true
+
+- name: commit changes to systemctl
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_uninstall
+  command: systemctl daemon-reload
+  when: use_systemctl == true

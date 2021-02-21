@@ -1,0 +1,8 @@
+---
+
+- name: enable boot-start
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_install
+  command: "{{ splunk_home }}/bin/splunk enable boot-start {{splunk_systemd_managed|default()}} {{splunk_create_polkit_rules|default()}} -user {{ splunk_user }} {{splunk_unit_file_name|default()}} --answer-yes --no-prompt {% if splunk_installed_version is version_compare('7.2.2', '>=') %}--accept-license{% endif %}"

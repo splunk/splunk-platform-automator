@@ -13,6 +13,14 @@
     mode: 0644
   when: use_systemctl == true
 
+- name: commit changes to systemctl
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_install
+  command: systemctl daemon-reload
+  when: use_systemctl == true
+
 - name: enable and start disable-thp service
   tags:
     - splunk

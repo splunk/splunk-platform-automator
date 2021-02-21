@@ -1,6 +1,6 @@
 ---
 
-- name: "update systemd service file"
+- name: "update {{splunk_service_name}} systemd service file"
   tags:
     - splunk
     - splunk_software
@@ -14,7 +14,7 @@
     group: root
     mode: 0700
   with_items: "{{ splunk_systemd_services_updates }}"
-  when: use_systemctl == true and splunk_systemd_services_updates is defined
+  when: use_systemctl == true and splunk_systemd_services[splunk_service_name] is defined
 
 - name: commit changes to systemctl
   tags:

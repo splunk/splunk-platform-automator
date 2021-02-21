@@ -91,30 +91,20 @@
     - { varkey: "HASHED_PASSWORD", varvalue: "{{ admin_hash_pw.stdout }}" }
   when: splunk_installed_version is version_compare('7.1', '>=') and splunk_install_app == "splunk"
 
-- name: accept license and start splunk
+- name: call start_accept_license_and_stop
   tags:
     - splunk
     - splunk_software
     - splunk_install
-  command: "{{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt"
-  become: yes
-  become_user: "{{ splunk_user }}"
+  include_tasks: start_accept_license_and_stop.yml
+  when: splunk_installed_version is version_compare('7.2.2', '<')
 
-- name: stop splunk
+- name: call enable_boot-start
   tags:
     - splunk
     - splunk_software
     - splunk_install
-  command: "{{ splunk_home }}/bin/splunk stop --answer-yes --no-prompt"
-  become: yes
-  become_user: "{{ splunk_user }}"
-
-- name: enable boot-start
-  tags:
-    - splunk
-    - splunk_software
-    - splunk_install
-  command: "{{ splunk_home }}/bin/splunk enable boot-start {{splunk_systemd_managed|default()}} {{splunk_create_polkit_rules|default()}} -user {{ splunk_user }} {{splunk_unit_file_name|default()}} --answer-yes --no-prompt"
+  include_tasks: enable_boot-start.yml
 
 - name: enable and start splunk service
   tags:
@@ -125,14 +115,6 @@
     name: "{{ splunk_service_name }}"
     state: started
     enabled: yes
-  when: use_systemctl == true
-
-- name: commit changes to systemctl
-  tags:
-    - splunk
-    - splunk_software
-    - splunk_install
-  command: systemctl daemon-reload
   when: use_systemctl == true
 
 - name: call check_systemd_file from splunk_common
@@ -166,4 +148,4 @@
   when: 
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
-    - splunk_installed_version is version_compare('8.1', '<')
+    - splunk_create_polkit_rules is not defined
