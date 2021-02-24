@@ -23,6 +23,7 @@ Vagrant.require_version '>= 1.6.0'
 VAGRANTFILE_API_VERSION = '2'
 
 require 'yaml'
+require 'securerandom'
 dir = File.dirname(File.expand_path(__FILE__))
 config_dir = "#{dir}/config"
 defaults_dir = "#{dir}/defaults"
@@ -78,12 +79,6 @@ if !settings['splunk_apps'].nil?
   splunk_apps = splunk_apps.merge(settings['splunk_apps'])
 end
 
-#TODO: Remove
-# # Create auth_dir
-# if !File.directory?("#{dir}/ansible/#{splunk_dirs['splunk_auth_dir']}")
-#   FileUtils.mkdir_p("#{dir}/ansible/#{splunk_dirs['splunk_auth_dir']}")
-# end
-
 # Check for virtualization provider
 if !settings.has_key?("virtualbox") and !settings.has_key?("aws")
     print "ERROR: No virtualization provider defined in #{config_file} \n\n"
@@ -128,9 +123,44 @@ end
 special_host_vars = {}
 network = {}
 defaults['os'] = {}
+aws_merged = {}
 
 # Create inventory/host_vars directory
 FileUtils.mkdir_p("#{host_vars_dir}")
+
+# Deal with the aws_ec2 file
+if provider == "aws"
+  aws_merged = defaults['aws'].merge(settings['aws'])
+  splunkenizerID = "undef"
+  if File.file?("#{config_dir}/aws_ec2.yml")
+    aws_ec2 = YAML.load_file("#{config_dir}/aws_ec2.yml")
+  else
+    aws_ec2 = {}
+  end
+  if aws_ec2.has_key?("filters")
+    if aws_ec2['filters'].has_key?("tag:Splunkenizer_ID")
+      splunkenizerID = aws_ec2['filters']['tag:Splunkenizer_ID']
+    end
+  else
+    aws_ec2['filters'] = {}
+  end
+  if splunkenizerID == "undef"
+    splunkenizerID = SecureRandom.uuid
+  else
+    aws_ec2['filters']['tag:Splunkenizer_ID'] = splunkenizerID
+  end
+  aws_ec2['plugin'] = 'aws_ec2'
+  aws_ec2['regions'] = [].append(aws_merged['region'])
+  aws_ec2['filters']['tag:Splunkenizer_ID'] = splunkenizerID
+  aws_ec2['hostnames'] = [].append("tag:Splunk_Hostname")
+  aws_ec2['compose'] = {}.update('ansible_host'=>'public_dns_name')
+  aws_ec2['compose']['ip_addr'] = 'private_ip_address'
+  aws_ec2['compose']['ansible_user'] = "ansible_user|default('#{aws_merged['ssh_username']}')"
+  aws_ec2['compose']['ansible_ssh_private_key_file'] = "ansible_ssh_private_key_file|default('#{aws_merged['ssh_private_key_path']}')"
+  File.open("#{config_dir}/aws_ec2.yml", "w") do |f|
+    f.write(aws_ec2.to_yaml)
+  end
+end
 
 # Create inventory host groups
 settings['splunk_hosts'].each do |splunk_host|
@@ -144,6 +174,13 @@ settings['splunk_hosts'].each do |splunk_host|
     end
   end
   special_host_vars[splunk_host['name']] = var_obj.dup
+  if provider == "aws"
+    aws_tags = {}
+    aws_tags['Name'] = splunk_host['name']
+    aws_tags['Splunk_Hostname'] = splunk_host['name']
+    aws_tags['Splunkenizer_ID'] = splunkenizerID
+    special_host_vars[splunk_host['name']]['aws']['tags'] = aws_tags
+  end
 end
 
 # If dynamic IPs are used, calculate the start number
