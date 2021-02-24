@@ -311,10 +311,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         end
       elsif provider == "aws"
 
-        #TODO: remove
-        # Parallel vm creation does still not work because of the hostmanager
-        #ENV['VAGRANT_NO_PARALLEL'] = 'yes'
-
         # Add all config attributes to the AWS config class
         srv.vm.provider :aws do |aws, override|
           special_host_vars[server['name']]['aws'].each do |k,v|
