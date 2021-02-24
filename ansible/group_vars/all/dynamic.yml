@@ -9,6 +9,12 @@ splunk_software: "{% if splunk_software_dir | regex_search('^/') %}{{ splunk_sof
 splunk_baseconfig: "{% if splunk_baseconfig_dir | regex_search('^/') %}{{ plunk_baseconfig_dir }}{% else %}{{ playbook_dir }}/../{{ splunk_baseconfig_dir }}{% endif %}"
 splunk_app_prefix: "{{ splunk_env_name|default('splunk') }}"
 
+# Splunk hostnames with ip_addr
+splunk_hosts_entries: >-
+          {%- for hostname in hostvars.keys()|list -%}
+            {{ hostvars[hostname]['ip_addr'] }} {{ hostname }}
+          {% endfor %}
+
 # Splunk Roles
 splunk_roles: >-
           {%- set res = [] -%}

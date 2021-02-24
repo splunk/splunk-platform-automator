@@ -4,5 +4,6 @@ os:
   # Do not set a default time zone, will default to the one from the ansible host
   #time_zone: "Europe/Zurich"
   #set_hostname: true
+  update_hosts_file: true
   disable_selinux: true
   packages:

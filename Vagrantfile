@@ -3,7 +3,7 @@
 # This file is part of Splunkenizer
 #
 ###############################################################################
-# Copyright 2018 Marco Stadler
+# Copyright 2021 Marco Stadler
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -90,10 +90,13 @@ if !settings.has_key?("virtualbox") and !settings.has_key?("aws")
     print "Supported types are virtualbox or aws\n"
     exit 2
 end
+
+stanza_merge_list = ['os']
 if settings.has_key?("virtualbox")
   provider = "virtualbox"
   virtualbox = YAML.load_file("#{defaults_dir}/virtualbox.yml")
   defaults['virtualbox'] = virtualbox['virtualbox']
+  stanza_merge_list.append(provider)
   if !Vagrant.has_plugin?("vagrant-vbguest")
     print "ERROR: Plugin for virtualbox provider is missing, install with 'vagrant plugin install vagrant-vbguest'.\n"
     exit 2
@@ -102,6 +105,7 @@ elsif settings.has_key?("aws")
   provider = "aws"
   aws = YAML.load_file("#{defaults_dir}/aws.yml")
   defaults['aws'] = aws['aws']
+  stanza_merge_list.append(provider)
   # Read access keys from environment variable, if not spcified in settings
   if !defaults['aws'].has_key?("access_key_id")
     defaults['aws']['access_key_id'] = ENV['AWS_ACCESS_KEY_ID']
@@ -120,12 +124,6 @@ elsif settings.has_key?("aws")
   end
 end
 
-# Check for hostmanager plugin
-if !Vagrant.has_plugin?("vagrant-hostmanager")
-  print "ERROR: Plugin 'vagrant-hostmanager' is missing, install with 'vagrant plugin install vagrant-hostmanager'.\n"
-  exit 2
-end
-
 # Create ansible inventory from the config file
 special_host_vars = {}
 network = {}
@@ -137,7 +135,7 @@ FileUtils.mkdir_p("#{host_vars_dir}")
 # Create inventory host groups
 settings['splunk_hosts'].each do |splunk_host|
   var_obj = defaults.dup
-  ['virtualbox','aws','os'].each do |config_group|
+  stanza_merge_list.each do |config_group|
     if !settings[config_group].nil?
       var_obj[config_group] = var_obj[config_group].merge(settings[config_group])
     end
@@ -197,22 +195,8 @@ settings['splunk_hosts'].each do |splunk_host|
   splunk_host_list.push(hosts_entry)
 end
 
-# Write out hosts content to build /etc/hosts file
-splunk_hosts = {}
-splunk_hosts['splunk_hosts'] = splunk_host_list
-#File.open("#{group_vars_dir}/all/hosts.yml", "w") do |f|
-#  f.write(splunk_hosts.to_yaml)
-#end
-
 # Create and configure the specified systems
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
-
-  config.hostmanager.enabled = true
-  config.hostmanager.manage_guest = true
-  config.hostmanager.include_offline = true
-  if provider == "aws"
-    config.hostmanager.include_offline = false
-  end
 
   # Loop through YAML file and set per-VM information
   settings['splunk_hosts'].each do |server|
@@ -256,7 +240,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
           exit 2
         end
         config.vbguest.no_install = false
-        special_host_vars[server['name']]['ansible']['skip_tags'].push('fix_time_sync')
 
 # Will enable this later again, but needs a propre check
 #        # Use Caching for package deployments
@@ -291,8 +274,9 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         end
       elsif provider == "aws"
 
+        #TODO: remove
         # Parallel vm creation does still not work because of the hostmanager
-        ENV['VAGRANT_NO_PARALLEL'] = 'yes'
+        #ENV['VAGRANT_NO_PARALLEL'] = 'yes'
 
         # Add all config attributes to the AWS config class
         srv.vm.provider :aws do |aws, override|
@@ -304,6 +288,34 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
           # Specify username and private key path
           override.ssh.username = special_host_vars[server['name']]['aws']['ssh_username']
           override.ssh.private_key_path = special_host_vars[server['name']]['aws']['ssh_private_key_path']
+        end
+      end
+
+      # Create host_vars dir for this host with ssh infos
+      if provider == "virtualbox"
+        srv.trigger.after :up do |trigger|
+          trigger.info = "Writing Ansible network_info host_vars"
+          trigger.ruby do |env,machine|
+            network_info = {}
+            network_info['ip_addr'] = network[machine.name.to_s]['ip_addr']
+            network_info['ansible_host'] = network[machine.name.to_s]['ip_addr']
+            network_info['ansible_port'] = 22
+            network_info['ansible_user'] = machine.ssh_info[:username]
+            if machine.communicate.ready?
+              # Check for Windows guest
+              if (machine.communicate.test("test -d $Env:SystemRoot"))
+                network_info['ansible_port'] = 5985
+                network_info['ansible_password'] = "vagrant"
+                network_info['ansible_connection'] = "winrm"
+              else
+                network_info['ansible_ssh_private_key_file'] = machine.ssh_info[:private_key_path].first
+              end
+            end
+            FileUtils.mkdir_p("#{host_vars_dir}/#{machine.name}")
+            File.open("#{host_vars_dir}/#{machine.name}/network_info.yml", "w") do |f|
+              f.write(network_info.to_yaml)
+            end
+          end
         end
       end
 
@@ -319,96 +331,11 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
           destroy_trigger.push("#{splunk_apps['splunk_save_baseconfig_apps_dir']}/#{server['name']}")
         end
         if destroy_trigger.length > 0
-          trigger.run = { inline: "rm -r #{destroy_trigger.join(" ")}" }
-        end
-      end
-
-      # Update ansible inventory/hosts with ansible variables
-      srv.vm.provision :hostmanager
-      ip_addr_list = {}
-      srv.hostmanager.ip_resolver = proc do |vm, resolving_vm|
-        vmname = vm.name.to_s
-        network_info = {}
-        update_file = false
-        update_index_html = false
-        if vm.provider_name == :virtualbox and !host_vars[vmname]['ip_addr'].nil? and ip_addr_list[vmname].nil?
-          ip_addr_list[vmname] = host_vars[vmname]['ip_addr']
-        # elsif vm.provider_name == :aws
-        #   if File.file?("#{host_vars_dir}/#{vm.name}/network.yml")
-        #     network_info = YAML.load_file("#{host_vars_dir}/#{vm.name}/network.yml")
-        #     ip_addr_list[vmname] = network_info['ip_addr']
-        #   elsif ip_addr_list[vmname].nil?
-        #     if vm.communicate.ready?
-        #       vm.communicate.execute('hostname --ip-address') do |type, privat_ip|
-        #         allips = privat_ip.strip().split(' ')
-        #         ip_addr_list[vmname] = allips[0]
-        #         #network_info['ip_addr'] = allips[0]
-        #       end
-        #     end
-        #   end
-        end
-        if !ip_addr_list[vmname].nil?
-          network_info['ip_addr'] = ip_addr_list[vmname]
-        end
-
-        if !File.file?("#{host_vars_dir}/#{vm.name}/ansible_ssh_info.yml") and vm.provider_name == :virtualbox
-          if ssh_info = (vm.ssh_info && vm.ssh_info.dup)
-            ansible_ssh_info = {}
-            ansible_ssh_info['ansible_host'] = ssh_info[:host]
-            ansible_ssh_info['ansible_port'] = ssh_info[:port]
-            # if vm.provider_name == :aws and network_info['dns_name'] != ssh_info[:host]
-            #   network_info['dns_name'] = ssh_info[:host]
-            #   update_file = true
-            # end
-            ansible_ssh_info['ansible_user'] = ssh_info[:username]
-            if vm.provider_name == :virtualbox and !host_vars[vmname]['ip_addr'].nil?
-              ansible_ssh_info['ansible_host'] = host_vars[vmname]['ip_addr']
-              ansible_ssh_info['ansible_port'] = 22
-            end
-            if vm.communicate.ready?
-              # Check for Windows guest
-              if (vm.communicate.test("test -d $Env:SystemRoot"))
-                ansible_ssh_info['ansible_port'] = 5985
-                ansible_ssh_info['ansible_password'] = "vagrant"
-                ansible_ssh_info['ansible_connection'] = "winrm"
-              else
-                ansible_ssh_info['ansible_ssh_private_key_file'] = ssh_info[:private_key_path].first
-              end
-            end
-            FileUtils.mkdir_p("#{host_vars_dir}/#{vm.name}")
-            if vm.provider_name == :virtualbox or update_file == true
-              File.open("#{host_vars_dir}/#{vm.name}/ansible_ssh_info.yml", "w") do |f|
-                f.write(ansible_ssh_info.to_yaml)
-              end
-              update_index_html = true
-            end
+          trigger.info = "Deleting Ansible network_info host_vars"
+          trigger.ruby do |env,machine|
+            FileUtils.rm_rf("#{destroy_trigger.join(' ')}")
           end
-          # if update_file == true
-          #   File.open("#{host_vars_dir}/#{vm.name}/network.yml", "w") do |f|
-          #     f.write(network_info.to_yaml)
-          #   end
-          # end
         end
-
-        #TODO: move this to the inventory plugin
-        # # Create HTML link page for all the roles
-        # if update_index_html == true
-        #   require 'erb'
-        #   settings['splunk_hosts'].each do |host|
-        #     network_file = {}
-        #     #TODO: extract this straight out of the config file
-        #     if File.file?("#{host_vars_dir}/#{host['name']}/network.yml")
-        #       network_file[host['name']] = YAML.load_file("#{host_vars_dir}/#{host['name']}/network.yml")
-        #       network = network.merge(network_file)
-        #     end
-        #   end
-        #   template = File.read("#{dir}/template/index.html.erb")
-        #   result = ERB.new(template).result(binding)
-        #   File.open("#{config_dir}/index.html", 'w+') do |f|
-        #     f.write result
-        #   end
-        # end
-        ip_addr_list[vmname]
       end
 
       # Allow remote commands, for example workaround for missing python in ubuntu/xenial64

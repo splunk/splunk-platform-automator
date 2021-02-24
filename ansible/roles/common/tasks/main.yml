@@ -21,7 +21,11 @@
   import_tasks: disable_selinux.yml
   when: ansible_os_family|lower != 'windows'
 
-#- import_tasks: hosts.yml
+- name:
+  import_tasks: hosts.yml
+  when:
+    - ansible_os_family|lower != 'windows'
+    - update_hosts_file|default(false) == true
 
 - name:
   import_tasks: fix_time_sync.yml
