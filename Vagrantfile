@@ -19,17 +19,17 @@
 ###############################################################################
 
 # Specify minimum Vagrant version and Vagrant API version
-Vagrant.require_version '>= 1.6.0'
+Vagrant.require_version '>= 2.2.7'
 VAGRANTFILE_API_VERSION = '2'
 
 require 'yaml'
 require 'securerandom'
 dir = File.dirname(File.expand_path(__FILE__))
-config_dir = "#{dir}/config"
-defaults_dir = "#{dir}/defaults"
-config_file = "#{config_dir}/splunk_config.yml"
-inventory_dir = "#{dir}/inventory"
-host_vars_dir = "#{inventory_dir}/host_vars"
+config_dir = File.join(dir,"config")
+defaults_dir = File.join(dir,"defaults")
+config_file = File.join(config_dir,"splunk_config.yml")
+inventory_dir = File.join(dir,"inventory")
+host_vars_dir = File.join(inventory_dir,"host_vars")
 defaults = {}
 
 # Workaround for bug with vagrant 2.2.7
@@ -57,22 +57,24 @@ if !File.file?("Vagrantfile")
   exit 2
 end
 
-# Create config_dir
-if !File.directory?("#{config_dir}")
-  FileUtils.mkdir_p("#{config_dir}")
+# Create some dirs if needed
+[config_dir, inventory_dir].each do |dir|
+  if !File.directory?(dir)
+    FileUtils.mkdir_p(dir)
+  end
 end
 
-if !File.file?("#{config_file}")
+if !File.file?(config_file)
   print "ERROR: Please copy a config file from the examples dir to #{config_file} to continue\n"
   exit 2
 end
 
 # Read YAML file with instance information (box, CPU, RAM, IP addresses)
 # Edit the config file to change VM and environment configuration details
-settings = YAML.load_file("#{config_file}")
+settings = YAML.load_file(config_file)
 
 # Create splunk_apps variables
-splunk_apps = YAML.load_file("#{defaults_dir}/splunk_apps.yml")
+splunk_apps = YAML.load_file(File.join(defaults_dir,"splunk_apps.yml"))
 defaults['splunk_apps'] = splunk_apps['splunk_apps']
 splunk_apps = defaults['splunk_apps'].dup
 if !settings['splunk_apps'].nil?
@@ -89,16 +91,20 @@ end
 stanza_merge_list = ['os']
 if settings.has_key?("virtualbox")
   provider = "virtualbox"
-  virtualbox = YAML.load_file("#{defaults_dir}/virtualbox.yml")
+  virtualbox = YAML.load_file(File.join(defaults_dir, "virtualbox.yml"))
   defaults['virtualbox'] = virtualbox['virtualbox']
   stanza_merge_list.append(provider)
   if !Vagrant.has_plugin?("vagrant-vbguest")
     print "ERROR: Plugin for virtualbox provider is missing, install with 'vagrant plugin install vagrant-vbguest'.\n"
     exit 2
   end
+  # Create inventory/host_vars directory
+  if !File.directory?(host_vars_dir)
+    FileUtils.mkdir_p(host_vars_dir)
+  end
 elsif settings.has_key?("aws")
   provider = "aws"
-  aws = YAML.load_file("#{defaults_dir}/aws.yml")
+  aws = YAML.load_file(File.join(defaults_dir,"aws.yml"))
   defaults['aws'] = aws['aws']
   stanza_merge_list.append(provider)
   # Read access keys from environment variable, if not spcified in settings
@@ -125,15 +131,12 @@ network = {}
 defaults['os'] = {}
 aws_merged = {}
 
-# Create inventory/host_vars directory
-FileUtils.mkdir_p("#{host_vars_dir}")
-
 # Deal with the aws_ec2 file
 if provider == "aws"
   aws_merged = defaults['aws'].merge(settings['aws'])
   splunkenizerID = "undef"
-  if File.file?("#{config_dir}/aws_ec2.yml")
-    aws_ec2 = YAML.load_file("#{config_dir}/aws_ec2.yml")
+  if File.file?(File.join(config_dir, "aws_ec2.yml"))
+    aws_ec2 = YAML.load_file(File.join(config_dir, "aws_ec2.yml"))
   else
     aws_ec2 = {}
   end
@@ -157,7 +160,7 @@ if provider == "aws"
   aws_ec2['compose']['ip_addr'] = 'private_ip_address'
   aws_ec2['compose']['ansible_user'] = "ansible_user|default('#{aws_merged['ssh_username']}')"
   aws_ec2['compose']['ansible_ssh_private_key_file'] = "ansible_ssh_private_key_file|default('#{aws_merged['ssh_private_key_path']}')"
-  File.open("#{config_dir}/aws_ec2.yml", "w") do |f|
+  File.open(File.join(config_dir,"aws_ec2.yml"), "w") do |f|
     f.write(aws_ec2.to_yaml)
   end
 end
@@ -327,7 +330,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       # Create host_vars dir for this host with ssh infos
       if provider == "virtualbox"
         srv.trigger.after :up do |trigger|
-          trigger.info = "Writing Ansible network_info host_vars"
+          trigger.info = "Update local Ansible inventory"
           trigger.ruby do |env,machine|
             network_info = {}
             network_info['ip_addr'] = network[machine.name.to_s]['ip_addr']
@@ -344,8 +347,18 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
                 network_info['ansible_ssh_private_key_file'] = machine.ssh_info[:private_key_path].first
               end
             end
-            FileUtils.mkdir_p("#{host_vars_dir}/#{machine.name}")
-            File.open("#{host_vars_dir}/#{machine.name}/network_info.yml", "w") do |f|
+            hosts_file = File.join(inventory_dir, "hosts")
+            if File.file?(hosts_file)
+              hosts = File.readlines(hosts_file, chomp: true)
+            else
+              hosts = []
+            end
+            hosts.append(machine.name.to_s)
+            File.open(hosts_file, "w") do |f|
+              f.write(hosts.join("\n"))
+            end
+            FileUtils.mkdir_p(File.join(host_vars_dir, machine.name.to_s))
+            File.open(File.join(host_vars_dir, machine.name.to_s,"network_info.yml"), "w") do |f|
               f.write(network_info.to_yaml)
             end
           end
@@ -355,18 +368,28 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       # Remove host_vars dir for this host
       destroy_trigger = []
       srv.trigger.after :destroy do |trigger|
-        if File.directory?("#{host_vars_dir}/#{server['name']}")
+        if File.directory?(File.join(host_vars_dir, server['name']))
           # Remove host_vars dir for this host
-          destroy_trigger.push("#{host_vars_dir}/#{server['name']}")
+          destroy_trigger.push(File.join(host_vars_dir, server['name']))
         end
-        if File.directory?("#{splunk_apps['splunk_save_baseconfig_apps_dir']}/#{server['name']}")
+        if File.directory?(File.join(splunk_apps['splunk_save_baseconfig_apps_dir'],server['name']))
           # Remove apps dir for this host
-          destroy_trigger.push("#{splunk_apps['splunk_save_baseconfig_apps_dir']}/#{server['name']}")
+          destroy_trigger.push(File.join(splunk_apps['splunk_save_baseconfig_apps_dir'],server['name']))
         end
         if destroy_trigger.length > 0
-          trigger.info = "Deleting Ansible network_info host_vars"
+          trigger.info = "Update local Ansible inventory"
           trigger.ruby do |env,machine|
-            FileUtils.rm_rf("#{destroy_trigger.join(' ')}")
+            FileUtils.rm_rf(destroy_trigger.join(' '))
+            hosts_file = File.join(inventory_dir, "hosts")
+            if File.file?(hosts_file)
+              hosts = File.readlines(hosts_file, chomp: true)
+            else
+              hosts = []
+            end
+            hosts -= [machine.name.to_s]
+            File.open(hosts_file, "w") do |f|
+              f.write(hosts.join("\n"))
+            end
           end
         end
       end
