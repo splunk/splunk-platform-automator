@@ -31,6 +31,8 @@
   copy:
     src: "{{ splunk_software }}/{{ splunk_license_file_name }}"
     dest: "/tmp/{{ splunk_license_file_name }}"
+    owner: "{{ splunk_user }}"
+    group: "{{ splunk_group }}"
   when: grep_result.stdout is not search(lic_guid_src.matches[0].guid)
 
 - name: add license file to splunk
