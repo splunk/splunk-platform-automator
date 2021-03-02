@@ -19,11 +19,10 @@
 
 - name:
   import_tasks: disable_selinux.yml
-  when: 
+  when:
+    - disable_selinux|default(false) == true
     - ansible_os_family|lower != 'windows'
-    - inventory_hostname not in groups.role_universal_forwarder
-
-#- import_tasks: hosts.yml
+    - "'role_universal_forwarder' not in group_names"
 
 - name:
   import_tasks: fix_time_sync.yml
