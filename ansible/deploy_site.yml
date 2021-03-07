@@ -6,6 +6,11 @@
     - common
   import_playbook: setup_common.yml
 
+- name: create splunk control
+  tags:
+    - common
+  import_playbook: create_linkpage.yml
+
 - name: install the splunk software
   tags:
     - splunk
