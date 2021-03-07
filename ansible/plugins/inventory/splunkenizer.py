@@ -211,6 +211,7 @@ class InventoryModule(BaseInventoryPlugin):
                 raise AnsibleParserError('Error: {}'.format(e))
 
         #TODO: Treat those sections individually: general, virtualbox, aws
+        #TODO: add general vars to hosts for url_local in index.html
         # Read in Indexer Cluster config
         if isinstance(self.configfiles.get('splunk_idxclusters'), list):
             for idxcluster in self.configfiles.get('splunk_idxclusters'):
@@ -296,7 +297,6 @@ class InventoryModule(BaseInventoryPlugin):
                             site_role_check_passed = True
 
                         if role == "license_master":
-                            #TODO: Check for license file, if role is license_master
                             if 'splunk_license_file' not in self.environments[splunk_env]['splunk_defaults']:
                                 raise AnsibleParserError("Error: Missing splunk_license_file variable for role %s in splunk_env %s" % (role,splunk_env))
                             license_file = os.path.join(cwd, self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'],self.environments[splunk_env]['splunk_defaults']['splunk_license_file'])
