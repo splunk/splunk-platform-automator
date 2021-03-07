@@ -1,4 +1,4 @@
-# Splunkenizer
+# Splunkenizer 2.0
 
 ![Splunkenizer Overview](https://github.com/splunkenizer/Splunkenizer/blob/master/pic/splunkenizer_overview.png)
 
@@ -8,7 +8,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
 
 ## Table of Contents
 
-- [Splunkenizer](#splunkenizer)
+- [Splunkenizer 2.0](#splunkenizer-20)
   - [Table of Contents](#table-of-contents)
 - [Support](#support)
 - [Features](#features)
@@ -38,6 +38,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
   - [Copy files](#copy-files)
   - [Deploying on Amazon Cloud](#deploying-on-amazon-cloud)
   - [Ansible playbooks only](#ansible-playbooks-only)
+    - [inventory configuration](#inventory-configuration)
 - [Known issues, limitations](#known-issues-limitations)
   - [Supported Ansible Versions](#supported-ansible-versions)
 - [Authors](#authors)
@@ -55,9 +56,10 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
 - Splunk environment definition stored in one simple [yaml](http://docs.ansible.com/ansible/latest/YAMLSyntax.html) file
 - [Example configuration files](examples) for different setups included
 - Deployment and configuration done with [Ansible](https://www.ansible.com)
-- Controlled by [Vagrant](https://www.vagrantup.com)
-- Virtualized by [Virtualbox](https://www.virtualbox.org) or in [AWS Cloud](https://aws.amazon.com). It can be extended to other technologies like VMWare, Docker and such in the future.
-- Tested on MacOSX and Linux as vagrant and virtualbox host
+- Virtual hosts can be created by [Vagrant](https://www.vagrantup.com)
+  - Currently supports [Virtualbox](https://www.virtualbox.org) or [AWS Cloud](https://aws.amazon.com).
+- Can deploy Splunk on existing hosts (virtual or physical)
+- Developed and tested on MacOSX but should support Linux as well.
 
 ## Roadmap
 
@@ -93,8 +95,8 @@ Your directory structure should now look like this:
 ./Vagrant/Splunkenizer/...
 ./Vagrant/Software/Configurations - Base/...
 ./Vagrant/Software/Configurations - Index Replication/...
-./Vagrant/Software/splunk-8.0.3-a6754d8441bf-Linux-x86_64.tgz
-./Vagrant/Software/splunkforwarder-8.0.3-a6754d8441bf-Linux-x86_64.tgz
+./Vagrant/Software/splunk-8.1.2-545206cc9f70-Linux-x86_64.tgz
+./Vagrant/Software/splunkforwarder-8.1.2-545206cc9f70-Linux-x86_64.tgz
 ./Vagrant/Software/Splunk_Enterprise.lic
 ```
 
@@ -198,6 +200,12 @@ ansible-playbook ansible/deploy_site.yml [--limit <hostname>]
 ### Login to Splunk Browser Interface
 
 To login to one of the hosts just open the `index.html` file created in the Splunkenizer/config directory. You will find links to every role of your deployment.
+If something changes along the way and you need to update the linkpage just call this playbook:
+
+```
+ansible-playbook ansible/create_linkpage.yml
+```
+
 
 ### Login by SSH
 
@@ -246,7 +254,13 @@ You can copy splunk_hosts and cluster configs from other example files to the AW
 
 ## Ansible playbooks only
 
-You can also use the ansible playbooks without vagrant. Like that you can deploy Splunk to an existing set of hosts (virtual or physical). You have to create some config files, which is normally done by vagrant. Vagrant dynamically creates the ansible inventory file with the host and group variables for your configuration. Everything can be found in the `inventory` directory. The easiest way would be to create the same configuration with vagrant (ex. on your laptop) and copy the created files to your other Ansible environment.
+You can also use the ansible playbooks without vagrant. For that you have to creare your virtual or physical machines by other means. You can use the ansible playbooks to
+deploy the Splunk roles onto the existing servers. You can specify the hostnames in the `splunk_config.yml` files `splunk_hosts` section.
+Ansible need to know, where to connect to via ssh to run the playbooks. For this you need to provide create some configs in the `inventory` folder.
+
+### inventory configuration
+
+TBD
 
 # Known issues, limitations
 
@@ -265,6 +279,7 @@ The following Ansible versions are tested and working with Splunkenizer, but any
 :white_check_mark: Ansible 2.8.x
 :white_check_mark: Ansible 2.9.x
 :white_check_mark: Ansible 2.10.x
+:white_check_mark: Ansible 3.x
 
 # Authors
 
