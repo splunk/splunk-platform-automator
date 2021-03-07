@@ -12,16 +12,16 @@
 # Any log file
 *.log
 # Config directory
-config
+/config
 **/splunk_config.yml
 # Auth directory
-auth
+/auth
 # Inventory directory
 /inventory
 # Apps directory
-apps
+/apps
 # Helpers directory
-helpers
+/helpers
 # Test files
 **/test.yml
 **/Todo.txt
