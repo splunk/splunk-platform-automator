@@ -4,15 +4,16 @@ splunk_systemd:
   splunk_systemd_services:
     splunk:
       Service:
-        ExecStart: "{{splunk_home}}/bin/splunk _internal_launch_under_systemd --accept-license --answer-yes --no-prompt"
         LimitCORE: 0
         LimitFSIZE: infinity
         LimitDATA: infinity
         LimitNPROC: 20480
         LimitNOFILE: 65536
+        TasksMax: 20480
         KillMode: mixed
         KillSignal: SIGINT
         TimeoutStopSec: 10min
     splunkforwarder:
       Service:
-        ExecStart: "{{splunk_home}}/bin/splunk _internal_launch_under_systemd --accept-license --answer-yes --no-prompt"
+        #TODO: remove this during merge
+        TimeoutStopSec: 10min
