@@ -346,7 +346,7 @@ class InventoryModule(BaseInventoryPlugin):
                             if hostname not in self.environments[splunk_env]['output'][splunk_outputs]['hosts']:
                                 self.environments[splunk_env]['output'][splunk_outputs]['hosts'].append(hostname)
 
-                        # Build the search_peer list (host where to search on)
+                        # List of search endpoints (indexers or cluster_masters)
                         if role in ['indexer','cluster_master']:
                             if role == 'cluster_master' and 'idxcluster' in splunkhost:
                                 if 'idxcluster' not in self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']:
@@ -356,8 +356,10 @@ class InventoryModule(BaseInventoryPlugin):
                                 if role not in self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']:
                                     self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets'] = {role: []}
                                 self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets'][role].append(hostname)
-
-                        if role in ['search_head','cluster_master']:
+                        
+                        # List of hosts running search agains indexers (search_heads)
+                        #TODO: Maybe add license Master as search head?
+                        if role in ['search_head','monitoring_console']:
                             if hostname not in self.environments[splunk_env]['search_peer'][splunk_search_peers]['hosts']:
                                 self.environments[splunk_env]['search_peer'][splunk_search_peers]['hosts'].append(hostname)
 
