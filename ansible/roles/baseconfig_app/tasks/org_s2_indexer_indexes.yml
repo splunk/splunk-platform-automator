@@ -42,8 +42,6 @@
     mode: 0600
   notify: restart splunk
 
-- debug: var=splunk_indexer_volumes_remote
-
 - name: "({{ app_name }}) set indexer volume variables for remote volumes"
   tags:
     - splunk
