@@ -4,16 +4,16 @@ splunk_systemd:
   splunk_systemd_services:
     splunk:
       Service:
-        LimitCORE: 0
+        #LimitCORE: 0
         LimitFSIZE: infinity
         LimitDATA: infinity
         LimitNPROC: 20480
         LimitNOFILE: 65536
         TasksMax: 20480
-        KillMode: mixed
-        KillSignal: SIGINT
-        TimeoutStopSec: 10min
+        #KillMode: mixed
+        #KillSignal: SIGINT
+        #TimeoutStopSec: 10min
     splunkforwarder:
       Service:
-        #TODO: remove this during merge
+        #TODO: remove this after merge to the master
         TimeoutStopSec: 10min
