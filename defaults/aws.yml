@@ -1,4 +1,4 @@
-# Default values for aws hosts
+# Default values for aws EC2 instances
 
 aws:
   # Access ID and Key are read from environment variables, if not spcified
