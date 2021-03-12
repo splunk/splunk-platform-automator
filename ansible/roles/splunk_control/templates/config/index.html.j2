@@ -24,7 +24,7 @@
           <div class="card text-white bg-secondary mb-3">
             <div class="card-header">{{ hostname }}</div>
             <div class="card-body">
-              <p class="card-text">Env: {{ splunk_env }}</p>
+              <p class="card-text">Env: {{ hostvars[hostname]['splunk_env_name'] }}</p>
               <p class="card-text">IP Addr: {{ hostvars[hostname]['ip_addr']|default("unknown") }}</p>
             </div>
             <div class="card-footer">
