@@ -16,7 +16,6 @@
     group: "{{splunk_group}}"
     mode: 0600
   notify: restart splunk
-  with_dict: "{{ splunk_ssl.inputs.config }}"
   when: splunk_ssl.inputs.enable == true
 
 - name: "({{ app_name }}) enable ssl in inputs.conf"
@@ -34,7 +33,6 @@
     group: "{{splunk_group}}"
     mode: 0600
   notify: restart splunk
-  with_dict: "{{ splunk_ssl.inputs.config }}"
   when: splunk_ssl.inputs.enable == true
 
 - name: "({{ app_name }}) setting ssl configs in inputs.conf"
