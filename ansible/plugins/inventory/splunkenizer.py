@@ -351,7 +351,8 @@ class InventoryModule(BaseInventoryPlugin):
                             if role == 'cluster_master' and 'idxcluster' in splunkhost:
                                 if 'idxcluster' not in self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']:
                                     self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']['idxcluster'] = {splunkhost['idxcluster']: hostname}
-                                #self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']['idxcluster'][splunkhost['idxcluster']].append(hostname)
+                                else:
+                                    self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']['idxcluster'].update({splunkhost['idxcluster']: hostname})
                             elif role == 'indexer' and 'idxcluster' not in splunkhost:
                                 if role not in self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']:
                                     self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets'] = {role: []}
