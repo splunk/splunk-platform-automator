@@ -253,6 +253,9 @@ class InventoryModule(BaseInventoryPlugin):
         for role in allowed_roles:
             roles[role] = []
 
+        #TODO: Check splunk_defaults and other sections for syntax errors
+        #TODO: Check volume definitions, if they are matching both sections
+
         # Going through the hosts and parse the settings
         for splunkhost in self.configfiles['splunk_hosts']:
             hostname = splunkhost['name']
