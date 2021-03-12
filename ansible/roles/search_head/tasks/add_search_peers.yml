@@ -14,7 +14,6 @@
   register: host_check
   check_mode: False
   failed_when: host_check.msg is defined and "error" in host_check.msg
-  changed_when: host_check.state is defined and host_check.state == 'started'
   when: search_head|default()|length > 0
 
 - name: add search peers on search head
