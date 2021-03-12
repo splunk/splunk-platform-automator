@@ -174,11 +174,12 @@
   notify: restart splunk
   when: splunk_outputs_idx_list|length > 0
 
-- name: "({{ app_name }}) setting ssl in tcpout stanza for non clustered indexers"
+- name: "({{ app_name }}) setting other ssl configs in tcpout stanza for non clustered indexers"
   tags:
     - splunk
     - splunk_baseconfig
     - org_all_forwarder_outputs
+    - outputs_ssl
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     section: tcpout:all_indexers
@@ -189,4 +190,29 @@
     mode: 0600
   notify: restart splunk
   with_dict: "{{ splunk_ssl.outputs.config }}"
-  when: splunk_outputs_idx_list|length > 0 and splunk_ssl.outputs.enable == true
+  when:
+    - splunk_outputs_idx_list|length > 0
+    - splunk_ssl.outputs.enable == true
+
+- name: "({{ app_name }}) setting ssl certfile configs in tcpout stanza for non clustered indexers"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_forwarder_outputs
+    - outputs_ssl
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+    section: tcpout:all_indexers
+    option: "{{ item.varkey }}"
+    value: "$SPLUNK_HOME/etc/apps/{{ app_dest_name }}/default/{{ item.varvalue|basename }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+  with_items:
+    - { varkey: "sslRootCAPath", varvalue: "{{ splunk_ssl.outputs.config.sslRootCAPath|default('cacert.pem') }}" }
+    - { varkey: "sslCertPath", varvalue: "{{ splunk_ssl.outputs.config.sslCertPath|default('client.pem') }}" }
+  when:
+    - splunk_outputs_idx_list|length
+    - splunk_ssl.outputs.enable == true
+    - splunk_ssl.outputs.own_certs == true
