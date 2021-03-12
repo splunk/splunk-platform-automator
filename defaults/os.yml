@@ -7,3 +7,7 @@ os:
   update_hosts_file: true
   disable_selinux: true
   packages:
+  # Needed for the Unix TA
+  #  - sysstat
+  #  - lsof
+  #  - net-tools
