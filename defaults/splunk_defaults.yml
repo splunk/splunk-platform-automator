@@ -25,26 +25,24 @@ splunk_defaults:
   #splunk_loginpage_print_userpw: false
   #splunk_loginpage_print_roles: false
 
-  splunk_volume_defaults:
-    homePath: primary 
-    coldPath: primary
-  # Define Indexer Volumes (filesystem must exist)
-  splunk_indexer_volumes:
-    primary:
-
   splunk_ssl:
     web:
       enable: false
       own_certs: false
       config:
         enableSplunkWebSSL: true
-        privKeyPath: "etc/auth/{{splunk_env_name}}/privkey.web.key"
-        serverCert: "etc/auth/{{splunk_env_name}}/cacert.web.pem"
+        # For web private keys the cert filename must match
+        # the systems name given in the splunk_hosts section.
+        # Example: cm -> cm.pem
+        #privKeyPath: etc/auth/{{splunk_env_name}}/custom_privkey.web.pem
+        #serverCert: etc/auth/{{splunk_env_name}}/custom_cacert.pem
     inputs:
       enable: false
       own_certs: false
-      # If own certs are provided, they must match the filename given here
       config:
+        # If own certs are provided, they must match the filename given here
+        #rootCA: "$SPLUNK_HOME/etc/auth/{{splunk_env_name}}/custom_cacert.pem"
+        #serverCert: "$SPLUNK_HOME/etc/auth/{{splunk_env_name}}/custom_inputs_server.pem"
         rootCA: "$SPLUNK_HOME/etc/auth/cacert.pem"
         serverCert: "$SPLUNK_HOME/etc/auth/server.pem"
         password: "password"
@@ -52,6 +50,9 @@ splunk_defaults:
       enable: false
       own_certs: false
       config:
+        # If own certs are provided, they must match the filename given here
+        #sslRootCAPath: "custom_cacert.pem"
+        #sslCertPath: "custom_outputs_server.pem"
         sslRootCAPath: "$SPLUNK_HOME/etc/auth/cacert.pem"
         sslCertPath: "$SPLUNK_HOME/etc/auth/server.pem"
         sslPassword: "password"
