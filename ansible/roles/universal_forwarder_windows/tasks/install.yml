@@ -44,7 +44,7 @@
     - universal_forwarder_windows
   win_copy:
     src: "{{splunk_archive.0}}"
-    dest: 'C:\tmp\splunkforwarder.msi'
+    dest: 'C:\Windows\Temp\splunkforwarder.msi'
   when: splunk_download is not defined or
         (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == false) or
         (splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == false)
@@ -65,7 +65,7 @@
     - universal_forwarder_windows
   win_get_url:
     url: "{{ splunk_url }}"
-    dest: 'C:\tmp\splunkforwarder.msi'
+    dest: 'C:\Windows\Temp\splunkforwarder.msi'
   when: splunk_download is defined and
         (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
         splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
@@ -75,7 +75,7 @@
     - splunk
     - universal_forwarder_windows
   win_package:
-    path: 'C:\tmp\splunkforwarder.msi'
+    path: 'C:\Windows\Temp\splunkforwarder.msi'
     state: present
     arguments:
     - AGREETOLICENSE=yes
@@ -88,7 +88,7 @@
     - splunk
     - universal_forwarder_windows
   win_file:
-    path: 'C:\tmp\splunkforwarder.msi'
+    path: 'C:\Windows\Temp\splunkforwarder.msi'
     state: absent
 
 #- name: find installed splunk version
