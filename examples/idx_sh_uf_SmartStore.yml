@@ -1,22 +1,18 @@
 ---
 # splunk_config.yml
-
-# General settings
-general:
-  url_locale: en-GB
+plugin: splunkenizer
 
 os:
   set_hostname: true
-  disable_selinux: true
 
 #virtualbox:
 aws:
   keypair_name: 'aws_key'
   #region: 'eu-central-1'
-  ami: 'ami-0badcc5b522737046' # Redhat 8 (may need to disable selinux)
+  ami: 'ami-0badcc5b522737046' # Redhat 8
   ssh_username: 'ec2-user'
-  #instance_type: 't2.micro'
-  instance_type: 'c5.2xlarge'
+  instance_type: 't2.micro'
+  #instance_type: 'c5.2xlarge'
   ssh_private_key_path: '~/.ssh/aws_key.pem'
   security_groups: ['Splunk_Basic']
   # AWS Storage
@@ -30,12 +26,12 @@ aws:
 # Splunk default settings
 splunk_defaults:
 #  splunk_env_name: splk
-#  splunk_version: '8.1.1'
+#  splunk_version: '8.1.2'
   splunk_download:
     splunk: true
     splunkforwarder: true
 #  splunk_admin_password: 'splunklab'
-  splunk_license_file: Splunk_Enterprise.lic
+#  splunk_license_file: Splunk_Enterprise.lic
 #  splunk_indexes:
 #    - test1
 #    - test2
@@ -75,10 +71,6 @@ splunk_hosts:
     roles:
       - indexer
     aws:
-      tags:
-        Name: idx
-        Env: SmartStore
-        Role: IDX
       # IAM Role with S3 access permissions to assign to the indexer
       # Must be created beforehand
       iam_instance_profile_name: Splunk_S3-Access
@@ -87,18 +79,8 @@ splunk_hosts:
   - name: sh
     roles:
       - search_head
-    aws:
-      tags:
-        Name: sh
-        Env: SmartStore
-        Role: SH
 
   # Universal Forwarder
   - name: uf
     roles:
       - universal_forwarder
-    aws:
-      tags:
-        Name: uf
-        Env: SmartStore
-        Role: UF

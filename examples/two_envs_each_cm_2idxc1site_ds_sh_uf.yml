@@ -1,12 +1,6 @@
 ---
 # splunk_config.yml
-
-# General settings
-general:
-  start_ip: 172.16.1.100
-
-os:
-#  time_zone: "Europe/Zurich"
+plugin: splunkenizer
 
 virtualbox:
 #  box: "centos/7" # Default
@@ -14,7 +8,7 @@ virtualbox:
 
 # Splunk default settings
 splunk_defaults:
-#    splunk_license_file: Splunk_Enterprise.lic
+#  splunk_license_file: Splunk_Enterprise.lic
 
 # Splunk general settings
 splunk_environments:
@@ -62,8 +56,8 @@ splunk_hosts:
     splunk_env: splk1
     roles:
       - cluster_master
-      - license_master
       - monitoring_console
+      #- license_master
     idxcluster: idxc1
     site: site0
 
@@ -109,8 +103,8 @@ splunk_hosts:
     splunk_env: splk2
     roles:
       - cluster_master
-      - license_master
       - monitoring_console
+      #- license_master
     idxcluster: idxc2
     site: site0
 

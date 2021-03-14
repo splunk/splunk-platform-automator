@@ -1,22 +1,17 @@
 ---
 # splunk_config.yml
-
-# General settings
-general:
-  url_locale: en-GB
+plugin: splunkenizer
 
 os:
   set_hostname: true
-  disable_selinux: true
 
-#virtualbox:
 aws:
   keypair_name: 'aws_key'
   #region: 'eu-central-1'
   ami: 'ami-0badcc5b522737046' # Redhat 8 (may need to disable selinux)
-  ssh_username: 'ec2-user'
-  #instance_type: 't2.micro'
-  instance_type: 'c5.2xlarge'
+  #ssh_username: 'ec2-user'
+  instance_type: 't2.micro'
+  #instance_type: 'c5.2xlarge'
   ssh_private_key_path: '~/.ssh/aws_key.pem'
   security_groups: ['Splunk_Basic']
   # AWS Storage
@@ -24,18 +19,18 @@ aws:
     - # do not remove this, it is part of the format
       DeviceName: "/dev/sda1" # Redhat 8
       Ebs.VolumeSize: 50 # Size in GB
-      #Ebs.DeleteOnTermination: true
+      #Ebs.DeleteOnTermination: true # Default
       #Ebs.VolumeType: "GP2" # General performance - you might want something faster
 
 # Splunk default settings
 splunk_defaults:
 #  splunk_env_name: splk
-#  splunk_version: '8.1.1'
+#  splunk_version: '8.1.2'
   splunk_download:
     splunk: true
     splunkforwarder: true
 #  splunk_admin_password: 'splunklab'
-  splunk_license_file: Splunk_Enterprise.lic
+#  splunk_license_file: Splunk_Enterprise.lic
 #  splunk_indexes:
 #    - test1
 #    - test2
@@ -44,6 +39,7 @@ splunk_defaults:
   splunk_indexer_volumes:
     hot:
     s2volume:
+      # Create a bucket in AWS and name it here. Make sure the EC2 instances have permission to write to this bucket.
       path: "s3://<your_s3_bucketname>/<subfolder>"
       storageType: remote
 
@@ -93,25 +89,15 @@ splunk_hosts:
       - deployment_server
       - deployer
     shcluster: shc1
-    aws:
-      tags:
-        Name: ds
-        Env: SmartStore
-        Role: DS,DP
 
   # Cluster Master
   - name: cm
     roles:
       - cluster_master
       - monitoring_console
-      - license_master
+      #- license_master
     idxcluster: idxc1
     site: site0
-    aws:
-      tags:
-        Name: cm
-        Env: SmartStore
-        Role: CM,MC,LM
 
   # Cluster Indexer
   - name: idx1
@@ -120,10 +106,7 @@ splunk_hosts:
     idxcluster: idxc1
     site: site1
     aws:
-      tags:
-        Name: idx1
-        Env: SmartStore
-        Role: IDX
+      # The IAM role listed here must be created in AWS. Allow write permissions to the bucket.
       iam_instance_profile_name: Splunk_S3-Access
 
   # Cluster Indexer
@@ -133,10 +116,6 @@ splunk_hosts:
     idxcluster: idxc1
     site: site1
     aws:
-      tags:
-        Name: idx2
-        Env: SmartStore
-        Role: IDX
       iam_instance_profile_name: Splunk_S3-Access
 
   # Cluster Indexer
@@ -146,10 +125,6 @@ splunk_hosts:
     idxcluster: idxc1
     site: site2
     aws:
-      tags:
-        Name: idx3
-        Env: SmartStore
-        Role: IDX
       iam_instance_profile_name: Splunk_S3-Access
 
   # Cluster Indexer
@@ -159,10 +134,6 @@ splunk_hosts:
     idxcluster: idxc1
     site: site2
     aws:
-      tags:
-        Name: idx4
-        Env: SmartStore
-        Role: IDX
       iam_instance_profile_name: Splunk_S3-Access
 
   # Search Head
@@ -170,40 +141,20 @@ splunk_hosts:
     roles:
       - search_head
     shcluster: shc1
-    aws:
-      tags:
-        Name: sh1
-        Env: SmartStore
-        Role: SH
 
   # Search Head
   - name: sh2
     roles:
       - search_head
     shcluster: shc1
-    aws:
-      tags:
-        Name: sh2
-        Env: SmartStore
-        Role: SH
 
   # Search Head
   - name: sh3
     roles:
       - search_head
     shcluster: shc1
-    aws:
-      tags:
-        Name: sh3
-        Env: SmartStore
-        Role: SH
 
   # Universal Forwarder
   - name: uf
     roles:
       - universal_forwarder
-    aws:
-      tags:
-        Name: uf
-        Env: SmartStore
-        Role: UF
