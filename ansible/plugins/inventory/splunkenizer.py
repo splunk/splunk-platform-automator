@@ -489,6 +489,12 @@ class InventoryModule(BaseInventoryPlugin):
             # Store the optional sections from the YAML file
             for section in ['general', 'os', 'splunk_dirs', 'splunk_defaults', 'splunk_environments', 'splunk_apps', 'splunk_systemd', 'splunk_idxclusters', 'splunk_shclusters', 'virtualbox', 'aws']:
                 configfiles[section] = self.get_option(section)
+            if 'virtualbox' in configfiles:
+                # Create empty aws_ec2.yml file, otherwise inventory will fail
+                #TODO: Maybe check Ansible inventory list, if aws is enabled
+                dirname = os.path.dirname(path)
+                with open(os.path.join(dirname,'aws_ec2.yml'), 'w') as f:
+                    f.write('#Empty file to satify the aws plugin\n')
             setattr(self, 'configfiles', configfiles)
         except Exception as e:
             raise AnsibleParserError('All correct options required: {}'.format(e))
