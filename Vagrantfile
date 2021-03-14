@@ -133,11 +133,15 @@ aws_merged = {}
 
 # Deal with the aws_ec2 file
 if provider == "aws"
+  if settings['aws'].nil?
+    settings['aws'] = {}
+  end
   aws_merged = defaults['aws'].merge(settings['aws'])
   splunkenizerID = "undef"
   if File.file?(File.join(config_dir, "aws_ec2.yml"))
     aws_ec2 = YAML.load_file(File.join(config_dir, "aws_ec2.yml"))
-  else
+  end
+  if aws_ec2 == false
     aws_ec2 = {}
   end
   if aws_ec2.has_key?("filters")
