@@ -9,3 +9,7 @@ aws:
   region: 'eu-central-1'
   ssh_username: 'ec2-user'
   instance_type: 't2.micro'
+  ami: 'ami-0badcc5b522737046' # Redhat 8 (eu-central-1)
+  keypair_name: 'aws_key'
+  ssh_private_key_path: '~/.ssh/aws_key.pem'
+  security_groups: ['Splunk_Basic']
