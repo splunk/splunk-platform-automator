@@ -1,4 +1,4 @@
-# Splunkenizer 2.0
+# Splunkenizer 2.0 (Beta)
 
 ![Splunkenizer Overview](https://github.com/splunkenizer/Splunkenizer/blob/master/pic/splunkenizer_overview.png)
 
@@ -8,7 +8,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
 
 ## Table of Contents
 
-- [Splunkenizer 2.0](#splunkenizer-20)
+- [Splunkenizer 2.0 (Beta)](#splunkenizer-20-beta)
   - [Table of Contents](#table-of-contents)
 - [Support](#support)
 - [Features](#features)
@@ -192,8 +192,6 @@ Ansible playbooks can be run over and over again. If the virtual machine is alre
 ```
 ansible-playbook ansible/deploy_site.yml [--limit <hostname>]
 ```
-
-**Important Note:** Always run `vagrant status` after updating the `splunk_config.yml` file, otherwise the changes are not populated to the Ansible inventory.
 
 ## Login to the hosts
 
