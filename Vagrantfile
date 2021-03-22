@@ -29,6 +29,7 @@ config_dir = File.join(dir,"config")
 defaults_dir = File.join(dir,"defaults")
 config_file = File.join(config_dir,"splunk_config.yml")
 inventory_dir = File.join(dir,"inventory")
+hosts_file = File.join(inventory_dir, "hosts")
 host_vars_dir = File.join(inventory_dir,"host_vars")
 defaults = {}
 
@@ -61,6 +62,12 @@ end
 [config_dir, inventory_dir].each do |dir|
   if !File.directory?(dir)
     FileUtils.mkdir_p(dir)
+  end
+end
+# Create empty file, if not there
+if !File.file?(hosts_file)
+  File.open(hosts_file, "w") do |f|
+    f.write("")
   end
 end
 
@@ -138,6 +145,7 @@ if provider == "aws"
   end
   aws_merged = defaults['aws'].merge(settings['aws'])
   splunkenizerID = "undef"
+  aws_ec2 = false
   if File.file?(File.join(config_dir, "aws_ec2.yml"))
     aws_ec2 = YAML.load_file(File.join(config_dir, "aws_ec2.yml"))
   end
@@ -351,7 +359,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
                 network_info['ansible_ssh_private_key_file'] = machine.ssh_info[:private_key_path].first
               end
             end
-            hosts_file = File.join(inventory_dir, "hosts")
             if File.file?(hosts_file)
               hosts = File.readlines(hosts_file, chomp: true)
             else
