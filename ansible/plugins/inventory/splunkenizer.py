@@ -134,6 +134,19 @@ class InventoryModule(BaseInventoryPlugin):
         if len(check_arch) < 1:
             raise AnsibleParserError("Error: %s Archive for %s version %s missing in %s" % (platform,arch_type,splunk_version,directory))
 
+    def _init_inventory(self):
+        if not os.path.isdir("inventory"):
+            try:
+                os.mkdir("inventory")
+            except Exception as e:
+                raise AnsibleParserError('Cannot create inventory directory. Error: {}'.format(e))
+        if not os.path.exists(os.path.join("inventory", "hosts")):
+            try:
+                with open(os.path.join("inventory", "hosts"), 'w') as f:
+                    f.write('')
+            except Exception as e:
+                raise AnsibleParserError('Cannot create inventory/hosts file. Error: {}'.format(e))            
+
     def _populate_defaults(self):
         '''Read all the default values'''
         defaults = {}
@@ -498,6 +511,8 @@ class InventoryModule(BaseInventoryPlugin):
             setattr(self, 'configfiles', configfiles)
         except Exception as e:
             raise AnsibleParserError('All correct options required: {}'.format(e))
+        # Create empty inventory, to make other plugins happy
+        self._init_inventory()
         # Call our internal helper to read in default values
         self._populate_defaults()
         # Call our internal helper to populate the dynamic inventory from the config file
