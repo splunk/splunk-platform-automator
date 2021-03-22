@@ -147,6 +147,16 @@ class InventoryModule(BaseInventoryPlugin):
             except Exception as e:
                 raise AnsibleParserError('Cannot create inventory/hosts file. Error: {}'.format(e))            
 
+    def _set_virtualization(self, splunk_config):
+        '''Set virtualization type based on the definition in the config file'''
+        setattr(self, 'virtualization', None)
+        with open(splunk_config,"r") as file:
+            splunk_config = yaml.load(file, Loader=yaml.FullLoader)
+        supported_virtualizations = ['virtualbox','aws']
+        for virtualization in supported_virtualizations:
+            if virtualization in splunk_config:
+                setattr(self, 'virtualization', virtualization)
+
     def _populate_defaults(self):
         '''Read all the default values'''
         defaults = {}
@@ -513,6 +523,8 @@ class InventoryModule(BaseInventoryPlugin):
             raise AnsibleParserError('All correct options required: {}'.format(e))
         # Create empty inventory, to make other plugins happy
         self._init_inventory()
+        # Call our internal helper to set the used virtualization
+        self._set_virtualization(path)
         # Call our internal helper to read in default values
         self._populate_defaults()
         # Call our internal helper to populate the dynamic inventory from the config file
