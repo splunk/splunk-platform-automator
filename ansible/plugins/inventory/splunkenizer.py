@@ -188,6 +188,11 @@ class InventoryModule(BaseInventoryPlugin):
                 #print("Merged: ", merged)
             else:
                 merged_section = self.defaults[section]
+
+            # Enable time sync workaround for virtualbox 
+            if section == 'os' and self.virtualization == 'virtualbox':
+                merged_section['enable_time_sync_cron'] = True
+
             #print("merged_section: ", merged_section)
             #TODO: maybe self.groups is not needed, can do populate directly
             self.groups['all'].update(merged_section)
