@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - Create all AWS EC2 instances at the same time. Huge time saver!
 - Better error checking in `splunk_config.yml` file
 - Added playbook (`create_linkpage.yml`) to update index.html file
+- Added disable_apparmor setting to disable AppArmor, if found
 
 ### Fixed
 

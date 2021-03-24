@@ -6,6 +6,7 @@ os:
   #set_hostname: true
   update_hosts_file: true
   disable_selinux: true
+  disable_apparmor: true
   packages:
   # Needed for the Unix TA
   #  - sysstat

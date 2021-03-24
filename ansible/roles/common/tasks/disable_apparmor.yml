@@ -1,0 +1,23 @@
+---
+# This playbook disables selinux
+
+- name: collect facts about system services
+  tags:
+    - common
+    - apparmor
+  service_facts:
+  register: services_state
+  when:
+    - disable_apparmor|default(false) == true
+
+- name: stop and disable AppArmor
+  tags:
+    - common
+    - apparmor
+  service:
+    name: apparmor
+    state: stopped
+    enabled: no
+  when:
+    - disable_apparmor|default(false) == true
+    - services_state.ansible_facts.services['apparmor.service'] is defined
