@@ -281,6 +281,7 @@ class InventoryModule(BaseInventoryPlugin):
             roles[role] = []
 
         #TODO: Check splunk_defaults and other sections for syntax errors
+        #TODO: Check if license_master role defined, when license file is given
         #TODO: Check volume definitions, if they are matching both sections
 
         # Going through the hosts and parse the settings
@@ -329,9 +330,15 @@ class InventoryModule(BaseInventoryPlugin):
                         if role == "license_master":
                             if 'splunk_license_file' not in self.environments[splunk_env]['splunk_defaults']:
                                 raise AnsibleParserError("Error: Missing splunk_license_file variable for role %s in splunk_env %s" % (role,splunk_env))
-                            license_file = os.path.join(cwd, self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'],self.environments[splunk_env]['splunk_defaults']['splunk_license_file'])
-                            if not os.path.isfile(license_file):
-                                raise AnsibleParserError("Error: Cannot read license file %s" % license_file)
+                            license_list = []
+                            if isinstance(self.environments[splunk_env]['splunk_defaults']['splunk_license_file'], list):
+                                license_list = self.environments[splunk_env]['splunk_defaults']['splunk_license_file']
+                            else:
+                                license_list.append(self.environments[splunk_env]['splunk_defaults']['splunk_license_file'])
+                            for license_file_name in license_list:
+                                license_file = os.path.join(cwd, self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'],license_file_name)
+                                if not os.path.isfile(license_file):
+                                    raise AnsibleParserError("Error: Cannot read license file %s" % license_file)
 
                         if role == "cluster_master" and 'idxcluster' not in splunkhost:
                             raise AnsibleParserError("Error: idxcluster variable not set for host %s with role %s." % (hostname, role))
