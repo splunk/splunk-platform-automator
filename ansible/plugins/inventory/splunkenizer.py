@@ -180,7 +180,7 @@ class InventoryModule(BaseInventoryPlugin):
         '''Populates the inventory with the hosts and groups and all the settings'''
         # Deal with the settings for the all group
         setattr(self, 'groups', {'all': {}})
-        for section in ['os', 'splunk_dirs', 'splunk_apps', 'splunk_systemd', 'splunk_defaults']:
+        for section in ['general', 'os', 'splunk_dirs', 'splunk_apps', 'splunk_systemd', 'splunk_defaults']:
             #print("Defaults[%s]: " % section, self.defaults[section])
             if isinstance(self.configfiles.get(section), dict):
                 #print("Configfile[%s]: " % section, self.configfiles[section])
@@ -188,6 +188,17 @@ class InventoryModule(BaseInventoryPlugin):
                 #print("Merged: ", merged)
             else:
                 merged_section = self.defaults[section]
+
+            # Check values in genreal section
+            if section == 'general':
+                for key, val in merged_section.items():
+                    if key == "start_ip":
+                        raise AnsibleParserError('Error: %s not allowed in general section. Please move to the virtualbox section.' % key)
+                    elif key == "url_locale":
+                        if not re.match(r"^[a-z]{2}[_-][A-Z]{2}$", val):
+                            raise AnsibleParserError("Error: Value '%s' for key '%s' has wrong syntax. Please use something like 'en-GB'." % (val, key))
+                    else:
+                        raise AnsibleParserError("Error: Key '%s' not allowed in general section." % key)
 
             # Enable time sync workaround for virtualbox 
             if section == 'os' and self.virtualization == 'virtualbox':
@@ -237,8 +248,8 @@ class InventoryModule(BaseInventoryPlugin):
             except Exception as e:
                 raise AnsibleParserError('Error: {}'.format(e))
 
-        #TODO: Treat those sections individually: general, virtualbox, aws
-        #TODO: add general vars to hosts for url_local in index.html
+        #TODO: Treat those sections individually: virtualbox, aws
+
         # Read in Indexer Cluster config
         if isinstance(self.configfiles.get('splunk_idxclusters'), list):
             for idxcluster in self.configfiles.get('splunk_idxclusters'):
