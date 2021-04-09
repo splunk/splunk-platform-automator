@@ -397,7 +397,11 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
             else
               hosts = []
             end
-            hosts -= [machine.name.to_s]
+            hosts.each do |host_entry|
+              if host_entry =~ /^#{machine.name.to_s}/
+                hosts -= [host_entry]
+              end
+            end
             File.open(hosts_file, "w") do |f|
               f.write(hosts.join("\n"))
             end
