@@ -153,8 +153,8 @@ if provider == "aws"
     aws_ec2 = {}
   end
   if aws_ec2.has_key?("filters")
-    if aws_ec2['filters'].has_key?("tag:Splunkenizer_ID")
-      splunkenizerID = aws_ec2['filters']['tag:Splunkenizer_ID']
+    if aws_ec2['filters'].has_key?("tag:SplunkEnvID")
+      splunkenizerID = aws_ec2['filters']['tag:SplunkEnvID']
     end
   else
     aws_ec2['filters'] = {}
@@ -162,12 +162,12 @@ if provider == "aws"
   if splunkenizerID == "undef"
     splunkenizerID = SecureRandom.uuid
   else
-    aws_ec2['filters']['tag:Splunkenizer_ID'] = splunkenizerID
+    aws_ec2['filters']['tag:SplunkEnvID'] = splunkenizerID
   end
   aws_ec2['plugin'] = 'aws_ec2'
   aws_ec2['regions'] = [].append(aws_merged['region'])
-  aws_ec2['filters']['tag:Splunkenizer_ID'] = splunkenizerID
-  aws_ec2['hostnames'] = [].append("tag:Splunk_Hostname")
+  aws_ec2['filters']['tag:SplunkEnvID'] = splunkenizerID
+  aws_ec2['hostnames'] = [].append("tag:SplunkHostname")
   aws_ec2['compose'] = {}.update('ansible_host'=>'public_dns_name')
   aws_ec2['compose']['ip_addr'] = 'private_ip_address'
   aws_ec2['compose']['ansible_user'] = "ansible_user|default('#{aws_merged['ssh_username']}')"
@@ -192,8 +192,8 @@ settings['splunk_hosts'].each do |splunk_host|
   if provider == "aws"
     aws_tags = {}
     aws_tags['Name'] = splunk_host['name']
-    aws_tags['Splunk_Hostname'] = splunk_host['name']
-    aws_tags['Splunkenizer_ID'] = splunkenizerID
+    aws_tags['SplunkHostname'] = splunk_host['name']
+    aws_tags['SplunkEnvID'] = splunkenizerID
     special_host_vars[splunk_host['name']]['aws']['tags'] = aws_tags
   end
 end
