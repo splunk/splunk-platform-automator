@@ -1,0 +1,62 @@
+# Default values for Splunk Enterprise
+
+splunk_defaults:
+  splunk_env_name: splk
+  splunk_version: latest
+  splunk_admin_password: splunklab
+  # Give a path to a license file. Must be located in splunk_software_dir
+  #splunk_license_file: Splunk_Enterprise.lic
+  # Share the same splunk.secret file for all installations.
+  splunk_secret_share:
+    # for Splunk Enterprise
+    splunk: false
+    # for Splunk Universal Forwarders
+    splunkforwarder: false
+    # use the same for both install types
+    equal: false
+
+  # If you deploy to a cloud like AWS you may want to set the serverName variable
+  # and/or default-hostname to the inventory name
+  #splunk_set_servername: true
+  #splunk_set_default_hostname: true
+ 
+  # Turn of loginpage info, if not needed
+  #splunk_loginpage_print_hostname: false
+  #splunk_loginpage_print_userpw: false
+  #splunk_loginpage_print_roles: false
+
+  splunk_ssl:
+    web:
+      enable: false
+      own_certs: false
+      config:
+        enableSplunkWebSSL: true
+        # For web private keys the cert filename must match
+        # the systems name given in the splunk_hosts section.
+        # Example: cm -> cm.pem
+        #privKeyPath: etc/auth/{{splunk_env_name}}/custom_privkey.web.pem
+        #serverCert: etc/auth/{{splunk_env_name}}/custom_cacert.pem
+    inputs:
+      enable: false
+      own_certs: false
+      config:
+        # If own certs are provided, they must match the filename given here
+        #rootCA: "$SPLUNK_HOME/etc/auth/{{splunk_env_name}}/custom_cacert.pem"
+        #serverCert: "$SPLUNK_HOME/etc/auth/{{splunk_env_name}}/custom_inputs_server.pem"
+        rootCA: "$SPLUNK_HOME/etc/auth/cacert.pem"
+        serverCert: "$SPLUNK_HOME/etc/auth/server.pem"
+        password: "password"
+    outputs:
+      enable: false
+      own_certs: false
+      config:
+        # If own certs are provided, they must match the filename given here
+        #sslRootCAPath: "custom_cacert.pem"
+        #sslCertPath: "custom_outputs_server.pem"
+        sslRootCAPath: "$SPLUNK_HOME/etc/auth/cacert.pem"
+        sslCertPath: "$SPLUNK_HOME/etc/auth/server.pem"
+        sslPassword: "password"
+
+  # Do not change those values, there are currently no other options available
+  splunk_outputs: all
+  splunk_search_peers: all

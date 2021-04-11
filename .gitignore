@@ -12,16 +12,16 @@
 # Any log file
 *.log
 # Config directory
-config
-# Auth directory
-auth
-# Inventory directory
-inventory
-# Apps directory
-apps
-# Helpers directory
-helpers
+/config
 **/splunk_config.yml
+# Auth directory
+/auth
+# Inventory directory
+/inventory
+# Apps directory
+/apps
+# Helpers directory
+/helpers
 # Test files
 **/test.yml
 **/Todo.txt
@@ -31,3 +31,7 @@ helpers
 # Sublime
 *.sublime-project
 *.sublime-workspace
+# Python
+__pycache__/
+*.py[cod]
+*$py.class

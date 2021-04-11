@@ -1,0 +1,14 @@
+# Default values for os setting
+
+os:
+  # Do not set a default time zone, will default to the one from the ansible host
+  #time_zone: "Europe/Zurich"
+  #set_hostname: true
+  update_hosts_file: true
+  disable_selinux: true
+  disable_apparmor: true
+  packages:
+  # Needed for the Unix TA
+  #  - sysstat
+  #  - lsof
+  #  - net-tools

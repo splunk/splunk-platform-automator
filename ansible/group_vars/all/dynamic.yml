@@ -9,6 +9,12 @@ splunk_software: "{% if splunk_software_dir | regex_search('^/') %}{{ splunk_sof
 splunk_baseconfig: "{% if splunk_baseconfig_dir | regex_search('^/') %}{{ plunk_baseconfig_dir }}{% else %}{{ playbook_dir }}/../{{ splunk_baseconfig_dir }}{% endif %}"
 splunk_app_prefix: "{{ splunk_env_name|default('splunk') }}"
 
+# Splunk hostnames with ip_addr
+splunk_hosts_entries: >-
+          {%- for hostname in hostvars.keys()|list -%}
+            {{ hostvars[hostname]['ip_addr'] }} {{ hostname }}
+          {% endfor %}
+
 # Splunk Roles
 splunk_roles: >-
           {%- set res = [] -%}
@@ -23,10 +29,10 @@ splunk_roles: >-
 splunk_outputs_idxc_list: >-
           {%- set res = {} -%}
           {%- for idxc in splunk_idxc_name_list -%}
-            {%- set ignored = res.update({idxc: splunk_outputs_list['idxcluster'][idxc]}) -%}
+            {%- set ignored = res.update({idxc: splunk_output_list['idxcluster'][idxc]}) -%}
           {%- endfor -%}
           {{ res }}
-splunk_outputs_idx_list: "{{ splunk_outputs_list['indexer']|default([])|intersect(groups['splunk_env_'+splunk_env_name]) }}"
+splunk_outputs_idx_list: "{{ splunk_output_list['indexer']|default([])|intersect(groups['splunk_env_'+splunk_env_name]) }}"
 splunk_outputs_name_list: >-
           {%- set res = [] -%}
           {%- for host in groups['all']|intersect(groups['splunk_env_'+splunk_env_name]) -%}

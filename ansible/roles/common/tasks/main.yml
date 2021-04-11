@@ -25,6 +25,18 @@
     - "'role_universal_forwarder' not in group_names"
 
 - name:
+  import_tasks: disable_apparmor.yml
+  when:
+    - ansible_os_family|lower != 'windows'
+    - disable_apparmor|default(false) == true
+
+- name:
+  import_tasks: hosts.yml
+  when:
+    - ansible_os_family|lower != 'windows'
+    - update_hosts_file|default(false) == true
+
+- name:
   import_tasks: fix_time_sync.yml
   when:
     - ansible_os_family|lower != 'windows'

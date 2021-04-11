@@ -8,6 +8,12 @@
   debug:
     msg: "role '{{ role_name }}' start"
 
+- name: update hosts file
+  tags:
+    - universal_forwarder_windows
+    - hosts
+  include_tasks: hosts.yml
+
 - name: enable remote desktop
   tags:
     - universal_forwarder_windows

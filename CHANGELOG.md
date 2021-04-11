@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## 2.0.0-devel - ongoing
+
+### Changed
+
+- Never disable SELinux on Universal Forwarders
+- start_ip is now part of `virtualbox` section (was in general before)
+
+### Added
+
+- Created Ansible inventory plugin (no more `vagrant status` needed to recalculate inventory)
+- Create all AWS EC2 instances at the same time. Huge time saver!
+- Better error checking in `splunk_config.yml` file
+- Added playbook (`create_linkpage.yml`) to update index.html file
+- Added disable_apparmor setting to disable AppArmor, if found
+- Added pipelining = true to ansible.cfg
+
+### Fixed
+
+- Usage of own certificates for single indexers
+
+### Removed
+
+- Ansible cannot be called from vagrant directly
+- Removed dependency to vagrant (Although vagrant does still work!)
+- Removed usage of `vagrant-hostmanager` plugin. This plugin can be removed.
+
 ## [1.3.0](https://github.com/splunkenizer/Splunkenizer/releases/tag/v1.3.0) - 2021-04-11
 
 ### Changed

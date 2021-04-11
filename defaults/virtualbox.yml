@@ -1,0 +1,13 @@
+# Default values for virtualbox hosts
+
+virtualbox:
+  start_ip: 172.16.1.100
+  box: "centos/7"
+  memory: 512
+  cpus: 1
+  # Install vbox guest additions
+  install_vbox_additions: false # true/false
+  # You need to install vagrant plugin vagrant-vbguest to mount folders
+  #synced_folder:
+  #  - source: "../../Documents/Splunk/Software"
+  #    target: "/Splunk_Software"

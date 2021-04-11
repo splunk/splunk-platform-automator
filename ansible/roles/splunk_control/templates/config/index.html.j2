@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" integrity="sha384-B0vP5xmATw1+K9KRQjQERJvTumQW0nPEzvF6L/Z6nronJ3oUOFUFpCjEUQouq2+l" crossorigin="anonymous">
+
+    <title>Splunkenizer Host List</title>
+  </head>
+  <body>
+
+    <div class="container-fluid" class="mx-auto" class="border border-primary">
+      <h1><p class="text-center">Splunkenizer Host List</p></h1>
+    </div>
+
+    <div class="container-fluid">
+      <div class="row">
+      {%- for splunk_env in groups|map('regex_search','splunk_env_.*')|select('string')|list -%}
+        {%- for hostname in groups[splunk_env] -%}
+        <div class="col-sm-3">
+          <div class="card text-white bg-secondary mb-3">
+            <div class="card-header">{{ hostname }}</div>
+            <div class="card-body">
+              <p class="card-text">Env: {{ hostvars[hostname]['splunk_env_name'] }}</p>
+              <p class="card-text">IP Addr: {{ hostvars[hostname]['ip_addr']|default("unknown") }}</p>
+            </div>
+            <div class="card-footer">
+        {%- set web_port = '8000' -%}
+        {%- if hostvars[hostname]['splunk_ssl']['web']['enable'] is true -%}
+          {%- set url = 'https://' -%}
+        {%- else -%}
+          {%- set url = 'http://' -%}
+        {%- endif -%}
+          {%- for role_name in groups|map('regex_search','role_.*')|select('string')|list -%}
+            {%- if hostname in groups[role_name] -%}
+              {%- if role_name == "role_search_head" -%}
+              <a class="btn btn-success" target="_blank" href="{{ url }}{{ hostvars[hostname]['public_dns_name']|default(hostvars[hostname]['ip_addr']|default("unknown")) }}:{{web_port}}/{{ url_locale|default("en-GB") }}/app/launcher/home">Search Head</a>
+              {%- elif role_name == "role_indexer" -%}
+              <span class="d-inline-block" tabindex="0" data-toggle="tooltip" title="No web access on indexer">
+                <button class="btn btn-primary" style="pointer-events: none;" type="button" disabled="">Indexer</button>
+              </span>
+              {%- elif role_name == "role_license_master" -%}
+              <a class="btn btn-success" target="_blank" href="{{ url }}{{ hostvars[hostname]['public_dns_name']|default(hostvars[hostname]['ip_addr']|default("unknown")) }}:{{web_port}}/{{ url_locale|default("en-GB") }}/manager/system/licensing">License Master</a>
+              {%- elif role_name == "role_cluster_master" -%}
+              <a class="btn btn-success" target="_blank" href="{{ url }}{{ hostvars[hostname]['public_dns_name']|default(hostvars[hostname]['ip_addr']|default("unknown")) }}:{{web_port}}/{{ url_locale|default("en-GB") }}/manager/system/clustering">Cluster Master</a>
+              {%- elif role_name == "role_deployment_server" -%}
+              <a class="btn btn-success" target="_blank" href="{{ url }}{{ hostvars[hostname]['public_dns_name']|default(hostvars[hostname]['ip_addr']|default("unknown")) }}:{{web_port}}/{{ url_locale|default("en-GB") }}/manager/system/deploymentserver">Deployment Server</a>
+              {%- elif role_name == "role_deployer" -%}
+              <a class="btn btn-success" target="_blank" href="{{ url }}{{ hostvars[hostname]['public_dns_name']|default(hostvars[hostname]['ip_addr']|default("unknown")) }}:{{web_port}}/{{ url_locale|default("en-GB") }}/app/launcher/home">Deployer</a>
+              {%- elif role_name == "role_monitoring_console" -%}
+              <a class="btn btn-success" target="_blank" href="{{ url }}{{ hostvars[hostname]['public_dns_name']|default(hostvars[hostname]['ip_addr']|default("unknown")) }}:{{web_port}}/{{ url_locale|default("en-GB") }}/app/splunk_monitoring_console">Monitoring Console</a>
+              {%- elif role_name == "role_heavy_forwarder" -%}
+              <a class="btn btn-success" target="_blank" href="{{ url }}{{ hostvars[hostname]['public_dns_name']|default(hostvars[hostname]['ip_addr']|default("unknown")) }}:{{web_port}}/{{ url_locale|default("en-GB") }}/app/launcher/home">Heavy Forwarder</a>
+              {%- elif role_name == "role_universal_forwarder" -%}
+              <span class="d-inline-block" tabindex="0" data-toggle="tooltip" title="No web access on universal forwarder">
+                <button class="btn btn-primary" style="pointer-events: none;" type="button" disabled="">Universal Forwarder</button>
+              </span>
+              {%- elif role_name == "role_universal_forwarder_windows" -%}
+              <span class="d-inline-block" tabindex="0" data-toggle="tooltip" title="No web access on universal forwarder">
+                <button class="btn btn-primary" style="pointer-events: none;" type="button" disabled="">Universal Forwarder (Windows)</button>
+              </span>
+              {%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+            </div>
+          </div>
+        </div>
+        {%- endfor -%}
+      {%- endfor -%}
+      </div>
+    </div>
+  </body>
+</html>

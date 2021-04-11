@@ -1,0 +1,9 @@
+---
+# This playbook configures navigation page
+
+- name: create splunk hosts link page
+  hosts: localhost
+  connection: local
+  gather_facts: False
+  roles:
+    - splunk_control

@@ -1,14 +1,24 @@
 ---
 # splunk_config.yml
+plugin: splunkenizer
+
+######################################################################
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#
+# This is not a working example
+# This file documents all the possible config settings
+#
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+######################################################################
 
 # General settings
 general:
-  start_ip: 172.16.1.100
   # Force a certain language in the created links in index.html
   url_locale: en-GB
 
 # Virtualbox settings
 virtualbox:
+#  start_ip: 172.16.1.100
   box: "centos/7"
 #  box: "ubuntu/xenial64"
   memory: 512
@@ -33,11 +43,15 @@ os:
   packages:
     - unzip
     - epel-release
-#    - lsof
+    - sysstat
+    - lsof
+    - net-tools
   # Set hostname to ansible_inventory name
   set_hostname: true
-  # Disable selinux
+  # Disable SELinux
   disable_selinux: true
+  # Disable AppArmor 
+  disable_apparmor: true
 
 splunk_defaults:
 #  splunk_env_name: splunk1

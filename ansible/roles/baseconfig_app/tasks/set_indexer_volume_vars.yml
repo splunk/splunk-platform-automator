@@ -1,7 +1,7 @@
 ---
 # This playbook configures additional settings for volumes
 
-- name: "setting volume variable for volume '{{ volume_name }}''"
+- name: "setting volume variable for volume '{{ volume_name }}'"
   tags:
     - splunk
     - splunk_baseconfig

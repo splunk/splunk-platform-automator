@@ -1,0 +1,8 @@
+# Default values for Search Head Cluster settings
+
+# Search Head Cluster settings
+splunk_shclusters:
+  - shc_name: shc
+    shc_site: site0
+    shc_password: splunkshc
+    shc_replication_port: 9887

@@ -10,7 +10,6 @@ os:
   # Set hostname to ansible_inventory name
   set_hostname: true
 
-#virtualbox:
 aws:
   #access_key_id: '' # defaults to ENV['AWS_ACCESS_KEY_ID']
   #secret_access_key: '' # ENV['AWS_SECRET_ACCESS_KEY']
@@ -22,7 +21,7 @@ aws:
   ssh_username: 'ec2-user' # ami-c86c3f23
   #instance_type: 't2.micro'
   ssh_private_key_path: '~/.ssh/aws_key.pem'
-  security_groups: ['Splunk']
+  security_groups: ['Splunk_Basic']
   # AWS Storage
   block_device_mapping:
     - # do not remove this, it is part of the format
@@ -40,7 +39,7 @@ aws:
 # Splunk default settings
 splunk_defaults:
 #  splunk_env_name: splk
-#  splunk_version: '7.0.4'
+#  splunk_version: '8.1.2'
   splunk_download:
     splunk: true
     splunkforwarder: true

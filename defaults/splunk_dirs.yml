@@ -1,0 +1,6 @@
+# Default values for directorie settings
+
+splunk_dirs:
+  splunk_baseconfig_dir: "../Software"
+  splunk_software_dir: "../Software"
+  splunk_auth_dir: "../auth"

@@ -1,12 +1,6 @@
 ---
 # splunk_config.yml
-
-# General settings
-general:
-  start_ip: 172.16.1.100
-
-os:
-#  time_zone: "Europe/Zurich"
+plugin: splunkenizer
 
 virtualbox:
 #  box: "centos/7" # Default
@@ -15,7 +9,7 @@ virtualbox:
 # Splunk default settings
 splunk_defaults:
 #  splunk_env_name: splk
-#  splunk_version: '6.5.7'
+#  splunk_version: '8.1.2'
 #  splunk_admin_password: 'splunklab'
 #  splunk_license_file: Splunk_Enterprise.lic
 #  splunk_indexes:
