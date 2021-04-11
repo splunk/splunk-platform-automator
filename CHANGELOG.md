@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
-## 2.0.0-beta - ongoing
+## 2.0.0-devel - ongoing
 
 ### Changed
 
@@ -30,7 +30,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - Removed dependency to vagrant (Although vagrant does still work!)
 - Removed usage of `vagrant-hostmanager` plugin. This plugin can be removed.
 
-## 1.3.0-devel - ongoing
+## [1.3.0](https://github.com/splunkenizer/Splunkenizer/releases/tag/v1.3.0) - 2021-04-11
 
 ### Changed
 
