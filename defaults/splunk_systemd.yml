@@ -15,5 +15,4 @@ splunk_systemd:
         #TimeoutStopSec: 10min
     splunkforwarder:
       Service:
-        #TODO: remove this after merge to the master
-        TimeoutStopSec: 10min
+        #TimeoutStopSec: 10min
