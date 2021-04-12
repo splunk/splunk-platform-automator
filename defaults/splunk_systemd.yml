@@ -13,6 +13,6 @@ splunk_systemd:
         #KillMode: mixed
         #KillSignal: SIGINT
         #TimeoutStopSec: 10min
-    splunkforwarder:
-      Service:
+    #splunkforwarder:
+      #Service:
         #TimeoutStopSec: 10min
