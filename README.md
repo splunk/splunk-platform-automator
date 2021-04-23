@@ -15,8 +15,9 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
   - [Roadmap](#roadmap)
   - [Changelog](#changelog)
 - [Installation](#installation)
-  - [Framework Installation (Mac OSX)](#framework-installation-mac-osx)
+  - [Framework Installation](#framework-installation)
   - [Install Virtualbox support (optional)](#install-virtualbox-support-optional)
+  - [Setup Windows Subsystem for Linux (WSL2)](#setup-windows-subsystem-for-linux-wsl2)
   - [Install and configure AWS support (optional)](#install-and-configure-aws-support-optional)
     - [Example Basic AWS Security Group](#example-basic-aws-security-group)
 - [Upgrade](#upgrade)
@@ -79,21 +80,21 @@ Implemented changes are to be found in the [Changelog](CHANGELOG.md)
 
 The Framework is currently tested on Mac OSX and Linux, but any other Unix, which is supported by Virtualbox, should work too.
 
-## Framework Installation (Mac OSX)
+## Framework Installation
 
 1. Download and install [Vagrant](https://www.vagrantup.com).
-1. Install the hostmanager plugin for Vagrant: `vagrant plugin install vagrant-hostmanager`
-1. Install Ansible, I personally prefer [Brew](https://brew.sh) which makes it as easy as `brew install ansible`. For [supported Ansible versions check here](#supported-ansible-versions)
-1. Create a folder called `Vagrant` and change into it.
-1. Download and extract a [Splunkenizer release here](https://github.com/splunkenizer/Splunkenizer/releases) or clone from GitHub when using the master branch: `git clone https://github.com/splunkenizer/Splunkenizer.git`
-1. Create a folder called `Software`.
-1. Download the tgz. archive for the Splunk Software and put in the `Software` directory
+2. Install the hostmanager plugin for Vagrant: `vagrant plugin install vagrant-hostmanager`
+3. Install Ansible, I personally prefer [Brew](https://brew.sh) (on OSX) which makes it as easy as `brew install ansible`. For [supported Ansible versions check here](#supported-ansible-versions)
+4. Create a folder called `Vagrant` and change into it.
+5. Download and extract a [Splunkenizer release here](https://github.com/splunkenizer/Splunkenizer/releases) or clone from GitHub when using the master branch: `git clone https://github.com/splunkenizer/Splunkenizer.git`
+6. Create a folder called `Software`.
+7. Download the tgz. archive for the Splunk Software and put in the `Software` directory
    1. [Splunk Enterprise](http://www.splunk.com/en_us/download/splunk-enterprise.html)
-   1. [Splunk Universal Forwarder](http://www.splunk.com/en_us/download/universal-forwarder.html)
-1. Download Splunk Professional Services Best Practices Base Config Apps and extract them into the `Software` directory
+   2. [Splunk Universal Forwarder](http://www.splunk.com/en_us/download/universal-forwarder.html)
+8. Download Splunk Professional Services Best Practices Base Config Apps and extract them into the `Software` directory
    1. [Configurations Base Apps](https://drive.google.com/open?id=107qWrfsv17j5bLxc21ymTagjtHG0AobF)
-   1. [Configurations Cluster Apps](https://drive.google.com/open?id=10aVQXjbgQC99b9InTvncrLFWUrXci3gz)
-1. If you have a Splunk License file, link it to the name `Splunk_Enterprise.lic` inside the `Software` directory.
+   2. [Configurations Cluster Apps](https://drive.google.com/open?id=10aVQXjbgQC99b9InTvncrLFWUrXci3gz)
+9. If you have a Splunk License file, link it to the name `Splunk_Enterprise.lic` inside the `Software` directory.
 
 Your directory structure should now look like this:
 
@@ -110,6 +111,27 @@ Your directory structure should now look like this:
 
 1. Download and install [Virtualbox](https://www.virtualbox.org/wiki/Downloads).
 1. Install the Virtualbox plugin for Vagrant: `vagrant plugin install vagrant-vbguest`
+
+## Setup Windows Subsystem for Linux (WSL2)
+
+The [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10) does allow to run Splunkenizer on Windows. It even allows to create virtualbox hosts from it on the windows host directly.
+
+Execute the steps [above](#framework-installation). To allow vagrant to talk to virtualbox follow the steps below.
+
+- Create /etc/wsl.conf and reboot WSL (`wsl --shutdown`)
+
+```
+[automount]
+options = "metadata"
+```
+
+- Enable WSL2 port forwarding by installing a vagrant plugin with: `vagrant plugin install virtualbox_WSL2`
+- Add Environment Variables in WSL (maybe to your `~/.bashrc`)
+
+```
+export VAGRANT_WSL_ENABLE_WINDOWS_ACCESS="1"
+export PATH="$PATH:/mnt/c/Program Files/Oracle/VirtualBox"
+```
 
 ## Install and configure AWS support (optional)
 
