@@ -515,11 +515,12 @@ class InventoryModule(BaseInventoryPlugin):
 
         # Add available_sites to the indexer clusters
         for idxcluster, cluster_values in self.indexer_clusters.items():
-            try:
-                groupname = "idxcluster_" + idxcluster
-                self.inventory.set_variable(groupname, 'idxc_available_sites', cluster_values['sites'])
-            except Exception as e:
-                raise AnsibleParserError('Cannot add stes to idxcluster. Error: {}'.format(e))
+            if 'sites' in cluster_values:
+                try:
+                    groupname = "idxcluster_" + idxcluster
+                    self.inventory.set_variable(groupname, 'idxc_available_sites', cluster_values['sites'])
+                except Exception as e:
+                    raise AnsibleParserError('Cannot add 'available sites' to idxcluster. Error: {}'.format(e))
 
     def parse(self, inventory, loader, path, cache):
         '''Return dynamic inventory from source '''
