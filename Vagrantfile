@@ -190,11 +190,15 @@ settings['splunk_hosts'].each do |splunk_host|
   end
   special_host_vars[splunk_host['name']] = var_obj.dup
   if provider == "aws"
-    aws_tags = {}
+    if !aws_merged['tags'].nil?
+      aws_tags = aws_merged['tags'].clone
+    else
+      aws_tags = {}
+    end
     aws_tags['Name'] = splunk_host['name']
     aws_tags['SplunkHostname'] = splunk_host['name']
     aws_tags['SplunkEnvID'] = splunkenizerID
-    special_host_vars[splunk_host['name']]['aws']['tags'] = aws_tags
+    special_host_vars[splunk_host['name']]['aws']['tags'] = special_host_vars[splunk_host['name']]['aws']['tags'].merge(aws_tags)
   end
 end
 
