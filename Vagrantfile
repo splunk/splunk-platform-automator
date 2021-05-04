@@ -198,7 +198,11 @@ settings['splunk_hosts'].each do |splunk_host|
     aws_tags['Name'] = splunk_host['name']
     aws_tags['SplunkHostname'] = splunk_host['name']
     aws_tags['SplunkEnvID'] = splunkenizerID
-    special_host_vars[splunk_host['name']]['aws']['tags'] = special_host_vars[splunk_host['name']]['aws']['tags'].merge(aws_tags)
+    if special_host_vars[splunk_host['name']]['aws']['tags'].nil?
+      special_host_vars[splunk_host['name']]['aws']['tags'] = aws_tags
+    else
+      special_host_vars[splunk_host['name']]['aws']['tags'] = special_host_vars[splunk_host['name']]['aws']['tags'].merge(aws_tags)
+    end
   end
 end
 
