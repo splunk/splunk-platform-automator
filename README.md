@@ -355,9 +355,9 @@ You can copy splunk_hosts and cluster configs from other example files to the AW
 
 ## Ansible playbooks only
 
-You can also use the ansible playbooks without vagrant. For that you have to creare your virtual or physical machines by other means. You can use the ansible playbooks to
-deploy the Splunk roles onto the existing servers. You can specify the hostnames in the `splunk_config.yml` files `splunk_hosts` section.
-Ansible need to know, where to connect to via ssh to run the playbooks. For this you need to provide create some configs in the `inventory` folder.
+You can also use the ansible playbooks without vagrant. For that you have to create your virtual or physical machines by other means. You can use the ansible playbooks to
+deploy the Splunk roles onto the existing servers. Specify the hostnames in the `splunk_config.yml` file in the `splunk_hosts` section.
+Ansible needs to know where to connect to via ssh to run the playbooks. For this you need to create some configs in the `inventory` folder.
 
 ### inventory configuration
 
