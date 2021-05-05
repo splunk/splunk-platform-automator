@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- Set storageEngine=wiredTiger on new installs for 8.1+
 - Created Ansible inventory plugin (no more `vagrant status` needed to recalculate inventory)
 - Create all AWS EC2 instances at the same time. Huge time saver!
 - Better error checking in `splunk_config.yml` file

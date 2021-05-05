@@ -91,6 +91,21 @@
     - { varkey: "HASHED_PASSWORD", varvalue: "{{ admin_hash_pw.stdout }}" }
   when: splunk_installed_version is version_compare('7.1', '>=') and splunk_install_app == "splunk"
 
+- name: enable wiredTiger KV Store
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_install
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/server.conf"
+    section: kvstore
+    option: storageEngine
+    value: wiredTiger
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  when: splunk_installed_version is version_compare('8.1', '>=') and splunk_install_app == "splunk"
+
 - name: call start_accept_license_and_stop
   tags:
     - splunk
