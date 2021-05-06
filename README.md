@@ -45,7 +45,6 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
   - [Copy files](#copy-files)
   - [Deploying on Amazon Cloud](#deploying-on-amazon-cloud)
   - [Ansible playbooks only](#ansible-playbooks-only)
-    - [inventory configuration](#inventory-configuration)
 - [Known issues, limitations](#known-issues-limitations)
   - [Supported Ansible Versions](#supported-ansible-versions)
 - [Authors](#authors)
@@ -357,11 +356,29 @@ You can copy splunk_hosts and cluster configs from other example files to the AW
 
 You can also use the ansible playbooks without vagrant. For that you have to create your virtual or physical machines by other means. You can use the ansible playbooks to
 deploy the Splunk roles onto the existing servers. Specify the hostnames in the `splunk_config.yml` file in the `splunk_hosts` section.
-Ansible needs to know where to connect to via ssh to run the playbooks. For this you need to create some configs in the `inventory` folder.
+Ansible needs to know where to connect to via ssh to run the playbooks. For this you need to create some custom variables in the 
+`splunk_config.yml` file.
 
-### inventory configuration
+As a minimum specify the ssh user for ansible and the ssh private key which has been deployed on the systems. This user must be able to elevate to the `root` user with sudo.
 
-TBD
+```
+custom:
+  ansible_user: ansible
+  ansible_ssh_private_key_file: '~/.ssh/id_rsa'
+```
+
+If you have host specific variables the custom section can also be added on host level. This could be for example `ansible_host` if different from the hostname. Also check [configuration description](examples/configuration_description.yml)
+
+You can verify things like this first with an ansible ping:
+
+```
+ansible -m ping all
+```
+
+And then some more ansible prerequisites with this playbook
+```
+ansible-playbook ansible/test_ansible_prereqs.yml
+```
 
 # Known issues, limitations
 
