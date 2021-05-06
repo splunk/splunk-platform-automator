@@ -31,6 +31,10 @@ DOCUMENTATION = r'''
             description: general settings
             type: dictionary
             required: false
+        custom:
+            description: custom settings
+            type: dictionary
+            required: false
         os:
             description: os settings
             type: dictionary
@@ -158,7 +162,7 @@ class InventoryModule(BaseInventoryPlugin):
                 setattr(self, 'virtualization', virtualization)
 
     def _populate_defaults(self):
-        '''Read all the default values'''
+        '''Read all the default values from the files in the defaults directory'''
         defaults = {}
         for file in glob.glob("defaults/*.yml"):
             with open(file,"r") as configfile:
@@ -180,7 +184,9 @@ class InventoryModule(BaseInventoryPlugin):
         '''Populates the inventory with the hosts and groups and all the settings'''
         # Deal with the settings for the all group
         setattr(self, 'groups', {'all': {}})
-        for section in ['general', 'os', 'splunk_dirs', 'splunk_apps', 'splunk_systemd', 'splunk_defaults']:
+        for section in ['general', 'custom', 'os', 'splunk_dirs', 'splunk_apps', 'splunk_systemd', 'splunk_defaults']:
+            if section not in self.defaults:
+                self.defaults[section] = {}
             #print("Defaults[%s]: " % section, self.defaults[section])
             if isinstance(self.configfiles.get(section), dict):
                 #print("Configfile[%s]: " % section, self.configfiles[section])
@@ -277,7 +283,7 @@ class InventoryModule(BaseInventoryPlugin):
         
         # Defining allowed settings
         allowed_roles = ['cluster_master','deployer','deployment_server','heavy_forwarder','indexer','license_master','monitoring_console','search_head','universal_forwarder','universal_forwarder_windows']
-        allowed_hostvars = ['splunk_version','splunk_admin_password','splunk_license_file','splunk_indexes','splunk_outputs','splunk_search_peers','splunk_conf','os','aws','virtualbox']
+        allowed_hostvars = ['splunk_version','splunk_admin_password','splunk_license_file','splunk_indexes','splunk_outputs','splunk_search_peers','splunk_conf','os','aws','virtualbox','custom']
         allowed_roles_with_site = ['indexer','search_head','cluster_master']
 
         # Creating some data structure for collecting information later on
@@ -476,7 +482,7 @@ class InventoryModule(BaseInventoryPlugin):
                 if key in allowed_hostvars:
                     # Extract section variables to add them directly
                     #TODO: Check how to deal with splunk_conf host vars
-                    if key in ['os']:
+                    if key in ['os','custom']:
                         for section_key, section_val in splunkhost.get(key).items():
                             #print("Addind key: %s with values %s" % (section_key, section_val))
                             self.inventory.set_variable(hostname, section_key, section_val)
@@ -533,7 +539,7 @@ class InventoryModule(BaseInventoryPlugin):
             for section in ['plugin', 'splunk_hosts']:
                 configfiles[section] = self.get_option(section)
             # Store the optional sections from the YAML file
-            for section in ['general', 'os', 'splunk_dirs', 'splunk_defaults', 'splunk_environments', 'splunk_apps', 'splunk_systemd', 'splunk_idxclusters', 'splunk_shclusters', 'virtualbox', 'aws']:
+            for section in ['general', 'custom', 'os', 'splunk_dirs', 'splunk_defaults', 'splunk_environments', 'splunk_apps', 'splunk_systemd', 'splunk_idxclusters', 'splunk_shclusters', 'virtualbox', 'aws']:
                 configfiles[section] = self.get_option(section)
             setattr(self, 'configfiles', configfiles)
         except Exception as e:

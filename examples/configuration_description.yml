@@ -16,6 +16,13 @@ general:
   # Force a certain language in the created links in index.html
   url_locale: en-GB
 
+# Custom settings
+custom:
+  # Use this section for example, if no vagrant is used and you need to define ansible connection settings, like
+  ansible_port: 22
+  ansible_user: ansible
+  ansible_ssh_private_key_file: "~/.ssh/ansible_id_rsa"
+
 # Virtualbox settings
 virtualbox:
 #  start_ip: 172.16.1.100
@@ -219,6 +226,11 @@ splunk_hosts:
     site: site0
     # Specify different version for this host
     splunk_version: '6.5.3'
+
+    # Custom settings
+    custom:
+      # Use this section for example, if no vagrant is used and you need to define ansible connection settings, like
+      ansible_host: 172.16.1.100
 
     # Special settings can be set for one host only
     # Other file definitions will be merged with the global settings
