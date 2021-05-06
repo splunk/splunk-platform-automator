@@ -283,7 +283,7 @@ class InventoryModule(BaseInventoryPlugin):
         
         # Defining allowed settings
         allowed_roles = ['cluster_master','deployer','deployment_server','heavy_forwarder','indexer','license_master','monitoring_console','search_head','universal_forwarder','universal_forwarder_windows']
-        allowed_hostvars = ['splunk_version','splunk_admin_password','splunk_license_file','splunk_indexes','splunk_outputs','splunk_search_peers','splunk_conf','os','aws','virtualbox','custom']
+        allowed_hostvars = ['splunk_version','splunk_admin_password','splunk_license_file','splunk_indexes','splunk_outputs','splunk_search_peers','splunk_conf','os','aws','virtualbox','ip_addr','custom']
         allowed_roles_with_site = ['indexer','search_head','cluster_master']
 
         # Creating some data structure for collecting information later on
@@ -474,7 +474,7 @@ class InventoryModule(BaseInventoryPlugin):
                 if key in ['idxcluster','shcluster']:
                     #TODO: Handle special vars
                     continue
-                if key in ['ip_addr', 'site', 'cname']:
+                if key in ['site', 'cname']:
                     #TODO: Handle special vars (site is done already)
                     continue
                 #print("Addind key: %s with values %s" % (key, val))
