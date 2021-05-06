@@ -1,0 +1,49 @@
+---
+# This playbook test the needed capabilities for ansible
+
+- name: Test user switching and file creation in /tmp
+  hosts: all
+  become: no
+
+  vars:
+    splunk_user: splunk
+    splunk_group: splunk
+
+  tasks:
+    - name: "touch file for the ansible {{ansible_user}}"
+      file:
+        path: /tmp/user.conf
+        state: touch
+
+    - name: "remove file for the ansible {{ansible_user}}"
+      file:
+        path: /tmp/user.conf
+        state: absent
+
+    - name: "touch file for technical user root"
+      file:
+        path: /tmp/root.conf
+        state: touch
+      become: yes
+      become_user: root
+
+    - name: "remove file for technical user root"
+      file:
+        path: /tmp/root.conf
+        state: absent
+      become: yes
+      become_user: root
+
+    - name: "touch file for splunk user {{splunk_user}}"
+      file:
+        path: /tmp/splunk.conf
+        state: touch
+      become: yes
+      become_user: "{{splunk_user}}"
+
+    - name: "remove file for splunk user {{splunk_user}}"
+      file:
+        path: /tmp/splunk.conf
+        state: absent
+      become: yes
+      become_user: "{{splunk_user}}"
