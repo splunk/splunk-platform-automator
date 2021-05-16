@@ -10,9 +10,9 @@
     section: "{{ item.section }}"
     option: "{{ item.key }}"
     value: "{{ item.value }}"
-    owner: "{{splunk_user}}"
-    group: "{{splunk_group}}"
     mode: 0600
+  become: yes
+  become_user: "{{ splunk_user }}"
   notify: restart splunk
   with_items: "{{ splunk_conf_settings_list }}"
   when: splunk_conf_settings_list|length > 0
