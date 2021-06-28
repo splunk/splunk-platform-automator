@@ -1,5 +1,6 @@
 ---
 # splunk_config.yml
+plugin: splunkenizer
 
 # General settings
 general:
