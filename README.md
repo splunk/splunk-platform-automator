@@ -1,4 +1,4 @@
-# Splunkenizer 2.0.0 (Devel)
+# Splunkenizer 2.0.0
 
 ![Splunkenizer Overview](https://github.com/splunkenizer/Splunkenizer/blob/master/pic/splunkenizer_overview.png)
 
@@ -8,7 +8,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
 
 ## Table of Contents
 
-- [Splunkenizer 2.0.0 (Devel)](#splunkenizer-200-devel)
+- [Splunkenizer 2.0.0](#splunkenizer-200)
   - [Table of Contents](#table-of-contents)
 - [Support](#support)
 - [Features](#features)
@@ -397,7 +397,7 @@ The following Ansible versions are tested and working with Splunkenizer, but any
 :white_check_mark: Ansible 2.8.x
 :white_check_mark: Ansible 2.9.x
 :white_check_mark: Ansible 2.10.x
-:white_check_mark: Ansible 3.x
+:white_check_mark: Ansible 2.11.x
 
 # Authors
 
