@@ -82,18 +82,17 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 ## Framework Installation
 
 1. Download and install [Vagrant](https://www.vagrantup.com).
-2. Install the hostmanager plugin for Vagrant: `vagrant plugin install vagrant-hostmanager`
-3. Install Ansible, I personally prefer [Brew](https://brew.sh) (on OSX) which makes it as easy as `brew install ansible`. For [supported Ansible versions check here](#supported-ansible-versions)
-4. Create a folder called `Vagrant` and change into it.
-5. Download and extract a [Splunkenizer release here](https://github.com/splunkenizer/Splunkenizer/releases) or clone from GitHub when using the master branch: `git clone https://github.com/splunkenizer/Splunkenizer.git`
-6. Create a folder called `Software`.
-7. Download the tgz. archive for the Splunk Software and put in the `Software` directory
+2. Install Ansible, I personally prefer [Brew](https://brew.sh) (on OSX) which makes it as easy as `brew install ansible`. For [supported Ansible versions check here](#supported-ansible-versions)
+3. Create a folder called `Vagrant` and change into it.
+4. Download and extract a [Splunkenizer release here](https://github.com/splunkenizer/Splunkenizer/releases) or clone from GitHub when using the master branch: `git clone https://github.com/splunkenizer/Splunkenizer.git`
+5. Create a folder called `Software`.
+6. Download the tgz. archive for the Splunk Software and put in the `Software` directory
    1. [Splunk Enterprise](http://www.splunk.com/en_us/download/splunk-enterprise.html)
    2. [Splunk Universal Forwarder](http://www.splunk.com/en_us/download/universal-forwarder.html)
-8. Download Splunk Professional Services Best Practices Base Config Apps and extract them into the `Software` directory
+7. Download Splunk Professional Services Best Practices Base Config Apps and extract them into the `Software` directory
    1. [Configurations Base Apps](https://drive.google.com/open?id=107qWrfsv17j5bLxc21ymTagjtHG0AobF)
    2. [Configurations Cluster Apps](https://drive.google.com/open?id=10aVQXjbgQC99b9InTvncrLFWUrXci3gz)
-9. If you have a Splunk License file, link it to the name `Splunk_Enterprise.lic` inside the `Software` directory.
+8. If you have a Splunk License file, link it to the name `Splunk_Enterprise.lic` inside the `Software` directory.
 
 Your directory structure should now look like this:
 
