@@ -45,7 +45,7 @@ os:
   # The timezone defaults to the vagrant host timezone, but you can set another one here
   time_zone: "Europe/Zurich"
   # If you want to manually control the time sync cron
-#  enable_time_sync_cron: false # Default true for virtualbox
+  enable_time_sync_cron: false # Default true for virtualbox
   # Install additional packages
   packages:
     - unzip
@@ -59,6 +59,12 @@ os:
   disable_selinux: true
   # Disable AppArmor 
   disable_apparmor: true
+  # Do not update /etc/hosts file
+  update_hosts_file: false
+  # Do not create splunk group/user
+  splunk_group_create: false
+  splunk_user_create: false
+
 
 splunk_defaults:
 #  splunk_env_name: splunk1
