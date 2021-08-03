@@ -1,0 +1,17 @@
+---
+# add a splunk web certs if not existing
+
+- name: add splunk web certs
+  hosts: role_indexer
+  roles:
+    - splunk_common
+  become: yes
+  become_user: root
+
+  tasks:
+
+    - name: install certs for inputs ssl
+      include_role:
+        name: baseconfig_app
+        tasks_from: splunk_ssl_inputs_certs
+      when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true

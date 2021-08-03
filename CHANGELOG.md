@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## 2.1.0-devel - ongoing
+
+### Added
+
+- Added playbook to update inputs ssl certificates
+
 ## [2.0.0](https://github.com/splunkenizer/Splunkenizer/releases/tag/v2.0.0) - 2021-07-27
 
 ### Changed
