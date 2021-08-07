@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - Follow symlinks during Splunk archive extraction
+- Fixed SPLUNK_HOME ownership, when having it linked to another directory
 
 ## [2.0.0](https://github.com/splunkenizer/Splunkenizer/releases/tag/v2.0.0) - 2021-07-27
 
