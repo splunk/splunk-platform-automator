@@ -9,6 +9,8 @@
     dest: "{{ splunk_install_dir }}/"
     owner: "{{ splunk_user }}"
     group: "{{ splunk_group }}"
+    extra_opts:
+      - "--dereference"
   when: splunk_download is not defined or
         (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == false) or
         (splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == false)
@@ -48,6 +50,8 @@
     owner: "{{ splunk_user }}"
     group: "{{ splunk_group }}"
     remote_src: yes
+    extra_opts:
+      - "--dereference"
   when: splunk_download is defined and
         (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
         splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
