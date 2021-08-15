@@ -1,0 +1,45 @@
+---
+# This playbook removes backup archives
+
+- name: find files to remove under {{splunk_backup_dir}}/
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_backup
+  find:
+    paths: "{{splunk_backup_dir}}/"
+    file_type: file
+    recurse: no
+    patterns: '{{ splunk_install_app }}_etc_v*.tgz'
+    use_regex: no
+  register: backup_files_to_delete
+  become: yes
+  become_user: "{{ splunk_user }}"
+
+- name: backup files to remove
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_backup
+  debug:
+    msg: "{{ item }}"
+  vars:
+    archive_list: "{{ backup_files_to_delete | json_query(query) | list }}"
+    query: "files[*].path"
+  with_items:
+    - "{{ backup_files_to_delete | json_query(query) | list }}"
+
+- name: remove backup archives under {{splunk_backup_dir}}/
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_backup
+  tags:
+    - splunk
+    - splunk_software
+  file:
+    path: "{{item.path}}"
+    state: absent
+  with_items: "{{ backup_files_to_delete.files }}"
+  become: yes
+  become_user: "{{ splunk_user }}"
