@@ -17,3 +17,4 @@
     - splunk_command
   debug:
     var: splunk_command_output.stdout_lines
+  when: splunk_command_output_show|default(true)|bool is true
