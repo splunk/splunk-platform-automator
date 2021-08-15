@@ -1,0 +1,74 @@
+---
+
+- name: 'call Splunk rest (noauth): {{ http_method|default("GET") }} {{ splunk_rest_endpoint|default("/") }}'
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+  shell: '/opt/splunk/bin/splunk cmd splunkd rest --noauth {{ http_method|default("GET") }} {{ splunk_rest_endpoint|default("/") }} output_mode={{ splunk_rest_output_mode|default("json") }} {%- if splunk_rest_output_mode|default("json") == "json" -%}| tail -1{%- endif -%}'
+  register: splunk_rest_output
+  when: splunk_rest_noauth|default(false) == true
+
+- name: get rest output
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+  set_fact:
+    splunk_rest_json_output: "{{ splunk_rest_output.stdout|to_json|from_json }}"
+  when: 
+    - splunk_rest_noauth|default(false)|bool == true
+    - splunk_rest_output_mode|default("json") == "json"
+
+- name: 'call Splunk rest (auth): {{ http_method|default("GET") }} {{ splunk_rest_endpoint|default("/") }}'
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+  uri:
+    url: "https://localhost:8089/{{ splunk_rest_endpoint|default('/') }}"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: "{{ http_method|default('GET') }}"
+    body_format: form-urlencoded
+    body:
+      output_mode: "{{ splunk_rest_output_mode|default('json') }}"
+    return_content: yes
+    force_basic_auth: yes
+    validate_certs: no
+  register: splunk_rest_output
+  when: splunk_rest_noauth|default(true)|bool == true
+  changed_when: http_method|default('GET') == 'POST'
+
+- name: get rest output
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+  set_fact:
+    splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
+  when: 
+    - splunk_rest_noauth|default(false)|bool == false
+    - splunk_rest_output_mode|default("json") == "json"
+
+- name: output json
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+  debug:
+    var: splunk_rest_output
+  when: 
+    - splunk_rest_output_show|default(false)|bool == true
+    - splunk_rest_output_mode|default("json") == "xml"
+
+- name: output json
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+  debug:
+    var: splunk_rest_json_output
+  when: 
+    - splunk_rest_output_show|default(false)|bool == true
+    - splunk_rest_output_mode|default("json") == "json"

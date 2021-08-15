@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - Added playbook to update inputs ssl certificates
-
+- Added playbook to call splunk rest endpoints
 ### Fixed
 
 - Follow symlinks during Splunk archive extraction

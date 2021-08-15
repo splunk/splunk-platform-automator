@@ -1,0 +1,16 @@
+---
+
+- name: run Splunk command
+  hosts: role_cluster_master,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_master,role_monitoring_console,role_search_head,role_universal_forwarder
+  become: yes
+  become_user: root
+
+  tasks:
+
+    - name: call splunk_rest from role splunk_software
+      include_role:
+        name: splunk_software
+        tasks_from: splunk_rest
+      vars:
+        splunk_rest_output_show: true
+        splunk_rest_output_mode: json
