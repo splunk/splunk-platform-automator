@@ -1,0 +1,39 @@
+---
+# This playbook does a rolling upgrade of indexer cluster members
+
+- name: begin tasks
+  hosts: idxcluster_*:&role_cluster_master
+  become: yes
+  become_user: root
+
+  tasks:
+
+    - name: call upgrade_idxc_rolling_begin
+      include_role:
+        name: splunk_software
+        tasks_from: upgrade_idxc_rolling_begin
+
+- name: upgrade indexer
+  hosts: idxcluster_*:&role_indexer
+  serial: 1
+  become: yes
+  become_user: root
+
+  tasks:
+
+    - name: call upgrade_idxc_rolling_check
+      include_role:
+        name: splunk_software
+        tasks_from: upgrade_idxc_rolling_check
+
+- name: end tasks
+  hosts: idxcluster_*:&role_cluster_master
+  become: yes
+  become_user: root
+
+  tasks:
+
+    - name: call upgrade_idxc_rolling_end
+      include_role:
+        name: splunk_software
+        tasks_from: upgrade_idxc_rolling_end

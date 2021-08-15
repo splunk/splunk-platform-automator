@@ -1,0 +1,22 @@
+---
+# Get peerlist for indexer cluster
+
+- name: get cluster peer ids
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+  import_tasks: splunk_rest.yml
+  vars:
+    splunk_rest_endpoint: /services/cluster/master/peers
+  delegate_to: "{{ splunk_idxc_cm }}"
+
+- name: create peerid list
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+  set_fact:
+    idxc_name_peerids: "{{ splunk_rest_json_output | json_query(jmesquery) }}"
+  vars:
+    jmesquery: "entry[*].{name: content.label, peerid: name}"
