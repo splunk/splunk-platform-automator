@@ -11,4 +11,4 @@
     - name: call upgrade splunk from role splunk_software
       include_role:
         name: splunk_software
-        tasks_from: upgrade
+        tasks_from: upgrade_software

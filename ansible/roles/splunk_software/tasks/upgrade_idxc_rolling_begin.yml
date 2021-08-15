@@ -1,0 +1,101 @@
+---
+
+- name: check if cluster master has been upgraded already
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_idxc_rolling
+  include_tasks: check_splunk_version.yml
+  vars:
+    fail_on_missing_upgrade: true
+
+- name: check cluster state
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_idxc_rolling
+  include_tasks: splunk_rest.yml
+  vars:
+    splunk_rest_endpoint: /services/cluster/master/status
+
+- name: set state variables
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_idxc_rolling
+  set_fact:
+    idxc_searchable_rolling: "{{ splunk_rest_json_output.entry[0].content.searchable_rolling|bool }}"
+    idxc_service_ready_flag: "{{ splunk_rest_json_output.entry[0].content.service_ready_flag|bool }}"
+  vars:
+    splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
+
+- name: fail if cluster service_ready_flag not ok
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_idxc_rolling
+  fail:
+    msg: "Cluster is not healthy!"
+  when: idxc_service_ready_flag is false
+
+- name: call splunk rest endpiont
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+    - splunk_upgrade
+    - splunk_upgrade_idxc_rolling
+  include_tasks: splunk_rest.yml
+  vars:
+    splunk_rest_endpoint: /services/cluster/master/health
+  when: idxc_searchable_rolling is false
+
+- name: fail if cluster preflight not ok
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_idxc_rolling
+  fail:
+    msg: "Cluster Health preflight check was not successfull!"
+  when:
+    - idxc_searchable_rolling is false
+    - splunk_rest_json_output.entry[0].content.pre_flight_check|int != 1
+
+- name: init rolling upgrade
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+    - splunk_upgrade
+    - splunk_upgrade_idxc_rolling
+  include_tasks: splunk_rest.yml
+  vars:
+    splunk_rest_endpoint: /services/cluster/master/control/control/rolling_upgrade_init
+    http_method: POST
+  when: idxc_searchable_rolling is false
+
+- name: init output
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_idxc_rolling
+  debug:
+    msg: "{{ splunk_rest_json_output.messages[0].text }}"
+  when: idxc_searchable_rolling is false
+  changed_when: idxc_searchable_rolling is false
+
+- name: init output
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_idxc_rolling
+  debug:
+    msg: "Cluster is already in searchable rolling upgrade mode."
+  when: idxc_searchable_rolling is true
