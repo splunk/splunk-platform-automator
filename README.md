@@ -19,7 +19,9 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
   - [Install Virtualbox support (optional)](#install-virtualbox-support-optional)
   - [Setup Windows Subsystem for Linux (WSL2)](#setup-windows-subsystem-for-linux-wsl2)
   - [Install and configure AWS support (optional)](#install-and-configure-aws-support-optional)
-    - [Example Basic AWS Security Group](#example-basic-aws-security-group)
+    - [Example Basic AWS Security Group 'Splunk_Basic'](#example-basic-aws-security-group-splunk_basic)
+      - [Inbound Rules](#inbound-rules)
+      - [Outbound Rules](#outbound-rules)
 - [Upgrade](#upgrade)
   - [Migrate existing Splunkenizer Environments from 1.x to 2.x](#migrate-existing-splunkenizer-environments-from-1x-to-2x)
     - [Migrate splunk_config.yml](#migrate-splunk_configyml)
@@ -140,15 +142,23 @@ export PATH="$PATH:/mnt/c/Program Files/Oracle/VirtualBox"
    1. Add AWS_ACCESS_KEY_ID=<your access key ID> as environment variable
    1. Add AWS_SECRET_ACCESS_KEY=<your secret access key> as environment variable
 1. Create an ssh key pair described [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair) and store the public key on your disk for later reference in the config file
-1. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it for example 'Splunk' and add the following TCP ports
+1. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it for example 'Splunk_Basic' and add the following TCP ports
 
-### Example Basic AWS Security Group
+### Example Basic AWS Security Group 'Splunk_Basic'
+
+#### Inbound Rules
 
 | Type       | Protocol | Port Range | Source        | Description                |
 | ---------- | -------- | ---------- | ------------- | -------------------------- |
 | All TCP    | TCP      | 0 - 65535  | 172.31.0.0/16 | Allow all internal traffic |
 | Custom TCP | TCP      | 8000       | 0.0.0.0/0     | Splunk Web Interface       |
 | SSH        | TCP      | 22         | 0.0.0.0/0     | SSH to all hosts           |
+
+#### Outbound Rules
+
+| Type        | Protocol | Port Range | Destination   | Description               |
+| ----------- | -------- | ---------- | ------------- | ------------------------- |
+| All Traffic | All      | All        | 0.0.0.0/0     | Allow all traffic         |
 
 # Upgrade
 
