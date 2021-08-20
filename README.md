@@ -45,6 +45,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
     - [User vagrant](#user-vagrant)
     - [User splunk](#user-splunk)
   - [Copy files](#copy-files)
+    - [scp example](#scp-example)
   - [Deploying on Amazon Cloud](#deploying-on-amazon-cloud)
   - [Ansible playbooks only](#ansible-playbooks-only)
 - [Known issues, limitations](#known-issues-limitations)
@@ -343,7 +344,13 @@ alias
 You can copy files from your host system to the virtual nodes with the vagrant command. You need to install the vagrant plugin `vagrant-scp` to have this feature available. Check [Vagrant Docs](https://www.vagrantup.com/docs/plugins/usage.html) on how to do this.
 
 ```
-vagrant scp <file> <hostname>:/destdir
+vagrant scp <files> <target_on_dest> [vm_name]
+```
+
+### scp example
+
+```
+vagrant scp ../app_dir/splunk-add-on-for-unix-and-linux_831.tgz /var/tmp uf
 ```
 
 ## Deploying on Amazon Cloud
