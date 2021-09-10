@@ -12,8 +12,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - Added playbook to cleanup splunk_backup (etc) archives
 - Added playbook to update inputs ssl certificates
 - Added playbook to call splunk rest endpoints
+
 ### Fixed
 
+- Updated URL for downloads of splunk install archives
 - Follow symlinks during Splunk archive extraction
 - Fixed SPLUNK_HOME ownership, when having it linked to another directory
 

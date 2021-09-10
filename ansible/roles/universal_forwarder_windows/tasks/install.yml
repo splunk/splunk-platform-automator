@@ -54,7 +54,7 @@
     - splunk
     - universal_forwarder_windows
   set_fact:
-    splunk_url: 'https://www.splunk.com/bin/splunk/DownloadActivityServlet?architecture=x86_64&platform=windows&version={{splunk_version}}&product={%- if splunk_install_app == "splunk" -%}splunk{%- else -%}universalforwarder{%- endif -%}&filename={{splunk_archive.0|basename}}&wget=true'
+    splunk_url: 'https://d7wz6hmoaavd0.cloudfront.net/products/{%- if splunk_install_app == "splunk" -%}splunk{%- else -%}universalforwarder{%- endif -%}/releases/{{splunk_version}}/windows/{{splunk_archive.0|basename}}'
   when: splunk_download is defined and
         (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
         splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
