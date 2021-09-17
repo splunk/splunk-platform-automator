@@ -104,7 +104,10 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  when: splunk_installed_version is version_compare('8.1', '>=') and splunk_install_app == "splunk"
+  when: 
+    - splunk_installed_version is version_compare('8.1', '>=')
+    - splunk_install_app == "splunk"
+    - splunk_kv_store_engine_wiredtiger|default(true) == true
 
 - name: call start_accept_license_and_stop
   tags:

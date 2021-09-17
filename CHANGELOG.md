@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- Added setting `splunk_kv_store_engine_wiredtiger` to disable config (enabled by default)
 - Added playbook to run indexer cluster rolling upgrade
 - Added playbook to cleanup splunk_backup (etc) archives
 - Added playbook to update inputs ssl certificates

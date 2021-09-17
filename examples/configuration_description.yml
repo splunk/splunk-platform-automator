@@ -87,6 +87,9 @@ splunk_defaults:
 #  splunk_loginpage_print_userpw: false
 #  splunk_loginpage_print_roles: false
 
+# Disable the usage of the new wiredTiger KV Store Engine (8.1+)
+#  splunk_kv_store_engine_wiredtiger: false
+
   # Add Splunk config settings to a file location relative to $SPLUNK_HOME/etc
   # This will be applied to all Splunk Enterprise Instances
   splunk_conf:
