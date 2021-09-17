@@ -1,6 +1,6 @@
 ---
 
-- name: wait for splunkd to be online
+- name: wait for splunkd port to be online
   tags:
     - splunk
     - splunk_common

@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Added splunkd full service check during SHC member add. Did run into timeout when having lots of apps.
 - Updated URL for downloads of splunk install archives
 - Follow symlinks during Splunk archive extraction
 - Fixed SPLUNK_HOME ownership, when having it linked to another directory

@@ -54,14 +54,25 @@
     tasks_from: restart_splunk
   when: need_shcluster_init.rc == 0
 
-- name: wait for splunkd to come back
+- name: wait for splunkd port
   tags:
     - splunk
     - search_head
     - shcluster
   include_role:
     name: splunk_common
-    tasks_from: wait_for_splunkd
+    tasks_from: wait_for_splunkd_port
+  when: need_shcluster_init.rc == 0
+
+# If we have plenty of apps, splunkd does several restarts and needs some time
+- name: wait for splunkd full service
+  tags:
+    - splunk
+    - search_head
+    - shcluster
+  include_role:
+    name: splunk_common
+    tasks_from: wait_for_splunkd_full
   when: need_shcluster_init.rc == 0
 
 - name: check shcluster status
@@ -144,21 +155,22 @@
   delay: 10
   when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
 
-- name: wait for the cluster to be service ready
-  tags:
-    - splunk
-    - search_head
-    - shcluster
-  command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
-  become: yes
-  become_user: "{{ splunk_user }}"
-  check_mode: no
-  register: shcluster_ready
-  until: "shcluster_ready.stdout.find('service_ready_flag : 1') != -1"
-  retries: 15
-  delay: 10
-  notify: wait for SHC service ready and call push bundle
-  when: inventory_hostname == splunk_shc_host_list|last and shcluster_status.changed == true
+# This seems not be be necessary, because cluster init does download right away.
+# - name: wait for the cluster to be service ready
+#   tags:
+#     - splunk
+#     - search_head
+#     - shcluster
+#   command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
+#   become: yes
+#   become_user: "{{ splunk_user }}"
+#   check_mode: no
+#   register: shcluster_ready
+#   until: "shcluster_ready.stdout.find('service_ready_flag : 1') != -1"
+#   retries: 15
+#   delay: 10
+#   notify: wait for SHC service ready and call push bundle
+#   when: inventory_hostname == splunk_shc_host_list|last and shcluster_status.changed == true
 
 - include_tasks: search_peers.yml
 

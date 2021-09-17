@@ -1,0 +1,14 @@
+---
+
+- name: wait for splunkd to be fully started
+  tags:
+    - splunk
+    - splunk_common
+  shell: '{{ splunk_home }}/bin/splunk status | grep "splunk helpers" | sed -e "s/.*PIDs: \([0-9 ]*\).*/\1/" | wc -w'
+  become: yes
+  become_user: "{{ splunk_user }}"
+  check_mode: no
+  register: splunk_helpers_pid_count
+  until: "splunk_helpers_pid_count.stdout|int > 2"
+  retries: 60
+  delay: 10
