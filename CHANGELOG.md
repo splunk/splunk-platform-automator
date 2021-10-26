@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ## 2.1.0-devel - ongoing
 
+### Changed
+
+- Changed start_ip for virtualbox, because of new restriction in Vbox 6.1.28
+
 ### Added
 
 - Added setting `splunk_kv_store_engine_wiredtiger` to disable config (enabled by default)

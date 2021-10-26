@@ -1,7 +1,7 @@
 # Default values for virtualbox hosts
 
 virtualbox:
-  start_ip: 172.16.1.100
+  start_ip: 192.168.60.100
   box: "centos/7"
   memory: 512
   cpus: 1
