@@ -88,7 +88,7 @@ import re
 import glob
 import os
 from pathlib import Path
-import collections
+from collections import abc
 
 class InventoryModule(BaseInventoryPlugin):
     NAME = 'splunkenizer'
@@ -105,7 +105,7 @@ class InventoryModule(BaseInventoryPlugin):
         return valid
 
     def _merge_dict(self, dict1, dict2, add_new=True):
-        '''Recursively merge two directories and return the merged one
+        '''Recursively merge two dictionaries and return the merged one
         Also add new keys, if any and add_new=True'''
         merged_dict = dict1.copy()
         if not add_new:
@@ -115,7 +115,7 @@ class InventoryModule(BaseInventoryPlugin):
             }
 
         for key, value in dict2.items():
-            if isinstance(merged_dict.get(key), dict) and isinstance(value, collections.Mapping):
+            if isinstance(merged_dict.get(key), dict) and isinstance(value, abc.Mapping):
                 merged_dict[key] = self._merge_dict(merged_dict[key], value, add_new=add_new)
             else:
                 merged_dict[key] = value
