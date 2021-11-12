@@ -25,7 +25,8 @@ custom:
 
 # Virtualbox settings
 virtualbox:
-#  start_ip: 172.16.1.100
+  # VirtualBox will only allow IP addresses in 192.68.56.0/21 range, see: https://www.virtualbox.org/manual/ch06.html#network_hostonly
+  start_ip: 192.168.60.200 # Defaul: 192.168.60.100
   box: "centos/7"
 #  box: "ubuntu/xenial64"
   memory: 512
