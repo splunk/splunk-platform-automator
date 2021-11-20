@@ -43,8 +43,8 @@
     - splunk_upgrade_idxc_rolling
   debug:
     msg: "{{ splunk_rest_json_output.messages[0].text }}"
-  when: idxc_searchable_rolling is true
-  changed_when: idxc_searchable_rolling is true
+  when: idxc_searchable_rolling == true
+  changed_when: idxc_searchable_rolling == true
 
 - name: finalize output
   tags:
@@ -54,4 +54,4 @@
     - splunk_upgrade_idxc_rolling
   debug:
     msg: "Cluster searchable rolling was already finalized."
-  when: idxc_searchable_rolling is false
+  when: idxc_searchable_rolling == false
