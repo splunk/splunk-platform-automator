@@ -459,8 +459,8 @@ class InventoryModule(BaseInventoryPlugin):
                         raise AnsibleParserError("Unsupported role %s found for host %s. Supported roles are: (%s)" % (role, splunkhost['name'], ','.join(allowed_roles)))
 
             # Set site, if available and role check passed
-            if site_role_check is True:
-                if site_role_check_passed is True:
+            if site_role_check == True:
+                if site_role_check_passed == True:
                     self.inventory.set_variable(hostname, 'site', splunkhost['site'])
                 else:
                     raise AnsibleParserError("Error: site variable not allowed for host %s. Only roles %s can have a site." % (hostname, ','.join(allowed_roles_with_site)))
