@@ -155,22 +155,35 @@
   delay: 10
   when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
 
-# This seems not be be necessary, because cluster init does download right away.
-# - name: wait for the cluster to be service ready
-#   tags:
-#     - splunk
-#     - search_head
-#     - shcluster
-#   command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
-#   become: yes
-#   become_user: "{{ splunk_user }}"
-#   check_mode: no
-#   register: shcluster_ready
-#   until: "shcluster_ready.stdout.find('service_ready_flag : 1') != -1"
-#   retries: 15
-#   delay: 10
-#   notify: wait for SHC service ready and call push bundle
-#   when: inventory_hostname == splunk_shc_host_list|last and shcluster_status.changed == true
+- name: check for first shc bundle push
+  tags:
+    - splunk
+    - search_head
+    - shcluster
+  stat:
+    path: "{{ splunk_home }}/var/run/splunk/deploy/apps"
+    follow: yes
+  become: yes
+  become_user: "{{ splunk_user }}"
+  delegate_to: "{{ splunk_shc_deployer }}"
+  register: deploy_apps_stat
+  when:
+    - inventory_hostname == splunk_shc_host_list|last
+    - shcluster_status.changed == true
+
+- name: push shc bundle if needed
+  tags:
+    - splunk
+    - search_head
+    - shcluster
+  debug:
+    msg: register shc bundle push
+  notify: wait for SHC service ready and call push bundle
+  changed_when: deploy_apps_stat.stat.exists|default(false) == false
+  when: 
+    - deploy_apps_stat.stat.exists|default(false) == false
+    - inventory_hostname == splunk_shc_host_list|last
+    - shcluster_status.changed == true
 
 - include_tasks: search_peers.yml
 

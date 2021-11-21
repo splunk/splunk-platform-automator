@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Fixed missing bundle push after shc setup
 - Fixed boolean comparison for older python versions
 - Fixed removed collections.Mapping usage with python 3.10
 - Added splunkd full service check during SHC member add. Did run into timeout when having lots of apps.
