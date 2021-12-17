@@ -10,3 +10,6 @@
     - name: call splunk_conf role
       include_role:
         name: splunk_conf
+      when:
+        - splunk_conf is defined
+        - splunk_conf is mapping
