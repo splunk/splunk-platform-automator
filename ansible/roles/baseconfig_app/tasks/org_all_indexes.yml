@@ -12,22 +12,34 @@
     - splunk_volume_defaults.remotePath is defined
     - splunk_volume_defaults.homePath|default("primary") != splunk_volume_defaults.coldPath|default("primary")
 
-- name: "({{ app_name }}) configure some indexes"
+# - name: "({{ app_name }}) add customer indexes"
+#   tags:
+#     - splunk
+#     - splunk_baseconfig
+#     - org_all_indexes
+#   blockinfile:
+#     path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
+#     insertafter: "# CUSTOMER INDEXES"
+#     marker: "# {mark} ANSIBLE MANAGED BLOCK Index: {{ item }}"
+#     content: |
+#       [{{ item }}]
+#       homePath   = volume:{{splunk_volume_defaults.homePath|default("primary")}}/$_index_name/db
+#       coldPath   = volume:{{splunk_volume_defaults.coldPath|default("primary")}}/$_index_name/colddb
+#       thawedPath = $SPLUNK_DB/$_index_name/thaweddb
+#   with_items: "{{ splunk_indexes.keys()|list | default('test') }}"
+#   notify: restart splunk
+
+- name: "({{ app_name }}) set index options"
   tags:
     - splunk
     - splunk_baseconfig
     - org_all_indexes
-  blockinfile:
-    path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
-    insertafter: "# CUSTOMER INDEXES"
-    marker: "# {mark} ANSIBLE MANAGED BLOCK Index: {{ item }}"
-    content: |
-      [{{ item }}]
-      homePath   = volume:{{splunk_volume_defaults.homePath|default("primary")}}/{{ item }}/db
-      coldPath   = volume:{{splunk_volume_defaults.coldPath|default("primary")}}/{{ item }}/colddb
-      thawedPath = $SPLUNK_DB/{{ item }}/thaweddb
-  with_items: "{{ splunk_indexes | default('test') }}"
-  notify: restart splunk
+  include_tasks: set_index_vars.yml
+  with_dict: "{{ splunk_indexes_settings|default({}) }}"
+  vars:
+    index_name: "{{ item.key }}"
+    index_vars: "{{ item.value }}"
+  when: splunk_indexes_settings|default({})|length > 0
 
 - name: "({{ app_name }}) configure volume for homePath"
   tags:

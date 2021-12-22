@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- Index definitions at splunk_defaults.splunk_indexes must be in dictionary format now
 - Changed start_ip for virtualbox, because of new restriction in Vbox 6.1.28
 
 ### Added

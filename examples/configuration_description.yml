@@ -106,9 +106,13 @@ splunk_defaults:
 
   # Define some indexes to be created on the indexers
   # Volume definitions can be set in the splunk_indexer_volumes section. otherwise creates a 'primary' volume
+  # You can define index setings options for each index. For example like this:
   splunk_indexes:
-    - test1
-    - test2
+    test1:
+      frozenTimePeriodInSecs: 604800
+    test2:
+      datatype: metric
+    test3:
 
   # Define Indexer Volumes (filesystem must exist)
   splunk_indexer_volumes:

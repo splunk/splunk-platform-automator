@@ -1,0 +1,20 @@
+---
+# This playbook configures additional settings for indexes
+
+- name: "setting option for index '{{ index_name }}'"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_indexes
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
+    section: "{{ index_name }}"
+    option: "{{ index_var.key }}"
+    value: "{{ index_var.value }}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  with_dict: "{{ index_vars }}"
+  loop_control:
+    loop_var: index_var
+  notify: restart splunk
