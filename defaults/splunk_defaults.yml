@@ -25,6 +25,12 @@ splunk_defaults:
   #splunk_loginpage_print_userpw: false
   #splunk_loginpage_print_roles: false
 
+  splunk_indexes_default_paths: true
+  splunk_indexes:
+    test:
+    test_metrics:
+      datatype: metric
+
   splunk_ssl:
     web:
       enable: false
