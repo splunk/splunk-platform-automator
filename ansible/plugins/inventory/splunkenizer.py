@@ -212,7 +212,6 @@ class InventoryModule(BaseInventoryPlugin):
 
             # Check things in splunk_defaults
             if section == 'splunk_defaults':
-                print(merged_section['splunk_indexes'])
                 if 'splunk_indexes' in merged_section:
                     if not isinstance(merged_section.get('splunk_indexes'), dict):
                         raise AnsibleParserError("Error: splunk_indexes must be a dictionary")
