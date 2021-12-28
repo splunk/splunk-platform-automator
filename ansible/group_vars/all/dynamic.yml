@@ -255,23 +255,34 @@ splunk_indexer_volumes_remote: >-
       {%- endif -%}
       {{ res }}
 
-splunk_indexes_settings: >-
+splunk_indexes_path_settings: >-
       {%- set res = {} -%}
-      {%- for index, properties in splunk_indexes|default(dict({'test':{}})) | dictsort -%}
+      {%- set properties_tmp = {} -%}
+      {%- for index, properties in splunk_indexes|default(dict({})) | dictsort -%}
         {%- if properties -%}{%- else -%}{%- set properties = {} -%}{%- endif -%}
         {%- if 'homePath' in properties -%}{%- else -%}
           {%- set volumename = splunk_volume_defaults.homePath|default('primary') -%}
-          {%- set ignored = properties.update({'homePath': 'volume:'+ volumename +'/$_index_name/db'}) -%}
+          {%- set ignored = properties_tmp.update({'homePath': 'volume:'+ volumename +'/$_index_name/db'}) -%}
         {%- endif -%}
         {%- if 'coldPath' in properties -%}{%- else -%}
           {%- set volumename = splunk_volume_defaults.coldPath|default('primary') -%}
-          {%- set ignored = properties.update({'coldPath': 'volume:'+ volumename +'/$_index_name/db'}) -%}
+          {%- set ignored = properties_tmp.update({'coldPath': 'volume:'+ volumename +'/$_index_name/colddb'}) -%}
         {%- endif -%}
         {%- if 'thawedPath' in properties -%}{%- else -%}
-          {%- set ignored = properties.update({'thawedPath': '$SPLUNK_DB/$_index_name/thaweddb'}) -%}
+          {%- set ignored = properties_tmp.update({'thawedPath': '$SPLUNK_DB/$_index_name/thaweddb'}) -%}
         {%- endif -%}
+        {%- set ignored = res.update({index: properties_tmp}) -%}
+      {%- endfor -%}
+      {%- if res.keys()|list|length >= 0 -%}
+        {{ res }}
+      {%- endif -%}
+
+splunk_indexes_settings: >-
+      {%- set res = {} -%}
+      {%- for index, properties in splunk_indexes|default(dict({})) | dictsort -%}
+        {%- if properties -%}{%- else -%}{%- set properties = {} -%}{%- endif -%}
         {%- set ignored = res.update({index: properties}) -%}
       {%- endfor -%}
-      {%- if res.keys()|list|length > 0 -%}
+      {%- if res.keys()|list|length >= 0 -%}
         {{ res }}
       {%- endif -%}
