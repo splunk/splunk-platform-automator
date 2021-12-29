@@ -104,11 +104,20 @@ splunk_defaults:
       stanzaname:
         key: value
 
-  # Define some indexes to be created on the indexers
-  # Volume definitions can be set in the splunk_indexer_volumes section. otherwise creates a 'primary' volume
+  # Define additional indexes to be created on the indexers.
+  # Per default there will be a 'test' and 'test_metrics' index created.
+  # Volume definitions can be set in the splunk_indexer_volumes section. Otherwise creates a 'primary' volume
+  # You can define index settings for each index. Specifying homePath, coldPath and thawedPath is not needed.
   splunk_indexes:
-    - test1
-    - test2
+    test1:
+      frozenTimePeriodInSecs: 604800
+    test2_metrics:
+      datatype: metric
+    test3:
+
+    # Set this to false, if you do not want to have default path settings in the [default] stanza
+    # They will be written to each defined index instead above.
+    splunk_indexes_default_paths: false
 
   # Define Indexer Volumes (filesystem must exist)
   splunk_indexer_volumes:

@@ -8,23 +8,25 @@ virtualbox:
 
 # Splunk default settings
 splunk_defaults:
-#  splunk_license_file: Splunk_Enterprise.lic
+  # splunk_license_file: Splunk_Enterprise.lic
 
 # Splunk general settings
 splunk_environments:
   - splunk_env_name: splk1
-#  splunk_version: '6.5.7'
-#    splunk_admin_password: 'splunklab'
-#    splunk_indexes:
-#      - test1
-#      - test2
+    # splunk_version: '8.2.3'
+    # splunk_admin_password: 'splunklab'
+    # splunk_indexes:
+    #   test1:
+    #   test2_metrics:
+    #     datatype: metric
 
   - splunk_env_name: splk2
-#  splunk_version: '6.5.7'
-#    splunk_admin_password: 'splunklab'
-#    splunk_indexes:
-#      - test1
-#      - test2
+    # splunk_version: '8.2.3'
+    # splunk_admin_password: 'splunklab'
+    # splunk_indexes:
+    #   test1:
+    #   test2_metrics:
+    #     datatype: metric
 
 # Indexer Cluster settings
 splunk_idxclusters:

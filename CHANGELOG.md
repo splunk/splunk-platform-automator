@@ -8,10 +8,14 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- Index path settings are defined in the [default] per default. Can be disabled.
+- Index definitions at splunk_defaults.splunk_indexes must be in dictionary format
 - Changed start_ip for virtualbox, because of new restriction in Vbox 6.1.28
 
 ### Added
 
+- Added possibility to set addidional index options
+- Added test_metrics index per default
 - Added setting `splunk_kv_store_engine_wiredtiger` to disable config (enabled by default)
 - Added playbook to run indexer cluster rolling upgrade
 - Added playbook to cleanup splunk_backup (etc) archives

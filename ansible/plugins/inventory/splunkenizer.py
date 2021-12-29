@@ -195,7 +195,7 @@ class InventoryModule(BaseInventoryPlugin):
             else:
                 merged_section = self.defaults[section]
 
-            # Check values in genreal section
+            # Check values in general section
             if section == 'general':
                 for key, val in merged_section.items():
                     if key == "start_ip":
@@ -209,6 +209,12 @@ class InventoryModule(BaseInventoryPlugin):
             # Enable time sync workaround for virtualbox 
             if section == 'os' and self.virtualization == 'virtualbox':
                 merged_section['enable_time_sync_cron'] = True
+
+            # Check things in splunk_defaults
+            if section == 'splunk_defaults':
+                if 'splunk_indexes' in merged_section:
+                    if not isinstance(merged_section.get('splunk_indexes'), dict):
+                        raise AnsibleParserError("Error: splunk_indexes must be a dictionary")
 
             #TODO: maybe self.groups is not needed, can do populate directly
             self.groups['all'].update(merged_section)
@@ -283,7 +289,7 @@ class InventoryModule(BaseInventoryPlugin):
         
         # Defining allowed settings
         allowed_roles = ['cluster_master','deployer','deployment_server','heavy_forwarder','indexer','license_master','monitoring_console','search_head','universal_forwarder','universal_forwarder_windows']
-        allowed_hostvars = ['splunk_version','splunk_admin_password','splunk_license_file','splunk_indexes','splunk_outputs','splunk_search_peers','splunk_conf','os','aws','virtualbox','ip_addr','custom']
+        allowed_hostvars = ['splunk_version','splunk_admin_password','splunk_license_file','splunk_outputs','splunk_search_peers','splunk_conf','os','aws','virtualbox','ip_addr','custom']
         allowed_roles_with_site = ['indexer','search_head','cluster_master']
 
         # Creating some data structure for collecting information later on

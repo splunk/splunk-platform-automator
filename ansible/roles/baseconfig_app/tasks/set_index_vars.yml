@@ -1,0 +1,25 @@
+---
+# This playbook configures additional settings for indexes
+
+- name: "setting option for index '{{ index_name }}'"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_indexes
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
+    section: "{{ index_name }}"
+    option: >-
+      {%- if index_var.key != 'null' -%}{{index_var.key}}{%- else -%}{%- endif -%}
+    value: >-
+      {%- if index_var.value != 'null' -%}{{index_var.value}}{%- else -%}{%- endif -%}
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+    allow_no_value: >-
+      {%- if index_var.key is defined -%}false{%- else -%}true{%- endif -%}
+  with_dict: >-
+    {%- if index_vars|length > 0 -%}{{index_vars}}{%- else -%}{'null': 'null'}{%- endif -%}
+  loop_control:
+    loop_var: index_var
+  notify: restart splunk
