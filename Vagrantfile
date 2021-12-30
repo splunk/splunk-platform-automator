@@ -177,35 +177,6 @@ if provider == "aws"
   end
 end
 
-# Create inventory host groups
-settings['splunk_hosts'].each do |splunk_host|
-  var_obj = defaults.dup
-  stanza_merge_list.each do |config_group|
-    if !settings[config_group].nil?
-      var_obj[config_group] = var_obj[config_group].merge(settings[config_group])
-    end
-    if !splunk_host[config_group].nil?
-      var_obj[config_group] = var_obj[config_group].merge(splunk_host[config_group])
-    end
-  end
-  special_host_vars[splunk_host['name']] = var_obj.dup
-  if provider == "aws"
-    if !aws_merged['tags'].nil?
-      aws_tags = aws_merged['tags'].clone
-    else
-      aws_tags = {}
-    end
-    aws_tags['Name'] = splunk_host['name']
-    aws_tags['SplunkHostname'] = splunk_host['name']
-    aws_tags['SplunkEnvID'] = splunkenizerID
-    if special_host_vars[splunk_host['name']]['aws']['tags'].nil?
-      special_host_vars[splunk_host['name']]['aws']['tags'] = aws_tags
-    else
-      special_host_vars[splunk_host['name']]['aws']['tags'] = special_host_vars[splunk_host['name']]['aws']['tags'].merge(aws_tags)
-    end
-  end
-end
-
 # If dynamic IPs are used, calculate the start number
 if provider == "virtualbox"
   if !settings['virtualbox'].nil? and !settings['virtualbox']['start_ip'].nil?
@@ -218,48 +189,105 @@ if provider == "virtualbox"
   start_num = ip_array[3].to_i
 end
 
-# Create inventory host vars
+# Create inventory host vars and groups
 host_vars = {}
 splunk_host_list = []
 settings['splunk_hosts'].each do |splunk_host|
-  per_host_vars = {}
-  ['ip_addr', 'site', 'cname'].each do |var|
-    if !start_ip.nil?
-      # Keep the ip, if defined
-      if provider == "virtualbox"
-        if splunk_host['ip_addr'].nil?
-          splunk_host['ip_addr'] = base_ip+"."+start_num.to_s
+  hostnames = []
+  if !splunk_host['name'].nil?
+    hostnames.append(splunk_host['name'])
+  elsif !splunk_host['list'].nil?
+    hostnames = splunk_host['list']
+  elsif !splunk_host['iter'].nil?
+    iteration = splunk_host['iter']['numbers']
+    nums = iteration.split('..')
+    startnum = nums[0]
+    endnum = nums[1]
+    width = endnum.length
+    (startnum..endnum).each do |hostnum|
+      hostname = hostnum.to_s.rjust(width,'0')
+      if !splunk_host['iter']['prefix'].nil?
+        hostname = splunk_host['iter']['prefix'] + hostname
+      end
+      if !splunk_host['iter']['postfix'].nil?
+        hostname = hostname + splunk_host['iter']['postfix']
+      end
+      hostnames.append(hostname)
+    end
+  end
+  hostnames.each do |hostname|
+    var_obj = defaults.dup
+    stanza_merge_list.each do |config_group|
+      if !settings[config_group].nil?
+        var_obj[config_group] = var_obj[config_group].merge(settings[config_group])
+      end
+      if !splunk_host[config_group].nil?
+        var_obj[config_group] = var_obj[config_group].merge(splunk_host[config_group])
+      end
+    end
+    special_host_vars[hostname] = var_obj.dup
+    if provider == "aws"
+      if !aws_merged['tags'].nil?
+        aws_tags = aws_merged['tags'].clone
+      else
+        aws_tags = {}
+      end
+      aws_tags['Name'] = hostname
+      aws_tags['SplunkHostname'] = hostname
+      aws_tags['SplunkEnvID'] = splunkenizerID
+      if special_host_vars[hostname]['aws']['tags'].nil?
+        special_host_vars[hostname]['aws']['tags'] = aws_tags
+      else
+        special_host_vars[hostname]['aws']['tags'] = special_host_vars[hostname]['aws']['tags'].merge(aws_tags)
+      end
+    end
+
+    per_host_vars = {}
+    ['ip_addr', 'site', 'cname'].each do |var|
+      if splunk_host[var]
+        var_obj = {}
+        var_obj[var] = splunk_host[var]
+        per_host_vars=per_host_vars.merge(var_obj)
+      end
+
+      if !start_ip.nil?
+        # Keep the ip, if defined
+        if provider == "virtualbox"
+          if splunk_host['ip_addr'].nil?
+            per_host_vars['ip_addr'] = base_ip+"."+start_num.to_s
+          else
+            if !splunk_host['list'].nil? or !splunk_host['iter'].nil?
+              print "ERROR: 'ip_addr' not allowed when using 'list' or 'iter'!\n"
+              exit 2
+            end
+          end
         end
       end
     end
-    if splunk_host[var]
-      var_obj = {}
-      var_obj[var] = splunk_host[var]
-      per_host_vars=per_host_vars.merge(var_obj)
+    host_vars[hostname] = per_host_vars
+    if start_num
+      start_num += 1
     end
+    hosts_entry = {}
+    hosts_entry['name'] = hostname
+    if provider == "virtualbox"
+      hosts_entry['ip_addr'] = per_host_vars['ip_addr']
+    end
+    if !per_host_vars['ip_addr'].nil?
+      network[hostname] = { 'ip_addr' => per_host_vars['ip_addr'] }
+    else
+      network[hostname] = { 'ip_addr' => "undef" }
+    end
+    splunk_host_list.push(hosts_entry)
+
   end
-  host_vars[splunk_host['name']] = per_host_vars
-  if start_num
-    start_num += 1
-  end
-  hosts_entry = {}
-  hosts_entry['name'] = splunk_host['name']
-  if provider == "virtualbox"
-    hosts_entry['ip_addr'] = splunk_host['ip_addr']
-  end
-  if !splunk_host['ip_addr'].nil?
-    network[splunk_host['name']] = { 'ip_addr' => splunk_host['ip_addr'] }
-  else
-    network[splunk_host['name']] = { 'ip_addr' => "undef" }
-  end
-  splunk_host_list.push(hosts_entry)
 end
 
 # Create and configure the specified systems
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
   # Loop through YAML file and set per-VM information
-  settings['splunk_hosts'].each do |server|
+  splunk_host_list.each do |server|
     config.vm.define server['name'] do |srv|
       # Setting hostname
       srv.vm.hostname = server['name']

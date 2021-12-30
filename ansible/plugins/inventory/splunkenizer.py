@@ -309,193 +309,209 @@ class InventoryModule(BaseInventoryPlugin):
 
         # Going through the hosts and parse the settings
         for splunkhost in self.configfiles['splunk_hosts']:
-            hostname = splunkhost['name']
-            #print("Working on host: ", splunkhost['name'])
-            #print("Splunkhost: ", splunkhost)
-            self.inventory.add_host(host=splunkhost['name'])
+            hostnames = []
+            if  'name' in splunkhost:
+                hostnames.append(splunkhost['name'])
 
-            # Add host to splunk_env
-            try:
-                if 'splunk_env' in splunkhost and splunkhost['splunk_env'] != self.groups['all']['splunk_env_name']:
-                    splunk_env =  splunkhost['splunk_env']
-                else:
-                    splunk_env = self.groups['all']['splunk_env_name']
-                self.inventory.add_host(host=hostname, group="splunk_env_" + splunk_env)
-            except Exception as e:
-                raise AnsibleParserError("Cannot add host %s to splunk_env %s. Error: %s" % (hostname, splunkhost['splunk_env'], e))   
+            elif  'list' in splunkhost:
+                hostnames = splunkhost['list']
 
-            # This is currently hardcoded to all. I may add selection settings in the future.
-            splunk_outputs = self.groups['all']['splunk_outputs']
-            if splunk_outputs not in self.environments[splunk_env]['output']:
-                self.environments[splunk_env]['output'][splunk_outputs] = {'targets':{}, 'hosts':[]}
+            elif  'iter' in splunkhost:
+                iteration = splunkhost['iter']['numbers']
+                start, end = iteration.split('..', 1)
+                width = len(end)
+                for hostnum in range(int(start), int(end)+1):
+                    hostname = str(hostnum).zfill(width)
+                    if 'prefix' in  splunkhost['iter']:
+                        hostname =  splunkhost['iter']['prefix'] + hostname
+                    if 'postfix' in  splunkhost['iter']:
+                        hostname =  hostname + splunkhost['iter']['postfix']
+                    hostnames.append(hostname)
 
-            splunk_search_peers = self.groups['all']['splunk_search_peers']
-            if splunk_search_peers not in self.environments[splunk_env]['search_peer']:
-                self.environments[splunk_env]['search_peer'][splunk_search_peers] = {'targets':{}, 'hosts':[]}
+            for hostname in hostnames:
+                self.inventory.add_host(host=hostname)
 
-            site_role_check = False
-            site_role_check_passed = False
-            if 'site' in splunkhost:
-                #TODO: Check site syntax
-                site_role_check = True
+                # Add host to splunk_env
+                try:
+                    if 'splunk_env' in splunkhost and splunkhost['splunk_env'] != self.groups['all']['splunk_env_name']:
+                        splunk_env =  splunkhost['splunk_env']
+                    else:
+                        splunk_env = self.groups['all']['splunk_env_name']
+                    self.inventory.add_host(host=hostname, group="splunk_env_" + splunk_env)
+                except Exception as e:
+                    raise AnsibleParserError("Cannot add host %s to splunk_env %s. Error: %s" % (hostname, splunkhost['splunk_env'], e))
+                # This is currently hardcoded to all. I may add selection settings in the future.
+                splunk_outputs = self.groups['all']['splunk_outputs']
+                if splunk_outputs not in self.environments[splunk_env]['output']:
+                    self.environments[splunk_env]['output'][splunk_outputs] = {'targets':{}, 'hosts':[]}
 
-            # Work through the given roles
-            if isinstance(splunkhost.get('roles'), list):
+                splunk_search_peers = self.groups['all']['splunk_search_peers']
+                if splunk_search_peers not in self.environments[splunk_env]['search_peer']:
+                    self.environments[splunk_env]['search_peer'][splunk_search_peers] = {'targets':{}, 'hosts':[]}
 
-                for role in splunkhost['roles']:
-                    #print("Role: ", role)
-                    if role in allowed_roles:
-                        #print("Role ok")
+                site_role_check = False
+                site_role_check_passed = False
+                if 'site' in splunkhost:
+                    #TODO: Check site syntax
+                    site_role_check = True
 
-                        if site_role_check and role in allowed_roles_with_site:
-                            site_role_check_passed = True
+                # Work through the given roles
+                if isinstance(splunkhost.get('roles'), list):
 
-                        if role == "license_master":
-                            if 'splunk_license_file' not in self.environments[splunk_env]['splunk_defaults']:
-                                raise AnsibleParserError("Error: Missing splunk_license_file variable for role %s in splunk_env %s" % (role,splunk_env))
-                            license_list = []
-                            if isinstance(self.environments[splunk_env]['splunk_defaults']['splunk_license_file'], list):
-                                license_list = self.environments[splunk_env]['splunk_defaults']['splunk_license_file']
-                            else:
-                                license_list.append(self.environments[splunk_env]['splunk_defaults']['splunk_license_file'])
-                            for license_file_name in license_list:
-                                license_file = os.path.join(cwd, self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'],license_file_name)
-                                if not os.path.isfile(license_file):
-                                    raise AnsibleParserError("Error: Cannot read license file %s" % license_file)
+                    for role in splunkhost['roles']:
+                        #print("Role: ", role)
+                        if role in allowed_roles:
+                            #print("Role ok")
 
-                        if role == "cluster_master" and 'idxcluster' not in splunkhost:
-                            raise AnsibleParserError("Error: idxcluster variable not set for host %s with role %s." % (hostname, role))
-                        
-                        # Build the indexer_cluster lists with their sites
-                        if role in ['indexer','cluster_master'] and 'idxcluster' in splunkhost:
-                            #print("Building indexer_cluster lists")
-                            
-                            if splunkhost['idxcluster'] not in self.indexer_clusters:
-                                self.indexer_clusters[splunkhost['idxcluster']] = {'hosts': []}
-                                #TODO: Group creation must be moved to cluster section handling
-                                #self.inventory.add_group("idxcluster_" + splunkhost['idxcluster'])
-                            
-                            if role == 'indexer':
-                                self.indexer_clusters[splunkhost['idxcluster']]['hosts'].append(hostname)
+                            if site_role_check and role in allowed_roles_with_site:
+                                site_role_check_passed = True
 
-                                if 'site' in splunkhost:
-                                    if 'sites' not in self.indexer_clusters[splunkhost['idxcluster']]:
-                                        self.indexer_clusters[splunkhost['idxcluster']].update({'sites': []})
-                                    if splunkhost['site'] not in self.indexer_clusters[splunkhost['idxcluster']]['sites']:
-                                        self.indexer_clusters[splunkhost['idxcluster']]['sites'].append(splunkhost['site'])
-                                        self.inventory.add_group("idxcluster_" + splunkhost['idxcluster'] + "_" + splunkhost['site'])
-                                    self.inventory.add_host(host=hostname, group="idxcluster_" + splunkhost['idxcluster'] + "_" + splunkhost['site'])
-
-                            self.inventory.add_host(host=hostname, group="idxcluster_" + splunkhost['idxcluster'])
-                        
-                        # Build the outputs list (all the hosts getting an outputs.conf)
-                        if role in ['indexer','heavy_forwarder']:
-                            #print("Building outputs list")
-                            if role =='indexer' and 'idxcluster' in splunkhost:
-                                if 'idxcluster' not in self.environments[splunk_env]['output'][splunk_outputs]['targets']:
-                                    self.environments[splunk_env]['output'][splunk_outputs]['targets']['idxcluster'] = {}
-                                if splunkhost['idxcluster'] not in self.environments[splunk_env]['output'][splunk_outputs]['targets']['idxcluster']:
-                                    self.environments[splunk_env]['output'][splunk_outputs]['targets']['idxcluster'][splunkhost['idxcluster']] = []
-                                self.environments[splunk_env]['output'][splunk_outputs]['targets']['idxcluster'][splunkhost['idxcluster']].append(hostname)
-                            else:
-                                if role not in self.environments[splunk_env]['output'][splunk_outputs]['targets']:
-                                    self.environments[splunk_env]['output'][splunk_outputs]['targets'][role] = []
-                                self.environments[splunk_env]['output'][splunk_outputs]['targets'][role].append(hostname)
-
-                        if role != 'indexer':
-                            if hostname not in self.environments[splunk_env]['output'][splunk_outputs]['hosts']:
-                                self.environments[splunk_env]['output'][splunk_outputs]['hosts'].append(hostname)
-
-                        # List of search endpoints (indexers or cluster_masters)
-                        if role in ['indexer','cluster_master']:
-                            if role == 'cluster_master' and 'idxcluster' in splunkhost:
-                                if 'idxcluster' not in self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']:
-                                    self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']['idxcluster'] = {splunkhost['idxcluster']: hostname}
+                            if role == "license_master":
+                                if 'splunk_license_file' not in self.environments[splunk_env]['splunk_defaults']:
+                                    raise AnsibleParserError("Error: Missing splunk_license_file variable for role %s in splunk_env %s" % (role,splunk_env))
+                                license_list = []
+                                if isinstance(self.environments[splunk_env]['splunk_defaults']['splunk_license_file'], list):
+                                    license_list = self.environments[splunk_env]['splunk_defaults']['splunk_license_file']
                                 else:
-                                    self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']['idxcluster'].update({splunkhost['idxcluster']: hostname})
-                            elif role == 'indexer' and 'idxcluster' not in splunkhost:
-                                if role not in self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']:
-                                    self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets'] = {role: []}
-                                self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets'][role].append(hostname)
-                        
-                        # List of hosts running search agains indexers (search_heads)
-                        #TODO: Maybe add license Master as search head?
-                        if role in ['search_head','monitoring_console']:
-                            if hostname not in self.environments[splunk_env]['search_peer'][splunk_search_peers]['hosts']:
-                                self.environments[splunk_env]['search_peer'][splunk_search_peers]['hosts'].append(hostname)
+                                    license_list.append(self.environments[splunk_env]['splunk_defaults']['splunk_license_file'])
+                                for license_file_name in license_list:
+                                    license_file = os.path.join(cwd, self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'],license_file_name)
+                                    if not os.path.isfile(license_file):
+                                        raise AnsibleParserError("Error: Cannot read license file %s" % license_file)
 
-                        # Build the search_head_clusters lists with their sites
-                        if role in ['search_head','deployer'] and 'shcluster' in splunkhost:
-                            if splunkhost['shcluster'] not in self.search_head_clusters:
-                                self.search_head_clusters[splunkhost['shcluster']] = {'hosts': []}
-                                #TODO: Group creation must be moved to cluster section handling
-                                self.inventory.add_group("shcluster_" + splunkhost['shcluster'])
+                            if role == "cluster_master" and 'idxcluster' not in splunkhost:
+                                raise AnsibleParserError("Error: idxcluster variable not set for host %s with role %s." % (hostname, role))
+                            
+                            # Build the indexer_cluster lists with their sites
+                            if role in ['indexer','cluster_master'] and 'idxcluster' in splunkhost:
+                                #print("Building indexer_cluster lists")
+                                
+                                if splunkhost['idxcluster'] not in self.indexer_clusters:
+                                    self.indexer_clusters[splunkhost['idxcluster']] = {'hosts': []}
+                                    #TODO: Group creation must be moved to cluster section handling
+                                    #self.inventory.add_group("idxcluster_" + splunkhost['idxcluster'])
+                                
+                                if role == 'indexer':
+                                    self.indexer_clusters[splunkhost['idxcluster']]['hosts'].append(hostname)
 
-                            if role == 'search_head':
-                                self.search_head_clusters[splunkhost['shcluster']]['hosts'].append(hostname)
+                                    if 'site' in splunkhost:
+                                        if 'sites' not in self.indexer_clusters[splunkhost['idxcluster']]:
+                                            self.indexer_clusters[splunkhost['idxcluster']].update({'sites': []})
+                                        if splunkhost['site'] not in self.indexer_clusters[splunkhost['idxcluster']]['sites']:
+                                            self.indexer_clusters[splunkhost['idxcluster']]['sites'].append(splunkhost['site'])
+                                            self.inventory.add_group("idxcluster_" + splunkhost['idxcluster'] + "_" + splunkhost['site'])
+                                        self.inventory.add_host(host=hostname, group="idxcluster_" + splunkhost['idxcluster'] + "_" + splunkhost['site'])
 
-                                if 'site' in splunkhost:
-                                    if 'sites' not in self.search_head_clusters[splunkhost['shcluster']]:
-                                        self.search_head_clusters[splunkhost['shcluster']].update({'sites': []})
-                                    if splunkhost['site'] not in self.search_head_clusters[splunkhost['shcluster']]['sites']:
-                                        self.search_head_clusters[splunkhost['shcluster']]['sites'].append(splunkhost['site'])
-                                        self.inventory.add_group("shcluster_" + splunkhost['shcluster'] + "_" + splunkhost['site'])
-                                    self.inventory.add_host(host=hostname, group="shcluster_" + splunkhost['shcluster'] + "_" + splunkhost['site'])
+                                self.inventory.add_host(host=hostname, group="idxcluster_" + splunkhost['idxcluster'])
+                            
+                            # Build the outputs list (all the hosts getting an outputs.conf)
+                            if role in ['indexer','heavy_forwarder']:
+                                #print("Building outputs list")
+                                if role =='indexer' and 'idxcluster' in splunkhost:
+                                    if 'idxcluster' not in self.environments[splunk_env]['output'][splunk_outputs]['targets']:
+                                        self.environments[splunk_env]['output'][splunk_outputs]['targets']['idxcluster'] = {}
+                                    if splunkhost['idxcluster'] not in self.environments[splunk_env]['output'][splunk_outputs]['targets']['idxcluster']:
+                                        self.environments[splunk_env]['output'][splunk_outputs]['targets']['idxcluster'][splunkhost['idxcluster']] = []
+                                    self.environments[splunk_env]['output'][splunk_outputs]['targets']['idxcluster'][splunkhost['idxcluster']].append(hostname)
+                                else:
+                                    if role not in self.environments[splunk_env]['output'][splunk_outputs]['targets']:
+                                        self.environments[splunk_env]['output'][splunk_outputs]['targets'][role] = []
+                                    self.environments[splunk_env]['output'][splunk_outputs]['targets'][role].append(hostname)
 
-                            self.inventory.add_host(host=hostname, group="shcluster_" + splunkhost['shcluster'])
+                            if role != 'indexer':
+                                if hostname not in self.environments[splunk_env]['output'][splunk_outputs]['hosts']:
+                                    self.environments[splunk_env]['output'][splunk_outputs]['hosts'].append(hostname)
 
-                        # Collect all version and arch combinations for archive avaiability check later on
-                        if 'splunk_version' in splunkhost:
-                            splunk_version = splunkhost['splunk_version']
+                            # List of search endpoints (indexers or cluster_masters)
+                            if role in ['indexer','cluster_master']:
+                                if role == 'cluster_master' and 'idxcluster' in splunkhost:
+                                    if 'idxcluster' not in self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']:
+                                        self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']['idxcluster'] = {splunkhost['idxcluster']: hostname}
+                                    else:
+                                        self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']['idxcluster'].update({splunkhost['idxcluster']: hostname})
+                                elif role == 'indexer' and 'idxcluster' not in splunkhost:
+                                    if role not in self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']:
+                                        self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets'] = {role: []}
+                                    self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets'][role].append(hostname)
+                            
+                            # List of hosts running search agains indexers (search_heads)
+                            #TODO: Maybe add license Master as search head?
+                            if role in ['search_head','monitoring_console']:
+                                if hostname not in self.environments[splunk_env]['search_peer'][splunk_search_peers]['hosts']:
+                                    self.environments[splunk_env]['search_peer'][splunk_search_peers]['hosts'].append(hostname)
+
+                            # Build the search_head_clusters lists with their sites
+                            if role in ['search_head','deployer'] and 'shcluster' in splunkhost:
+                                if splunkhost['shcluster'] not in self.search_head_clusters:
+                                    self.search_head_clusters[splunkhost['shcluster']] = {'hosts': []}
+                                    #TODO: Group creation must be moved to cluster section handling
+                                    self.inventory.add_group("shcluster_" + splunkhost['shcluster'])
+
+                                if role == 'search_head':
+                                    self.search_head_clusters[splunkhost['shcluster']]['hosts'].append(hostname)
+
+                                    if 'site' in splunkhost:
+                                        if 'sites' not in self.search_head_clusters[splunkhost['shcluster']]:
+                                            self.search_head_clusters[splunkhost['shcluster']].update({'sites': []})
+                                        if splunkhost['site'] not in self.search_head_clusters[splunkhost['shcluster']]['sites']:
+                                            self.search_head_clusters[splunkhost['shcluster']]['sites'].append(splunkhost['site'])
+                                            self.inventory.add_group("shcluster_" + splunkhost['shcluster'] + "_" + splunkhost['site'])
+                                        self.inventory.add_host(host=hostname, group="shcluster_" + splunkhost['shcluster'] + "_" + splunkhost['site'])
+
+                                self.inventory.add_host(host=hostname, group="shcluster_" + splunkhost['shcluster'])
+
+                            # Collect all version and arch combinations for archive avaiability check later on
+                            if 'splunk_version' in splunkhost:
+                                splunk_version = splunkhost['splunk_version']
+                            else:
+                                splunk_version = self.environments[splunk_env]['splunk_defaults']['splunk_version']
+                            directory = os.path.join(cwd, self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'])
+                            if role == 'universal_forwarder':
+                                arch_type = 'splunkforwarder'
+                            elif role == 'universal_forwarder_windows':
+                                arch_type = 'windowsforwarder'
+                                directory = os.path.join(cwd,self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'])
+                            else:
+                                arch_type = 'splunk'
+                            self.versions = self._merge_dict(self.versions,{splunk_env: {arch_type+'_'+splunk_version: {'arch_type':arch_type,'splunk_version':splunk_version}}})
+
+                            # Add host to the roles list from where is will be added to
+                            roles[role].append(hostname)
                         else:
-                            splunk_version = self.environments[splunk_env]['splunk_defaults']['splunk_version']
-                        directory = os.path.join(cwd, self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'])
-                        if role == 'universal_forwarder':
-                            arch_type = 'splunkforwarder'
-                        elif role == 'universal_forwarder_windows':
-                            arch_type = 'windowsforwarder'
-                            directory = os.path.join(cwd,self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'])
+                            raise AnsibleParserError("Unsupported role %s found for host %s. Supported roles are: (%s)" % (role, splunkhost['name'], ','.join(allowed_roles)))
+
+                # Set site, if available and role check passed
+                if site_role_check == True:
+                    if site_role_check_passed == True:
+                        self.inventory.set_variable(hostname, 'site', splunkhost['site'])
+                    else:
+                        raise AnsibleParserError("Error: site variable not allowed for host %s. Only roles %s can have a site." % (hostname, ','.join(allowed_roles_with_site)))
+                
+
+                # Add the rest of the host variables
+                for key, val in splunkhost.items():
+                    if key in ['name','list','iter','splunk_env','splunk_version','roles','aws','virtualbox']:
+                        # Ignore those ones. Either not relevant or already worked on
+                        continue
+                    if key in ['idxcluster','shcluster']:
+                        #TODO: Handle special vars
+                        continue
+                    if key in ['site', 'cname']:
+                        #TODO: Handle special vars (site is done already)
+                        continue
+                    #print("Addind key: %s with values %s" % (key, val))
+
+                    if key in allowed_hostvars:
+                        # Extract section variables to add them directly
+                        #TODO: Check how to deal with splunk_conf host vars
+                        if key in ['os','custom']:
+                            for section_key, section_val in splunkhost.get(key).items():
+                                #print("Addind key: %s with values %s" % (section_key, section_val))
+                                self.inventory.set_variable(hostname, section_key, section_val)
                         else:
-                            arch_type = 'splunk'
-                        self.versions = self._merge_dict(self.versions,{splunk_env: {arch_type+'_'+splunk_version: {'arch_type':arch_type,'splunk_version':splunk_version}}})
-
-                        # Add host to the roles list from where is will be added to
-                        roles[role].append(splunkhost['name'])
+                            self.inventory.set_variable(hostname, key, val)
                     else:
-                        raise AnsibleParserError("Unsupported role %s found for host %s. Supported roles are: (%s)" % (role, splunkhost['name'], ','.join(allowed_roles)))
-
-            # Set site, if available and role check passed
-            if site_role_check == True:
-                if site_role_check_passed == True:
-                    self.inventory.set_variable(hostname, 'site', splunkhost['site'])
-                else:
-                    raise AnsibleParserError("Error: site variable not allowed for host %s. Only roles %s can have a site." % (hostname, ','.join(allowed_roles_with_site)))
-              
-
-            # Add the rest of the host variables
-            for key, val in splunkhost.items():
-                if key in ['name','splunk_env','splunk_version','roles','aws','virtualbox']:
-                    # Ignore those ones. Either not relevant or already worked on
-                    continue
-                if key in ['idxcluster','shcluster']:
-                    #TODO: Handle special vars
-                    continue
-                if key in ['site', 'cname']:
-                    #TODO: Handle special vars (site is done already)
-                    continue
-                #print("Addind key: %s with values %s" % (key, val))
-
-                if key in allowed_hostvars:
-                    # Extract section variables to add them directly
-                    #TODO: Check how to deal with splunk_conf host vars
-                    if key in ['os','custom']:
-                        for section_key, section_val in splunkhost.get(key).items():
-                            #print("Addind key: %s with values %s" % (section_key, section_val))
-                            self.inventory.set_variable(hostname, section_key, section_val)
-                    else:
-                        self.inventory.set_variable(hostname, key, val)
-                else:
-                    raise AnsibleParserError("Unsupported host_var %s found for host %s. Supported vars are: (%s)" % (key, hostname, ','.join(allowed_hostvars)))
+                        raise AnsibleParserError("Unsupported host_var %s found for host %s. Supported vars are: (%s)" % (key, hostname, ','.join(allowed_hostvars)))
 
         # Check the archive availability for all versions needed
         for splunk_env, versions_combs in self.versions.items():
