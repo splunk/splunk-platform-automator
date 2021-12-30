@@ -53,7 +53,7 @@ DOCUMENTATION = r'''
             required: false
         splunk_environments:
             description: splunk_environments settings
-            type: dictionary
+            type: list
             required: false
         splunk_dirs:
             description: splunk_dirs settings
