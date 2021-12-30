@@ -40,20 +40,10 @@ splunk_hosts:
     roles:
       - indexer
 
- # Cluster Search Head
-  - name: sh1
-    roles:
-      - search_head
-    shcluster: shc1
-
-  # Cluster Search Head
-  - name: sh2
-    roles:
-      - search_head
-    shcluster: shc1
-
-  # Cluster Search Head
-  - name: sh3
+  # Search Heads
+  - iter:
+      prefix: sh
+      numbers: 1..3
     roles:
       - search_head
     shcluster: shc1

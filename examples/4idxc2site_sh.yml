@@ -37,29 +37,21 @@ splunk_hosts:
     idxcluster: idxc1
     site: site0
 
-  # Cluster Indexer
-  - name: idx1
+  # Cluster Indexers (site1)
+  - iter:
+      prefix: idx
+      numbers: 1..2
+      #postfix: _server
     roles:
       - indexer
     idxcluster: idxc1
     site: site1
 
-  # Cluster Indexer
-  - name: idx2
-    roles:
-      - indexer
-    idxcluster: idxc1
-    site: site1
-
-  # Cluster Indexer
-  - name: idx3
-    roles:
-      - indexer
-    idxcluster: idxc1
-    site: site2
-
-  # Cluster Indexer
-  - name: idx4
+  # Cluster Indexers (site2)
+  - iter:
+      prefix: idx
+      numbers: 3..4
+      #postfix: _server
     roles:
       - indexer
     idxcluster: idxc1

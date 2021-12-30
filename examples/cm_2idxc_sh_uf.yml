@@ -36,14 +36,10 @@ splunk_hosts:
       #- license_master
     idxcluster: idxc1
 
-  # Cluster Indexer
-  - name: idx1
-    roles:
-      - indexer
-    idxcluster: idxc1
-
-  # Cluster Indexer
-  - name: idx2
+  # Cluster Indexers
+  - iter:
+      prefix: idx
+      numbers: 1..2
     roles:
       - indexer
     idxcluster: idxc1

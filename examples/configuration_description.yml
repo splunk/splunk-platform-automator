@@ -264,23 +264,23 @@ splunk_hosts:
         stanzaname:
           key: value
 
+  # Create a list of hosts
   # Cluster Indexer
-  - name: idx1
+  - list:
+      - idx1
+      - idx2
     roles:
       - indexer
     # Name the indexer cluster to be a member of
     idxcluster: idxc1
     site: site1
 
+  # Create a list of hosts and iterate a number
   # Cluster Indexer
-  - name: idx2
-    roles:
-      - indexer
-    idxcluster: idxc1
-    site: site1
-
-  # Cluster Indexer
-  - name: idx3
+  - iter:
+      prefix: idx
+      numbers: 2..3
+      #postfix: _server
     roles:
       - indexer
     idxcluster: idxc1
@@ -290,8 +290,16 @@ splunk_hosts:
   - name: idx4
     roles:
       - indexer
+    # Name the indexer cluster to be a member of
     idxcluster: idxc1
-    site: site2
+    site: site3
+
+  # Cluster Indexer
+  - name: idx5
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site3
 
   # Deployment Server
   - name: ds

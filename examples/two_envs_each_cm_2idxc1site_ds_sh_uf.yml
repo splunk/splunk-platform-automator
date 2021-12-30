@@ -63,16 +63,10 @@ splunk_hosts:
     idxcluster: idxc1
     site: site0
 
-  # Cluster Indexer
-  - name: idx11
-    splunk_env: splk1
-    roles:
-      - indexer
-    idxcluster: idxc1
-    site: site1
-
-  # Cluster Indexer
-  - name: idx12
+  # Cluster Indexers (site1)
+  - iter:
+      prefix: idx1
+      numbers: 1..2
     splunk_env: splk1
     roles:
       - indexer
@@ -110,16 +104,10 @@ splunk_hosts:
     idxcluster: idxc2
     site: site0
 
-  # Cluster Indexer
-  - name: idx21
-    splunk_env: splk2
-    roles:
-      - indexer
-    idxcluster: idxc2
-    site: site1
-
-  # Cluster Indexer
-  - name: idx22
+  # Cluster Indexers (site1)
+  - iter:
+      prefix: idx2
+      numbers: 1..2
     splunk_env: splk2
     roles:
       - indexer
