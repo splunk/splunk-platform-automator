@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- Added new splunk_hosts types: list and iter (shorter config for lots of equal nodes)
 - Added possibility to set addidional index options
 - Added test_metrics index per default
 - Added setting `splunk_kv_store_engine_wiredtiger` to disable config (enabled by default)
