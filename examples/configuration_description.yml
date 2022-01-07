@@ -199,9 +199,11 @@ splunk_environments:
     splunk_license_file: Splunk_Enterprise.lic
     # Define some indexes to be created on the indexers
     splunk_indexes:
-      - test1
-      - test2
-      - os
+      test1:
+        frozenTimePeriodInSecs: 604800
+      test2_metrics:
+        datatype: metric
+      test3:
 
 # Indexer Cluster settings
 splunk_idxclusters:
