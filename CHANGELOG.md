@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- Changed default image for virtualbox to almalinux/8
 - Index path settings are defined in the [default] per default. Can be disabled.
 - Index definitions at splunk_defaults.splunk_indexes must be in dictionary format
 - Changed start_ip for virtualbox, because of new restriction in Vbox 6.1.28
