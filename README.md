@@ -48,6 +48,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
     - [scp example](#scp-example)
   - [Deploying on Amazon Cloud](#deploying-on-amazon-cloud)
   - [Ansible playbooks only](#ansible-playbooks-only)
+  - [Create vitualenv for specific Ansible version](#create-vitualenv-for-specific-ansible-version)
 - [Known issues, limitations](#known-issues-limitations)
   - [Supported Ansible Versions](#supported-ansible-versions)
 - [Authors](#authors)
@@ -395,6 +396,39 @@ And then some more ansible prerequisites with this playbook
 ```
 ansible-playbook ansible/test_ansible_prereqs.yml
 ```
+
+## Create vitualenv for specific Ansible version
+
+If you need a specific Ansible version you can create it inside a virtualenv environment. This can
+ be useful when deploying older linux images, which too old python versions. 
+
+```
+python3 -m venv ansible_490
+source ansible_490/bin/activate
+python -m pip install ansible==4.9.0 # to have a certain version
+```
+
+You must install some additional modules for Splunkenizer to work
+
+```
+python -m pip install jmespath # required for json_query calls
+python -m pip install lxml     # required for license file checks
+python -m pip install boto3    # required for ec2 (aws) plugin
+```
+
+Check the ansible version. 
+
+```
+ansible --version
+```
+
+If the version is not correct, open a new terminal and activate the
+virtual environment again with the command from above.
+
+```
+source ansible_470/bin/activate
+```
+
 
 # Known issues, limitations
 
