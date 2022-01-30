@@ -1,0 +1,22 @@
+---
+
+- name: "({{ app_name }}) disable startwebserver in web.conf"
+  tags:
+    - splunk
+    - splunk_webserver
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/web.conf"
+    section: settings
+    option: "startwebserver"
+    value: 0
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  register: startwebserver
+
+- name: restart splunkweb
+  tags:
+    - splunk
+    - splunk_webserver
+  command: "{{ splunk_home }}/bin/splunk restart splunkweb -auth admin:{{splunk_admin_password}}"
+  when: startwebserver.changed

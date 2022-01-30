@@ -1,0 +1,20 @@
+---
+
+- name: call check_splunk_version
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  include_tasks: check_splunk_version.yml
+  vars:
+    inform_on_already_upgraded: true
+
+- name: call rolling upgrade for peer
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  include_tasks: upgrade_shc_rolling_upgrade.yml
+  when: splunk_installed_version != splunk_target_version

@@ -1,5 +1,11 @@
 ---
 
+# Usage: call_splunk_rest.yml --limit <hostname> -e "splunk_rest_endpoint=/services"
+#
+#        POST Method: -e "http_method=POST" 
+#        Add 'splunk_rest_noauth=true' to use noauth method
+#         
+
 - name: run Splunk command
   hosts: role_cluster_master,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_master,role_monitoring_console,role_search_head,role_universal_forwarder
   become: yes

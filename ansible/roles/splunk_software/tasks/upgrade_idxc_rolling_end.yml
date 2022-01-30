@@ -34,6 +34,7 @@
   vars:
     splunk_rest_endpoint: /services/cluster/master/control/control/rolling_upgrade_finalize
     http_method: POST
+  when: idxc_searchable_rolling == true
 
 - name: finalize output
   tags:
