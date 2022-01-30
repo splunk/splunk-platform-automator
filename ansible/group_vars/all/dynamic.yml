@@ -11,9 +11,9 @@ splunk_app_prefix: "{{ splunk_env_name|default('splunk') }}"
 
 # Splunk hostnames with ip_addr
 splunk_hosts_entries: >-
-          {%- for hostname in hostvars.keys()|list -%}
+          {%- for hostname in hostvars.keys()|list -%}{%- if 'ip_addr' in hostvars[hostname] -%}
             {{ hostvars[hostname]['ip_addr'] }} {{ hostname }}
-          {% endfor %}
+          {% endif %}{% endfor %}
 
 # Splunk Roles
 splunk_roles: >-
