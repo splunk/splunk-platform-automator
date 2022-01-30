@@ -2,7 +2,7 @@
 
 virtualbox:
   start_ip: 192.168.60.100
-  box: "centos/7"
+  box: "almalinux/8"
   memory: 512
   cpus: 1
   # Install vbox guest additions

@@ -43,6 +43,8 @@ os:
   # Execute remote commands before ansible is called.
   # Example: Workaround for missing python in ubuntu/xenial64
   remote_command: 'which python || (sudo apt-get update; sudo apt-get -y install python)'
+  # Example for missing ACL support in Ubuntu on AWS
+  # remote_command: 'sudo apt-get install -y acl'
   # The timezone defaults to the vagrant host timezone, but you can set another one here
   time_zone: "Europe/Zurich"
   # If you want to manually control the time sync cron
