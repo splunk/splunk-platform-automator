@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- Added playbook to run search head cluster rolling upgrade
 - Added new splunk_hosts types: list and iter (shorter config for lots of equal nodes)
 - Added possibility to set addidional index options
 - Added test_metrics index per default

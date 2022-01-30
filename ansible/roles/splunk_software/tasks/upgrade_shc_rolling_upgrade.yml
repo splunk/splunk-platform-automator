@@ -1,0 +1,224 @@
+---
+
+- name: check cluster member state
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  include_tasks: splunk_rest.yml
+  vars:
+    splunk_rest_endpoint: /services/shcluster/member/info
+
+- name: set state variables
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  set_fact:
+    sh_status: "{{ splunk_rest_json_output.entry[0].content.status }}"
+    sh_restart_state: "{{ splunk_rest_json_output.entry[0].content.restart_state }}"
+  vars:
+    splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
+
+- name: fail if peer has wrong state
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  fail:
+    msg: "Cluster SH {{ inventory_hostname }} has wrong state '{{ sh_status }}'"
+  when:
+    - sh_status != 'Up'
+    - sh_status != 'Down'
+    - sh_status != 'ManualDetention'
+    - sh_restart_state != 'NoRestart'
+
+- name: check cluster state
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  include_tasks: splunk_rest.yml
+  vars:
+    splunk_rest_endpoint: /services/shcluster/status?advanced=1
+
+- name: set state variables
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  set_fact:
+    shc_captain: "{{ splunk_rest_json_output.entry[0].content.captain.label }}"
+  vars:
+    splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
+
+- name: fail if search head is captain
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  fail:
+    msg: "Cluster search head {{ inventory_hostname }} is captain. Not allowed to upgrade this node."
+  when:
+    - shc_captain == inventory_hostname
+
+- name: call disable_splunkweb from role splunk_common
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  include_role:
+    name: splunk_software
+    tasks_from: disable_splunkweb.yml
+
+- name: set manual detention mode on search head
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  include_tasks: splunk_rest.yml
+  vars:
+    splunk_rest_endpoint: /services/shcluster/member/control/control/set_manual_detention?manual_detention=on
+    http_method: POST
+  when: sh_status == 'Up'
+
+# There is not 'loop until' with include_tasks. So, we need to code the rest call directly here.
+- name: check for search head to complete all searches
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  uri:
+    url: "https://localhost:8089//services/shcluster/member/info"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: "GET"
+    body_format: form-urlencoded
+    body:
+      output_mode: "json"
+    return_content: yes
+    force_basic_auth: yes
+    validate_certs: no
+  register: splunk_rest_output_local
+  vars:
+    splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|to_json|from_json }}"
+  check_mode: no
+  until: "splunk_rest_json_output_local.entry[0].content.active_historical_search_count == 0"
+  # Wait 30 minutes to complete this step
+  retries: 30
+  delay: 60
+
+- name: call enable_splunkweb from role splunk_common
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  include_role:
+    name: splunk_software
+    tasks_from: enable_splunkweb.yml
+
+- name: call upgrade
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  include_tasks: upgrade.yml
+
+- name: wait for splunkd port
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  include_role:
+    name: splunk_common
+    tasks_from: wait_for_splunkd_port
+
+- name: wait for splunkd full service
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  include_role:
+    name: splunk_common
+    tasks_from: wait_for_splunkd_full
+
+- name: check cluster state
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  include_tasks: splunk_rest.yml
+  vars:
+    splunk_rest_endpoint: /services/shcluster/member/info
+
+- name: set state variables
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  set_fact:
+    sh_status: "{{ splunk_rest_json_output.entry[0].content.status }}"
+    sh_restart_state: "{{ splunk_rest_json_output.entry[0].content.restart_state }}"
+  vars:
+    splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
+
+- name: remove manual detention mode on search head
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  include_tasks: splunk_rest.yml
+  vars:
+    splunk_rest_endpoint: /services/shcluster/member/control/control/set_manual_detention?manual_detention=off
+    http_method: POST
+  when: sh_status == 'ManualDetention'
+
+# There is not 'loop until' with include_tasks. So, we need to code the rest call directly here.
+- name: check for peer to be up
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  uri:
+    url: "https://localhost:8089//services/shcluster/member/info"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: "GET"
+    body_format: form-urlencoded
+    body:
+      output_mode: "json"
+    return_content: yes
+    force_basic_auth: yes
+    validate_certs: no
+  register: splunk_rest_output_local
+  vars:
+    splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|to_json|from_json }}"
+  check_mode: no
+  until: "splunk_rest_json_output_local.entry[0].content.status == 'Up'"
+  # Wait 10 minutes to complete this step
+  retries: 40
+  delay: 15

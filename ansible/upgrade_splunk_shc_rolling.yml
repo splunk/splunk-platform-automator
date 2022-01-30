@@ -1,0 +1,39 @@
+---
+# This playbook does a rolling upgrade of a search head cluster
+
+- name: begin tasks
+  hosts: shcluster_*:&role_search_head
+  become: yes
+  become_user: root
+
+  tasks:
+
+    - name: call upgrade_shc_rolling_begin
+      include_role:
+        name: splunk_software
+        tasks_from: upgrade_shc_rolling_begin
+
+- name: upgrade search head
+  hosts: shcluster_*:&role_search_head
+  serial: 1
+  become: yes
+  become_user: root
+
+  tasks:
+
+    - name: call upgrade_shc_rolling_check
+      include_role:
+        name: splunk_software
+        tasks_from: upgrade_shc_rolling_check
+
+- name: end tasks
+  hosts: shcluster_*:&role_search_head
+  become: yes
+  become_user: root
+
+  tasks:
+
+    - name: call upgrade_shc_rolling_end
+      include_role:
+        name: splunk_software
+        tasks_from: upgrade_shc_rolling_end

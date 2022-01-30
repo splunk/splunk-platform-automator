@@ -1,0 +1,79 @@
+---
+
+- name: check cluster state
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  include_tasks: splunk_rest.yml
+  vars:
+    splunk_rest_endpoint: /services/shcluster/status?advanced=1
+  when: inventory_hostname == splunk_shc_host_list|first
+
+- name: set state variables
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  set_fact:
+    shc_rolling_restart_flag: "{{ splunk_rest_json_output.entry[0].content.captain.rolling_restart_flag|bool }}"
+    shc_rolling_upgrade_flag: "{{ splunk_rest_json_output.entry[0].content.captain.rolling_upgrade_flag|bool }}"
+    shc_service_ready_flag: "{{ splunk_rest_json_output.entry[0].content.captain.service_ready_flag|bool }}"
+  vars:
+    splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
+  when: inventory_hostname == splunk_shc_host_list|first
+
+- name: fail if cluster service_ready_flag not ok
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  fail:
+    msg: "Cluster is not healthy!"
+  when:
+    - inventory_hostname == splunk_shc_host_list|first
+    - shc_service_ready_flag == false or shc_rolling_restart_flag == true
+
+- name: init rolling upgrade
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  include_tasks: splunk_rest.yml
+  vars:
+    splunk_rest_endpoint: /services/shcluster/captain/control/control/upgrade-init
+    http_method: POST
+  when:
+    - inventory_hostname == splunk_shc_host_list|first 
+    - shc_rolling_upgrade_flag == false
+
+- name: init output
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  debug:
+    msg: "{{ splunk_rest_json_output.messages[0].text }}"
+  when:
+    - inventory_hostname == splunk_shc_host_list|first 
+    - shc_rolling_upgrade_flag == false
+  changed_when: shc_rolling_upgrade_flag == false
+
+- name: init output
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  debug:
+    msg: "Cluster is already in searchable rolling upgrade mode."
+  when:
+    - inventory_hostname == splunk_shc_host_list|first 
+    - shc_rolling_upgrade_flag == true

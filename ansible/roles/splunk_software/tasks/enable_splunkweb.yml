@@ -1,0 +1,23 @@
+---
+
+- name: "({{ app_name }}) remove startwebserver in web.conf"
+  tags:
+    - splunk
+    - splunk_webserver
+  ini_file:
+    path: "{{ splunk_home }}/etc/system/local/web.conf"
+    section: settings
+    option: "startwebserver"
+    state: absent
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0644
+  register: startwebserver
+
+- name: start splunkweb
+  tags:
+    - splunk
+    - splunk_webserver
+  debug:
+    msg: "You have to restart splunk to start splunkweb."
+  when: startwebserver.changed
