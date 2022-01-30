@@ -167,7 +167,10 @@ splunk_defaults:
         sslCertPath: "custom_outputs_server.pem"
         sslPassword: "password"
 
-# Share the same splunk.secret file for all installations.
+# Share the same splunk.secret file with all Splunk nodes
+# Note: You must first deploy splunk to one host only to store the splunk.secret file
+#       You can do that by running: ansible-playbook ansible/setup_common.yml ansible/install_splunk.yml --limit <one_host_from_the_list>
+#       After that you can run ansible/deploy_site.yml to all hosts
   splunk_secret_share:
     # for Splunk Enterprise
     splunk: true

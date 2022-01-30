@@ -25,6 +25,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Fail on install if no splunk.secret file is found and more than one host is deployed
+- Create auth dir if needed
 - Fixed missing bundle push after shc setup
 - Fixed boolean comparison for older python versions
 - Fixed removed collections.Mapping usage with python 3.10

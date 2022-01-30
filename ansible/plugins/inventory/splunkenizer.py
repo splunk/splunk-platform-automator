@@ -227,6 +227,15 @@ class InventoryModule(BaseInventoryPlugin):
         if len(check_base) < 1 or len(check_cluster) < 1:
             raise AnsibleParserError('Error: Cannot find Splunk baseconfig apps mentioned in the README.md. Extract them under %s' % splunk_baseconfig_dir)
 
+        # Create auth dir if not existing
+        splunk_auth_dir = os.path.join(cwd,"ansible",self.groups['all']['splunk_auth_dir'])
+        if self.groups['all']['splunk_secret_share']['splunk'] == True or self.groups['all']['splunk_secret_share']['splunkforwarder'] == True:
+            if not os.path.isdir(splunk_auth_dir):
+                try:
+                    os.mkdir(splunk_auth_dir)
+                except Exception as e:
+                    raise AnsibleParserError('Cannot create auth directory. Error: {}'.format(e))
+
         # Set timezone to my own one, if nothing is specified
         if 'time_zone' not in self.groups['all']:
             if os.path.islink('/etc/localtime'):

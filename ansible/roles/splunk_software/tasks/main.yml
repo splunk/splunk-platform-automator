@@ -42,6 +42,18 @@
   delegate_to: localhost
   when: splunk_secret_share[splunk_install_app] == true
 
+- name: Fail if no splunk.secret is there and more than one host is deployed
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_secret
+  fail:
+    msg: "Cannot find secret file {{ splunk_auth_dir }}/{{ splunk_install_app }}_splunk.secret. You must first install {{ splunk_install_app }} on one host only."
+  when: 
+    - splunk_secret_share[splunk_install_app] == true
+    - splunk_secret_file.stat.exists == false
+    - play_hosts|length > 1
+
 - name: "install the splunk software"
   tags:
     - splunk
@@ -102,7 +114,9 @@
     rsync_path: "{{ become_method|default('sudo') }} -u {{splunk_user}} rsync"
     mode: pull
   become: no
-  when: splunk_secret_share[splunk_install_app] == true and splunk_secret_file.stat.exists == false
+  when:
+    - splunk_secret_share[splunk_install_app] == true
+    - splunk_secret_file.stat.exists == false
 
 - name: link splunkforwarder to splunk secret file
   tags:
