@@ -21,3 +21,4 @@
   when:
     - disable_apparmor|default(false) == true
     - services_state.ansible_facts.services['apparmor.service'] is defined
+    - services_state.ansible_facts.services['apparmor.service']['status'] == 'enabled'
