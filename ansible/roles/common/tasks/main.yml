@@ -10,6 +10,10 @@
   when: ansible_os_family|lower != 'windows'
 
 - name:
+  import_tasks: check_ansible_requirements.yml
+  when: ansible_os_family|lower != 'windows'
+
+- name:
   import_tasks: users.yml
   when: ansible_os_family|lower != 'windows'
 

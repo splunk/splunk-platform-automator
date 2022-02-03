@@ -105,12 +105,19 @@
     - /etc/systemd/system/disable-thp.service
     - /etc/init.d/splunk
 
-- name: call remove_splunk_polkit_or_sudoers
+- name: call remove_custom_policykit
   tags:
     - splunk
     - splunk_software
     - splunk_uninstall
-  include_tasks: remove_splunk_polkit_or_sudoers.yml
+  include_tasks: remove_custom_policykit.yml
+
+- name: call remove_splunk_sudoers
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  include_tasks: remove_splunk_sudoers.yml
 
 # Find all directories to remove, except lost+found
 - name: find files to remove all under {{splunk_home}}/

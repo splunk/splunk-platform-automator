@@ -1,0 +1,15 @@
+---
+# This playbook checks for the required packages
+
+- name: check for acl
+  tags:
+    - splunk
+    - splunk_common
+  stat:
+    path: /usr/bin/setfacl
+  register: acl
+
+- name: Fail if acl is not installed
+  fail:
+    msg: "Package 'acl' is not installed. This is required for Ansible."
+  when: acl.stat.exists == false

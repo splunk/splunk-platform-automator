@@ -10,6 +10,12 @@
     splunk_group: splunk
 
   tasks:
+
+    - name: call check_ansible_requirements role common
+      include_role:
+        name: common
+        tasks_from: check_ansible_requirements.yml
+
     - name: "touch file for the ansible {{ansible_user}}"
       file:
         path: /tmp/user.conf
@@ -34,12 +40,25 @@
       become: yes
       become_user: root
 
+    - name: Determine available groups
+      getent:
+        database: group
+
+    - name: Determine available users
+      getent:
+        database: passwd
+
     - name: "touch file for splunk user {{splunk_user}}"
       file:
         path: /tmp/splunk.conf
         state: touch
+        owner: '{{splunk_user}}'
+        group: '{{splunk_group}}'
       become: yes
       become_user: "{{splunk_user}}"
+      when:
+        - splunk_group in ansible_facts.getent_group
+        - splunk_user in ansible_facts.getent_passwd
 
     - name: "remove file for splunk user {{splunk_user}}"
       file:
@@ -47,3 +66,11 @@
         state: absent
       become: yes
       become_user: "{{splunk_user}}"
+      when:
+        - splunk_group in ansible_facts.getent_group
+        - splunk_user in ansible_facts.getent_passwd
+
+    - name: call check_policykit role splunk_common
+      include_role:
+        name: splunk_common
+        tasks_from: check_policykit.yml

@@ -15,6 +15,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- Added check for acl package availability in linux
+- Added setting `splunk_use_policykit` to disable policykit usage
+- Added logic to setup sudo rules, if policykit is not installed
 - Added playbook to run search head cluster rolling upgrade
 - Added new splunk_hosts types: list and iter (shorter config for lots of equal nodes)
 - Added possibility to set addidional index options
