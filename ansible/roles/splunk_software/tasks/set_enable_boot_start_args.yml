@@ -14,7 +14,10 @@
     - splunk_software
   set_fact:
     splunk_systemd_managed: "-systemd-managed 1"
-  when: use_systemctl == true and version_output.stdout is defined and splunk_installed_version is version_compare('7.2.2', '>=')
+  when:
+    - use_systemctl == true
+    - version_output.stdout is defined
+    - splunk_installed_version is version_compare('7.2.2', '>=')
 
 - name: set splunk systemd service file name
   tags:
@@ -22,7 +25,10 @@
     - splunk_software
   set_fact:
     splunk_unit_file_name: "-systemd-unit-file-name {{splunk_service_name}}"
-  when: use_systemctl == true and version_output.stdout is defined and splunk_installed_version is version_compare('7.2.2', '>=')
+  when:
+    - use_systemctl == true
+    - version_output.stdout is defined
+    - splunk_installed_version is version_compare('7.2.2', '>=')
 
 - name: set splunk create-polkit-rules to 1
   tags:
@@ -30,4 +36,8 @@
     - splunk_software
   set_fact:
     splunk_create_polkit_rules: "-create-polkit-rules 1"
-  when: use_systemctl == true and version_output.stdout is defined and splunk_installed_version is version_compare('8.1.1', '>=')
+  when:
+    - use_policykit == true
+    - use_systemctl == true
+    - version_output.stdout is defined
+    - splunk_installed_version is version_compare('8.1.1', '>=')
