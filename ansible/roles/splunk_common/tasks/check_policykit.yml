@@ -1,0 +1,29 @@
+---
+
+- name: "check for policykit"
+  tags:
+    - splunk
+    - splunk_common
+  stat:
+    path: /usr/bin/pkaction
+  register: policykit
+
+- name: Fail if policykit is not installed
+  tags:
+    - splunk
+    - splunk_common
+  fail:
+    msg: "Policykit (polkit) is not installed. Install the policykit package or set splunk_use_policykit to false."
+  when:
+    - splunk_use_policykit|default(true) == true
+    - policykit.stat.exists == false
+
+- name: set policykit
+  tags:
+    - splunk
+    - splunk_common
+  set_fact:
+    use_policykit: true
+  when:
+    - splunk_use_policykit|default(true) == true
+    - policykit.stat.exists == true

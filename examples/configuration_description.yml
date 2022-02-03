@@ -43,14 +43,16 @@ os:
   # Execute remote commands before ansible is called.
   # Example: Workaround for missing python in ubuntu/xenial64
   remote_command: 'which python || (sudo apt-get update; sudo apt-get -y install python)'
-  # Example for missing ACL support in Ubuntu on AWS
-  # remote_command: 'sudo apt-get install -y acl'
+  # Example for missing ACL support in Ubuntu on AWS. But can be added in the os.packages section as well.
+  remote_command: 'sudo apt-get install -y acl'
   # The timezone defaults to the vagrant host timezone, but you can set another one here
   time_zone: "Europe/Zurich"
   # If you want to manually control the time sync cron
   enable_time_sync_cron: false # Default true for virtualbox
   # Install additional packages
   packages:
+    - acl
+    - polkit
     - unzip
     - epel-release
     - sysstat
@@ -68,30 +70,41 @@ os:
   splunk_group_create: false
   splunk_user_create: false
 
-
 splunk_defaults:
-#  splunk_env_name: splunk1
+  # Defines the environment name and org name for the base_config apps
+  splunk_env_name: splunk1
+  
   # Specify a Splunk version. Will use the latest found when not set or set to 'latest'
-#  splunk_version: '7.0.0'
-  # Download Splunk archive from splunk.com. The archive must still be found in the
-  # local Software directory to fullfill the software download agreement
-#  splunk_download:
-#    splunk: true
-#    splunkforwarder: true
-#  splunk_admin_password: 'splunklab1'
-  # Give a path to a license file. Must be located in splunk_software_dir
-#  splunk_license_file: Splunk_Enterprise.lic
-# If you deploy to a cloud like AWS you may want to set the serverName variable
-# and/or default-hostname to the inventory name
-#  splunk_set_servername: true
-#  splunk_set_default_hostname: true
-# Turn of loginpage info, if not needed
-#  splunk_loginpage_print_hostname: false
-#  splunk_loginpage_print_userpw: false
-#  splunk_loginpage_print_roles: false
+  splunk_version: '8.2.4'
 
-# Disable the usage of the new wiredTiger KV Store Engine (8.1+)
-#  splunk_kv_store_engine_wiredtiger: false
+  # Download Splunk archive from splunk.com. The archive must still be found in the
+  # local Software directory to fulfill the software download agreement
+  splunk_download:
+    splunk: true
+    splunkforwarder: true
+
+  # admin user password
+  splunk_admin_password: 'splunklab1'
+
+  # Give a path to a license file. Must be located in splunk_software_dir
+  splunk_license_file: Splunk_Enterprise.lic
+
+  # If you deploy to a cloud like AWS you may want to set the serverName variable
+  # and/or default-hostname to the inventory name
+  splunk_set_servername: true
+  splunk_set_default_hostname: true
+
+  # Turn of loginpage info, if not needed
+  splunk_loginpage_print_hostname: false
+  splunk_loginpage_print_userpw: false
+  splunk_loginpage_print_roles: false
+
+  # Disable checking for policykit, will install a sudo rule, if polkit is not found.
+  # You can add the package to be installed in the os.packages section
+  splunk_use_policykit: false
+
+  # Disable the usage of the new wiredTiger KV Store Engine (8.1+)
+  splunk_kv_store_engine_wiredtiger: false
 
   # Add Splunk config settings to a file location relative to $SPLUNK_HOME/etc
   # This will be applied to all Splunk Enterprise Instances
@@ -138,9 +151,9 @@ splunk_defaults:
     homePath: primary 
     coldPath: cold
 
-# Enable SSL for web, inputs and outputs. Own certs can be provided and have to be put
-# inside Splunkenizer/auth directory. If own_certs=false the Splunk internal self-signed
-# ones are used.
+  # Enable SSL for web, inputs and outputs. Own certs can be provided and have to be put
+  # inside Splunkenizer/auth directory. If own_certs=false the Splunk internal self-signed
+  # ones are used.
   splunk_ssl:
     web:
       enable: true
@@ -169,10 +182,10 @@ splunk_defaults:
         sslCertPath: "custom_outputs_server.pem"
         sslPassword: "password"
 
-# Share the same splunk.secret file with all Splunk nodes
-# Note: You must first deploy splunk to one host only to store the splunk.secret file
-#       You can do that by running: ansible-playbook ansible/setup_common.yml ansible/install_splunk.yml --limit <one_host_from_the_list>
-#       After that you can run ansible/deploy_site.yml to all hosts
+  # Share the same splunk.secret file with all Splunk nodes
+  # Note: You must first deploy splunk to one host only to store the splunk.secret file
+  #       You can do that by running: ansible-playbook ansible/setup_common.yml ansible/install_splunk.yml --limit <one_host_from_the_list>
+  #       After that you can run ansible/deploy_site.yml to all hosts
   splunk_secret_share:
     # for Splunk Enterprise
     splunk: true

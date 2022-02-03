@@ -39,12 +39,12 @@
     - splunk_install
   include_tasks: upload_and_extract.yml
 
-- name: set splunk service name
+- name: set enable boot-start args
   tags:
     - splunk
     - splunk_software
     - splunk_install
-  include_tasks: set_splunk_service_name.yml
+  include_tasks: set_enable_boot_start_args.yml
 
 - name: copy shared splunk.secret file
   tags:
@@ -155,15 +155,27 @@
   become_user: "{{ splunk_user }}"
   when: splunk_installed_version is version_compare('7.1', '<') and splunk_install_app == "splunk"
 
-- name: call add_splunk_polkit_or_sudoers
+- name: call add_custom_policykit
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_install
+    - splunk_polkit
+  include_tasks: add_custom_policykit.yml
+  when: 
+    - use_policykit == true
+    - use_systemctl == true
+    - use_splunk_systemd|default(false) == true
+    - splunk_create_polkit_rules is not defined
+
+- name: call add_splunk_sudoers
   tags:
     - splunk
     - splunk_software
     - splunk_install
     - splunk_sudoers
-    - splunk_polkit
-  include_tasks: add_splunk_polkit_or_sudoers.yml
+  include_tasks: add_splunk_sudoers.yml
   when: 
+    - use_policykit == false
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
-    - splunk_create_polkit_rules is not defined
