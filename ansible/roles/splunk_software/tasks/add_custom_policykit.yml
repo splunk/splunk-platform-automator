@@ -5,7 +5,6 @@
     - splunk
     - splunk_software
     - splunk_polkit
-    - splunk_sudoers
   shell: "systemctl --version | grep -w systemd | cut -d' ' -f 2"
   check_mode: no
   changed_when: false
@@ -16,7 +15,6 @@
     - splunk
     - splunk_software
     - splunk_polkit
-    - splunk_sudoers
   shell: "pkaction --version | grep -w version | cut -d' ' -f 3"
   check_mode: no
   changed_when: false
@@ -52,25 +50,19 @@
     - systemd_version_output.stdout|int >= 226
     - polkit_version_output.stdout is version_compare('0.105', '<=')
 
-- name: remove splunk sudoers file
+- name: call remove_splunk_sudoers
   tags:
     - splunk
     - splunk_software
-    - splunk_sudoers
-  file:
-    path: /etc/sudoers.d/splunk
-    state: absent
+    - splunk_upgrade
+  include_tasks: remove_splunk_sudoers.yml
   when: systemd_version_output.stdout|int >= 226
 
-- name: add splunk sudoers file
+- name: call add_splunk_sudoers
   tags:
     - splunk
     - splunk_software
+    - splunk_install
     - splunk_sudoers
-  template:
-    src: etc/sudoers.d/splunk.j2
-    dest: /etc/sudoers.d/splunk
-    owner: "root"
-    group: "root"
-    mode: 0440
+  include_tasks: add_splunk_sudoers.yml
   when: systemd_version_output.stdout|int < 226

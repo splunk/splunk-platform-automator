@@ -1,15 +1,6 @@
 ---
 # This playbook removes policy kit config or suoders file
 
-- name: "remove /etc/sudoers.d/splunk"
-  tags:
-    - splunk
-    - splunk_software
-    - splunk_uninstall
-  file:
-    path: "/etc/sudoers.d/splunk"
-    state: absent
-
 - name: "remove /etc/polkit-1/rules.d/10-{{splunk_service_name}}.rules"
   tags:
     - splunk

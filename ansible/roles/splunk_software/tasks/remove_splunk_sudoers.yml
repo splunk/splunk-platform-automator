@@ -1,0 +1,10 @@
+---
+
+- name: remove splunk sudoers file
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_sudoers
+  file:
+    path: /etc/sudoers.d/splunk
+    state: absent

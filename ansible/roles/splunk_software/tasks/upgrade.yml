@@ -61,12 +61,22 @@
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
 
-- name: call remove_splunk_polkit_or_sudoers
+- name: call remove_custom_policykit
   tags:
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: remove_splunk_polkit_or_sudoers.yml
+  include_tasks: remove_custom_policykit.yml
+  when:
+    - use_systemctl == true
+    - use_splunk_systemd|default(false) == true
+
+- name: call remove_splunk_sudoers
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+  include_tasks: remove_splunk_sudoers.yml
   when:
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
@@ -90,12 +100,12 @@
   include_tasks: upload_and_extract.yml
   when: splunk_path.stat.exists == true
 
-- name: set splunk service name
+- name: set enable boot-start args
   tags:
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: set_splunk_service_name.yml
+  include_tasks: set_enable_boot_start_args.yml
 
 - name: call enable_boot-start
   tags:
@@ -137,16 +147,30 @@
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
 
-- name: call add_splunk_polkit_or_sudoers
+- name: call add_custom_policykit
   tags:
     - splunk
     - splunk_software
-    - splunk_upgrade
-  include_tasks: add_splunk_polkit_or_sudoers.yml
-  when:
+    - splunk_install
+    - splunk_polkit
+  include_tasks: add_custom_policykit.yml
+  when: 
+    - use_policykit == true
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
     - splunk_create_polkit_rules is not defined
+
+- name: call add_splunk_sudoers
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_install
+    - splunk_sudoers
+  include_tasks: add_splunk_sudoers.yml
+  when: 
+    - use_policykit == false
+    - use_systemctl == true
+    - use_splunk_systemd|default(false) == true
 
 - name: start splunk by service control
   tags:
