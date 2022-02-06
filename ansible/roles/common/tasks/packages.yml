@@ -1,6 +1,11 @@
 ---
 # This playbook installs additional os packages
 
+- name: Run apt-get update
+  apt:
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
 - name: install additional os packages
   tags:
     - common
@@ -8,4 +13,3 @@
   package:
     name: "{{ packages }}" 
     state: latest
-  when: packages|default()
