@@ -192,6 +192,7 @@ end
 # Create inventory host vars and groups
 host_vars = {}
 splunk_host_list = []
+ssh_usernames = {}
 settings['splunk_hosts'].each do |splunk_host|
   hostnames = []
   if !splunk_host['name'].nil?
@@ -223,6 +224,11 @@ settings['splunk_hosts'].each do |splunk_host|
       end
       if !splunk_host[config_group].nil?
         var_obj[config_group] = var_obj[config_group].merge(splunk_host[config_group])
+        if config_group == "aws"
+          if !splunk_host[config_group].nil?
+            ssh_usernames.update(hostname=>splunk_host[config_group]['ssh_username'])
+          end
+        end
       end
     end
     special_host_vars[hostname] = var_obj.dup
@@ -280,6 +286,16 @@ settings['splunk_hosts'].each do |splunk_host|
     end
     splunk_host_list.push(hosts_entry)
 
+  end
+end
+
+# Update aws_ec2 with custom ansible_user settings
+if provider == "aws" and ssh_usernames.length > 0
+  # If custom ssh_usernames are defined create a line like this:
+  # "[tags.Name] | map('extract', {'uf': 'ec2-user'})|first|default('admin')"
+  aws_ec2['compose']['ansible_user'] = "[tags.Name] | map(\"extract\", #{ssh_usernames.to_json})|first|default(\"#{aws_merged['ssh_username']}\")"
+  File.open(File.join(config_dir,"aws_ec2.yml"), "w") do |f|
+    f.write(aws_ec2.to_yaml)
   end
 end
 
