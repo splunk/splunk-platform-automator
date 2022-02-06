@@ -6,8 +6,9 @@
   when: ansible_os_family|lower != 'windows'
 
 - name:
-  import_tasks: packages.yml
-  when: ansible_os_family|lower != 'windows'
+  when:
+    - packages|default([],true)|length > 0
+    - ansible_os_family|lower != 'windows'
 
 - name:
   import_tasks: check_ansible_requirements.yml
