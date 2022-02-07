@@ -585,7 +585,7 @@ class InventoryModule(BaseInventoryPlugin):
             #TODO: Check Ansible inventory var, if aws is there
             dirname = os.path.dirname(path)
             with open(os.path.join(dirname,'aws_ec2.yml'), 'w') as f:
-                f.write('#Empty file to satify the aws plugin\n')
+                f.write('#Empty file to satisfy the aws plugin\n')
 
         # Call our internal helper to read in default values
         self._populate_defaults()
