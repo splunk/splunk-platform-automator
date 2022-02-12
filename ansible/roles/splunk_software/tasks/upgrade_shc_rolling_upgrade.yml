@@ -116,7 +116,7 @@
   vars:
     splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|to_json|from_json }}"
   check_mode: no
-  until: "splunk_rest_json_output_local.entry[0].content.active_historical_search_count == 0"
+  until: "splunk_rest_json_output_local.entry[0].content.active_historical_search_count == 0 and splunk_rest_json_output_local.entry[0].content.active_realtime_search_count == 0" 
   # Wait 30 minutes to complete this step
   retries: 30
   delay: 60
