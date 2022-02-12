@@ -1,6 +1,6 @@
 ---
 
-- name: check cluster state
+- name: check search head cluster state
   tags:
     - splunk
     - splunk_software
@@ -26,17 +26,53 @@
     splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
   when: inventory_hostname == splunk_shc_host_list|first
 
-- name: fail if cluster service_ready_flag not ok
+- name: fail if search head cluster service_ready_flag not ok
   tags:
     - splunk
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
   fail:
-    msg: "Cluster is not healthy!"
+    msg: "Search Head Cluster is not healthy!"
   when:
     - inventory_hostname == splunk_shc_host_list|first
     - shc_service_ready_flag == false or shc_rolling_restart_flag == true
+
+- name: check KV store cluster state
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_rest
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  include_tasks: splunk_rest.yml
+  vars:
+    splunk_rest_endpoint: /services/kvstore/status
+  when: inventory_hostname == splunk_shc_host_list|first
+
+- name: set state variables
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  set_fact:
+    kv_stre_status: "{{ splunk_rest_json_output.entry[0].content.current.status }}"
+  vars:
+    splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
+  when: inventory_hostname == splunk_shc_host_list|first
+
+- name: fail if KV store cluster status not 'ready'
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_upgrade
+    - splunk_upgrade_shc_rolling
+  fail:
+    msg: "KV Store Cluster is not healthy!"
+  when:
+    - inventory_hostname == splunk_shc_host_list|first
+    - kv_stre_status != 'ready'
 
 - name: init rolling upgrade
   tags:
