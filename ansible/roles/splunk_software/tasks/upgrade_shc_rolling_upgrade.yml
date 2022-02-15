@@ -118,8 +118,8 @@
   check_mode: no
   # Real Time searches are never going to stop, so we do not check for them here
   until: "splunk_rest_json_output_local.entry[0].content.active_historical_search_count == 0" 
-  # Wait 30 minutes to complete this step
-  retries: 30
+  # Wait 60 minutes to complete this step
+  retries: 60
   delay: 60
 
 - name: call enable_splunkweb from role splunk_common
