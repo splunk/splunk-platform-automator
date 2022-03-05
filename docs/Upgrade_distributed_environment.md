@@ -1,126 +1,134 @@
 # Upgrade steps of a distributed Splunk environment
 
-## This example upgrades from 6.6.x to 7.0.x or from 7.0.x to 7.1.x
+## This example upgrades 8.0+ to later versions with rolling upgrades
 
-Docs: https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Upgradeacluster#Upgrade_each_tier_separately
+- Edit splunk_config.yml to have the new splunk_version
+- Make sure the binaries are download to the Software directory
+- Check the [Splunk Upgrade Order Process](https://docs.splunk.com/images/d/d3/Splunk_upgrade_order_of_ops.pdf)
 
-```
-ansible-playbook ansible/upgrade_splunk.yml --limit cm
+## Checks during upgrade
 
-ansible-playbook ansible/stop_splunk.yml --limit role_search_head,ds
-ansible-playbook ansible/upgrade_splunk.yml --limit ds
-ansible-playbook ansible/upgrade_splunk.yml --limit sh1,sh2,sh3
-```
+- Check migration logs with this search:
+  - `index=_internal sourcetype=splunk_migration`
+  - `index=_internal sourcetype=splunk_migration | stats latest(VERSION) by host`
 
-Docs: https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Upgradeacluster#Site-by-site_upgrade_for_multisite_indexer_clusters
 
-```
-ansible-playbook ansible/run_splunk_command.yml --limit cm -e "splunk_command='enable maintenance-mode'"
-ansible-playbook ansible/upgrade_splunk.yml --limit idxcluster_idxc1_site1
-ansible-playbook ansible/run_splunk_command.yml --limit cm -e "splunk_command='disable maintenance-mode'"
-ansible-playbook ansible/run_splunk_command.yml --limit cm -e "splunk_command='show cluster-status'"
-```
-
-Wait until bucket fixup tasks have completed
+### Upgrade the Deployment Server
 
 ```
-ansible-playbook ansible/run_splunk_command.yml --limit cm -e "splunk_command='enable maintenance-mode'"
-ansible-playbook ansible/upgrade_splunk.yml --limit idxcluster_idxc1_site2
-ansible-playbook ansible/run_splunk_command.yml --limit cm -e "splunk_command='disable maintenance-mode'"
-ansible-playbook ansible/run_splunk_command.yml --limit cm -e "splunk_command='show cluster-status'"
+ansible-playbook ansible/upgrade_splunk.yml --limit role_deployment_server
 ```
 
-Wait again until bucket fixup tasks have completed
+### Upgrade the License Master
 
 ```
-ansible-playbook ansible/run_splunk_command.yml --limit cm -e "splunk_command='remove excess-buckets'"
+ansible-playbook ansible/upgrade_splunk.yml --limit role_license_master
 ```
 
-## This example upgrades from 7.1.x with rolling upgrades
+### Upgrade the Cluster Master
 
-Upgrade the Cluster Master
+Check Indexer Cluster status
 
 ```
-ansible-playbook ansible/upgrade_splunk.yml --limit cm
+ansible-playbook ansible/run_splunk_command.yml --limit role_cluster_master -e "splunk_command='show cluster-status --verbose'"
+```
+
+Note: Look for this line: Pre-flight check successful .................. YES
+
+```
+ansible-playbook ansible/upgrade_splunk.yml --limit role_cluster_master
+```
+
+### Upgrade the Monitoring Console
+
+```
+ansible-playbook ansible/upgrade_splunk.yml --limit role_monitoring_console
+```
+
+### Upgrade any single search head
+
+```
+ansible-playbook ansible/upgrade_splunk.yml --limit <search_head1>,<search_head2>
+```
+
+### Upgrade the SHC Deployer
+
+```
+ansible-playbook ansible/upgrade_splunk.yml --limit role_deployer
 ```
 
 ## Rolling upgrade for search head cluster
-Docs: https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/SHCrollingupgrade#Perform_a_rolling_upgrade
+[Splunk Docs](https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/SHCrollingupgrade)
 
-```
-ansible-playbook ansible/run_splunk_command.yml --limit sh1 -e "splunk_command='upgrade-init shcluster-members'"
-ansible-playbook ansible/run_splunk_command.yml --limit sh1 -e "splunk_command='edit shcluster-config -manual_detention on'"
-```
+### Prework and Preflight checks
 
-Check if all searches are finished
-```
-splunk list shcluster-member-info | grep "active_"
-```
+Check if we have a KV Store Backup (from the cronjob script)
 
-Output should be:
+
+Check captain and status of SHC
 ```
-active_historical_search_count:0
-active_realtime_search_count:0
+ansible-playbook ansible/run_splunk_command.yml --limit sh1 -e "splunk_command='show shcluster-status'"
+ansible-playbook ansible/run_splunk_command.yml --limit sh1 -e "splunk_command='show kvstore-status'"
 ```
 
-Build sum
+Switch Captain to last node in the cluster (sh3 in this example)
+
 ```
-splunk list shcluster-member-info | grep "active_" | cut -d: -f 2 | awk '{ sum += $1; } END { print sum; }' "$@"
+ansible-playbook ansible/run_splunk_command.yml --limit sh1 -e "splunk_command='transfer shcluster-captain -mgmt_uri https://sh3:8089'"
+ansible-playbook ansible/run_splunk_command.yml --limit sh1 -e "splunk_command='show shcluster-status'"
 ```
 
-Upgrade first node
+### Run SHC Rolling Upgrade
+
 ```
-ansible-playbook ansible/upgrade_splunk.yml --limit sh1
-ansible-playbook ansible/run_splunk_command.yml --limit sh1 -e "splunk_command='edit shcluster-config -manual_detention off'"
+ansible-playbook ansible/upgrade_splunk_shc_rolling.yml
 ```
 
-Check cluster health
-```
-ansible-playbook ansible/run_splunk_command.yml --limit sh1 -e "splunk_command='show shcluster-status --verbose'"
-```
+### Check for proper functionality on the SHC
 
-Repeat the above two steps for the rest of the nodes
-
-When all nodes are finished upgrade the deployer:
-```
-ansible-playbook ansible/upgrade_splunk.yml --limit ds
-```
-
-Finalize the SHC upgrade
-```
-ansible-playbook ansible/run_splunk_command.yml --limit sh1 -e "splunk_command='upgrade-finalize shcluster-members'"
-```
+- Check some searches
+- Check some dashboards
 
 ## Rolling upgrade for indexer cluster
-Docs: https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Searchablerollingupgrade#Perform_a_rolling_upgrade
+[Splunk Docs](https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Searchablerollingupgrade#Perform_a_rolling_upgrade)
 
-Initiate the rolling upgrade
-```
-ansible-playbook ansible/run_splunk_command.yml --limit cm -e "splunk_command='upgrade-init cluster-peers'"
-```
-
-Take the first node offline
+### Run the rolling Indexer Cluster upgrade playbook
 
 ```
-ansible-playbook ansible/run_splunk_command.yml --limit idx1 -e "splunk_command='offline'"
+ansible-playbook ansible/upgrade_splunk_idxc_rolling.yml
 ```
 
-Wait until the idx is down and check the indexer status with:
-```
-splunk show cluster-status
-```
-
-If the response shows `ReassigningPrimaries`, the peer is not yet shut down.
-
-Upgrade the indexer
+### Rerun the peer offline
+Sometime it happens after running the peer offline command the indexer does the primaries reassign but then does not go down.
+It can happen that it goes back to status Up and the process does not proceed. You can send the offline call again manually:
 
 ```
-ansible-playbook ansible/upgrade_splunk.yml --limit idx1
+ansible-playbook ansible/call_splunk_rest.yml -e "splunk_rest_endpoint=/services/cluster/slave/control/control/decommission" -e "http_method=POST" --limit <indexer_name>
 ```
 
-Repeat the three last steps for the rest of the indexers
+## Upgrade Heavy Forwarders
 
-Finalize the upgrade
 ```
-ansible-playbook ansible/run_splunk_command.yml --limit cm -e "splunk_command='upgrade-finalize cluster-peers'"
+ansible-playbook ansible/upgrade_splunk.yml --limit role_heavy_forwarder
+```
+
+## Upgrade Intermediate Universal Forwarders
+
+If you have pairs, do not upgrade both at the same time
+
+```
+ansible-playbook ansible/upgrade_splunk.yml --limit iuf1
+ansible-playbook ansible/upgrade_splunk.yml --limit iuf2
+```
+
+## Upgrade Universal Forwarders
+
+```
+ansible-playbook ansible/upgrade_splunk.yml --limit role_universal_forwarder
+```
+
+## Check all versions
+
+```
+ansible-playbook ansible/run_splunk_command.yml -e "splunk_command='version'"
 ```
