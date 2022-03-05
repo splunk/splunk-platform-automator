@@ -1,4 +1,4 @@
-# Splunkenizer 2.1.0-devel
+# Splunkenizer 2.1.0
 
 ![Splunkenizer Overview](https://github.com/splunkenizer/Splunkenizer/blob/master/pic/splunkenizer_overview.png)
 
@@ -8,7 +8,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
 
 ## Table of Contents
 
-- [Splunkenizer 2.1.0-devel](#splunkenizer-210-devel)
+- [Splunkenizer 2.1.0](#splunkenizer-210)
   - [Table of Contents](#table-of-contents)
 - [Support](#support)
 - [Features](#features)
