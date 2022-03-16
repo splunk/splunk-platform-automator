@@ -426,7 +426,7 @@ If the version is not correct, open a new terminal and activate the
 virtual environment again with the command from above.
 
 ```
-source ansible_470/bin/activate
+source ansible_490/bin/activate
 ```
 
 
