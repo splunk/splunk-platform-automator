@@ -48,7 +48,9 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
     - [scp example](#scp-example)
   - [Deploying on Amazon Cloud](#deploying-on-amazon-cloud)
   - [Ansible playbooks only](#ansible-playbooks-only)
+  - [Build your own Python version](#build-your-own-python-version)
   - [Create vitualenv for specific Ansible version](#create-vitualenv-for-specific-ansible-version)
+    - [Install needed python libraries](#install-needed-python-libraries)
 - [Known issues, limitations](#known-issues-limitations)
   - [Supported Ansible Versions](#supported-ansible-versions)
 - [Authors](#authors)
@@ -85,18 +87,20 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 
 ## Framework Installation
 
-1. Download and install [Vagrant](https://www.vagrantup.com).
-2. Install Ansible, I personally prefer [Brew](https://brew.sh) (on OSX) which makes it as easy as `brew install ansible`. For [supported Ansible versions check here](#supported-ansible-versions)
-3. Create a folder called `Vagrant` and change into it.
-4. Download and extract a [Splunkenizer release here](https://github.com/splunkenizer/Splunkenizer/releases) or clone from GitHub when using the master branch: `git clone https://github.com/splunkenizer/Splunkenizer.git`
-5. Create a folder called `Software`.
-6. Download the tgz. archive for the Splunk Software and put in the `Software` directory
+1. Make sure you have Python 3.6+ installed. If not available for your distro, you can [build your own Python version](#build-your-own-python-version).
+   1. [Install needed python libraries](#install-needed-python-libraries)
+2. Download and install [Vagrant](https://www.vagrantup.com).
+3. Install Ansible, I personally prefer [Brew](https://brew.sh) (on OSX) which makes it as easy as `brew install ansible`. For [supported Ansible versions check here](#supported-ansible-versions)
+4. Create a folder called `Vagrant` and change into it.
+5. Download and extract a [Splunkenizer release here](https://github.com/splunkenizer/Splunkenizer/releases) or clone from GitHub when using the master branch: `git clone https://github.com/splunkenizer/Splunkenizer.git`
+6. Create a folder called `Software`.
+7. Download the tgz. archive for the Splunk Software and put in the `Software` directory
    1. [Splunk Enterprise](http://www.splunk.com/en_us/download/splunk-enterprise.html)
    2. [Splunk Universal Forwarder](http://www.splunk.com/en_us/download/universal-forwarder.html)
-7. Download Splunk Professional Services Best Practices Base Config Apps and extract them into the `Software` directory
+8. Download Splunk Professional Services Best Practices Base Config Apps and extract them into the `Software` directory
    1. [Configurations Base Apps](https://drive.google.com/open?id=107qWrfsv17j5bLxc21ymTagjtHG0AobF)
    2. [Configurations Cluster Apps](https://drive.google.com/open?id=10aVQXjbgQC99b9InTvncrLFWUrXci3gz)
-8. If you have a Splunk License file, link it to the name `Splunk_Enterprise.lic` inside the `Software` directory.
+9.  If you have a Splunk License file, link it to the name `Splunk_Enterprise.lic` inside the `Software` directory.
 
 Your directory structure should now look like this:
 
@@ -397,6 +401,26 @@ And then some more ansible prerequisites with this playbook
 ansible-playbook ansible/test_ansible_prereqs.yml
 ```
 
+## Build your own Python version
+
+You can build your own python version, if you need a specific python version or your local one is outdated.
+Please install the needed development tools in order to be able to compile stuff.
+
+This examples installs Python 3.9.9 into your home directory.
+
+```
+cd
+mkdir tmp
+mkdir -p ~/Python/3.9.9
+cd tmp
+wget https://www.python.org/ftp/python/3.9.9/Python-3.9.9.tgz
+tar -xzf Python-3.9.9.tgz
+cd Python-3.9.9/
+./configure --prefix=~/Python/3.9.9 --with-ensurepip=install
+make
+make install
+```
+
 ## Create vitualenv for specific Ansible version
 
 If you need a specific Ansible version you can create it inside a virtualenv environment. This can
@@ -407,6 +431,8 @@ python3 -m venv ansible_490
 source ansible_490/bin/activate
 python -m pip install ansible==4.9.0 # to have a certain version
 ```
+
+### Install needed python libraries
 
 You must install some additional modules for Splunkenizer to work
 
