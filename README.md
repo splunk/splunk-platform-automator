@@ -1,6 +1,6 @@
-# Splunkenizer 2.2.0-devel
+# Splunk Automator 2.2.0-devel
 
-![Splunkenizer Overview](https://github.com/splunkenizer/Splunkenizer/blob/master/pic/splunkenizer_overview.png)
+![Splunk Automator Overview](https://github.com/splunk/splunk-automator/blob/master/pic/splunk-automator_overview.png)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](#license)
 
@@ -8,7 +8,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
 
 ## Table of Contents
 
-- [Splunkenizer 2.2.0-devel](#splunkenizer-220-devel)
+- [Splunk Automator 2.2.0-devel](#splunk-automator-220-devel)
   - [Table of Contents](#table-of-contents)
 - [Support](#support)
 - [Features](#features)
@@ -23,7 +23,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
       - [Inbound Rules](#inbound-rules)
       - [Outbound Rules](#outbound-rules)
 - [Upgrade](#upgrade)
-  - [Migrate existing Splunkenizer Environments from 1.x to 2.x](#migrate-existing-splunkenizer-environments-from-1x-to-2x)
+  - [Migrate existing Splunk Automator Environments from 1.x to 2.x](#migrate-existing-splunk-automator-environments-from-1x-to-2x)
     - [Migrate splunk_config.yml](#migrate-splunk_configyml)
     - [Migrate Virtualbox Environments](#migrate-virtualbox-environments)
     - [Migrate AWS Environments](#migrate-aws-environments)
@@ -92,7 +92,7 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 2. Download and install [Vagrant](https://www.vagrantup.com).
 3. Install Ansible, I personally prefer [Brew](https://brew.sh) (on OSX) which makes it as easy as `brew install ansible`. For [supported Ansible versions check here](#supported-ansible-versions)
 4. Create a folder called `Vagrant` and change into it.
-5. Download and extract a [Splunkenizer release here](https://github.com/splunkenizer/Splunkenizer/releases) or clone from GitHub when using the master branch: `git clone https://github.com/splunkenizer/Splunkenizer.git`
+5. Download and extract a [Splunk Automator release here](https://github.com/splunk/splunk-automator/tags) or clone from GitHub when using the master branch: `git clone https://github.com/splunk/splunk-automator.git`
 6. Create a folder called `Software`.
 7. Download the tgz. archive for the Splunk Software and put in the `Software` directory
    1. [Splunk Enterprise](http://www.splunk.com/en_us/download/splunk-enterprise.html)
@@ -105,7 +105,7 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 Your directory structure should now look like this:
 
 ```
-./Vagrant/Splunkenizer/...
+./Vagrant/splunk-automator/...
 ./Vagrant/Software/Configurations - Base/...
 ./Vagrant/Software/Configurations - Index Replication/...
 ./Vagrant/Software/splunk-8.1.2-545206cc9f70-Linux-x86_64.tgz
@@ -120,7 +120,7 @@ Your directory structure should now look like this:
 
 ## Setup Windows Subsystem for Linux (WSL2)
 
-The [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10) does allow to run Splunkenizer on Windows. It even allows to create virtualbox hosts from it on the windows host directly.
+The [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10) does allow to run Splunk Automator on Windows. It even allows to create virtualbox hosts from it on the windows host directly.
 
 Execute the steps [above](#framework-installation). To allow vagrant to talk to virtualbox follow the steps below.
 
@@ -168,15 +168,15 @@ export PATH="$PATH:/mnt/c/Program Files/Oracle/VirtualBox"
 
 # Upgrade
 
-To upgrade your Splunkenizer, just update your local code from the repo
+To upgrade your Splunk Automator, just update your local code from the repo
 
 ```
 git pull
 ```
 
-## Migrate existing Splunkenizer Environments from 1.x to 2.x
+## Migrate existing Splunk Automator Environments from 1.x to 2.x
 
-From Splunkenizer 2.0 the Framework does use an [Ansible Inventory Plugin](https://docs.ansible.com/ansible/latest/plugins/inventory.html) to build the inventory on the fly during execution. The local `inventory` directory does only hold minimum settings based on the virtualization you choose. The rest calculated in flight and not stored somewhere.
+From Splunk Automator 2.0 the Framework does use an [Ansible Inventory Plugin](https://docs.ansible.com/ansible/latest/plugins/inventory.html) to build the inventory on the fly during execution. The local `inventory` directory does only hold minimum settings based on the virtualization you choose. The rest calculated in flight and not stored somewhere.
 
 You can verify your inventory with
 ```
@@ -230,7 +230,7 @@ The steps here only apply if your current environment is not built with vagrant.
 The process is not so traight forward, since I do not know how you built your ansible inventory. Basically, you have
 to make sure everything you defined in your inventory files is reflected in the splunk_config.yml file.
 
-- Before you upgrade your splunkenizer environment, you have to export the inventory to a file
+- Before you upgrade your splunk automator environment, you have to export the inventory to a file
 ```
 ansible-inventory --list --export > inventory_1.txt
 ```
@@ -249,10 +249,10 @@ To build your own windows vagrant image follow [Setup Windows Vagrant image](doc
 
 ## First start and initialization
 
-Run vagrant the first time to initialize itself and create needed directories. You must execute vagrant always in side the Splunkenizer directory where the `Vagrantfile` sits, otherwise it will not work correctly. You will see the usage page, when executing vagrant without options.
+Run vagrant the first time to initialize itself and create needed directories. You must execute vagrant always in side the Splunk Automator directory where the `Vagrantfile` sits, otherwise it will not work correctly. You will see the usage page, when executing vagrant without options.
 
 ```
-cd Splunkenizer
+cd splunk-automator
 vagrant
 ```
 
@@ -314,7 +314,7 @@ ansible-playbook ansible/deploy_site.yml [--limit <hostname>]
 
 ### Login to Splunk Browser Interface
 
-To login to one of the hosts just open the `index.html` file created in the Splunkenizer/config directory. You will find links to every role of your deployment.
+To login to one of the hosts just open the `index.html` file created in the splunk-automator/config directory. You will find links to every role of your deployment.
 If something changes along the way and you need to update the linkpage just call this playbook:
 
 ```
@@ -360,7 +360,7 @@ vagrant scp ../app_dir/splunk-add-on-for-unix-and-linux_831.tgz /var/tmp uf
 
 ## Deploying on Amazon Cloud
 
-Splunkenizer can talk to the AWS cloud and create virtual machines with Splunk in the cloud. Vagrant is using the plugin [vagrant-aws](https://github.com/mitchellh/vagrant-aws) for that. Follow these steps to setup Splunkenizer for AWS. In the example there is a simple network setup, with only one Security group, covering all ports. More complex network setups should be possible, but make sure the host, where Splunkenizer is running does have ssh access to all instances.
+Splunk Automator can talk to the AWS cloud and create virtual machines with Splunk in the cloud. Vagrant is using the plugin [vagrant-aws](https://github.com/mitchellh/vagrant-aws) for that. Follow these steps to setup Splunk Automator for AWS. In the example there is a simple network setup, with only one Security group, covering all ports. More complex network setups should be possible, but make sure the host, where Splunk Automator is running does have ssh access to all instances.
 
 To prepare the configuration file for Amazon deployments
 
@@ -434,7 +434,7 @@ python -m pip install ansible==4.9.0 # to have a certain version
 
 ### Install needed python libraries
 
-You must install some additional modules for Splunkenizer to work
+You must install some additional modules for Splunk Automator to work
 
 ```
 python -m pip install jmespath # required for json_query calls
@@ -458,16 +458,17 @@ source ansible_490/bin/activate
 
 # Known issues, limitations
 
+- Ubuntu 20.04 fails on checking the systemd settings and needs a more current ansible version. See [service_facts broken in Ubuntu 20.04](https://github.com/DataDog/ansible-datadog/issues/274)
 - ulimit settings not working on Ubuntu 14 (without systemd)
 - Forwarding data from a universal forwarder to a heavy forwarder cannot be configured in the config file. This must be done manually after installation.
 - Virtualbox: Virtual host startup does not respond sometimes, if it fails, recreate the host again.
 - Virtualbox has some issues with clock time skew, when not using virtualbox additions. I added a workaround with forcing time clock sync every 5 minutes. A working internet connection on the Virtualbox host is needed.
 - AWS: Due to security reasons the login page with the admin password information has been disabled and https is enabled with splunk's own self signed certs.
-- AWS: OS images (AMI) do not have ntp configured by default. This will be added in Splunkenizer later.
+- AWS: OS images (AMI) do not have ntp configured by default. This will be added in Splunk Automator later.
 
 ## Supported Ansible Versions
 
-The following Ansible versions are tested and working with Splunkenizer, but any newer version should work as well.
+The following Ansible versions are tested and working with Splunk Automator, but any newer version should work as well.
 
 :white_check_mark: Ansible 2.7.x
 :white_check_mark: Ansible 2.8.x
@@ -478,7 +479,7 @@ The following Ansible versions are tested and working with Splunkenizer, but any
 
 # Authors
 
-Splunkenizer is created by [Marco Stadler](https://github.com/splunkenizer) - a passionate Splunker.
+Splunk Automator is created by [Marco Stadler](https://github.com/splunkenizer) - a passionate Splunker.
 
 # License
 
