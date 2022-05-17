@@ -189,7 +189,14 @@ splunk_monitoring_console: "{{groups.role_monitoring_console|default([])|interse
 splunk_dservers: "{{ groups.all|intersect(groups['splunk_env_'+splunk_env_name])|unique|difference(splunk_idxc_all_host_list)|difference(groups.role_monitoring_console|default([]))|difference(groups.role_universal_forwarder|default([])) }}"
 
 # License Server
-splunk_license_master: "{{groups.role_license_master|default([])|intersect(groups['splunk_env_'+splunk_env_name])|default([])}}"
+splunk_license_master: >-
+          {%- set res = [] -%}
+          {%- if splunk_license_server is defined -%}
+            {%- set ignored = res.extend([splunk_license_server]) -%}
+            {{ res|unique }}
+          {%- else -%}
+            {{groups.role_license_master|default([])|intersect(groups['splunk_env_'+splunk_env_name])|default([])}}
+          {%- endif -%}
 
 # Systemd
 splunk_systemd_services_updates: >-

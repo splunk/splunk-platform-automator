@@ -35,7 +35,7 @@
   vars:
     app_name: 'org_full_license_server'
     app_path: '{{splunk_home}}/etc/apps'
-  when: splunk_deployment_server|default()|length == 0 and splunk_license_master|default()|length > 0 and inventory_hostname not in groups.role_license_master
+  when: splunk_deployment_server|default()|length == 0 and splunk_license_master|default()|length > 0 and inventory_hostname not in groups.role_license_master|default([])
 
 - name: apply baseconfig app org_all_indexer_base
   tags:
