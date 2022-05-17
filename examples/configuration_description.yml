@@ -89,6 +89,9 @@ splunk_defaults:
   # Give a path to a license file. Must be located in splunk_software_dir
   splunk_license_file: Splunk_Enterprise.lic
 
+  # If there is an existing license server. Specify an IP or FQDN
+  splunk_license_server: license.splunk.local
+
   # If you deploy to a cloud like AWS you may want to set the serverName variable
   # and/or default-hostname to the inventory name
   splunk_set_servername: true
