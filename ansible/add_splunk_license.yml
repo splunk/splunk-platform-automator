@@ -1,7 +1,7 @@
 ---
 # add a splunk license if not existing
 
-- name: add splunk license to license master
+- name: add splunk license to license manager
   hosts: role_license_manager
   become: yes
   become_user: root

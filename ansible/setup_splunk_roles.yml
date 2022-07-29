@@ -8,7 +8,7 @@
   roles:
     - deployment_server
 
-- name: setup license master role
+- name: setup license manager role
   hosts: role_license_manager
   become: yes
   become_user: root
