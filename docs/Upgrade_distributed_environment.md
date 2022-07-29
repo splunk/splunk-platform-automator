@@ -19,10 +19,10 @@
 ansible-playbook ansible/upgrade_splunk.yml --limit role_deployment_server
 ```
 
-### Upgrade the License Master
+### Upgrade the License Manager
 
 ```
-ansible-playbook ansible/upgrade_splunk.yml --limit role_license_master
+ansible-playbook ansible/upgrade_splunk.yml --limit role_license_manager
 ```
 
 ### Upgrade the Cluster Manager

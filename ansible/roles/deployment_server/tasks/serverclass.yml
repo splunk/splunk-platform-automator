@@ -126,7 +126,7 @@
     mode: 0644
   with_items: "{{splunk_license_dsclients}}"
   notify: reload deploy-server
-  when: splunk_license_master|default()|length > 0
+  when: splunk_license_manager|default()|length > 0
 
 - name: define org_full_license_server server class apps
   tags:
@@ -148,7 +148,7 @@
     - { var: 'restartSplunkd', value: '1' }
     - { var: 'stateOnClient', value: 'enabled' }
   notify: reload deploy-server
-  when: splunk_license_master|default()|length > 0
+  when: splunk_license_manager|default()|length > 0
 
 - name: define org_all_indexer_base server class clients
   tags:

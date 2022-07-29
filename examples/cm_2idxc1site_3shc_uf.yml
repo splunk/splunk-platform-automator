@@ -41,7 +41,7 @@ splunk_hosts:
       - deployer
       - cluster_manager
       - monitoring_console
-      #- license_master
+      #- license_manager
     idxcluster: idxc1
     shcluster: shc1
     site: site0

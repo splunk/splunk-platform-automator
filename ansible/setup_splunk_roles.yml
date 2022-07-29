@@ -9,11 +9,11 @@
     - deployment_server
 
 - name: setup license master role
-  hosts: role_license_master
+  hosts: role_license_manager
   become: yes
   become_user: root
   roles:
-    - license_master
+    - license_manager
 
 - name: setup cluster manager role
   hosts: role_cluster_manager

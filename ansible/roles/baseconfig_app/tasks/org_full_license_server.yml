@@ -19,7 +19,7 @@
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: license
     option: "{{splunk_manager_uri_var}}"
-    value: "https://{{splunk_license_master|first}}:8089"
+    value: "https://{{splunk_license_manager|first}}:8089"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644

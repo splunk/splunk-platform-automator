@@ -297,7 +297,7 @@ class InventoryModule(BaseInventoryPlugin):
         #TODO: set ansible_host: self.inventory.set_variable(hostname, 'ansible_host', data['Mgmt IP'])
         
         # Defining allowed settings
-        allowed_roles = ['cluster_manager','deployer','deployment_server','heavy_forwarder','indexer','license_master','monitoring_console','search_head','universal_forwarder','universal_forwarder_windows']
+        allowed_roles = ['cluster_manager','deployer','deployment_server','heavy_forwarder','indexer','license_manager','monitoring_console','search_head','universal_forwarder','universal_forwarder_windows']
         allowed_hostvars = ['splunk_version','splunk_admin_password','splunk_license_file','splunk_outputs','splunk_search_peers','splunk_conf','os','aws','virtualbox','ip_addr','custom']
         allowed_roles_with_site = ['indexer','search_head','cluster_manager']
 
@@ -313,7 +313,7 @@ class InventoryModule(BaseInventoryPlugin):
             roles[role] = []
 
         #TODO: Check splunk_defaults and other sections for syntax errors
-        #TODO: Check if license_master role defined, when license file is given
+        #TODO: Check if license_manager role defined, when license file is given
         #TODO: Check volume definitions, if they are matching both sections
 
         # Going through the hosts and parse the settings
@@ -375,7 +375,7 @@ class InventoryModule(BaseInventoryPlugin):
                             if site_role_check and role in allowed_roles_with_site:
                                 site_role_check_passed = True
 
-                            if role == "license_master":
+                            if role == "license_manager":
                                 if 'splunk_license_file' not in self.environments[splunk_env]['splunk_defaults']:
                                     raise AnsibleParserError("Error: Missing splunk_license_file variable for role %s in splunk_env %s" % (role,splunk_env))
                                 license_list = []

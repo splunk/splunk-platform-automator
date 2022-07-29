@@ -44,7 +44,7 @@ splunk_hosts:
   - name: cm1
     roles:
       - cluster_manager
-      #- license_master
+      #- license_manager
     idxcluster: idxc1
     site: site0
 

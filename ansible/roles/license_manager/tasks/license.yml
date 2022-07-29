@@ -4,7 +4,7 @@
 - name: loop through the license files
   tags:
     - splunk
-    - license_master
+    - license_manager
   include_tasks:
     file: add_license.yml
   with_items: "{{ splunk_license_file }}"

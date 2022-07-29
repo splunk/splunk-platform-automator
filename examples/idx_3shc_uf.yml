@@ -32,7 +32,7 @@ splunk_hosts:
       - deployer
       - deployment_server
       - monitoring_console
-#      - license_master
+#      - license_manager
     shcluster: shc1
 
   # Single Indexer

@@ -96,7 +96,7 @@ splunk_hosts:
     roles:
       - cluster_manager
       - monitoring_console
-      #- license_master
+      #- license_manager
     idxcluster: idxc1
     site: site0
 

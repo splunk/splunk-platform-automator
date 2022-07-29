@@ -56,7 +56,7 @@
   vars:
     app_name: 'org_full_license_server'
     app_path: '{{splunk_home}}/etc/apps'
-  when: splunk_license_master|default()|length > 0 and inventory_hostname not in groups.role_license_master|default([])
+  when: splunk_license_manager|default()|length > 0 and inventory_hostname not in groups.role_license_manager|default([])
 
 - name: apply baseconfig app org_all_forwarder_outputs
   tags:
@@ -85,7 +85,7 @@
   vars:
     app_name: 'org_full_license_server'
     app_path: '{{ splunk_home }}/etc/deployment-apps'
-  when: splunk_license_master|default()|length > 0
+  when: splunk_license_manager|default()|length > 0
 
 - name: apply baseconfig app org_all_deploymentclient
   tags:

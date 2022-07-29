@@ -33,7 +33,7 @@ splunk_hosts:
       - cluster_manager
       - monitoring_console
       - deployment_server
-      #- license_master
+      #- license_manager
     idxcluster: idxc1
     site: site0
 

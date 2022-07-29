@@ -265,7 +265,7 @@ splunk_hosts:
         - lsof
     roles:
       - cluster_manager
-      - license_master
+      - license_manager
     # Name the indexer cluster to be master of
     idxcluster: idxc1
     site: site0

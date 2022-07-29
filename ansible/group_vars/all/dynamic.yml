@@ -178,13 +178,13 @@ splunk_idx_hf_sh_dsclients: >-
           {{ res|unique }}
 splunk_hf_sh_lm_cm_ds_dp_mc_dsclients: >-
           {%- set res = [] -%}
-          {%- for ds_client in splunk_heavy_forwarder_list|union(splunk_search_head_list)|union(splunk_license_master)|union(splunk_idxc_cm_list)|union(splunk_deployment_server)|union(splunk_shc_dp_list)|union(splunk_monitoring_console)|difference([splunk_deployment_server|first]) -%}
+          {%- for ds_client in splunk_heavy_forwarder_list|union(splunk_search_head_list)|union(splunk_license_manager)|union(splunk_idxc_cm_list)|union(splunk_deployment_server)|union(splunk_shc_dp_list)|union(splunk_monitoring_console)|difference([splunk_deployment_server|first]) -%}
             {%- set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res|unique }}
 splunk_license_dsclients: >-
           {%- set res = [] -%}
-          {%- for ds_client in groups.all|intersect(groups['splunk_env_'+splunk_env_name])|unique|difference(splunk_idxc_all_host_list)|difference(splunk_shc_all_host_list|default([]))|difference(groups.role_license_master|default([]))|difference(groups.role_universal_forwarder|default([]))|difference([splunk_deployment_server|first]) -%}
+          {%- for ds_client in groups.all|intersect(groups['splunk_env_'+splunk_env_name])|unique|difference(splunk_idxc_all_host_list)|difference(splunk_shc_all_host_list|default([]))|difference(groups.role_license_manager|default([]))|difference(groups.role_universal_forwarder|default([]))|difference([splunk_deployment_server|first]) -%}
             {%- set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res|unique }}
@@ -194,13 +194,13 @@ splunk_monitoring_console: "{{groups.role_monitoring_console|default([])|interse
 splunk_dservers: "{{ groups.all|intersect(groups['splunk_env_'+splunk_env_name])|unique|difference(splunk_idxc_all_host_list)|difference(groups.role_monitoring_console|default([]))|difference(groups.role_universal_forwarder|default([])) }}"
 
 # License Server
-splunk_license_master: >-
+splunk_license_manager: >-
           {%- set res = [] -%}
           {%- if splunk_license_server is defined -%}
             {%- set ignored = res.extend([splunk_license_server]) -%}
             {{ res|unique }}
           {%- else -%}
-            {{groups.role_license_master|default([])|intersect(groups['splunk_env_'+splunk_env_name])|default([])}}
+            {{groups.role_license_manager|default([])|intersect(groups['splunk_env_'+splunk_env_name])|default([])}}
           {%- endif -%}
 
 # Systemd

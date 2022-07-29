@@ -4,7 +4,7 @@
 - name: get guid of source license file
   tags:
     - splunk
-    - license_master
+    - license_manager
   xml:
     path: "{{ splunk_software }}/{{ splunk_license_file_name }}"
     xpath: /license/payload/guid
@@ -16,7 +16,7 @@
 - name: "check for license guid {{ lic_guid_src.matches[0].guid }} in splunk"
   tags:
     - splunk
-    - license_master
+    - license_manager
   command: "{{ splunk_home }}/bin/splunk list license -auth admin:{{splunk_admin_password}}"
   become: yes
   become_user: "{{ splunk_user }}"
@@ -27,7 +27,7 @@
 - name: copy license file to tmp location
   tags:
     - splunk
-    - license_master
+    - license_manager
   copy:
     src: "{{ splunk_software }}/{{ splunk_license_file_name }}"
     dest: "/tmp/{{ splunk_license_file_name }}"
@@ -38,7 +38,7 @@
 - name: add license file to splunk
   tags:
     - splunk
-    - license_master
+    - license_manager
   command: "{{ splunk_home }}/bin/splunk add license /tmp/{{ splunk_license_file_name }} -auth admin:{{splunk_admin_password}}"
   become: yes
   become_user: "{{ splunk_user }}"
@@ -48,7 +48,7 @@
 - name: remove license file from tmp location
   tags:
     - splunk
-    - license_master
+    - license_manager
   file:
     path: "/tmp/{{ splunk_license_file_name }}"
     state: absent

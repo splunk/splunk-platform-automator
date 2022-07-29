@@ -5,7 +5,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - license_master
+    - license_manager
     - org_all_deploymentclient
   include_role:
     name: baseconfig_app
@@ -18,7 +18,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - license_master
+    - license_manager
     - org_all_forwarder_outputs
   include_role:
     name: baseconfig_app
@@ -31,7 +31,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - license_master
+    - license_manager
     - org_all_search_base
     - web_ssl
   include_role:
@@ -43,7 +43,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - license_master
+    - license_manager
     - org_all_search_base
   include_role:
     name: baseconfig_app
