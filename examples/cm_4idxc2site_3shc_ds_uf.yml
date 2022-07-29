@@ -41,10 +41,10 @@ splunk_hosts:
       - deployer
     shcluster: shc1
 
-  # Cluster Master
+  # Cluster Manager
   - name: cm
     roles:
-      - cluster_master
+      - cluster_manager
       - monitoring_console
       #- license_master
     idxcluster: idxc1

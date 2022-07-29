@@ -1,6 +1,6 @@
 ---
 
-- name: check if cluster master has been upgraded already
+- name: check if cluster manager has been upgraded already
   tags:
     - splunk
     - splunk_software

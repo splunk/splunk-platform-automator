@@ -63,7 +63,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
 # Features
 
 - Build complex, reproducible Splunk environments in one shot, including all roles available for Splunk Enterprise.
-- Building Cluster Master, Indexer Clusters, Deployer, Search Head Clusters, Deployment Server, Universal Forwarders, Heavy Forwarders, License Master and Monitoring Console. All ready to use.
+- Building Cluster Manager, Indexer Clusters, Deployer, Search Head Clusters, Deployment Server, Universal Forwarders, Heavy Forwarders, License Master and Monitoring Console. All ready to use.
 - Configuration done according best practices with configuration apps
 - Splunk environment definition stored in one simple [yaml](http://docs.ansible.com/ansible/latest/YAMLSyntax.html) file
 - [Example configuration files](examples) for different setups included

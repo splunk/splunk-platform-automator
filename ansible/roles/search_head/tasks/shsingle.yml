@@ -105,7 +105,7 @@
   vars:
     app_name: 'org_cluster_search_base'
     app_path: '{{splunk_home}}/etc/apps'
-  when: splunk_deployment_server|default()|length == 0 and splunk_search_peer_idxc_list|length > 0 and inventory_hostname not in groups.role_cluster_master
+  when: splunk_deployment_server|default()|length == 0 and splunk_search_peer_idxc_list|length > 0 and inventory_hostname not in groups.role_cluster_manager
 
 - name: add indexer as search pears
   tags:

@@ -7,7 +7,7 @@
 #         
 
 - name: run Splunk command
-  hosts: role_cluster_master,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_master,role_monitoring_console,role_search_head,role_universal_forwarder
+  hosts: role_cluster_manager,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_master,role_monitoring_console,role_search_head,role_universal_forwarder
   become: yes
   become_user: root
 

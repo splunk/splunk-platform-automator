@@ -27,10 +27,10 @@ splunk_idxclusters:
 
 # Splunk hosts with its settings
 splunk_hosts:
-  # Cluster Master
+  # Cluster Manager
   - name: cm
     roles:
-      - cluster_master
+      - cluster_manager
       - deployment_server
       - monitoring_console
       #- license_master

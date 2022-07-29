@@ -248,7 +248,7 @@ splunk_shclusters:
 
 # Splunk hosts with its settings
 splunk_hosts:
-  # Cluster Master
+  # Cluster Manager
   - name: cm
 # You can set host specific vbox resources here as well
     virtualbox:
@@ -264,7 +264,7 @@ splunk_hosts:
         - unzip
         - lsof
     roles:
-      - cluster_master
+      - cluster_manager
       - license_master
     # Name the indexer cluster to be master of
     idxcluster: idxc1

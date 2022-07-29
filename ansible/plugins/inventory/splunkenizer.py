@@ -297,9 +297,9 @@ class InventoryModule(BaseInventoryPlugin):
         #TODO: set ansible_host: self.inventory.set_variable(hostname, 'ansible_host', data['Mgmt IP'])
         
         # Defining allowed settings
-        allowed_roles = ['cluster_master','deployer','deployment_server','heavy_forwarder','indexer','license_master','monitoring_console','search_head','universal_forwarder','universal_forwarder_windows']
+        allowed_roles = ['cluster_manager','deployer','deployment_server','heavy_forwarder','indexer','license_master','monitoring_console','search_head','universal_forwarder','universal_forwarder_windows']
         allowed_hostvars = ['splunk_version','splunk_admin_password','splunk_license_file','splunk_outputs','splunk_search_peers','splunk_conf','os','aws','virtualbox','ip_addr','custom']
-        allowed_roles_with_site = ['indexer','search_head','cluster_master']
+        allowed_roles_with_site = ['indexer','search_head','cluster_manager']
 
         # Creating some data structure for collecting information later on
         for environment in self.environments:
@@ -388,11 +388,11 @@ class InventoryModule(BaseInventoryPlugin):
                                     if not os.path.isfile(license_file):
                                         raise AnsibleParserError("Error: Cannot read license file %s" % license_file)
 
-                            if role == "cluster_master" and 'idxcluster' not in splunkhost:
+                            if role == "cluster_manager" and 'idxcluster' not in splunkhost:
                                 raise AnsibleParserError("Error: idxcluster variable not set for host %s with role %s." % (hostname, role))
                             
                             # Build the indexer_cluster lists with their sites
-                            if role in ['indexer','cluster_master'] and 'idxcluster' in splunkhost:
+                            if role in ['indexer','cluster_manager'] and 'idxcluster' in splunkhost:
                                 #print("Building indexer_cluster lists")
                                 
                                 if splunkhost['idxcluster'] not in self.indexer_clusters:
@@ -431,9 +431,9 @@ class InventoryModule(BaseInventoryPlugin):
                                 if hostname not in self.environments[splunk_env]['output'][splunk_outputs]['hosts']:
                                     self.environments[splunk_env]['output'][splunk_outputs]['hosts'].append(hostname)
 
-                            # List of search endpoints (indexers or cluster_masters)
-                            if role in ['indexer','cluster_master']:
-                                if role == 'cluster_master' and 'idxcluster' in splunkhost:
+                            # List of search endpoints (indexers or cluster_managers)
+                            if role in ['indexer','cluster_manager']:
+                                if role == 'cluster_manager' and 'idxcluster' in splunkhost:
                                     if 'idxcluster' not in self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']:
                                         self.environments[splunk_env]['search_peer'][splunk_search_peers]['targets']['idxcluster'] = {splunkhost['idxcluster']: hostname}
                                     else:

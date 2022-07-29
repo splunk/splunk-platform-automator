@@ -86,6 +86,6 @@
   when:
     - (splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server)
     - splunk_search_peer_idxc_list|length > 0
-    - inventory_hostname not in groups.role_cluster_master
+    - inventory_hostname not in groups.role_cluster_manager
 
 - include_tasks: dserver.yml

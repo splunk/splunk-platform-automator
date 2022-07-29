@@ -44,8 +44,8 @@
               </span>
               {%- elif role_name == "role_license_master" -%}
               <a class="btn btn-success" target="_blank" href="{{ url }}{{ hostvars[hostname]['public_dns_name']|default(hostvars[hostname]['ip_addr']|default("unknown")) }}:{{web_port}}/{{ url_locale|default("en-GB") }}/manager/system/licensing">License Master</a>
-              {%- elif role_name == "role_cluster_master" -%}
-              <a class="btn btn-success" target="_blank" href="{{ url }}{{ hostvars[hostname]['public_dns_name']|default(hostvars[hostname]['ip_addr']|default("unknown")) }}:{{web_port}}/{{ url_locale|default("en-GB") }}/manager/system/clustering">Cluster Master</a>
+              {%- elif role_name == "role_cluster_manager" -%}
+              <a class="btn btn-success" target="_blank" href="{{ url }}{{ hostvars[hostname]['public_dns_name']|default(hostvars[hostname]['ip_addr']|default("unknown")) }}:{{web_port}}/{{ url_locale|default("en-GB") }}/manager/system/clustering">Cluster Manager</a>
               {%- elif role_name == "role_deployment_server" -%}
               <a class="btn btn-success" target="_blank" href="{{ url }}{{ hostvars[hostname]['public_dns_name']|default(hostvars[hostname]['ip_addr']|default("unknown")) }}:{{web_port}}/{{ url_locale|default("en-GB") }}/manager/system/deploymentserver">Deployment Server</a>
               {%- elif role_name == "role_deployer" -%}

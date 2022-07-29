@@ -2,7 +2,7 @@
 # This playbook does a rolling upgrade of indexer cluster members
 
 - name: begin tasks
-  hosts: idxcluster_*:&role_cluster_master
+  hosts: idxcluster_*:&role_cluster_manager
   become: yes
   become_user: root
 
@@ -27,7 +27,7 @@
         tasks_from: upgrade_idxc_rolling_check
 
 - name: end tasks
-  hosts: idxcluster_*:&role_cluster_master
+  hosts: idxcluster_*:&role_cluster_manager
   become: yes
   become_user: root
 

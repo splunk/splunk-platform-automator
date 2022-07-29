@@ -15,12 +15,12 @@
   roles:
     - license_master
 
-- name: setup cluster master role
-  hosts: role_cluster_master
+- name: setup cluster manager role
+  hosts: role_cluster_manager
   become: yes
   become_user: root
   roles:
-    - cluster_master
+    - cluster_manager
 
 - name: setup indexer role
   hosts: role_indexer

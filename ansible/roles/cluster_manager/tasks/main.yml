@@ -4,7 +4,7 @@
 - name: start role tasks
   tags:
     - splunk
-    - cluster_master
+    - cluster_manager
   debug:
     msg: "role '{{ role_name }}' start"
 
@@ -12,7 +12,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - cluster_master
+    - cluster_manager
     - org_cluster_manager_base
   include_role:
     name: baseconfig_app
@@ -25,7 +25,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - cluster_master
+    - cluster_manager
     - org_multisite_manager_base
   include_role:
     name: baseconfig_app
@@ -38,7 +38,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - cluster_master
+    - cluster_manager
     - org_all_deploymentclient
   include_role:
     name: baseconfig_app
@@ -51,7 +51,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - cluster_master
+    - cluster_manager
     - org_all_forwarder_outputs
   include_role:
     name: baseconfig_app
@@ -64,7 +64,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - cluster_master
+    - cluster_manager
     - org_all_search_base
     - web_ssl
   include_role:
@@ -76,7 +76,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - cluster_master
+    - cluster_manager
     - org_all_search_base
   include_role:
     name: baseconfig_app
@@ -89,7 +89,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - cluster_master
+    - cluster_manager
     - org_full_license_server
   include_role:
     name: baseconfig_app
@@ -102,7 +102,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - cluster_master
+    - cluster_manager
     - org_indexer_volume_indexes
   include_role:
     name: baseconfig_app
@@ -114,7 +114,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - cluster_master
+    - cluster_manager
     - org_all_indexes
   include_role:
     name: baseconfig_app
@@ -126,7 +126,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - cluster_master
+    - cluster_manager
     - org_s2_indexer_indexes
   include_role:
     name: baseconfig_app
@@ -139,7 +139,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - cluster_master
+    - cluster_manager
     - org_full_license_server
   include_role:
     name: baseconfig_app

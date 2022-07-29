@@ -25,18 +25,18 @@ ansible-playbook ansible/upgrade_splunk.yml --limit role_deployment_server
 ansible-playbook ansible/upgrade_splunk.yml --limit role_license_master
 ```
 
-### Upgrade the Cluster Master
+### Upgrade the Cluster Manager
 
 Check Indexer Cluster status
 
 ```
-ansible-playbook ansible/run_splunk_command.yml --limit role_cluster_master -e "splunk_command='show cluster-status --verbose'"
+ansible-playbook ansible/run_splunk_command.yml --limit role_cluster_manager -e "splunk_command='show cluster-status --verbose'"
 ```
 
 Note: Look for this line: Pre-flight check successful .................. YES
 
 ```
-ansible-playbook ansible/upgrade_splunk.yml --limit role_cluster_master
+ansible-playbook ansible/upgrade_splunk.yml --limit role_cluster_manager
 ```
 
 ### Upgrade the Monitoring Console

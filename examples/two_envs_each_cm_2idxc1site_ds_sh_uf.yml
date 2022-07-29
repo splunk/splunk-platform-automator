@@ -53,11 +53,11 @@ splunk_hosts:
     roles:
       - deployment_server
 
-  # Cluster Master
+  # Cluster Manager
   - name: cm1
     splunk_env: splk1
     roles:
-      - cluster_master
+      - cluster_manager
       - monitoring_console
       #- license_master
     idxcluster: idxc1
@@ -94,11 +94,11 @@ splunk_hosts:
     roles:
       - deployment_server
 
-  # Cluster Master
+  # Cluster Manager
   - name: cm2
     splunk_env: splk2
     roles:
-      - cluster_master
+      - cluster_manager
       - monitoring_console
       #- license_master
     idxcluster: idxc2

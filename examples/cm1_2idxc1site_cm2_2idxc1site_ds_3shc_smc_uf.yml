@@ -40,10 +40,10 @@ splunk_shclusters:
 
 # Splunk hosts with its settings
 splunk_hosts:
-  # Cluster Master
+  # Cluster Manager
   - name: cm1
     roles:
-      - cluster_master
+      - cluster_manager
       #- license_master
     idxcluster: idxc1
     site: site0
@@ -57,10 +57,10 @@ splunk_hosts:
     idxcluster: idxc1
     site: site1
 
-  # Cluster Master
+  # Cluster Manager
   - name: cm2
     roles:
-      - cluster_master
+      - cluster_manager
     idxcluster: idxc2
     site: site0
 

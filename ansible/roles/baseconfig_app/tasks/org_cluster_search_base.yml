@@ -55,7 +55,7 @@
     mode: 0600
   notify: restart splunk
 
-- name: "({{ app_name }}) remove {{splunk_clustermanager_var}}:two cluster master group"
+- name: "({{ app_name }}) remove {{splunk_clustermanager_var}}:two cluster manager group"
   tags:
     - splunk
     - splunk_baseconfig

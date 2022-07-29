@@ -34,12 +34,12 @@ splunk_shclusters:
 
 # Splunk hosts with its settings
 splunk_hosts:
-  # Cluster Master
+  # Cluster Manager
   - name: cm
     roles:
       - deployment_server
       - deployer
-      - cluster_master
+      - cluster_manager
       - monitoring_console
       #- license_master
     idxcluster: idxc1
