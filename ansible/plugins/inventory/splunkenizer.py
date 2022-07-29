@@ -222,10 +222,10 @@ class InventoryModule(BaseInventoryPlugin):
         # Check Base Config App availability
         cwd = os.getcwd()
         splunk_baseconfig_dir = os.path.join(cwd,self.groups['all']['splunk_baseconfig_dir'])
-        check_base = glob.glob(os.path.join(cwd,self.groups['all']['splunk_baseconfig_dir']+"/*/org_all_indexer_base"))
-        check_cluster = glob.glob(os.path.join(cwd,self.groups['all']['splunk_baseconfig_dir']+"/*/org_cluster_indexer_base"))
+        check_base = glob.glob(os.path.join(cwd,self.groups['all']['splunk_baseconfig_dir']+"/*/org_ds_secure_server"))
+        check_cluster = glob.glob(os.path.join(cwd,self.groups['all']['splunk_baseconfig_dir']+"/*/org_cluster_manager_base"))
         if len(check_base) < 1 or len(check_cluster) < 1:
-            raise AnsibleParserError('Error: Cannot find Splunk baseconfig apps mentioned in the README.md. Extract them under %s' % splunk_baseconfig_dir)
+            raise AnsibleParserError('Error: Cannot find the latest Splunk baseconfig apps mentioned in the README.md. Extract them under %s' % splunk_baseconfig_dir)
 
         # Create auth dir if not existing
         splunk_auth_dir = os.path.join(cwd,"ansible",self.groups['all']['splunk_auth_dir'])

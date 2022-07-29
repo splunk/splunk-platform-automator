@@ -1,0 +1,13 @@
+---
+# This playbook replaces master_uri -> manager_uri or vice versa
+
+- name: "({{ app_name }}) rename (master|manager)_uri to {{splunk_manager_uri_var}}"
+  tags:
+    - splunk
+    - splunk_baseconfig
+  replace:
+    path: "{{ splunk_file_to_change }}"
+    regexp: '(master|manager)_uri'
+    replace: "{{splunk_manager_uri_var}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"

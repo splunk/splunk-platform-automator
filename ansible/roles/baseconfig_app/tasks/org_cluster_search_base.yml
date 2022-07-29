@@ -1,7 +1,16 @@
 ---
 # This playbook install the base config app
 
-- name: "({{ app_name }}) setting clustering master_uri"
+- name: "call replace_master_uri"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_search_base
+  include_tasks: replace_master_uri.yml
+  vars:
+    splunk_file_to_change: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
+
+- name: "({{ app_name }}) setting mode"
   tags:
     - splunk
     - splunk_baseconfig
@@ -9,50 +18,68 @@
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
-    option: master_uri
-    value: "{% set comma = joiner(',') %}{% for peer in splunk_search_peer_idxc_list %}{{ comma() }}clustermaster:{{ peer }}{% endfor %}"
+    option: mode
+    value: searchhead
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+
+- name: "({{ app_name }}) setting clustering manager_uri"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_cluster_search_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
+    section: clustering
+    option: "{{splunk_manager_uri_var}}"
+    value: "{% set comma = joiner(',') %}{% for peer in splunk_search_peer_idxc_list %}{{ comma() }}{{splunk_clustermanager_var}}:{{ peer }}{% endfor %}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
   notify: restart splunk
   when: splunk_search_peer_idxc_list|length > 0
 
-- name: "({{ app_name }}) rename clustermaster:one"
+- name: "({{ app_name }}) rename {{splunk_clustermanager_var}}:one"
   tags:
     - splunk
     - splunk_baseconfig
     - org_cluster_search_base
   replace:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
-    regexp: '\[clustermaster:one\]'
-    replace: "[clustermaster:{{ splunk_search_peer_idxc_list|first }}]"
+    regexp: '\[cluster(master|manager):one\]'
+    replace: "[{{splunk_clustermanager_var}}:{{ splunk_search_peer_idxc_list|first }}]"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
   notify: restart splunk
 
-- name: "({{ app_name }}) remove clustermaster:two cluster master group"
+- name: "({{ app_name }}) remove {{splunk_clustermanager_var}}:two cluster master group"
   tags:
     - splunk
     - splunk_baseconfig
     - org_cluster_search_base
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
-    section: clustermaster:two
+    section: "{{item}}:two"
     state: absent
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
+  with_items:
+    - clustermaster
+    - clustermanager
   notify: restart splunk
 
-- name: "({{ app_name }}) setting pass4SymmKey for hashing on clustermaster stanza"
+- name: "({{ app_name }}) setting pass4SymmKey for hashing on {{splunk_clustermanager_var}} stanza"
   tags:
     - splunk
     - splunk_baseconfig
     - org_cluster_search_base
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
-    section: clustermaster:{{ item.key }}
+    section: "{{splunk_clustermanager_var}}:{{ item.key }}"
     option: pass4SymmKey
     value: "{{ hostvars[item.value]['idxc_password'] }}"
     owner: "{{splunk_user}}"
@@ -62,14 +89,14 @@
   with_dict: "{{ splunk_search_peer_idxc_list }}"
   when: app_local.stat.exists == false and app_path == splunk_home + '/etc/apps'
 
-- name: "({{ app_name }}) setting static unhashed pass4SymmKey on clustermaster stanza"
+- name: "({{ app_name }}) setting static unhashed pass4SymmKey on {{splunk_clustermanager_var}} stanza"
   tags:
     - splunk
     - splunk_baseconfig
     - org_cluster_search_base
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
-    section: clustermaster:{{ item.key }}
+    section: "{{splunk_clustermanager_var}}:{{ item.key }}"
     option: pass4SymmKey
     value: "{{ hostvars[item.value]['idxc_password'] }}"
     owner: "{{splunk_user}}"
@@ -79,15 +106,15 @@
   with_dict: "{{ splunk_search_peer_idxc_list }}"
   when: app_path != splunk_home + '/etc/apps'
 
-- name: "({{ app_name }}) setting master_uri in clustermaster stanza"
+- name: "({{ app_name }}) setting manager_uri in {{splunk_clustermanager_var}} stanza"
   tags:
     - splunk
     - splunk_baseconfig
     - org_cluster_search_base
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
-    section: clustermaster:{{ item.key }}
-    option: master_uri
+    section: "{{splunk_clustermanager_var}}:{{ item.key }}"
+    option: "{{splunk_manager_uri_var}}"
     value: "https://{{ item.value }}:8089"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
@@ -95,14 +122,14 @@
   notify: restart splunk
   with_dict: "{{ splunk_search_peer_idxc_list }}"
 
-- name: "({{ app_name }}) setting multisite on clustermaster stanza"
+- name: "({{ app_name }}) setting multisite on {{splunk_clustermanager_var}} stanza"
   tags:
     - splunk
     - splunk_baseconfig
     - org_cluster_search_base
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
-    section: clustermaster:{{ item.key }}
+    section: "{{splunk_clustermanager_var}}:{{ item.key }}"
     option: multisite
     value: "{% if hostvars[item.value]['idxc_available_sites']|default([])|length > 0 %}true{% else %}false{% endif %}"
     owner: "{{splunk_user}}"

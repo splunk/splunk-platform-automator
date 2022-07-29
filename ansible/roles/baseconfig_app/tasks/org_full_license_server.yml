@@ -1,7 +1,16 @@
 ---
 # This playbook install the base config app
 
-- name: "({{ app_name }}) setting license master_uri"
+- name: "call replace_master_uri"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_full_license_server
+  include_tasks: replace_master_uri.yml
+  vars:
+    splunk_file_to_change: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
+
+- name: "({{ app_name }}) setting license manager_uri"
   tags:
     - splunk
     - splunk_baseconfig
@@ -9,7 +18,7 @@
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: license
-    option: master_uri
+    option: "{{splunk_manager_uri_var}}"
     value: "https://{{splunk_license_master|first}}:8089"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"

@@ -8,29 +8,29 @@
   debug:
     msg: "role '{{ role_name }}' start"
 
-- name: apply baseconfig app org_cluster_master_base
+- name: apply baseconfig app org_cluster_manager_base
   tags:
     - splunk
     - splunk_baseconfig
     - cluster_master
-    - org_cluster_master_base
+    - org_cluster_manager_base
   include_role:
     name: baseconfig_app
   vars:
-    app_name: 'org_cluster_master_base'
+    app_name: 'org_cluster_manager_base'
     app_path: '{{splunk_home}}/etc/apps'
   when: site is not defined
 
-- name: apply baseconfig app org_multisite_master_base
+- name: apply baseconfig app org_multisite_manager_base
   tags:
     - splunk
     - splunk_baseconfig
     - cluster_master
-    - org_multisite_master_base
+    - org_multisite_manager_base
   include_role:
     name: baseconfig_app
   vars:
-    app_name: 'org_multisite_master_base'
+    app_name: 'org_multisite_manager_base'
     app_path: '{{splunk_home}}/etc/apps'
   when: site is defined
 

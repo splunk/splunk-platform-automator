@@ -92,6 +92,11 @@ splunk_idxc_name_list: >-
            {%- endfor -%}
            {{ res|unique }}
 splunk_idxc_indexer_list: "{{ groups.role_indexer|default([])|intersect(splunk_idxc_all_host_list|default([]))|intersect(groups['splunk_env_'+splunk_env_name]) }}"
+splunk_manager_uri_var: "{%- if splunk_installed_version is version_compare('9.0', '>=') -%}manager_uri{%- else -%}master_uri{%- endif -%}"
+splunk_clustermanager_var: "{%- if splunk_installed_version is version_compare('9.0', '>=') -%}clustermanager{%- else -%}clustermaster{%- endif -%}"
+splunk_cluster_manager_mode: "{%- if splunk_installed_version is version_compare('9.0', '>=') -%}manager{%- else -%}master{%- endif -%}"
+splunk_cluster_peer_mode: "{%- if splunk_installed_version is version_compare('9.0', '>=') -%}peer{%- else -%}slave{%- endif -%}"
+
 
 # Multisite Indexer Cluster
 splunk_idxc_available_sites: "{{ idxc_available_sites|default([])|join(',') }}"

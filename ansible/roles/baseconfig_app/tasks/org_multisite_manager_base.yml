@@ -5,7 +5,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - org_multisite_master_base
+    - org_multisite_manager_base
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: general
@@ -20,7 +20,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - org_multisite_master_base
+    - org_multisite_manager_base
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
@@ -35,7 +35,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - org_multisite_master_base
+    - org_multisite_manager_base
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
@@ -50,7 +50,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - org_multisite_master_base
+    - org_multisite_manager_base
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
@@ -66,7 +66,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - org_multisite_master_base
+    - org_multisite_manager_base
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
@@ -82,7 +82,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - org_multisite_master_base
+    - org_multisite_manager_base
   shell: "{{ splunk_home }}/bin/splunk btool server list clustering | grep -w replication_factor | cut -d= -f 2"
   check_mode: no
   changed_when: false
@@ -94,7 +94,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - org_multisite_master_base
+    - org_multisite_manager_base
   shell: "{{ splunk_home }}/bin/splunk btool server list clustering | grep -w search_factor | cut -d= -f 2"
   check_mode: no
   changed_when: false
@@ -106,7 +106,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - org_multisite_master_base
+    - org_multisite_manager_base
   fail:
     msg: "replication_factor ({{replication_factor.stdout|int}}) must be equal to search_factor ({{search_factor.stdout|int}}) when using SmartStore"
   when: 
@@ -118,7 +118,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - org_multisite_master_base
+    - org_multisite_manager_base
   vars:
     site_replication_factor: "{% for rfval in splunk_idxc_site_rf.split(',') %}{% if 'total' in rfval %}{{ rfval.split(':')|last }}{% endif %}{% endfor %}"
   ini_file:
@@ -136,7 +136,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - org_multisite_master_base
+    - org_multisite_manager_base
   shell: "{{ splunk_home }}/bin/splunk btool server list clustering | grep -w search_factor | cut -d= -f 2"
   check_mode: no
   changed_when: false
@@ -149,7 +149,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - org_multisite_master_base
+    - org_multisite_manager_base
   vars:
     site_search_factor: "{% for rfval in splunk_idxc_site_sf.split(',') %}{% if 'total' in rfval %}{{ rfval.split(':')|last }}{% endif %}{% endfor %}"
   ini_file:
@@ -167,7 +167,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - org_multisite_master_base
+    - org_multisite_manager_base
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
@@ -182,7 +182,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - org_multisite_master_base
+    - org_multisite_manager_base
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
@@ -197,7 +197,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - org_multisite_master_base
+    - org_multisite_manager_base
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
@@ -213,7 +213,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - org_multisite_master_base
+    - org_multisite_manager_base
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: indexer_discovery
@@ -229,7 +229,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-    - org_cluster_master_base
+    - org_cluster_manager_base
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering

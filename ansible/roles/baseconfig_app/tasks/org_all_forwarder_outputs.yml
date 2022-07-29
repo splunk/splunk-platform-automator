@@ -1,6 +1,15 @@
 ---
 # This playbook install the base config app
 
+- name: "call replace_master_uri"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_forwarder_outputs
+  include_tasks: replace_master_uri.yml
+  vars:
+    splunk_file_to_change: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+
 - name: "({{ app_name }}) setting defaultGroup value"
   tags:
     - splunk
@@ -112,7 +121,7 @@
   with_items: "{{ splunk_outputs_discovery_idxc_list }}"
   when: splunk_outputs_discovery_idxc_list|length > 0
 
-- name: "({{ app_name }}) setting indexer discovery master_uri"
+- name: "({{ app_name }}) setting indexer discovery manager_uri"
   tags:
     - splunk
     - splunk_baseconfig
@@ -120,7 +129,7 @@
   ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     section: indexer_discovery:{{ item.idxc_name+'_indexers' }}
-    option: master_uri
+    option: "{{splunk_manager_uri_var}}"
     value: "https://{{item.master }}:8089"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
