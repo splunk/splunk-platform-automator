@@ -1,6 +1,21 @@
 ---
 # This playbook install the base config app
 
+- name: "({{ app_name }}) setting mode"
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_multisite_manager_base
+  ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
+    section: clustering
+    option: mode
+    value: "{{splunk_cluster_manager_mode}}"
+    owner: "{{splunk_user}}"
+    group: "{{splunk_group}}"
+    mode: 0600
+  notify: restart splunk
+
 - name: "({{ app_name }}) setting cluster manager site"
   tags:
     - splunk
