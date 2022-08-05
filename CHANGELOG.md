@@ -1,4 +1,4 @@
-# Splunk Automator changes by release
+# Splunk Platform Automator changes by release
 
 All notable changes to this project will be documented in this file.
 
