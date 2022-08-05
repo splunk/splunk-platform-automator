@@ -1,6 +1,6 @@
-# Splunk Automator 2.2.0-devel
+# Splunk Platform Automator 2.2.0-devel
 
-![Splunk Automator Overview](https://github.com/splunk/splunk-automator/blob/master/pic/splunk-automator_overview.png)
+![Splunk Platform Automator Overview](https://github.com/splunk/splunk-automator/blob/master/pic/splunk-automator_overview.png)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](#license)
 
@@ -8,7 +8,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
 
 ## Table of Contents
 
-- [Splunk Automator 2.2.0-devel](#splunk-automator-220-devel)
+- [Splunk Platform Automator 2.2.0-devel](#splunk-platform-automator-220-devel)
   - [Table of Contents](#table-of-contents)
 - [Support](#support)
 - [Features](#features)
@@ -23,7 +23,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
       - [Inbound Rules](#inbound-rules)
       - [Outbound Rules](#outbound-rules)
 - [Upgrade](#upgrade)
-  - [Migrate existing Splunk Automator Environments from 1.x to 2.x](#migrate-existing-splunk-automator-environments-from-1x-to-2x)
+  - [Migrate existing Splunk Platform Automator Environments from 1.x to 2.x](#migrate-existing-splunk-platform-automator-environments-from-1x-to-2x)
     - [Migrate splunk_config.yml](#migrate-splunk_configyml)
     - [Migrate Virtualbox Environments](#migrate-virtualbox-environments)
     - [Migrate AWS Environments](#migrate-aws-environments)
@@ -92,7 +92,7 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 2. Download and install [Vagrant](https://www.vagrantup.com).
 3. Install Ansible, I personally prefer [Brew](https://brew.sh) (on OSX) which makes it as easy as `brew install ansible`. For [supported Ansible versions check here](#supported-ansible-versions)
 4. Create a folder called `Vagrant` and change into it.
-5. Download and extract a [Splunk Automator release here](https://github.com/splunk/splunk-automator/tags) or clone from GitHub when using the master branch: `git clone https://github.com/splunk/splunk-automator.git`
+5. Download and extract a [Splunk Platform Automator release here](https://github.com/splunk/splunk-automator/tags) or clone from GitHub when using the master branch: `git clone https://github.com/splunk/splunk-automator.git`
 6. Create a folder called `Software`.
 7. Download the tgz. archive for the Splunk Software and put in the `Software` directory
    1. [Splunk Enterprise](http://www.splunk.com/en_us/download/splunk-enterprise.html)
@@ -120,7 +120,7 @@ Your directory structure should now look like this:
 
 ## Setup Windows Subsystem for Linux (WSL2)
 
-The [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10) does allow to run Splunk Automator on Windows. It even allows to create virtualbox hosts from it on the windows host directly.
+The [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10) does allow to run Splunk Platform Automator on Windows. It even allows to create virtualbox hosts from it on the windows host directly.
 
 Execute the steps [above](#framework-installation). To allow vagrant to talk to virtualbox follow the steps below.
 
@@ -168,15 +168,15 @@ export PATH="$PATH:/mnt/c/Program Files/Oracle/VirtualBox"
 
 # Upgrade
 
-To upgrade your Splunk Automator, just update your local code from the repo
+To upgrade your Splunk Platform Automator, just update your local code from the repo
 
 ```
 git pull
 ```
 
-## Migrate existing Splunk Automator Environments from 1.x to 2.x
+## Migrate existing Splunk Platform Automator Environments from 1.x to 2.x
 
-From Splunk Automator 2.0 the Framework does use an [Ansible Inventory Plugin](https://docs.ansible.com/ansible/latest/plugins/inventory.html) to build the inventory on the fly during execution. The local `inventory` directory does only hold minimum settings based on the virtualization you choose. The rest calculated in flight and not stored somewhere.
+From Splunk Platform Automator 2.0 the Framework does use an [Ansible Inventory Plugin](https://docs.ansible.com/ansible/latest/plugins/inventory.html) to build the inventory on the fly during execution. The local `inventory` directory does only hold minimum settings based on the virtualization you choose. The rest calculated in flight and not stored somewhere.
 
 You can verify your inventory with
 ```
@@ -243,7 +243,7 @@ rm -rf inventory/*
 
 # Removed Biased Language
 
-With Splunk 9.x some configuration terms have been renamed and are considered deprecated. The Base Config Apps habe been changed and need to be updated and some apps have been renamed. Please download the latest version. The Splunk Automator Framework does taking care of this automatically when Splunk version 9.x or higher is installed. Existing installation are working as is but the settings should be changed manually in the apps.
+With Splunk 9.x some configuration terms have been renamed and are considered deprecated. The Base Config Apps habe been changed and need to be updated and some apps have been renamed. Please download the latest version. The Splunk Platform Automator Framework does taking care of this automatically when Splunk version 9.x or higher is installed. Existing installation are working as is but the settings should be changed manually in the apps.
 
 Those settings have been changed:
 - server.conf[clustering]
@@ -267,7 +267,7 @@ To build your own windows vagrant image follow [Setup Windows Vagrant image](doc
 
 ## First start and initialization
 
-Run vagrant the first time to initialize itself and create needed directories. You must execute vagrant always in side the Splunk Automator directory where the `Vagrantfile` sits, otherwise it will not work correctly. You will see the usage page, when executing vagrant without options.
+Run vagrant the first time to initialize itself and create needed directories. You must execute vagrant always in side the Splunk Platform Automator directory where the `Vagrantfile` sits, otherwise it will not work correctly. You will see the usage page, when executing vagrant without options.
 
 ```
 cd splunk-automator
@@ -378,7 +378,7 @@ vagrant scp ../app_dir/splunk-add-on-for-unix-and-linux_831.tgz /var/tmp uf
 
 ## Deploying on Amazon Cloud
 
-Splunk Automator can talk to the AWS cloud and create virtual machines with Splunk in the cloud. Vagrant is using the plugin [vagrant-aws](https://github.com/mitchellh/vagrant-aws) for that. Follow these steps to setup Splunk Automator for AWS. In the example there is a simple network setup, with only one Security group, covering all ports. More complex network setups should be possible, but make sure the host, where Splunk Automator is running does have ssh access to all instances.
+Splunk Platform Automator can talk to the AWS cloud and create virtual machines with Splunk in the cloud. Vagrant is using the plugin [vagrant-aws](https://github.com/mitchellh/vagrant-aws) for that. Follow these steps to setup Splunk Platform Automator for AWS. In the example there is a simple network setup, with only one Security group, covering all ports. More complex network setups should be possible, but make sure the host, where Splunk Platform Automator is running does have ssh access to all instances.
 
 To prepare the configuration file for Amazon deployments
 
@@ -452,7 +452,7 @@ python -m pip install ansible==4.9.0 # to have a certain version
 
 ### Install needed python libraries
 
-You must install some additional modules for Splunk Automator to work
+You must install some additional modules for Splunk Platform Automator to work
 
 ```
 python -m pip install jmespath # required for json_query calls
@@ -482,11 +482,11 @@ source ansible_490/bin/activate
 - Virtualbox: Virtual host startup does not respond sometimes, if it fails, recreate the host again.
 - Virtualbox has some issues with clock time skew, when not using virtualbox additions. I added a workaround with forcing time clock sync every 5 minutes. A working internet connection on the Virtualbox host is needed.
 - AWS: Due to security reasons the login page with the admin password information has been disabled and https is enabled with splunk's own self signed certs.
-- AWS: OS images (AMI) do not have ntp configured by default. This will be added in Splunk Automator later.
+- AWS: OS images (AMI) do not have ntp configured by default. This will be added in Splunk Platform Automator later.
 
 ## Supported Ansible Versions
 
-The following Ansible versions are tested and working with Splunk Automator, but any newer version should work as well.
+The following Ansible versions are tested and working with Splunk Platform Automator, but any newer version should work as well.
 
 :white_check_mark: Ansible 2.7.x
 :white_check_mark: Ansible 2.8.x
