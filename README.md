@@ -1,6 +1,6 @@
 # Splunk Platform Automator 2.2.0-devel
 
-![Splunk Platform Automator Overview](https://github.com/splunk/splunk-automator/blob/master/pic/splunk-automator_overview.png)
+![Splunk Platform Automator Overview](https://github.com/splunk/splunk-automator/blob/master/pic/splunk-platform-automator_overview.png)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](#license)
 
