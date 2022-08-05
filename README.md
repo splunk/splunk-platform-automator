@@ -54,7 +54,6 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
     - [Install needed python libraries](#install-needed-python-libraries)
 - [Known issues, limitations](#known-issues-limitations)
   - [Supported Ansible Versions](#supported-ansible-versions)
-- [Authors](#authors)
 - [License](#license)
 
 # Support
@@ -495,10 +494,6 @@ The following Ansible versions are tested and working with Splunk Automator, but
 :white_check_mark: Ansible 2.10.x
 :white_check_mark: Ansible 2.11.x
 :white_check_mark: Ansible 2.12.x
-
-# Authors
-
-Splunk Automator is created by [Marco Stadler](https://github.com/splunkenizer) - a passionate Splunker.
 
 # License
 
