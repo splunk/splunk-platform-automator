@@ -114,13 +114,6 @@ elsif settings.has_key?("aws")
   aws = YAML.load_file(File.join(defaults_dir,"aws.yml"))
   defaults['aws'] = aws['aws']
   stanza_merge_list.append(provider)
-  # Read access keys from environment variable, if not spcified in settings
-  if !defaults['aws'].has_key?("access_key_id")
-    defaults['aws']['access_key_id'] = ENV['AWS_ACCESS_KEY_ID']
-  end
-  if !defaults['aws'].has_key?("secret_access_key")
-    defaults['aws']['secret_access_key'] = ENV['AWS_SECRET_ACCESS_KEY']
-  end
   if !Vagrant.has_plugin?("vagrant-aws")
     print "ERROR: Plugin for AWS provider missing, install with 'vagrant plugin install vagrant-aws'.\n"
     exit 2
@@ -163,6 +156,19 @@ if provider == "aws"
     splunkenizerID = SecureRandom.uuid
   else
     aws_ec2['filters']['tag:SplunkEnvID'] = splunkenizerID
+  end
+  # Read access keys from environment variable, if not spcified in settings
+  if aws_merged.has_key?("access_key_id")
+    aws_ec2['aws_access_key'] = aws_merged['access_key_id']
+  else
+    defaults['aws']['access_key_id'] = ENV['AWS_ACCESS_KEY_ID']
+    aws_ec2.delete('aws_access_key')
+  end
+  if aws_merged.has_key?("secret_access_key")
+    aws_ec2['aws_secret_key'] = aws_merged['secret_access_key']
+  else
+    defaults['aws']['secret_access_key'] = ENV['AWS_SECRET_ACCESS_KEY']
+    aws_ec2.delete('aws_secret_key')
   end
   aws_ec2['plugin'] = 'aws_ec2'
   aws_ec2['regions'] = [].append(aws_merged['region'])
