@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 - Removed biased language and use new manager/peer terms from 9.0.0 on
 - Transfered the project to the Splunk Organization
-- Renamed the project from splunkenizer to splunk-automator
+- Renamed the project from splunkenizer to splunk-platform-automator
 
 ### Added
 
@@ -20,7 +20,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 - Fixed usage of AWS key/secret in splunk_config.yml
 
-## [2.1.0](https://github.com/splunk/splunk-automator/tag/v2.1.0) - 2022-03-05
+## [2.1.0](https://github.com/splunk/splunk-platform-automator/tag/v2.1.0) - 2022-03-05
 
 ### Changed
 
@@ -57,7 +57,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - Follow symlinks during Splunk archive extraction
 - Fixed SPLUNK_HOME ownership, when having it linked to another directory
 
-## [2.0.0](https://github.com/splunk/splunk-automator/tag/v2.0.0) - 2021-07-27
+## [2.0.0](https://github.com/splunk/splunk-platform-automator/tag/v2.0.0) - 2021-07-27
 
 ### Changed
 
@@ -85,7 +85,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - Removed dependency to vagrant (Although vagrant does still work!)
 - Removed usage of `vagrant-hostmanager` plugin. This plugin can be removed.
 
-## [1.3.0](https://github.com/splunk/splunk-automator/tag/v1.3.0) - 2021-04-11
+## [1.3.0](https://github.com/splunk/splunk-platform-automator/tag/v1.3.0) - 2021-04-11
 
 ### Changed
 
@@ -124,7 +124,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - Fixed issue: Special characters in Splunk password #6
 - Added workaround for bug in vagrant-aws with vagrant 2.2.7
 
-## [1.2](https://github.com/splunk/splunk-automator/tag/v1.2) - 2019-06-02
+## [1.2](https://github.com/splunk/splunk-platform-automator/tag/v1.2) - 2019-06-02
 
 ### Added
 
@@ -160,7 +160,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - Fixed some base_config installations on single node configs with additional roles
 - Disable time sync cron for AWS by default
 
-## [1.1.1](https://github.com/splunk/splunk-automator/tag/v1.1.1) - 2018-10-18
+## [1.1.1](https://github.com/splunk/splunk-platform-automator/tag/v1.1.1) - 2018-10-18
 
 ### Changed
 
@@ -171,7 +171,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - Fixed SHC setup for Splunk 7.2
 - Fixed updating the index.html, after restart AWS instances
 
-## [1.1](https://github.com/splunk/splunk-automator/tag/v1.1) - 2018-10-08
+## [1.1](https://github.com/splunk/splunk-platform-automator/tag/v1.1) - 2018-10-08
 
 ### Added
 
@@ -190,7 +190,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - Removed Deployment Server from serverclasses whitelists
 - Do not install splk_all_forwarder_outputs on a single box, when adding LM, MC roles
 
-## [1.0](https://github.com/splunk/splunk-automator/tag/v1.0) - 2018-05-21
+## [1.0](https://github.com/splunk/splunk-platform-automator/tag/v1.0) - 2018-05-21
 
 ### Added
 
@@ -215,7 +215,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - Added missing org_search_volume_indexes to DS
 - Added org_all_search_base to all roles with web enabled
 
-## [0.9](https://github.com/splunk/splunk-automator/tag/v0.9) - 2018-02-09
+## [0.9](https://github.com/splunk/splunk-platform-automator/tag/v0.9) - 2018-02-09
 
 ### Added
 
@@ -250,7 +250,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - volume and indexes should be deployed to single search head (create serverclass)
 - org_all_forwarder_outputs should output to all indexers. does only use first cluster in multicluster config
 
-## [0.8](https://github.com/splunk/splunk-automator/tag/v0.8) - 2017-11-12
+## [0.8](https://github.com/splunk/splunk-platform-automator/tag/v0.8) - 2017-11-12
 
 - Check for site affinity in search head clusters
 - Install path /opt changeable

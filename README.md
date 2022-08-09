@@ -1,6 +1,6 @@
 # Splunk Platform Automator 2.2.0-devel
 
-![Splunk Platform Automator Overview](https://github.com/splunk/splunk-automator/blob/master/pic/splunk-platform-automator_overview.png)
+![Splunk Platform Automator Overview](https://github.com/splunk/splunk-platform-automator/blob/master/pic/splunk-platform-automator_overview.png)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](#license)
 
@@ -92,7 +92,7 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 2. Download and install [Vagrant](https://www.vagrantup.com).
 3. Install Ansible, I personally prefer [Brew](https://brew.sh) (on OSX) which makes it as easy as `brew install ansible`. For [supported Ansible versions check here](#supported-ansible-versions)
 4. Create a folder called `Vagrant` and change into it.
-5. Download and extract a [Splunk Platform Automator release here](https://github.com/splunk/splunk-automator/tags) or clone from GitHub when using the master branch: `git clone https://github.com/splunk/splunk-automator.git`
+5. Download and extract a [Splunk Platform Automator release here](https://github.com/splunk/splunk-platform-automator/tags) or clone from GitHub when using the master branch: `git clone https://github.com/splunk/splunk-platform-automator.git`
 6. Create a folder called `Software`.
 7. Download the tgz. archive for the Splunk Software and put in the `Software` directory
    1. [Splunk Enterprise](http://www.splunk.com/en_us/download/splunk-enterprise.html)
@@ -105,7 +105,7 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 Your directory structure should now look like this:
 
 ```
-./Vagrant/splunk-automator/...
+./Vagrant/splunk-platform-automator/...
 ./Vagrant/Software/Configurations - Base/...
 ./Vagrant/Software/Configurations - Index Replication/...
 ./Vagrant/Software/splunk-8.1.2-545206cc9f70-Linux-x86_64.tgz
@@ -270,7 +270,7 @@ To build your own windows vagrant image follow [Setup Windows Vagrant image](doc
 Run vagrant the first time to initialize itself and create needed directories. You must execute vagrant always in side the Splunk Platform Automator directory where the `Vagrantfile` sits, otherwise it will not work correctly. You will see the usage page, when executing vagrant without options.
 
 ```
-cd splunk-automator
+cd splunk-platform-automator
 vagrant
 ```
 
@@ -332,7 +332,7 @@ ansible-playbook ansible/deploy_site.yml [--limit <hostname>]
 
 ### Login to Splunk Browser Interface
 
-To login to one of the hosts just open the `index.html` file created in the splunk-automator/config directory. You will find links to every role of your deployment.
+To login to one of the hosts just open the `index.html` file created in the splunk-platform-automator/config directory. You will find links to every role of your deployment.
 If something changes along the way and you need to update the linkpage just call this playbook:
 
 ```
