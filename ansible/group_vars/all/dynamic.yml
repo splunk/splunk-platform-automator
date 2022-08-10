@@ -6,7 +6,7 @@
 splunk_software: "{% if splunk_software_dir | regex_search('^/') %}{{ splunk_software_dir }}{% else %}{{ playbook_dir }}/../{{ splunk_software_dir }}{% endif %}"
 
 # Baseconfig apps directory
-splunk_baseconfig: "{% if splunk_baseconfig_dir | regex_search('^/') %}{{ plunk_baseconfig_dir }}{% else %}{{ playbook_dir }}/../{{ splunk_baseconfig_dir }}{% endif %}"
+splunk_baseconfig: "{% if splunk_baseconfig_dir | regex_search('^/') %}{{ splunk_baseconfig_dir }}{% else %}{{ playbook_dir }}/../{{ splunk_baseconfig_dir }}{% endif %}"
 splunk_app_prefix: "{{ splunk_env_name|default('splunk') }}"
 
 # Splunk hostnames with ip_addr
