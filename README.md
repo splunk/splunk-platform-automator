@@ -190,7 +190,7 @@ The steps here apply to all environments.
 - You have to add the `plugin` setting to the top of your config file
 ```
 # splunk_config.yml
-plugin: splunkenizer
+plugin: splunk-platform-automator
 ```
 
 ### Migrate Virtualbox Environments

@@ -1,6 +1,6 @@
 # -*- mode: ruby -*-
 #
-# This file is part of Splunkenizer
+# This file is part of Splunk Platform Automator
 #
 ###############################################################################
 # Copyright 2021 Marco Stadler
@@ -137,7 +137,7 @@ if provider == "aws"
     settings['aws'] = {}
   end
   aws_merged = defaults['aws'].merge(settings['aws'])
-  splunkenizerID = "undef"
+  splunkPlatformAutomatorID = "undef"
   aws_ec2 = false
   if File.file?(File.join(config_dir, "aws_ec2.yml"))
     aws_ec2 = YAML.load_file(File.join(config_dir, "aws_ec2.yml"))
@@ -147,15 +147,15 @@ if provider == "aws"
   end
   if aws_ec2.has_key?("filters")
     if aws_ec2['filters'].has_key?("tag:SplunkEnvID")
-      splunkenizerID = aws_ec2['filters']['tag:SplunkEnvID']
+      splunkPlatformAutomatorID = aws_ec2['filters']['tag:SplunkEnvID']
     end
   else
     aws_ec2['filters'] = {}
   end
-  if splunkenizerID == "undef"
-    splunkenizerID = SecureRandom.uuid
+  if splunkPlatformAutomatorID == "undef"
+    splunkPlatformAutomatorID = SecureRandom.uuid
   else
-    aws_ec2['filters']['tag:SplunkEnvID'] = splunkenizerID
+    aws_ec2['filters']['tag:SplunkEnvID'] = splunkPlatformAutomatorID
   end
   # Read access keys from environment variable, if not spcified in settings
   if aws_merged.has_key?("access_key_id")
@@ -172,7 +172,7 @@ if provider == "aws"
   end
   aws_ec2['plugin'] = 'aws_ec2'
   aws_ec2['regions'] = [].append(aws_merged['region'])
-  aws_ec2['filters']['tag:SplunkEnvID'] = splunkenizerID
+  aws_ec2['filters']['tag:SplunkEnvID'] = splunkPlatformAutomatorID
   aws_ec2['hostnames'] = [].append("tag:SplunkHostname")
   aws_ec2['compose'] = {}.update('ansible_host'=>'public_dns_name')
   aws_ec2['compose']['ip_addr'] = 'private_ip_address'
@@ -246,7 +246,7 @@ settings['splunk_hosts'].each do |splunk_host|
       end
       aws_tags['Name'] = hostname
       aws_tags['SplunkHostname'] = hostname
-      aws_tags['SplunkEnvID'] = splunkenizerID
+      aws_tags['SplunkEnvID'] = splunkPlatformAutomatorID
       if special_host_vars[hostname]['aws']['tags'].nil?
         special_host_vars[hostname]['aws']['tags'] = aws_tags
       else
