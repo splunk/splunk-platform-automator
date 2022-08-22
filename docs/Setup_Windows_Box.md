@@ -28,7 +28,7 @@ winrm set winrm/config/service/auth @{Basic="true"}
 Package the image
 
 ```
-vagrant package --base "Windows 10 (Vagrant Template)" --output /var/tmp/windows.box --vagrantfile Vagrant/Splunkenizer/template/Vagrantfile_windows
+vagrant package --base "Windows 10 (Vagrant Template)" --output /var/tmp/windows.box --vagrantfile Vagrant/SplunkPlatformAutomator/template/Vagrantfile_windows
 ```
 
 Add the new Windows image to vagrant

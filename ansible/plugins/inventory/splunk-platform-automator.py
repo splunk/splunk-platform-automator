@@ -18,15 +18,15 @@ __metaclass__ = type
 ###############################################################################
 
 DOCUMENTATION = r'''
-    name: splunkenizer
+    name: splunk-platform-automator
     plugin_type: inventory
-    short_description: Returns Ansible inventory from Splunkenizer config file
-    description: Returns Ansible inventory from Splunkenizer config file
+    short_description: Returns Ansible inventory from Splunk Platform Automator config file
+    description: Returns Ansible inventory from Splunk Platform Automator config file
     options:
         plugin:
             description: Name of the plugin
             required: true
-            choices: ['splunkenizer']
+            choices: ['splunk-platform-automator']
         general:
             description: general settings
             type: dictionary
@@ -91,7 +91,7 @@ from pathlib import Path
 from collections import abc
 
 class InventoryModule(BaseInventoryPlugin):
-    NAME = 'splunkenizer'
+    NAME = 'splunk-platform-automator'
 
     def verify_file(self, path):
         '''Return true/false if this is possibly a valid file for this plugin to consume'''
@@ -99,8 +99,8 @@ class InventoryModule(BaseInventoryPlugin):
         if super(InventoryModule, self).verify_file(path):
             # base class verifies that file exists and is readable by current user
             if path.endswith(('splunk_config.yml',
-                              'splunkenizer_inventory.yml',
-                              'splunkenizer_inventory.yaml')):
+                              'splunk-platform-automator_inventory.yml',
+                              'splunk-platform-automator_inventory.yaml')):
                 valid = True
         return valid
 

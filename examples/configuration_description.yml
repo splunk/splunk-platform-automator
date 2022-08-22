@@ -1,6 +1,6 @@
 ---
 # splunk_config.yml
-plugin: splunkenizer
+plugin: splunk-platform-automator
 
 ######################################################################
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -155,7 +155,7 @@ splunk_defaults:
     coldPath: cold
 
   # Enable SSL for web, inputs and outputs. Own certs can be provided and have to be put
-  # inside Splunkenizer/auth directory. If own_certs=false the Splunk internal self-signed
+  # inside splunk-platform-automator/auth directory. If own_certs=false the Splunk internal self-signed
   # ones are used.
   splunk_ssl:
     web:

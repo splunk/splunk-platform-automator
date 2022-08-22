@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- Changed code to reflect new name as splunk-platform-automator
 - Removed biased language and use new manager/peer terms from 9.0.0 on
 - Transfered the project to the Splunk Organization
 - Renamed the project from splunkenizer to splunk-platform-automator
