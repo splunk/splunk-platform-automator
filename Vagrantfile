@@ -3,7 +3,7 @@
 # This file is part of Splunk Platform Automator
 #
 ###############################################################################
-# Copyright 2021 Marco Stadler
+# Copyright 2022 Splunk Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
