@@ -185,6 +185,7 @@
     - inventory_hostname == splunk_shc_host_list|last
     - shcluster_status.changed == true
 
+# Add single indexers as search peers
 - include_tasks: search_peers.yml
 
 - name: call update_dserver from role monitoring_console

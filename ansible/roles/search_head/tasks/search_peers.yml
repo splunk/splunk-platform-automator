@@ -1,5 +1,5 @@
 ---
-# This playbook install the apps required in a server
+# This playbook adds single indexers as search peers
 
 - name: get list of current distributedSearch peers (single indexers)
   tags:
@@ -8,14 +8,24 @@
     - search_head
     - search_peer
   # Same command is in monitoring_console/tasks/dserver.yml
-  shell: sed -n '/^\[distributedSearch\]$/,+1p' {{ splunk_home }}/etc/system/local/distsearch.conf | grep servers | awk -F= '{print $2}' | sed -e 's%https\://%%g' -e 's/\:[0-9]*//g' | tr -d " "
-  become: yes
-  become_user: "{{ splunk_user }}"
-  check_mode: no
-  changed_when: false
+  include_role:
+    name: splunk_software
+    tasks_from: splunk_rest
+  vars:
+    splunk_rest_endpoint: /services/search/distributed/peers
   register: current_dservers
-  args:
-    warn: false
+
+- name: create current_dservers list
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - monitoring_console
+    - dserver
+    - splunk_rest
+  set_fact:
+    current_dservers: "{{ splunk_rest_json_output | json_query(jmesquery) | map('regex_replace', ':\\d+$', '') }}"
+  vars:
+    jmesquery: "entry[*].name"
 
 - name: adding new distributedSearch peer (single indexers)
   tags:
@@ -25,7 +35,7 @@
     - search_peer
   command: "{{ splunk_home }}/bin/splunk add search-server {{ item }}:8089 -remoteUsername admin -remotePassword {{splunk_admin_password}} -auth admin:{{splunk_admin_password}}"
   with_items:
-    - "{{ splunk_search_peer_idx_list | difference(current_dservers.stdout.split(',')|list) }}"
+    - "{{ splunk_search_peer_idx_list | difference(current_dservers) }}"
   become: yes
   become_user: "{{ splunk_user }}"
-  when: "splunk_search_peer_idx_list|difference(current_dservers.stdout.split(',')|list)|length > 0"
+  when: "splunk_search_peer_idx_list|difference(current_dservers)|length > 0"

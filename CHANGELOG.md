@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - Fixed usage of AWS key/secret in splunk_config.yml
+- Fixed 'Unsupported parameters' for command in newer ansible versions
 
 ## [2.1.0](https://github.com/splunk/splunk-platform-automator/tag/v2.1.0) - 2022-03-05
 
