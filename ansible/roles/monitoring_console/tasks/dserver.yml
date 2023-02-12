@@ -8,14 +8,23 @@
     - monitoring_console
     - dserver
   # Same command is in search_head/tasks/search_peers.yml
-  shell: sed -n '/^\[distributedSearch\]$/,+1p' {{ splunk_home }}/etc/system/local/distsearch.conf | grep servers | awk -F= '{print $2}' | sed -e 's%https\://%%g' -e 's/\:[0-9]*//g' | tr -d " "
-  become: yes
-  become_user: "{{ splunk_user }}"
-  check_mode: no
-  changed_when: false
-  register: current_dservers
-  args:
-    warn: false
+  include_role:
+    name: splunk_software
+    tasks_from: splunk_rest
+  vars:
+    splunk_rest_endpoint: /services/search/distributed/peers
+
+- name: create current_dservers list
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - monitoring_console
+    - dserver
+    - splunk_rest
+  set_fact:
+    current_dservers: "{{ splunk_rest_json_output | json_query(jmesquery) | map('regex_replace', ':\\d+$', '') }}"
+  vars:
+    jmesquery: "entry[*].name"
 
 - name: call add_dserver
   tags:
@@ -25,7 +34,7 @@
     - dserver
   include_tasks: add_dserver.yml
   with_items:
-    - "{{ splunk_dservers | difference(current_dservers.stdout.split(',')|list) }}"
+    - "{{ splunk_dservers | difference(current_dservers) }}"
   loop_control:
     loop_var: dserver_name
-  when: "splunk_dservers|difference(current_dservers.stdout.split(',')|list)|length > 0"
+  when: "splunk_dservers|difference(current_dservers)|length > 0"
