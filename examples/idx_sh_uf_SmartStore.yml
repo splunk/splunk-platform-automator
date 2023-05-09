@@ -43,6 +43,8 @@ splunk_defaults:
     s2volume:
       path: "s3://<your_s3_bucketname>/<subfolder>"
       storageType: remote
+      # TSIDX compression with Splunk 9.0+ 
+      #remote.s3.tsidx_compression: true
 
   splunk_volume_defaults:
     VolumeDataSize_Free_MB: 800 # Will calculate maxVolumeDataSizeMB as 'fs_free - VolumeDataSize_Free_MB'
