@@ -19,12 +19,12 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
   - [Install Virtualbox support (optional)](#install-virtualbox-support-optional)
   - [Setup Windows Subsystem for Linux (WSL2)](#setup-windows-subsystem-for-linux-wsl2)
   - [Install and configure AWS support (optional)](#install-and-configure-aws-support-optional)
-    - [Example Basic AWS Security Group 'Splunk_Basic'](#example-basic-aws-security-group-splunk_basic)
+    - [Example Basic AWS Security Group 'Splunk\_Basic'](#example-basic-aws-security-group-splunk_basic)
       - [Inbound Rules](#inbound-rules)
       - [Outbound Rules](#outbound-rules)
 - [Upgrade](#upgrade)
   - [Migrate existing Splunk Platform Automator Environments from 1.x to 2.x](#migrate-existing-splunk-platform-automator-environments-from-1x-to-2x)
-    - [Migrate splunk_config.yml](#migrate-splunk_configyml)
+    - [Migrate splunk\_config.yml](#migrate-splunk_configyml)
     - [Migrate Virtualbox Environments](#migrate-virtualbox-environments)
     - [Migrate AWS Environments](#migrate-aws-environments)
     - [Migrate Environments where ansible only is used](#migrate-environments-where-ansible-only-is-used)
@@ -494,6 +494,8 @@ The following Ansible versions are tested and working with Splunk Platform Autom
 :white_check_mark: Ansible 2.10.x
 :white_check_mark: Ansible 2.11.x
 :white_check_mark: Ansible 2.12.x
+:white_check_mark: Ansible 2.13.x
+:white_check_mark: Ansible 2.14.x
 
 # License
 
