@@ -89,7 +89,7 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 
 1. Make sure you have Python 3.6+ installed. If not available for your distro, you can [build your own Python version](#build-your-own-python-version).
    1. [Install needed python libraries](#install-needed-python-libraries)
-2. Download and install [Vagrant](https://www.vagrantup.com).
+2. Download and install [Vagrant](https://www.vagrantup.com). Is you are using the AWS plugin, see version hints [here](#install-and-configure-aws-support-optional)
 3. Install Ansible, I personally prefer [Brew](https://brew.sh) (on OSX) which makes it as easy as `brew install ansible`. For [supported Ansible versions check here](#supported-ansible-versions)
 4. Create a folder called `Vagrant` and change into it.
 5. Download and extract a [Splunk Platform Automator release here](https://github.com/splunk/splunk-platform-automator/tags) or clone from GitHub when using the master branch: `git clone https://github.com/splunk/splunk-platform-automator.git`
@@ -141,7 +141,7 @@ export PATH="$PATH:/mnt/c/Program Files/Oracle/VirtualBox"
 
 ## Install and configure AWS support (optional)
 
-1. Install the aws vagrant plugin: `vagrant plugin install vagrant-aws`
+1. Install the aws vagrant plugin: `vagrant plugin install vagrant-aws`. The plugin is not maintained anymore and has issues with newer vagrant versions on OSX. The last working version of vagrant is 2.3.4
 1. Download the vagrant dummy box for aws: `vagrant box add aws-dummy https://github.com/mitchellh/vagrant-aws/raw/master/dummy.box`
 1. Generate AWS ACCESS Keys, described [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html#cli-configure-quickstart-creds)
 1. Optional, but recommended:
@@ -496,6 +496,7 @@ The following Ansible versions are tested and working with Splunk Platform Autom
 :white_check_mark: Ansible 2.12.x
 :white_check_mark: Ansible 2.13.x
 :white_check_mark: Ansible 2.14.x
+:x: Ansible 2.15.x
 
 # License
 
