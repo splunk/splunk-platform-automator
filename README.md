@@ -490,7 +490,7 @@ The following Ansible versions are tested and working with Splunk Platform Autom
 
 * :white_check_mark: Ansible 2.7.x
 * :white_check_mark: Ansible 2.8.x
-* :white_check_mark: Ansible 2.9.x
+* :x: Ansible 2.9.x
 * :white_check_mark: Ansible 2.10.x
 * :white_check_mark: Ansible 2.11.x
 * :white_check_mark: Ansible 2.12.x
