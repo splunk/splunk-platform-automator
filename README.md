@@ -445,9 +445,9 @@ If you need a specific Ansible version you can create it inside a virtualenv env
  be useful when deploying older linux images, which too old python versions. 
 
 ```
-python3 -m venv ansible_490
-source ansible_490/bin/activate
-python -m pip install ansible==4.9.0 # to have a certain version
+python3 -m venv ansible_414
+source ansible_414/bin/activate
+python -m pip install ansible==7.7.0 # (which is ansible 2.14.10)
 ```
 
 ### Install needed python libraries
