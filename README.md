@@ -488,15 +488,18 @@ source ansible_414/bin/activate
 
 The following Ansible versions are tested and working with Splunk Platform Automator, but any newer version should work as well.
 
-* :white_check_mark: Ansible 2.7.x
-* :white_check_mark: Ansible 2.8.x
-* :x: Ansible 2.9.x
-* :white_check_mark: Ansible 2.10.x
-* :white_check_mark: Ansible 2.11.x
-* :white_check_mark: Ansible 2.12.x
-* :white_check_mark: Ansible 2.13.x
+* :x: Ansible 2.7.x (EOL)
+* :x: Ansible 2.8.x (EOL)
+* :x: Ansible 2.9.x (EOL)
+* :white_check_mark: Ansible 2.10.x (EOL)
+* :white_check_mark: Ansible 2.11.x (EOL)
+* :white_check_mark: Ansible 2.12.x (EOL)
+* :white_check_mark: Ansible 2.13.x (EOL)
 * :white_check_mark: Ansible 2.14.x
-* :x: Ansible 2.15.x
+* :x: Ansible 2.15.x (due to ansible bug)
+* :x: Ansible 2.16.x (due to ansible bug)
+
+Check the [Ansible Support Matrix](https://docs.ansible.com/ansible/latest/reference_appendices/release_and_maintenance.html#ansible-core-support-matrix) for the most current information.
 
 # License
 
