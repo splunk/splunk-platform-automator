@@ -1,4 +1,4 @@
-# Splunk Platform Automator 2.2.0
+# Splunk Platform Automator 2.2.1
 
 ![Splunk Platform Automator Overview](https://github.com/splunk/splunk-platform-automator/blob/master/pic/splunk-platform-automator_overview.png)
 
@@ -8,7 +8,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
 
 ## Table of Contents
 
-- [Splunk Platform Automator 2.2.0](#splunk-platform-automator-220)
+- [Splunk Platform Automator 2.2.1](#splunk-platform-automator-221)
   - [Table of Contents](#table-of-contents)
 - [Support](#support)
 - [Features](#features)
