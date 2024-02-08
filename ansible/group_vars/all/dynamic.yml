@@ -144,11 +144,11 @@ splunk_shc_host_list: >-
           {{ res|unique }}
 splunk_shc_deployer: "{% for dp in groups.role_deployer|default([]) %}{% if dp in groups['shcluster_'+shc_name] %}{{ dp }}{% endif %}{% endfor %}"
 splunk_shc_dp_list: >-
-           {%- set res = [] -%}
-           {%- for shc in splunk_shc_name_list -%}
+          {%- set res = [] -%}
+          {%- for shc in splunk_shc_name_list -%}
             {%- set ignored = res.extend(groups[shc]|list) -%}
-           {%- endfor -%}
-           {{ res|unique|intersect(groups.role_deployer|default([]))|intersect(groups['splunk_env_'+splunk_env_name]) }}
+          {%- endfor -%}
+          {{ res|unique|intersect(groups.role_deployer|default([]))|intersect(groups['splunk_env_'+splunk_env_name]) }}
 
 
 # Deployment Server
