@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- Fixed the sharing of variables with role dependencies ([Issue 80944](https://github.com/ansible/ansible/issues/80944))
+- Fixed the sharing of variables with role dependencies ([ Ansible Issue 80944](https://github.com/ansible/ansible/issues/80944)) -> Support Ansible 2.15 and above.
 
 ## [2.2.0](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.2.0) - 2023-09-25
 
