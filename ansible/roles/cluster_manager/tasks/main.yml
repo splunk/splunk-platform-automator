@@ -108,7 +108,7 @@
     name: baseconfig_app
   vars:
     app_name: 'org_indexer_volume_indexes'
-    app_path: '{{splunk_home}}/etc/master-apps'
+    app_path: '{{splunk_home}}/etc/{{splunk_cluster_manager_apps}}'
 
 - name: apply baseconfig app org_all_indexes
   tags:
@@ -120,7 +120,7 @@
     name: baseconfig_app
   vars:
     app_name: 'org_all_indexes'
-    app_path: '{{splunk_home}}/etc/master-apps'
+    app_path: '{{splunk_home}}/etc/{{splunk_cluster_manager_apps}}'
 
 - name: apply baseconfig app org_s2_indexer_indexes
   tags:
@@ -132,7 +132,7 @@
     name: baseconfig_app
   vars:
     app_name: 'org_s2_indexer_indexes'
-    app_path: '{{splunk_home}}/etc/master-apps'
+    app_path: '{{splunk_home}}/etc/{{splunk_cluster_manager_apps}}'
   when: splunk_volume_defaults.remotePath is defined
 
 - name: apply baseconfig app org_full_license_server
@@ -145,7 +145,7 @@
     name: baseconfig_app
   vars:
     app_name: 'org_full_license_server'
-    app_path: '{{splunk_home}}/etc/master-apps'
+    app_path: '{{splunk_home}}/etc/{{splunk_cluster_manager_apps}}'
   when: splunk_license_manager|default()|length > 0
 
 - name: call update_dserver from role monitoring_console

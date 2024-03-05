@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## [2.2.2](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.2.2) - tbd
+
+### Fixed
+
+- Fix the usage of the manager-apps dir on the cm from 9.0.0 on
+
 ## [2.2.1](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.2.1) - 2024-02-11
 
 ### Fixed
