@@ -2,11 +2,23 @@
 export SPLUNK_HOME={{ splunk_home }}
 export PATH=$PATH:$SPLUNK_HOME/bin
 
+# Functions
+cdmanager()
+{
+    # Check if there is a manager-apps dir
+    if [ -d $SPLUNK_HOME/etc/manager-apps ]; 
+    then
+        cd $SPLUNK_HOME/etc/manager-apps
+    else 
+        cd $SPLUNK_HOME/etc/master-apps
+    fi
+}
+
 # Aliases
 alias cs="cd $SPLUNK_HOME"
 alias ce="cd $SPLUNK_HOME/etc"
 alias ca="cd $SPLUNK_HOME/etc/apps"
-alias cm="cd $SPLUNK_HOME/etc/master-apps"
+alias cm=cdmanager
 alias ch="cd $SPLUNK_HOME/etc/shcluster/apps"
 alias cdd="cd $SPLUNK_HOME/etc/deployment-apps"
 alias cdl="cd $SPLUNK_HOME/var/log/splunk"

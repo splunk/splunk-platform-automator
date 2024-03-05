@@ -96,7 +96,7 @@ splunk_manager_uri_var: "{%- if splunk_installed_version is version_compare('9.0
 splunk_clustermanager_var: "{%- if splunk_installed_version is version_compare('9.0', '>=') -%}clustermanager{%- else -%}clustermaster{%- endif -%}"
 splunk_cluster_manager_mode: "{%- if splunk_installed_version is version_compare('9.0', '>=') -%}manager{%- else -%}master{%- endif -%}"
 splunk_cluster_peer_mode: "{%- if splunk_installed_version is version_compare('9.0', '>=') -%}peer{%- else -%}slave{%- endif -%}"
-
+splunk_cluster_manager_apps: "{%- if splunk_installed_version is version_compare('9.0', '>=') -%}manager-apps{%- else -%}master-apps{%- endif -%}"
 
 # Multisite Indexer Cluster
 splunk_idxc_available_sites: "{{ idxc_available_sites|default([])|join(',') }}"
