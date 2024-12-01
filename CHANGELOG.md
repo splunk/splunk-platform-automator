@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## [2.2.3](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.2.3) - 2024-12-01
+
+### Fixed
+
+- Forced splunk restart handler to the inventory_hostname to prevent mistaken delegations
+
+### Added
+
+- Added org_indexer_volume_indexes and org_all_indexes to heavy forwarders for app wizards index selection
+- Added requirements.txt to the project for easy module installation
+- Added commented out profiling for easy timestamp activation in the ansible output
+- Added support for vagrant-gecko-aws plugin
+
 ## [2.2.2](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.2.2) - 2024-03-05
 
 ### Fixed
