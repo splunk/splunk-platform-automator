@@ -51,7 +51,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
   - [Ansible playbooks only](#ansible-playbooks-only)
   - [Build your own Python version](#build-your-own-python-version)
   - [Create vitualenv for specific Ansible version](#create-vitualenv-for-specific-ansible-version)
-    - [Install needed python libraries](#install-needed-python-libraries)
+    - [Install needed python libraries in your virtualenv](#install-needed-python-libraries-in-your-virtualenv)
 - [Known issues, limitations](#known-issues-limitations)
   - [Supported Ansible Versions](#supported-ansible-versions)
 - [License](#license)
@@ -141,14 +141,16 @@ export PATH="$PATH:/mnt/c/Program Files/Oracle/VirtualBox"
 
 ## Install and configure AWS support (optional)
 
-1. Install the aws vagrant plugin: `vagrant plugin install vagrant-aws`. The plugin is not maintained anymore and has issues with newer vagrant versions on OSX. The last working version of vagrant is 2.3.4
-1. Download the vagrant dummy box for aws: `vagrant box add aws-dummy https://github.com/mitchellh/vagrant-aws/raw/master/dummy.box`
-1. Generate AWS ACCESS Keys, described [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html#cli-configure-quickstart-creds)
-1. Optional, but recommended:
-   1. Add AWS_ACCESS_KEY_ID=<your access key ID> as environment variable
-   1. Add AWS_SECRET_ACCESS_KEY=<your secret access key> as environment variable
-1. Create an ssh key pair described [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair) and store the public key on your disk for later reference in the config file
-1. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it for example 'Splunk_Basic' and add the following TCP ports
+1. Install either of the aws vagrant plugins:
+    * [vagrant-aws](https://github.com/mitchellh/vagrant-aws): This is te orig plugin but not maintained anymore and has issues with newer vagrant versions on OSX. The last working version of vagrant is 2.3.4. Install it with `vagrant plugin install vagrant-aws`
+    * [vagrant-gecko-aws](https://github.com/geckoboard/vagrant-aws): This is a clone of the orig project and does support newer versions (up to 2.3.7) of vagrant. Install it with `vagrant plugin install vagrant-gecko-aws --entry-point vagrant-aws`
+2. Download the vagrant dummy box for aws: `vagrant box add aws-dummy https://github.com/mitchellh/vagrant-aws/raw/master/dummy.box`
+3. Generate AWS ACCESS Keys, described [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html#cli-configure-quickstart-creds)
+4. Optional, but recommended:
+    * Add AWS_ACCESS_KEY_ID=<your access key ID> as environment variable
+    * Add AWS_SECRET_ACCESS_KEY=<your secret access key> as environment variable
+5. Create an ssh key pair described [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair) and store the public key on your disk for later reference in the config file
+6. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it for example 'Splunk_Basic' and add the following TCP ports
 
 ### Example Basic AWS Security Group 'Splunk_Basic'
 
@@ -424,7 +426,7 @@ ansible-playbook ansible/test_ansible_prereqs.yml
 You can build your own python version, if you need a specific python version or your local one is outdated.
 Please install the needed development tools in order to be able to compile stuff.
 
-This examples installs Python 3.9.9 into your home directory.
+An easy way to install new python versions is using [pyenv](https://github.com/pyenv/pyenv) but you can manually install Python like the following example.
 
 ```
 cd
@@ -442,22 +444,26 @@ make install
 ## Create vitualenv for specific Ansible version
 
 If you need a specific Ansible version you can create it inside a virtualenv environment. This can
- be useful when deploying older linux images, which too old python versions. 
+ be useful when deploying older linux images, which too old python versions. An easy way to install new virtual environments is using [pyenv-virtualenv](https://github.com/pyenv/pyenv-virtualenv) or you can do it manually like the following example.
 
 ```
 python3 -m venv ansible_414
 source ansible_414/bin/activate
-python -m pip install ansible==7.7.0 # (which is ansible 2.14.10)
+python -m pip install ansible==7.7.0
 ```
+This installs ansible 2.14.10, see the [version mapping](https://docs.ansible.com/ansible/latest/reference_appendices/release_and_maintenance.html#ansible-community-changelogs)
 
-### Install needed python libraries
+### Install needed python libraries in your virtualenv
 
-You must install some additional modules for Splunk Platform Automator to work
+You must install some additional python modules for Splunk Platform Automator to work:
+* jmespath # required for json_query calls
+* lxml     # required for license file checks
+* boto3    # required for ec2 (aws) plugin
+
+Use the requirements file for easy installation
 
 ```
-python -m pip install jmespath # required for json_query calls
-python -m pip install lxml     # required for license file checks
-python -m pip install boto3    # required for ec2 (aws) plugin
+python -m pip install -r requirements.txt
 ```
 
 Check the ansible version. 
@@ -495,9 +501,11 @@ The following Ansible versions are tested and working with Splunk Platform Autom
 * :white_check_mark: Ansible 2.11.x (EOL)
 * :white_check_mark: Ansible 2.12.x (EOL)
 * :white_check_mark: Ansible 2.13.x (EOL)
-* :white_check_mark: Ansible 2.14.x
-* :white_check_mark: Ansible 2.15.x
+* :white_check_mark: Ansible 2.14.x (EOL)
+* :white_check_mark: Ansible 2.15.x (EOL)
 * :white_check_mark: Ansible 2.16.x
+* :white_check_mark: Ansible 2.17.x
+* :white_check_mark: Ansible 2.18.x
 
 Check the [Ansible Support Matrix](https://docs.ansible.com/ansible/latest/reference_appendices/release_and_maintenance.html#ansible-core-support-matrix) for the most current information.
 
