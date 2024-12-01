@@ -49,4 +49,5 @@
     state: restarted
   become: yes
   become_user: root
+  delegate_to: "{{ inventory_hostname }}"
   when: app_path == splunk_home + '/etc/apps'
