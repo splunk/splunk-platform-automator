@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD024 -->
 # Splunk Platform Automator changes by release
 
 All notable changes to this project will be documented in this file.
@@ -27,7 +28,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- Fixed the sharing of variables with role dependencies ([ Ansible Issue 80944](https://github.com/ansible/ansible/issues/80944)) -> Support Ansible 2.15 and above.
+- Fixed the sharing of variables with role dependencies ([Ansible Issue 80944](https://github.com/ansible/ansible/issues/80944)) -> Support Ansible 2.15 and above.
 
 ## [2.2.0](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.2.0) - 2023-09-25
 
@@ -294,7 +295,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - make Vagrant file dynamical
 - Set role with Vagrant var
 - make common main playbook and decide on Vagrant var (done on the config role)
-- after shcluster build, bundle push must be performed: splunk apply shcluster-bundle -target https://sh3:8089
+- after shcluster build, bundle push must be performed: `splunk apply shcluster-bundle -target https://sh3:8089`
 - uf is not connecting after install, needs reboot, how to check for it?
 - do not add own host to dservers and make the list unique
 - Multi site indexer cluster
@@ -303,8 +304,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - probably need to wait until the shcluster has restarted, otherwise bundle deploy can fail
 - org_full_license_server should not be installed if role license master (check on cm)
 - org_cluster_search_base should not be installed if role is cluster master
-- ulimit settings https://docs.splunk.com/Documentation/Splunk/latest/Installation/Systemrequirements#Considerations_regarding_system-wide_resource_limits_on_.2Anix_systems
-- THP settings http://docs.splunk.com/Documentation/Splunk/latest/ReleaseNotes/SplunkandTHP
+- ulimit settings <https://docs.splunk.com/Documentation/Splunk/latest/Installation/Systemrequirements#Considerations_regarding_system-wide_resource_limits_on_.2Anix_systems>
+- THP settings <http://docs.splunk.com/Documentation/Splunk/latest/ReleaseNotes/SplunkandTHP>
 - org_cluster_search_base misses multisite = true if multiside idx cluster
 - one more restart for UF
 - caclculate idxc_available_sites dynamically and add it to the cluster
@@ -324,7 +325,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - added org_all_search_base
 - fix dserver list creation fail, if group was missing
 - Output error if license file not there
-- Added fix for clock skew on Linux in Virtualbox: https://oitibs.com/fix-virtualbox-guest-time-skew/ (not working, either)
+- Added fix for clock skew on Linux in Virtualbox: <https://oitibs.com/fix-virtualbox-guest-time-skew> (not working, either)
 - dserver list does not exclude UF
 - Install forward output, if deployer is ds
 - Install forward output, if cm is ds
