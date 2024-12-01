@@ -114,7 +114,7 @@ elsif settings.has_key?("aws")
   aws = YAML.load_file(File.join(defaults_dir,"aws.yml"))
   defaults['aws'] = aws['aws']
   stanza_merge_list.append(provider)
-  if !Vagrant.has_plugin?("vagrant-aws")
+  if !Vagrant.has_plugin?("vagrant-gecko-aws") and !Vagrant.has_plugin?("vagrant-aws")
     print "ERROR: Plugin for AWS provider missing, install with 'vagrant plugin install vagrant-aws'.\n"
     exit 2
   end
