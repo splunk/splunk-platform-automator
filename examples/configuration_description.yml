@@ -74,11 +74,14 @@ splunk_defaults:
   # Defines the environment name and org name for the base_config apps
   splunk_env_name: splunk1
   
-  # Specify a Splunk version. Will use the latest found when not set or set to 'latest'
+  # Specify a Splunk version. Will use the latest found when not set or set to 'latest'. Can also be set on the host level
   splunk_version: '8.2.4'
 
-  # Specify a Splunk architecture. This is the os architecture portion in the splunk archive name. Will use 'amd64' if not set
+  # Specify a Splunk architecture. This is the os architecture portion in the splunk archive name. Will use 'amd64' if not set. Can also be set on the host level
   splunk_architecture: amd64
+
+  # Enable FIPS mode for Splunk. Can also be set on the host level.
+  splunk_fips: true
 
   # Download Splunk archive from splunk.com. The archive must still be found in the
   # local Software directory to fulfill the software download agreement
@@ -274,6 +277,8 @@ splunk_hosts:
     site: site0
     # Specify different version for this host
     splunk_version: '6.5.3'
+    # Only enable FIPS mode for this host
+    splunk_fips: true
 
     # Custom settings
     custom:
