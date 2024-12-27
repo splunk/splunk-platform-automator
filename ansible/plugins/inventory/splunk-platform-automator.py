@@ -299,7 +299,7 @@ class InventoryModule(BaseInventoryPlugin):
         
         # Defining allowed settings
         allowed_roles = ['cluster_manager','deployer','deployment_server','heavy_forwarder','indexer','license_manager','monitoring_console','search_head','universal_forwarder','universal_forwarder_windows']
-        allowed_hostvars = ['splunk_version','splunk_admin_password','splunk_license_file','splunk_outputs','splunk_search_peers','splunk_conf','os','aws','virtualbox','ip_addr','custom']
+        allowed_hostvars = ['splunk_version','splunk_architecture','splunk_admin_password','splunk_license_file','splunk_outputs','splunk_search_peers','splunk_conf','os','aws','virtualbox','ip_addr','custom','splunk_fips']
         allowed_roles_with_site = ['indexer','search_head','cluster_manager']
 
         # Creating some data structure for collecting information later on

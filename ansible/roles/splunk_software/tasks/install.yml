@@ -109,6 +109,22 @@
     - splunk_install_app == "splunk"
     - splunk_kv_store_engine_wiredtiger|default(true) == true
 
+- name: add enable FIPS mode
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_install
+    - splunk_fips
+  lineinfile:
+    path: "{{ splunk_home }}/etc/splunk-launch.conf"
+    line: "SPLUNK_FIPS=1"
+    state: present
+    owner: "{{ splunk_user }}"
+    group: "{{ splunk_group }}"
+    mode: 0644
+  when:
+    - splunk_fips|default(false) == true
+
 - name: call start_accept_license_and_stop
   tags:
     - splunk
