@@ -77,6 +77,9 @@ splunk_defaults:
   # Specify a Splunk version. Will use the latest found when not set or set to 'latest'
   splunk_version: '8.2.4'
 
+  # Specify a Splunk architecture. This is the os architecture portion in the splunk archive name. Will use 'amd64' if not set
+  splunk_architecture: amd64
+
   # Download Splunk archive from splunk.com. The archive must still be found in the
   # local Software directory to fulfill the software download agreement
   splunk_download:

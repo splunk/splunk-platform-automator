@@ -122,21 +122,22 @@ class InventoryModule(BaseInventoryPlugin):
 
         return merged_dict
 
-    def _check_splunk_archive(self,arch_type,splunk_version,directory):
+    def _check_splunk_archive(self,arch_type,splunk_architecture,splunk_version,directory):
         '''Check if splunk version archive is available'''
         if splunk_version == 'latest':
             search_version = "*"
         else:
             search_version = splunk_version
-        platform = 'Linux'
-        suffix = platform+'-x86_64.tgz'
+        platform = '?inux'
+        suffix = platform+'-'+splunk_architecture+'.tgz'
         if arch_type == 'windowsforwarder':
             arch_type = 'splunkforwarder'
             suffix = 'x64-release.msi'
             platform = 'Windows'
-        check_arch = glob.glob(directory+"/"+arch_type+"-"+search_version+"-*-"+suffix)
+        archive_pattern = arch_type+"-"+search_version+"-*-"+suffix
+        check_arch = glob.glob(directory+"/"+archive_pattern)
         if len(check_arch) < 1:
-            raise AnsibleParserError("Error: %s Archive for %s version %s missing in %s" % (platform,arch_type,splunk_version,directory))
+            raise AnsibleParserError("Error: No archive found matching pattern '%s' in directory %s" % (archive_pattern,directory))
 
     def _init_inventory(self):
         if not os.path.isdir("inventory"):
@@ -474,6 +475,12 @@ class InventoryModule(BaseInventoryPlugin):
                                 splunk_version = splunkhost['splunk_version']
                             else:
                                 splunk_version = self.environments[splunk_env]['splunk_defaults']['splunk_version']
+                            if 'splunk_architecture' in splunkhost:
+                                splunk_architecture = splunkhost['splunk_architecture']
+                            elif 'splunk_architecture' in self.environments[splunk_env]['splunk_defaults']:
+                                splunk_architecture = self.environments[splunk_env]['splunk_defaults']['splunk_architecture']
+                            else:
+                                splunk_architecture = 'amd64'
                             directory = os.path.join(cwd, self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'])
                             if role == 'universal_forwarder':
                                 arch_type = 'splunkforwarder'
@@ -482,7 +489,7 @@ class InventoryModule(BaseInventoryPlugin):
                                 directory = os.path.join(cwd,self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'])
                             else:
                                 arch_type = 'splunk'
-                            self.versions = self._merge_dict(self.versions,{splunk_env: {arch_type+'_'+splunk_version: {'arch_type':arch_type,'splunk_version':splunk_version}}})
+                            self.versions = self._merge_dict(self.versions,{splunk_env: {arch_type+'_'+splunk_version+'_'+splunk_architecture: {'arch_type':arch_type,'splunk_version':splunk_version,'splunk_architecture':splunk_architecture}}})
 
                             # Add host to the roles list from where is will be added to
                             roles[role].append(hostname)
@@ -499,7 +506,7 @@ class InventoryModule(BaseInventoryPlugin):
 
                 # Add the rest of the host variables
                 for key, val in splunkhost.items():
-                    if key in ['name','list','iter','splunk_env','splunk_version','roles','aws','virtualbox']:
+                    if key in ['name','list','iter','splunk_env','roles','aws','virtualbox']:
                         # Ignore those ones. Either not relevant or already worked on
                         continue
                     if key in ['idxcluster','shcluster']:
@@ -524,11 +531,13 @@ class InventoryModule(BaseInventoryPlugin):
 
         # Check the archive availability for all versions needed
         for splunk_env, versions_combs in self.versions.items():
+            #print("Checking Versions combs: %s in splunk_env %s" % (versions_combs, splunk_env))
             directory = os.path.join(cwd,self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'])
             for versions_comb, versions_values in versions_combs.items():
                 arch_type = versions_values['arch_type']
                 splunk_version = versions_values['splunk_version']
-                self._check_splunk_archive(arch_type,splunk_version,directory)
+                splunk_architecture = versions_values['splunk_architecture']
+                self._check_splunk_archive(arch_type,splunk_architecture,splunk_version,directory)
 
         # Add hosts to role_ ansible groups
         for role in allowed_roles:

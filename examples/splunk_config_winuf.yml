@@ -19,6 +19,7 @@ virtualbox:
 splunk_defaults:
   # splunk_env_name: splk
   # splunk_version: '8.2.3'
+  # splunk_architecture: amd64
   # splunk_admin_password: 'splunklab'
   # splunk_license_file: Splunk_Enterprise.lic
   # splunk_indexes:

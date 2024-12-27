@@ -6,7 +6,7 @@
     - splunk_software
   find:
     path: "{{splunk_software}}/"
-    pattern: "{{splunk_install_app}}-*-Linux-x86_64.tgz"
+    pattern: "{{splunk_install_app}}-*-?inux-{{splunk_architecture|default('amd64')}}.tgz"
     file_type: file
     recurse: no
   register: splunk_archive_files
@@ -21,12 +21,12 @@
     splunk_target_version: "{{splunk_archive_files.files|sort(attribute='path')|map(attribute='path')|list|last|basename|regex_replace('.*-([0-9]+\\.[0-9]+[\\.]*[0-9]*[\\.]*[0-9]*)-.*', '\\1')}}"
   when: splunk_version == 'latest' and splunk_archive_files.files|length > 0
 
-- name:
+- name: fail if no splunk binaries are found for latest version
   tags:
     - splunk
     - splunk_software
   fail:
-    msg: "Cannot find latest splunk binaries in directory {{splunk_software}}"
+    msg: "Cannot find latest splunk binaries in directory {{splunk_software}}, check variables 'splunk_version' and 'splunk_architecture'"
   when: splunk_version == 'latest' and splunk_target_version is not defined
 
 - name: set splunk_target_version
@@ -45,7 +45,7 @@
     splunk_archive: '{{splunk_archive_files.files|map(attribute="path")|list|select("match",".*-"+splunk_target_version+"-.*")|list}}'
   when: splunk_archive_files.files is defined
 
-- name:
+- name: fail if no splunk binaries are found for given version
   tags:
     - splunk
     - splunk_software
@@ -53,7 +53,7 @@
     msg: "Cannot find splunk binary for version '{{ splunk_target_version }}' in directory {{splunk_software}}"
   when: splunk_archive is not defined or splunk_archive|length == 0
 
-- name:
+- name: list found splunk archive
   tags:
     - splunk
     - splunk_software

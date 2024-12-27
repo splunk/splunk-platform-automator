@@ -41,6 +41,7 @@ aws:
 splunk_defaults:
   # splunk_env_name: splk
   # splunk_version: '8.2.3'
+  
   splunk_download:
     splunk: true
     splunkforwarder: true

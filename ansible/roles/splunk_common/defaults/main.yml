@@ -15,3 +15,4 @@ splunk_home: '{{splunk_install_dir}}/{{splunk_install_app}}'
 app_path: '{{splunk_home}}/etc/apps'
 use_systemctl: false
 use_policykit: false
+splunk_architecture: amd64
