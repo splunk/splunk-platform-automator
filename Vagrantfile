@@ -381,9 +381,11 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 #          vb.customize ['createmedium', '--filename', dataDisk1, '--variant', 'Standard', '--size', 10 * 1024]
 #        end
 #        vb.customize ['storageattach', :id, '--storagectl', 'IDE', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', dataDisk1]
+          if ENV.key?('VAGRANT_WSL_ENABLE_WINDOWS_ACCESS') and ENV['VAGRANT_WSL_ENABLE_WINDOWS_ACCESS'] == '1'
+            vb.customize ['modifyvm', :id, '--uartmode1', 'disconnected']
+          end
         end
       elsif provider == "aws"
-
         # Add all config attributes to the AWS config class
         srv.vm.provider :aws do |aws, override|
           special_host_vars[server['name']]['aws'].each do |k,v|
