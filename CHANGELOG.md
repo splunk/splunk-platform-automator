@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## [2.2.4](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.2.4) - 2024-12-27
+
+### Fixed
+
+- Disable COM1 when using Virtualbox on WSL with vagrant
+
+### Added
+
+- Added splunk_architecture to support different OS architectures like amd64, x86_64, arm64, etc.
+- Added splunk_fips to support FIPS mode in splunk
+
 ## [2.2.3](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.2.3) - 2024-12-01
 
 ### Fixed
