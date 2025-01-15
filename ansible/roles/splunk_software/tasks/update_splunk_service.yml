@@ -12,7 +12,7 @@
     value: "{{ item.val }}"
     owner: root
     group: root
-    mode: 0700
+    mode: 0644
     no_extra_spaces: yes
   with_items: "{{ splunk_systemd_services_updates }}"
   when: use_systemctl == true and splunk_systemd_services[splunk_service_name] is defined
