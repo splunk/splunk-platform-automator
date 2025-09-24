@@ -242,7 +242,7 @@ splunk_app_roles_host_list: >-
 # Volume Calculations
 splunk_indexer_volumes_local: >-
       {%- set defaultpath = splunk_home+'/var/lib/splunk' -%}
-      {%- if splunk_indexer_volumes is mapping -%}
+      {%- if splunk_indexer_volumes is defined and splunk_indexer_volumes is mapping -%}
         {%- set res = {} -%}
         {%- for volume, properties in splunk_indexer_volumes|default(dict({'primary':{}})) | dictsort -%}
           {%- if properties is not mapping -%}
@@ -265,7 +265,7 @@ splunk_indexer_volumes_local: >-
       {%- endif -%}
 splunk_indexer_volumes_remote: >-
       {%- set res = {} -%}
-      {%- if splunk_indexer_volumes is mapping -%}
+      {%- if splunk_indexer_volumes is defined and splunk_indexer_volumes is mapping -%}
         {%- for volume, properties in splunk_indexer_volumes | dictsort -%}
           {%- if properties.storageType|default("local") == "remote" -%}
             {%- set ignored = res.update({volume: properties}) -%}

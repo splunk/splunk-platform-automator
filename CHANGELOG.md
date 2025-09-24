@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## [2.2.6](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.2.6) - 2025-09-24
+
+### Fixed
+
+- Fixed some issues for ansible 2.19.x
+
 ## [2.2.5](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.2.5) - 2025-01-15
 
 ### Fixed

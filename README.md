@@ -519,9 +519,10 @@ The following Ansible versions are tested and working with Splunk Platform Autom
 - :white_check_mark: Ansible 2.13.x (EOL)
 - :white_check_mark: Ansible 2.14.x (EOL)
 - :white_check_mark: Ansible 2.15.x (EOL)
-- :white_check_mark: Ansible 2.16.x
+- :white_check_mark: Ansible 2.16.x (EOL)
 - :white_check_mark: Ansible 2.17.x
 - :white_check_mark: Ansible 2.18.x
+- :white_check_mark: Ansible 2.19.x
 
 Check the [Ansible Support Matrix](https://docs.ansible.com/ansible/latest/reference_appendices/release_and_maintenance.html#ansible-core-support-matrix) for the most current information.
 

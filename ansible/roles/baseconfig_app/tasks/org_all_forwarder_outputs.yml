@@ -222,6 +222,6 @@
     - { varkey: "sslRootCAPath", varvalue: "{{ splunk_ssl.outputs.config.sslRootCAPath|default('cacert.pem') }}" }
     - { varkey: "sslCertPath", varvalue: "{{ splunk_ssl.outputs.config.sslCertPath|default('client.pem') }}" }
   when:
-    - splunk_outputs_idx_list|length
+    - splunk_outputs_idx_list|length > 0
     - splunk_ssl.outputs.enable == true
     - splunk_ssl.outputs.own_certs == true
