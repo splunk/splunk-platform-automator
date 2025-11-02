@@ -1,0 +1,43 @@
+# Per-host configurations including storage and instance settings
+host_configs = {
+  "splunk-master" = {
+  },
+  "splunk-indexer1" = {
+    instance_type    = "t2.large"
+  },
+  "splunk-indexer2" = {
+    instance_type    = "t2.large"
+    root_volume_size = 60
+    root_volume_type = "gp3"
+    additional_tags  = {
+      "Role" = "Indexer"
+      "Index" = "2"
+    }
+  },
+  "splunk-forwarder" = {
+    instance_type    = "t2.micro"
+    root_volume_size = 50
+    root_volume_type = "gp3"
+    additional_tags  = {
+      "Role" = "Forwarder"
+    }
+  }
+}
+
+# AWS Region
+aws_region = "eu-central-1"
+
+# Instance configuration
+instance_type = "t2.micro"
+ami_id        = "ami-01a612f2c60d80101"
+
+# Security and access
+security_group_names = ["Splunk_Basic"]
+key_name           = "aws_key"
+
+# Tags to apply to all instances
+tags = {
+  splunkit_data_classification = "public"
+  splunkit_environment_type   = "non-prd"
+  "Env" = "Test"
+}
