@@ -25,13 +25,21 @@ variable "security_group_names" {
 
 variable "host_configs" {
   type = map(object({
-    instance_type = optional(string, "t2.micro")
-    root_volume_size = optional(number, 50)
-    root_volume_type = optional(string, "gp3")
-    additional_tags = optional(map(string), {})
+    instance_type         = optional(string, "t2.micro")
+    root_volume_size      = optional(number, 50)
+    root_volume_type      = optional(string, "gp3")
+    root_volume_encrypted = optional(bool, true)
+    additional_tags       = optional(map(string), {})
+    additional_volumes = optional(list(object({
+      device_name           = string
+      volume_size           = number
+      volume_type           = optional(string, "gp3")
+      encrypted             = optional(bool, true)
+      delete_on_termination = optional(bool, true)
+    })), [])
   }))
   description = "Per-host configurations including storage and instance settings"
-  default = {}
+  default     = {}
 }
 
 variable "security_group_ids" {
@@ -42,7 +50,6 @@ variable "security_group_ids" {
 variable "tags" {
   type = map(string)
   default = {
-    splunkit_data_classification = "public"
-    splunkit_environment_type   = "non-prd"
+    Env = "Splunk Lab"
   }
 }
