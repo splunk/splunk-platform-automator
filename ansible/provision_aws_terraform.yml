@@ -1,0 +1,123 @@
+---
+# Provision AWS infrastructure using Terraform
+# This playbook generates terraform.tfvars from splunk_config.yml and runs Terraform
+
+- name: Provision AWS Infrastructure with Terraform
+  hosts: localhost
+  gather_facts: false
+  vars:
+    terraform_dir: "{{ playbook_dir }}/../terraform/aws"
+    config_file: "{{ playbook_dir }}/../config/splunk_config.yml"
+
+  tasks:
+    - name: Load Splunk configuration
+      ansible.builtin.include_vars:
+        file: "{{ config_file }}"
+      tags: always
+
+    - name: Validate terraform section exists
+      ansible.builtin.assert:
+        that:
+          - terraform is defined
+          - terraform.aws is defined
+          - terraform.aws.ami_id is defined
+          - terraform.aws.key_name is defined
+        fail_msg: "terraform.aws section is missing or incomplete in {{ config_file }}"
+      tags: always
+
+    - name: Generate terraform.tfvars from template
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../template/terraform.tfvars.j2"
+        dest: "{{ terraform_dir }}/terraform.tfvars"
+        mode: "0644"
+      tags:
+        - generate
+        - always
+
+    - name: Display generated terraform.tfvars
+      ansible.builtin.debug:
+        msg: "Generated {{ terraform_dir }}/terraform.tfvars from {{ config_file }}"
+      tags: generate
+
+    - name: Initialize Terraform
+      community.general.terraform:
+        project_path: "{{ terraform_dir }}"
+        force_init: true
+      register: terraform_init
+      tags:
+        - init
+        - plan
+        - apply
+
+    - name: Run Terraform Plan
+      community.general.terraform:
+        project_path: "{{ terraform_dir }}"
+        state: planned
+        plan_file: "{{ terraform_dir }}/tfplan"
+      register: terraform_plan
+      tags:
+        - plan
+        - apply
+
+    - name: Display Terraform Plan
+      ansible.builtin.debug:
+        var: terraform_plan.stdout
+      when: terraform_plan.stdout is defined
+      tags:
+        - plan
+        - apply
+
+    - name: Confirm Terraform Apply
+      ansible.builtin.pause:
+        prompt: "Review the plan above. Press Enter to apply or Ctrl+C to cancel"
+      when:
+        - terraform_plan is defined
+        - not (auto_approve | default(false) | bool)
+      tags: apply
+
+    - name: Apply Terraform Configuration
+      community.general.terraform:
+        project_path: "{{ terraform_dir }}"
+        state: present
+      register: terraform_apply
+      tags: apply
+
+    - name: Get Terraform Outputs
+      community.general.terraform:
+        project_path: "{{ terraform_dir }}"
+        state: present
+      register: terraform_outputs
+      tags:
+        - apply
+        - outputs
+
+    - name: Save Ansible Inventory JSON
+      ansible.builtin.copy:
+        content: "{{ terraform_outputs.outputs.ansible_inventory.value }}"
+        dest: "{{ playbook_dir }}/../ansible_inventory.json"
+        mode: "0644"
+      when: terraform_outputs.outputs.ansible_inventory is defined
+      tags:
+        - apply
+        - outputs
+
+    - name: Display Provisioned Hosts
+      ansible.builtin.debug:
+        msg: |
+          Provisioned {{ (terraform_outputs.outputs.ansible_inventory.value | from_json) | length }} instances:
+          {% for host, details in (terraform_outputs.outputs.ansible_inventory.value | from_json).items() %}
+          - {{ host }}: {{ details.public_ip }}
+          {% endfor %}
+      when: terraform_outputs.outputs.ansible_inventory is defined
+      tags:
+        - apply
+        - outputs
+
+
+    - name: Set facts for subsequent playbooks
+      ansible.builtin.set_fact:
+        terraform_ansible_inventory: "{{ terraform_outputs.outputs.ansible_inventory.value | from_json }}"
+      when: terraform_outputs.outputs.ansible_inventory is defined
+      tags:
+        - apply
+        - outputs

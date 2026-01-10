@@ -1,0 +1,119 @@
+---
+# splunk_config.yml - Terraform Integration Example
+# This example shows how to use Terraform for AWS infrastructure provisioning
+
+plugin: splunk-platform-automator
+
+# General settings
+general:
+  # url_locale: en-GB
+
+os:
+  # time_zone: "Europe/Zurich"
+  # Set hostname to ansible_inventory name
+  set_hostname: true
+
+# Terraform configuration for AWS infrastructure
+terraform:
+  aws:
+    region: "eu-central-1"
+    ami_id: "ami-0badcc5b522737046" # Redhat 8 (eu-central-1)
+    key_name: "aws_key"
+    ssh_private_key_file: "~/.ssh/aws_key.pem"
+    security_group_names: ["Splunk_Basic"]
+    default_instance_type: "t2.micro"
+    tags:
+      Env: "Splunk Lab"
+      splunkit_data_classification: "public"
+      splunkit_environment_type: "non-prd"
+
+# Splunk default settings
+splunk_defaults:
+  # splunk_env_name: splk
+  # splunk_version: '8.2.3'
+
+  splunk_download:
+    splunk: true
+    splunkforwarder: true
+    # splunk_admin_password: 'splunklab'
+    # splunk_license_file: Splunk_Enterprise.lic
+
+  splunk_set_servername: true
+  splunk_set_default_hostname: true
+  splunk_loginpage_print_userpw: false
+
+  # Enable ssl by default to secure internet facing connections
+  splunk_ssl:
+    web:
+      enable: true
+    inputs:
+      enable: true
+    outputs:
+      enable: true
+
+# Splunk hosts with Terraform-specific configurations
+splunk_hosts:
+  # Indexer with additional storage volumes
+  - name: idx1
+    roles:
+      - indexer
+    terraform:
+      aws:
+        instance_type: "t3.large"
+        root_volume_size: 100
+        root_volume_encrypted: true
+        additional_volumes:
+          - device_name: "/dev/xvdb"
+            volume_size: 500
+            volume_type: "gp3"
+          - device_name: "/dev/xvdc"
+            volume_size: 500
+            volume_type: "gp3"
+        additional_tags:
+          Role: "Indexer"
+
+  # Second indexer with same configuration
+  - name: idx2
+    roles:
+      - indexer
+    terraform:
+      aws:
+        instance_type: "t3.large"
+        root_volume_size: 100
+        additional_volumes:
+          - device_name: "/dev/xvdb"
+            volume_size: 500
+            volume_type: "gp3"
+          - device_name: "/dev/xvdc"
+            volume_size: 500
+            volume_type: "gp3"
+        additional_tags:
+          Role: "Indexer"
+
+  # Search Head - medium instance, no additional volumes
+  - name: sh1
+    roles:
+      - search_head
+    terraform:
+      aws:
+        instance_type: "t3.medium"
+        root_volume_size: 50
+        additional_tags:
+          Role: "SearchHead"
+
+  # Universal Forwarder - minimal configuration
+  - name: uf1
+    roles:
+      - universal_forwarder
+    terraform:
+      aws:
+        instance_type: "t2.micro"
+        root_volume_size: 30
+        additional_tags:
+          Role: "UniversalForwarder"
+
+  # Deployment Server - uses defaults from terraform.aws.default_instance_type
+  - name: ds1
+    roles:
+      - deployment_server
+    # No terraform section - will use defaults

@@ -1,0 +1,49 @@
+---
+# Destroy AWS infrastructure managed by Terraform
+
+- name: Destroy AWS Infrastructure with Terraform
+  hosts: localhost
+  gather_facts: false
+  vars:
+    terraform_dir: "{{ playbook_dir }}/../terraform/aws"
+
+  tasks:
+    - name: Check if Terraform state exists
+      ansible.builtin.stat:
+        path: "{{ terraform_dir }}/terraform.tfstate"
+      register: tfstate
+
+    - name: Warn if no state file found
+      ansible.builtin.debug:
+        msg: "No Terraform state file found. Nothing to destroy."
+      when: not tfstate.stat.exists
+
+    - name: Confirm Terraform Destroy
+      ansible.builtin.pause:
+        prompt: "WARNING: This will destroy all Terraform-managed infrastructure. Press Enter to continue or Ctrl+C to cancel"
+      when:
+        - tfstate.stat.exists
+        - not (auto_approve | default(false) | bool)
+
+    - name: Destroy Terraform Infrastructure
+      community.general.terraform:
+        project_path: "{{ terraform_dir }}"
+        state: absent
+      register: terraform_destroy
+      when: tfstate.stat.exists
+
+    - name: Remove generated files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ playbook_dir }}/../ansible_inventory.json"
+        - "{{ terraform_dir }}/tfplan"
+      when: tfstate.stat.exists
+
+    - name: Display Destroy Results
+      ansible.builtin.debug:
+        msg: "Infrastructure destroyed successfully"
+      when:
+        - tfstate.stat.exists
+        - terraform_destroy is succeeded

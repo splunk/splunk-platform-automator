@@ -6,10 +6,24 @@ aws:
   # Access Key: AWS_SECRET_ACCESS_KEY
   #access_key_id: <your_AWS_ACCESS_KEY_ID>
   #secret_access_key: <your_AWS_SECRET_ACCESS_KEY>
-  region: 'eu-central-1'
-  ssh_username: 'ec2-user'
-  instance_type: 't2.micro'
-  ami: 'ami-0badcc5b522737046' # Redhat 8 (eu-central-1)
-  keypair_name: 'aws_key'
-  ssh_private_key_path: '~/.ssh/aws_key.pem'
-  security_groups: ['Splunk_Basic']
+  region: "eu-central-1"
+  ssh_username: "ec2-user"
+  instance_type: "t2.micro"
+  ami: "ami-0badcc5b522737046" # Redhat 8 (eu-central-1)
+  keypair_name: "aws_key"
+  ssh_private_key_path: "~/.ssh/aws_key.pem"
+  security_groups: ["Splunk_Basic"]
+
+# Terraform-specific defaults for infrastructure provisioning
+terraform:
+  aws:
+    region: "eu-central-1"
+    ami_id: "ami-0badcc5b522737046" # Redhat 8 (eu-central-1)
+    key_name: "aws_key"
+    ssh_private_key_file: "~/.ssh/aws_key.pem"
+    security_group_names: ["Splunk_Basic"]
+    default_instance_type: "t2.micro"
+    tags:
+      Env: "Splunk Lab"
+      splunkit_data_classification: "public"
+      splunkit_environment_type: "non-prd"
