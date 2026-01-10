@@ -18,6 +18,18 @@ variable "key_name" {
   default = "aws_key"
 }
 
+variable "ssh_username" {
+  type        = string
+  default     = "ubuntu"
+  description = "SSH username for connecting to instances"
+}
+
+variable "ssh_private_key_file" {
+  type        = string
+  default     = "~/.ssh/aws_key.pem"
+  description = "Path to SSH private key file for connecting to instances"
+}
+
 variable "security_group_names" {
   type    = list(string)
   default = ["Splunk_Basic"]
