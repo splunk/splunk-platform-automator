@@ -12,28 +12,28 @@ provider "aws" {
   region = var.aws_region
 }
 
-# Lookup AMI details to determine the appropriate SSH username
-data "aws_ami" "selected" {
-  owners = ["self", "amazon", "099720109477"] # self, Amazon, and Canonical (Ubuntu)
-
+# Lookup security group IDs from names
+data "aws_security_groups" "selected" {
   filter {
-    name   = "image-id"
-    values = [var.ami_id]
+    name   = "group-name"
+    values = var.security_group_names
   }
 }
 
-# Determine SSH username based on AMI platform details
+# Lookup AMI details to determine the appropriate SSH username
+# NOTE: Commented out due to AMI lookup failures - using var.ssh_username directly instead
+# data "aws_ami" "selected" {
+#   most_recent = true
+#
+#   filter {
+#     name   = "image-id"
+#     values = [var.ami_id]
+#   }
+# }
+
+# Use the configured SSH username directly
 locals {
-  # Map AMI name patterns to SSH usernames
-  ssh_username = (
-    can(regex("ubuntu", lower(data.aws_ami.selected.name))) ? "ubuntu" :
-    can(regex("amzn|amazon", lower(data.aws_ami.selected.name))) ? "ec2-user" :
-    can(regex("rhel|red.?hat", lower(data.aws_ami.selected.name))) ? "ec2-user" :
-    can(regex("centos", lower(data.aws_ami.selected.name))) ? "centos" :
-    can(regex("debian", lower(data.aws_ami.selected.name))) ? "admin" :
-    can(regex("suse", lower(data.aws_ami.selected.name))) ? "ec2-user" :
-    var.ssh_username # Fallback to variable if pattern doesn't match
-  )
+  ssh_username = var.ssh_username
 }
 
 resource "aws_instance" "splunk" {
@@ -41,7 +41,7 @@ resource "aws_instance" "splunk" {
   ami                    = var.ami_id
   instance_type          = each.value.instance_type
   key_name               = var.key_name
-  vpc_security_group_ids = var.security_group_names
+  vpc_security_group_ids = data.aws_security_groups.selected.ids
 
   root_block_device {
     volume_type           = each.value.root_volume_type
