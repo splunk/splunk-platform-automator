@@ -14,17 +14,15 @@ aws:
   ssh_private_key_path: "~/.ssh/aws_key.pem"
   security_groups: ["Splunk_Basic"]
 
-# Terraform-specific defaults for infrastructure provisioning
+# Terraform-specific defaults for infrastructure provisioning in AWS
 terraform:
   aws:
     region: "eu-central-1"
-    ami_id: "ami-0badcc5b522737046" # Redhat 8 (eu-central-1)
+    ami_id: "ami-03cbad7144aeda3eb" # Redhat 9 (eu-central-1)
     key_name: "aws_key"
     ssh_private_key_file: "~/.ssh/aws_key.pem"
     ssh_username: "ec2-user"
     security_group_names: ["Splunk_Basic"]
     instance_type: "t2.micro"
-    tags:
-      Env: "Splunk Lab"
-      splunkit_data_classification: "public"
-      splunkit_environment_type: "non-prd"
+    # tags:
+    #   Env: "Splunk Lab"
