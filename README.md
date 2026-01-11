@@ -18,7 +18,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
     - [Framework Installation](#framework-installation)
     - [Install Virtualbox support (optional)](#install-virtualbox-support-optional)
     - [Setup Windows Subsystem for Linux (WSL2)](#setup-windows-subsystem-for-linux-wsl2)
-    - [Install and configure AWS support (optional)](#install-and-configure-aws-support-optional)
+    - [Install and configure AWS support (optional - Legacy Vagrant Plugin)](#install-and-configure-aws-support-optional---legacy-vagrant-plugin)
       - [Example Basic AWS Security Group 'Splunk\_Basic'](#example-basic-aws-security-group-splunk_basic)
         - [Inbound Rules](#inbound-rules)
         - [Outbound Rules](#outbound-rules)
@@ -34,8 +34,9 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
     - [First start and initialization](#first-start-and-initialization)
     - [Copy a configuration file](#copy-a-configuration-file)
     - [Start the deployment](#start-the-deployment)
-      - [Create the Virtual Machines](#create-the-virtual-machines)
-      - [Run Ansible playbooks to deploy and configure the Splunk software](#run-ansible-playbooks-to-deploy-and-configure-the-splunk-software)
+      - [Option A: Virtualbox (Local Virtual Machines)](#option-a-virtualbox-local-virtual-machines)
+      - [Option B: AWS with Terraform (Recommended for AWS)](#option-b-aws-with-terraform-recommended-for-aws)
+      - [Option C: AWS with Vagrant Plugin (Legacy)](#option-c-aws-with-vagrant-plugin-legacy)
     - [Stop hosts](#stop-hosts)
     - [Destroy hosts](#destroy-hosts)
     - [Rerun provisioning](#rerun-provisioning)
@@ -47,9 +48,6 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
       - [User splunk](#user-splunk)
     - [Copy files](#copy-files)
       - [scp example](#scp-example)
-    - [Deploying on Amazon Cloud](#deploying-on-amazon-cloud)
-      - [Option 1: Terraform (Recommended)](#option-1-terraform-recommended)
-      - [Option 2: Vagrant AWS Plugin (Legacy)](#option-2-vagrant-aws-plugin-legacy)
     - [Ansible playbooks only](#ansible-playbooks-only)
     - [Build your own Python version](#build-your-own-python-version)
     - [Create vitualenv for specific Ansible version](#create-vitualenv-for-specific-ansible-version)
@@ -145,7 +143,9 @@ export VAGRANT_WSL_ENABLE_WINDOWS_ACCESS="1"
 export PATH="$PATH:/mnt/c/Program Files/Oracle/VirtualBox"
 ```
 
-### Install and configure AWS support (optional)
+### Install and configure AWS support (optional - Legacy Vagrant Plugin)
+
+> ⚠️ **Note:** This section describes the legacy Vagrant AWS plugin setup. For new AWS deployments, we recommend using the [Terraform approach](#deploying-on-aws-with-terraform) instead, which is more modern and easier to manage.
 
 1. Install either of the aws vagrant plugins:
     - [vagrant-aws](https://github.com/mitchellh/vagrant-aws): This is te orig plugin but not maintained anymore and has issues with newer vagrant versions on OSX. The last working version of vagrant is 2.3.4. Install it with `vagrant plugin install vagrant-aws`
@@ -305,15 +305,19 @@ AWS: See [instruction here](#deploying-on-amazon-cloud) when deploying into Amaz
 
 ### Start the deployment
 
-When building virtual machines (for virtualbox) the first time it will pull an os image from the internet. The box images are cached here: `~/.vagrant.d/boxes`.
+Splunk Platform Automator supports multiple deployment targets. Choose the appropriate method for your environment:
 
-#### Create the Virtual Machines
+#### Option A: Virtualbox (Local Virtual Machines)
+
+When building virtual machines for Virtualbox the first time it will pull an OS image from the internet. The box images are cached here: `~/.vagrant.d/boxes`.
+
+**Create the Virtual Machines:**
 
 ```bash
 vagrant up
 ```
 
-#### Run Ansible playbooks to deploy and configure the Splunk software
+**Run Ansible playbooks to deploy and configure the Splunk software:**
 
 The `vagrant up` command only creates the virtual machines. To deploy Splunk afterwards, run this command:
 
@@ -326,6 +330,88 @@ To run both steps with one command use:
 ```bash
 vagrant up; ansible-playbook ansible/deploy_site.yml
 ```
+
+---
+
+#### Option B: AWS with Terraform (Recommended for AWS)
+
+**Modern, declarative infrastructure provisioning using Terraform managed by Ansible playbooks.**
+
+**Prerequisites:**
+- Terraform 1.3.0+ installed
+- `community.general` Ansible collection: `ansible-galaxy collection install community.general`
+- AWS credentials (via environment variables or config file)
+- AWS security group created (e.g., 'Splunk_Basic') - see [security group example](#example-basic-aws-security-group-splunk_basic)
+- EC2 key pair created
+
+**Quick Start:**
+
+1. Configure `config/splunk_config.yml` with a `terraform.aws` section:
+
+```yaml
+terraform:
+  aws:
+    region: "eu-central-1"
+    ami_id: "ami-03cbad7144aeda3eb"  # Redhat 9
+    key_name: "aws_key"
+    ssh_private_key_file: "~/.ssh/aws_key.pem"
+    ssh_username: "ec2-user"
+    security_group_names: ["Splunk_Basic"]
+    instance_type: "t2.micro"
+
+splunk_hosts:
+  - name: idx1
+    roles: [indexer]
+    terraform:
+      aws:
+        instance_type: "c5.4xlarge"
+        root_volume_size: 100
+```
+
+2. Provision infrastructure:
+
+```bash
+ansible-playbook ansible/provision_aws_terraform.yml
+```
+
+3. Deploy Splunk:
+
+```bash
+ansible-playbook ansible/deploy_site.yml
+```
+
+4. Destroy infrastructure:
+
+```bash
+ansible-playbook ansible/destroy_aws_terraform.yml
+```
+
+**Features:**
+- ✅ Single source of truth in `splunk_config.yml`
+- ✅ Automatic Ansible inventory generation
+- ✅ Support for `iter` to generate multiple hosts with numbering
+- ✅ Support for `list` to generate multiple hosts with custom names
+- ✅ Per-host instance types, volumes, and configurations
+- ✅ AWS credentials can be in config or environment variables
+
+**Documentation:**
+- [Ansible-Terraform Integration Guide](terraform/ANSIBLE_TERRAFORM_INTEGRATION.md) - Complete documentation
+- [Terraform AWS README](terraform/aws/README.md) - Terraform configuration details
+
+---
+
+#### Option C: AWS with Vagrant Plugin (Legacy)
+
+**Traditional Vagrant-based approach using the vagrant-aws plugin.**
+
+> ⚠️ **Note:** This method is considered legacy. The Terraform approach (Option B) above is recommended for new AWS deployments.
+
+To use the Vagrant AWS plugin:
+
+1. Follow the [AWS plugin installation instructions](#install-and-configure-aws-support-optional---legacy-vagrant-plugin)
+2. Configure `config/splunk_config.yml` with an `aws` section (see [splunk_config_aws.yml](examples/splunk_config_aws.yml))
+3. Run `vagrant up` to create instances
+4. Run `ansible-playbook ansible/deploy_site.yml` to deploy Splunk
 
 ### Stop hosts
 
@@ -397,96 +483,6 @@ vagrant scp <files> <target_on_dest> [vm_name]
 ```bash
 vagrant scp ../app_dir/splunk-add-on-for-unix-and-linux_831.tgz /var/tmp uf
 ```
-
-### Deploying on Amazon Cloud
-
-Splunk Platform Automator supports two methods for deploying to AWS:
-
-#### Option 1: Terraform (Recommended)
-
-**Modern, declarative infrastructure provisioning using Terraform managed by Ansible playbooks.**
-
-**Prerequisites:**
-- Terraform 1.3.0+ installed
-- `community.general` Ansible collection: `ansible-galaxy collection install community.general`
-- AWS credentials (via environment variables or config file)
-- AWS security group created (e.g., 'Splunk_Basic')
-- EC2 key pair created
-
-**Quick Start:**
-
-1. Configure `config/splunk_config.yml` with a `terraform.aws` section:
-
-```yaml
-terraform:
-  aws:
-    region: "eu-central-1"
-    ami_id: "ami-03cbad7144aeda3eb"  # Redhat 9
-    key_name: "aws_key"
-    ssh_private_key_file: "~/.ssh/aws_key.pem"
-    ssh_username: "ec2-user"
-    security_group_names: ["Splunk_Basic"]
-    instance_type: "t2.micro"
-
-splunk_hosts:
-  - name: idx1
-    roles: [indexer]
-    terraform:
-      aws:
-        instance_type: "c5.4xlarge"
-        root_volume_size: 100
-```
-
-2. Provision infrastructure:
-
-```bash
-ansible-playbook ansible/provision_aws_terraform.yml
-```
-
-3. Deploy Splunk:
-
-```bash
-ansible-playbook ansible/deploy_site.yml
-```
-
-4. Destroy infrastructure:
-
-```bash
-ansible-playbook ansible/destroy_aws_terraform.yml
-```
-
-**Features:**
-- ✅ Single source of truth in `splunk_config.yml`
-- ✅ Automatic Ansible inventory generation
-- ✅ Support for `iter` to generate multiple hosts with numbering
-- ✅ Support for `list` to generate multiple hosts with custom names
-- ✅ Per-host instance types, volumes, and configurations
-- ✅ AWS credentials can be in config or environment variables
-
-**Documentation:**
-- [Ansible-Terraform Integration Guide](terraform/ANSIBLE_TERRAFORM_INTEGRATION.md) - Complete documentation
-- [Terraform AWS README](terraform/aws/README.md) - Terraform configuration details
-
----
-
-#### Option 2: Vagrant AWS Plugin (Legacy)
-
-**Traditional Vagrant-based approach using the vagrant-aws plugin.**
-
-> ⚠️ **Note:** This method is considered legacy. The Terraform approach above is recommended for new deployments.
-
-Splunk Platform Automator can use Vagrant with the [vagrant-aws](https://github.com/mitchellh/vagrant-aws) plugin to create virtual machines in AWS. Follow these steps to setup:
-
-To prepare the configuration file for Amazon deployments:
-
-- Take the [AWS example](examples/splunk_config_aws.yml) and fill in the values you like in the 'aws' section. You need at least:
-  - access_key_id, secret_access_key if not specified as ENV vars.
-  - keypair_name
-  - ssh_private_key_path
-  - security_groups
-  - you can use the new 'splunk_download' section in 'splunk_defaults', if you do not want to upload the splunk binaries from your host all the time. This will download them from splunk.com instead.
-
-You can copy splunk_hosts and cluster configs from other example files to the AWS template to create more complex environments. There can be all configuration option used, which are described in the vagrant-aws plugin. They can also set individually on the splunk hosts, if needed. Just add a aws: section to the host.
 
 ### Ansible playbooks only
 
