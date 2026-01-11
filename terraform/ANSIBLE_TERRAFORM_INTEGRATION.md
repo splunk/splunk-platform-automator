@@ -1,8 +1,6 @@
 # Ansible-Terraform Integration
 
-## Overview
-
-This integration allows you to provision AWS infrastructure using Terraform while maintaining a single source of truth in your `splunk_config.yml` file. An Ansible playbook automatically generates `terraform.tfvars` from your config and manages the Terraform lifecycle.
+This integration allows you to provision AWS infrastructure using Terraform while maintaining a single source of truth in `config/splunk_config.yml`. Ansible playbooks automatically generate Terraform configuration and manage the infrastructure lifecycle.
 
 ## Quick Start
 
@@ -13,31 +11,32 @@ Edit `config/splunk_config.yml` and add a `terraform` section:
 ```yaml
 terraform:
   aws:
-    region: 'eu-central-1'
-    ami_id: 'ami-0badcc5b522737046'
-    key_name: 'aws_key'
-    ssh_private_key_file: '~/.ssh/aws_key.pem'
-    security_group_names: ['Splunk_Basic']
-    tags:
-      Env: "Splunk Lab"
+    region: "eu-central-1"
+    ami_id: "ami-03cbad7144aeda3eb"  # Redhat 9
+    key_name: "aws_key"
+    ssh_private_key_file: "~/.ssh/aws_key.pem"
+    ssh_username: "ec2-user"
+    security_group_names: ["Splunk_Basic"]
+    instance_type: "t2.micro"  # Default for all hosts
+    root_volume_size: 50       # Default root volume size in GB
 
 splunk_hosts:
   - name: idx1
     roles: [indexer]
     terraform:
       aws:
-        instance_type: 't3.large'
+        instance_type: "c5.4xlarge"
         root_volume_size: 100
         additional_volumes:
           - device_name: "/dev/xvdb"
             volume_size: 500
+            volume_type: "gp3"
 ```
 
 ### 2. Provision Infrastructure
 
 ```bash
-cd ansible
-ansible-playbook provision_aws_terraform.yml
+ansible-playbook ansible/provision_aws_terraform.yml
 ```
 
 This will:
@@ -46,43 +45,64 @@ This will:
 3. Run `terraform plan` and show you the changes
 4. Prompt for confirmation
 5. Apply the changes
-6. Save `ansible_inventory.json` for subsequent playbooks
+6. Generate `inventory/hosts` with all provisioned instances
 
 ### 3. Use the Provisioned Infrastructure
 
-The playbook captures Terraform outputs and makes them available to subsequent Ansible playbooks:
+The playbook creates a standard Ansible inventory file that's automatically picked up:
 
 ```bash
-# Use the generated inventory
-ansible-playbook -i ../ansible_inventory.json install_splunk.yml
+# Ansible automatically uses inventory/hosts
+ansible-playbook ansible/deploy_site.yml
 ```
 
 ### 4. Destroy Infrastructure
 
 ```bash
-ansible-playbook destroy_aws_terraform.yml
+ansible-playbook ansible/destroy_aws_terraform.yml
 ```
+
+---
 
 ## Configuration Structure
 
 ### Global Terraform Settings
 
+Define defaults in the `terraform.aws` section:
+
 ```yaml
 terraform:
   aws:
-    region: 'eu-central-1'              # AWS region
-    ami_id: 'ami-xxx'                   # AMI to use
-    key_name: 'aws_key'                 # EC2 key pair name
-    ssh_private_key_file: '~/.ssh/aws_key.pem'  # Path to private key
-    security_group_names: ['Splunk_Basic']      # Security groups
-    instance_type: 't2.micro'   # Default if not specified per host
-    tags:                               # Tags applied to all instances
-      Env: "Splunk Lab"
+    # AWS Configuration
+    region: "eu-central-1"
+    ami_id: "ami-03cbad7144aeda3eb"
+    
+    # SSH Configuration
+    key_name: "aws_key"
+    ssh_private_key_file: "~/.ssh/aws_key.pem"
+    ssh_username: "ec2-user"
+    
+    # Security
+    security_group_names: ["Splunk_Basic"]
+    
+    # Optional: AWS Credentials Override
+    # access_key_id: "YOUR_ACCESS_KEY"
+    # secret_access_key: "YOUR_SECRET_KEY"
+    
+    # Default Instance Settings
+    instance_type: "t2.micro"
+    root_volume_size: 50
+    
+    # Optional: Global Additional Volumes
+    additional_volumes:
+      - device_name: "/dev/xvdb"
+        volume_size: 100
+        volume_type: "gp3"
 ```
 
 ### Per-Host Terraform Settings
 
-Add a `terraform.aws` section to any host in `splunk_hosts` to override global defaults:
+Override global defaults for specific hosts:
 
 ```yaml
 splunk_hosts:
@@ -90,97 +110,230 @@ splunk_hosts:
     roles: [indexer]
     terraform:
       aws:
-        instance_type: 't3.large'         # Instance type
-        root_volume_size: 100             # Root volume size in GB
-        root_volume_type: 'gp3'           # Volume type (default: gp3)
-        root_volume_encrypted: true       # Encrypt root volume (default: true)
+        instance_type: "c5.4xlarge"
+        root_volume_size: 100
+        root_volume_type: "gp3"
+        root_volume_encrypted: true
         
-        additional_volumes:               # Optional additional EBS volumes
+        additional_volumes:
           - device_name: "/dev/xvdb"
             volume_size: 500
             volume_type: "gp3"
             encrypted: true
             delete_on_termination: true
         
-        additional_tags:                  # Host-specific tags
+        additional_tags:
           Role: "Indexer"
+          Tier: "Production"
 ```
 
-**How defaults work:**
-- Global `terraform.aws` settings provide defaults
-- Host-specific `terraform.aws` settings override global defaults
-- If a host has no `terraform` section, it uses `terraform.aws.instance_type`
+### Host Generation with `iter`
+
+Generate multiple hosts with sequential numbering:
+
+```yaml
+splunk_hosts:
+  # Creates idx01, idx02, idx03
+  - iter:
+      prefix: idx
+      numbers: "01..03"
+    roles: [indexer]
+    terraform:
+      aws:
+        instance_type: "c5.4xlarge"
+  
+  # Creates sh1-prod, sh2-prod
+  - iter:
+      prefix: sh
+      numbers: "1..2"
+      postfix: "-prod"
+    roles: [search_head]
+```
+
+**Features:**
+- `numbers`: Range like "01..10" (zero-padded based on end number)
+- `prefix`: Optional text before number
+- `postfix`: Optional text after number
+
+### Configuration Precedence
+
+Settings are merged in this order (later overrides earlier):
+
+1. **Defaults** from `defaults/aws.yml`
+2. **Global** `terraform.aws` settings
+3. **Per-host** `terraform.aws` settings
+
+**Example:**
+```yaml
+# defaults/aws.yml
+terraform:
+  aws:
+    instance_type: "t2.micro"        # Lowest priority
+    ssh_username: "ec2-user"
+
+# config/splunk_config.yml
+terraform:
+  aws:
+    instance_type: "t3.small"        # Overrides default
+    
+splunk_hosts:
+  - name: idx1
+    terraform:
+      aws:
+        instance_type: "c5.4xlarge"  # Highest priority for this host
+```
+
+---
 
 ## Playbook Options
 
 ### Generate terraform.tfvars Only
 
 ```bash
-ansible-playbook provision_aws_terraform.yml --tags generate
+ansible-playbook ansible/provision_aws_terraform.yml --tags generate
+```
+
+### Run Terraform Init Only
+
+```bash
+ansible-playbook ansible/provision_aws_terraform.yml --tags init
 ```
 
 ### Run Terraform Plan Only
 
 ```bash
-ansible-playbook provision_aws_terraform.yml --tags plan
+ansible-playbook ansible/provision_aws_terraform.yml --tags plan
 ```
 
 ### Auto-Approve (Skip Confirmation)
 
 ```bash
-ansible-playbook provision_aws_terraform.yml -e auto_approve=true
+ansible-playbook ansible/provision_aws_terraform.yml -e auto_approve=true
 ```
 
 ### View Outputs Only
 
 ```bash
-ansible-playbook provision_aws_terraform.yml --tags outputs
+ansible-playbook ansible/provision_aws_terraform.yml --tags outputs
 ```
+
+---
 
 ## Files Created
 
-- `terraform/aws/terraform.tfvars` - Generated Terraform variables
-- `ansible_inventory.json` - Ansible inventory with connection details
-- `terraform/aws/terraform.tfstate` - Terraform state (managed by Terraform)
+### Generated by Playbook
 
-## Examples
+- `terraform/aws/terraform.tfvars` - Terraform variables (auto-generated, **DO NOT EDIT**)
+- `inventory/hosts` - Ansible inventory with connection details
+- `terraform/aws/tfplan` - Terraform plan file (temporary)
 
-See `examples/splunk_config_terraform.yml` for a comprehensive example showing:
-- Indexers with additional storage volumes
-- Search heads with medium instances
-- Universal forwarders with minimal configuration
-- Hosts using default settings
+### Managed by Terraform
 
-## Migrating from block_device_mapping
+- `terraform/aws/terraform.tfstate` - Infrastructure state
+- `terraform/aws/terraform.tfstate.backup` - State backup
+- `terraform/aws/.terraform/` - Provider plugins
 
-**Old format (Ansible AWS):**
-```yaml
-aws:
-  block_device_mapping:
-    - DeviceName: "/dev/sdg"
-      Ebs.VolumeSize: 500
+---
+
+## Inventory Format
+
+The generated `inventory/hosts` file contains all provisioned instances:
+
+```ini
+# Ansible Inventory - Generated from Terraform
+# DO NOT EDIT - This file is auto-generated by provision_aws_terraform.yml
+
+idx1 ansible_host=54.93.174.46 ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/aws_key.pem private_ip=172.31.22.82 public_dns_name=ec2-54-93-174-46.eu-central-1.compute.amazonaws.com private_dns_name=ip-172-31-22-82.eu-central-1.compute.internal
+idx2 ansible_host=3.76.29.76 ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/aws_key.pem private_ip=172.31.29.206 public_dns_name=ec2-3-76-29-76.eu-central-1.compute.amazonaws.com private_dns_name=ip-172-31-29-206.eu-central-1.compute.internal
 ```
 
-**New format (Terraform):**
+This file is automatically picked up by Ansible via `ansible.cfg`.
+
+---
+
+## AWS Credentials
+
+### Option 1: Environment Variables (Recommended)
+
+```bash
+export AWS_ACCESS_KEY_ID="your-access-key"
+export AWS_SECRET_ACCESS_KEY="your-secret-key"
+ansible-playbook ansible/provision_aws_terraform.yml
+```
+
+### Option 2: Config File Override
+
 ```yaml
 terraform:
   aws:
-    # ... global settings ...
+    access_key_id: "your-access-key"
+    secret_access_key: "your-secret-key"
+```
+
+> ⚠️ **Security Note:** Don't commit credentials to version control. Use environment variables or AWS credential files.
+
+---
+
+## Complete Example
+
+```yaml
+terraform:
+  aws:
+    region: "eu-central-1"
+    ami_id: "ami-03cbad7144aeda3eb"
+    key_name: "aws_key"
+    ssh_private_key_file: "~/.ssh/aws_key.pem"
+    ssh_username: "ec2-user"
+    security_group_names: ["Splunk_Basic"]
+    instance_type: "t2.micro"
+    additional_volumes:
+      - device_name: "/dev/xvdb"
+        volume_size: 100
+        volume_type: "gp3"
 
 splunk_hosts:
-  - name: idx1
+  # Cluster Manager
+  - name: cm
+    roles: [cluster_manager, license_manager]
     terraform:
       aws:
+        instance_type: "t3.large"
+        root_volume_size: 50
+  
+  # Indexers with iter
+  - iter:
+      prefix: idx
+      numbers: "01..03"
+    roles: [indexer]
+    terraform:
+      aws:
+        instance_type: "c5.4xlarge"
+        root_volume_size: 100
         additional_volumes:
           - device_name: "/dev/xvdb"
             volume_size: 500
             volume_type: "gp3"
+  
+  # Search Heads
+  - iter:
+      prefix: sh
+      numbers: "1..2"
+    roles: [search_head]
+    terraform:
+      aws:
+        instance_type: "t3.large"
+  
+  # Deployment Server (uses global defaults)
+  - name: ds
+    roles: [deployment_server]
 ```
+
+---
 
 ## Requirements
 
 - Ansible 2.9+
-- `community.general` collection (for terraform module)
+- `community.general` collection
 - Terraform 1.3.0+
 - AWS credentials configured
 
@@ -189,20 +342,97 @@ Install requirements:
 ansible-galaxy collection install community.general
 ```
 
+---
+
 ## Troubleshooting
 
 ### "terraform section is missing"
-Ensure your `config/splunk_config.yml` has a `terraform.aws` section with required fields.
+Ensure `config/splunk_config.yml` has a `terraform.aws` section with required fields (`region`, `ami_id`, `key_name`, etc.).
 
 ### "Module community.general.terraform not found"
-Install the collection: `ansible-galaxy collection install community.general`
+Install the collection:
+```bash
+ansible-galaxy collection install community.general
+```
+
+### "The security group 'xxx' does not exist"
+Ensure security groups exist in AWS before provisioning. The playbook looks up security group IDs from names.
 
 ### Generated tfvars looks wrong
-Run with `--tags generate` and check `terraform/aws/terraform.tfvars`
+Run with `--tags generate` and inspect `terraform/aws/terraform.tfvars`:
+```bash
+ansible-playbook ansible/provision_aws_terraform.yml --tags generate
+cat terraform/aws/terraform.tfvars
+```
 
-### Want to see Terraform output
+### Want to see detailed Terraform output
 The playbook displays Terraform plan output. For more details, run Terraform directly:
 ```bash
 cd terraform/aws
 terraform plan
 ```
+
+### Inventory not found
+The inventory file is created at `inventory/hosts` after running the provision playbook. Ensure you've run:
+```bash
+ansible-playbook ansible/provision_aws_terraform.yml
+```
+
+---
+
+## Migration Notes
+
+### From Vagrant AWS Plugin
+
+The old Vagrant AWS plugin used these variables which now map to:
+
+| Old (Vagrant) | New (Terraform) |
+|---------------|-----------------|
+| `aws.access_key_id` | `terraform.aws.access_key_id` |
+| `aws.secret_access_key` | `terraform.aws.secret_access_key` |
+| `aws.region` | `terraform.aws.region` |
+| `aws.ami` | `terraform.aws.ami_id` |
+| `aws.instance_type` | `terraform.aws.instance_type` |
+| `aws.keypair_name` | `terraform.aws.key_name` |
+| `aws.ssh_username` | `terraform.aws.ssh_username` |
+| `aws.security_groups` | `terraform.aws.security_group_names` |
+
+### From block_device_mapping
+
+**Old format:**
+```yaml
+aws:
+  block_device_mapping:
+    - DeviceName: "/dev/sdg"
+      Ebs.VolumeSize: 500
+```
+
+**New format:**
+```yaml
+terraform:
+  aws:
+    additional_volumes:
+      - device_name: "/dev/xvdb"
+        volume_size: 500
+        volume_type: "gp3"
+```
+
+---
+
+## Best Practices
+
+1. **Use `iter` for multiple similar hosts** instead of repeating configuration
+2. **Define global defaults** in `terraform.aws` for common settings
+3. **Override per-host** only when needed
+4. **Use environment variables** for AWS credentials, not config files
+5. **Run `--tags plan`** before applying to preview changes
+6. **Commit `terraform.tfstate`** to version control or use remote state
+7. **Don't edit generated files** (`terraform.tfvars`, `inventory/hosts`)
+
+---
+
+## Additional Resources
+
+- [Terraform AWS README](aws/README.md)
+- [Terraform AWS Provider Documentation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
+- [AWS EC2 Instance Types](https://aws.amazon.com/ec2/instance-types/)
