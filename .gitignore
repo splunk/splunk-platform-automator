@@ -41,3 +41,4 @@ __pycache__/
 *.tfvars
 *.tfstate
 *.tfstate.backup
+tfplan

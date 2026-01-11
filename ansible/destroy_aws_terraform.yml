@@ -37,7 +37,7 @@
         path: "{{ item }}"
         state: absent
       loop:
-        - "{{ playbook_dir }}/../ansible_inventory.json"
+        - "{{ playbook_dir }}/../inventory/hosts"
         - "{{ terraform_dir }}/tfplan"
       when: tfstate.stat.exists
 
