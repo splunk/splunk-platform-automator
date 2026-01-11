@@ -22,7 +22,7 @@ terraform:
     key_name: "aws_key"
     ssh_private_key_file: "~/.ssh/aws_key.pem"
     security_group_names: ["Splunk_Basic"]
-    default_instance_type: "t2.micro"
+    instance_type: "t2.micro"
     tags:
       Env: "Splunk Lab"
       splunkit_data_classification: "public"

@@ -21,7 +21,16 @@ terraform:
     key_name: "aws_key"
     ssh_private_key_file: "~/.ssh/aws_key.pem"
     security_group_names: ["Splunk_Basic"]
-    default_instance_type: "t2.micro"
+    instance_type: "t2.micro"
+    root_volume_size: 50
+    root_volume_encrypted: true
+    additional_volumes:
+      - device_name: "/dev/xvdb"
+        volume_size: 500
+        volume_type: "gp3"
+      - device_name: "/dev/xvdc"
+        volume_size: 500
+        volume_type: "gp3"
     tags:
       Env: "Splunk Lab"
       splunkit_data_classification: "public"
@@ -112,7 +121,7 @@ splunk_hosts:
         additional_tags:
           Role: "UniversalForwarder"
 
-  # Deployment Server - uses defaults from terraform.aws.default_instance_type
+  # Deployment Server - uses defaults from terraform.aws.instance_type
   - name: ds1
     roles:
       - deployment_server

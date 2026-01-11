@@ -75,7 +75,7 @@ terraform:
     key_name: 'aws_key'                 # EC2 key pair name
     ssh_private_key_file: '~/.ssh/aws_key.pem'  # Path to private key
     security_group_names: ['Splunk_Basic']      # Security groups
-    default_instance_type: 't2.micro'   # Default if not specified per host
+    instance_type: 't2.micro'   # Default if not specified per host
     tags:                               # Tags applied to all instances
       Env: "Splunk Lab"
 ```
@@ -109,7 +109,7 @@ splunk_hosts:
 **How defaults work:**
 - Global `terraform.aws` settings provide defaults
 - Host-specific `terraform.aws` settings override global defaults
-- If a host has no `terraform` section, it uses `terraform.aws.default_instance_type`
+- If a host has no `terraform` section, it uses `terraform.aws.instance_type`
 
 ## Playbook Options
 
