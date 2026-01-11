@@ -26,6 +26,11 @@ host_configs = {
 {%     set ns.count = ns.count + 1 %}
 {%   elif host.list is defined %}
 {%     set ns.count = ns.count + (host.list | length) %}
+{%   elif host.iter is defined %}
+{%     set range_parts = host.iter.numbers.split('..') %}
+{%     set start_num = range_parts[0] %}
+{%     set end_num = range_parts[1] %}
+{%     set ns.count = ns.count + (end_num | int - start_num | int + 1) %}
 {%   endif %}
 {% endfor %}
 {% set ns2 = namespace(current=0) %}
@@ -34,6 +39,17 @@ host_configs = {
 {%     set hostnames = [host.name] %}
 {%   elif host.list is defined %}
 {%     set hostnames = host.list %}
+{%   elif host.iter is defined %}
+{%     set range_parts = host.iter.numbers.split('..') %}
+{%     set start_num = range_parts[0] | int %}
+{%     set end_num = range_parts[1] | int %}
+{%     set width = range_parts[1] | length %}
+{%     set hostnames = [] %}
+{%     for num in range(start_num, end_num + 1) %}
+{%       set padded_num = "%0{}d".format(width) | format(num) %}
+{%       set hostname = (host.iter.prefix | default('')) ~ padded_num ~ (host.iter.postfix | default('')) %}
+{%       set _ = hostnames.append(hostname) %}
+{%     endfor %}
 {%   else %}
 {%     set hostnames = [] %}
 {%   endif %}
@@ -42,13 +58,14 @@ host_configs = {
   "{{ hostname }}" = {
 {% if host.terraform is defined and host.terraform.aws is defined %}
 {%   set host_aws = host.terraform.aws %}
-    instance_type         = "{{ host_aws.instance_type | default(terraform.aws.default_instance_type | default('t2.micro')) }}"
+    instance_type         = "{{ host_aws.instance_type | default(terraform.aws.instance_type | default('t2.micro')) }}"
     root_volume_size      = {{ host_aws.root_volume_size | default(50) }}
     root_volume_type      = "{{ host_aws.root_volume_type | default('gp3') }}"
     root_volume_encrypted = {{ host_aws.root_volume_encrypted | default(true) | lower }}
-{% if host_aws.additional_volumes is defined and host_aws.additional_volumes | length > 0 %}
+{%   set volumes = host_aws.additional_volumes | default(terraform.aws.additional_volumes | default([])) %}
+{% if volumes | length > 0 %}
     additional_volumes = [
-{% for volume in host_aws.additional_volumes %}
+{% for volume in volumes %}
       {
         device_name = "{{ volume.device_name }}"
         volume_size = {{ volume.volume_size }}
@@ -63,7 +80,21 @@ host_configs = {
     additional_tags = {{ host_aws.additional_tags | to_json }}
 {% endif %}
 {% else %}
-    instance_type = "{{ terraform.aws.default_instance_type | default('t2.micro') }}"
+    instance_type = "{{ terraform.aws.instance_type | default('t2.micro') }}"
+{%   set volumes = terraform.aws.additional_volumes | default([]) %}
+{% if volumes | length > 0 %}
+    additional_volumes = [
+{% for volume in volumes %}
+      {
+        device_name = "{{ volume.device_name }}"
+        volume_size = {{ volume.volume_size }}
+        volume_type = "{{ volume.volume_type | default('gp3') }}"
+        encrypted   = {{ volume.encrypted | default(true) | lower }}
+        delete_on_termination = {{ volume.delete_on_termination | default(true) | lower }}
+      }{{ "," if not loop.last else "" }}
+{% endfor %}
+    ]
+{% endif %}
 {% endif %}
   }{{ "" if ns2.current == ns.count else "," }}
 {%   endfor %}
