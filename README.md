@@ -145,7 +145,7 @@ export PATH="$PATH:/mnt/c/Program Files/Oracle/VirtualBox"
 
 ### Install and configure AWS support (optional - Legacy Vagrant Plugin)
 
-> ⚠️ **Note:** This section describes the legacy Vagrant AWS plugin setup. For new AWS deployments, we recommend using the [Terraform approach](#deploying-on-aws-with-terraform) instead, which is more modern and easier to manage.
+> ⚠️ **Note:** This section describes the legacy Vagrant AWS plugin setup. For new AWS deployments, we recommend using the [Terraform approach](#option-b-aws-with-terraform-recommended-for-aws) instead, which is more modern and easier to manage.
 
 1. Install either of the aws vagrant plugins:
     - [vagrant-aws](https://github.com/mitchellh/vagrant-aws): This is te orig plugin but not maintained anymore and has issues with newer vagrant versions on OSX. The last working version of vagrant is 2.3.4. Install it with `vagrant plugin install vagrant-aws`
