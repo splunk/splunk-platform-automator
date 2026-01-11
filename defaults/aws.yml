@@ -21,6 +21,7 @@ terraform:
     ami_id: "ami-0badcc5b522737046" # Redhat 8 (eu-central-1)
     key_name: "aws_key"
     ssh_private_key_file: "~/.ssh/aws_key.pem"
+    ssh_username: "ec2-user"
     security_group_names: ["Splunk_Basic"]
     instance_type: "t2.micro"
     tags:

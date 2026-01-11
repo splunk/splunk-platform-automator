@@ -11,6 +11,7 @@ ami_id = "{{ terraform.aws.ami_id }}"
 # SSH Configuration
 key_name = "{{ terraform.aws.key_name }}"
 ssh_private_key_file = "{{ terraform.aws.ssh_private_key_file }}"
+ssh_username = "{{ terraform.aws.ssh_username | default('ec2-user') }}"
 
 # Security Groups
 security_group_names = {{ terraform.aws.security_group_names | to_json }}
