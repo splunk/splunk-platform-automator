@@ -5,9 +5,26 @@
   hosts: localhost
   gather_facts: false
   vars:
+    config_file: "{{ lookup('env', 'SPLUNK_CONFIG_FILE') | default('../config/splunk_config.yml', true) }}"
     terraform_dir: "{{ playbook_dir }}/../terraform/aws"
 
   tasks:
+    - name: Load Splunk configuration
+      ansible.builtin.include_vars:
+        file: "{{ config_file }}"
+      tags: always
+
+    - name: Set AWS credentials from config if provided
+      ansible.builtin.set_fact:
+        terraform_env:
+          AWS_ACCESS_KEY_ID: "{{ terraform.aws.access_key_id }}"
+          AWS_SECRET_ACCESS_KEY: "{{ terraform.aws.secret_access_key }}"
+      when:
+        - terraform is defined
+        - terraform.aws is defined
+        - terraform.aws.access_key_id is defined
+        - terraform.aws.secret_access_key is defined
+      tags: always
     - name: Check if Terraform state exists
       ansible.builtin.stat:
         path: "{{ terraform_dir }}/terraform.tfstate"
@@ -29,6 +46,7 @@
       community.general.terraform:
         project_path: "{{ terraform_dir }}"
         state: absent
+      environment: "{{ terraform_env | default({}) }}"
       register: terraform_destroy
       when: tfstate.stat.exists
 

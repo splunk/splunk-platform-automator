@@ -16,6 +16,8 @@ os:
 # Terraform configuration for AWS infrastructure
 terraform:
   aws:
+    #access_key_id: '' # defaults to ENV['AWS_ACCESS_KEY_ID']
+    #secret_access_key: '' # ENV['AWS_SECRET_ACCESS_KEY']
     region: "eu-central-1"
     ami_id: "ami-0badcc5b522737046" # Redhat 8 (eu-central-1)
     key_name: "aws_key"
