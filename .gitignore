@@ -35,6 +35,8 @@
 __pycache__/
 *.py[cod]
 *$py.class
+# VSCode
+.vscode
 # Terraform
 .terraform/
 .terraform.lock.hcl
