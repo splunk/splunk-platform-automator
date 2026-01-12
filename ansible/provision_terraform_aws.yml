@@ -38,7 +38,7 @@
 
     - name: Generate terraform.tfvars from template
       ansible.builtin.template:
-        src: "{{ playbook_dir }}/../template/terraform.tfvars.j2"
+        src: "{{ playbook_dir }}/../template/terraform_aws.tfvars.j2"
         dest: "{{ terraform_dir }}/terraform.tfvars"
         mode: "0644"
       tags:
