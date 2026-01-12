@@ -57,6 +57,7 @@
       loop:
         - "{{ playbook_dir }}/../inventory/hosts"
         - "{{ terraform_dir }}/tfplan"
+        - "{{ terraform_dir }}/terraform.tfvars"
       when: tfstate.stat.exists
 
     - name: Display Destroy Results
