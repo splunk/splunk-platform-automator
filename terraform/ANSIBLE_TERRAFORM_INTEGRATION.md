@@ -40,14 +40,35 @@ ansible-playbook ansible/provision_aws_terraform.yml
 ```
 
 This will:
+
 1. Generate `terraform/aws/terraform.tfvars` from your config
 2. Run `terraform init`
 3. Run `terraform plan` and show you the changes
 4. Prompt for confirmation
 5. Apply the changes
 6. Generate `inventory/hosts` with all provisioned instances
+7. Wait for SSH to be available on all hosts (default behavior)
 
-### 3. Use the Provisioned Infrastructure
+**Note:** The playbook automatically waits for SSH to be ready. To skip this check, use `-e wait_for_ssh=false`.
+
+### 3. Verify Host Readiness (Optional)
+
+For comprehensive readiness checks beyond basic SSH availability:
+
+```bash
+ansible-playbook ansible/wait_for_terraform_aws_hosts.yml
+```
+
+This playbook performs additional checks:
+
+- SSH authentication testing
+- Python availability verification
+- System uptime validation
+- Cloud-init completion (if applicable)
+
+**This step is optional but recommended** before deploying Splunk to ensure all hosts are fully initialized.
+
+### 4. Deploy Splunk
 
 The playbook creates a standard Ansible inventory file that's automatically picked up:
 
@@ -56,7 +77,7 @@ The playbook creates a standard Ansible inventory file that's automatically pick
 ansible-playbook ansible/deploy_site.yml
 ```
 
-### 4. Destroy Infrastructure
+### 5. Destroy Infrastructure
 
 ```bash
 ansible-playbook ansible/destroy_aws_terraform.yml

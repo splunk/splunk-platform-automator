@@ -1,0 +1,108 @@
+---
+# Wait for AWS hosts to be ready for Ansible provisioning
+# This playbook checks SSH connectivity and ensures hosts are fully booted
+
+- name: Wait for Terraform-provisioned hosts to be ready
+  hosts: localhost
+  gather_facts: false
+  vars:
+    config_file: "{{ lookup('env', 'SPLUNK_CONFIG_FILE') | default('../config/splunk_config.yml', true) }}"
+    terraform_dir: "{{ playbook_dir }}/../terraform/aws"
+    ssh_timeout: 300 # 5 minutes timeout
+    ssh_delay: 10 # Check every 10 seconds
+
+  tasks:
+    - name: Load Splunk configuration
+      ansible.builtin.include_vars:
+        file: "{{ config_file }}"
+
+    - name: Get Terraform Outputs
+      community.general.terraform:
+        project_path: "{{ terraform_dir }}"
+        state: present
+      register: terraform_outputs
+      failed_when: terraform_outputs.outputs.ansible_inventory is not defined
+
+    - name: Parse inventory from Terraform outputs
+      ansible.builtin.set_fact:
+        terraform_inventory: "{{ terraform_outputs.outputs.ansible_inventory.value | from_json }}"
+
+    - name: Display hosts to check
+      ansible.builtin.debug:
+        msg: "Checking {{ terraform_inventory | length }} hosts for SSH readiness..."
+
+    - name: Wait for SSH port to be available on all hosts
+      ansible.builtin.wait_for:
+        host: "{{ item.value.public_ip }}"
+        port: "{{ item.value.ansible_port | default(22) }}"
+        delay: "{{ ssh_delay }}"
+        timeout: "{{ ssh_timeout }}"
+        state: started
+        msg: "SSH port {{ item.value.ansible_port | default(22) }} not available on {{ item.key }} ({{ item.value.public_ip }})"
+      loop: "{{ terraform_inventory | dict2items }}"
+      loop_control:
+        label: "{{ item.key }} ({{ item.value.public_ip }})"
+
+- name: Test Ansible connectivity using inventory settings
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Verify Ansible can connect to all hosts
+      ansible.builtin.ping:
+      register: ping_result
+      retries: 30
+      delay: 10
+      until: ping_result is succeeded
+
+    - name: Display connection success
+      ansible.builtin.debug:
+        msg: "✅ {{ inventory_hostname }} is reachable via Ansible"
+
+- name: Display overall success message
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Show completion message
+      ansible.builtin.debug:
+        msg: |
+          ✅ All hosts are ready for Ansible provisioning!
+
+          You can now run:
+            ansible-playbook ansible/deploy_site.yml
+
+- name: Verify host system readiness
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Check Python availability
+      ansible.builtin.raw: python3 --version || python --version
+      register: python_check
+      changed_when: false
+
+    - name: Display Python version
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ python_check.stdout_lines[0] }}"
+
+    - name: Check system uptime
+      ansible.builtin.command: uptime
+      register: uptime_check
+      changed_when: false
+
+    - name: Display uptime
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ uptime_check.stdout }}"
+
+    - name: Verify cloud-init completion (if applicable)
+      ansible.builtin.stat:
+        path: /var/lib/cloud/instance/boot-finished
+      register: cloud_init_status
+
+    - name: Wait for cloud-init to complete
+      ansible.builtin.wait_for:
+        path: /var/lib/cloud/instance/boot-finished
+        timeout: 300
+      when: cloud_init_status.stat.exists is defined
+
+    - name: Display readiness summary
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} is fully ready for provisioning"
