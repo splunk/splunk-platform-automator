@@ -150,6 +150,7 @@
           {% for hostname, details in (terraform_outputs.outputs.ansible_inventory.value | from_json).items() %}
           {%   set custom = (custom_vars_by_host | from_yaml).get(hostname, {}) %}
           {{ hostname }} ansible_host={{ details.public_ip }} ansible_user={{ details.ansible_user }} ansible_ssh_private_key_file={{ details.ansible_ssh_private_key_file }}{% if custom.ansible_port is defined %} ansible_port={{ custom.ansible_port }}{% endif %} private_ip={{ details.private_ip }} public_dns_name={{ details.public_dns_name }} private_dns_name={{ details.private_dns_name }}{% for key, value in custom.items() %}{% if key != 'ansible_port' %} {{ key }}={{ value }}{% endif %}{% endfor %}
+
           {% endfor %}
         dest: "{{ playbook_dir }}/../inventory/hosts"
         mode: "0644"
