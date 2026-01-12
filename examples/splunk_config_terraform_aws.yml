@@ -25,18 +25,8 @@ terraform:
     security_group_names: ["Splunk_Basic"]
     instance_type: "t2.micro"
     root_volume_size: 50
-    root_volume_encrypted: true
-    additional_volumes:
-      - device_name: "/dev/xvdb"
-        volume_size: 500
-        volume_type: "gp3"
-      - device_name: "/dev/xvdc"
-        volume_size: 500
-        volume_type: "gp3"
     tags:
       Env: "Splunk Lab"
-      splunkit_data_classification: "public"
-      splunkit_environment_type: "non-prd"
 
 # Splunk default settings
 splunk_defaults:
@@ -64,44 +54,16 @@ splunk_defaults:
 
 # Splunk hosts with Terraform-specific configurations
 splunk_hosts:
-  # Indexer with additional storage volumes
-  - name: idx1
+  # Indexer
+  - name: idx
     roles:
       - indexer
     terraform:
       aws:
         instance_type: "t3.large"
         root_volume_size: 100
-        root_volume_encrypted: true
-        additional_volumes:
-          - device_name: "/dev/xvdb"
-            volume_size: 500
-            volume_type: "gp3"
-          - device_name: "/dev/xvdc"
-            volume_size: 500
-            volume_type: "gp3"
-        additional_tags:
-          Role: "Indexer"
 
-  # Second indexer with same configuration
-  - name: idx2
-    roles:
-      - indexer
-    terraform:
-      aws:
-        instance_type: "t3.large"
-        root_volume_size: 100
-        additional_volumes:
-          - device_name: "/dev/xvdb"
-            volume_size: 500
-            volume_type: "gp3"
-          - device_name: "/dev/xvdc"
-            volume_size: 500
-            volume_type: "gp3"
-        additional_tags:
-          Role: "Indexer"
-
-  # Search Head - medium instance, no additional volumes
+  # Search Head
   - name: sh1
     roles:
       - search_head
@@ -109,10 +71,8 @@ splunk_hosts:
       aws:
         instance_type: "t3.medium"
         root_volume_size: 50
-        additional_tags:
-          Role: "SearchHead"
 
-  # Universal Forwarder - minimal configuration
+  # Universal Forwarder
   - name: uf1
     roles:
       - universal_forwarder
@@ -120,11 +80,8 @@ splunk_hosts:
       aws:
         instance_type: "t2.micro"
         root_volume_size: 30
-        additional_tags:
-          Role: "UniversalForwarder"
 
-  # Deployment Server - uses defaults from terraform.aws.instance_type
+  # Deployment Server
   - name: ds1
     roles:
       - deployment_server
-    # No terraform section - will use defaults
