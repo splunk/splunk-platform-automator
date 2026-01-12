@@ -212,6 +212,7 @@ After provisioning, Terraform generates:
 
 ## ⚠️ Important Notes
 
+- **AWS CLI Required:** The AWS CLI must be installed for instance status checks to work
 - **Security Groups:** Must exist in AWS before provisioning
 - **SSH Keys:** EC2 key pair must exist in the specified region
 - **AMI IDs:** Region-specific; update when changing regions

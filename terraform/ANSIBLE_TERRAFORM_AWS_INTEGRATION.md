@@ -46,14 +46,14 @@ This will:
 3. Run `terraform plan` and show you the changes
 4. Prompt for confirmation
 5. Apply the changes
-6. Generate `inventory/hosts` with all provisioned instances
-7. Wait for SSH to be available on all hosts (default behavior)
+6. **Wait for AWS status checks to pass** (ensures instances are fully ready)
+7. Generate `inventory/hosts` with all provisioned instances
 
-**Note:** The playbook automatically waits for SSH to be ready. To skip this check, use `-e wait_for_ssh=false`.
+**Note:** Terraform now waits for AWS instance status checks (both instance and system checks) to pass before completing. This ensures instances are fully ready for Ansible deployment. To enable optional quick SSH verification during provisioning, use `-e verify_ssh=true`.
 
 ### 3. Verify Host Readiness (Optional)
 
-For comprehensive readiness checks beyond basic SSH availability:
+For comprehensive readiness checks beyond AWS status checks:
 
 ```bash
 ansible-playbook ansible/wait_for_terraform_aws_hosts.yml
@@ -61,12 +61,12 @@ ansible-playbook ansible/wait_for_terraform_aws_hosts.yml
 
 This playbook performs additional checks:
 
-- SSH authentication testing
+- Ansible ping connectivity test
 - Python availability verification
 - System uptime validation
-- Cloud-init completion (if applicable)
+- Cloud-init completion verification
 
-**This step is optional but recommended** before deploying Splunk to ensure all hosts are fully initialized.
+**This step is optional** - Terraform already ensures instances pass AWS status checks before completing.
 
 ### 4. Deploy Splunk
 
@@ -356,11 +356,20 @@ splunk_hosts:
 - Ansible 2.9+
 - `community.general` collection
 - Terraform 1.3.0+
+- **AWS CLI** (for instance status checks)
 - AWS credentials configured
 
 Install requirements:
 ```bash
+# Ansible collection
 ansible-galaxy collection install community.general
+
+# AWS CLI (if not already installed)
+# macOS
+brew install awscli
+
+# Linux
+pip install awscli
 ```
 
 ---
@@ -374,6 +383,19 @@ Ensure `config/splunk_config.yml` has a `terraform.aws` section with required fi
 Install the collection:
 ```bash
 ansible-galaxy collection install community.general
+```
+
+### "aws: command not found" or status check errors
+The AWS CLI is required for instance status checks. Install it:
+```bash
+# macOS
+brew install awscli
+
+# Linux
+pip install awscli
+
+# Verify installation
+aws --version
 ```
 
 ### "The security group 'xxx' does not exist"

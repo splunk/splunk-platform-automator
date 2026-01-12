@@ -34,11 +34,11 @@
     - name: Wait for SSH port to be available on all hosts
       ansible.builtin.wait_for:
         host: "{{ item.value.public_ip }}"
-        port: "{{ item.value.ansible_port | default(22) }}"
+        port: 22
         delay: "{{ ssh_delay }}"
         timeout: "{{ ssh_timeout }}"
         state: started
-        msg: "SSH port {{ item.value.ansible_port | default(22) }} not available on {{ item.key }} ({{ item.value.public_ip }})"
+        msg: "SSH port 22 not available on {{ item.key }} ({{ item.value.public_ip }})"
       loop: "{{ terraform_inventory | dict2items }}"
       loop_control:
         label: "{{ item.key }} ({{ item.value.public_ip }})"

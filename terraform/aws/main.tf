@@ -20,17 +20,6 @@ data "aws_security_groups" "selected" {
   }
 }
 
-# Lookup AMI details to determine the appropriate SSH username
-# NOTE: Commented out due to AMI lookup failures - using var.ssh_username directly instead
-# data "aws_ami" "selected" {
-#   most_recent = true
-#
-#   filter {
-#     name   = "image-id"
-#     values = [var.ami_id]
-#   }
-# }
-
 # Use the configured SSH username directly
 locals {
   ssh_username = var.ssh_username
@@ -42,6 +31,25 @@ resource "aws_instance" "splunk" {
   instance_type          = each.value.instance_type
   key_name               = var.key_name
   vpc_security_group_ids = data.aws_security_groups.selected.ids
+
+  # Enable detailed monitoring for better visibility
+  monitoring = true
+
+  # Safety: stop instead of terminate on shutdown
+  instance_initiated_shutdown_behavior = "stop"
+
+  # User data to ensure cloud-init completion
+  user_data = <<-EOF
+    #!/bin/bash
+    # Wait for cloud-init to complete
+    cloud-init status --wait
+    
+    # Create completion marker
+    touch /var/lib/cloud/instance/boot-finished
+    
+    # Log completion
+    echo "Instance initialization complete at $(date)" >> /var/log/cloud-init-complete.log
+  EOF
 
   root_block_device {
     volume_type           = each.value.root_volume_type

@@ -12,3 +12,15 @@ output "ansible_inventory" {
     }
   })
 }
+
+output "instance_states" {
+  description = "Instance state information for monitoring"
+  value = {
+    for hostname, instance in aws_instance.splunk : hostname => {
+      id         = instance.id
+      state      = instance.instance_state
+      public_ip  = instance.public_ip
+      private_ip = instance.private_ip
+    }
+  }
+}
