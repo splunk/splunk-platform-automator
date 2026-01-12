@@ -119,7 +119,21 @@ terraform:
       - device_name: "/dev/xvdb"
         volume_size: 100
         volume_type: "gp3"
+
+# OS Configuration (Optional)
+os:
+  # Optional: Run command on instances after creation
+  remote_command: |
+    #!/bin/bash
+    sudo apt-get install -y acl" # Needed for Ubuntu to have Ansible working
 ```
+
+**Remote Command Execution:**
+- Commands run via SSH after instance creation and status checks
+- Executes before Ansible deployment
+- If command fails, Terraform apply fails (prevents bad deployments)
+- Supports multi-line bash scripts
+- Can use sudo for privileged operations
 
 ### Per-Host Terraform Settings
 

@@ -101,3 +101,6 @@ host_configs = {
 {%   endfor %}
 {% endfor %}
 }
+
+# Remote Command Execution
+remote_command = {{ (os.remote_command | default('')) | to_json }}

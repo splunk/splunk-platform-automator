@@ -65,3 +65,9 @@ variable "tags" {
     Env = "Splunk Lab"
   }
 }
+
+variable "remote_command" {
+  type        = string
+  description = "Optional command to run on instances after creation via SSH"
+  default     = ""
+}
