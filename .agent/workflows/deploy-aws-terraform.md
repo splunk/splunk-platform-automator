@@ -52,7 +52,7 @@ Generate Terraform configuration and preview what will be created:
 
 // turbo
 ```bash
-ansible-playbook ansible/provision_aws_terraform.yml --tags plan
+ansible-playbook ansible/provision_terraform_aws.yml --tags plan
 ```
 
 This will:
@@ -66,7 +66,7 @@ This will:
 Apply the Terraform configuration to create AWS resources:
 
 ```bash
-ansible-playbook ansible/provision_aws_terraform.yml
+ansible-playbook ansible/provision_terraform_aws.yml
 ```
 
 This will:
@@ -80,12 +80,12 @@ This will:
 
 **To skip confirmation** (auto-approve):
 ```bash
-ansible-playbook ansible/provision_aws_terraform.yml -e auto_approve=true
+ansible-playbook ansible/provision_terraform_aws.yml -e auto_approve=true
 ```
 
 **To skip SSH wait** (not recommended):
 ```bash
-ansible-playbook ansible/provision_aws_terraform.yml -e wait_for_ssh=false
+ansible-playbook ansible/provision_terraform_aws.yml -e wait_for_ssh=false
 ```
 
 ## Step 4: Verify Host Readiness (Optional but Recommended)
@@ -184,7 +184,7 @@ terraform refresh
 To destroy all AWS resources:
 
 ```bash
-ansible-playbook ansible/destroy_aws_terraform.yml
+ansible-playbook ansible/destroy_terraform_aws.yml
 ```
 
 **Warning:** This will permanently delete all EC2 instances and associated resources!
@@ -193,18 +193,18 @@ ansible-playbook ansible/destroy_aws_terraform.yml
 
 | Command | Purpose |
 |---------|---------|
-| `ansible-playbook ansible/provision_aws_terraform.yml --tags plan` | Preview changes only |
-| `ansible-playbook ansible/provision_aws_terraform.yml` | Provision infrastructure |
+| `ansible-playbook ansible/provision_terraform_aws.yml --tags plan` | Preview changes only |
+| `ansible-playbook ansible/provision_terraform_aws.yml` | Provision infrastructure |
 | `ansible-playbook ansible/wait_for_terraform_aws_hosts.yml` | Verify host readiness |
 | `ansible-playbook ansible/deploy_site.yml` | Deploy Splunk |
-| `ansible-playbook ansible/destroy_aws_terraform.yml` | Destroy infrastructure |
+| `ansible-playbook ansible/destroy_terraform_aws.yml` | Destroy infrastructure |
 | `ansible-inventory --list` | View current inventory |
 
 ## Advanced Options
 
 ### Skip SSH wait during provisioning
 ```bash
-ansible-playbook ansible/provision_aws_terraform.yml -e wait_for_ssh=false
+ansible-playbook ansible/provision_terraform_aws.yml -e wait_for_ssh=false
 ```
 
 ### Custom SSH timeout

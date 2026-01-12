@@ -8,7 +8,7 @@ This directory contains Terraform configuration for provisioning EC2 instances f
 
 ```bash
 # From the main directory
-ansible-playbook ansible/provision_aws_terraform.yml
+ansible-playbook ansible/provision_terraform_aws.yml
 ```
 
 This approach:
@@ -17,7 +17,7 @@ This approach:
 - ✅ Creates Ansible inventory automatically
 - ✅ Maintains single source of truth in config file
 
-See [ANSIBLE_TERRAFORM_INTEGRATION.md](../ANSIBLE_TERRAFORM_INTEGRATION.md) for complete documentation.
+See [ANSIBLE_TERRAFORM_AWS_INTEGRATION.md](../ANSIBLE_TERRAFORM_AWS_INTEGRATION.md) for complete documentation.
 
 ---
 
@@ -97,13 +97,13 @@ splunk_hosts:
 
 ```bash
 # From the main directory
-ansible-playbook ansible/provision_aws_terraform.yml
+ansible-playbook ansible/provision_terraform_aws.yml
 ```
 
 ### 3. Destroy Infrastructure
 
 ```bash
-ansible-playbook ansible/destroy_aws_terraform.yml
+ansible-playbook ansible/destroy_terraform_aws.yml
 ```
 
 ---
@@ -222,6 +222,6 @@ After provisioning, Terraform generates:
 
 ## 📚 Additional Resources
 
-- [Ansible-Terraform Integration Guide](../ANSIBLE_TERRAFORM_INTEGRATION.md)
+- [Ansible-Terraform Integration Guide](../ANSIBLE_TERRAFORM_AWS_INTEGRATION.md)
 - [Terraform AWS Provider Documentation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 - [AWS EC2 Instance Types](https://aws.amazon.com/ec2/instance-types/)

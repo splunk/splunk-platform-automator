@@ -371,7 +371,7 @@ splunk_hosts:
 2. Provision infrastructure:
 
 ```bash
-ansible-playbook ansible/provision_aws_terraform.yml
+ansible-playbook ansible/provision_terraform_aws.yml
 ```
 
 3. Deploy Splunk:
@@ -383,7 +383,7 @@ ansible-playbook ansible/deploy_site.yml
 4. Destroy infrastructure:
 
 ```bash
-ansible-playbook ansible/destroy_aws_terraform.yml
+ansible-playbook ansible/destroy_terraform_aws.yml
 ```
 
 **Features:**
@@ -395,7 +395,7 @@ ansible-playbook ansible/destroy_aws_terraform.yml
 - ✅ AWS credentials can be in config or environment variables
 
 **Documentation:**
-- [Ansible-Terraform Integration Guide](terraform/ANSIBLE_TERRAFORM_INTEGRATION.md) - Complete documentation
+- [Ansible-Terraform Integration Guide](terraform/ANSIBLE_TERRAFORM_AWS_INTEGRATION.md) - Complete documentation
 - [Terraform AWS README](terraform/aws/README.md) - Terraform configuration details
 
 ---
