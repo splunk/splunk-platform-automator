@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## [2.3.0](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.3.0) - 2026-01-18
+
+### Added
+
+- Added Terraform AWS integration as modern replacement for the outdated vagrant-aws plugin
+  - Ansible-driven Terraform workflow with single source of truth in `splunk_config.yml`
+  - Automatic Ansible inventory generation from Terraform outputs
+  - AWS instance status check verification before deployment
+  - Support for per-host instance types, volumes, and configurations
+  - Comprehensive documentation in `docs/Ansible_Terraform_AWS_Integration.md`
+
 ## [2.2.6](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.2.6) - 2025-09-24
 
 ### Fixed
