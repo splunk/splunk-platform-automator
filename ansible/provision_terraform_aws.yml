@@ -74,7 +74,7 @@
 
     - name: Display Terraform Plan
       ansible.builtin.debug:
-        var: terraform_plan.stdout
+        msg: "{{ terraform_plan.stdout.split('\n') }}"
       when: terraform_plan.stdout is defined
       tags:
         - plan
