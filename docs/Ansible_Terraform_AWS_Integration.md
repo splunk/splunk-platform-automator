@@ -490,6 +490,6 @@ terraform:
 
 ## Additional Resources
 
-- [Terraform AWS README](aws/README.md)
+- [Terraform AWS README](../terraform/aws/README.md)
 - [Terraform AWS Provider Documentation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 - [AWS EC2 Instance Types](https://aws.amazon.com/ec2/instance-types/)

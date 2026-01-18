@@ -119,17 +119,36 @@
         dest: "{{ playbook_dir }}/../inventory/hosts"
         mode: "0644"
       when: terraform_outputs.outputs.ansible_inventory is defined
+      register: inventory_result
+      tags:
+        - apply
+        - outputs
+
+    - name: Confirm inventory generation
+      ansible.builtin.debug:
+        msg: "✅ Generated Ansible inventory at {{ playbook_dir }}/../inventory/hosts"
+      when: 
+        - terraform_outputs.outputs.ansible_inventory is defined
+        - inventory_result is changed
+      tags:
+        - apply
+        - outputs
+
+    - name: Build provisioned hosts message
+      ansible.builtin.set_fact:
+        provisioned_hosts_msg: |
+          Provisioned {{ (terraform_outputs.outputs.ansible_inventory.value | from_json) | length }} instances:
+          {% for host, details in (terraform_outputs.outputs.ansible_inventory.value | from_json).items() %}
+            - {{ host }}: {{ details.public_ip }}
+          {% endfor %}
+      when: terraform_outputs.outputs.ansible_inventory is defined
       tags:
         - apply
         - outputs
 
     - name: Display Provisioned Hosts
       ansible.builtin.debug:
-        msg: |
-          Provisioned {{ (terraform_outputs.outputs.ansible_inventory.value | from_json) | length }} instances:
-          {% for host, details in (terraform_outputs.outputs.ansible_inventory.value | from_json).items() %}
-          - {{ host }}: {{ details.public_ip }}
-          {% endfor %}
+        msg: "{{ provisioned_hosts_msg.split('\n') }}"
       when: terraform_outputs.outputs.ansible_inventory is defined
       tags:
         - apply
@@ -143,15 +162,22 @@
         - apply
         - outputs
 
-    - name: Display instance readiness status
-      ansible.builtin.debug:
-        msg: |
+    - name: Build instance readiness message
+      ansible.builtin.set_fact:
+        instance_readiness_msg: |
           ✅ Terraform has verified all instances passed AWS status checks.
-
           Instance States:
           {% for hostname, state in (terraform_outputs.outputs.instance_states.value).items() %}
-          - {{ hostname }}: {{ state.state }} ({{ state.public_ip }})
+            - {{ hostname }}: {{ state.state }} ({{ state.public_ip }})
           {% endfor %}
+      when: terraform_outputs.outputs.instance_states is defined
+      tags:
+        - apply
+        - outputs
+
+    - name: Display instance readiness status
+      ansible.builtin.debug:
+        msg: "{{ instance_readiness_msg.split('\n') }}"
       when: terraform_outputs.outputs.instance_states is defined
       tags:
         - apply
@@ -175,19 +201,24 @@
         - apply
         - verify
 
-    - name: Display completion message
-      ansible.builtin.debug:
-        msg: |
+    - name: Build completion message
+      ansible.builtin.set_fact:
+        completion_msg: |
           ✅ Infrastructure provisioning complete!
-
           Terraform has verified all instances passed AWS status checks.
           Instances are ready for Ansible deployment.
-
           Next steps:
             1. (Optional) Comprehensive readiness check: ansible-playbook ansible/wait_for_terraform_aws_hosts.yml
             2. Deploy Splunk: ansible-playbook ansible/deploy_site.yml
-
           Tip: To enable quick SSH verification during provisioning, use: -e verify_ssh=true
+      when: terraform_outputs.outputs.ansible_inventory is defined
+      tags:
+        - apply
+        - outputs
+
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg: "{{ completion_msg.split('\n') }}"
       when: terraform_outputs.outputs.ansible_inventory is defined
       tags:
         - apply
