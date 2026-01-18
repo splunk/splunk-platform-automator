@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
   - Automatic Ansible inventory generation from Terraform outputs
   - AWS instance status check verification before deployment
   - Support for per-host instance types, volumes, and configurations
-  - Comprehensive documentation in `docs/Ansible_Terraform_AWS_Integration.md`
+  - Comprehensive documentation in [Ansible_Terraform_AWS_Integration.md](docs/Ansible_Terraform_AWS_Integration.md)
 
 ## [2.2.6](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.2.6) - 2025-09-24
 
