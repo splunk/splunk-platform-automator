@@ -17,7 +17,7 @@ This approach:
 - ✅ Creates Ansible inventory automatically
 - ✅ Maintains single source of truth in config file
 
-See [ANSIBLE_TERRAFORM_AWS_INTEGRATION.md](../ANSIBLE_TERRAFORM_AWS_INTEGRATION.md) for complete documentation.
+See [Ansible_Terraform_AWS_Integration.md](../../docs/Ansible_Terraform_AWS_Integration.md) for complete documentation.
 
 ---
 
@@ -223,6 +223,6 @@ After provisioning, Terraform generates:
 
 ## 📚 Additional Resources
 
-- [Ansible-Terraform Integration Guide](../ANSIBLE_TERRAFORM_AWS_INTEGRATION.md)
+- [Ansible-Terraform Integration Guide](../../docs/Ansible_Terraform_AWS_Integration.md)
 - [Terraform AWS Provider Documentation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 - [AWS EC2 Instance Types](https://aws.amazon.com/ec2/instance-types/)

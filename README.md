@@ -339,6 +339,7 @@ vagrant up; ansible-playbook ansible/deploy_site.yml
 
 **Prerequisites:**
 - Terraform 1.3.0+ installed
+- AWS CLI installed (required for instance status checks)
 - `community.general` Ansible collection: `ansible-galaxy collection install community.general`
 - AWS credentials (via environment variables or config file)
 - AWS security group created (e.g., 'Splunk_Basic') - see [security group example](#example-basic-aws-security-group-splunk_basic)
@@ -395,7 +396,7 @@ ansible-playbook ansible/destroy_terraform_aws.yml
 - ✅ AWS credentials can be in config or environment variables
 
 **Documentation:**
-- [Ansible-Terraform Integration Guide](terraform/ANSIBLE_TERRAFORM_AWS_INTEGRATION.md) - Complete documentation
+- [Ansible-Terraform Integration Guide](docs/Ansible_Terraform_AWS_Integration.md) - Complete documentation
 - [Terraform AWS README](terraform/aws/README.md) - Terraform configuration details
 
 ---
