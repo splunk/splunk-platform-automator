@@ -1,5 +1,4 @@
 ---
-
 - name: Upload and unarchive splunk archive from ansible host
   tags:
     - splunk
@@ -12,8 +11,8 @@
     extra_opts:
       - "--dereference"
   when: splunk_download is not defined or
-        (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == false) or
-        (splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == false)
+    (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == false) or
+    (splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == false)
 
 - name: Define splunk archive download url
   tags:
@@ -22,8 +21,8 @@
   ansible.builtin.set_fact:
     splunk_url: 'https://d7wz6hmoaavd0.cloudfront.net/products/{%- if splunk_install_app == "splunk" -%}splunk{%- else -%}universalforwarder{%- endif -%}/releases/{{splunk_target_version}}/linux/{{splunk_archive.0|basename}}'
   when: splunk_download is defined and
-        (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
-        splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
+    (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
+    splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
 
 - name: Download the splunk archive from splunk.com
   tags:
@@ -35,10 +34,10 @@
     timeout: 60
     owner: "{{ splunk_user }}"
     group: "{{ splunk_group }}"
-    force: yes
+    force: true
   when: splunk_download is defined and
-        (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
-        splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
+    (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
+    splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
 
 - name: Extract splunk archive
   tags:
@@ -53,8 +52,8 @@
     extra_opts:
       - "--dereference"
   when: splunk_download is defined and
-        (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
-        splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
+    (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
+    splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
 
 # This is needed when having splunk_home linked to another directory
 - name: Set owner {{ splunk_user }}:{{ splunk_group }} for {{ splunk_home }}
@@ -65,7 +64,7 @@
     path: "{{ splunk_home }}/."
     owner: "{{ splunk_user }}"
     group: "{{ splunk_group }}"
-    mode: '0755'
+    mode: "0755"
 
 - name: Remove splunk install archive
   tags:
@@ -75,5 +74,5 @@
     path: "/tmp/splunk.tar.gz"
     state: absent
   when: splunk_download is defined and
-        (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
-        splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
+    (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
+    splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)

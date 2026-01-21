@@ -9,9 +9,9 @@
   ansible.builtin.find:
     paths: "{{splunk_backup_dir}}/"
     file_type: file
-    recurse: no
-    patterns: '{{ splunk_install_app }}_etc_v*.tgz'
-    use_regex: no
+    recurse: false
+    patterns: "{{ splunk_install_app }}_etc_v*.tgz"
+    use_regex: false
   register: backup_files_to_delete
   become: true
   become_user: "{{ splunk_user }}"
@@ -34,9 +34,6 @@
     - splunk
     - splunk_software
     - splunk_backup
-  tags:
-    - splunk
-    - splunk_software
   ansible.builtin.file:
     path: "{{item.path}}"
     state: absent

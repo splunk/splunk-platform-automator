@@ -1,5 +1,4 @@
 ---
-
 - name: Check /etc/init.d/splunk
   tags:
     - splunk
@@ -25,9 +24,9 @@
   ansible.builtin.find:
     paths: "/etc"
     file_type: any
-    recurse: yes
+    recurse: true
     follow: yes
-    patterns: '[KS][0-9]+splunk$'
+    patterns: "[KS][0-9]+splunk$"
     use_regex: yes
   register: init_files_to_delete
 

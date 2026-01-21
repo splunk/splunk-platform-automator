@@ -18,7 +18,7 @@
   ansible.builtin.stat:
     path: "/etc/systemd/system/{{splunk_service_name}}.service"
   register: check_systemd_unit_file
-  when: 
+  when:
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
 
@@ -31,7 +31,7 @@
     name: "{{splunk_service_name}}.service"
     state: stopped
     enabled: no
-  when: 
+  when:
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
     - check_systemd_unit_file.stat.exists == true
@@ -128,9 +128,9 @@
   ansible.builtin.find:
     paths: "{{splunk_home}}/"
     file_type: any
-    recurse: no
+    recurse: false
     patterns: '.*(?<!lost\+found)$'
-    use_regex: yes
+    use_regex: true
   register: files_to_delete
 
 # Remove as user splunk to prevent removing mounted directories
@@ -145,7 +145,6 @@
   loop: "{{ files_to_delete.files }}"
   become: true
   become_user: "{{ splunk_user }}"
-
 # Do not remove this directory, since a mounted filesystem could be inside
 #  tags:
 #    - splunk

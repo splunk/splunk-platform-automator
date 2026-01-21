@@ -9,7 +9,7 @@
     path: "{{splunk_software}}/"
     pattern: "splunkforwarder-*-*-x64-release.msi"
     file_type: file
-    recurse: no
+    recurse: false
   register: splunk_archive_files
   delegate_to: localhost
   become: false

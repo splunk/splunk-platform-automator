@@ -10,7 +10,7 @@
     path: "{{ splunk_baseconfig }}/"
     pattern: "{{ app_name }}"
     file_type: directory
-    recurse: yes
+    recurse: true
   register: baseapp_dir
   ignore_errors: True
   delegate_to: localhost

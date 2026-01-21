@@ -7,7 +7,7 @@
     path: "{{splunk_software}}/"
     pattern: "{{splunk_install_app}}-*-?inux-{{splunk_architecture|default('amd64')}}.tgz"
     file_type: file
-    recurse: no
+    recurse: false
   register: splunk_archive_files
   delegate_to: localhost
   become: false

@@ -12,7 +12,7 @@
     path: "{{ splunk_baseconfig }}/"
     pattern: "org_all_deploymentclient"
     file_type: directory
-    recurse: yes
+    recurse: true
   register: baseapp_dir
   ignore_errors: True
   delegate_to: localhost
