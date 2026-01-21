@@ -17,7 +17,7 @@
     - common
     - bashrc
   ansible.builtin.blockinfile:
-    create: yes
+    create: true
     path: "~{{ ansible_user }}/.bashrc"
     marker: "#<!-- {mark} ANSIBLE MANAGED BLOCK -->"
     insertafter: "export PATH"

@@ -49,7 +49,7 @@
     dest: "{{ splunk_install_dir }}"
     owner: "{{ splunk_user }}"
     group: "{{ splunk_group }}"
-    remote_src: yes
+    remote_src: true
     extra_opts:
       - "--dereference"
   when: splunk_download is defined and
