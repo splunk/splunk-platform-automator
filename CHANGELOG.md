@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## 2.3.1-dev - ongoing
+
+### Added
+
+- Added check for Ansible version compatibility (2.10.x - 2.16.x)
+- Added requirements for community collections
+
+### Changed
+
+- Updated all Ansible tasks to use Fully Qualified Collection Names (FQCNs)
+
+### Fixed
+
+- Fixed Splunk version detection logic for Splunk 10+
+- Fixed Ansible linting issues:
+  - Added names to anonymous tasks
+  - Corrected boolean syntax
+  - Fixed loop usage and filters
+  - Fixed handler notifications
+
 ## [2.3.0](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.3.0) - 2026-01-18
 
 ### Added
