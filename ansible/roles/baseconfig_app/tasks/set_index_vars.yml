@@ -18,8 +18,7 @@
     mode: 0644
     allow_no_value: >-
       {%- if index_var.key != "null" -%}false{%- else -%}true{%- endif -%}
-  with_dict: >-
-    {%- if index_vars|length > 0 -%}{{index_vars}}{%- else -%}{%- set index_dict = dict({"null":"null"}) -%}{{index_dict}}{%- endif -%}
+  loop: "{{ (index_vars | length > 0) | ternary(index_vars | dict2items, [{'key': 'null', 'value': 'null'}]) }}"
   loop_control:
     loop_var: index_var
   notify: restart splunk

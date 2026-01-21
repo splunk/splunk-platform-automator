@@ -84,7 +84,7 @@
     group: "{{splunk_group}}"
     mode: 0644
   notify: restart splunk
-  with_dict: "{{ splunk_outputs_idxc_list }}"
+  loop: "{{ splunk_outputs_idxc_list }} | dict2items"
   when: splunk_outputs_idxc_list|length > 0
 
 - name: "({{ app_name }}) setting indexerDiscovery for indexer clusters"
@@ -198,7 +198,7 @@
     group: "{{splunk_group}}"
     mode: 0600
   notify: restart splunk
-  with_dict: "{{ splunk_ssl.outputs.config }}"
+  loop: "{{ splunk_ssl.outputs.config }} | dict2items"
   when:
     - splunk_outputs_idx_list|length > 0
     - splunk_ssl.outputs.enable == true

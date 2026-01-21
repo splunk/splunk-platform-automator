@@ -16,7 +16,7 @@
     group: "{{splunk_group}}"
     mode: 0600
   notify: restart splunk
-  with_dict: "{{ splunk_ssl.outputs.config }}"
+  loop: "{{ splunk_ssl.outputs.config }} | dict2items"
   when: splunk_ssl.outputs.enable == true
 
 - name: "({{ app_name }}) setting ssl cert path in tcpout stanza for clustered indexers"

@@ -7,7 +7,7 @@
     - splunk_conf
   ansible.builtin.include_tasks:
     file: add_splunk_conf.yml
-  with_dict: "{{ splunk_conf }}"
+  loop: "{{ splunk_conf }} | dict2items"
   loop_control:
     loop_var: splunk_conf_list_items
   when: splunk_conf is defined

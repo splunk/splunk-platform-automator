@@ -86,7 +86,7 @@
     group: "{{splunk_group}}"
     mode: 0600
   notify: restart splunk
-  with_dict: "{{ splunk_search_peer_idxc_list }}"
+  loop: "{{ splunk_search_peer_idxc_list }} | dict2items"
   when: app_local.stat.exists == false and app_path == splunk_home + '/etc/apps'
 
 - name: "({{ app_name }}) setting static unhashed pass4SymmKey on {{splunk_clustermanager_var}} stanza"
@@ -103,7 +103,7 @@
     group: "{{splunk_group}}"
     mode: 0600
   notify: restart splunk
-  with_dict: "{{ splunk_search_peer_idxc_list }}"
+  loop: "{{ splunk_search_peer_idxc_list }} | dict2items"
   when: app_path != splunk_home + '/etc/apps'
 
 - name: "({{ app_name }}) setting manager_uri in {{splunk_clustermanager_var}} stanza"
@@ -120,7 +120,7 @@
     group: "{{splunk_group}}"
     mode: 0600
   notify: restart splunk
-  with_dict: "{{ splunk_search_peer_idxc_list }}"
+  loop: "{{ splunk_search_peer_idxc_list }} | dict2items"
 
 - name: "({{ app_name }}) setting multisite on {{splunk_clustermanager_var}} stanza"
   tags:
@@ -136,7 +136,7 @@
     group: "{{splunk_group}}"
     mode: 0600
   notify: restart splunk
-  with_dict: "{{ splunk_search_peer_idxc_list }}"
+  loop: "{{ splunk_search_peer_idxc_list }} | dict2items"
 
 - name: "({{ app_name }}) setting site"
   tags:

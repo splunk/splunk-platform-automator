@@ -66,5 +66,5 @@
     group: "{{splunk_group}}"
     mode: 0600
   notify: restart splunk
-  with_dict: "{{ splunk_ssl.web.config }}"
+  loop: "{{ splunk_ssl.web.config }} | dict2items"
   when: splunk_ssl.web.enable == true

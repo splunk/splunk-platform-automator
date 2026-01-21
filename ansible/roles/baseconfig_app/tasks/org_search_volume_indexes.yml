@@ -36,7 +36,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  with_dict: "{{splunk_indexer_volumes_local}}"
+  loop: "{{splunk_indexer_volumes_local}}"
   notify: restart splunk
   when: splunk_indexer_volumes_local|length > 0
 

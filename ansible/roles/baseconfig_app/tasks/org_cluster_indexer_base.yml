@@ -119,7 +119,7 @@
     group: "{{splunk_group}}"
     mode: 0600
   notify: restart splunk
-  with_dict: "{{ splunk_ssl.inputs.config }}"
+  loop: "{{ splunk_ssl.inputs.config }} | dict2items"
   when: splunk_ssl.inputs.enable == true
 
 - name: "({{ app_name }}) call set_bucket_tunings"

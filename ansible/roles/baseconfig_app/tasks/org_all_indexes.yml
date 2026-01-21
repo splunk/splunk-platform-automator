@@ -18,7 +18,7 @@
     - splunk_baseconfig
     - org_all_indexes
   ansible.builtin.include_tasks: set_index_vars.yml
-  with_dict: "{{ splunk_indexes_path_settings|default({}) }}"
+  loop: "{{ splunk_indexes_path_settings|default({}) }}"
   vars:
     index_name: "{{ item.key }}"
     index_vars: "{{ item.value }}"
@@ -33,7 +33,7 @@
     - splunk_baseconfig
     - org_all_indexes
   ansible.builtin.include_tasks: set_index_vars.yml
-  with_dict: "{{ splunk_indexes_path_settings|default({}) }}"
+  loop: "{{ splunk_indexes_path_settings|default({}) }}"
   vars:
     index_name: "{{ item.key }}"
     index_vars: "{{ item.value }}"
@@ -47,7 +47,7 @@
     - splunk_baseconfig
     - org_all_indexes
   ansible.builtin.include_tasks: set_index_vars.yml
-  with_dict: "{{ splunk_indexes_settings|default({}) }}"
+  loop: "{{ splunk_indexes_settings|default({}) }}"
   vars:
     index_name: "{{ item.key }}"
     index_vars: "{{ item.value }}"
