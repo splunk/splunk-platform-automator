@@ -64,7 +64,7 @@
     path: "{{ splunk_home }}/."
     owner: "{{ splunk_user }}"
     group: "{{ splunk_group }}"
-    mode: "0755"
+    mode: '0755'
 
 - name: Remove splunk install archive
   tags:

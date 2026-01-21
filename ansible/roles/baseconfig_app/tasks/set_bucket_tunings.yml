@@ -14,7 +14,7 @@
     value: "zstd"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: "0600"
+    mode: '0600'
   notify: Restart splunk
   when: splunk_installed_version is version_compare('7.2', '>=')
 
@@ -36,6 +36,6 @@
       {%- endif -%}
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: "0600"
+    mode: '0600'
   notify: Restart splunk
   when: splunk_installed_version is version_compare('7.2', '>=')

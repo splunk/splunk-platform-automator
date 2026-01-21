@@ -24,7 +24,7 @@
     state: directory
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: "0755"
+    mode: '0755'
 
 - name: "({{ app_name }}) checking if local dir exists"
   tags:
@@ -42,7 +42,7 @@
     dest: "{{ app_path }}/{{ app_dest_name }}/local/"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: "0644"
+    mode: '0644'
   with_fileglob:
     - "{{ baseapp_dir.files.0.path }}/local/*"
   when: app_local.stat.exists == false
@@ -56,7 +56,7 @@
     state: directory
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: "0755"
+    mode: '0755'
 
 - name: "({{ app_name }}) copy local.meta"
   tags:
@@ -67,4 +67,4 @@
     dest: "{{ app_path }}/{{ app_dest_name }}/metadata/local.meta"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: "0644"
+    mode: '0644'
