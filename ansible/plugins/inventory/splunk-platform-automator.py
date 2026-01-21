@@ -576,7 +576,7 @@ class InventoryModule(BaseInventoryPlugin):
         '''Return dynamic inventory from source '''
         super(InventoryModule, self).parse(inventory, loader, path, cache)
 
-        # Check for allowed Ansible versions (2.10.x - 2.16.x)
+        # Check for allowed Ansible versions (greater than 2.10.x)
         from ansible import __version__ as ansible_version
         try:
             major, minor = map(int, ansible_version.split('.')[:2])
