@@ -580,8 +580,8 @@ class InventoryModule(BaseInventoryPlugin):
         from ansible import __version__ as ansible_version
         try:
             major, minor = map(int, ansible_version.split('.')[:2])
-            if major != 2 or minor < 10 or minor > 16:
-                raise AnsibleParserError("Ansible version %s is not supported. Only versions 2.10.x to 2.16.x are working." % ansible_version)
+            if major < 2 or (major == 2 and minor < 10):
+                raise AnsibleParserError("Ansible version %s is not supported. Only versions 2.10.x or higher are working." % ansible_version)
         except ValueError:
             pass
         # Read the inventory YAML file
