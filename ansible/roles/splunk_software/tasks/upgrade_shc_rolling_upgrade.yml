@@ -1,5 +1,4 @@
 ---
-
 - name: Check cluster member state
   tags:
     - splunk
@@ -109,15 +108,15 @@
     body_format: form-urlencoded
     body:
       output_mode: "json"
-    return_content: yes
-    force_basic_auth: yes
-    validate_certs: no
+    return_content: true
+    force_basic_auth: true
+    validate_certs: false
   register: splunk_rest_output_local
   vars:
     splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|to_json|from_json }}"
-  check_mode: no
+  check_mode: false
   # Real Time searches are never going to stop, so we do not check for them here
-  until: "splunk_rest_json_output_local.entry[0].content.active_historical_search_count == 0" 
+  until: "splunk_rest_json_output_local.entry[0].content.active_historical_search_count == 0"
   # Wait 60 minutes to complete this step
   retries: 60
   delay: 60
@@ -212,13 +211,13 @@
     body_format: form-urlencoded
     body:
       output_mode: "json"
-    return_content: yes
-    force_basic_auth: yes
-    validate_certs: no
+    return_content: true
+    force_basic_auth: true
+    validate_certs: false
   register: splunk_rest_output_local
   vars:
     splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|to_json|from_json }}"
-  check_mode: no
+  check_mode: false
   until: "splunk_rest_json_output_local.entry[0].content.status == 'Up'"
   # Wait 10 minutes to complete this step
   retries: 40

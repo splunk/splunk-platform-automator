@@ -88,4 +88,9 @@
     - splunk_search_peer_idxc_list|length > 0
     - inventory_hostname not in groups.role_cluster_manager
 
-- include_tasks: dserver.yml
+- name: Call dserver from role monitoring_console
+  tags:
+    - splunk
+    - monitoring_console
+    - dserver
+  ansible.builtin.include_tasks: dserver.yml

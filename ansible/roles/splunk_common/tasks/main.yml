@@ -8,10 +8,14 @@
   ansible.builtin.debug:
     msg: "role '{{ role_name }}' start"
 
-- include_tasks: check_systemctl.yml
+- name: Call check_systemctl from role splunk_common
+  ansible.builtin.include_tasks: check_systemctl.yml
 
-- include_tasks: check_policykit.yml
+- name: Call check_policykit from role splunk_common
+  ansible.builtin.include_tasks: check_policykit.yml
 
-- include_tasks: set_splunk_installed_version.yml
+- name: Call set_splunk_installed_version from role splunk_common
+  ansible.builtin.include_tasks: set_splunk_installed_version.yml
 
-- include_tasks: check_systemd_file.yml
+- name: Call check_systemd_file from role splunk_common
+  ansible.builtin.include_tasks: check_systemd_file.yml

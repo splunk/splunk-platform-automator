@@ -1,5 +1,4 @@
 ---
-
 - name: 'call Splunk rest (noauth): {{ http_method|default("GET") }} {{ splunk_rest_endpoint|default("/") }}'
   tags:
     - splunk
@@ -16,7 +15,7 @@
     - splunk_rest
   ansible.builtin.set_fact:
     splunk_rest_json_output: "{{ splunk_rest_output.stdout|to_json|from_json }}"
-  when: 
+  when:
     - splunk_rest_noauth|default(false)|bool == true
     - splunk_rest_output_mode|default("json") == "json"
 
@@ -33,9 +32,9 @@
     body_format: form-urlencoded
     body:
       output_mode: "{{ splunk_rest_output_mode|default('json') }}"
-    return_content: yes
-    force_basic_auth: yes
-    validate_certs: no
+    return_content: true
+    force_basic_auth: true
+    validate_certs: false
   register: splunk_rest_output
   when: splunk_rest_noauth|default(true)|bool == true
   changed_when: http_method|default('GET') == 'POST'
@@ -47,7 +46,7 @@
     - splunk_rest
   ansible.builtin.set_fact:
     splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
-  when: 
+  when:
     - splunk_rest_noauth|default(false)|bool == false
     - splunk_rest_output_mode|default("json") == "json"
 
@@ -58,7 +57,7 @@
     - splunk_rest
   ansible.builtin.debug:
     var: splunk_rest_output
-  when: 
+  when:
     - splunk_rest_output_show|default(false)|bool == true
     - splunk_rest_output_mode|default("json") == "xml"
 
@@ -69,6 +68,6 @@
     - splunk_rest
   ansible.builtin.debug:
     var: splunk_rest_json_output
-  when: 
+  when:
     - splunk_rest_output_show|default(false)|bool == true
     - splunk_rest_output_mode|default("json") == "json"

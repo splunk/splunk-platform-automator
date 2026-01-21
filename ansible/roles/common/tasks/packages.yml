@@ -2,7 +2,7 @@
 # This playbook installs additional os packages
 
 - name: Run apt-get update
-  apt:
+  ansible.builtin.apt:
     update_cache: yes
   when: ansible_os_family == "Debian"
 
@@ -11,5 +11,5 @@
     - common
     - packages
   ansible.builtin.package:
-    name: "{{ packages }}" 
+    name: "{{ packages }}"
     state: latest

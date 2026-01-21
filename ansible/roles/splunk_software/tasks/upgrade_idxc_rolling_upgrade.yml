@@ -1,5 +1,4 @@
 ---
-
 - name: Call get_idxc_peerids
   tags:
     - splunk
@@ -15,7 +14,7 @@
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
   ansible.builtin.set_fact:
-    idxc_peerid:  "{{ idxc_name_peerids | json_query(query) }}"
+    idxc_peerid: "{{ idxc_name_peerids | json_query(query) }}"
   vars:
     query: "[? name=='{{ inventory_hostname }}'].peerid"
 
@@ -69,13 +68,13 @@
     body_format: form-urlencoded
     body:
       output_mode: "json"
-    return_content: yes
-    force_basic_auth: yes
-    validate_certs: no
+    return_content: true
+    force_basic_auth: true
+    validate_certs: false
   register: splunk_rest_output_local
   vars:
     splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|to_json|from_json }}"
-  check_mode: no
+  check_mode: false
   until: "splunk_rest_json_output_local.entry[0].content.status == 'Down'"
   # Wait 30 minutes to complete this step
   retries: 30
@@ -106,13 +105,13 @@
     body_format: form-urlencoded
     body:
       output_mode: "json"
-    return_content: yes
-    force_basic_auth: yes
-    validate_certs: no
+    return_content: true
+    force_basic_auth: true
+    validate_certs: false
   register: splunk_rest_output_local
   vars:
     splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|to_json|from_json }}"
-  check_mode: no
+  check_mode: false
   until: "splunk_rest_json_output_local.entry[0].content.status == 'Up'"
   # Wait 10 minutes to complete this step
   retries: 40

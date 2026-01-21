@@ -48,8 +48,8 @@
     tasks_from: splunk_ssl_inputs_certs
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
 
-- include_tasks: idxcluster.yml
+- ansible.builtin.include_tasks: idxcluster.yml
   when: idxc_name is defined
 
-- include_tasks: idxsingle.yml
+- ansible.builtin.include_tasks: idxsingle.yml
   when: idxc_name is not defined

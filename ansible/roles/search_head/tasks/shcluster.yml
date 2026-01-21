@@ -17,7 +17,7 @@
     - shcluster
     - shsettings
     - comment_macro
-  when: 
+  when:
     - inventory_hostname == splunk_shc_host_list|first
     - splunk_installed_version is version_compare('8.1.0', '<')
 
@@ -30,7 +30,7 @@
   become: true
   become_user: "{{ splunk_user }}"
   register: need_shcluster_init
-  check_mode: no
+  check_mode: false
   failed_when: "need_shcluster_init.rc > 1"
   changed_when: "need_shcluster_init.rc == 0"
 
@@ -84,7 +84,7 @@
   become: true
   become_user: "{{ splunk_user }}"
   register: shcluster_status
-  check_mode: no
+  check_mode: false
   failed_when: shcluster_status.rc != 0 and shcluster_status.rc != 22
   changed_when: shcluster_status.stdout.find('service_ready_flag') == -1
 
@@ -107,7 +107,7 @@
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
   become: true
   become_user: "{{ splunk_user }}"
-  check_mode: no
+  check_mode: false
   register: shcluster_ready
   until: "shcluster_ready.stdout.find('service_ready_flag') != -1"
   retries: 15
@@ -135,7 +135,7 @@
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk show servername -auth admin:{{ splunk_admin_password }}"
   become: true
   become_user: "{{ splunk_user }}"
-  check_mode: no
+  check_mode: false
   changed_when: false
   register: splunk_servername
   when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
@@ -148,7 +148,7 @@
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
   become: true
   become_user: "{{ splunk_user }}"
-  check_mode: no
+  check_mode: false
   register: shcluster_join
   until: "shcluster_join.stdout.find('label :' + splunk_servername.stdout.split(':')[1]) != -1"
   retries: 15
@@ -162,7 +162,7 @@
     - shcluster
   ansible.builtin.stat:
     path: "{{ splunk_home }}/var/run/splunk/deploy/apps"
-    follow: yes
+    follow: true
   become: true
   become_user: "{{ splunk_user }}"
   delegate_to: "{{ splunk_shc_deployer }}"
@@ -180,13 +180,14 @@
     msg: register shc bundle push
   notify: Wait for SHC service ready and call push bundle
   changed_when: deploy_apps_stat.stat.exists|default(false) == false
-  when: 
+  when:
     - deploy_apps_stat.stat.exists|default(false) == false
     - inventory_hostname == splunk_shc_host_list|last
     - shcluster_status.changed == true
 
 # Add single indexers as search peers
-- include_tasks: search_peers.yml
+- name: Call search_peers from role search_head
+  ansible.builtin.include_tasks: search_peers.yml
 
 - name: Call update_dserver from role monitoring_console
   tags:

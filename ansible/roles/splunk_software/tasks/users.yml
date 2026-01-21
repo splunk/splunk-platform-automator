@@ -21,7 +21,7 @@
     group: "{{ splunk_group }}"
     comment: "Splunk User"
     shell: /bin/bash
-    create_home: yes
+    create_home: true
     state: present
   when: splunk_user_create|default(true) == true
 
@@ -34,7 +34,7 @@
     dest: "~{{ splunk_user }}/.bashrc.splunk"
     owner: "{{ splunk_user }}"
     group: "{{ splunk_group }}"
-    mode: '0644'
+    mode: "0644"
 
 - name: Insert/update bashrc for splunk stuff
   tags:

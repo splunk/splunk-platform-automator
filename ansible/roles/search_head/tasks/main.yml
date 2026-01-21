@@ -20,14 +20,16 @@
     tasks_from: splunk_ssl_web_certs
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
-- include_tasks: shcluster.yml
+- name: Call shcluster from role search_head
+  ansible.builtin.include_tasks: shcluster.yml
   tags:
     - splunk
     - search_head
     - shcluster
   when: shc_name is defined
 
-- include_tasks: shsingle.yml
+- name: Call shsingle from role search_head
+  ansible.builtin.include_tasks: shsingle.yml
   tags:
     - splunk
     - search_head
