@@ -17,7 +17,7 @@
     - splunk
     - splunk_software
   ansible.builtin.set_fact:
-    splunk_target_version: "{{splunk_archive_files.files|sort(attribute='path')|map(attribute='path')|list|last|basename|regex_replace('.*-([0-9]+\\.[0-9]+[\\.]*[0-9]*[\\.]*[0-9]*)-.*', '\\1')}}"
+    splunk_target_version: "{{ splunk_archive_files.files | map(attribute='path') | map('basename') | map('regex_replace', '.*-([0-9]+\\.[0-9]+[\\.]*[0-9]*[\\.]*[0-9]*)-.*', '\\1') | community.general.version_sort | last }}"
   when: splunk_version == 'latest' and splunk_archive_files.files|length > 0
 
 - name: Fail if no splunk binaries are found for latest version
