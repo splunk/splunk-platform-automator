@@ -19,8 +19,8 @@
   ansible.builtin.include_role:
     name: baseconfig_app
   vars:
-    app_name: 'org_cluster_indexer_base'
-    app_path: '{{splunk_home}}/etc/apps'
+    app_name: "org_cluster_indexer_base"
+    app_path: "{{splunk_home}}/etc/apps"
 
 - name: Apply baseconfig app org_site_n_indexer_base
   tags:
@@ -32,6 +32,6 @@
   ansible.builtin.include_role:
     name: baseconfig_app
   vars:
-    app_name: 'org_site_n_indexer_base'
-    app_path: '{{splunk_home}}/etc/apps'
-  when: site is defined and "'site' in site"
+    app_name: "org_site_n_indexer_base"
+    app_path: "{{splunk_home}}/etc/apps"
+  when: site is defined and 'site' in site
