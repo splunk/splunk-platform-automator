@@ -28,9 +28,9 @@
     path: "{{ splunk_home }}/etc/system/local/server.conf"
     section: shclustering
     option: pass4SymmKey
-    value: "{{splunk_shc_pass}}"
-    owner: "{{splunk_user}}"
-    group: "{{splunk_group}}"
+    value: "{{ splunk_shc_pass }}"
+    owner: "{{ splunk_user }}"
+    group: "{{ splunk_group }}"
     mode: '0600'
   notify: Restart splunk
   when: "grep_result.rc == 1"
@@ -43,9 +43,9 @@
     path: "{{ splunk_home }}/etc/system/local/server.conf"
     section: shclustering
     option: shcluster_label
-    value: "{{splunk_shc_label}}"
-    owner: "{{splunk_user}}"
-    group: "{{splunk_group}}"
+    value: "{{ splunk_shc_label }}"
+    owner: "{{ splunk_user }}"
+    group: "{{ splunk_group }}"
     mode: '0600'
   notify: Restart splunk
 
