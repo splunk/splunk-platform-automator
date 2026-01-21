@@ -1,14 +1,14 @@
 ---
 # Main playbook for this role
 
-- name: start role tasks
+- name: Start role tasks
   tags:
     - splunk
     - deployment_server
   debug:
     msg: "role '{{ role_name }}' start"
 
-- name: apply baseconfig app org_all_forwarder_outputs
+- name: Apply baseconfig app org_all_forwarder_outputs
   tags:
     - splunk
     - splunk_baseconfig
@@ -21,7 +21,7 @@
     app_path: '{{splunk_home}}/etc/apps'
   when: inventory_hostname not in groups.role_indexer
 
-- name: install certs for web ssl
+- name: Install certs for web ssl
   tags:
     - splunk
     - splunk_baseconfig
@@ -33,7 +33,7 @@
     tasks_from: splunk_ssl_web_certs
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
-- name: apply baseconfig app org_all_search_base
+- name: Apply baseconfig app org_all_search_base
   tags:
     - splunk
     - splunk_baseconfig
@@ -45,7 +45,7 @@
     app_name: 'org_all_search_base'
     app_path: '{{splunk_home}}/etc/apps'
 
-- name: apply baseconfig app org_full_license_server
+- name: Apply baseconfig app org_full_license_server
   tags:
     - splunk
     - splunk_baseconfig
@@ -58,7 +58,7 @@
     app_path: '{{splunk_home}}/etc/apps'
   when: splunk_license_manager|default()|length > 0 and inventory_hostname not in groups.role_license_manager|default([])
 
-- name: apply baseconfig app org_all_forwarder_outputs
+- name: Apply baseconfig app org_all_forwarder_outputs
   tags:
     - splunk
     - splunk_baseconfig
@@ -74,7 +74,7 @@
   loop_control:
     loop_var: output_name
 
-- name: apply baseconfig app org_full_license_server
+- name: Apply baseconfig app org_full_license_server
   tags:
     - splunk
     - splunk_baseconfig
@@ -87,7 +87,7 @@
     app_path: '{{ splunk_home }}/etc/deployment-apps'
   when: splunk_license_manager|default()|length > 0
 
-- name: apply baseconfig app org_all_deploymentclient
+- name: Apply baseconfig app org_all_deploymentclient
   tags:
     - splunk
     - splunk_baseconfig
@@ -99,7 +99,7 @@
     app_name: 'org_all_deploymentclient'
     app_path: '{{ splunk_home }}/etc/deployment-apps'
 
-- name: apply baseconfig app org_all_indexer_base
+- name: Apply baseconfig app org_all_indexer_base
   tags:
     - splunk
     - splunk_baseconfig
@@ -111,7 +111,7 @@
     app_name: 'org_all_indexer_base'
     app_path: '{{ splunk_home }}/etc/deployment-apps'
 
-- name: apply baseconfig app org_indexer_volume_indexes
+- name: Apply baseconfig app org_indexer_volume_indexes
   tags:
     - splunk
     - splunk_baseconfig
@@ -123,7 +123,7 @@
     app_name: 'org_indexer_volume_indexes'
     app_path: '{{splunk_home}}/etc/deployment-apps'
 
-- name: apply baseconfig app org_search_volume_indexes
+- name: Apply baseconfig app org_search_volume_indexes
   tags:
     - splunk
     - splunk_baseconfig
@@ -135,7 +135,7 @@
     app_name: 'org_search_volume_indexes'
     app_path: '{{splunk_home}}/etc/deployment-apps'
 
-- name: apply baseconfig app org_all_indexes
+- name: Apply baseconfig app org_all_indexes
   tags:
     - splunk
     - splunk_baseconfig
@@ -147,7 +147,7 @@
     app_name: 'org_all_indexes'
     app_path: '{{splunk_home}}/etc/deployment-apps'
 
-- name: apply baseconfig app org_all_search_base
+- name: Apply baseconfig app org_all_search_base
   tags:
     - splunk
     - splunk_baseconfig
@@ -159,7 +159,7 @@
     app_name: 'org_all_search_base'
     app_path: '{{splunk_home}}/etc/deployment-apps'
 
-- name: apply baseconfig app org_cluster_search_base
+- name: Apply baseconfig app org_cluster_search_base
   tags:
     - splunk
     - splunk_baseconfig
@@ -176,7 +176,7 @@
     loop_var: search_peer_name
   when: splunk_idxc_cm_list|length > 0
 
-- name: call serverclass
+- name: Call serverclass
   tags:
     - splunk
     - splunk_baseconfig
@@ -184,7 +184,7 @@
     - serverclass
   include_tasks: serverclass.yml
 
-- name: call save_serverclass
+- name: Call save_serverclass
   tags:
     - splunk
     - splunk_baseconfig
@@ -195,7 +195,7 @@
   include_tasks: "save_serverclass.yml"
   when: splunk_save_serverclass|default(false) == true
 
-- name: call update_dserver from role monitoring_console
+- name: Call update_dserver from role monitoring_console
   tags:
     - splunk
     - splunk_baseconfig

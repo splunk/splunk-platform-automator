@@ -1,6 +1,6 @@
 ---
 
-- name: accept license and start splunk
+- name: Accept license and start splunk
   tags:
     - splunk
     - splunk_software
@@ -9,7 +9,7 @@
   become: yes
   become_user: "{{ splunk_user }}"
 
-- name: stop splunk
+- name: Stop splunk
   tags:
     - splunk
     - splunk_software

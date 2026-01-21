@@ -1,7 +1,7 @@
 ---
 # This playbook does setup 
 
-- name: enable chronyd
+- name: Enable chronyd
   tags:
     - common
     - ntp

@@ -1,7 +1,7 @@
 ---
 # This playbook install the base config app
 
-- name: create system/local directory
+- name: Create system/local directory
   tags:
     - splunk
     - splunk_baseconfig
@@ -14,7 +14,7 @@
     group: "{{splunk_group}}"
     mode: 0755
 
-- name: define org_all_forwarder_outputs server class clients
+- name: Define org_all_forwarder_outputs server class clients
   tags:
     - splunk
     - splunk_baseconfig
@@ -31,7 +31,7 @@
     mode: 0644
   notify: reload deploy-server
 
-- name: blacklist org_all_forwarder_outputs server class clients
+- name: Blacklist org_all_forwarder_outputs server class clients
   tags:
     - splunk
     - splunk_baseconfig
@@ -50,7 +50,7 @@
   notify: reload deploy-server
   when: splunk_idx_dsclients|default()|length > 0
 
-- name: define org_all_forwarder_outputs server class apps
+- name: Define org_all_forwarder_outputs server class apps
   tags:
     - splunk
     - splunk_baseconfig
@@ -71,7 +71,7 @@
     - { var: 'stateOnClient', value: 'enabled' }
   notify: reload deploy-server
 
-- name: define org_all_deploymentclient server class clients
+- name: Define org_all_deploymentclient server class clients
   tags:
     - splunk
     - splunk_baseconfig
@@ -88,7 +88,7 @@
     mode: 0644
   notify: reload deploy-server
 
-- name: define org_all_deploymentclient server class apps
+- name: Define org_all_deploymentclient server class apps
   tags:
     - splunk
     - splunk_baseconfig
@@ -109,7 +109,7 @@
     - { var: 'stateOnClient', value: 'enabled' }
   notify: reload deploy-server
 
-- name: define org_full_license_server server class clients
+- name: Define org_full_license_server server class clients
   tags:
     - splunk
     - splunk_baseconfig
@@ -128,7 +128,7 @@
   notify: reload deploy-server
   when: splunk_license_manager|default()|length > 0
 
-- name: define org_full_license_server server class apps
+- name: Define org_full_license_server server class apps
   tags:
     - splunk
     - splunk_baseconfig
@@ -150,7 +150,7 @@
   notify: reload deploy-server
   when: splunk_license_manager|default()|length > 0
 
-- name: define org_all_indexer_base server class clients
+- name: Define org_all_indexer_base server class clients
   tags:
     - splunk
     - splunk_baseconfig
@@ -169,7 +169,7 @@
   notify: reload deploy-server
   when: splunk_idx_hf_dsclients|default()|length > 0
 
-- name: define org_all_indexer_base server class apps
+- name: Define org_all_indexer_base server class apps
   tags:
     - splunk
     - splunk_baseconfig
@@ -191,7 +191,7 @@
   notify: reload deploy-server
   when: splunk_idx_hf_dsclients|default()|length > 0
 
-- name: define org_indexer_volume_indexes server class clients
+- name: Define org_indexer_volume_indexes server class clients
   tags:
     - splunk
     - splunk_baseconfig
@@ -210,7 +210,7 @@
   notify: reload deploy-server
   when: splunk_idx_dsclients|default()|length > 0
 
-- name: define org_indexer_volume_indexes server class apps
+- name: Define org_indexer_volume_indexes server class apps
   tags:
     - splunk
     - splunk_baseconfig
@@ -232,7 +232,7 @@
   notify: reload deploy-server
   when: splunk_idx_dsclients|default()|length > 0
 
-- name: define org_all_indexes server class clients
+- name: Define org_all_indexes server class clients
   tags:
     - splunk
     - splunk_baseconfig
@@ -251,7 +251,7 @@
   notify: reload deploy-server
   when: splunk_idx_hf_sh_dsclients|default()|length > 0
 
-- name: define org_all_indexes server class apps
+- name: Define org_all_indexes server class apps
   tags:
     - splunk
     - splunk_baseconfig
@@ -273,7 +273,7 @@
   notify: reload deploy-server
   when: splunk_idx_hf_sh_dsclients|default()|length > 0
 
-- name: define org_cluster_search_base server class clients
+- name: Define org_cluster_search_base server class clients
   tags:
     - splunk
     - splunk_baseconfig
@@ -292,7 +292,7 @@
   notify: reload deploy-server
   when: splunk_sh_dsclients|default()|length > 0
 
-- name: define org_cluster_search_base server class apps
+- name: Define org_cluster_search_base server class apps
   tags:
     - splunk
     - splunk_baseconfig
@@ -314,7 +314,7 @@
   notify: reload deploy-server
   when: splunk_sh_dsclients|default()|length > 0
 
-- name: define org_search_volume_indexes server class clients
+- name: Define org_search_volume_indexes server class clients
   tags:
     - splunk
     - splunk_baseconfig
@@ -333,7 +333,7 @@
   notify: reload deploy-server
   when: splunk_sh_hf_dsclients|default()|length > 0
 
-- name: define org_search_volume_indexes server class apps
+- name: Define org_search_volume_indexes server class apps
   tags:
     - splunk
     - splunk_baseconfig
@@ -355,7 +355,7 @@
   notify: reload deploy-server
   when: splunk_sh_hf_dsclients|default()|length > 0
 
-- name: define org_all_search_base server class clients
+- name: Define org_all_search_base server class clients
   tags:
     - splunk
     - splunk_baseconfig
@@ -374,7 +374,7 @@
   notify: reload deploy-server
   when: splunk_hf_sh_lm_cm_ds_dp_mc_dsclients|default()|length > 0
 
-- name: define org_all_search_base server class apps
+- name: Define org_all_search_base server class apps
   tags:
     - splunk
     - splunk_baseconfig

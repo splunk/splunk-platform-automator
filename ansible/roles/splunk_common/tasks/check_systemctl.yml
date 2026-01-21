@@ -8,7 +8,7 @@
     path: /bin/systemctl
   register: systemctl
 
-- name: set systemctl
+- name: Set systemctl
   tags:
     - splunk
     - splunk_common

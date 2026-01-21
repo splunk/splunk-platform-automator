@@ -1,7 +1,7 @@
 ---
 # This playbook uninstalls splunk enterprise or splunk universal forwarder
 
-- name: check for splunk binary
+- name: Check for splunk binary
   tags:
     - splunk
     - splunk_software
@@ -10,7 +10,7 @@
     path: "{{ splunk_home }}/bin/splunk"
   register: check_splunk_binary_file
 
-- name: check for splunk systemd unit file {{splunk_service_name}}.service
+- name: Check for splunk systemd unit file {{splunk_service_name}}.service
   tags:
     - splunk
     - splunk_software
@@ -22,7 +22,7 @@
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
 
-- name: stop and disable {{splunk_service_name}} service
+- name: Stop and disable {{splunk_service_name}} service
   tags:
     - splunk
     - splunk_software
@@ -36,12 +36,12 @@
     - use_splunk_systemd|default(false) == true
     - check_systemd_unit_file.stat.exists == true
 
-- name: check for thp service file
+- name: Check for thp service file
   stat:
     path: "/etc/systemd/system/disable-thp.service"
   register: check_thp_systemd
 
-- name: call remove_disable_thp_service
+- name: Call remove_disable_thp_service
   tags:
     - splunk
     - splunk_software
@@ -51,7 +51,7 @@
     - use_systemctl == true
     - check_thp_systemd.stat.exists == true
 
-- name: check if splunk is stopped
+- name: Check if splunk is stopped
   tags:
     - splunk
     - splunk_software
@@ -62,7 +62,7 @@
   failed_when: "grep_result.rc > 1"
   changed_when: "grep_result.rc == 0"
 
-- name: kill splunk processes
+- name: Kill splunk processes
   tags:
     - splunk
     - splunk_software
@@ -72,7 +72,7 @@
   # become_user: "{{ splunk_user }}"
   when: grep_result.rc == 0
 
-- name: call disable_boot-start
+- name: Call disable_boot-start
   tags:
     - splunk
     - splunk_software
@@ -84,7 +84,7 @@
     - check_systemd_unit_file.stat.exists == true
     - check_splunk_binary_file.stat.exists == true
 
-- name: remove init.d scripts
+- name: Remove init.d scripts
   tags:
     - splunk
     - splunk_software
@@ -92,7 +92,7 @@
     - splunk_remove_init
   include_tasks: remove_init_and_ulimit.yml
 
-- name: make sure files are gone
+- name: Make sure files are gone
   tags:
     - splunk
     - splunk_software
@@ -105,14 +105,14 @@
     - /etc/systemd/system/disable-thp.service
     - /etc/init.d/splunk
 
-- name: call remove_custom_policykit
+- name: Call remove_custom_policykit
   tags:
     - splunk
     - splunk_software
     - splunk_uninstall
   include_tasks: remove_custom_policykit.yml
 
-- name: call remove_splunk_sudoers
+- name: Call remove_splunk_sudoers
   tags:
     - splunk
     - splunk_software
@@ -120,7 +120,7 @@
   include_tasks: remove_splunk_sudoers.yml
 
 # Find all directories to remove, except lost+found
-- name: find files to remove all under {{splunk_home}}/
+- name: Find files to remove all under {{splunk_home}}/
   tags:
     - splunk
     - splunk_software
@@ -134,7 +134,7 @@
   register: files_to_delete
 
 # Remove as user splunk to prevent removing mounted directories
-- name: remove all under {{splunk_home}}/
+- name: Remove all under {{splunk_home}}/
   tags:
     - splunk
     - splunk_software

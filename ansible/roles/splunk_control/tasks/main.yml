@@ -1,7 +1,7 @@
 ---
 # Main playbook for this role
 
-- name: start role tasks
+- name: Start role tasks
   tags:
     - splunk
     - splunk_software

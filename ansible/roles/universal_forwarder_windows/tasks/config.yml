@@ -1,7 +1,7 @@
 ---
 # This playbook configures the windows universal forwarder
 
-- name: find path to baseconfig app
+- name: Find path to baseconfig app
   tags:
     - splunk
     - splunk_baseconfig
@@ -17,7 +17,7 @@
   ignore_errors: True
   delegate_to: localhost
 
-- name: apply baseconfig app org_all_deploymentclient
+- name: Apply baseconfig app org_all_deploymentclient
   tags:
     - splunk
     - splunk_baseconfig

@@ -1,7 +1,7 @@
 ---
 # This playbook install the apps required in a server
 
-- name: create splunk install dir
+- name: Create splunk install dir
   tags:
     - splunk
     - splunk_software
@@ -13,7 +13,7 @@
     group: root
     mode: 0755
 
-- name: create splunk directory
+- name: Create splunk directory
   tags:
     - splunk
     - splunk_software
@@ -25,28 +25,28 @@
     group: "{{ splunk_group }}"
     mode: 0755
 
-- name: find target version
+- name: Find target version
   tags:
     - splunk
     - splunk_software
     - splunk_install
   include_tasks: find_target_version.yml
 
-- name: upload and extract the splunk software
+- name: Upload and extract the splunk software
   tags:
     - splunk
     - splunk_software
     - splunk_install
   include_tasks: upload_and_extract.yml
 
-- name: set enable boot-start args
+- name: Set enable boot-start args
   tags:
     - splunk
     - splunk_software
     - splunk_install
   include_tasks: set_enable_boot_start_args.yml
 
-- name: copy shared splunk.secret file
+- name: Copy shared splunk.secret file
   tags:
     - splunk
     - splunk_software
@@ -60,7 +60,7 @@
     mode: 0400
   when: splunk_secret_share[splunk_install_app] == true and splunk_secret_file.stat.exists == true
 
-- name: create hashed password for new password policy
+- name: Create hashed password for new password policy
   tags:
     - splunk
     - splunk_software
@@ -91,7 +91,7 @@
     - { varkey: "HASHED_PASSWORD", varvalue: "{{ admin_hash_pw.stdout }}" }
   when: splunk_installed_version is version_compare('7.1', '>=') and splunk_install_app == "splunk"
 
-- name: enable wiredTiger KV Store
+- name: Enable wiredTiger KV Store
   tags:
     - splunk
     - splunk_software
@@ -109,7 +109,7 @@
     - splunk_install_app == "splunk"
     - splunk_kv_store_engine_wiredtiger|default(true) == true
 
-- name: add enable FIPS mode
+- name: Add enable FIPS mode
   tags:
     - splunk
     - splunk_software
@@ -125,7 +125,7 @@
   when:
     - splunk_fips|default(false) == true
 
-- name: call start_accept_license_and_stop
+- name: Call start_accept_license_and_stop
   tags:
     - splunk
     - splunk_software
@@ -133,14 +133,14 @@
   include_tasks: start_accept_license_and_stop.yml
   when: splunk_installed_version is version_compare('7.2.2', '<')
 
-- name: call enable_boot-start
+- name: Call enable_boot-start
   tags:
     - splunk
     - splunk_software
     - splunk_install
   include_tasks: enable_boot-start.yml
 
-- name: enable and start splunk service
+- name: Enable and start splunk service
   tags:
     - splunk
     - splunk_software
@@ -151,7 +151,7 @@
     enabled: yes
   when: use_systemctl == true
 
-- name: call check_systemd_file from splunk_common
+- name: Call check_systemd_file from splunk_common
   tags:
     - splunk
     - splunk_software
@@ -160,7 +160,7 @@
     name: splunk_common
     tasks_from: check_systemd_file
 
-- name: change splunk admin password
+- name: Change splunk admin password
   tags:
     - splunk
     - splunk_software
@@ -171,7 +171,7 @@
   become_user: "{{ splunk_user }}"
   when: splunk_installed_version is version_compare('7.1', '<') and splunk_install_app == "splunk"
 
-- name: call add_custom_policykit
+- name: Call add_custom_policykit
   tags:
     - splunk
     - splunk_software
@@ -184,7 +184,7 @@
     - use_splunk_systemd|default(false) == true
     - splunk_create_polkit_rules is not defined
 
-- name: call add_splunk_sudoers
+- name: Call add_splunk_sudoers
   tags:
     - splunk
     - splunk_software

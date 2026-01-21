@@ -1,14 +1,14 @@
 ---
 # Main playbook for this role
 
-- name: start role tasks
+- name: Start role tasks
   tags:
     - splunk
     - cluster_manager
   debug:
     msg: "role '{{ role_name }}' start"
 
-- name: apply baseconfig app org_cluster_manager_base
+- name: Apply baseconfig app org_cluster_manager_base
   tags:
     - splunk
     - splunk_baseconfig
@@ -21,7 +21,7 @@
     app_path: '{{splunk_home}}/etc/apps'
   when: site is not defined
 
-- name: apply baseconfig app org_multisite_manager_base
+- name: Apply baseconfig app org_multisite_manager_base
   tags:
     - splunk
     - splunk_baseconfig
@@ -34,7 +34,7 @@
     app_path: '{{splunk_home}}/etc/apps'
   when: site is defined
 
-- name: apply baseconfig app org_all_deploymentclient
+- name: Apply baseconfig app org_all_deploymentclient
   tags:
     - splunk
     - splunk_baseconfig
@@ -47,7 +47,7 @@
     app_path: '{{splunk_home}}/etc/apps'
   when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server
 
-- name: apply baseconfig app org_all_forwarder_outputs
+- name: Apply baseconfig app org_all_forwarder_outputs
   tags:
     - splunk
     - splunk_baseconfig
@@ -60,7 +60,7 @@
     app_path: '{{splunk_home}}/etc/apps'
   when: splunk_deployment_server|default()|length == 0 and inventory_hostname not in groups.role_indexer
 
-- name: install certs for web ssl
+- name: Install certs for web ssl
   tags:
     - splunk
     - splunk_baseconfig
@@ -72,7 +72,7 @@
     tasks_from: splunk_ssl_web_certs
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
-- name: apply baseconfig app org_all_search_base
+- name: Apply baseconfig app org_all_search_base
   tags:
     - splunk
     - splunk_baseconfig
@@ -85,7 +85,7 @@
     app_path: '{{splunk_home}}/etc/apps'
   when: splunk_deployment_server|default()|length == 0
 
-- name: apply baseconfig app org_full_license_server
+- name: Apply baseconfig app org_full_license_server
   tags:
     - splunk
     - splunk_baseconfig
@@ -98,7 +98,7 @@
     app_path: '{{splunk_home}}/etc/apps'
   when: splunk_deployment_server|default()|length == 0 and splunk_license_manager|default()|length > 0 and inventory_hostname not in groups.role_license_manager|default([])
 
-- name: apply baseconfig app org_indexer_volume_indexes
+- name: Apply baseconfig app org_indexer_volume_indexes
   tags:
     - splunk
     - splunk_baseconfig
@@ -110,7 +110,7 @@
     app_name: 'org_indexer_volume_indexes'
     app_path: '{{splunk_home}}/etc/{{splunk_cluster_manager_apps}}'
 
-- name: apply baseconfig app org_all_indexes
+- name: Apply baseconfig app org_all_indexes
   tags:
     - splunk
     - splunk_baseconfig
@@ -122,7 +122,7 @@
     app_name: 'org_all_indexes'
     app_path: '{{splunk_home}}/etc/{{splunk_cluster_manager_apps}}'
 
-- name: apply baseconfig app org_s2_indexer_indexes
+- name: Apply baseconfig app org_s2_indexer_indexes
   tags:
     - splunk
     - splunk_baseconfig
@@ -135,7 +135,7 @@
     app_path: '{{splunk_home}}/etc/{{splunk_cluster_manager_apps}}'
   when: splunk_volume_defaults.remotePath is defined
 
-- name: apply baseconfig app org_full_license_server
+- name: Apply baseconfig app org_full_license_server
   tags:
     - splunk
     - splunk_baseconfig
@@ -148,7 +148,7 @@
     app_path: '{{splunk_home}}/etc/{{splunk_cluster_manager_apps}}'
   when: splunk_license_manager|default()|length > 0
 
-- name: call update_dserver from role monitoring_console
+- name: Call update_dserver from role monitoring_console
   tags:
     - splunk
     - splunk_baseconfig

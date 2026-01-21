@@ -1,7 +1,7 @@
 ---
 # This playbook install the base config app
 
-- name: start search head cluster node
+- name: Start search head cluster node
   tags:
     - splunk
     - search_head
@@ -9,7 +9,7 @@
   debug:
     msg: "Configuring search head cluster node"
 
-- name: set global permissions for comment macro
+- name: Set global permissions for comment macro
   include_tasks: comment_macro.yml
   tags:
     - splunk
@@ -21,7 +21,7 @@
     - inventory_hostname == splunk_shc_host_list|first
     - splunk_installed_version is version_compare('8.1.0', '<')
 
-- name: check if shcluster config is initialized
+- name: Check if shcluster config is initialized
   tags:
     - splunk
     - search_head
@@ -34,7 +34,7 @@
   failed_when: "need_shcluster_init.rc > 1"
   changed_when: "need_shcluster_init.rc == 0"
 
-- name: init shcluster member
+- name: Init shcluster member
   tags:
     - splunk
     - search_head
@@ -44,7 +44,7 @@
   become_user: "{{ splunk_user }}"
   when: need_shcluster_init.rc == 0
 
-- name: restart splunk for cluster init (service restart)
+- name: Restart splunk for cluster init (service restart)
   tags:
     - splunk
     - search_head
@@ -54,7 +54,7 @@
     tasks_from: restart_splunk
   when: need_shcluster_init.rc == 0
 
-- name: wait for splunkd port
+- name: Wait for splunkd port
   tags:
     - splunk
     - search_head
@@ -65,7 +65,7 @@
   when: need_shcluster_init.rc == 0
 
 # If we have plenty of apps, splunkd does several restarts and needs some time
-- name: wait for splunkd full service
+- name: Wait for splunkd full service
   tags:
     - splunk
     - search_head
@@ -75,7 +75,7 @@
     tasks_from: wait_for_splunkd_full
   when: need_shcluster_init.rc == 0
 
-- name: check shcluster status
+- name: Check shcluster status
   tags:
     - splunk
     - search_head
@@ -88,7 +88,7 @@
   failed_when: shcluster_status.rc != 0 and shcluster_status.rc != 22
   changed_when: shcluster_status.stdout.find('service_ready_flag') == -1
 
-- name: bootstrap search head cluster
+- name: Bootstrap search head cluster
   tags:
     - splunk
     - search_head
@@ -99,7 +99,7 @@
   become_user: "{{ splunk_user }}"
   when: inventory_hostname == splunk_shc_host_list|first and shcluster_status.changed == true
 
-- name: wait for the search head cluster status to be available
+- name: Wait for the search head cluster status to be available
   tags:
     - splunk
     - search_head
@@ -115,7 +115,7 @@
   delegate_to: "{{splunk_shc_host_list|first}}"
   when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
 
-- name: add node to search head cluster
+- name: Add node to search head cluster
   tags:
     - splunk
     - search_head
@@ -126,7 +126,7 @@
   become_user: "{{ splunk_user }}"
   when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
 
-- name: find splunk servername
+- name: Find splunk servername
   tags:
     - splunk
     - search_head
@@ -140,7 +140,7 @@
   register: splunk_servername
   when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
 
-- name: wait for the node to join the cluster
+- name: Wait for the node to join the cluster
   tags:
     - splunk
     - search_head
@@ -155,7 +155,7 @@
   delay: 10
   when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
 
-- name: check for first shc bundle push
+- name: Check for first shc bundle push
   tags:
     - splunk
     - search_head
@@ -171,7 +171,7 @@
     - inventory_hostname == splunk_shc_host_list|last
     - shcluster_status.changed == true
 
-- name: push shc bundle if needed
+- name: Push shc bundle if needed
   tags:
     - splunk
     - search_head
@@ -188,7 +188,7 @@
 # Add single indexers as search peers
 - include_tasks: search_peers.yml
 
-- name: call update_dserver from role monitoring_console
+- name: Call update_dserver from role monitoring_console
   tags:
     - splunk
     - search_head

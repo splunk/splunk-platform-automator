@@ -1,7 +1,7 @@
 ---
 # This playbook contains common settings for search heads
 
-- name: check for apps/search/metadata/local.meta
+- name: Check for apps/search/metadata/local.meta
   tags:
     - splunk
     - search_head

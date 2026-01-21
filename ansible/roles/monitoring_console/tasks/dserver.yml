@@ -1,7 +1,7 @@
 ---
 # get the list of existing dservers and add the missing ones
 
-- name: get list of current distributedSearch servers
+- name: Get list of current distributedSearch servers
   tags:
     - splunk
     - splunk_baseconfig
@@ -14,7 +14,7 @@
   vars:
     splunk_rest_endpoint: /services/search/distributed/peers
 
-- name: create current_dservers list
+- name: Create current_dservers list
   tags:
     - splunk
     - splunk_baseconfig
@@ -26,7 +26,7 @@
   vars:
     jmesquery: "entry[*].name"
 
-- name: call add_dserver
+- name: Call add_dserver
   tags:
     - splunk
     - splunk_baseconfig

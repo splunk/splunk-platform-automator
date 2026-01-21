@@ -1,6 +1,6 @@
 ---
 
-- name: call get_idxc_peerids
+- name: Call get_idxc_peerids
   tags:
     - splunk
     - splunk_software
@@ -8,7 +8,7 @@
     - splunk_upgrade_idxc_rolling
   include_tasks: get_idxc_peerids.yml
 
-- name: set idxc_peerid
+- name: Set idxc_peerid
   tags:
     - splunk
     - splunk_software
@@ -19,7 +19,7 @@
   vars:
     query: "[? name=='{{ inventory_hostname }}'].peerid"
 
-- name: call get_idxc_peer_status
+- name: Call get_idxc_peer_status
   tags:
     - splunk
     - splunk_software
@@ -27,7 +27,7 @@
     - splunk_upgrade_idxc_rolling
   include_tasks: get_idxc_peer_status.yml
 
-- name: fail if peer has wrong state
+- name: Fail if peer has wrong state
   tags:
     - splunk
     - splunk_software
@@ -40,7 +40,7 @@
     - idxc_peer_status != 'Down'
     - idxc_peer_status != 'ReassigningPrimaries'
 
-- name: offline indexer
+- name: Offline indexer
   tags:
     - splunk
     - splunk_software
@@ -54,7 +54,7 @@
   when: idxc_peer_status == 'Up'
 
 # There is not 'loop until' with include_tasks. So, we need to code the rest call directly here.
-- name: check for peer to be down
+- name: Check for peer to be down
   tags:
     - splunk
     - splunk_software
@@ -82,7 +82,7 @@
   delay: 60
   delegate_to: "{{ splunk_idxc_cm }}"
 
-- name: call upgrade
+- name: Call upgrade
   tags:
     - splunk
     - splunk_software
@@ -91,7 +91,7 @@
   include_tasks: upgrade.yml
 
 # There is not 'loop until' with include_tasks. So, we need to code the rest call directly here.
-- name: check for peer to be up
+- name: Check for peer to be up
   tags:
     - splunk
     - splunk_software

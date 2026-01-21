@@ -1,7 +1,7 @@
 ---
 # This playbook installs the windows universal forwarder
 
-- name: find splunk archive files
+- name: Find splunk archive files
   tags:
     - splunk
     - universal_forwarder_windows
@@ -14,7 +14,7 @@
   delegate_to: localhost
   become: no
 
-- name: find latest splunk version
+- name: Find latest splunk version
   tags:
     - splunk
     - universal_forwarder_windows
@@ -22,7 +22,7 @@
     splunk_version: "{{splunk_archive_files.files|sort(attribute='path')|map(attribute='path')|list|last|basename|regex_replace('.*-([0-9]+\\.[0-9]+[\\.]*[0-9]*[\\.]*[0-9]*)-.*', '\\1')}}"
   when: splunk_version == 'latest' and splunk_archive_files.files is defined
 
-- name: get splunk archive for given version
+- name: Get splunk archive for given version
   tags:
     - splunk
     - universal_forwarder_windows
@@ -38,7 +38,7 @@
     msg: "Using Splunk archive: {{splunk_archive.0}}"
   when: splunk_archive is defined
 
-- name: upload splunk archive from ansible host
+- name: Upload splunk archive from ansible host
   tags:
     - splunk
     - universal_forwarder_windows
@@ -49,7 +49,7 @@
         (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == false) or
         (splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == false)
 
-- name: define splunk archive download url
+- name: Define splunk archive download url
   tags:
     - splunk
     - universal_forwarder_windows
@@ -59,7 +59,7 @@
         (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
         splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
 
-- name: download the splunk archive from splunk.com
+- name: Download the splunk archive from splunk.com
   tags:
     - splunk
     - universal_forwarder_windows
@@ -70,7 +70,7 @@
         (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
         splunk_install_app == "splunkforwarder" and splunk_download.splunkforwarder|default(false) == true)
 
-- name: install splunk archive
+- name: Install splunk archive
   tags:
     - splunk
     - universal_forwarder_windows
@@ -83,7 +83,7 @@
     - LAUNCHSPLUNK=0
 #    - INSTALLDIR="{{ splunk_home }}"
 
-- name: remove splunk install archive
+- name: Remove splunk install archive
   tags:
     - splunk
     - universal_forwarder_windows
@@ -107,7 +107,7 @@
 #    splunk_version: '{{ version_output.stdout }}'
 #  when: version_output.stdout is defined
 
-- name: copy shared splunk.secret file
+- name: Copy shared splunk.secret file
   tags:
     - splunk
     - universal_forwarder_windows
@@ -117,7 +117,7 @@
     dest: "{{ splunk_home }}/etc/auth/splunk.secret"
   when: splunk_secret_share[splunk_install_app] == true and splunk_secret_file.stat.exists == true
 
-- name: enable and start splunk service
+- name: Enable and start splunk service
   tags:
     - splunk
     - universal_forwarder_windows

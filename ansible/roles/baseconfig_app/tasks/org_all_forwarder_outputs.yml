@@ -41,7 +41,7 @@
   notify: restart splunk
   when: splunk_outputs_idxc_list|length > 0
 
-- name: set input port
+- name: Set input port
   tags:
     - splunk
     - splunk_baseconfig
@@ -50,7 +50,7 @@
     idx_port: "{{ inputs_port }}"
   when: splunk_ssl.outputs.enable != true
 
-- name: set ssl input port
+- name: Set ssl input port
   tags:
     - splunk
     - splunk_baseconfig
@@ -59,7 +59,7 @@
     idx_port: "{{ inputs_port_ssl }}"
   when: splunk_ssl.outputs.enable == true
 
-- name: install certs for outputs ssl
+- name: Install certs for outputs ssl
   tags:
     - splunk
     - splunk_baseconfig

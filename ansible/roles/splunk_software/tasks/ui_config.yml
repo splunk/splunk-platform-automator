@@ -1,7 +1,7 @@
 ---
 # This playbook configures splunk user interface
 
-- name: check if splunk first login is turned off
+- name: Check if splunk first login is turned off
   tags:
     - splunk
     - splunk_software
@@ -12,7 +12,7 @@
   register: splunk_first_login
   when: splunk_install_app == "splunk"
 
-- name: disable first login page
+- name: Disable first login page
   tags:
     - splunk
     - splunk_software
@@ -26,7 +26,7 @@
     mode: 0600
   when: splunk_install_app == "splunk" and not splunk_first_login.stat.exists
 
-- name: set user/passwd info to login page
+- name: Set user/passwd info to login page
   tags:
     - splunk
     - splunk_software
@@ -36,7 +36,7 @@
     splunk_loginpage_user_info: "<br><br><b>User: </b>admin<br><b>Password: </b>{{splunk_admin_password}}"
   when: splunk_loginpage_print_userpw|default(true) == true
 
-- name: set splunk roles info to login page
+- name: Set splunk roles info to login page
   tags:
     - splunk
     - splunk_software
@@ -46,7 +46,7 @@
     splunk_loginpage_role_info: "<br><b>Splunk Roles: </b>{{splunk_roles}}"
   when: splunk_loginpage_print_roles|default(true) == true
 
-- name: set hostname info to login page
+- name: Set hostname info to login page
   tags:
     - splunk
     - splunk_software
@@ -56,7 +56,7 @@
     splunk_loginpage_hostname_info: "<b>Hostname: </b>{{inventory_hostname}}"
   when: splunk_loginpage_print_hostname|default(true) == true
 
-- name: add user and roles info to login page
+- name: Add user and roles info to login page
   tags:
     - splunk
     - splunk_software

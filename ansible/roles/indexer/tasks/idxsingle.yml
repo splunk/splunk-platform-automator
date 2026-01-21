@@ -1,7 +1,7 @@
 ---
 # Main playbook for this role
 
-- name: start indexer cluster node
+- name: Start indexer cluster node
   tags:
     - splunk
     - indexer
@@ -9,7 +9,7 @@
   debug:
     msg: "Configuring single indexer"
 
-- name: apply baseconfig app org_all_deploymentclient
+- name: Apply baseconfig app org_all_deploymentclient
   tags:
     - splunk
     - splunk_baseconfig
@@ -23,7 +23,7 @@
     app_path: '{{splunk_home}}/etc/apps'
   when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server
 
-- name: apply baseconfig app org_full_license_server
+- name: Apply baseconfig app org_full_license_server
   tags:
     - splunk
     - splunk_baseconfig
@@ -37,7 +37,7 @@
     app_path: '{{splunk_home}}/etc/apps'
   when: splunk_deployment_server|default()|length == 0 and splunk_license_manager|default()|length > 0 and inventory_hostname not in groups.role_license_manager|default([])
 
-- name: apply baseconfig app org_all_indexer_base
+- name: Apply baseconfig app org_all_indexer_base
   tags:
     - splunk
     - splunk_baseconfig
@@ -51,7 +51,7 @@
     app_path: '{{splunk_home}}/etc/apps'
   when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
 
-- name: apply baseconfig app org_indexer_volume_indexes
+- name: Apply baseconfig app org_indexer_volume_indexes
   tags:
     - splunk
     - splunk_baseconfig
@@ -65,7 +65,7 @@
     app_path: '{{splunk_home}}/etc/apps'
   when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
 
-- name: apply baseconfig app org_all_indexes
+- name: Apply baseconfig app org_all_indexes
   tags:
     - splunk
     - splunk_baseconfig
@@ -79,7 +79,7 @@
     app_path: '{{splunk_home}}/etc/apps'
   when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
 
-- name: apply baseconfig app org_s2_indexer_indexes
+- name: Apply baseconfig app org_s2_indexer_indexes
   tags:
     - splunk
     - splunk_baseconfig
@@ -95,7 +95,7 @@
     - splunk_volume_defaults.remotePath is defined
     - splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
 
-- name: call update_dserver from role monitoring_console
+- name: Call update_dserver from role monitoring_console
   tags:
     - splunk
     - splunk_baseconfig
@@ -110,7 +110,7 @@
     splunk_dservers: "[ '{{ inventory_hostname }}' ]"
   when: splunk_monitoring_console|default()|length > 0 and inventory_hostname not in groups.role_monitoring_console
 
-- name: add as search peer on search head
+- name: Add as search peer on search head
   tags:
     - splunk
     - splunk_baseconfig

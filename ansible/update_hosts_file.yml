@@ -1,22 +1,22 @@
 ---
 # update the hosts entires on all hosts
 
-- name: add hosts to /etc/hosts (Linux)
+- name: Add hosts to /etc/hosts (Linux)
   hosts: all,!role_universal_forwarder_windows
 
   tasks:
 
-    - name: call hosts from role common
+    - name: Call hosts from role common
       include_role:
         name: common
         tasks_from: hosts
 
-- name: add hosts to /etc/hosts (Windows)
+- name: Add hosts to /etc/hosts (Windows)
   hosts: role_universal_forwarder_windows
 
   tasks:
 
-    - name: call restart splunk from role splunk_software
+    - name: Call restart splunk from role splunk_software
       include_role:
         name: universal_forwarder_windows
         tasks_from: hosts

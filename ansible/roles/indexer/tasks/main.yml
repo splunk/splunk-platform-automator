@@ -1,7 +1,7 @@
 ---
 # Main playbook for this role
 
-- name: start role tasks
+- name: Start role tasks
   tags:
     - splunk
     - indexer
@@ -23,7 +23,7 @@
 #  with_dict: "{{ splunk_indexer_volumes }}"
 #  when: splunk_indexer_volumes_local|length > 0
 
-- name: check volume pathes
+- name: Check volume pathes
   tags:
     - splunk
     - indexer
@@ -35,7 +35,7 @@
     volume_path: "{{ item.value.path|default(splunk_home+'/var/lib/splunk') }}"
   when: splunk_indexer_volumes_local|length > 0
 
-- name: install certs for inputs ssl
+- name: Install certs for inputs ssl
   tags:
     - splunk
     - splunk_baseconfig

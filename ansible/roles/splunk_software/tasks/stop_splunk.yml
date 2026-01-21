@@ -1,6 +1,6 @@
 ---
 
-- name: stop splunk
+- name: Stop splunk
   tags:
     - splunk
     - splunk_common

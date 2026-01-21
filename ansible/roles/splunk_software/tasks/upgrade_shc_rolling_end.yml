@@ -1,6 +1,6 @@
 ---
 
-- name: check cluster state
+- name: Check cluster state
   tags:
     - splunk
     - splunk_software
@@ -12,7 +12,7 @@
     splunk_rest_endpoint: /services/shcluster/status?advanced=1
   when: inventory_hostname == splunk_shc_host_list|first
 
-- name: set state variables
+- name: Set state variables
   tags:
     - splunk
     - splunk_software
@@ -26,7 +26,7 @@
     splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
   when: inventory_hostname == splunk_shc_host_list|first
 
-- name: finalize rolling upgrade
+- name: Finalize rolling upgrade
   tags:
     - splunk
     - splunk_software
@@ -41,7 +41,7 @@
     - inventory_hostname == splunk_shc_host_list|first 
     - shc_rolling_upgrade_flag == true
 
-- name: finalize output
+- name: Finalize output
   tags:
     - splunk
     - splunk_software
@@ -54,7 +54,7 @@
     - shc_rolling_upgrade_flag == true
   changed_when: shc_rolling_upgrade_flag == true
 
-- name: finalize output
+- name: Finalize output
   tags:
     - splunk
     - splunk_software

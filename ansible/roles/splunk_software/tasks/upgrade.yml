@@ -1,7 +1,7 @@
 ---
 # playbook fot upgrading splunk
 
-- name: display upgrade version info
+- name: Display upgrade version info
   tags:
     - splunk
     - splunk_software
@@ -9,21 +9,21 @@
   debug:
     msg: "Upgrade {{ splunk_install_app }} from version '{{ splunk_current_version }}' to version '{{ splunk_target_version }}'"
 
-- name: backup splunk etc
+- name: Backup splunk etc
   tags:
     - splunk
     - splunk_software
     - splunk_upgrade
   include_tasks: backup_splunk_etc.yml
 
-- name: stop splunk by service control
+- name: Stop splunk by service control
   tags:
     - splunk
     - splunk_software
     - splunk_upgrade
   include_tasks: stop_splunk.yml
 
-- name: check /etc/init.d/splunk
+- name: Check /etc/init.d/splunk
   tags:
     - splunk
     - splunk_software
@@ -32,7 +32,7 @@
     path: "/etc/init.d/splunk"
   register: check_splunk_init
 
-- name: set boot_start_migration variable
+- name: Set boot_start_migration variable
   tags:
     - splunk
     - splunk_software
@@ -43,7 +43,7 @@
     - check_splunk_init.stat.exists == true
     - splunk_target_version is version_compare('7.2.2', '>=')
 
-- name: remove init.d, ulimit settings and THP scripts
+- name: Remove init.d, ulimit settings and THP scripts
   tags:
     - splunk
     - splunk_software
@@ -51,7 +51,7 @@
   include_tasks: remove_init_and_ulimit.yml
   when: boot_start_migration|default(false) == true
 
-- name: call disable_boot-start
+- name: Call disable_boot-start
   tags:
     - splunk
     - splunk_software
@@ -61,7 +61,7 @@
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
 
-- name: call remove_custom_policykit
+- name: Call remove_custom_policykit
   tags:
     - splunk
     - splunk_software
@@ -71,7 +71,7 @@
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
 
-- name: call remove_splunk_sudoers
+- name: Call remove_splunk_sudoers
   tags:
     - splunk
     - splunk_software
@@ -81,7 +81,7 @@
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
 
-- name: call remove_disable_thp_service
+- name: Call remove_disable_thp_service
   tags:
     - splunk
     - splunk_software
@@ -92,7 +92,7 @@
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
 
-- name: upload and extract the splunk software
+- name: Upload and extract the splunk software
   tags:
     - splunk
     - splunk_software
@@ -100,14 +100,14 @@
   include_tasks: upload_and_extract.yml
   when: splunk_path.stat.exists == true
 
-- name: set enable boot-start args
+- name: Set enable boot-start args
   tags:
     - splunk
     - splunk_software
     - splunk_upgrade
   include_tasks: set_enable_boot_start_args.yml
 
-- name: call enable_boot-start
+- name: Call enable_boot-start
   tags:
     - splunk
     - splunk_software
@@ -115,7 +115,7 @@
   include_tasks: enable_boot-start.yml
   when: boot_start_migration|default(false) == true or use_systemctl == true and use_splunk_systemd|default(false) == true
 
-- name: call check_systemd_file from splunk_common
+- name: Call check_systemd_file from splunk_common
   tags:
     - splunk
     - splunk_software
@@ -124,7 +124,7 @@
     name: splunk_common
     tasks_from: check_systemd_file
 
-- name: call update_splunk_service
+- name: Call update_splunk_service
   tags:
     - splunk
     - splunk_software
@@ -135,7 +135,7 @@
     - use_splunk_systemd|default(false) == true
     - splunk_systemd_services[splunk_service_name] is defined
 
-- name: call add_disable_thp_service
+- name: Call add_disable_thp_service
   tags:
     - splunk
     - splunk_software
@@ -147,7 +147,7 @@
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
 
-- name: call add_custom_policykit
+- name: Call add_custom_policykit
   tags:
     - splunk
     - splunk_software
@@ -160,7 +160,7 @@
     - use_splunk_systemd|default(false) == true
     - splunk_create_polkit_rules is not defined
 
-- name: call add_splunk_sudoers
+- name: Call add_splunk_sudoers
   tags:
     - splunk
     - splunk_software
@@ -172,7 +172,7 @@
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
 
-- name: start splunk by service control
+- name: Start splunk by service control
   tags:
     - splunk
     - splunk_software

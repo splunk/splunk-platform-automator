@@ -1,7 +1,7 @@
 ---
 # This playbook configures common settings
 
-- name: apply common configurations
+- name: Apply common configurations
   hosts: all:!role_universal_forwarder_windows
   become: yes
   become_user: root

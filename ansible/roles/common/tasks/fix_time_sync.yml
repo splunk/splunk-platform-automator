@@ -1,7 +1,7 @@
 ---
 # This playbook does setup a time sync fix
 
-- name: setup time sync cronjob
+- name: Setup time sync cronjob
   tags:
     - common
     - fix_time_sync

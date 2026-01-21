@@ -1,7 +1,7 @@
 ---
 # playbook for upgrading splunk
 
-- name: call check_splunk_version
+- name: Call check_splunk_version
   tags:
     - splunk
     - splunk_software
@@ -10,7 +10,7 @@
   vars:
     inform_on_already_upgraded: true
 
-- name: call upgrade
+- name: Call upgrade
   tags:
     - splunk
     - splunk_software

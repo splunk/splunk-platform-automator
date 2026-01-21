@@ -1,7 +1,7 @@
 ---
 # This playbook removes backup archives
 
-- name: find files to remove under {{splunk_backup_dir}}/
+- name: Find files to remove under {{splunk_backup_dir}}/
   tags:
     - splunk
     - splunk_software
@@ -16,7 +16,7 @@
   become: yes
   become_user: "{{ splunk_user }}"
 
-- name: backup files to remove
+- name: Backup files to remove
   tags:
     - splunk
     - splunk_software
@@ -29,7 +29,7 @@
   with_items:
     - "{{ backup_files_to_delete | json_query(query) | list }}"
 
-- name: remove backup archives under {{splunk_backup_dir}}/
+- name: Remove backup archives under {{splunk_backup_dir}}/
   tags:
     - splunk
     - splunk_software

@@ -1,20 +1,20 @@
 ---
 # Main playbook for this role
 
-- name: start role tasks
+- name: Start role tasks
   tags:
     - splunk
     - universal_forwarder_windows
   debug:
     msg: "role '{{ role_name }}' start"
 
-- name: update hosts file
+- name: Update hosts file
   tags:
     - universal_forwarder_windows
     - hosts
   include_tasks: hosts.yml
 
-- name: enable remote desktop
+- name: Enable remote desktop
   tags:
     - universal_forwarder_windows
     - enable_rdp
@@ -30,7 +30,7 @@
     path: "{{ splunk_home }}"
   register: splunk_stat
 
-- name: checking if splunk is installed
+- name: Checking if splunk is installed
   tags:
     - splunk
     - splunk_software
@@ -40,7 +40,7 @@
     path: "{{ splunk_home }}/bin"
   register: splunk_path
 
-- name: splunk is installed here
+- name: Splunk is installed here
   tags:
     - splunk
     - splunk_software

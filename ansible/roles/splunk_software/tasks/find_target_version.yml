@@ -1,6 +1,6 @@
 ---
 
-- name: find splunk archive files
+- name: Find splunk archive files
   tags:
     - splunk
     - splunk_software
@@ -13,7 +13,7 @@
   delegate_to: localhost
   become: no
 
-- name: find latest splunk version
+- name: Find latest splunk version
   tags:
     - splunk
     - splunk_software
@@ -21,7 +21,7 @@
     splunk_target_version: "{{splunk_archive_files.files|sort(attribute='path')|map(attribute='path')|list|last|basename|regex_replace('.*-([0-9]+\\.[0-9]+[\\.]*[0-9]*[\\.]*[0-9]*)-.*', '\\1')}}"
   when: splunk_version == 'latest' and splunk_archive_files.files|length > 0
 
-- name: fail if no splunk binaries are found for latest version
+- name: Fail if no splunk binaries are found for latest version
   tags:
     - splunk
     - splunk_software
@@ -29,7 +29,7 @@
     msg: "Cannot find latest splunk binaries in directory {{splunk_software}}, check variables 'splunk_version' and 'splunk_architecture'"
   when: splunk_version == 'latest' and splunk_target_version is not defined
 
-- name: set splunk_target_version
+- name: Set splunk_target_version
   tags:
     - splunk
     - splunk_software
@@ -37,7 +37,7 @@
     splunk_target_version: "{{ splunk_version }}"
   when: splunk_version != 'latest'
 
-- name: get splunk archive for given version
+- name: Get splunk archive for given version
   tags:
     - splunk
     - splunk_software
@@ -45,7 +45,7 @@
     splunk_archive: '{{splunk_archive_files.files|map(attribute="path")|list|select("match",".*-"+splunk_target_version+"-.*")|list}}'
   when: splunk_archive_files.files is defined
 
-- name: fail if no splunk binaries are found for given version
+- name: Fail if no splunk binaries are found for given version
   tags:
     - splunk
     - splunk_software
@@ -53,7 +53,7 @@
     msg: "Cannot find splunk binary for version '{{ splunk_target_version }}' in directory {{splunk_software}}"
   when: splunk_archive is not defined or splunk_archive|length == 0
 
-- name: list found splunk archive
+- name: List found splunk archive
   tags:
     - splunk
     - splunk_software

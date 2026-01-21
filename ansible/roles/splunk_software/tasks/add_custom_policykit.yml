@@ -1,6 +1,6 @@
 ---
 
-- name: find systemd version
+- name: Find systemd version
   tags:
     - splunk
     - splunk_software
@@ -10,7 +10,7 @@
   changed_when: false
   register: systemd_version_output
 
-- name: find polkit version
+- name: Find polkit version
   tags:
     - splunk
     - splunk_software
@@ -20,7 +20,7 @@
   changed_when: false
   register: polkit_version_output
 
-- name: add splunk polkit rules file
+- name: Add splunk polkit rules file
   tags:
     - splunk
     - splunk_software
@@ -35,7 +35,7 @@
     - systemd_version_output.stdout|int >= 226
     - polkit_version_output.stdout is version_compare('0.105', '>')
 
-- name: add splunk polkit pkla file
+- name: Add splunk polkit pkla file
   tags:
     - splunk
     - splunk_software
@@ -50,7 +50,7 @@
     - systemd_version_output.stdout|int >= 226
     - polkit_version_output.stdout is version_compare('0.105', '<=')
 
-- name: call remove_splunk_sudoers
+- name: Call remove_splunk_sudoers
   tags:
     - splunk
     - splunk_software
@@ -58,7 +58,7 @@
   include_tasks: remove_splunk_sudoers.yml
   when: systemd_version_output.stdout|int >= 226
 
-- name: call add_splunk_sudoers
+- name: Call add_splunk_sudoers
   tags:
     - splunk
     - splunk_software

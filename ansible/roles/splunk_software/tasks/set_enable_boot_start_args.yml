@@ -1,6 +1,6 @@
 ---
 
-- name: call set_splunk_installed_version from splunk_common
+- name: Call set_splunk_installed_version from splunk_common
   tags:
     - splunk
     - splunk_software
@@ -8,7 +8,7 @@
     name: splunk_common
     tasks_from: set_splunk_installed_version
 
-- name: set splunk systemd-managed to 1
+- name: Set splunk systemd-managed to 1
   tags:
     - splunk
     - splunk_software
@@ -19,7 +19,7 @@
     - version_output.stdout is defined
     - splunk_installed_version is version_compare('7.2.2', '>=')
 
-- name: set splunk systemd service file name
+- name: Set splunk systemd service file name
   tags:
     - splunk
     - splunk_software
@@ -30,7 +30,7 @@
     - version_output.stdout is defined
     - splunk_installed_version is version_compare('7.2.2', '>=')
 
-- name: set splunk create-polkit-rules to 1
+- name: Set splunk create-polkit-rules to 1
   tags:
     - splunk
     - splunk_software

@@ -22,7 +22,7 @@
   register: splunkforwarder_install_app_dir
   when: splunk_install_app is not defined
 
-- name: set var splunk_install_app=splunk
+- name: Set var splunk_install_app=splunk
   tags:
     - splunk
     - splunk_common
@@ -32,7 +32,7 @@
     - splunk_install_app_dir.stat is defined
     - splunk_install_app_dir.stat.exists == true
 
-- name: set var splunk_install_app=splunkforwarder
+- name: Set var splunk_install_app=splunkforwarder
   tags:
     - splunk
     - splunk_common
@@ -50,7 +50,7 @@
     path: "{{splunk_install_dir}}/{{splunk_install_app}}/bin/splunk"
   register: splunk_bin_stat
 
-- name: set var splunk_is_installed=true
+- name: Set var splunk_is_installed=true
   tags:
     - splunk
     - splunk_common

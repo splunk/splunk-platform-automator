@@ -1,7 +1,7 @@
 ---
 # This playbook installs a splunk licenses
 
-- name: loop through the license files
+- name: Loop through the license files
   tags:
     - splunk
     - license_manager

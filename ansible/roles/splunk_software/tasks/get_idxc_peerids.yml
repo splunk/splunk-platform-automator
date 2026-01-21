@@ -1,7 +1,7 @@
 ---
 # Get peerlist for indexer cluster
 
-- name: get cluster peer ids
+- name: Get cluster peer ids
   tags:
     - splunk
     - splunk_software
@@ -11,7 +11,7 @@
     splunk_rest_endpoint: /services/cluster/master/peers
   delegate_to: "{{ splunk_idxc_cm }}"
 
-- name: create peerid list
+- name: Create peerid list
   tags:
     - splunk
     - splunk_software

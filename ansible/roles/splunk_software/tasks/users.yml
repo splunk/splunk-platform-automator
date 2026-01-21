@@ -1,7 +1,7 @@
 ---
 # This playbook install the apps required in a server
 
-- name: add splunk group
+- name: Add splunk group
   tags:
     - splunk
     - splunk_software
@@ -11,7 +11,7 @@
     state: present
   when: splunk_group_create|default(true) == true
 
-- name: add splunk user
+- name: Add splunk user
   tags:
     - splunk
     - splunk_software
@@ -36,7 +36,7 @@
     group: "{{ splunk_group }}"
     mode: 0644
 
-- name: insert/update bashrc for splunk stuff
+- name: Insert/update bashrc for splunk stuff
   tags:
     - splunk
     - splunk_software

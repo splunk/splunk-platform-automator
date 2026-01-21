@@ -1,6 +1,6 @@
 ---
 
-- name: check cluster member state
+- name: Check cluster member state
   tags:
     - splunk
     - splunk_software
@@ -11,7 +11,7 @@
   vars:
     splunk_rest_endpoint: /services/shcluster/member/info
 
-- name: set state variables
+- name: Set state variables
   tags:
     - splunk
     - splunk_software
@@ -23,7 +23,7 @@
   vars:
     splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
 
-- name: fail if peer has wrong state
+- name: Fail if peer has wrong state
   tags:
     - splunk
     - splunk_software
@@ -37,7 +37,7 @@
     - sh_status != 'ManualDetention'
     - sh_restart_state != 'NoRestart'
 
-- name: check cluster state
+- name: Check cluster state
   tags:
     - splunk
     - splunk_software
@@ -48,7 +48,7 @@
   vars:
     splunk_rest_endpoint: /services/shcluster/status?advanced=1
 
-- name: set state variables
+- name: Set state variables
   tags:
     - splunk
     - splunk_software
@@ -59,7 +59,7 @@
   vars:
     splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
 
-- name: fail if search head is captain
+- name: Fail if search head is captain
   tags:
     - splunk
     - splunk_software
@@ -70,7 +70,7 @@
   when:
     - shc_captain == inventory_hostname
 
-- name: call disable_splunkweb from role splunk_common
+- name: Call disable_splunkweb from role splunk_common
   tags:
     - splunk
     - splunk_software
@@ -80,7 +80,7 @@
     name: splunk_software
     tasks_from: disable_splunkweb.yml
 
-- name: set manual detention mode on search head
+- name: Set manual detention mode on search head
   tags:
     - splunk
     - splunk_software
@@ -94,7 +94,7 @@
   when: sh_status == 'Up'
 
 # There is not 'loop until' with include_tasks. So, we need to code the rest call directly here.
-- name: check for search head to complete all searches
+- name: Check for search head to complete all searches
   tags:
     - splunk
     - splunk_software
@@ -122,7 +122,7 @@
   retries: 60
   delay: 60
 
-- name: call enable_splunkweb from role splunk_common
+- name: Call enable_splunkweb from role splunk_common
   tags:
     - splunk
     - splunk_software
@@ -132,7 +132,7 @@
     name: splunk_software
     tasks_from: enable_splunkweb.yml
 
-- name: call upgrade
+- name: Call upgrade
   tags:
     - splunk
     - splunk_software
@@ -140,7 +140,7 @@
     - splunk_upgrade_shc_rolling
   include_tasks: upgrade.yml
 
-- name: wait for splunkd port
+- name: Wait for splunkd port
   tags:
     - splunk
     - splunk_software
@@ -150,7 +150,7 @@
     name: splunk_common
     tasks_from: wait_for_splunkd_port
 
-- name: wait for splunkd full service
+- name: Wait for splunkd full service
   tags:
     - splunk
     - splunk_software
@@ -160,7 +160,7 @@
     name: splunk_common
     tasks_from: wait_for_splunkd_full
 
-- name: check cluster state
+- name: Check cluster state
   tags:
     - splunk
     - splunk_software
@@ -171,7 +171,7 @@
   vars:
     splunk_rest_endpoint: /services/shcluster/member/info
 
-- name: set state variables
+- name: Set state variables
   tags:
     - splunk
     - splunk_software
@@ -183,7 +183,7 @@
   vars:
     splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
 
-- name: remove manual detention mode on search head
+- name: Remove manual detention mode on search head
   tags:
     - splunk
     - splunk_software
@@ -197,7 +197,7 @@
   when: sh_status == 'ManualDetention'
 
 # There is not 'loop until' with include_tasks. So, we need to code the rest call directly here.
-- name: check for peer to be up
+- name: Check for peer to be up
   tags:
     - splunk
     - splunk_software

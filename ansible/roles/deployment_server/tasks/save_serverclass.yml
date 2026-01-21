@@ -1,7 +1,7 @@
 ---
 # This playbook saves a copy of the serverclass.conf on the ansible host
 
-- name: create hostname and system/local dir on ansible host
+- name: Create hostname and system/local dir on ansible host
   tags:
     - splunk
     - splunk_baseconfig
@@ -15,7 +15,7 @@
   become: no
   delegate_to: localhost
 
-- name: save serverclass file to ansible host
+- name: Save serverclass file to ansible host
   tags:
     - splunk
     - splunk_baseconfig

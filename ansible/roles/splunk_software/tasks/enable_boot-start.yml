@@ -1,6 +1,6 @@
 ---
 
-- name: enable boot-start
+- name: Enable boot-start
   tags:
     - splunk
     - splunk_software

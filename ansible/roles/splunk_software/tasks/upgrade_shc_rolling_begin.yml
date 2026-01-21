@@ -1,6 +1,6 @@
 ---
 
-- name: check search head cluster state
+- name: Check search head cluster state
   tags:
     - splunk
     - splunk_software
@@ -12,7 +12,7 @@
     splunk_rest_endpoint: /services/shcluster/status?advanced=1
   when: inventory_hostname == splunk_shc_host_list|first
 
-- name: set state variables
+- name: Set state variables
   tags:
     - splunk
     - splunk_software
@@ -26,7 +26,7 @@
     splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
   when: inventory_hostname == splunk_shc_host_list|first
 
-- name: fail if search head cluster service_ready_flag not ok
+- name: Fail if search head cluster service_ready_flag not ok
   tags:
     - splunk
     - splunk_software
@@ -38,7 +38,7 @@
     - inventory_hostname == splunk_shc_host_list|first
     - shc_service_ready_flag == false or shc_rolling_restart_flag == true
 
-- name: check KV store cluster state
+- name: Check KV store cluster state
   tags:
     - splunk
     - splunk_software
@@ -50,7 +50,7 @@
     splunk_rest_endpoint: /services/kvstore/status
   when: inventory_hostname == splunk_shc_host_list|first
 
-- name: set state variables
+- name: Set state variables
   tags:
     - splunk
     - splunk_software
@@ -62,7 +62,7 @@
     splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
   when: inventory_hostname == splunk_shc_host_list|first
 
-- name: fail if KV store cluster status not 'ready'
+- name: Fail if KV store cluster status not 'ready'
   tags:
     - splunk
     - splunk_software
@@ -74,7 +74,7 @@
     - inventory_hostname == splunk_shc_host_list|first
     - kv_stre_status != 'ready'
 
-- name: init rolling upgrade
+- name: Init rolling upgrade
   tags:
     - splunk
     - splunk_software
@@ -89,7 +89,7 @@
     - inventory_hostname == splunk_shc_host_list|first 
     - shc_rolling_upgrade_flag == false
 
-- name: init output
+- name: Init output
   tags:
     - splunk
     - splunk_software
@@ -102,7 +102,7 @@
     - shc_rolling_upgrade_flag == false
   changed_when: shc_rolling_upgrade_flag == false
 
-- name: init output
+- name: Init output
   tags:
     - splunk
     - splunk_software

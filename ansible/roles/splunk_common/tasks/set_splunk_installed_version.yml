@@ -1,13 +1,13 @@
 ---
 # Main playbook for this role
 
-- name: call check_splunk_install
+- name: Call check_splunk_install
   tags:
     - splunk
     - splunk_common
   include_tasks: "check_splunk_install.yml"
 
-- name: find installed splunk version
+- name: Find installed splunk version
   tags:
     - splunk
     - splunk_common
@@ -19,7 +19,7 @@
   register: version_output
   when: splunk_is_installed|default(false) == true
 
-- name: set splunk_installed_version variable
+- name: Set splunk_installed_version variable
   tags:
     - splunk
     - splunk_common
@@ -28,7 +28,7 @@
     splunk_exists: true
   when: version_output.stdout is defined
 
-- name: splunk version found
+- name: Splunk version found
   tags:
     - splunk
     - splunk_common
@@ -36,7 +36,7 @@
     msg: 'found {{ splunk_install_app }} version {{ splunk_installed_version }}'
   when: version_output.stdout is defined
 
-- name: set splunkforwarder systemd service name
+- name: Set splunkforwarder systemd service name
   tags:
     - splunk
     - splunk_software

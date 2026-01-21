@@ -1,7 +1,7 @@
 ---
 # This playbook contains common tasks in this role
 
-- name: loop through all search heads and add single indexers as search peers
+- name: Loop through all search heads and add single indexers as search peers
   tags:
     - splunk
     - splunk_baseconfig

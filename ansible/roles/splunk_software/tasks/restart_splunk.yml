@@ -1,6 +1,6 @@
 ---
 
-- name: restart splunk
+- name: Restart splunk
   tags:
     - splunk
     - splunk_common

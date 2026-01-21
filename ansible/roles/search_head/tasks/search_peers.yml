@@ -1,7 +1,7 @@
 ---
 # This playbook adds single indexers as search peers
 
-- name: get list of current distributedSearch peers (single indexers)
+- name: Get list of current distributedSearch peers (single indexers)
   tags:
     - splunk
     - splunk_baseconfig
@@ -15,7 +15,7 @@
     splunk_rest_endpoint: /services/search/distributed/peers
   register: current_dservers
 
-- name: create current_dservers list
+- name: Create current_dservers list
   tags:
     - splunk
     - splunk_baseconfig
@@ -27,7 +27,7 @@
   vars:
     jmesquery: "entry[*].name"
 
-- name: adding new distributedSearch peer (single indexers)
+- name: Adding new distributedSearch peer (single indexers)
   tags:
     - splunk
     - splunk_baseconfig

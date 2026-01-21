@@ -1,7 +1,7 @@
 ---
 # This playbook installs certs for ssl on web
 
-- name: check key filename to copy
+- name: Check key filename to copy
   tags:
     - splunk
     - splunk_baseconfig
@@ -20,7 +20,7 @@
   become: no
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
-- name: check pem filename to copy
+- name: Check pem filename to copy
   tags:
     - splunk
     - splunk_baseconfig
@@ -39,7 +39,7 @@
   become: no
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
-- name: set cert file names
+- name: Set cert file names
   tags:
     - splunk
     - splunk_baseconfig
@@ -50,7 +50,7 @@
     pem_file: "{% for result in cert_pems.results %}{% if result.stat.exists == true %}{{ result.item }}.pem{% endif %}{% endfor %}"
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
-- name: fail if no cacert found
+- name: Fail if no cacert found
   tags:
     - splunk
     - splunk_baseconfig
@@ -60,7 +60,7 @@
     msg: "Cannot find a .key file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true and key_file == ""
 
-- name: fail if no pem cert found
+- name: Fail if no pem cert found
   tags:
     - splunk
     - splunk_baseconfig
@@ -70,7 +70,7 @@
     msg: "Cannot find a .pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true and pem_file == ""
 
-- name: create path for custom certs
+- name: Create path for custom certs
   tags:
     - splunk
     - splunk_baseconfig
@@ -87,7 +87,7 @@
     - '{{ splunk_ssl.web.config.serverCert|dirname }}'
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
-- name: copy certs file for web ssl
+- name: Copy certs file for web ssl
   tags:
     - splunk
     - splunk_baseconfig
@@ -104,7 +104,7 @@
     - { src: '{{ pem_file }}', dest: '{{ splunk_ssl.web.config.serverCert|dirname }}' }
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
-- name: link certs file for web ssl
+- name: Link certs file for web ssl
   tags:
     - splunk
     - splunk_baseconfig

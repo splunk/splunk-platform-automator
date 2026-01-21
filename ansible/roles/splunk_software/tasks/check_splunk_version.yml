@@ -1,7 +1,7 @@
 ---
 # Different checks for installed or target version
 
-- name: checking if splunk is installed
+- name: Checking if splunk is installed
   tags:
     - splunk
     - splunk_software
@@ -10,7 +10,7 @@
     path: "{{ splunk_home }}/bin/splunk"
   register: splunk_path
 
-- name: splunk is installed here
+- name: Splunk is installed here
   tags:
     - splunk
     - splunk_software
@@ -19,7 +19,7 @@
     msg: 'splunk found as {{ splunk_home }}/bin/splunk'
   when: splunk_path.stat.exists
 
-- name: no Splunk installation found
+- name: No Splunk installation found
   tags:
     - splunk
     - splunk_software
@@ -28,7 +28,7 @@
     msg: "No Splunk installation found, ending"
   when: splunk_path.stat.exists == false
 
-- name: find target version
+- name: Find target version
   tags:
     - splunk
     - splunk_software
@@ -36,7 +36,7 @@
   include_tasks: find_target_version.yml
   when: find_target_version|default(true) == true
 
-- name: fail on installed version
+- name: Fail on installed version
   tags:
     - splunk
     - splunk_software
@@ -47,7 +47,7 @@
     - fail_on_missing_upgrade|default(false) == true
     - splunk_installed_version != splunk_target_version
 
-- name: inform about not upgrading
+- name: Inform about not upgrading
   tags:
     - splunk
     - splunk_software
@@ -58,7 +58,7 @@
     - inform_on_already_upgraded|default(false) == true 
     - splunk_installed_version == splunk_target_version
 
-- name: set splunk_current_version
+- name: Set splunk_current_version
   tags:
     - splunk
     - splunk_software

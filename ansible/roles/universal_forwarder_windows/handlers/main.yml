@@ -1,4 +1,4 @@
-- name: restart splunk
+- name: Restart splunk
   tags:
     - splunk
     - universal_forwarder_windows

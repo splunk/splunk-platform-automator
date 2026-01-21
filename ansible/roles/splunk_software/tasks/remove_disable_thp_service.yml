@@ -1,6 +1,6 @@
 ---
 
-- name: stop and disable disable-thp service
+- name: Stop and disable disable-thp service
   tags:
     - splunk
     - splunk_software
@@ -11,7 +11,7 @@
     enabled: no
   when: use_systemctl == true
 
-- name: remove disable-thp.service systemd file
+- name: Remove disable-thp.service systemd file
   tags:
     - splunk
     - splunk_software
@@ -21,7 +21,7 @@
     state: absent
   when: use_systemctl == true
 
-- name: commit changes to systemctl
+- name: Commit changes to systemctl
   tags:
     - splunk
     - splunk_software

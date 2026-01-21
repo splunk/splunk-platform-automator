@@ -12,13 +12,13 @@
 # 3. Upgrade the peer node tier.
 
 
-- name: upgrade cluster master
+- name: Upgrade cluster master
   hosts: role_cluster_master
   become: yes
   become_user: root
 
   tasks:
-    - name: call upgrade splunk from role splunk_software
+    - name: Call upgrade splunk from role splunk_software
       include_role:
         name: splunk_software
         tasks_from: upgrade
@@ -27,14 +27,14 @@
 # Upgrading a search cluster version 6.4+
 # https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/UpgradeaSHC#Perform_a_member-by-member_upgrade
 
-- name: upgrade search head cluster (one by one)
+- name: Upgrade search head cluster (one by one)
   hosts: role_search_head
   become: yes
   become_user: root
   serial: 1
 
   tasks:
-    - name: call upgrade splunk from role splunk_software
+    - name: Call upgrade splunk from role splunk_software
       include_role:
         name: splunk_software
         tasks_from: upgrade

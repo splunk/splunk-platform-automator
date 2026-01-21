@@ -1,6 +1,6 @@
 ---
 
-- name: check if cluster manager has been upgraded already
+- name: Check if cluster manager has been upgraded already
   tags:
     - splunk
     - splunk_software
@@ -10,7 +10,7 @@
   vars:
     fail_on_missing_upgrade: true
 
-- name: check cluster state
+- name: Check cluster state
   tags:
     - splunk
     - splunk_software
@@ -20,7 +20,7 @@
   vars:
     splunk_rest_endpoint: /services/cluster/master/status
 
-- name: set state variables
+- name: Set state variables
   tags:
     - splunk
     - splunk_software
@@ -32,7 +32,7 @@
   vars:
     splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
 
-- name: fail if cluster service_ready_flag not ok
+- name: Fail if cluster service_ready_flag not ok
   tags:
     - splunk
     - splunk_software
@@ -42,7 +42,7 @@
     msg: "Cluster is not healthy!"
   when: idxc_service_ready_flag == false
 
-- name: call splunk rest endpiont
+- name: Call splunk rest endpiont
   tags:
     - splunk
     - splunk_software
@@ -54,7 +54,7 @@
     splunk_rest_endpoint: /services/cluster/master/health
   when: idxc_searchable_rolling == false
 
-- name: fail if cluster preflight not ok
+- name: Fail if cluster preflight not ok
   tags:
     - splunk
     - splunk_software
@@ -66,7 +66,7 @@
     - idxc_searchable_rolling == false
     - splunk_rest_json_output.entry[0].content.pre_flight_check|int != 1
 
-- name: init rolling upgrade
+- name: Init rolling upgrade
   tags:
     - splunk
     - splunk_software
@@ -79,7 +79,7 @@
     http_method: POST
   when: idxc_searchable_rolling == false
 
-- name: init output
+- name: Init output
   tags:
     - splunk
     - splunk_software
@@ -90,7 +90,7 @@
   when: idxc_searchable_rolling == false
   changed_when: idxc_searchable_rolling == false
 
-- name: init output
+- name: Init output
   tags:
     - splunk
     - splunk_software

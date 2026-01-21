@@ -14,7 +14,7 @@
     mode: 0600
   register: startwebserver
 
-- name: restart splunkweb
+- name: Restart splunkweb
   tags:
     - splunk
     - splunk_webserver

@@ -1,6 +1,6 @@
 ---
 
-- name: add splunk sudoers file
+- name: Add splunk sudoers file
   tags:
     - splunk
     - splunk_software

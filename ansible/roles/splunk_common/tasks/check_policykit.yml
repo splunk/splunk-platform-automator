@@ -18,7 +18,7 @@
     - splunk_use_policykit|default(true) == true
     - policykit.stat.exists == false
 
-- name: set policykit
+- name: Set policykit
   tags:
     - splunk
     - splunk_common

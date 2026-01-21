@@ -1,7 +1,7 @@
 ---
 # This playbook installs a splunk license
 
-- name: get guid of source license file
+- name: Get guid of source license file
   tags:
     - splunk
     - license_manager
@@ -24,7 +24,7 @@
   check_mode: no
   changed_when: false
 
-- name: copy license file to tmp location
+- name: Copy license file to tmp location
   tags:
     - splunk
     - license_manager
@@ -35,7 +35,7 @@
     group: "{{ splunk_group }}"
   when: grep_result.stdout is not search(lic_guid_src.matches[0].guid)
 
-- name: add license file to splunk
+- name: Add license file to splunk
   tags:
     - splunk
     - license_manager
@@ -45,7 +45,7 @@
   when: grep_result.stdout is not search(lic_guid_src.matches[0].guid)
   notify: restart splunk
 
-- name: remove license file from tmp location
+- name: Remove license file from tmp location
   tags:
     - splunk
     - license_manager

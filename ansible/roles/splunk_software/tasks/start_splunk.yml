@@ -1,6 +1,6 @@
 ---
 
-- name: start splunk
+- name: Start splunk
   tags:
     - splunk
     - splunk_common

@@ -16,7 +16,7 @@
     state: present
     enabled: yes
 
-- name: enable remote desktop service
+- name: Enable remote desktop service
   tags:
     - splunk
     - universal_forwarder_windows

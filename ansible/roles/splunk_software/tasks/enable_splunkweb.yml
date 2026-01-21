@@ -14,7 +14,7 @@
     mode: 0644
   register: startwebserver
 
-- name: start splunkweb
+- name: Start splunkweb
   tags:
     - splunk
     - splunk_webserver

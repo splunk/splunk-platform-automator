@@ -1,7 +1,7 @@
 ---
 # This playbook installs splunk apps
 
-- name: loop through the config files
+- name: Loop through the config files
   tags:
     - splunk
     - splunk_conf

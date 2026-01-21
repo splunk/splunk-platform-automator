@@ -1,7 +1,7 @@
 ---
 # This playbook disables selinux
 
-- name: collect facts about system services
+- name: Collect facts about system services
   tags:
     - common
     - apparmor
@@ -10,7 +10,7 @@
   when:
     - disable_apparmor|default(false) == true
 
-- name: stop and disable AppArmor
+- name: Stop and disable AppArmor
   tags:
     - common
     - apparmor

@@ -1,6 +1,6 @@
 ---
 
-- name: remove splunk sudoers file
+- name: Remove splunk sudoers file
   tags:
     - splunk
     - splunk_software

@@ -1,14 +1,14 @@
 ---
 # remove the splunk installation
 
-- name: remove the complete splunk installation
+- name: Remove the complete splunk installation
   hosts: all
   become: yes
   become_user: root
 
   tasks:
 
-    - name: call uninstall from role splunk_software
+    - name: Call uninstall from role splunk_software
       include_role:
         name: splunk_software
         tasks_from: uninstall

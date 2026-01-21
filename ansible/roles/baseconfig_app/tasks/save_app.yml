@@ -1,7 +1,7 @@
 ---
 # This playbook saves a copy of the app on the ansible host
 
-- name: create hostname and app dir on ansible host
+- name: Create hostname and app dir on ansible host
   tags:
     - splunk
     - splunk_baseconfig
@@ -13,7 +13,7 @@
   become: no
   delegate_to: localhost
 
-- name: save app content to ansible host
+- name: Save app content to ansible host
   tags:
     - splunk
     - splunk_baseconfig

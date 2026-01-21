@@ -1,35 +1,35 @@
 ---
 # This playbook deploys a full splunk site
 
-- name: setup common settings
+- name: Setup common settings
   tags:
     - common
   import_playbook: setup_common.yml
 
-- name: create splunk control
+- name: Create splunk control
   tags:
     - common
   import_playbook: create_linkpage.yml
 
-- name: install the splunk software
+- name: Install the splunk software
   tags:
     - splunk
     - splunk_software
   import_playbook: install_splunk.yml
 
-- name: setup splunk roles
+- name: Setup splunk roles
   tags:
     - splunk
     - splunk_roles
   import_playbook: setup_splunk_roles.yml
 
-- name: configure splunk conf settings
+- name: Configure splunk conf settings
   tags:
     - splunk
     - splunk_conf
   import_playbook: setup_splunk_conf.yml
 
-- name: setup other roles
+- name: Setup other roles
   tags:
     - other_roles
   import_playbook: setup_other_roles.yml

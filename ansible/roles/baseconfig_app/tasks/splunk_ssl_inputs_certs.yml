@@ -1,7 +1,7 @@
 ---
 # This playbook installs certs for ssl on inputs
 
-- name: check rootCA filename to copy
+- name: Check rootCA filename to copy
   tags:
     - splunk
     - splunk_baseconfig
@@ -15,7 +15,7 @@
   become: no
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
 
-- name: check serverCert filename to copy
+- name: Check serverCert filename to copy
   tags:
     - splunk
     - splunk_baseconfig
@@ -29,7 +29,7 @@
   become: no
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
 
-- name: set cert file names
+- name: Set cert file names
   tags:
     - splunk
     - splunk_baseconfig
@@ -39,7 +39,7 @@
     server_pem: "{% for result in server_pems.results %}{% if result.stat.exists == true %}{{ result.item }}{% endif %}{% endfor %}"
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
 
-- name: fail if no cacert found
+- name: Fail if no cacert found
   tags:
     - splunk
     - splunk_baseconfig
@@ -48,7 +48,7 @@
     msg: "Cannot find a cacert.pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true and cacert_pem == ""
 
-- name: fail if no pem cert found
+- name: Fail if no pem cert found
   tags:
     - splunk
     - splunk_baseconfig
@@ -57,7 +57,7 @@
     msg: "Cannot find a .pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true and server_pem == ""
 
-- name: create path for custom certs
+- name: Create path for custom certs
   tags:
     - splunk
     - splunk_baseconfig
@@ -73,7 +73,7 @@
     - "{{ splunk_ssl.inputs.config.serverCert|replace('$SPLUNK_HOME/', '')|dirname }}"
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
 
-- name: copy certs file for inputs ssl
+- name: Copy certs file for inputs ssl
   tags:
     - splunk
     - splunk_baseconfig

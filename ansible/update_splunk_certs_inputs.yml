@@ -1,7 +1,7 @@
 ---
 # add a splunk web certs if not existing
 
-- name: add splunk web certs
+- name: Add splunk web certs
   hosts: role_indexer
   roles:
     - splunk_common
@@ -10,7 +10,7 @@
 
   tasks:
 
-    - name: install certs for inputs ssl
+    - name: Install certs for inputs ssl
       include_role:
         name: baseconfig_app
         tasks_from: splunk_ssl_inputs_certs

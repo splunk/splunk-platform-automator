@@ -9,7 +9,7 @@
   register: splunk_rest_output
   when: splunk_rest_noauth|default(false) == true
 
-- name: get rest output
+- name: Get rest output
   tags:
     - splunk
     - splunk_software
@@ -40,7 +40,7 @@
   when: splunk_rest_noauth|default(true)|bool == true
   changed_when: http_method|default('GET') == 'POST'
 
-- name: get rest output
+- name: Get rest output
   tags:
     - splunk
     - splunk_software
@@ -51,7 +51,7 @@
     - splunk_rest_noauth|default(false)|bool == false
     - splunk_rest_output_mode|default("json") == "json"
 
-- name: output json
+- name: Output json
   tags:
     - splunk
     - splunk_software
@@ -62,7 +62,7 @@
     - splunk_rest_output_show|default(false)|bool == true
     - splunk_rest_output_mode|default("json") == "xml"
 
-- name: output json
+- name: Output json
   tags:
     - splunk
     - splunk_software

@@ -1,7 +1,7 @@
 ---
 # This playbook install the base config apps
 
-- name: find path to baseconfig app
+- name: Find path to baseconfig app
   tags:
    - splunk
    - splunk_baseconfig

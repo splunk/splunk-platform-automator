@@ -1,6 +1,6 @@
 ---
 
-- name: check cluster state
+- name: Check cluster state
   tags:
     - splunk
     - splunk_software
@@ -11,7 +11,7 @@
   vars:
     splunk_rest_endpoint: /services/cluster/master/status
 
-- name: set state variables
+- name: Set state variables
   tags:
     - splunk
     - splunk_software
@@ -23,7 +23,7 @@
   vars:
     splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
 
-- name: finalize rolling upgrade
+- name: Finalize rolling upgrade
   tags:
     - splunk
     - splunk_software
@@ -36,7 +36,7 @@
     http_method: POST
   when: idxc_searchable_rolling == true
 
-- name: finalize output
+- name: Finalize output
   tags:
     - splunk
     - splunk_software
@@ -47,7 +47,7 @@
   when: idxc_searchable_rolling == true
   changed_when: idxc_searchable_rolling == true
 
-- name: finalize output
+- name: Finalize output
   tags:
     - splunk
     - splunk_software

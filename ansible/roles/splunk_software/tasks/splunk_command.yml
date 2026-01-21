@@ -10,7 +10,7 @@
   become_user: "{{ splunk_user }}"
   register: splunk_command_output
 
-- name: output from command
+- name: Output from command
   tags:
     - splunk
     - splunk_software

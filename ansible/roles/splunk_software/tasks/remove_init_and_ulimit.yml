@@ -1,6 +1,6 @@
 ---
 
-- name: check /etc/init.d/splunk
+- name: Check /etc/init.d/splunk
   tags:
     - splunk
     - splunk_software
@@ -9,7 +9,7 @@
     path: "/etc/init.d/splunk"
   register: check_splunk_init
 
-- name: disable boot-start
+- name: Disable boot-start
   tags:
     - splunk
     - splunk_software
@@ -17,7 +17,7 @@
   command: "{{ splunk_home }}/bin/splunk disable boot-start"
   when: check_splunk_init.stat.exists == true
 
-- name: find rc.d file to remove
+- name: Find rc.d file to remove
   tags:
     - splunk
     - splunk_software
@@ -31,7 +31,7 @@
     use_regex: yes
   register: init_files_to_delete
 
-- name: remove all rc.d files
+- name: Remove all rc.d files
   tags:
     - splunk
     - splunk_software
@@ -41,7 +41,7 @@
     state: absent
   with_items: "{{ init_files_to_delete.files }}"
 
-- name: remove /etc/init.d/splunk
+- name: Remove /etc/init.d/splunk
   tags:
     - splunk
     - splunk_software
@@ -50,7 +50,7 @@
     path: /etc/init.d/splunk
     state: absent
 
-- name: commit changes to systemctl
+- name: Commit changes to systemctl
   tags:
     - splunk
     - splunk_software
@@ -58,7 +58,7 @@
   command: systemctl daemon-reload
   when: use_systemctl == true
 
-- name: check /etc/rc.local
+- name: Check /etc/rc.local
   tags:
     - splunk
     - splunk_software
@@ -67,7 +67,7 @@
     path: "/etc/rc.local"
   register: check_rc_local
 
-- name: remove disable THP in /etc/rc.local
+- name: Remove disable THP in /etc/rc.local
   tags:
     - splunk
     - splunk_software

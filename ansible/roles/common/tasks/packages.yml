@@ -6,7 +6,7 @@
     update_cache: yes
   when: ansible_os_family == "Debian"
 
-- name: install additional os packages
+- name: Install additional os packages
   tags:
     - common
     - packages

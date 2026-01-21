@@ -1,6 +1,6 @@
 ---
 
-- name: wait for splunkd to be fully started
+- name: Wait for splunkd to be fully started
   tags:
     - splunk
     - splunk_common

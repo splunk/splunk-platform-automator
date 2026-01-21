@@ -1,14 +1,14 @@
 ---
 # Main playbook for this role
 
-- name: start role tasks
+- name: Start role tasks
   tags:
     - splunk
     - search_head
   debug:
     msg: "role '{{ role_name }}' start"
 
-- name: install certs for web ssl
+- name: Install certs for web ssl
   tags:
     - splunk
     - splunk_baseconfig

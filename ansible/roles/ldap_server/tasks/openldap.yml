@@ -3,7 +3,7 @@
 
 # Following this guide: http://www.itzgeek.com/how-tos/linux/centos-how-tos/step-step-openldap-server-configuration-centos-7-rhel-7.html
 
-- name: install openladp packages
+- name: Install openladp packages
   tags:
     - ldap
   package:
@@ -13,7 +13,7 @@
       - openldap-servers
     state: latest
 
-- name: enable and start service slapd
+- name: Enable and start service slapd
   tags:
     - ldap
   service: 
@@ -21,20 +21,20 @@
     state: started
     enabled: yes
 
-- name: check for ldap db config file
+- name: Check for ldap db config file
   tags:
     - ldap
   stat: path="/var/tmp/db.ldif"
   register: ldap_config
 
-- name: create LDAP root password
+- name: Create LDAP root password
   tags:
     - ldap
   shell: slappasswd -s {{ldap_root_passwd}}
   register: ldap_root_hash
   when: ldap_config.stat.exists == false
 
-- name: define ldap db config file
+- name: Define ldap db config file
   tags:
     - ldap
   template:
@@ -42,7 +42,7 @@
     dest: /var/tmp/db.ldif
   when: ldap_config.stat.exists == false
 
-- name: add ldap db config file
+- name: Add ldap db config file
   tags:
     - ldap
   shell: ldapmodify -Y EXTERNAL  -H ldapi:/// -f /var/tmp/db.ldif
@@ -52,7 +52,7 @@
   stat: path="/var/tmp/monitor.ldif"
   register: ldap_monitor_config
 
-- name: define monitor config file
+- name: Define monitor config file
   tags:
     - ldap
   template:
@@ -60,25 +60,25 @@
     dest: /var/tmp/monitor.ldif
   when: ldap_monitor_config.stat.exists == false
 
-- name: add ldap monitor config
+- name: Add ldap monitor config
   tags:
     - ldap
   shell: ldapmodify -Y EXTERNAL  -H ldapi:/// -f /var/tmp/monitor.ldif
   when: ldap_monitor_config.stat.exists == false
 
-- name: check for ldap DB_CONFIG file
+- name: Check for ldap DB_CONFIG file
   tags:
     - ldap
   stat: path="/var/lib/ldap/DB_CONFIG"
   register: ldap_db_config
 
-- name: copy /var/lib/ldap/DB_CONFIG from example
+- name: Copy /var/lib/ldap/DB_CONFIG from example
   tags:
     - ldap
   shell: cp /usr/share/openldap-servers/DB_CONFIG.example /var/lib/ldap/DB_CONFIG
   when: ldap_db_config.stat.exists == false
 
-- name: set correct file permissions for DB_CONFIG
+- name: Set correct file permissions for DB_CONFIG
   tags:
     - ldap
   file:
@@ -87,7 +87,7 @@
     group: ldap
     mode: 0644
 
-- name: add more schemas
+- name: Add more schemas
   tags:
     - ldap
   shell: ldapadd -Y EXTERNAL -H ldapi:/// -f {{item}}
@@ -103,7 +103,7 @@
   stat: path="/var/tmp/base.ldif"
   register: ldap_base_config
 
-- name: define domain config
+- name: Define domain config
   tags:
     - ldap
   template:
@@ -111,7 +111,7 @@
     dest: /var/tmp/base.ldif
   when: ldap_base_config.stat.exists == false
 
-- name: build lDAP directory sturcture
+- name: Build lDAP directory sturcture
   tags:
     - ldap
   shell: ldapadd -x -w {{ldap_root_passwd}} -D "cn=ldapadm,{{ldap_dc}}" -f /var/tmp/base.ldif

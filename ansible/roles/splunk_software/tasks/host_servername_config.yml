@@ -1,7 +1,7 @@
 ---
 # This playbook configures host and servername settings
 
-- name: set serverName to {{inventory_hostname}}
+- name: Set serverName to {{inventory_hostname}}
   tags:
     - splunk
     - splunk_software
@@ -17,7 +17,7 @@
   notify: restart splunk
   when: splunk_set_servername|default(false) == true
 
-- name: set default-hostname to {{inventory_hostname}}
+- name: Set default-hostname to {{inventory_hostname}}
   tags:
     - splunk
     - splunk_software

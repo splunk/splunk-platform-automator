@@ -2,7 +2,7 @@
 # Handlers are run in the order they are listed, not in the order that they are notified
 # See: https://docs.ansible.com/ansible/latest/reference_appendices/glossary.html#Notify
 
-- name: wait for SHC service ready and call push bundle
+- name: Wait for SHC service ready and call push bundle
   tags:
     - splunk
     - splunk_common
@@ -18,7 +18,7 @@
   delegate_to: "{{splunk_shc_host_list|first}}"
   notify: push shcluster bundle
 
-- name: push shcluster bundle
+- name: Push shcluster bundle
   tags:
     - splunk
     - splunk_common
@@ -29,7 +29,7 @@
   become_user: "{{ splunk_user }}"
   delegate_to: "{{ splunk_shc_deployer }}"
 
-- name: reload deploy-server
+- name: Reload deploy-server
   tags:
     - splunk
     - splunk_common
@@ -39,7 +39,7 @@
   become_user: "{{ splunk_user }}"
   delegate_to: "{{splunk_deployment_server|first}}"
 
-- name: restart splunk
+- name: Restart splunk
   tags:
     - splunk
     - splunk_common

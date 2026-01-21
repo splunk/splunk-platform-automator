@@ -1,42 +1,42 @@
 ---
 # This playbook configures the splunk roles
 
-- name: setup deployment server role
+- name: Setup deployment server role
   hosts: role_deployment_server
   become: yes
   become_user: root
   roles:
     - deployment_server
 
-- name: setup license manager role
+- name: Setup license manager role
   hosts: role_license_manager
   become: yes
   become_user: root
   roles:
     - license_manager
 
-- name: setup cluster manager role
+- name: Setup cluster manager role
   hosts: role_cluster_manager
   become: yes
   become_user: root
   roles:
     - cluster_manager
 
-- name: setup indexer role
+- name: Setup indexer role
   hosts: role_indexer
   become: yes
   become_user: root
   roles:
     - indexer
 
-- name: setup deployer role
+- name: Setup deployer role
   hosts: role_deployer
   become: yes
   become_user: root
   roles:
     - deployer
 
-- name: setup search head role
+- name: Setup search head role
   hosts: role_search_head
   serial: 1
   become: yes
@@ -44,28 +44,28 @@
   roles:
     - search_head
 
-- name: setup monitoring console role
+- name: Setup monitoring console role
   hosts: role_monitoring_console
   become: yes
   become_user: root
   roles:
     - monitoring_console
 
-- name: setup heavy forwarder role
+- name: Setup heavy forwarder role
   hosts: role_heavy_forwarder
   become: yes
   become_user: root
   roles:
     - heavy_forwarder
 
-- name: setup universal forwarder role
+- name: Setup universal forwarder role
   hosts: role_universal_forwarder
   become: yes
   become_user: root
   roles:
     - universal_forwarder
 
-- name: setup universal forwarder role for windows
+- name: Setup universal forwarder role for windows
   hosts: role_universal_forwarder_windows
   roles:
     - universal_forwarder_windows

@@ -1,6 +1,6 @@
 ---
 
-- name: create splunk backup dir {{ splunk_backup_dir }}
+- name: Create splunk backup dir {{ splunk_backup_dir }}
   tags:
     - splunk
     - splunk_software
@@ -14,7 +14,7 @@
   become: yes
   become_user: root
 
-- name: backup splunk etc directory {{ splunk_home }}/etc
+- name: Backup splunk etc directory {{ splunk_home }}/etc
   tags:
     - splunk
     - splunk_software

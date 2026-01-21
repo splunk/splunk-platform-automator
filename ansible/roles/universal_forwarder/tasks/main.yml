@@ -1,14 +1,14 @@
 ---
 # Main playbook for this role
 
-- name: start role tasks
+- name: Start role tasks
   tags:
     - splunk
     - universal_forwarder
   debug:
     msg: "role '{{ role_name }}' start"
 
-- name: apply baseconfig app org_all_deploymentclient
+- name: Apply baseconfig app org_all_deploymentclient
   tags:
     - splunk
     - splunk_baseconfig
@@ -21,7 +21,7 @@
     app_path: '{{splunk_home}}/etc/apps'
   when: splunk_deployment_server|default()|length > 0 and inventory_hostname not in groups.role_deployment_server
 
-- name: apply baseconfig app org_all_forwarder_outputs
+- name: Apply baseconfig app org_all_forwarder_outputs
   tags:
     - splunk
     - splunk_baseconfig

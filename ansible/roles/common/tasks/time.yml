@@ -1,7 +1,7 @@
 ---
 # This playbook install the basic time settings
 
-- name: set timezone
+- name: Set timezone
   tags:
     - common
     - timezone
