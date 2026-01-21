@@ -5,7 +5,7 @@
   tags:
     - splunk
     - splunk_common
-  debug:
+  ansible.builtin.debug:
     msg: "role '{{ role_name }}' start"
 
 - include_tasks: check_systemctl.yml

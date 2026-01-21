@@ -5,7 +5,7 @@
   tags:
     - splunk
     - deployment_server
-  debug:
+  ansible.builtin.debug:
     msg: "role '{{ role_name }}' start"
 
 - name: Apply baseconfig app org_all_forwarder_outputs
@@ -14,7 +14,7 @@
     - splunk_baseconfig
     - deployment_server
     - org_all_forwarder_outputs
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_forwarder_outputs'
@@ -28,7 +28,7 @@
     - deployment_server
     - org_all_search_base
     - web_ssl
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
     tasks_from: splunk_ssl_web_certs
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
@@ -39,7 +39,7 @@
     - splunk_baseconfig
     - deployment_server
     - org_all_search_base
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_search_base'
@@ -51,7 +51,7 @@
     - splunk_baseconfig
     - deployment_server
     - org_full_license_server
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_full_license_server'
@@ -64,7 +64,7 @@
     - splunk_baseconfig
     - deployment_server
     - org_all_forwarder_outputs
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_forwarder_outputs'
@@ -80,7 +80,7 @@
     - splunk_baseconfig
     - deployment_server
     - org_full_license_server
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_full_license_server'
@@ -93,7 +93,7 @@
     - splunk_baseconfig
     - deployment_server
     - org_all_deploymentclient
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_deploymentclient'
@@ -105,7 +105,7 @@
     - splunk_baseconfig
     - deployment_server
     - org_all_indexer_base
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_indexer_base'
@@ -117,7 +117,7 @@
     - splunk_baseconfig
     - deployment_server
     - org_indexer_volume_indexes
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_indexer_volume_indexes'
@@ -129,7 +129,7 @@
     - splunk_baseconfig
     - deployment_server
     - org_search_volume_indexes
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_search_volume_indexes'
@@ -141,7 +141,7 @@
     - splunk_baseconfig
     - deployment_server
     - org_all_indexes
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_indexes'
@@ -153,7 +153,7 @@
     - splunk_baseconfig
     - deployment_server
     - org_all_search_base
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_search_base'
@@ -165,7 +165,7 @@
     - splunk_baseconfig
     - monitoring_console
     - org_cluster_search_base
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_cluster_search_base'
@@ -182,7 +182,7 @@
     - splunk_baseconfig
     - deployment_server
     - serverclass
-  include_tasks: serverclass.yml
+  ansible.builtin.include_tasks: serverclass.yml
 
 - name: Call save_serverclass
   tags:
@@ -192,7 +192,7 @@
     - serverclass
     - save_baseconfig
     - save_serverclass
-  include_tasks: "save_serverclass.yml"
+  ansible.builtin.include_tasks: "save_serverclass.yml"
   when: splunk_save_serverclass|default(false) == true
 
 - name: Call update_dserver from role monitoring_console
@@ -201,7 +201,7 @@
     - splunk_baseconfig
     - monitoring_console
     - dserver
-  include_role:
+  ansible.builtin.include_role:
     name: monitoring_console
     tasks_from: update_dserver
   vars:

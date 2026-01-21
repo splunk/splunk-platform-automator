@@ -4,7 +4,7 @@
   tags:
     - splunk
     - splunk_common
-  wait_for:
+  ansible.builtin.wait_for:
     timeout: 500
     port: 8089
     delay: 10

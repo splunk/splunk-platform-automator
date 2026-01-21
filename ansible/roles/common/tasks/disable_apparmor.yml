@@ -14,7 +14,7 @@
   tags:
     - common
     - apparmor
-  service:
+  ansible.builtin.service:
     name: apparmor
     state: stopped
     enabled: no

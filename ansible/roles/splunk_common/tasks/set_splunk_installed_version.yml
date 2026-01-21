@@ -5,13 +5,13 @@
   tags:
     - splunk
     - splunk_common
-  include_tasks: "check_splunk_install.yml"
+  ansible.builtin.include_tasks: "check_splunk_install.yml"
 
 - name: Find installed splunk version
   tags:
     - splunk
     - splunk_common
-  shell: 'grep -w VERSION {{ splunk_home }}/etc/splunk.version | cut -d= -f 2'
+  ansible.builtin.shell: 'grep -w VERSION {{ splunk_home }}/etc/splunk.version | cut -d= -f 2'
   become: yes
   become_user: "{{ splunk_user }}"
   check_mode: no
@@ -23,7 +23,7 @@
   tags:
     - splunk
     - splunk_common
-  set_fact:
+  ansible.builtin.set_fact:
     splunk_installed_version: '{{ version_output.stdout }}'
     splunk_exists: true
   when: version_output.stdout is defined
@@ -32,7 +32,7 @@
   tags:
     - splunk
     - splunk_common
-  debug:
+  ansible.builtin.debug:
     msg: 'found {{ splunk_install_app }} version {{ splunk_installed_version }}'
   when: version_output.stdout is defined
 
@@ -40,7 +40,7 @@
   tags:
     - splunk
     - splunk_software
-  set_fact:
+  ansible.builtin.set_fact:
     splunk_service_name: "splunkforwarder"
   when: use_systemctl == true
         and version_output.stdout is defined

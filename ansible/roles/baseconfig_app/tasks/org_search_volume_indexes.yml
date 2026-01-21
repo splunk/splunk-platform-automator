@@ -6,7 +6,7 @@
     - splunk
     - splunk_baseconfig
     - org_indexer_volume_indexes
-  fail:
+  ansible.builtin.fail:
     msg: "homePath ({{splunk_volume_defaults.homePath|default('primary')}}) must be equal to coldPath ({{splunk_volume_defaults.coldPath|default('primary')}}) when using SmartStore"
   when: 
     - splunk_volume_defaults.remotePath is defined
@@ -17,7 +17,7 @@
     - splunk
     - splunk_baseconfig
     - org_indexer_volume_indexes
-  replace:
+  ansible.builtin.replace:
     path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
     regexp: '^\[volume:primary\]'
     replace: '[volume:{{splunk_indexer_volumes_local|first|default(["primary"])}}]'
@@ -28,7 +28,7 @@
     - splunk
     - splunk_baseconfig
     - org_indexer_volume_indexes
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
     section: volume:{{item.key}}
     option: path
@@ -45,7 +45,7 @@
     - splunk
     - splunk_baseconfig
     - org_search_volume_indexes
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
     section: volume:primary
     option: path
@@ -61,7 +61,7 @@
     - splunk
     - splunk_baseconfig
     - org_search_volume_indexes
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
     section: volume:secondary
     state: absent

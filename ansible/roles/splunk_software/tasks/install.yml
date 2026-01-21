@@ -6,7 +6,7 @@
     - splunk
     - splunk_software
     - splunk_install
-  file:
+  ansible.builtin.file:
     path: "{{ splunk_install_dir }}"
     state: directory
     owner: root
@@ -18,7 +18,7 @@
     - splunk
     - splunk_software
     - splunk_install
-  file:
+  ansible.builtin.file:
     path: "{{ splunk_home }}"
     state: directory
     owner: "{{ splunk_user }}"
@@ -30,21 +30,21 @@
     - splunk
     - splunk_software
     - splunk_install
-  include_tasks: find_target_version.yml
+  ansible.builtin.include_tasks: find_target_version.yml
 
 - name: Upload and extract the splunk software
   tags:
     - splunk
     - splunk_software
     - splunk_install
-  include_tasks: upload_and_extract.yml
+  ansible.builtin.include_tasks: upload_and_extract.yml
 
 - name: Set enable boot-start args
   tags:
     - splunk
     - splunk_software
     - splunk_install
-  include_tasks: set_enable_boot_start_args.yml
+  ansible.builtin.include_tasks: set_enable_boot_start_args.yml
 
 - name: Copy shared splunk.secret file
   tags:
@@ -52,7 +52,7 @@
     - splunk_software
     - splunk_install
     - splunk_secret
-  copy:
+  ansible.builtin.copy:
     src: "{{ splunk_auth_dir }}/{{ splunk_install_app }}_splunk.secret"
     dest: "{{ splunk_home }}/etc/auth/splunk.secret"
     owner: "{{splunk_user}}"
@@ -66,7 +66,7 @@
     - splunk_software
     - splunk_install
     - splunk_password
-  command: "{{ splunk_home }}/bin/splunk hash-passwd '{{splunk_admin_password}}'"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk hash-passwd '{{splunk_admin_password}}'"
   become: yes
   become_user: "{{ splunk_user }}"
   register: admin_hash_pw
@@ -78,7 +78,7 @@
     - splunk_software
     - splunk_install
     - splunk_password
-  ini_file:
+  community.general.ini_file:
     path: "{{ splunk_home }}/etc/system/local/user-seed.conf"
     section: user_info
     option: "{{ item.varkey }}"
@@ -96,7 +96,7 @@
     - splunk
     - splunk_software
     - splunk_install
-  ini_file:
+  community.general.ini_file:
     path: "{{ splunk_home }}/etc/system/local/server.conf"
     section: kvstore
     option: storageEngine
@@ -115,7 +115,7 @@
     - splunk_software
     - splunk_install
     - splunk_fips
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: "{{ splunk_home }}/etc/splunk-launch.conf"
     line: "SPLUNK_FIPS=1"
     state: present
@@ -130,7 +130,7 @@
     - splunk
     - splunk_software
     - splunk_install
-  include_tasks: start_accept_license_and_stop.yml
+  ansible.builtin.include_tasks: start_accept_license_and_stop.yml
   when: splunk_installed_version is version_compare('7.2.2', '<')
 
 - name: Call enable_boot-start
@@ -138,14 +138,14 @@
     - splunk
     - splunk_software
     - splunk_install
-  include_tasks: enable_boot-start.yml
+  ansible.builtin.include_tasks: enable_boot-start.yml
 
 - name: Enable and start splunk service
   tags:
     - splunk
     - splunk_software
     - splunk_install
-  service:
+  ansible.builtin.service:
     name: "{{ splunk_service_name }}"
     state: started
     enabled: yes
@@ -156,7 +156,7 @@
     - splunk
     - splunk_software
     - splunk_install
-  include_role:
+  ansible.builtin.include_role:
     name: splunk_common
     tasks_from: check_systemd_file
 
@@ -166,7 +166,7 @@
     - splunk_software
     - splunk_install
     - splunk_password
-  command: "{{ splunk_home }}/bin/splunk edit user admin -password '{{splunk_admin_password}}' -auth admin:changeme"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk edit user admin -password '{{splunk_admin_password}}' -auth admin:changeme"
   become: yes
   become_user: "{{ splunk_user }}"
   when: splunk_installed_version is version_compare('7.1', '<') and splunk_install_app == "splunk"
@@ -177,7 +177,7 @@
     - splunk_software
     - splunk_install
     - splunk_polkit
-  include_tasks: add_custom_policykit.yml
+  ansible.builtin.include_tasks: add_custom_policykit.yml
   when: 
     - use_policykit == true
     - use_systemctl == true
@@ -190,7 +190,7 @@
     - splunk_software
     - splunk_install
     - splunk_sudoers
-  include_tasks: add_splunk_sudoers.yml
+  ansible.builtin.include_tasks: add_splunk_sudoers.yml
   when: 
     - use_policykit == false
     - use_systemctl == true

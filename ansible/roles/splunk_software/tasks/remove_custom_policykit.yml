@@ -6,7 +6,7 @@
     - splunk
     - splunk_software
     - splunk_uninstall
-  file:
+  ansible.builtin.file:
     path: "/etc/polkit-1/rules.d/10-{{splunk_service_name}}.rules"
     state: absent
 
@@ -15,6 +15,6 @@
     - splunk
     - splunk_software
     - splunk_uninstall
-  file:
+  ansible.builtin.file:
     path: "/etc/polkit-1/rules.d/10-Splunkd.rules"
     state: absent

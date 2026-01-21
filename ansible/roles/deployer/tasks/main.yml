@@ -5,14 +5,14 @@
   tags:
     - splunk
     - deployer
-  debug:
+  ansible.builtin.debug:
     msg: "role '{{ role_name }}' start"
 
 - name: "check if shclustering pass4SymmKey exists"
   tags:
     - splunk
     - deployer
-  shell: "{{ splunk_home }}/bin/splunk btool server list shclustering | egrep -we '^pass4SymmKey'"
+  ansible.builtin.shell: "{{ splunk_home }}/bin/splunk btool server list shclustering | egrep -we '^pass4SymmKey'"
   become: yes
   become_user: "{{ splunk_user }}"
   register: grep_result
@@ -24,7 +24,7 @@
   tags:
     - splunk
     - deployer
-  ini_file:
+  community.general.ini_file:
     path: "{{ splunk_home }}/etc/system/local/server.conf"
     section: shclustering
     option: pass4SymmKey
@@ -39,7 +39,7 @@
   tags:
     - splunk
     - deployer
-  ini_file:
+  community.general.ini_file:
     path: "{{ splunk_home }}/etc/system/local/server.conf"
     section: shclustering
     option: shcluster_label
@@ -55,7 +55,7 @@
     - splunk_baseconfig
     - deployer
     - org_all_deploymentclient
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_deploymentclient'
@@ -68,7 +68,7 @@
     - splunk_baseconfig
     - deployer
     - org_all_forwarder_outputs
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_forwarder_outputs'
@@ -82,7 +82,7 @@
     - deployer
     - org_all_search_base
     - web_ssl
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
     tasks_from: splunk_ssl_web_certs
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
@@ -93,7 +93,7 @@
     - splunk_baseconfig
     - deployer
     - org_all_search_base
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_search_base'
@@ -106,7 +106,7 @@
     - splunk_baseconfig
     - deployer
     - org_full_license_server
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_full_license_server'
@@ -119,7 +119,7 @@
     - splunk_baseconfig
     - deployer
     - org_search_volume_indexes
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_search_volume_indexes'
@@ -131,7 +131,7 @@
     - splunk_baseconfig
     - deployer
     - org_all_indexes
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_indexes'
@@ -143,7 +143,7 @@
     - splunk_baseconfig
     - deployer
     - org_all_search_base
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_search_base'
@@ -155,7 +155,7 @@
     - splunk_baseconfig
     - monitoring_console
     - org_cluster_search_base
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_cluster_search_base'
@@ -172,7 +172,7 @@
     - splunk_baseconfig
     - deployer
     - org_all_forwarder_outputs
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_forwarder_outputs'
@@ -188,7 +188,7 @@
     - splunk_baseconfig
     - deployer
     - org_full_license_server
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_full_license_server'
@@ -201,7 +201,7 @@
     - splunk_baseconfig
     - monitoring_console
     - dserver
-  include_role:
+  ansible.builtin.include_role:
     name: monitoring_console
     tasks_from: update_dserver
   vars:

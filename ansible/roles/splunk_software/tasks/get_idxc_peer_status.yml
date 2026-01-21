@@ -6,7 +6,7 @@
     - splunk
     - splunk_software
     - splunk_rest
-  import_tasks: splunk_rest.yml
+  ansible.builtin.import_tasks: splunk_rest.yml
   vars:
     splunk_rest_endpoint: "/services/cluster/master/peers/{{ idxc_peerid|first }}"
   delegate_to: "{{ splunk_idxc_cm }}"
@@ -16,5 +16,5 @@
     - splunk
     - splunk_software
     - splunk_rest
-  set_fact:
+  ansible.builtin.set_fact:
     idxc_peer_status: "{{ splunk_rest_json_output.entry[0].content.status }}"

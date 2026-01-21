@@ -8,7 +8,7 @@
     - search_head
     - search_peer
   # Same command is in monitoring_console/tasks/dserver.yml
-  include_role:
+  ansible.builtin.include_role:
     name: splunk_software
     tasks_from: splunk_rest
   vars:
@@ -22,7 +22,7 @@
     - monitoring_console
     - dserver
     - splunk_rest
-  set_fact:
+  ansible.builtin.set_fact:
     current_dservers: "{{ splunk_rest_json_output | json_query(jmesquery) | map('regex_replace', ':\\d+$', '') }}"
   vars:
     jmesquery: "entry[*].name"
@@ -33,7 +33,7 @@
     - splunk_baseconfig
     - search_head
     - search_peer
-  command: "{{ splunk_home }}/bin/splunk add search-server {{ item }}:8089 -remoteUsername admin -remotePassword {{splunk_admin_password}} -auth admin:{{splunk_admin_password}}"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk add search-server {{ item }}:8089 -remoteUsername admin -remotePassword {{splunk_admin_password}} -auth admin:{{splunk_admin_password}}"
   with_items:
     - "{{ splunk_search_peer_idx_list | difference(current_dservers) }}"
   become: yes

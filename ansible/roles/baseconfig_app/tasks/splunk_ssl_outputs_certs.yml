@@ -6,7 +6,7 @@
     - splunk
     - splunk_baseconfig
     - outputs_ssl
-  stat:
+  ansible.builtin.stat:
     path: "{{ splunk_auth_dir }}/{{ item }}"
   with_items:
     - "{{ splunk_ssl.outputs.config.sslRootCAPath|basename|default('cacert.pem') }}"
@@ -20,7 +20,7 @@
     - splunk
     - splunk_baseconfig
     - outputs_ssl
-  stat:
+  ansible.builtin.stat:
     path: "{{ splunk_auth_dir }}/{{ item }}"
   with_items:
     - "{{ splunk_ssl.outputs.config.sslCertPath|basename|default('client.pem') }}"
@@ -34,7 +34,7 @@
     - splunk
     - splunk_baseconfig
     - outputs_ssl
-  set_fact:
+  ansible.builtin.set_fact:
     cacert_pem: "{% for result in cacert_pems.results %}{% if result.stat.exists == true %}{{ result.item }}{% endif %}{% endfor %}"
     client_pem: "{% for result in client_pems.results %}{% if result.stat.exists == true %}{{ result.item }}{% endif %}{% endfor %}"
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true
@@ -45,7 +45,7 @@
     - splunk
     - splunk_baseconfig
     - outputs_ssl
-  fail:
+  ansible.builtin.fail:
     msg: "Cannot find a cacert.pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true and cacert_pem == ""
 
@@ -55,7 +55,7 @@
     - splunk
     - splunk_baseconfig
     - outputs_ssl
-  fail:
+  ansible.builtin.fail:
     msg: "Cannot find a .pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true and client_pem == ""
 
@@ -64,7 +64,7 @@
     - splunk
     - splunk_baseconfig
     - outputs_ssl
-  file:
+  ansible.builtin.file:
     state: directory
     recurse: true
     path: "{{ app_path }}/{{ app_dest_name }}/default"
@@ -77,7 +77,7 @@
     - splunk
     - splunk_baseconfig
     - outputs_ssl
-  copy:
+  ansible.builtin.copy:
     src: "{{ splunk_auth_dir }}/{{ item.src }}"
     dest: "{{ item.dest }}"
     owner: "{{splunk_user}}"

@@ -6,7 +6,7 @@
     - splunk
     - splunk_software
     - splunk_uninstall
-  stat:
+  ansible.builtin.stat:
     path: "{{ splunk_home }}/bin/splunk"
   register: check_splunk_binary_file
 
@@ -15,7 +15,7 @@
     - splunk
     - splunk_software
     - splunk_uninstall
-  stat:
+  ansible.builtin.stat:
     path: "/etc/systemd/system/{{splunk_service_name}}.service"
   register: check_systemd_unit_file
   when: 
@@ -27,7 +27,7 @@
     - splunk
     - splunk_software
     - splunk_uninstall
-  service:
+  ansible.builtin.service:
     name: "{{splunk_service_name}}.service"
     state: stopped
     enabled: no
@@ -37,7 +37,7 @@
     - check_systemd_unit_file.stat.exists == true
 
 - name: Check for thp service file
-  stat:
+  ansible.builtin.stat:
     path: "/etc/systemd/system/disable-thp.service"
   register: check_thp_systemd
 
@@ -46,7 +46,7 @@
     - splunk
     - splunk_software
     - splunk_uninstall
-  include_tasks: remove_disable_thp_service.yml
+  ansible.builtin.include_tasks: remove_disable_thp_service.yml
   when:
     - use_systemctl == true
     - check_thp_systemd.stat.exists == true
@@ -56,7 +56,7 @@
     - splunk
     - splunk_software
     - splunk_uninstall
-  shell: "pgrep splunkd"
+  ansible.builtin.shell: "pgrep splunkd"
   register: grep_result
   check_mode: no
   failed_when: "grep_result.rc > 1"
@@ -67,7 +67,7 @@
     - splunk
     - splunk_software
     - splunk_uninstall
-  shell: "pkill -9 -u splunk"
+  ansible.builtin.shell: "pkill -9 -u splunk"
   # become: yes
   # become_user: "{{ splunk_user }}"
   when: grep_result.rc == 0
@@ -77,7 +77,7 @@
     - splunk
     - splunk_software
     - splunk_uninstall
-  include_tasks: disable_boot-start.yml
+  ansible.builtin.include_tasks: disable_boot-start.yml
   when:
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
@@ -90,14 +90,14 @@
     - splunk_software
     - splunk_uninstall
     - splunk_remove_init
-  include_tasks: remove_init_and_ulimit.yml
+  ansible.builtin.include_tasks: remove_init_and_ulimit.yml
 
 - name: Make sure files are gone
   tags:
     - splunk
     - splunk_software
     - splunk_uninstall
-  file:
+  ansible.builtin.file:
     path: "{{ item }}"
     state: absent
   with_items:
@@ -110,14 +110,14 @@
     - splunk
     - splunk_software
     - splunk_uninstall
-  include_tasks: remove_custom_policykit.yml
+  ansible.builtin.include_tasks: remove_custom_policykit.yml
 
 - name: Call remove_splunk_sudoers
   tags:
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: remove_splunk_sudoers.yml
+  ansible.builtin.include_tasks: remove_splunk_sudoers.yml
 
 # Find all directories to remove, except lost+found
 - name: Find files to remove all under {{splunk_home}}/
@@ -125,7 +125,7 @@
     - splunk
     - splunk_software
     - splunk_uninstall
-  find:
+  ansible.builtin.find:
     paths: "{{splunk_home}}/"
     file_type: any
     recurse: no
@@ -139,7 +139,7 @@
     - splunk
     - splunk_software
     - splunk_uninstall
-  file:
+  ansible.builtin.file:
     path: "{{item.path}}"
     state: absent
   with_items: "{{ files_to_delete.files }}"

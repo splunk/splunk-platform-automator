@@ -7,7 +7,7 @@
     - splunk_baseconfig
     - search_head
     - search_peer
-  wait_for:
+  ansible.builtin.wait_for:
     host: '{{search_head}}'
     port: 8089
     timeout: 1

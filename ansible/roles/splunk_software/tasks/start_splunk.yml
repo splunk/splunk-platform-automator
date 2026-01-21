@@ -5,7 +5,7 @@
     - splunk
     - splunk_common
     - splunk_start
-  service:
+  ansible.builtin.service:
     name: "{{splunk_service_name}}"
     state: started
   become: yes

@@ -7,7 +7,7 @@
     - splunk_baseconfig
     - monitoring_console
     - dserver
-  wait_for:
+  ansible.builtin.wait_for:
     host: '{{ dserver_name }}'
     port: 8089
     timeout: 1
@@ -24,7 +24,7 @@
     - splunk_baseconfig
     - monitoring_console
     - dserver
-  command: "{{ splunk_home }}/bin/splunk add search-server {{ dserver_name }}:8089 -remoteUsername admin -remotePassword {{splunk_admin_password}} -auth admin:{{splunk_admin_password}}"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk add search-server {{ dserver_name }}:8089 -remoteUsername admin -remotePassword {{splunk_admin_password}} -auth admin:{{splunk_admin_password}}"
   delegate_to: '{{splunk_monitoring_console|first}}'
   become: yes
   become_user: "{{ splunk_user }}"

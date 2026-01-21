@@ -4,7 +4,7 @@
   tags:
     - splunk
     - splunk_common
-  shell: '{{ splunk_home }}/bin/splunk status | grep "splunk helpers" | sed -e "s/.*PIDs: \([0-9 ]*\).*/\1/" | wc -w'
+  ansible.builtin.shell: '{{ splunk_home }}/bin/splunk status | grep "splunk helpers" | sed -e "s/.*PIDs: \([0-9 ]*\).*/\1/" | wc -w'
   become: yes
   become_user: "{{ splunk_user }}"
   check_mode: no

@@ -4,7 +4,7 @@
   tags:
     - splunk
     - splunk_common
-  stat:
+  ansible.builtin.stat:
     path: "/etc/systemd/system/{{splunk_service_name}}.service"
   register: check_splunk_systemd
 
@@ -12,6 +12,6 @@
   tags:
     - splunk
     - splunk_common
-  set_fact:
+  ansible.builtin.set_fact:
     use_splunk_systemd: true
   when: check_splunk_systemd.stat.exists == true

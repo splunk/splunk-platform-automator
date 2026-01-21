@@ -5,7 +5,7 @@
     - splunk
     - splunk_software
     - splunk_backup
-  file:
+  ansible.builtin.file:
     path: "{{ splunk_backup_dir }}"
     state: directory
     owner: "{{splunk_user}}"

@@ -10,6 +10,6 @@
   tags:
     - common
     - packages
-  package:
+  ansible.builtin.package:
     name: "{{ packages }}" 
     state: latest

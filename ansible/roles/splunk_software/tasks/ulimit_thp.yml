@@ -5,7 +5,7 @@
   tags:
     - splunk
     - splunk_software
-  stat:
+  ansible.builtin.stat:
     path: "/etc/init.d/splunk"
   register: splunk_initd
 
@@ -13,7 +13,7 @@
   tags:
     - splunk
     - splunk_software
-  set_fact:
+  ansible.builtin.set_fact:
   when: splunk_path.stat.exists
 
 - name: Add disable THP in /etc/rc.local
@@ -21,7 +21,7 @@
     - splunk
     - splunk_software
     - splunk_disable_thp
-  blockinfile:
+  ansible.builtin.blockinfile:
     path: /etc/rc.local
     insertbefore: "^exit 0"
     create: yes
@@ -41,7 +41,7 @@
     - splunk
     - splunk_software
     - splunk_ulimits
-  template:
+  ansible.builtin.template:
     src: "etc/security/limits.d/splunk.conf.j2"
     dest: "/etc/security/limits.d/splunk.conf"
     owner: root
@@ -55,7 +55,7 @@
     - splunk_software
     - splunk_ulimits
     - splunk_disable_thp
-  blockinfile:
+  ansible.builtin.blockinfile:
     path: /etc/init.d/splunk
     marker: "# {mark} ANSIBLE MANAGED BLOCK (functions)"
     insertbefore: "^case"
@@ -88,7 +88,7 @@
     - splunk_software
     - splunk_ulimits
     - splunk_disable_thp
-  blockinfile:
+  ansible.builtin.blockinfile:
     path: /etc/init.d/splunk
     marker: "    # {mark} ANSIBLE MANAGED BLOCK (start)"
     insertbefore: "splunk_start$"
@@ -103,7 +103,7 @@
     - splunk_software
     - splunk_ulimits
     - splunk_disable_thp
-  blockinfile:
+  ansible.builtin.blockinfile:
     path: /etc/init.d/splunk
     marker: "    # {mark} ANSIBLE MANAGED BLOCK (restart)"
     insertbefore: "splunk_restart$"
@@ -116,5 +116,5 @@
   tags:
     - splunk
     - splunk_software
-  command: systemctl daemon-reload
+  ansible.builtin.command: systemctl daemon-reload
   when: use_systemctl == true and splunk_initd.stat.exists == true

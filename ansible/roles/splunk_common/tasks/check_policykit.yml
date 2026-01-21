@@ -4,7 +4,7 @@
   tags:
     - splunk
     - splunk_common
-  stat:
+  ansible.builtin.stat:
     path: /usr/bin/pkaction
   register: policykit
 
@@ -12,7 +12,7 @@
   tags:
     - splunk
     - splunk_common
-  fail:
+  ansible.builtin.fail:
     msg: "Policykit (polkit) is not installed. Install the policykit package or set splunk_use_policykit to false."
   when:
     - splunk_use_policykit|default(true) == true
@@ -22,7 +22,7 @@
   tags:
     - splunk
     - splunk_common
-  set_fact:
+  ansible.builtin.set_fact:
     use_policykit: true
   when:
     - splunk_use_policykit|default(true) == true

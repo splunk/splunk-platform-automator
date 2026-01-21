@@ -6,7 +6,7 @@
     - splunk
     - indexer
     - idxcluster
-  debug:
+  ansible.builtin.debug:
     msg: "Configuring indexer cluster"
 
 - name: Apply baseconfig app org_cluster_indexer_base
@@ -16,7 +16,7 @@
     - indexer
     - idxcluster
     - org_cluster_indexer_base
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_cluster_indexer_base'
@@ -29,7 +29,7 @@
     - indexer
     - idxcluster
     - org_site_n_indexer_base
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_site_n_indexer_base'

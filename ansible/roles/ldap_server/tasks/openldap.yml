@@ -6,7 +6,7 @@
 - name: Install openladp packages
   tags:
     - ldap
-  package:
+  ansible.builtin.package:
     name:
       - openldap
       - openldap-clients
@@ -16,7 +16,7 @@
 - name: Enable and start service slapd
   tags:
     - ldap
-  service: 
+  ansible.builtin.service: 
     name: slapd
     state: started
     enabled: yes
@@ -24,20 +24,20 @@
 - name: Check for ldap db config file
   tags:
     - ldap
-  stat: path="/var/tmp/db.ldif"
+  ansible.builtin.stat: path="/var/tmp/db.ldif"
   register: ldap_config
 
 - name: Create LDAP root password
   tags:
     - ldap
-  shell: slappasswd -s {{ldap_root_passwd}}
+  ansible.builtin.shell: slappasswd -s {{ldap_root_passwd}}
   register: ldap_root_hash
   when: ldap_config.stat.exists == false
 
 - name: Define ldap db config file
   tags:
     - ldap
-  template:
+  ansible.builtin.template:
     src: var/tmp/db.ldif.j2
     dest: /var/tmp/db.ldif
   when: ldap_config.stat.exists == false
@@ -45,17 +45,17 @@
 - name: Add ldap db config file
   tags:
     - ldap
-  shell: ldapmodify -Y EXTERNAL  -H ldapi:/// -f /var/tmp/db.ldif
+  ansible.builtin.shell: ldapmodify -Y EXTERNAL  -H ldapi:/// -f /var/tmp/db.ldif
   when: ldap_config.stat.exists == false
 
 - name: "check for ldap monitor config file"
-  stat: path="/var/tmp/monitor.ldif"
+  ansible.builtin.stat: path="/var/tmp/monitor.ldif"
   register: ldap_monitor_config
 
 - name: Define monitor config file
   tags:
     - ldap
-  template:
+  ansible.builtin.template:
     src: var/tmp/monitor.ldif.j2
     dest: /var/tmp/monitor.ldif
   when: ldap_monitor_config.stat.exists == false
@@ -63,25 +63,25 @@
 - name: Add ldap monitor config
   tags:
     - ldap
-  shell: ldapmodify -Y EXTERNAL  -H ldapi:/// -f /var/tmp/monitor.ldif
+  ansible.builtin.shell: ldapmodify -Y EXTERNAL  -H ldapi:/// -f /var/tmp/monitor.ldif
   when: ldap_monitor_config.stat.exists == false
 
 - name: Check for ldap DB_CONFIG file
   tags:
     - ldap
-  stat: path="/var/lib/ldap/DB_CONFIG"
+  ansible.builtin.stat: path="/var/lib/ldap/DB_CONFIG"
   register: ldap_db_config
 
 - name: Copy /var/lib/ldap/DB_CONFIG from example
   tags:
     - ldap
-  shell: cp /usr/share/openldap-servers/DB_CONFIG.example /var/lib/ldap/DB_CONFIG
+  ansible.builtin.shell: cp /usr/share/openldap-servers/DB_CONFIG.example /var/lib/ldap/DB_CONFIG
   when: ldap_db_config.stat.exists == false
 
 - name: Set correct file permissions for DB_CONFIG
   tags:
     - ldap
-  file:
+  ansible.builtin.file:
     path: /var/lib/ldap/DB_CONFIG
     owner: ldap
     group: ldap
@@ -90,7 +90,7 @@
 - name: Add more schemas
   tags:
     - ldap
-  shell: ldapadd -Y EXTERNAL -H ldapi:/// -f {{item}}
+  ansible.builtin.shell: ldapadd -Y EXTERNAL -H ldapi:/// -f {{item}}
   with_items:
     - /etc/openldap/schema/cosine.ldif
     - /etc/openldap/schema/nis.ldif
@@ -100,13 +100,13 @@
 - name: "check for ldap base config file"
   tags:
     - ldap
-  stat: path="/var/tmp/base.ldif"
+  ansible.builtin.stat: path="/var/tmp/base.ldif"
   register: ldap_base_config
 
 - name: Define domain config
   tags:
     - ldap
-  template:
+  ansible.builtin.template:
     src: var/tmp/base.ldif.j2
     dest: /var/tmp/base.ldif
   when: ldap_base_config.stat.exists == false
@@ -114,5 +114,5 @@
 - name: Build lDAP directory sturcture
   tags:
     - ldap
-  shell: ldapadd -x -w {{ldap_root_passwd}} -D "cn=ldapadm,{{ldap_dc}}" -f /var/tmp/base.ldif
+  ansible.builtin.shell: ldapadd -x -w {{ldap_root_passwd}} -D "cn=ldapadm,{{ldap_dc}}" -f /var/tmp/base.ldif
   when: ldap_base_config.stat.exists == false

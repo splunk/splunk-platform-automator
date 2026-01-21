@@ -6,7 +6,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  include_tasks: check_splunk_version.yml
+  ansible.builtin.include_tasks: check_splunk_version.yml
   vars:
     fail_on_missing_upgrade: true
 
@@ -16,7 +16,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  include_tasks: splunk_rest.yml
+  ansible.builtin.include_tasks: splunk_rest.yml
   vars:
     splunk_rest_endpoint: /services/cluster/master/status
 
@@ -26,7 +26,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  set_fact:
+  ansible.builtin.set_fact:
     idxc_searchable_rolling: "{{ splunk_rest_json_output.entry[0].content.searchable_rolling|bool }}"
     idxc_service_ready_flag: "{{ splunk_rest_json_output.entry[0].content.service_ready_flag|bool }}"
   vars:
@@ -38,7 +38,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  fail:
+  ansible.builtin.fail:
     msg: "Cluster is not healthy!"
   when: idxc_service_ready_flag == false
 
@@ -49,7 +49,7 @@
     - splunk_rest
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  include_tasks: splunk_rest.yml
+  ansible.builtin.include_tasks: splunk_rest.yml
   vars:
     splunk_rest_endpoint: /services/cluster/master/health
   when: idxc_searchable_rolling == false
@@ -60,7 +60,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  fail:
+  ansible.builtin.fail:
     msg: "Cluster Health preflight check was not successfull!"
   when:
     - idxc_searchable_rolling == false
@@ -73,7 +73,7 @@
     - splunk_rest
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  include_tasks: splunk_rest.yml
+  ansible.builtin.include_tasks: splunk_rest.yml
   vars:
     splunk_rest_endpoint: /services/cluster/master/control/control/rolling_upgrade_init
     http_method: POST
@@ -85,7 +85,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  debug:
+  ansible.builtin.debug:
     msg: "{{ splunk_rest_json_output.messages[0].text }}"
   when: idxc_searchable_rolling == false
   changed_when: idxc_searchable_rolling == false
@@ -96,6 +96,6 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  debug:
+  ansible.builtin.debug:
     msg: "Cluster is already in searchable rolling upgrade mode."
   when: idxc_searchable_rolling == true

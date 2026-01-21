@@ -6,11 +6,11 @@
     - splunk
     - search_head
     - shcluster
-  debug:
+  ansible.builtin.debug:
     msg: "Configuring search head cluster node"
 
 - name: Set global permissions for comment macro
-  include_tasks: comment_macro.yml
+  ansible.builtin.include_tasks: comment_macro.yml
   tags:
     - splunk
     - search_head
@@ -26,7 +26,7 @@
     - splunk
     - search_head
     - shcluster
-  shell: "{{ splunk_home }}/bin/splunk btool server list shclustering | egrep -e '^disabled = true$'"
+  ansible.builtin.shell: "{{ splunk_home }}/bin/splunk btool server list shclustering | egrep -e '^disabled = true$'"
   become: yes
   become_user: "{{ splunk_user }}"
   register: need_shcluster_init
@@ -39,7 +39,7 @@
     - splunk
     - search_head
     - shcluster
-  command: "{{ splunk_home }}/bin/splunk init shcluster-config -shcluster_label {{ splunk_shc_label }} -mgmt_uri https://{{ inventory_hostname }}:8089 -replication_port {{splunk_shc_replication_port}} -secret '{{splunk_shc_pass}}' -conf_deploy_fetch_url https://{{splunk_shc_deployer}}:8089 -auth admin:{{splunk_admin_password}}"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk init shcluster-config -shcluster_label {{ splunk_shc_label }} -mgmt_uri https://{{ inventory_hostname }}:8089 -replication_port {{splunk_shc_replication_port}} -secret '{{splunk_shc_pass}}' -conf_deploy_fetch_url https://{{splunk_shc_deployer}}:8089 -auth admin:{{splunk_admin_password}}"
   become: yes
   become_user: "{{ splunk_user }}"
   when: need_shcluster_init.rc == 0
@@ -49,7 +49,7 @@
     - splunk
     - search_head
     - shcluster
-  include_role:
+  ansible.builtin.include_role:
     name: splunk_software
     tasks_from: restart_splunk
   when: need_shcluster_init.rc == 0
@@ -59,7 +59,7 @@
     - splunk
     - search_head
     - shcluster
-  include_role:
+  ansible.builtin.include_role:
     name: splunk_common
     tasks_from: wait_for_splunkd_port
   when: need_shcluster_init.rc == 0
@@ -70,7 +70,7 @@
     - splunk
     - search_head
     - shcluster
-  include_role:
+  ansible.builtin.include_role:
     name: splunk_common
     tasks_from: wait_for_splunkd_full
   when: need_shcluster_init.rc == 0
@@ -80,7 +80,7 @@
     - splunk
     - search_head
     - shcluster
-  command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
   become: yes
   become_user: "{{ splunk_user }}"
   register: shcluster_status
@@ -94,7 +94,7 @@
     - search_head
     - shcluster
     - shc_bootstrap
-  command: "{{ splunk_home }}/bin/splunk bootstrap shcluster-captain -auth admin:{{ splunk_admin_password }}"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk bootstrap shcluster-captain -auth admin:{{ splunk_admin_password }}"
   become: yes
   become_user: "{{ splunk_user }}"
   when: inventory_hostname == splunk_shc_host_list|first and shcluster_status.changed == true
@@ -104,7 +104,7 @@
     - splunk
     - search_head
     - shcluster
-  command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
   become: yes
   become_user: "{{ splunk_user }}"
   check_mode: no
@@ -121,7 +121,7 @@
     - search_head
     - shcluster
     - shc_add_member
-  command: "{{ splunk_home }}/bin/splunk add shcluster-member -current_member_uri https://{{splunk_shc_host_list|first}}:8089 -auth admin:{{ splunk_admin_password }}"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk add shcluster-member -current_member_uri https://{{splunk_shc_host_list|first}}:8089 -auth admin:{{ splunk_admin_password }}"
   become: yes
   become_user: "{{ splunk_user }}"
   when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
@@ -132,7 +132,7 @@
     - search_head
     - shcluster
     - shc_add_member
-  command: "{{ splunk_home }}/bin/splunk show servername -auth admin:{{ splunk_admin_password }}"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk show servername -auth admin:{{ splunk_admin_password }}"
   become: yes
   become_user: "{{ splunk_user }}"
   check_mode: no
@@ -145,7 +145,7 @@
     - splunk
     - search_head
     - shcluster
-  command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
   become: yes
   become_user: "{{ splunk_user }}"
   check_mode: no
@@ -160,7 +160,7 @@
     - splunk
     - search_head
     - shcluster
-  stat:
+  ansible.builtin.stat:
     path: "{{ splunk_home }}/var/run/splunk/deploy/apps"
     follow: yes
   become: yes
@@ -176,7 +176,7 @@
     - splunk
     - search_head
     - shcluster
-  debug:
+  ansible.builtin.debug:
     msg: register shc bundle push
   notify: wait for SHC service ready and call push bundle
   changed_when: deploy_apps_stat.stat.exists|default(false) == false
@@ -196,7 +196,7 @@
     - splunk_baseconfig
     - monitoring_console
     - dserver
-  include_role:
+  ansible.builtin.include_role:
     name: monitoring_console
     tasks_from: update_dserver
   vars:

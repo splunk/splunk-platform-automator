@@ -5,7 +5,7 @@
     - splunk
     - splunk_software
     - splunk_unit_file
-  ini_file:
+  community.general.ini_file:
     path: "/etc/systemd/system/{{splunk_service_name}}.service"
     section: "{{ item.section }}"
     option: "{{ item.var }}"
@@ -22,5 +22,5 @@
     - splunk
     - splunk_software
     - splunk_unit_file
-  command: systemctl daemon-reload
+  ansible.builtin.command: systemctl daemon-reload
   when: use_systemctl == true

@@ -6,7 +6,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_deploymentclient
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/deploymentclient.conf"
     section: target-broker:deploymentServer
     option: targetUri

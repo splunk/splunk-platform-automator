@@ -4,7 +4,7 @@
   tags:
     - splunk
     - splunk_software
-  include_role:
+  ansible.builtin.include_role:
     name: splunk_common
     tasks_from: set_splunk_installed_version
 
@@ -12,7 +12,7 @@
   tags:
     - splunk
     - splunk_software
-  set_fact:
+  ansible.builtin.set_fact:
     splunk_systemd_managed: "-systemd-managed 1"
   when:
     - use_systemctl == true
@@ -23,7 +23,7 @@
   tags:
     - splunk
     - splunk_software
-  set_fact:
+  ansible.builtin.set_fact:
     splunk_unit_file_name: "-systemd-unit-file-name {{splunk_service_name}}"
   when:
     - use_systemctl == true
@@ -34,7 +34,7 @@
   tags:
     - splunk
     - splunk_software
-  set_fact:
+  ansible.builtin.set_fact:
     splunk_create_polkit_rules: "-create-polkit-rules 1"
   when:
     - use_policykit == true

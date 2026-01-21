@@ -5,7 +5,7 @@
     - splunk
     - splunk_software
     - splunk_polkit
-  shell: "systemctl --version | grep -w systemd | cut -d' ' -f 2"
+  ansible.builtin.shell: "systemctl --version | grep -w systemd | cut -d' ' -f 2"
   check_mode: no
   changed_when: false
   register: systemd_version_output
@@ -15,7 +15,7 @@
     - splunk
     - splunk_software
     - splunk_polkit
-  shell: "pkaction --version | grep -w version | cut -d' ' -f 3"
+  ansible.builtin.shell: "pkaction --version | grep -w version | cut -d' ' -f 3"
   check_mode: no
   changed_when: false
   register: polkit_version_output
@@ -25,7 +25,7 @@
     - splunk
     - splunk_software
     - splunk_polkit
-  template:
+  ansible.builtin.template:
     src: etc/polkit-1/rules.d/10-splunk.rules.j2
     dest: /etc/polkit-1/rules.d/10-{{ splunk_service_name }}.rules
     owner: "root"
@@ -40,7 +40,7 @@
     - splunk
     - splunk_software
     - splunk_polkit
-  template:
+  ansible.builtin.template:
     src: etc/polkit-1/localauthority/50-local.d/splunk.pkla.j2
     dest: /etc/polkit-1/localauthority/50-local.d/{{ splunk_service_name }}.pkla
     owner: "root"
@@ -55,7 +55,7 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: remove_splunk_sudoers.yml
+  ansible.builtin.include_tasks: remove_splunk_sudoers.yml
   when: systemd_version_output.stdout|int >= 226
 
 - name: Call add_splunk_sudoers
@@ -64,5 +64,5 @@
     - splunk_software
     - splunk_install
     - splunk_sudoers
-  include_tasks: add_splunk_sudoers.yml
+  ansible.builtin.include_tasks: add_splunk_sudoers.yml
   when: systemd_version_output.stdout|int < 226

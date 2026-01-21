@@ -4,7 +4,7 @@
   tags:
     - splunk
     - splunk_software
-  unarchive:
+  ansible.builtin.unarchive:
     src: "{{splunk_archive.0}}"
     dest: "{{ splunk_install_dir }}/"
     owner: "{{ splunk_user }}"
@@ -19,7 +19,7 @@
   tags:
     - splunk
     - splunk_software
-  set_fact:
+  ansible.builtin.set_fact:
     splunk_url: 'https://d7wz6hmoaavd0.cloudfront.net/products/{%- if splunk_install_app == "splunk" -%}splunk{%- else -%}universalforwarder{%- endif -%}/releases/{{splunk_target_version}}/linux/{{splunk_archive.0|basename}}'
   when: splunk_download is defined and
         (splunk_install_app == "splunk" and splunk_download.splunk|default(false) == true or
@@ -44,7 +44,7 @@
   tags:
     - splunk
     - splunk_software
-  unarchive:
+  ansible.builtin.unarchive:
     src: "/tmp/splunk.tar.gz"
     dest: "{{ splunk_install_dir }}"
     owner: "{{ splunk_user }}"
@@ -61,7 +61,7 @@
   tags:
     - splunk
     - splunk_software
-  file:
+  ansible.builtin.file:
     path: "{{ splunk_home }}/."
     owner: "{{ splunk_user }}"
     group: "{{ splunk_group }}"
@@ -71,7 +71,7 @@
   tags:
     - splunk
     - splunk_software
-  file:
+  ansible.builtin.file:
     path: "/tmp/splunk.tar.gz"
     state: absent
   when: splunk_download is defined and

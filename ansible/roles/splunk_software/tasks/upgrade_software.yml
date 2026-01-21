@@ -6,7 +6,7 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: check_splunk_version.yml
+  ansible.builtin.include_tasks: check_splunk_version.yml
   vars:
     inform_on_already_upgraded: true
 
@@ -15,5 +15,5 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: upgrade.yml
+  ansible.builtin.include_tasks: upgrade.yml
   when: splunk_installed_version != splunk_target_version

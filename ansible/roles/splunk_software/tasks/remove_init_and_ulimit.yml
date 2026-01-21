@@ -5,7 +5,7 @@
     - splunk
     - splunk_software
     - splunk_remove_init
-  stat:
+  ansible.builtin.stat:
     path: "/etc/init.d/splunk"
   register: check_splunk_init
 
@@ -14,7 +14,7 @@
     - splunk
     - splunk_software
     - splunk_remove_init
-  command: "{{ splunk_home }}/bin/splunk disable boot-start"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk disable boot-start"
   when: check_splunk_init.stat.exists == true
 
 - name: Find rc.d file to remove
@@ -22,7 +22,7 @@
     - splunk
     - splunk_software
     - splunk_remove_init
-  find:
+  ansible.builtin.find:
     paths: "/etc"
     file_type: any
     recurse: yes
@@ -36,7 +36,7 @@
     - splunk
     - splunk_software
     - splunk_remove_init
-  file:
+  ansible.builtin.file:
     path: "{{item.path}}"
     state: absent
   with_items: "{{ init_files_to_delete.files }}"
@@ -46,7 +46,7 @@
     - splunk
     - splunk_software
     - splunk_remove_init
-  file:
+  ansible.builtin.file:
     path: /etc/init.d/splunk
     state: absent
 
@@ -55,7 +55,7 @@
     - splunk
     - splunk_software
     - splunk_remove_init
-  command: systemctl daemon-reload
+  ansible.builtin.command: systemctl daemon-reload
   when: use_systemctl == true
 
 - name: Check /etc/rc.local
@@ -63,7 +63,7 @@
     - splunk
     - splunk_software
     - splunk_remove_init
-  stat:
+  ansible.builtin.stat:
     path: "/etc/rc.local"
   register: check_rc_local
 
@@ -72,7 +72,7 @@
     - splunk
     - splunk_software
     - splunk_remove_init
-  blockinfile:
+  ansible.builtin.blockinfile:
     path: /etc/rc.local
     state: absent
     marker: "# {mark} ANSIBLE MANAGED BLOCK (THP)"
@@ -83,6 +83,6 @@
     - splunk
     - splunk_software
     - splunk_remove_init
-  file:
+  ansible.builtin.file:
     path: "/etc/security/limits.d/splunk.conf"
     state: absent

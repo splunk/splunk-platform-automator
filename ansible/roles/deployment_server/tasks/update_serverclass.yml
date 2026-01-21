@@ -7,7 +7,7 @@
     - splunk_baseconfig
     - deployment_server
     - serverclass
-  wait_for:
+  ansible.builtin.wait_for:
     host: '{{splunk_deployment_server|first}}'
     port: 8089
     timeout: 1

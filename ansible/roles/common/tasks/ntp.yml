@@ -6,7 +6,7 @@
     - common
     - ntp
     - chrony
-  service:
+  ansible.builtin.service:
     name: chronyd
     state: started
     enabled: yes

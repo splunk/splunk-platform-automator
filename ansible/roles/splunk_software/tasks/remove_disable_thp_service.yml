@@ -5,7 +5,7 @@
     - splunk
     - splunk_software
     - splunk_disable_thp
-  service:
+  ansible.builtin.service:
     name: disable-thp
     state: stopped
     enabled: no
@@ -16,7 +16,7 @@
     - splunk
     - splunk_software
     - splunk_uninstall
-  file:
+  ansible.builtin.file:
     path: /etc/systemd/system/disable-thp.service
     state: absent
   when: use_systemctl == true
@@ -26,5 +26,5 @@
     - splunk
     - splunk_software
     - splunk_install
-  command: systemctl daemon-reload
+  ansible.builtin.command: systemctl daemon-reload
   when: use_systemctl == true

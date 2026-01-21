@@ -6,7 +6,7 @@
     - splunk
     - splunk_baseconfig
     - inputs_ssl
-  stat:
+  ansible.builtin.stat:
     path: "{{ splunk_auth_dir }}/{{ item }}"
   with_items:
     - "{{ splunk_ssl.inputs.config.rootCA|basename|default('cacert.pem') }}"
@@ -20,7 +20,7 @@
     - splunk
     - splunk_baseconfig
     - inputs_ssl
-  stat:
+  ansible.builtin.stat:
     path: "{{ splunk_auth_dir }}/{{ item }}"
   with_items:
     - "{{ splunk_ssl.inputs.config.serverCert|basename|default('server.pem') }}"
@@ -34,7 +34,7 @@
     - splunk
     - splunk_baseconfig
     - inputs_ssl
-  set_fact:
+  ansible.builtin.set_fact:
     cacert_pem: "{% for result in cacert_pems.results %}{% if result.stat.exists == true %}{{ result.item }}{% endif %}{% endfor %}"
     server_pem: "{% for result in server_pems.results %}{% if result.stat.exists == true %}{{ result.item }}{% endif %}{% endfor %}"
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
@@ -44,7 +44,7 @@
     - splunk
     - splunk_baseconfig
     - inputs_ssl
-  fail:
+  ansible.builtin.fail:
     msg: "Cannot find a cacert.pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true and cacert_pem == ""
 
@@ -53,7 +53,7 @@
     - splunk
     - splunk_baseconfig
     - inputs_ssl
-  fail: 
+  ansible.builtin.fail: 
     msg: "Cannot find a .pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true and server_pem == ""
 
@@ -62,7 +62,7 @@
     - splunk
     - splunk_baseconfig
     - inputs_ssl
-  file:
+  ansible.builtin.file:
     state: directory
     recurse: true
     path: "{{ splunk_home }}/{{ item }}"
@@ -78,7 +78,7 @@
     - splunk
     - splunk_baseconfig
     - inputs_ssl
-  copy:
+  ansible.builtin.copy:
     src: "{{ splunk_auth_dir }}/{{ item.src }}"
     dest: "{{ splunk_home }}/{{ item.dest }}"
     owner: "{{splunk_user}}"

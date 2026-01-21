@@ -6,7 +6,7 @@
     - splunk
     - search_head
     - shsingle
-  debug:
+  ansible.builtin.debug:
     msg: "Configuring single search head"
 
 - name: Apply baseconfig app org_all_deploymentclient
@@ -16,7 +16,7 @@
     - search_head
     - shsingle
     - org_all_deploymentclient
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_deploymentclient'
@@ -30,7 +30,7 @@
     - search_head
     - shsingle
     - org_all_forwarder_outputs
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_forwarder_outputs'
@@ -44,7 +44,7 @@
     - search_head
     - shsingle
     - org_all_search_base
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_search_base'
@@ -58,7 +58,7 @@
     - search_head
     - shsingle
     - org_full_license_server
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_full_license_server'
@@ -72,7 +72,7 @@
     - search_head
     - shsingle
     - org_search_volume_indexes
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_search_volume_indexes'
@@ -86,7 +86,7 @@
     - search_head
     - shsingle
     - org_all_indexes
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_indexes'
@@ -100,7 +100,7 @@
     - search_head
     - shsingle
     - org_cluster_search_base
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_cluster_search_base'
@@ -113,7 +113,7 @@
     - splunk_baseconfig
     - search_head
     - shsingle
-  include_tasks: search_peers.yml
+  ansible.builtin.include_tasks: search_peers.yml
   when: inventory_hostname not in groups.role_indexer
 
 - name: Call update_dserver from role monitoring_console
@@ -122,7 +122,7 @@
     - splunk_baseconfig
     - monitoring_console
     - dserver
-  include_role:
+  ansible.builtin.include_role:
     name: monitoring_console
     tasks_from: update_dserver
   vars:
@@ -130,7 +130,7 @@
   when: splunk_monitoring_console|default()|length > 0 and inventory_hostname not in groups.role_monitoring_console
 
 - name: Set global permissions for comment macro
-  include_tasks: comment_macro.yml
+  ansible.builtin.include_tasks: comment_macro.yml
   tags:
     - splunk
     - search_head

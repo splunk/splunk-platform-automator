@@ -5,6 +5,6 @@
     - splunk
     - splunk_software
     - splunk_sudoers
-  file:
+  ansible.builtin.file:
     path: /etc/sudoers.d/splunk
     state: absent

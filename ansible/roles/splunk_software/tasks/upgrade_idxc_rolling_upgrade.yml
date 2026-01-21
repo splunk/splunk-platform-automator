@@ -6,7 +6,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  include_tasks: get_idxc_peerids.yml
+  ansible.builtin.include_tasks: get_idxc_peerids.yml
 
 - name: Set idxc_peerid
   tags:
@@ -14,7 +14,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  set_fact:
+  ansible.builtin.set_fact:
     idxc_peerid:  "{{ idxc_name_peerids | json_query(query) }}"
   vars:
     query: "[? name=='{{ inventory_hostname }}'].peerid"
@@ -25,7 +25,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  include_tasks: get_idxc_peer_status.yml
+  ansible.builtin.include_tasks: get_idxc_peer_status.yml
 
 - name: Fail if peer has wrong state
   tags:
@@ -33,7 +33,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  fail:
+  ansible.builtin.fail:
     msg: "Cluster Peer {{ inventory_hostname }} has wrong state '{{ idxc_peer_status }}'"
   when:
     - idxc_peer_status != 'Up'
@@ -47,7 +47,7 @@
     - splunk_rest
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  include_tasks: splunk_rest.yml
+  ansible.builtin.include_tasks: splunk_rest.yml
   vars:
     splunk_rest_endpoint: /services/cluster/slave/control/control/decommission
     http_method: POST
@@ -61,7 +61,7 @@
     - splunk_rest
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  uri:
+  ansible.builtin.uri:
     url: "https://localhost:8089//services/cluster/master/peers/{{ idxc_peerid|first }}"
     user: admin
     password: "{{ splunk_admin_password }}"
@@ -88,7 +88,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  include_tasks: upgrade.yml
+  ansible.builtin.include_tasks: upgrade.yml
 
 # There is not 'loop until' with include_tasks. So, we need to code the rest call directly here.
 - name: Check for peer to be up
@@ -98,7 +98,7 @@
     - splunk_rest
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
-  uri:
+  ansible.builtin.uri:
     url: "https://localhost:8089//services/cluster/master/peers/{{ idxc_peerid|first }}"
     user: admin
     password: "{{ splunk_admin_password }}"

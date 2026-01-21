@@ -4,7 +4,7 @@
   tags:
     - splunk
     - splunk_software
-  find:
+  ansible.builtin.find:
     path: "{{splunk_software}}/"
     pattern: "{{splunk_install_app}}-*-?inux-{{splunk_architecture|default('amd64')}}.tgz"
     file_type: file
@@ -17,7 +17,7 @@
   tags:
     - splunk
     - splunk_software
-  set_fact:
+  ansible.builtin.set_fact:
     splunk_target_version: "{{splunk_archive_files.files|sort(attribute='path')|map(attribute='path')|list|last|basename|regex_replace('.*-([0-9]+\\.[0-9]+[\\.]*[0-9]*[\\.]*[0-9]*)-.*', '\\1')}}"
   when: splunk_version == 'latest' and splunk_archive_files.files|length > 0
 
@@ -25,7 +25,7 @@
   tags:
     - splunk
     - splunk_software
-  fail:
+  ansible.builtin.fail:
     msg: "Cannot find latest splunk binaries in directory {{splunk_software}}, check variables 'splunk_version' and 'splunk_architecture'"
   when: splunk_version == 'latest' and splunk_target_version is not defined
 
@@ -33,7 +33,7 @@
   tags:
     - splunk
     - splunk_software
-  set_fact:
+  ansible.builtin.set_fact:
     splunk_target_version: "{{ splunk_version }}"
   when: splunk_version != 'latest'
 
@@ -41,7 +41,7 @@
   tags:
     - splunk
     - splunk_software
-  set_fact:
+  ansible.builtin.set_fact:
     splunk_archive: '{{splunk_archive_files.files|map(attribute="path")|list|select("match",".*-"+splunk_target_version+"-.*")|list}}'
   when: splunk_archive_files.files is defined
 
@@ -49,7 +49,7 @@
   tags:
     - splunk
     - splunk_software
-  fail:
+  ansible.builtin.fail:
     msg: "Cannot find splunk binary for version '{{ splunk_target_version }}' in directory {{splunk_software}}"
   when: splunk_archive is not defined or splunk_archive|length == 0
 
@@ -57,6 +57,6 @@
   tags:
     - splunk
     - splunk_software
-  debug:
+  ansible.builtin.debug:
     msg: "Using Splunk archive: {{splunk_archive.0}}"
   when: splunk_archive is defined

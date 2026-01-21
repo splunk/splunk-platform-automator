@@ -5,7 +5,7 @@
     - splunk
     - splunk_common
     - splunk_restart
-  service:
+  ansible.builtin.service:
     name: "{{splunk_service_name}}"
     state: restarted
   become: yes

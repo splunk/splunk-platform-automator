@@ -2,7 +2,7 @@
 # This playbook disables selinux
 
 - name: Check SELinux state
-  shell: which getenforce > /dev/null 2>&1 && getenforce
+  ansible.builtin.shell: which getenforce > /dev/null 2>&1 && getenforce
   check_mode: no
   changed_when: false
   failed_when: "selinux_state.rc > 1"

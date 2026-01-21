@@ -5,7 +5,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-  replace:
+  ansible.builtin.replace:
     path: "{{ splunk_file_to_change }}"
     regexp: '(master|manager)_uri'
     replace: "{{splunk_manager_uri_var}}"

@@ -5,7 +5,7 @@
   tags:
     - splunk
     - splunk_conf
-  ini_file:
+  community.general.ini_file:
     path: "{{ splunk_home }}/etc/{{ splunk_conf_list_items.key }}"
     section: "{{ item.section }}"
     option: "{{ item.key }}"

@@ -5,7 +5,7 @@
   tags:
     - splunk
     - indexer
-  debug:
+  ansible.builtin.debug:
     msg: "role '{{ role_name }}' start"
 
 #TODO: create volume directories
@@ -28,7 +28,7 @@
     - splunk
     - indexer
     - check_volume_path
-  include_tasks: check_volume_path.yml
+  ansible.builtin.include_tasks: check_volume_path.yml
   with_dict: "{{ splunk_indexer_volumes_local }}"
   vars:
     volume_name: "{{ item.key }}"
@@ -43,7 +43,7 @@
     - idxsingle
     - idxcluster
     - inputs_ssl
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
     tasks_from: splunk_ssl_inputs_certs
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true

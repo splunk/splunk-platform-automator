@@ -5,20 +5,20 @@
   tags:
     - splunk
     - universal_forwarder_windows
-  debug:
+  ansible.builtin.debug:
     msg: "role '{{ role_name }}' start"
 
 - name: Update hosts file
   tags:
     - universal_forwarder_windows
     - hosts
-  include_tasks: hosts.yml
+  ansible.builtin.include_tasks: hosts.yml
 
 - name: Enable remote desktop
   tags:
     - universal_forwarder_windows
     - enable_rdp
-  include_tasks: enable_rdp.yml
+  ansible.builtin.include_tasks: enable_rdp.yml
 
 - name: "check for splunk fresh install"
   tags:
@@ -46,7 +46,7 @@
     - splunk_software
     - splunk_install
     - universal_forwarder_windows
-  debug:
+  ansible.builtin.debug:
     msg: 'splunk is already installed under {{ splunk_home }}/bin/splunk'
   when: splunk_path.stat.exists
 
@@ -56,7 +56,7 @@
     - splunk_software
     - splunk_install
     - universal_forwarder_windows
-  include_tasks: install.yml
+  ansible.builtin.include_tasks: install.yml
   when: splunk_path.stat.exists == false
 
 - name: "config the splunk software"
@@ -65,7 +65,7 @@
     - splunk_software
     - splunk_baseconfig
     - universal_forwarder_windows
-  include_tasks: config.yml
+  ansible.builtin.include_tasks: config.yml
 
 #- name: create staging dir
 #  file:

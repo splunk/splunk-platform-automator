@@ -5,7 +5,7 @@
   tags:
     - splunk
     - license_manager
-  include_tasks:
+  ansible.builtin.include_tasks:
     file: add_license.yml
   with_items: "{{ splunk_license_file }}"
   loop_control:

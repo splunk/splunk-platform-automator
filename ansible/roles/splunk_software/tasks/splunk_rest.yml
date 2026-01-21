@@ -5,7 +5,7 @@
     - splunk
     - splunk_software
     - splunk_rest
-  shell: '/opt/splunk/bin/splunk cmd splunkd rest --noauth {{ http_method|default("GET") }} {{ splunk_rest_endpoint|default("/") }} output_mode={{ splunk_rest_output_mode|default("json") }} {%- if splunk_rest_output_mode|default("json") == "json" -%}| tail -1{%- endif -%}'
+  ansible.builtin.shell: '/opt/splunk/bin/splunk cmd splunkd rest --noauth {{ http_method|default("GET") }} {{ splunk_rest_endpoint|default("/") }} output_mode={{ splunk_rest_output_mode|default("json") }} {%- if splunk_rest_output_mode|default("json") == "json" -%}| tail -1{%- endif -%}'
   register: splunk_rest_output
   when: splunk_rest_noauth|default(false) == true
 
@@ -14,7 +14,7 @@
     - splunk
     - splunk_software
     - splunk_rest
-  set_fact:
+  ansible.builtin.set_fact:
     splunk_rest_json_output: "{{ splunk_rest_output.stdout|to_json|from_json }}"
   when: 
     - splunk_rest_noauth|default(false)|bool == true
@@ -25,7 +25,7 @@
     - splunk
     - splunk_software
     - splunk_rest
-  uri:
+  ansible.builtin.uri:
     url: "https://localhost:8089/{{ splunk_rest_endpoint|default('/') }}"
     user: admin
     password: "{{ splunk_admin_password }}"
@@ -45,7 +45,7 @@
     - splunk
     - splunk_software
     - splunk_rest
-  set_fact:
+  ansible.builtin.set_fact:
     splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
   when: 
     - splunk_rest_noauth|default(false)|bool == false
@@ -56,7 +56,7 @@
     - splunk
     - splunk_software
     - splunk_rest
-  debug:
+  ansible.builtin.debug:
     var: splunk_rest_output
   when: 
     - splunk_rest_output_show|default(false)|bool == true
@@ -67,7 +67,7 @@
     - splunk
     - splunk_software
     - splunk_rest
-  debug:
+  ansible.builtin.debug:
     var: splunk_rest_json_output
   when: 
     - splunk_rest_output_show|default(false)|bool == true

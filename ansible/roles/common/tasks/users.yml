@@ -5,7 +5,7 @@
   tags:
     - common
     - bashrc
-  copy:
+  ansible.builtin.copy:
     src: home/ansible_user/bashrc.splunk
     dest: "~{{ ansible_user }}/.bashrc.splunk"
     mode: 0644
@@ -16,7 +16,7 @@
   tags:
     - common
     - bashrc
-  blockinfile:
+  ansible.builtin.blockinfile:
     create: yes
     path: "~{{ ansible_user }}/.bashrc"
     marker: "#<!-- {mark} ANSIBLE MANAGED BLOCK -->"

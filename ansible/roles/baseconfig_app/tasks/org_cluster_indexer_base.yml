@@ -6,7 +6,7 @@
     - splunk
     - splunk_baseconfig
     - org_cluster_indexer_base
-  include_tasks: replace_master_uri.yml
+  ansible.builtin.include_tasks: replace_master_uri.yml
   vars:
     splunk_file_to_change: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
 
@@ -15,7 +15,7 @@
     - splunk
     - splunk_baseconfig
     - org_cluster_indexer_base
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
     option: mode
@@ -30,7 +30,7 @@
     - splunk
     - splunk_baseconfig
     - org_cluster_indexer_base
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
     option: "{{splunk_manager_uri_var}}"
@@ -45,7 +45,7 @@
     - splunk
     - splunk_baseconfig
     - org_cluster_indexer_base
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
     option: pass4SymmKey
@@ -61,7 +61,7 @@
     - splunk
     - splunk_baseconfig
     - org_cluster_indexer_base
-  replace:
+  ansible.builtin.replace:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     regexp: '(<PORT_NUM>)'
     replace: '{{splunk_idxc_replication_port}}'
@@ -76,7 +76,7 @@
     - splunk_baseconfig
     - org_cluster_indexer_base
     - inputs_ssl
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/inputs.conf"
     section: "splunktcp://{{inputs_port}}"
     option: "disabled"
@@ -93,7 +93,7 @@
     - splunk_baseconfig
     - org_cluster_indexer_base
     - inputs_ssl
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/inputs.conf"
     section: "splunktcp-ssl://{{inputs_port_ssl}}"
     option: "disabled"
@@ -110,7 +110,7 @@
     - splunk_baseconfig
     - org_cluster_indexer_base
     - inputs_ssl
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/inputs.conf"
     section: "SSL"
     option: "{{ item.key }}"
@@ -127,4 +127,4 @@
     - splunk
     - splunk_baseconfig
     - org_cluster_indexer_base
-  include_tasks: set_bucket_tunings.yml
+  ansible.builtin.include_tasks: set_bucket_tunings.yml

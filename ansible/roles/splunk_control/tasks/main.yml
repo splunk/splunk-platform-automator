@@ -5,13 +5,13 @@
   tags:
     - splunk
     - splunk_software
-  debug:
+  ansible.builtin.debug:
     msg: "role '{{ role_name }}' start"
 
 - name: Create Splunk Hosts index.html
   tags:
     - splunk
     - splunk_control
-  template:
+  ansible.builtin.template:
     src: "config/index.html.j2"
     dest: "../config/index.html"

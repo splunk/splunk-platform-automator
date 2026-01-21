@@ -5,7 +5,7 @@
     - splunk
     - splunk_software
     - splunk_sudoers
-  template:
+  ansible.builtin.template:
     src: etc/sudoers.d/splunk.j2
     dest: /etc/sudoers.d/splunk
     owner: "root"

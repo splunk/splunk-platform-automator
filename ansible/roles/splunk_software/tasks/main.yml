@@ -5,20 +5,20 @@
   tags:
     - splunk
     - splunk_software
-  debug:
+  ansible.builtin.debug:
     msg: "role '{{ role_name }}' start"
 
 - name: "create splunk user and group"
   tags:
     - splunk
     - splunk_software
-  include_tasks: users.yml
+  ansible.builtin.include_tasks: users.yml
 
 - name: Checking if splunk is installed
   tags:
     - splunk
     - splunk_software
-  stat:
+  ansible.builtin.stat:
     path: "{{ splunk_home }}/bin/splunk"
   register: splunk_path
 
@@ -26,7 +26,7 @@
   tags:
     - splunk
     - splunk_software
-  debug:
+  ansible.builtin.debug:
     msg: 'splunk found as {{ splunk_home }}/bin/splunk'
   when: splunk_path.stat.exists
 
@@ -35,7 +35,7 @@
     - splunk
     - splunk_software
     - splunk_secret
-  stat:
+  ansible.builtin.stat:
     path: "{{ splunk_auth_dir }}/{{ splunk_install_app }}_splunk.secret"
   become: no
   register: splunk_secret_file
@@ -47,7 +47,7 @@
     - splunk
     - splunk_software
     - splunk_secret
-  fail:
+  ansible.builtin.fail:
     msg: "Cannot find secret file {{ splunk_auth_dir }}/{{ splunk_install_app }}_splunk.secret. You must first install {{ splunk_install_app }} on one host only."
   when: 
     - splunk_secret_share[splunk_install_app] == true
@@ -58,14 +58,14 @@
   tags:
     - splunk
     - splunk_software
-  include_tasks: install.yml
+  ansible.builtin.include_tasks: install.yml
   when: splunk_path.stat.exists == false
 
 - name: Call ulimit_thp
   tags:
     - splunk
     - splunk_software
-  include_tasks: ulimit_thp.yml
+  ansible.builtin.include_tasks: ulimit_thp.yml
   when:
     - splunk_install_app == 'splunk'
     - use_systemctl == true
@@ -75,7 +75,7 @@
   tags:
     - splunk
     - splunk_software
-  include_tasks: add_disable_thp_service.yml
+  ansible.builtin.include_tasks: add_disable_thp_service.yml
   when:
     - splunk_install_app == 'splunk'
     - use_systemctl == true
@@ -85,7 +85,7 @@
   tags:
     - splunk
     - splunk_software
-  include_tasks: update_splunk_service.yml
+  ansible.builtin.include_tasks: update_splunk_service.yml
   when:
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
@@ -95,13 +95,13 @@
   tags:
     - splunk
     - splunk_software
-  include_tasks: ui_config.yml
+  ansible.builtin.include_tasks: ui_config.yml
 
 - name: "host and servername settings"
   tags:
     - splunk
     - splunk_software
-  include_tasks: host_servername_config.yml
+  ansible.builtin.include_tasks: host_servername_config.yml
 
 - name: Save shared splunk.secret file
   tags:
@@ -123,7 +123,7 @@
     - splunk
     - splunk_software
     - splunk_secret
-  file:
+  ansible.builtin.file:
     state: link
     src: "splunk_splunk.secret"
     dest: "{{ splunk_auth_dir }}/splunkforwarder_splunk.secret"

@@ -6,7 +6,7 @@
     - splunk
     - splunk_software
     - splunk_group
-  group:
+  ansible.builtin.group:
     name: "{{ splunk_group }}"
     state: present
   when: splunk_group_create|default(true) == true
@@ -16,7 +16,7 @@
     - splunk
     - splunk_software
     - splunk_user
-  user:
+  ansible.builtin.user:
     name: "{{ splunk_user }}"
     group: "{{ splunk_group }}"
     comment: "Splunk User"
@@ -29,7 +29,7 @@
   tags:
     - splunk
     - splunk_software
-  template:
+  ansible.builtin.template:
     src: home/splunk/bashrc.splunk.j2
     dest: "~{{ splunk_user }}/.bashrc.splunk"
     owner: "{{ splunk_user }}"
@@ -40,7 +40,7 @@
   tags:
     - splunk
     - splunk_software
-  blockinfile:
+  ansible.builtin.blockinfile:
     path: "~{{ splunk_user }}/.bashrc"
     marker: "#<!-- {mark} ANSIBLE MANAGED BLOCK -->"
     insertafter: "export PATH"

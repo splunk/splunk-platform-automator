@@ -6,7 +6,7 @@
     - splunk
     - splunk_baseconfig
     - org_indexer_volume_indexes
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
     section: volume:{{ volume_name }}
     option: "{{ volume_var.key }}"

@@ -5,7 +5,7 @@
   tags:
     - splunk
     - universal_forwarder
-  debug:
+  ansible.builtin.debug:
     msg: "role '{{ role_name }}' start"
 
 - name: Apply baseconfig app org_all_deploymentclient
@@ -14,7 +14,7 @@
     - splunk_baseconfig
     - universal_forwarder
     - org_all_deploymentclient
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_deploymentclient'
@@ -27,7 +27,7 @@
     - splunk_baseconfig
     - universal_forwarder
     - org_all_forwarder_outputs
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_forwarder_outputs'

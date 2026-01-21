@@ -5,7 +5,7 @@
     - splunk
     - splunk_software
     - splunk_install
-  command: "{{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk start --accept-license --answer-yes --no-prompt"
   become: yes
   become_user: "{{ splunk_user }}"
 
@@ -14,6 +14,6 @@
     - splunk
     - splunk_software
     - splunk_install
-  command: "{{ splunk_home }}/bin/splunk stop --answer-yes --no-prompt"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk stop --answer-yes --no-prompt"
   become: yes
   become_user: "{{ splunk_user }}"

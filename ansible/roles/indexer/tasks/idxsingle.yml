@@ -6,7 +6,7 @@
     - splunk
     - indexer
     - idxsingle
-  debug:
+  ansible.builtin.debug:
     msg: "Configuring single indexer"
 
 - name: Apply baseconfig app org_all_deploymentclient
@@ -16,7 +16,7 @@
     - indexer
     - idxsingle
     - org_all_deploymentclient
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_deploymentclient'
@@ -30,7 +30,7 @@
     - indexer
     - idxsingle
     - org_full_license_server
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_full_license_server'
@@ -44,7 +44,7 @@
     - indexer
     - idxsingle
     - org_all_indexer_base
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_indexer_base'
@@ -58,7 +58,7 @@
     - indexer
     - idxsingle
     - org_indexer_volume_indexes
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_indexer_volume_indexes'
@@ -72,7 +72,7 @@
     - indexer
     - idxsingle
     - org_all_indexes
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_indexes'
@@ -86,7 +86,7 @@
     - indexer
     - idxsingle
     - org_s2_indexer_indexes
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_s2_indexer_indexes'
@@ -103,7 +103,7 @@
     - idxsingle
     - monitoring_console
     - dserver
-  include_role:
+  ansible.builtin.include_role:
     name: monitoring_console
     tasks_from: update_dserver
   vars:
@@ -118,7 +118,7 @@
     - idxsingle
     - search_head
     - dserver
-  include_role:
+  ansible.builtin.include_role:
     name: search_head
     tasks_from: loop_search_heads
   when: inventory_hostname not in groups.role_search_head

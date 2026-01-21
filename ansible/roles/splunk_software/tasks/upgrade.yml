@@ -6,7 +6,7 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  debug:
+  ansible.builtin.debug:
     msg: "Upgrade {{ splunk_install_app }} from version '{{ splunk_current_version }}' to version '{{ splunk_target_version }}'"
 
 - name: Backup splunk etc
@@ -14,21 +14,21 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: backup_splunk_etc.yml
+  ansible.builtin.include_tasks: backup_splunk_etc.yml
 
 - name: Stop splunk by service control
   tags:
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: stop_splunk.yml
+  ansible.builtin.include_tasks: stop_splunk.yml
 
 - name: Check /etc/init.d/splunk
   tags:
     - splunk
     - splunk_software
     - splunk_upgrade
-  stat:
+  ansible.builtin.stat:
     path: "/etc/init.d/splunk"
   register: check_splunk_init
 
@@ -37,7 +37,7 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  set_fact:
+  ansible.builtin.set_fact:
     boot_start_migration: true
   when:
     - check_splunk_init.stat.exists == true
@@ -48,7 +48,7 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: remove_init_and_ulimit.yml
+  ansible.builtin.include_tasks: remove_init_and_ulimit.yml
   when: boot_start_migration|default(false) == true
 
 - name: Call disable_boot-start
@@ -56,7 +56,7 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: disable_boot-start.yml
+  ansible.builtin.include_tasks: disable_boot-start.yml
   when:
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
@@ -66,7 +66,7 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: remove_custom_policykit.yml
+  ansible.builtin.include_tasks: remove_custom_policykit.yml
   when:
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
@@ -76,7 +76,7 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: remove_splunk_sudoers.yml
+  ansible.builtin.include_tasks: remove_splunk_sudoers.yml
   when:
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
@@ -86,7 +86,7 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: remove_disable_thp_service.yml
+  ansible.builtin.include_tasks: remove_disable_thp_service.yml
   when:
     - splunk_install_app == 'splunk'
     - use_systemctl == true
@@ -97,7 +97,7 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: upload_and_extract.yml
+  ansible.builtin.include_tasks: upload_and_extract.yml
   when: splunk_path.stat.exists == true
 
 - name: Set enable boot-start args
@@ -105,14 +105,14 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: set_enable_boot_start_args.yml
+  ansible.builtin.include_tasks: set_enable_boot_start_args.yml
 
 - name: Call enable_boot-start
   tags:
     - splunk
     - splunk_software
     - splunk_install
-  include_tasks: enable_boot-start.yml
+  ansible.builtin.include_tasks: enable_boot-start.yml
   when: boot_start_migration|default(false) == true or use_systemctl == true and use_splunk_systemd|default(false) == true
 
 - name: Call check_systemd_file from splunk_common
@@ -120,7 +120,7 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_role:
+  ansible.builtin.include_role:
     name: splunk_common
     tasks_from: check_systemd_file
 
@@ -129,7 +129,7 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: update_splunk_service.yml
+  ansible.builtin.include_tasks: update_splunk_service.yml
   when:
     - use_systemctl == true
     - use_splunk_systemd|default(false) == true
@@ -141,7 +141,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_disable_thp
-  include_tasks: add_disable_thp_service.yml
+  ansible.builtin.include_tasks: add_disable_thp_service.yml
   when:
     - splunk_install_app == 'splunk'
     - use_systemctl == true
@@ -153,7 +153,7 @@
     - splunk_software
     - splunk_install
     - splunk_polkit
-  include_tasks: add_custom_policykit.yml
+  ansible.builtin.include_tasks: add_custom_policykit.yml
   when: 
     - use_policykit == true
     - use_systemctl == true
@@ -166,7 +166,7 @@
     - splunk_software
     - splunk_install
     - splunk_sudoers
-  include_tasks: add_splunk_sudoers.yml
+  ansible.builtin.include_tasks: add_splunk_sudoers.yml
   when: 
     - use_policykit == false
     - use_systemctl == true
@@ -177,4 +177,4 @@
     - splunk
     - splunk_software
     - splunk_upgrade
-  include_tasks: start_splunk.yml
+  ansible.builtin.include_tasks: start_splunk.yml

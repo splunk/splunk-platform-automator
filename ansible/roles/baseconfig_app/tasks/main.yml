@@ -1,8 +1,8 @@
 ---
 # Main playbook for this role
 
-- import_tasks: "install_app.yml"
-- import_tasks: "{{app_name}}.yml"
+- ansible.builtin.import_tasks: "install_app.yml"
+- ansible.builtin.import_tasks: "{{app_name}}.yml"
 
 - name: Call save_app
   tags:
@@ -10,5 +10,5 @@
     - splunk_baseconfig
     - save_baseconfig
     - save_baseconfig_apps
-  include_tasks: "save_app.yml"
+  ansible.builtin.include_tasks: "save_app.yml"
   when: splunk_save_baseconfig_apps|default(false) == true

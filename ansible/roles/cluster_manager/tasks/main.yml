@@ -5,7 +5,7 @@
   tags:
     - splunk
     - cluster_manager
-  debug:
+  ansible.builtin.debug:
     msg: "role '{{ role_name }}' start"
 
 - name: Apply baseconfig app org_cluster_manager_base
@@ -14,7 +14,7 @@
     - splunk_baseconfig
     - cluster_manager
     - org_cluster_manager_base
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_cluster_manager_base'
@@ -27,7 +27,7 @@
     - splunk_baseconfig
     - cluster_manager
     - org_multisite_manager_base
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_multisite_manager_base'
@@ -40,7 +40,7 @@
     - splunk_baseconfig
     - cluster_manager
     - org_all_deploymentclient
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_deploymentclient'
@@ -53,7 +53,7 @@
     - splunk_baseconfig
     - cluster_manager
     - org_all_forwarder_outputs
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_forwarder_outputs'
@@ -67,7 +67,7 @@
     - cluster_manager
     - org_all_search_base
     - web_ssl
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
     tasks_from: splunk_ssl_web_certs
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
@@ -78,7 +78,7 @@
     - splunk_baseconfig
     - cluster_manager
     - org_all_search_base
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_search_base'
@@ -91,7 +91,7 @@
     - splunk_baseconfig
     - cluster_manager
     - org_full_license_server
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_full_license_server'
@@ -104,7 +104,7 @@
     - splunk_baseconfig
     - cluster_manager
     - org_indexer_volume_indexes
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_indexer_volume_indexes'
@@ -116,7 +116,7 @@
     - splunk_baseconfig
     - cluster_manager
     - org_all_indexes
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_indexes'
@@ -128,7 +128,7 @@
     - splunk_baseconfig
     - cluster_manager
     - org_s2_indexer_indexes
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_s2_indexer_indexes'
@@ -141,7 +141,7 @@
     - splunk_baseconfig
     - cluster_manager
     - org_full_license_server
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_full_license_server'
@@ -154,7 +154,7 @@
     - splunk_baseconfig
     - monitoring_console
     - dserver
-  include_role:
+  ansible.builtin.include_role:
     name: monitoring_console
     tasks_from: update_dserver
   vars:

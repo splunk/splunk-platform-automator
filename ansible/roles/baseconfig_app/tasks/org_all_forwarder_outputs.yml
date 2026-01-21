@@ -6,7 +6,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_forwarder_outputs
-  include_tasks: replace_master_uri.yml
+  ansible.builtin.include_tasks: replace_master_uri.yml
   vars:
     splunk_file_to_change: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
 
@@ -15,7 +15,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_forwarder_outputs
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     section: tcpout
     option: defaultGroup
@@ -31,7 +31,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_forwarder_outputs
-  replace:
+  ansible.builtin.replace:
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     regexp: '\[tcpout:primary_indexers\]'
     replace: "[tcpout:{{ splunk_outputs_idxc_list|first+'_indexers' }}]"
@@ -46,7 +46,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_forwarder_outputs
-  set_fact:
+  ansible.builtin.set_fact:
     idx_port: "{{ inputs_port }}"
   when: splunk_ssl.outputs.enable != true
 
@@ -55,7 +55,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_forwarder_outputs
-  set_fact:
+  ansible.builtin.set_fact:
     idx_port: "{{ inputs_port_ssl }}"
   when: splunk_ssl.outputs.enable == true
 
@@ -65,7 +65,7 @@
     - splunk_baseconfig
     - org_all_forwarder_outputs
     - outputs_ssl
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
     tasks_from: splunk_ssl_outputs_certs
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true
@@ -75,7 +75,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_forwarder_outputs
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     section: tcpout:{{ item.key+'_indexers' }}
     option: server
@@ -92,7 +92,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_forwarder_outputs
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     section: tcpout:{{ item.idxc_name+'_indexers' }}
     option: indexerDiscovery
@@ -109,7 +109,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_forwarder_outputs
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     section: indexer_discovery:{{ item.idxc_name+'_indexers' }}
     option: pass4SymmKey
@@ -126,7 +126,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_forwarder_outputs
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     section: indexer_discovery:{{ item.idxc_name+'_indexers' }}
     option: "{{splunk_manager_uri_var}}"
@@ -144,7 +144,7 @@
     - splunk_baseconfig
     - outputs_ssl
     - org_all_forwarder_outputs
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
     tasks_from: org_all_forwarder_outputs_idxc_ssl
   with_items: "{{ splunk_outputs_idxc_list }}"
@@ -157,7 +157,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_forwarder_outputs
-  replace:
+  ansible.builtin.replace:
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     regexp: '\[tcpout:primary_indexers\]'
     replace: "[tcpout:all_indexers]"
@@ -172,7 +172,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_forwarder_outputs
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     section: tcpout:all_indexers
     option: server
@@ -189,7 +189,7 @@
     - splunk_baseconfig
     - org_all_forwarder_outputs
     - outputs_ssl
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     section: tcpout:all_indexers
     option: "{{ item.key }}"
@@ -209,7 +209,7 @@
     - splunk_baseconfig
     - org_all_forwarder_outputs
     - outputs_ssl
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     section: tcpout:all_indexers
     option: "{{ item.varkey }}"

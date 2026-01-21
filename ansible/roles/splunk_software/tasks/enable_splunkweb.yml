@@ -4,7 +4,7 @@
   tags:
     - splunk
     - splunk_webserver
-  ini_file:
+  community.general.ini_file:
     path: "{{ splunk_home }}/etc/system/local/web.conf"
     section: settings
     option: "startwebserver"
@@ -18,6 +18,6 @@
   tags:
     - splunk
     - splunk_webserver
-  debug:
+  ansible.builtin.debug:
     msg: "You have to restart splunk to start splunkweb."
   when: startwebserver.changed

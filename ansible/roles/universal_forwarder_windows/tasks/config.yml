@@ -8,7 +8,7 @@
     - universal_forwarder_windows
     - org_all_deploymentclient
   become: no
-  find:
+  ansible.builtin.find:
     path: "{{ splunk_baseconfig }}/"
     pattern: "org_all_deploymentclient"
     file_type: directory

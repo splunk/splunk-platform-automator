@@ -17,7 +17,7 @@
   tags:
     - splunk
     - license_manager
-  command: "{{ splunk_home }}/bin/splunk list license -auth admin:{{splunk_admin_password}}"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk list license -auth admin:{{splunk_admin_password}}"
   become: yes
   become_user: "{{ splunk_user }}"
   register: grep_result
@@ -28,7 +28,7 @@
   tags:
     - splunk
     - license_manager
-  copy:
+  ansible.builtin.copy:
     src: "{{ splunk_software }}/{{ splunk_license_file_name }}"
     dest: "/tmp/{{ splunk_license_file_name }}"
     owner: "{{ splunk_user }}"
@@ -39,7 +39,7 @@
   tags:
     - splunk
     - license_manager
-  command: "{{ splunk_home }}/bin/splunk add license /tmp/{{ splunk_license_file_name }} -auth admin:{{splunk_admin_password}}"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk add license /tmp/{{ splunk_license_file_name }} -auth admin:{{splunk_admin_password}}"
   become: yes
   become_user: "{{ splunk_user }}"
   when: grep_result.stdout is not search(lic_guid_src.matches[0].guid)
@@ -49,6 +49,6 @@
   tags:
     - splunk
     - license_manager
-  file:
+  ansible.builtin.file:
     path: "/tmp/{{ splunk_license_file_name }}"
     state: absent

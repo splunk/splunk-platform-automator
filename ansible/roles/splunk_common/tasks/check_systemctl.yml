@@ -4,7 +4,7 @@
   tags:
     - splunk
     - splunk_common
-  stat:
+  ansible.builtin.stat:
     path: /bin/systemctl
   register: systemctl
 
@@ -12,6 +12,6 @@
   tags:
     - splunk
     - splunk_common
-  set_fact:
+  ansible.builtin.set_fact:
     use_systemctl: true
   when: systemctl.stat.exists == true

@@ -6,7 +6,7 @@
    - splunk
    - splunk_baseconfig
   become: no
-  find:
+  ansible.builtin.find:
     path: "{{ splunk_baseconfig }}/"
     pattern: "{{ app_name }}"
     file_type: directory
@@ -19,7 +19,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-  file:
+  ansible.builtin.file:
     path: "{{ app_path }}/{{ app_dest_name }}"
     state: directory
     owner: "{{splunk_user}}"
@@ -30,14 +30,14 @@
   tags:
     - splunk
     - splunk_baseconfig
-  stat: path="{{ app_path }}/{{ app_dest_name }}/local"
+  ansible.builtin.stat: path="{{ app_path }}/{{ app_dest_name }}/local"
   register: app_local
 
 - name: "({{ app_name }}) copy local files"
   tags:
     - splunk
     - splunk_baseconfig
-  copy:
+  ansible.builtin.copy:
     src: "{{ item }}"
     dest: "{{ app_path }}/{{ app_dest_name }}/local/"
     owner: "{{splunk_user}}"
@@ -51,7 +51,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-  file:
+  ansible.builtin.file:
     path: "{{ app_path }}/{{ app_dest_name }}/metadata"
     state: directory
     owner: "{{splunk_user}}"
@@ -62,7 +62,7 @@
   tags:
     - splunk
     - splunk_baseconfig
-  copy:
+  ansible.builtin.copy:
     src: "{{ baseapp_dir.files.0.path }}/metadata/local.meta"
     dest: "{{ app_path }}/{{ app_dest_name }}/metadata/local.meta"
     owner: "{{splunk_user}}"

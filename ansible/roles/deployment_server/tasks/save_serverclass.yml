@@ -9,7 +9,7 @@
     - serverclass
     - save_baseconfig
     - save_serverclass
-  file:
+  ansible.builtin.file:
     path: "../{{splunk_save_baseconfig_apps_dir|default('apps')}}/{{inventory_hostname}}/{{ splunk_install_dir }}/splunk/etc/system/local/"
     state: directory
   become: no

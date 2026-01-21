@@ -7,7 +7,7 @@
     - splunk_software
     - ui_config
     - first_login_off
-  stat:
+  ansible.builtin.stat:
     path: "{{ splunk_home }}/etc/.ui_login"
   register: splunk_first_login
   when: splunk_install_app == "splunk"
@@ -18,7 +18,7 @@
     - splunk_software
     - ui_config
     - first_login_off
-  file:
+  ansible.builtin.file:
     path: "{{ splunk_home }}/etc/.ui_login"
     state: touch
     owner: "{{ splunk_user }}"
@@ -32,7 +32,7 @@
     - splunk_software
     - ui_config
     - splunk_user_password
-  set_fact:
+  ansible.builtin.set_fact:
     splunk_loginpage_user_info: "<br><br><b>User: </b>admin<br><b>Password: </b>{{splunk_admin_password}}"
   when: splunk_loginpage_print_userpw|default(true) == true
 
@@ -42,7 +42,7 @@
     - splunk_software
     - ui_config
     - splunk_roles_info
-  set_fact:
+  ansible.builtin.set_fact:
     splunk_loginpage_role_info: "<br><b>Splunk Roles: </b>{{splunk_roles}}"
   when: splunk_loginpage_print_roles|default(true) == true
 
@@ -52,7 +52,7 @@
     - splunk_software
     - ui_config
     - splunk_roles_info
-  set_fact:
+  ansible.builtin.set_fact:
     splunk_loginpage_hostname_info: "<b>Hostname: </b>{{inventory_hostname}}"
   when: splunk_loginpage_print_hostname|default(true) == true
 
@@ -62,7 +62,7 @@
     - splunk_software
     - ui_config
     - login_page_info
-  ini_file:
+  community.general.ini_file:
     path: "{{ splunk_home }}/etc/system/local/web.conf"
     section: settings
     option: "login_content"

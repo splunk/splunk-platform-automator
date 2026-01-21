@@ -6,7 +6,7 @@
     - splunk
     - splunk_software
     - splunk_backup
-  find:
+  ansible.builtin.find:
     paths: "{{splunk_backup_dir}}/"
     file_type: file
     recurse: no
@@ -21,7 +21,7 @@
     - splunk
     - splunk_software
     - splunk_backup
-  debug:
+  ansible.builtin.debug:
     msg: "{{ item }}"
   vars:
     archive_list: "{{ backup_files_to_delete | json_query(query) | list }}"
@@ -37,7 +37,7 @@
   tags:
     - splunk
     - splunk_software
-  file:
+  ansible.builtin.file:
     path: "{{item.path}}"
     state: absent
   with_items: "{{ backup_files_to_delete.files }}"

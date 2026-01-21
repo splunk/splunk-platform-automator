@@ -7,7 +7,7 @@
     - splunk_rest
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  include_tasks: splunk_rest.yml
+  ansible.builtin.include_tasks: splunk_rest.yml
   vars:
     splunk_rest_endpoint: /services/shcluster/member/info
 
@@ -17,7 +17,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  set_fact:
+  ansible.builtin.set_fact:
     sh_status: "{{ splunk_rest_json_output.entry[0].content.status }}"
     sh_restart_state: "{{ splunk_rest_json_output.entry[0].content.restart_state }}"
   vars:
@@ -29,7 +29,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  fail:
+  ansible.builtin.fail:
     msg: "Cluster SH {{ inventory_hostname }} has wrong state '{{ sh_status }}'"
   when:
     - sh_status != 'Up'
@@ -44,7 +44,7 @@
     - splunk_rest
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  include_tasks: splunk_rest.yml
+  ansible.builtin.include_tasks: splunk_rest.yml
   vars:
     splunk_rest_endpoint: /services/shcluster/status?advanced=1
 
@@ -54,7 +54,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  set_fact:
+  ansible.builtin.set_fact:
     shc_captain: "{{ splunk_rest_json_output.entry[0].content.captain.label }}"
   vars:
     splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
@@ -65,7 +65,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  fail:
+  ansible.builtin.fail:
     msg: "Cluster search head {{ inventory_hostname }} is captain. Not allowed to upgrade this node."
   when:
     - shc_captain == inventory_hostname
@@ -76,7 +76,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  include_role:
+  ansible.builtin.include_role:
     name: splunk_software
     tasks_from: disable_splunkweb.yml
 
@@ -87,7 +87,7 @@
     - splunk_rest
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  include_tasks: splunk_rest.yml
+  ansible.builtin.include_tasks: splunk_rest.yml
   vars:
     splunk_rest_endpoint: /services/shcluster/member/control/control/set_manual_detention?manual_detention=on
     http_method: POST
@@ -101,7 +101,7 @@
     - splunk_rest
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  uri:
+  ansible.builtin.uri:
     url: "https://localhost:8089//services/shcluster/member/info"
     user: admin
     password: "{{ splunk_admin_password }}"
@@ -128,7 +128,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  include_role:
+  ansible.builtin.include_role:
     name: splunk_software
     tasks_from: enable_splunkweb.yml
 
@@ -138,7 +138,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  include_tasks: upgrade.yml
+  ansible.builtin.include_tasks: upgrade.yml
 
 - name: Wait for splunkd port
   tags:
@@ -146,7 +146,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  include_role:
+  ansible.builtin.include_role:
     name: splunk_common
     tasks_from: wait_for_splunkd_port
 
@@ -156,7 +156,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  include_role:
+  ansible.builtin.include_role:
     name: splunk_common
     tasks_from: wait_for_splunkd_full
 
@@ -167,7 +167,7 @@
     - splunk_rest
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  include_tasks: splunk_rest.yml
+  ansible.builtin.include_tasks: splunk_rest.yml
   vars:
     splunk_rest_endpoint: /services/shcluster/member/info
 
@@ -177,7 +177,7 @@
     - splunk_software
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  set_fact:
+  ansible.builtin.set_fact:
     sh_status: "{{ splunk_rest_json_output.entry[0].content.status }}"
     sh_restart_state: "{{ splunk_rest_json_output.entry[0].content.restart_state }}"
   vars:
@@ -190,7 +190,7 @@
     - splunk_rest
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  include_tasks: splunk_rest.yml
+  ansible.builtin.include_tasks: splunk_rest.yml
   vars:
     splunk_rest_endpoint: /services/shcluster/member/control/control/set_manual_detention?manual_detention=off
     http_method: POST
@@ -204,7 +204,7 @@
     - splunk_rest
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
-  uri:
+  ansible.builtin.uri:
     url: "https://localhost:8089//services/shcluster/member/info"
     user: admin
     password: "{{ splunk_admin_password }}"

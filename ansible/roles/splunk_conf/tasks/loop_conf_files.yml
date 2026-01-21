@@ -5,7 +5,7 @@
   tags:
     - splunk
     - splunk_conf
-  include_tasks:
+  ansible.builtin.include_tasks:
     file: add_splunk_conf.yml
   with_dict: "{{ splunk_conf }}"
   loop_control:

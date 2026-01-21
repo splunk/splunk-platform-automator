@@ -8,7 +8,7 @@
     - monitoring_console
     - dserver
   # Same command is in search_head/tasks/search_peers.yml
-  include_role:
+  ansible.builtin.include_role:
     name: splunk_software
     tasks_from: splunk_rest
   vars:
@@ -21,7 +21,7 @@
     - monitoring_console
     - dserver
     - splunk_rest
-  set_fact:
+  ansible.builtin.set_fact:
     current_dservers: "{{ splunk_rest_json_output | json_query(jmesquery) | map('regex_replace', ':\\d+$', '') }}"
   vars:
     jmesquery: "entry[*].name"
@@ -32,7 +32,7 @@
     - splunk_baseconfig
     - monitoring_console
     - dserver
-  include_tasks: add_dserver.yml
+  ansible.builtin.include_tasks: add_dserver.yml
   with_items:
     - "{{ splunk_dservers | difference(current_dservers) }}"
   loop_control:

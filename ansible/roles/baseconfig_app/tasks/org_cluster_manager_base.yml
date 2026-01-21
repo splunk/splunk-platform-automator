@@ -6,7 +6,7 @@
     - splunk
     - splunk_baseconfig
     - org_cluster_manager_base
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
     option: mode
@@ -21,7 +21,7 @@
     - splunk
     - splunk_baseconfig
     - org_cluster_manager_base
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
     option: replication_factor
@@ -36,7 +36,7 @@
     - splunk
     - splunk_baseconfig
     - org_cluster_manager_base
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
     option: search_factor
@@ -51,7 +51,7 @@
     - splunk
     - splunk_baseconfig
     - org_cluster_manager_base
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
     option: cluster_label
@@ -66,7 +66,7 @@
     - splunk
     - splunk_baseconfig
     - org_cluster_manager_base
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
     option: pass4SymmKey
@@ -82,7 +82,7 @@
     - splunk
     - splunk_baseconfig
     - org_cluster_manager_base
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: indexer_discovery
     option: pass4SymmKey
@@ -98,7 +98,7 @@
     - splunk
     - splunk_baseconfig
     - org_cluster_manager_base
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/server.conf"
     section: clustering
     option: summary_replication

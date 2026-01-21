@@ -7,7 +7,7 @@
     - splunk_baseconfig
     - org_all_forwarder_outputs
     - outputs_ssl
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     section: tcpout:{{ index_cluster_name+'_indexers' }}
     option: "{{ item.key }}"
@@ -25,7 +25,7 @@
     - splunk_baseconfig
     - org_all_forwarder_outputs
     - outputs_ssl
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
     section: tcpout:{{ index_cluster_name+'_indexers' }}
     option: "{{ item.varkey }}"

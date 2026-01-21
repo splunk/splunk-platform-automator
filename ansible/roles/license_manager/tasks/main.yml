@@ -7,7 +7,7 @@
     - splunk_baseconfig
     - license_manager
     - org_all_deploymentclient
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_deploymentclient'
@@ -20,7 +20,7 @@
     - splunk_baseconfig
     - license_manager
     - org_all_forwarder_outputs
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_forwarder_outputs'
@@ -34,7 +34,7 @@
     - license_manager
     - org_all_search_base
     - web_ssl
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
     tasks_from: splunk_ssl_web_certs
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
@@ -45,7 +45,7 @@
     - splunk_baseconfig
     - license_manager
     - org_all_search_base
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_search_base'
@@ -60,7 +60,7 @@
     - splunk_baseconfig
     - monitoring_console
     - dserver
-  include_role:
+  ansible.builtin.include_role:
     name: monitoring_console
     tasks_from: update_dserver
   vars:

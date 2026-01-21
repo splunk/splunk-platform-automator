@@ -5,7 +5,7 @@
   tags:
     - splunk
     - search_head
-  debug:
+  ansible.builtin.debug:
     msg: "role '{{ role_name }}' start"
 
 - name: Install certs for web ssl
@@ -15,7 +15,7 @@
     - search_head
     - org_all_search_base
     - web_ssl
-  include_role:
+  ansible.builtin.include_role:
     name: baseconfig_app
     tasks_from: splunk_ssl_web_certs
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true

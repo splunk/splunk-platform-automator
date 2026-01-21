@@ -8,7 +8,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_search_base
-  stat: path={{ app_path }}/{{ app_dest_name }}/local/authentication.conf.disable
+  ansible.builtin.stat: path={{ app_path }}/{{ app_dest_name }}/local/authentication.conf.disable
   register: authentication_stat
 
 - name: "({{ app_name }}) disable authentication.conf"
@@ -16,7 +16,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_search_base
-  command: mv {{ app_path }}/{{ app_dest_name }}/local/authentication.conf {{ app_path }}/{{ app_dest_name }}/local/authentication.conf.disable
+  ansible.builtin.command: mv {{ app_path }}/{{ app_dest_name }}/local/authentication.conf {{ app_path }}/{{ app_dest_name }}/local/authentication.conf.disable
   when: not authentication_stat.stat.exists
 
 - name: "({{ app_name }}) check for authorize.conf.disable"
@@ -24,7 +24,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_search_base
-  stat: path={{ app_path }}/{{ app_dest_name }}/local/authorize.conf.disable
+  ansible.builtin.stat: path={{ app_path }}/{{ app_dest_name }}/local/authorize.conf.disable
   register: authorize_stat
 
 - name: "({{ app_name }}) disable authorize.conf"
@@ -32,7 +32,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_search_base
-  command: mv {{ app_path }}/{{ app_dest_name }}/local/authorize.conf {{ app_path }}/{{ app_dest_name }}/local/authorize.conf.disable
+  ansible.builtin.command: mv {{ app_path }}/{{ app_dest_name }}/local/authorize.conf {{ app_path }}/{{ app_dest_name }}/local/authorize.conf.disable
   when: not authorize_stat.stat.exists
 
 - name: "({{ app_name }}) check for web.conf.disable"
@@ -40,7 +40,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_search_base
-  stat: path={{ app_path }}/{{ app_dest_name }}/local/web.conf.disable
+  ansible.builtin.stat: path={{ app_path }}/{{ app_dest_name }}/local/web.conf.disable
   register: web_stat
   when: splunk_ssl.web.enable != true
 
@@ -49,7 +49,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_search_base
-  command: mv {{ app_path }}/{{ app_dest_name }}/local/web.conf {{ app_path }}/{{ app_dest_name }}/local/web.conf.disable
+  ansible.builtin.command: mv {{ app_path }}/{{ app_dest_name }}/local/web.conf {{ app_path }}/{{ app_dest_name }}/local/web.conf.disable
   when: splunk_ssl.web.enable != true and not web_stat.stat.exists
 
 - name: "({{ app_name }}) enable ssl in web.conf"
@@ -57,7 +57,7 @@
     - splunk
     - splunk_baseconfig
     - org_all_search_base
-  ini_file:
+  community.general.ini_file:
     path: "{{ app_path }}/{{ app_dest_name }}/local/web.conf"
     section: settings
     option: "{{ item.key }}"

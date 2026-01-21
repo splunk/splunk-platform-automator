@@ -6,7 +6,7 @@
     - splunk
     - indexer
     - check_volume_path
-  stat:
+  ansible.builtin.stat:
     path: "{{ volume_path }}"
   register: volumepath
 
@@ -15,7 +15,7 @@
     - splunk
     - indexer
     - check_volume_path
-  fail:
+  ansible.builtin.fail:
     msg: "volume:{{ volume_name }} path: {{ volume_path }} does not exist"
   when: volumepath.stat.exists == false
 
@@ -24,7 +24,7 @@
     - splunk
     - indexer
     - check_volume_path
-  fail:
+  ansible.builtin.fail:
     msg: "volume:{{ volume_name }} path: {{ volume_path }} is not a directory"
   when: volumepath.stat.isdir == false
 
@@ -33,7 +33,7 @@
     - splunk
     - indexer
     - check_volume_path
-  fail:
+  ansible.builtin.fail:
     msg: "volume:{{ volume_name }} path: {{ volume_path }} is not owned by user {{splunk_user}}"
   when: volumepath.stat.pw_name != splunk_user
 
@@ -42,6 +42,6 @@
     - splunk
     - indexer
     - check_volume_path
-  fail:
+  ansible.builtin.fail:
     msg: "volume:{{ volume_name }} path: {{ volume_path }} is not writable by user {{splunk_user}}"
   when: volumepath.stat.wusr == false

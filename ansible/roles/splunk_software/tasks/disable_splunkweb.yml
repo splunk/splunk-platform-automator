@@ -4,7 +4,7 @@
   tags:
     - splunk
     - splunk_webserver
-  ini_file:
+  community.general.ini_file:
     path: "{{ splunk_home }}/etc/system/local/web.conf"
     section: settings
     option: "startwebserver"
@@ -18,5 +18,5 @@
   tags:
     - splunk
     - splunk_webserver
-  command: "{{ splunk_home }}/bin/splunk restart splunkweb -auth admin:{{splunk_admin_password}}"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk restart splunkweb -auth admin:{{splunk_admin_password}}"
   when: startwebserver.changed
