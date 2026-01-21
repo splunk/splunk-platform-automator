@@ -38,13 +38,16 @@
     value: "{{ item.value }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: '0644'
+    mode: "0644"
   loop:
-    - { var: 'access', value: 'read : [ * ], write : [ admin, power ]' }
-    - { var: 'export', value: 'system' }
-    - { var: 'owner', value: 'nobody' }
-    - { var: 'version', value: '{{ splunk_installed_version }}' }
-    - { var: 'modtime', value: '{{ ansible_date_time.epoch + ".000000000"}}' }
-# don't restart because it dusturbes the SHC configuration
-#  notify: Restart splunk
+    - { var: "access", value: "read : [ * ], write : [ admin, power ]" }
+    - { var: "export", value: "system" }
+    - { var: "owner", value: "nobody" }
+    - { var: "version", value: "{{ splunk_installed_version }}" }
+    - {
+        var: "modtime",
+        value: '{{ ansible_facts[''date_time''][''epoch''] + ".000000000"}}',
+      }
+  # don't restart because it dusturbes the SHC configuration
+  #  notify: Restart splunk
   when: localmeta_result.stat.exists == false or grep_result.rc == 1

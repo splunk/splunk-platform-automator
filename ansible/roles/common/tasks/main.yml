@@ -3,47 +3,47 @@
 
 - name: Call Set hostname
   ansible.builtin.include_tasks: set_hostname.yml
-  when: ansible_os_family|lower != 'windows'
+  when: ansible_facts['os_family']|lower != 'windows'
 
 - name: Call Install packages
   ansible.builtin.include_tasks: packages.yml
   when:
     - packages|default([],true)|length > 0
-    - ansible_os_family|lower != 'windows'
+    - ansible_facts['os_family']|lower != 'windows'
 
 - name: Call Check Ansible requirements
   ansible.builtin.include_tasks: check_ansible_requirements.yml
-  when: ansible_os_family|lower != 'windows'
+  when: ansible_facts['os_family']|lower != 'windows'
 
 - name: Call Configure users
   ansible.builtin.include_tasks: users.yml
-  when: ansible_os_family|lower != 'windows'
+  when: ansible_facts['os_family']|lower != 'windows'
 
 - name: Call Configure time
   ansible.builtin.include_tasks: time.yml
-  when: ansible_os_family|lower != 'windows'
+  when: ansible_facts['os_family']|lower != 'windows'
 
 - name: Call Disable SELinux
   ansible.builtin.include_tasks: disable_selinux.yml
   when:
     - disable_selinux|default(false) == true
-    - ansible_os_family|lower != 'windows'
+    - ansible_facts['os_family']|lower != 'windows'
     - "'role_universal_forwarder' not in group_names"
 
 - name: Call Disable AppArmor
   ansible.builtin.include_tasks: disable_apparmor.yml
   when:
-    - ansible_os_family|lower != 'windows'
+    - ansible_facts['os_family']|lower != 'windows'
     - disable_apparmor|default(false) == true
 
 - name: Call Update hosts file
   ansible.builtin.include_tasks: hosts.yml
   when:
-    - ansible_os_family|lower != 'windows'
+    - ansible_facts['os_family']|lower != 'windows'
     - update_hosts_file|default(false) == true
 
 - name: Call Fix time sync
   ansible.builtin.include_tasks: fix_time_sync.yml
   when:
-    - ansible_os_family|lower != 'windows'
+    - ansible_facts['os_family']|lower != 'windows'
     - enable_time_sync_cron|default(false) == true
