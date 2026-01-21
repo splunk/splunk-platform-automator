@@ -20,7 +20,7 @@
 #    owner: "{{splunk_user}}"
 #    group: "{{splunk_group}}"
 #    mode: 0755
-#  loop: "{{ splunk_indexer_volumes }} | dict2items"
+#  loop: "{{ splunk_indexer_volumes | dict2items }}"
 #  when: splunk_indexer_volumes_local|length > 0
 
 - name: Check volume pathes
@@ -29,7 +29,7 @@
     - indexer
     - check_volume_path
   ansible.builtin.include_tasks: check_volume_path.yml
-  loop: "{{ splunk_indexer_volumes_local }} | dict2items"
+  loop: "{{ splunk_indexer_volumes_local | dict2items }}"
   vars:
     volume_name: "{{ item.key }}"
     volume_path: "{{ item.value.path|default(splunk_home+'/var/lib/splunk') }}"

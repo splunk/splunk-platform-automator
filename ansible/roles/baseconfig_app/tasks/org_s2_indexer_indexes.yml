@@ -48,7 +48,7 @@
     - splunk_baseconfig
     - org_s2_indexer_indexes
   ansible.builtin.include_tasks: set_indexer_volume_vars.yml
-  loop: "{{ splunk_indexer_volumes_remote }} | dict2items"
+  loop: "{{ splunk_indexer_volumes_remote | dict2items }}"
   vars:
     volume_name: "{{ item.key }}"
     volume_vars: "{{ item.value }}"

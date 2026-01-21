@@ -8,7 +8,7 @@
     - org_indexer_volume_indexes
   ansible.builtin.fail:
     msg: "homePath ({{splunk_volume_defaults.homePath|default('primary')}}) must be equal to coldPath ({{splunk_volume_defaults.coldPath|default('primary')}}) when using SmartStore"
-  when: 
+  when:
     - splunk_volume_defaults.remotePath is defined
     - splunk_volume_defaults.homePath|default("primary") != splunk_volume_defaults.coldPath|default("primary")
 
@@ -36,7 +36,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  loop: "{{splunk_indexer_volumes_local}}"
+  loop: "{{splunk_indexer_volumes_local | dict2items}}"
   notify: Restart splunk
   when: splunk_indexer_volumes_local|length > 0
 

@@ -34,7 +34,7 @@
   register: volume_fs_avail
   become: yes
   become_user: "{{splunk_user}}"
-  loop: "{{ splunk_indexer_volumes_local }} | dict2items"
+  loop: "{{ splunk_indexer_volumes_local | dict2items }}"
   vars:
     volume_name: "{{ item.key }}"
     volume_vars: "{{ item.value }}"
@@ -63,7 +63,7 @@
     - splunk_baseconfig
     - org_indexer_volume_indexes
   ansible.builtin.include_tasks: set_indexer_volume_vars.yml
-  loop: "{{ splunk_indexer_volumes_tmp|default(splunk_indexer_volumes_local) }} | dict2items"
+  loop: "{{ splunk_indexer_volumes_tmp|default(splunk_indexer_volumes_local) | dict2items }}"
   vars:
     volume_name: "{{ item.key }}"
     volume_vars: "{{ item.value }}"

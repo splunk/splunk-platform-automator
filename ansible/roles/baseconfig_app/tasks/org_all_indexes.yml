@@ -8,7 +8,7 @@
     - org_all_indexes
   ansible.builtin.fail:
     msg: "homePath ({{splunk_volume_defaults.homePath|default('primary')}}) must be equal to coldPath ({{splunk_volume_defaults.coldPath|default('primary')}}) when using SmartStore"
-  when: 
+  when:
     - splunk_volume_defaults.remotePath is defined
     - splunk_volume_defaults.homePath|default("primary") != splunk_volume_defaults.coldPath|default("primary")
 
@@ -18,11 +18,11 @@
     - splunk_baseconfig
     - org_all_indexes
   ansible.builtin.include_tasks: set_index_vars.yml
-  loop: "{{ splunk_indexes_path_settings|default({}) }}"
+  loop: "{{ splunk_indexes_path_settings|default({}) | dict2items }}"
   vars:
     index_name: "{{ item.key }}"
     index_vars: "{{ item.value }}"
-    splunk_indexes: { 'default': {} }
+    splunk_indexes: { "default": {} }
   when:
     - splunk_indexes_default_paths|default(false) == true
     - splunk_indexes_path_settings|default({})|length > 0
@@ -33,12 +33,12 @@
     - splunk_baseconfig
     - org_all_indexes
   ansible.builtin.include_tasks: set_index_vars.yml
-  loop: "{{ splunk_indexes_path_settings|default({}) }}"
+  loop: "{{ splunk_indexes_path_settings|default({}) | dict2items }}"
   vars:
     index_name: "{{ item.key }}"
     index_vars: "{{ item.value }}"
   when:
-    - splunk_indexes_default_paths|default(false) == false 
+    - splunk_indexes_default_paths|default(false) == false
     - splunk_indexes_path_settings|default({})|length > 0
 
 - name: "({{ app_name }}) set index options"
@@ -47,7 +47,7 @@
     - splunk_baseconfig
     - org_all_indexes
   ansible.builtin.include_tasks: set_index_vars.yml
-  loop: "{{ splunk_indexes_settings|default({}) }}"
+  loop: "{{ splunk_indexes_settings|default({}) | dict2items }}"
   vars:
     index_name: "{{ item.key }}"
     index_vars: "{{ item.value }}"
