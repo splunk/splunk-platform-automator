@@ -7,7 +7,7 @@
     - license_manager
   ansible.builtin.include_tasks:
     file: add_license.yml
-  with_items: "{{ splunk_license_file }}"
+  loop: "{{ splunk_license_file }}"
   loop_control:
     loop_var: splunk_license_file_name
   when: splunk_license_file is defined

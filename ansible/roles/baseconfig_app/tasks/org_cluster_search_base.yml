@@ -67,7 +67,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  with_items:
+  loop:
     - clustermaster
     - clustermanager
   notify: restart splunk

@@ -91,7 +91,7 @@
   tags:
     - ldap
   ansible.builtin.shell: ldapadd -Y EXTERNAL -H ldapi:/// -f {{item}}
-  with_items:
+  loop:
     - /etc/openldap/schema/cosine.ldif
     - /etc/openldap/schema/nis.ldif
     - /etc/openldap/schema/inetorgperson.ldif

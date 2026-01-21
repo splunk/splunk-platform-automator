@@ -39,7 +39,7 @@
   ansible.builtin.file:
     path: "{{item.path}}"
     state: absent
-  with_items: "{{ init_files_to_delete.files }}"
+  loop: "{{ init_files_to_delete.files }}"
 
 - name: Remove /etc/init.d/splunk
   tags:

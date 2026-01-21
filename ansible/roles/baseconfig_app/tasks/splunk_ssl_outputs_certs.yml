@@ -8,7 +8,7 @@
     - outputs_ssl
   ansible.builtin.stat:
     path: "{{ splunk_auth_dir }}/{{ item }}"
-  with_items:
+  loop:
     - "{{ splunk_ssl.outputs.config.sslRootCAPath|basename|default('cacert.pem') }}"
   register: cacert_pems
   delegate_to: localhost
@@ -22,7 +22,7 @@
     - outputs_ssl
   ansible.builtin.stat:
     path: "{{ splunk_auth_dir }}/{{ item }}"
-  with_items:
+  loop:
     - "{{ splunk_ssl.outputs.config.sslCertPath|basename|default('client.pem') }}"
   register: client_pems
   delegate_to: localhost
@@ -83,7 +83,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  with_items:
+  loop:
     - { src: '{{ cacert_pem }}', dest: "{{ app_path }}/{{ app_dest_name }}/default" }
     - { src: '{{ client_pem }}', dest: "{{ app_path }}/{{ app_dest_name }}/default" }
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true

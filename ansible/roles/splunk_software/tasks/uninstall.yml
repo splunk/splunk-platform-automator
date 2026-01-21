@@ -100,7 +100,7 @@
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
-  with_items:
+  loop:
     - "/etc/systemd/system/{{splunk_service_name}}.service"
     - /etc/systemd/system/disable-thp.service
     - /etc/init.d/splunk
@@ -142,7 +142,7 @@
   ansible.builtin.file:
     path: "{{item.path}}"
     state: absent
-  with_items: "{{ files_to_delete.files }}"
+  loop: "{{ files_to_delete.files }}"
   become: yes
   become_user: "{{ splunk_user }}"
 

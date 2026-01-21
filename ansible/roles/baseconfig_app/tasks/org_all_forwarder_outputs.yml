@@ -101,7 +101,7 @@
     group: "{{splunk_group}}"
     mode: 0644
   notify: restart splunk
-  with_items: "{{ splunk_outputs_discovery_idxc_list }}"
+  loop: "{{ splunk_outputs_discovery_idxc_list }}"
   when: splunk_outputs_discovery_idxc_list|length > 0
 
 - name: "({{ app_name }}) setting indexer discovery password"
@@ -118,7 +118,7 @@
     group: "{{splunk_group}}"
     mode: 0644
   notify: restart splunk
-  with_items: "{{ splunk_outputs_discovery_idxc_list }}"
+  loop: "{{ splunk_outputs_discovery_idxc_list }}"
   when: splunk_outputs_discovery_idxc_list|length > 0
 
 - name: "({{ app_name }}) setting indexer discovery manager_uri"
@@ -135,7 +135,7 @@
     group: "{{splunk_group}}"
     mode: 0644
   notify: restart splunk
-  with_items: "{{ splunk_outputs_discovery_idxc_list }}"
+  loop: "{{ splunk_outputs_discovery_idxc_list }}"
   when: splunk_outputs_discovery_idxc_list|length > 0
 
 - name: "({{ app_name }}) setting ssl in tcpout stanza for clustered indexers"
@@ -147,7 +147,7 @@
   ansible.builtin.include_role:
     name: baseconfig_app
     tasks_from: org_all_forwarder_outputs_idxc_ssl
-  with_items: "{{ splunk_outputs_idxc_list }}"
+  loop: "{{ splunk_outputs_idxc_list }}"
   loop_control:
     loop_var: index_cluster_name
   when: splunk_outputs_idxc_list|length > 0 and splunk_ssl.outputs.enable == true
@@ -218,7 +218,7 @@
     group: "{{splunk_group}}"
     mode: 0600
   notify: restart splunk
-  with_items:
+  loop:
     - { varkey: "sslRootCAPath", varvalue: "{{ splunk_ssl.outputs.config.sslRootCAPath|default('cacert.pem') }}" }
     - { varkey: "sslCertPath", varvalue: "{{ splunk_ssl.outputs.config.sslCertPath|default('client.pem') }}" }
   when:

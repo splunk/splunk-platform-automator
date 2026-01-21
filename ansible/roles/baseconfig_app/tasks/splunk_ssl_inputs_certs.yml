@@ -8,7 +8,7 @@
     - inputs_ssl
   ansible.builtin.stat:
     path: "{{ splunk_auth_dir }}/{{ item }}"
-  with_items:
+  loop:
     - "{{ splunk_ssl.inputs.config.rootCA|basename|default('cacert.pem') }}"
   register: cacert_pems
   delegate_to: localhost
@@ -22,7 +22,7 @@
     - inputs_ssl
   ansible.builtin.stat:
     path: "{{ splunk_auth_dir }}/{{ item }}"
-  with_items:
+  loop:
     - "{{ splunk_ssl.inputs.config.serverCert|basename|default('server.pem') }}"
   register: server_pems
   delegate_to: localhost
@@ -68,7 +68,7 @@
     path: "{{ splunk_home }}/{{ item }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-  with_items:
+  loop:
     - "{{ splunk_ssl.inputs.config.rootCA|replace('$SPLUNK_HOME/', '')|dirname }}"
     - "{{ splunk_ssl.inputs.config.serverCert|replace('$SPLUNK_HOME/', '')|dirname }}"
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
@@ -84,7 +84,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  with_items:
+  loop:
     - { src: '{{ cacert_pem }}', dest: "{{ splunk_ssl.inputs.config.rootCA|replace('$SPLUNK_HOME/', '')|dirname }}" }
     - { src: '{{ server_pem }}', dest: "{{ splunk_ssl.inputs.config.serverCert|replace('$SPLUNK_HOME/', '')|dirname }}" }
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true

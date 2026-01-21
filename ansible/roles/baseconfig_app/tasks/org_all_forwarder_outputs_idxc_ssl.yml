@@ -34,7 +34,7 @@
     group: "{{splunk_group}}"
     mode: 0600
   notify: restart splunk
-  with_items:
+  loop:
     - { varkey: "sslRootCAPath", varvalue: "{{ splunk_ssl.outputs.config.sslRootCAPath|default('cacert.pem') }}" }
     - { varkey: "sslCertPath", varvalue: "{{ splunk_ssl.outputs.config.sslCertPath|default('client.pem') }}" }
   when:

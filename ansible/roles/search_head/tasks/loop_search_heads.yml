@@ -10,7 +10,7 @@
   ansible.builtin.include_role:
     name: search_head
     tasks_from: add_search_peers
-  with_items:
+  loop:
     - "{{ splunk_shc_all_host_list + splunk_search_head_list }}"
   loop_control:
     loop_var: search_head

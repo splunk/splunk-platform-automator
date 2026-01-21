@@ -14,5 +14,5 @@
   become: yes
   become_user: "{{ splunk_user }}"
   notify: restart splunk
-  with_items: "{{ splunk_conf_settings_list }}"
+  loop: "{{ splunk_conf_settings_list }}"
   when: splunk_conf_settings_list|length > 0

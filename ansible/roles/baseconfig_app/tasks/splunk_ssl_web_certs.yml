@@ -11,7 +11,7 @@
     path: "{{ splunk_auth_dir }}/{{ item }}.key"
   vars:
     cname_tmp: "{{ cname|default() }}"
-  with_items:
+  loop:
     - "{{ cname_tmp.split(',')|list }}"
     - "{{ inventory_hostname }}"
     - "{{ ip_addr|default() }}"
@@ -30,7 +30,7 @@
     path: "{{ splunk_auth_dir }}/{{ item }}.pem"
   vars:
     cname_tmp: "{{ cname|default() }}"
-  with_items:
+  loop:
     - "{{ cname_tmp.split(',')|list }}"
     - "{{ inventory_hostname }}"
     - "{{ ip_addr|default() }}"
@@ -82,7 +82,7 @@
     path: "{{ splunk_home }}/{{ item }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-  with_items:
+  loop:
     - '{{ splunk_ssl.web.config.privKeyPath|dirname }}'
     - '{{ splunk_ssl.web.config.serverCert|dirname }}'
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
@@ -99,7 +99,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  with_items:
+  loop:
     - { src: '{{ key_file }}', dest: '{{ splunk_ssl.web.config.privKeyPath|dirname }}' }
     - { src: '{{ pem_file }}', dest: '{{ splunk_ssl.web.config.serverCert|dirname }}' }
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
@@ -116,7 +116,7 @@
     dest: "{{ splunk_home }}/{{ item.dest }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-  with_items:
+  loop:
     - { src: '{{ key_file }}', dest: '{{ splunk_ssl.web.config.privKeyPath }}' }
     - { src: '{{ pem_file }}', dest: '{{ splunk_ssl.web.config.serverCert }}' }
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true

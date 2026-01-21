@@ -86,7 +86,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  with_items:
+  loop:
     - { varkey: "USERNAME", varvalue: "admin" }
     - { varkey: "HASHED_PASSWORD", varvalue: "{{ admin_hash_pw.stdout }}" }
   when: splunk_installed_version is version_compare('7.1', '>=') and splunk_install_app == "splunk"

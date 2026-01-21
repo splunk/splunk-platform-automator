@@ -70,7 +70,7 @@
     app_name: 'org_all_forwarder_outputs'
     app_path: '{{ splunk_home }}/etc/deployment-apps'
     splunk_output_list: "{{ hostvars[groups['output_'+splunk_env_name+'_'+output_name][0]]['splunk_output_list'] }}"
-  with_items: "{{ splunk_outputs_name_list }}"
+  loop: "{{ splunk_outputs_name_list }}"
   loop_control:
     loop_var: output_name
 
@@ -171,7 +171,7 @@
     app_name: 'org_cluster_search_base'
     app_path: '{{ splunk_home }}/etc/deployment-apps'
     splunk_search_peer_list: "{{ hostvars[groups['search_peer_'+splunk_env_name+'_'+search_peer_name][0]]['splunk_search_peer_list'] }}"
-  with_items: "{{ splunk_search_peer_name_list }}"
+  loop: "{{ splunk_search_peer_name_list }}"
   loop_control:
     loop_var: search_peer_name
   when: splunk_idxc_cm_list|length > 0

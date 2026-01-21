@@ -33,7 +33,7 @@
     - monitoring_console
     - dserver
   ansible.builtin.include_tasks: add_dserver.yml
-  with_items:
+  loop:
     - "{{ splunk_dservers | difference(current_dservers) }}"
   loop_control:
     loop_var: dserver_name

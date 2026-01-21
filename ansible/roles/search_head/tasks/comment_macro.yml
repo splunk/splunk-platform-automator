@@ -39,7 +39,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  with_items:
+  loop:
     - { var: 'access', value: 'read : [ * ], write : [ admin, power ]' }
     - { var: 'export', value: 'system' }
     - { var: 'owner', value: 'nobody' }
