@@ -2,7 +2,7 @@
 
 - name: Backup splunk config
   hosts: role_cluster_manager,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_manager,role_monitoring_console,role_search_head,role_universal_forwarder
-  become: yes
+  become: true
   become_user: root
 
   tasks:

@@ -13,7 +13,7 @@
     patterns: '{{ splunk_install_app }}_etc_v*.tgz'
     use_regex: no
   register: backup_files_to_delete
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
 
 - name: Backup files to remove
@@ -41,5 +41,5 @@
     path: "{{item.path}}"
     state: absent
   loop: "{{ backup_files_to_delete.files }}"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"

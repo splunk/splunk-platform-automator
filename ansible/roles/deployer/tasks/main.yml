@@ -13,7 +13,7 @@
     - splunk
     - deployer
   ansible.builtin.shell: "{{ splunk_home }}/bin/splunk btool server list shclustering | egrep -we '^pass4SymmKey'"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   register: grep_result
   check_mode: no

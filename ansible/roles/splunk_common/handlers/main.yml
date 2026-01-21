@@ -9,7 +9,7 @@
     - search_head
     - shcluster
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   register: shcluster_ready
   until: "shcluster_ready.stdout.find('service_ready_flag : 1') != -1 and shcluster_ready.stdout.find('status : Down') != 0"
@@ -25,7 +25,7 @@
     - search_head
     - shcluster
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk apply shcluster-bundle -target https://{{splunk_shc_host_list|first}}:8089 -auth admin:{{ splunk_admin_password }} --answer-yes"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   delegate_to: "{{ splunk_shc_deployer }}"
 
@@ -35,7 +35,7 @@
     - splunk_common
     - deployment_server
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk reload deploy-server -auth admin:{{splunk_admin_password}}"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   delegate_to: "{{splunk_deployment_server|first}}"
 
@@ -47,7 +47,7 @@
   ansible.builtin.service:
     name: "{{splunk_service_name}}"
     state: restarted
-  become: yes
+  become: true
   become_user: root
   delegate_to: "{{ inventory_hostname }}"
   when: app_path == splunk_home + '/etc/apps'

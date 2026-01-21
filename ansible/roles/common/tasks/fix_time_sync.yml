@@ -11,5 +11,5 @@
     name: "sync time"
     minute: "*/5"
     job: "/bin/chronyc makestep >/dev/null"
-  become: yes
+  become: true
   become_user: root

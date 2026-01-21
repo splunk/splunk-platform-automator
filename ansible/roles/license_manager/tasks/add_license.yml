@@ -18,7 +18,7 @@
     - splunk
     - license_manager
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk list license -auth admin:{{splunk_admin_password}}"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   register: grep_result
   check_mode: no
@@ -40,7 +40,7 @@
     - splunk
     - license_manager
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk add license /tmp/{{ splunk_license_file_name }} -auth admin:{{splunk_admin_password}}"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   when: grep_result.stdout is not search(lic_guid_src.matches[0].guid)
   notify: Restart splunk

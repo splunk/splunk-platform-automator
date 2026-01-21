@@ -3,7 +3,7 @@
 
 - name: Begin tasks
   hosts: shcluster_*:&role_search_head
-  become: yes
+  become: true
   become_user: root
 
   tasks:
@@ -16,7 +16,7 @@
 - name: Upgrade search head
   hosts: shcluster_*:&role_search_head
   serial: 1
-  become: yes
+  become: true
   become_user: root
 
   tasks:
@@ -28,7 +28,7 @@
 
 - name: End tasks
   hosts: shcluster_*:&role_search_head
-  become: yes
+  become: true
   become_user: root
 
   tasks:

@@ -3,7 +3,7 @@
 
 - name: Add splunk license to license manager
   hosts: role_license_manager
-  become: yes
+  become: true
   become_user: root
 
   tasks:

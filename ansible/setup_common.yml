@@ -3,7 +3,7 @@
 
 - name: Apply common configurations
   hosts: all:!role_universal_forwarder_windows
-  become: yes
+  become: true
   become_user: root
   roles:
     - common

@@ -9,7 +9,7 @@
     src: home/ansible_user/bashrc.splunk
     dest: "~{{ ansible_user }}/.bashrc.splunk"
     mode: 0644
-  become: yes
+  become: true
   become_user: "{{ ansible_user }}"
 
 - name: Insert/update bashrc for splunk stuff

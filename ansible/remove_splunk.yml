@@ -3,7 +3,7 @@
 
 - name: Remove the complete splunk installation
   hosts: all
-  become: yes
+  become: true
   become_user: root
 
   tasks:

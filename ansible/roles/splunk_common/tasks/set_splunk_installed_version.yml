@@ -12,7 +12,7 @@
     - splunk
     - splunk_common
   ansible.builtin.shell: 'grep -w VERSION {{ splunk_home }}/etc/splunk.version | cut -d= -f 2'
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   check_mode: no
   changed_when: false

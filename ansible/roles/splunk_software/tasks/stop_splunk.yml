@@ -8,5 +8,5 @@
   ansible.builtin.service:
     name: "{{splunk_service_name}}"
     state: stopped
-  become: yes
+  become: true
   become_user: root

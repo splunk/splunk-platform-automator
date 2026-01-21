@@ -4,7 +4,7 @@
 ################### Cluster Master Tasks #####################
 - name: Install ITSI on cluster master
   hosts: cm*
-  become: yes
+  become: true
   become_user: root
 
   vars:
@@ -105,7 +105,7 @@
 
     - name: Push shcluster bundle
       shell: "{{ splunk_home }}/bin/splunk apply cluster-bundle  -auth admin:{{ splunk_admin_password }}"
-      become: yes
+      become: true
       become_user: "{{ splunk_user }}"
 
 
@@ -114,7 +114,7 @@
 
 - name: Install ITSI on license master
   hosts: ds*
-  become: yes
+  become: true
   become_user: root
 
   vars:
@@ -139,14 +139,14 @@
       service:
         name: "{{splunk_service_name}}"
         state: restarted
-      become: yes
+      become: true
       become_user: root
 
 ################### ITSI Search Head Tasks #####################
 
 - name: Install ITSI
   hosts: itsi*
-  become: yes
+  become: true
   become_user: root
 
   vars:
@@ -158,19 +158,19 @@
   tasks:
 #    - name: upload and unarchive ITSI
 #      unarchive: src="../../app_repo/splunk-it-service-intelligence_420.spl" dest="{{ splunk_home }}/etc/apps" owner={{ splunk_user }} group={{ splunk_group }} creates=yes
-#      become: yes
+#      become: true
 #      become_user: "{{ splunk_user }}"
 
     - name: Upload and unarchive ITSI Demo
       unarchive: src="../../app_repo/itsidemo-v4.2.tgz" dest="/var/tmp" owner={{ splunk_user }} group={{ splunk_group }} creates=yes
-      become: yes
+      become: true
       become_user: "{{ splunk_user }}"
 
     - name: Stop splunk
       service:
         name: "{{splunk_service_name}}"
         state: stopped
-      become: yes
+      become: true
       become_user: root
 
     - name: Disable systemd control
@@ -184,7 +184,7 @@
 
     - name: Install ITSI Demo
       shell: "cd /var/tmp/demo-itsi; {{ splunk_home }}/bin/splunk cmd python configureITSIdemo.py --user admin --passwd fiducialab"
-      become: yes
+      become: true
       become_user: "{{ splunk_user }}"
 
     - name: Create local directories
@@ -210,7 +210,7 @@
 
     - name: Stop splunk
       shell: "{{ splunk_home }}/bin/splunk stop"
-      become: yes
+      become: true
       become_user: "{{ splunk_user }}"
 
     - name: Enable systemd control
@@ -226,5 +226,5 @@
       service:
         name: "{{splunk_service_name}}"
         state: started
-      become: yes
+      become: true
       become_user: root

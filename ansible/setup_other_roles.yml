@@ -3,7 +3,7 @@
 
 - name: Setup ldap server role
   hosts: role_ldap_server
-  become: yes
+  become: true
   become_user: root
   roles:
     - ldap_server

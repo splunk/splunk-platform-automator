@@ -11,7 +11,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0755
-  become: yes
+  become: true
   become_user: root
 
 - name: Backup splunk etc directory {{ splunk_home }}/etc
@@ -23,5 +23,5 @@
     path: "{{ splunk_home }}/etc"
     dest: "{{ splunk_backup_dir }}/{{ splunk_install_app }}_etc_v{{ splunk_installed_version }}_{{ansible_date_time.date|replace('-','')}}_{{ansible_date_time.time|replace(':','')}}.tgz"
     format: gz
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"

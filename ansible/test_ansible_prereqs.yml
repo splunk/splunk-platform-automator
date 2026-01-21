@@ -30,14 +30,14 @@
       file:
         path: /tmp/root.conf
         state: touch
-      become: yes
+      become: true
       become_user: root
 
     - name: "remove file for technical user root"
       file:
         path: /tmp/root.conf
         state: absent
-      become: yes
+      become: true
       become_user: root
 
     - name: Determine available groups
@@ -54,7 +54,7 @@
         state: touch
         owner: '{{splunk_user}}'
         group: '{{splunk_group}}'
-      become: yes
+      become: true
       become_user: "{{splunk_user}}"
       when:
         - splunk_group in ansible_facts.getent_group
@@ -64,7 +64,7 @@
       file:
         path: /tmp/splunk.conf
         state: absent
-      become: yes
+      become: true
       become_user: "{{splunk_user}}"
       when:
         - splunk_group in ansible_facts.getent_group

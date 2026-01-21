@@ -67,7 +67,7 @@
     - splunk_install
     - splunk_password
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk hash-passwd '{{splunk_admin_password}}'"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   register: admin_hash_pw
   when: splunk_installed_version is version_compare('7.1', '>=') and splunk_install_app == "splunk"
@@ -167,7 +167,7 @@
     - splunk_install
     - splunk_password
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk edit user admin -password '{{splunk_admin_password}}' -auth admin:changeme"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   when: splunk_installed_version is version_compare('7.1', '<') and splunk_install_app == "splunk"
 

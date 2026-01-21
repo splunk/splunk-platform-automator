@@ -4,7 +4,7 @@
 - name: Run splunk_app role
 #  hosts: role_cluster_master,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_master,role_monitoring_console,role_search_head,role_universal_forwarder
   hosts: role_indexer,role_search_head,role_universal_forwarder
-  become: yes
+  become: true
   become_user: root
 
   tasks:

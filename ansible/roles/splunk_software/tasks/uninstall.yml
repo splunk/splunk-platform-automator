@@ -68,7 +68,7 @@
     - splunk_software
     - splunk_uninstall
   ansible.builtin.shell: "pkill -9 -u splunk"
-  # become: yes
+  # become: true
   # become_user: "{{ splunk_user }}"
   when: grep_result.rc == 0
 
@@ -143,7 +143,7 @@
     path: "{{item.path}}"
     state: absent
   loop: "{{ files_to_delete.files }}"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
 
 # Do not remove this directory, since a mounted filesystem could be inside

@@ -32,7 +32,7 @@
   check_mode: no
   changed_when: false
   register: volume_fs_avail
-  become: yes
+  become: true
   become_user: "{{splunk_user}}"
   loop: "{{ splunk_indexer_volumes_local | dict2items }}"
   vars:

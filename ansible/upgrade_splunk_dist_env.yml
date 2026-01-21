@@ -14,7 +14,7 @@
 
 - name: Upgrade cluster master
   hosts: role_cluster_master
-  become: yes
+  become: true
   become_user: root
 
   tasks:
@@ -29,7 +29,7 @@
 
 - name: Upgrade search head cluster (one by one)
   hosts: role_search_head
-  become: yes
+  become: true
   become_user: root
   serial: 1
 

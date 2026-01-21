@@ -17,7 +17,7 @@
     - shsettings
     - comment_macro
   ansible.builtin.shell: 'grep "\[macros\/comment(1)\]" {{ splunk_home }}/etc/apps/search/metadata/local.meta'
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   register: grep_result
   check_mode: no

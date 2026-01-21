@@ -27,7 +27,7 @@
     - search_head
     - shcluster
   ansible.builtin.shell: "{{ splunk_home }}/bin/splunk btool server list shclustering | egrep -e '^disabled = true$'"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   register: need_shcluster_init
   check_mode: no
@@ -40,7 +40,7 @@
     - search_head
     - shcluster
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk init shcluster-config -shcluster_label {{ splunk_shc_label }} -mgmt_uri https://{{ inventory_hostname }}:8089 -replication_port {{splunk_shc_replication_port}} -secret '{{splunk_shc_pass}}' -conf_deploy_fetch_url https://{{splunk_shc_deployer}}:8089 -auth admin:{{splunk_admin_password}}"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   when: need_shcluster_init.rc == 0
 
@@ -81,7 +81,7 @@
     - search_head
     - shcluster
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   register: shcluster_status
   check_mode: no
@@ -95,7 +95,7 @@
     - shcluster
     - shc_bootstrap
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk bootstrap shcluster-captain -auth admin:{{ splunk_admin_password }}"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   when: inventory_hostname == splunk_shc_host_list|first and shcluster_status.changed == true
 
@@ -105,7 +105,7 @@
     - search_head
     - shcluster
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   check_mode: no
   register: shcluster_ready
@@ -122,7 +122,7 @@
     - shcluster
     - shc_add_member
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk add shcluster-member -current_member_uri https://{{splunk_shc_host_list|first}}:8089 -auth admin:{{ splunk_admin_password }}"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
 
@@ -133,7 +133,7 @@
     - shcluster
     - shc_add_member
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk show servername -auth admin:{{ splunk_admin_password }}"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   check_mode: no
   changed_when: false
@@ -146,7 +146,7 @@
     - search_head
     - shcluster
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   check_mode: no
   register: shcluster_join
@@ -163,7 +163,7 @@
   ansible.builtin.stat:
     path: "{{ splunk_home }}/var/run/splunk/deploy/apps"
     follow: yes
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   delegate_to: "{{ splunk_shc_deployer }}"
   register: deploy_apps_stat

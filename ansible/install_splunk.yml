@@ -3,7 +3,7 @@
 
 - name: Install the splunk enterprise software
   hosts: role_cluster_manager,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_manager,role_monitoring_console,role_search_head
-  become: yes
+  become: true
   become_user: root
   roles:
     - role: splunk_software
@@ -12,7 +12,7 @@
 
 - name: Install the splunk universal forwarder software
   hosts: role_universal_forwarder
-  become: yes
+  become: true
   become_user: root
   roles:
     - role: splunk_software

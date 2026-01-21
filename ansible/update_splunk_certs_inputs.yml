@@ -5,7 +5,7 @@
   hosts: role_indexer
   roles:
     - splunk_common
-  become: yes
+  become: true
   become_user: root
 
   tasks:

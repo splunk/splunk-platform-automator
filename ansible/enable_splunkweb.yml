@@ -2,7 +2,7 @@
 
 - name: Enable splunkweb
   hosts: all,!role_universal_forwarder,!role_universal_forwarder_windows
-  become: yes
+  become: true
   become_user: root
 
   tasks:

@@ -11,7 +11,7 @@
     option: "{{ item.key }}"
     value: "{{ item.value }}"
     mode: 0600
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   notify: Restart splunk
   loop: "{{ splunk_conf_settings_list }}"

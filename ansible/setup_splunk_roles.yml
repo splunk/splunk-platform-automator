@@ -3,35 +3,35 @@
 
 - name: Setup deployment server role
   hosts: role_deployment_server
-  become: yes
+  become: true
   become_user: root
   roles:
     - deployment_server
 
 - name: Setup license manager role
   hosts: role_license_manager
-  become: yes
+  become: true
   become_user: root
   roles:
     - license_manager
 
 - name: Setup cluster manager role
   hosts: role_cluster_manager
-  become: yes
+  become: true
   become_user: root
   roles:
     - cluster_manager
 
 - name: Setup indexer role
   hosts: role_indexer
-  become: yes
+  become: true
   become_user: root
   roles:
     - indexer
 
 - name: Setup deployer role
   hosts: role_deployer
-  become: yes
+  become: true
   become_user: root
   roles:
     - deployer
@@ -39,28 +39,28 @@
 - name: Setup search head role
   hosts: role_search_head
   serial: 1
-  become: yes
+  become: true
   become_user: root
   roles:
     - search_head
 
 - name: Setup monitoring console role
   hosts: role_monitoring_console
-  become: yes
+  become: true
   become_user: root
   roles:
     - monitoring_console
 
 - name: Setup heavy forwarder role
   hosts: role_heavy_forwarder
-  become: yes
+  become: true
   become_user: root
   roles:
     - heavy_forwarder
 
 - name: Setup universal forwarder role
   hosts: role_universal_forwarder
-  become: yes
+  become: true
   become_user: root
   roles:
     - universal_forwarder

@@ -26,6 +26,6 @@
     - dserver
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk add search-server {{ dserver_name }}:8089 -remoteUsername admin -remotePassword {{splunk_admin_password}} -auth admin:{{splunk_admin_password}}"
   delegate_to: '{{splunk_monitoring_console|first}}'
-  become: yes
+  become: true
   become_user: "{{ splunk_user }}"
   when: dserver_check.state is defined and dserver_check.state == 'started'

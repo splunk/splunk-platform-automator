@@ -5,7 +5,7 @@
   hosts: all,!role_indexer,!role_universal_forwarder,!role_universal_forwarder_windows
   roles:
     - splunk_common
-  become: yes
+  become: true
   become_user: root
 
   tasks:
