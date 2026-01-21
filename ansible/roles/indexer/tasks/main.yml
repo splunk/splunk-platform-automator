@@ -48,8 +48,18 @@
     tasks_from: splunk_ssl_inputs_certs
   when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
 
-- ansible.builtin.include_tasks: idxcluster.yml
+- name: Call idxcluster from role indexer
+  tags:
+    - splunk
+    - indexer
+    - idxcluster
+  ansible.builtin.include_tasks: idxcluster.yml
   when: idxc_name is defined
 
-- ansible.builtin.include_tasks: idxsingle.yml
+- name: Call idxsingle from role indexer
+  tags:
+    - splunk
+    - indexer
+    - idxsingle
+  ansible.builtin.include_tasks: idxsingle.yml
   when: idxc_name is not defined
