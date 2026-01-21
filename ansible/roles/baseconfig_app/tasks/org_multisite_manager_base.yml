@@ -14,7 +14,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: "({{ app_name }}) setting cluster manager site"
   tags:
@@ -29,7 +29,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: "({{ app_name }}) setting available sites"
   tags:
@@ -44,7 +44,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: "({{ app_name }}) setting site_replication_factor"
   tags:
@@ -59,7 +59,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: "({{ app_name }}) setting replication factor"
   tags:
@@ -74,7 +74,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: idxc_rf is defined
 
 - name: "({{ app_name }}) setting search factor"
@@ -90,7 +90,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: idxc_sf is defined
 
 - name: Getting for replication_factor
@@ -144,7 +144,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: site_replication_factor|int < replication_factor.stdout|int
 
 - name: Check for search_factor > site_search_factor
@@ -175,7 +175,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: site_search_factor|int < search_factor.stdout|int
 
 - name: "({{ app_name }}) setting site_search_factor"
@@ -191,7 +191,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: "({{ app_name }}) setting cluster label"
   tags:
@@ -206,7 +206,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: "({{ app_name }}) setting unhashed clustering pass4SymmKey"
   tags:
@@ -221,7 +221,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: app_local.stat.exists == false
 
 - name: "({{ app_name }}) setting unhashed indexer discovery pass4SymmKey"
@@ -237,7 +237,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: app_local.stat.exists == false and idxc_discovery_password is defined
 
 - name: "({{ app_name }}) setting summary_replication = true"
@@ -253,5 +253,5 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: splunk_installed_version is version_compare('6.4.0', '>=') and splunk_volume_defaults.remotePath is not defined

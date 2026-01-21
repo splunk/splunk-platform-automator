@@ -14,7 +14,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: splunk_set_servername|default(false) == true
 
 - name: Set default-hostname to {{inventory_hostname}}
@@ -30,5 +30,5 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: splunk_set_default_hostname|default(false) == true

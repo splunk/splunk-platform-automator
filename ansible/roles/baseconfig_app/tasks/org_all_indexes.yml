@@ -63,7 +63,7 @@
     path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
     regexp: '^(homePath\s*=\s*)volume:\w*'
     replace: '\1volume:{{splunk_volume_defaults.homePath|default("primary")}}'
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: "({{ app_name }}) configure volume for coldPath"
   tags:
@@ -74,4 +74,4 @@
     path: "{{ app_path }}/{{ app_dest_name }}/local/indexes.conf"
     regexp: '^(coldPath\s*=\s*)volume:\w*'
     replace: '\1volume:{{splunk_volume_defaults.coldPath|default("primary")}}'
-  notify: restart splunk
+  notify: Restart splunk

@@ -70,7 +70,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
+  notify: Restart splunk
   when:
     - splunk_install_app == "splunk"
     - splunk_loginpage_print_userpw|default(true) == true or splunk_loginpage_print_roles|default(true) == true or splunk_loginpage_print_hostname|default(true) == true

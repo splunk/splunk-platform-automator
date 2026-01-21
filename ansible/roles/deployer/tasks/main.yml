@@ -32,7 +32,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: "grep_result.rc == 1"
 
 - name: "setting shclustering label"
@@ -47,7 +47,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: Apply baseconfig app org_all_deploymentclient
   tags:

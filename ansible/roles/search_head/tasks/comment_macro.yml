@@ -46,5 +46,5 @@
     - { var: 'version', value: '{{ splunk_installed_version }}' }
     - { var: 'modtime', value: '{{ ansible_date_time.epoch + ".000000000"}}' }
 # don't restart because it dusturbes the SHC configuration
-#  notify: restart splunk
+#  notify: Restart splunk
   when: localmeta_result.stat.exists == false or grep_result.rc == 1

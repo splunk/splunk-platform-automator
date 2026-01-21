@@ -37,7 +37,7 @@
     group: "{{splunk_group}}"
     mode: 0644
   loop: "{{splunk_indexer_volumes_local}}"
-  notify: restart splunk
+  notify: Restart splunk
   when: splunk_indexer_volumes_local|length > 0
 
 - name: "({{ app_name }}) setting volume:primary"
@@ -53,7 +53,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
+  notify: Restart splunk
   when: splunk_indexer_volumes_local|length < 1 or splunk_volume_defaults.homePath is not defined
 
 - name: "({{ app_name }}) remove volume:secondary"
@@ -69,4 +69,4 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
+  notify: Restart splunk

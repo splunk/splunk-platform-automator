@@ -16,7 +16,7 @@
   retries: 15
   delay: 10
   delegate_to: "{{splunk_shc_host_list|first}}"
-  notify: push shcluster bundle
+  notify: Push shcluster bundle
 
 - name: Push shcluster bundle
   tags:

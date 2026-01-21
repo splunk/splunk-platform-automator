@@ -24,7 +24,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: "({{ app_name }}) remove comments"
   tags:
@@ -40,7 +40,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: "({{ app_name }}) set indexer volume variables for remote volumes"
   tags:
@@ -69,5 +69,5 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: splunk_volume_defaults.remotePath is defined

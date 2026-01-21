@@ -47,7 +47,7 @@
     value: "hf_host::{{inventory_hostname}}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: Install certs for web ssl
   tags:

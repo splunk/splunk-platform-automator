@@ -15,7 +15,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   loop: "{{ splunk_ssl.outputs.config }} | dict2items"
   when: splunk_ssl.outputs.enable == true
 
@@ -33,7 +33,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   loop:
     - { varkey: "sslRootCAPath", varvalue: "{{ splunk_ssl.outputs.config.sslRootCAPath|default('cacert.pem') }}" }
     - { varkey: "sslCertPath", varvalue: "{{ splunk_ssl.outputs.config.sslCertPath|default('client.pem') }}" }

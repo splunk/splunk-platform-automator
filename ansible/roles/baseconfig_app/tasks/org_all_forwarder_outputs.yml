@@ -23,7 +23,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
+  notify: Restart splunk
   when: splunk_outputs_idxc_list|length > 0 or splunk_outputs_idx_list|length > 0
 
 - name: "({{ app_name }}) rename tcpout:primary_indexers if clustered indexers"
@@ -38,7 +38,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
+  notify: Restart splunk
   when: splunk_outputs_idxc_list|length > 0
 
 - name: Set input port
@@ -83,7 +83,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
+  notify: Restart splunk
   loop: "{{ splunk_outputs_idxc_list }} | dict2items"
   when: splunk_outputs_idxc_list|length > 0
 
@@ -100,7 +100,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
+  notify: Restart splunk
   loop: "{{ splunk_outputs_discovery_idxc_list }}"
   when: splunk_outputs_discovery_idxc_list|length > 0
 
@@ -117,7 +117,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
+  notify: Restart splunk
   loop: "{{ splunk_outputs_discovery_idxc_list }}"
   when: splunk_outputs_discovery_idxc_list|length > 0
 
@@ -134,7 +134,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
+  notify: Restart splunk
   loop: "{{ splunk_outputs_discovery_idxc_list }}"
   when: splunk_outputs_discovery_idxc_list|length > 0
 
@@ -164,7 +164,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
+  notify: Restart splunk
   when: splunk_outputs_idxc_list|length == 0 and splunk_outputs_idx_list|length > 0
 
 - name: "({{ app_name }}) setting server in tcpout stanza for non clustered indexers"
@@ -180,7 +180,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: restart splunk
+  notify: Restart splunk
   when: splunk_outputs_idx_list|length > 0
 
 - name: "({{ app_name }}) setting other ssl configs in tcpout stanza for non clustered indexers"
@@ -197,7 +197,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   loop: "{{ splunk_ssl.outputs.config }} | dict2items"
   when:
     - splunk_outputs_idx_list|length > 0
@@ -217,7 +217,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   loop:
     - { varkey: "sslRootCAPath", varvalue: "{{ splunk_ssl.outputs.config.sslRootCAPath|default('cacert.pem') }}" }
     - { varkey: "sslCertPath", varvalue: "{{ splunk_ssl.outputs.config.sslCertPath|default('client.pem') }}" }

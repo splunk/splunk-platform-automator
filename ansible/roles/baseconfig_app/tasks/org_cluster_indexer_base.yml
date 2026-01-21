@@ -23,7 +23,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: "({{ app_name }}) setting clustering manager_uri"
   tags:
@@ -38,7 +38,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: "({{ app_name }}) setting unhashed pass4SymmKey"
   tags:
@@ -53,7 +53,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: app_local.stat.exists == false
 
 - name: "({{ app_name }}) setting replication port"
@@ -68,7 +68,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: "({{ app_name }}) disable none-ssl in inputs.conf"
   tags:
@@ -84,7 +84,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: splunk_ssl.inputs.enable == true
 
 - name: "({{ app_name }}) enable ssl in inputs.conf"
@@ -101,7 +101,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: splunk_ssl.inputs.enable == true
 
 - name: "({{ app_name }}) setting ssl configs in inputs.conf"
@@ -118,7 +118,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   loop: "{{ splunk_ssl.inputs.config }} | dict2items"
   when: splunk_ssl.inputs.enable == true
 

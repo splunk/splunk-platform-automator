@@ -29,7 +29,7 @@
   vars:
     app_name: 'org_all_deploymentclient'
     app_path: '{{splunk_home}}/etc/apps'
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: "(org_all_deploymentclient) setting deployment server"
   tags:
@@ -44,4 +44,4 @@
   vars:
     app_name: 'org_all_deploymentclient'
     app_path: '{{splunk_home}}/etc/apps'
-  notify: restart splunk
+  notify: Restart splunk

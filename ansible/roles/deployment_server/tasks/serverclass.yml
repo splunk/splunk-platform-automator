@@ -29,7 +29,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: reload deploy-server
+  notify: Reload deploy-server
 
 - name: Blacklist org_all_forwarder_outputs server class clients
   tags:
@@ -47,7 +47,7 @@
     group: "{{splunk_group}}"
     mode: 0644
   loop: "{{splunk_idx_dsclients}}"
-  notify: reload deploy-server
+  notify: Reload deploy-server
   when: splunk_idx_dsclients|default()|length > 0
 
 - name: Define org_all_forwarder_outputs server class apps
@@ -69,7 +69,7 @@
     - { var: 'restartSplunkWeb', value: '0' }
     - { var: 'restartSplunkd', value: '1' }
     - { var: 'stateOnClient', value: 'enabled' }
-  notify: reload deploy-server
+  notify: Reload deploy-server
 
 - name: Define org_all_deploymentclient server class clients
   tags:
@@ -86,7 +86,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0644
-  notify: reload deploy-server
+  notify: Reload deploy-server
 
 - name: Define org_all_deploymentclient server class apps
   tags:
@@ -107,7 +107,7 @@
     - { var: 'restartSplunkWeb', value: '0' }
     - { var: 'restartSplunkd', value: '1' }
     - { var: 'stateOnClient', value: 'enabled' }
-  notify: reload deploy-server
+  notify: Reload deploy-server
 
 - name: Define org_full_license_server server class clients
   tags:
@@ -125,7 +125,7 @@
     group: "{{splunk_group}}"
     mode: 0644
   loop: "{{splunk_license_dsclients}}"
-  notify: reload deploy-server
+  notify: Reload deploy-server
   when: splunk_license_manager|default()|length > 0
 
 - name: Define org_full_license_server server class apps
@@ -147,7 +147,7 @@
     - { var: 'restartSplunkWeb', value: '0' }
     - { var: 'restartSplunkd', value: '1' }
     - { var: 'stateOnClient', value: 'enabled' }
-  notify: reload deploy-server
+  notify: Reload deploy-server
   when: splunk_license_manager|default()|length > 0
 
 - name: Define org_all_indexer_base server class clients
@@ -166,7 +166,7 @@
     group: "{{splunk_group}}"
     mode: 0644
   loop: "{{splunk_idx_hf_dsclients}}"
-  notify: reload deploy-server
+  notify: Reload deploy-server
   when: splunk_idx_hf_dsclients|default()|length > 0
 
 - name: Define org_all_indexer_base server class apps
@@ -188,7 +188,7 @@
     - { var: 'restartSplunkWeb', value: '0' }
     - { var: 'restartSplunkd', value: '1' }
     - { var: 'stateOnClient', value: 'enabled' }
-  notify: reload deploy-server
+  notify: Reload deploy-server
   when: splunk_idx_hf_dsclients|default()|length > 0
 
 - name: Define org_indexer_volume_indexes server class clients
@@ -207,7 +207,7 @@
     group: "{{splunk_group}}"
     mode: 0644
   loop: "{{splunk_idx_dsclients}}"
-  notify: reload deploy-server
+  notify: Reload deploy-server
   when: splunk_idx_dsclients|default()|length > 0
 
 - name: Define org_indexer_volume_indexes server class apps
@@ -229,7 +229,7 @@
     - { var: 'restartSplunkWeb', value: '0' }
     - { var: 'restartSplunkd', value: '1' }
     - { var: 'stateOnClient', value: 'enabled' }
-  notify: reload deploy-server
+  notify: Reload deploy-server
   when: splunk_idx_dsclients|default()|length > 0
 
 - name: Define org_all_indexes server class clients
@@ -248,7 +248,7 @@
     group: "{{splunk_group}}"
     mode: 0644
   loop: "{{splunk_idx_hf_sh_dsclients}}"
-  notify: reload deploy-server
+  notify: Reload deploy-server
   when: splunk_idx_hf_sh_dsclients|default()|length > 0
 
 - name: Define org_all_indexes server class apps
@@ -270,7 +270,7 @@
     - { var: 'restartSplunkWeb', value: '0' }
     - { var: 'restartSplunkd', value: '1' }
     - { var: 'stateOnClient', value: 'enabled' }
-  notify: reload deploy-server
+  notify: Reload deploy-server
   when: splunk_idx_hf_sh_dsclients|default()|length > 0
 
 - name: Define org_cluster_search_base server class clients
@@ -289,7 +289,7 @@
     group: "{{splunk_group}}"
     mode: 0644
   loop: "{{splunk_sh_dsclients}}"
-  notify: reload deploy-server
+  notify: Reload deploy-server
   when: splunk_sh_dsclients|default()|length > 0
 
 - name: Define org_cluster_search_base server class apps
@@ -311,7 +311,7 @@
     - { var: 'restartSplunkWeb', value: '0' }
     - { var: 'restartSplunkd', value: '1' }
     - { var: 'stateOnClient', value: 'enabled' }
-  notify: reload deploy-server
+  notify: Reload deploy-server
   when: splunk_sh_dsclients|default()|length > 0
 
 - name: Define org_search_volume_indexes server class clients
@@ -330,7 +330,7 @@
     group: "{{splunk_group}}"
     mode: 0644
   loop: "{{splunk_sh_hf_dsclients}}"
-  notify: reload deploy-server
+  notify: Reload deploy-server
   when: splunk_sh_hf_dsclients|default()|length > 0
 
 - name: Define org_search_volume_indexes server class apps
@@ -352,7 +352,7 @@
     - { var: 'restartSplunkWeb', value: '0' }
     - { var: 'restartSplunkd', value: '1' }
     - { var: 'stateOnClient', value: 'enabled' }
-  notify: reload deploy-server
+  notify: Reload deploy-server
   when: splunk_sh_hf_dsclients|default()|length > 0
 
 - name: Define org_all_search_base server class clients
@@ -371,7 +371,7 @@
     group: "{{splunk_group}}"
     mode: 0644
   loop: "{{splunk_hf_sh_lm_cm_ds_dp_mc_dsclients}}"
-  notify: reload deploy-server
+  notify: Reload deploy-server
   when: splunk_hf_sh_lm_cm_ds_dp_mc_dsclients|default()|length > 0
 
 - name: Define org_all_search_base server class apps
@@ -393,5 +393,5 @@
     - { var: 'restartSplunkWeb', value: '0' }
     - { var: 'restartSplunkd', value: '1' }
     - { var: 'stateOnClient', value: 'enabled' }
-  notify: reload deploy-server
+  notify: Reload deploy-server
   when: splunk_hf_sh_lm_cm_ds_dp_mc_dsclients|default()|length > 0

@@ -17,4 +17,4 @@
   loop: "{{ volume_vars }} | dict2items"
   loop_control:
     loop_var: volume_var
-  notify: restart splunk
+  notify: Restart splunk

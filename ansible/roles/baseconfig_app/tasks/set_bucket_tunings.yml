@@ -15,7 +15,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: splunk_installed_version is version_compare('7.2', '>=')
 
 - name: "({{ app_name }}) set tsidxWritingLevel = 3 in indexes.conf"
@@ -37,5 +37,5 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: splunk_installed_version is version_compare('7.2', '>=')

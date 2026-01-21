@@ -23,7 +23,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: "({{ app_name }}) setting clustering manager_uri"
   tags:
@@ -38,7 +38,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: splunk_search_peer_idxc_list|length > 0
 
 - name: "({{ app_name }}) rename {{splunk_clustermanager_var}}:one"
@@ -53,7 +53,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: "({{ app_name }}) remove {{splunk_clustermanager_var}}:two cluster manager group"
   tags:
@@ -70,7 +70,7 @@
   loop:
     - clustermaster
     - clustermanager
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: "({{ app_name }}) setting pass4SymmKey for hashing on {{splunk_clustermanager_var}} stanza"
   tags:
@@ -85,7 +85,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   loop: "{{ splunk_search_peer_idxc_list }} | dict2items"
   when: app_local.stat.exists == false and app_path == splunk_home + '/etc/apps'
 
@@ -102,7 +102,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   loop: "{{ splunk_search_peer_idxc_list }} | dict2items"
   when: app_path != splunk_home + '/etc/apps'
 
@@ -119,7 +119,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   loop: "{{ splunk_search_peer_idxc_list }} | dict2items"
 
 - name: "({{ app_name }}) setting multisite on {{splunk_clustermanager_var}} stanza"
@@ -135,7 +135,7 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   loop: "{{ splunk_search_peer_idxc_list }} | dict2items"
 
 - name: "({{ app_name }}) setting site"
@@ -151,5 +151,5 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
     mode: 0600
-  notify: restart splunk
+  notify: Restart splunk
   when: splunk_shc_site is defined

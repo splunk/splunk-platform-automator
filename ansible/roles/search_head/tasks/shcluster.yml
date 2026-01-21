@@ -178,7 +178,7 @@
     - shcluster
   ansible.builtin.debug:
     msg: register shc bundle push
-  notify: wait for SHC service ready and call push bundle
+  notify: Wait for SHC service ready and call push bundle
   changed_when: deploy_apps_stat.stat.exists|default(false) == false
   when: 
     - deploy_apps_stat.stat.exists|default(false) == false

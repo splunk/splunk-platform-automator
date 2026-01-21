@@ -43,7 +43,7 @@
   become: yes
   become_user: "{{ splunk_user }}"
   when: grep_result.stdout is not search(lic_guid_src.matches[0].guid)
-  notify: restart splunk
+  notify: Restart splunk
 
 - name: Remove license file from tmp location
   tags:
