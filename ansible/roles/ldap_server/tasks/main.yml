@@ -1,4 +1,5 @@
 ---
 # Main playbook for this role
 
-- ansible.builtin.include_tasks: openldap.yml
+- name: Call openldap from role ldap_server
+  ansible.builtin.include_tasks: openldap.yml
