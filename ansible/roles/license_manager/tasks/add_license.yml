@@ -8,10 +8,10 @@
   xml:
     path: "{{ splunk_software }}/{{ splunk_license_file_name }}"
     xpath: /license/payload/guid
-    content: 'text'
+    content: "text"
   register: lic_guid_src
   delegate_to: localhost
-  become: no
+  become: false
 
 - name: "check for license guid {{ lic_guid_src.matches[0].guid }} in splunk"
   tags:

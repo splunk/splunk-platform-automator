@@ -37,7 +37,7 @@
     - splunk_secret
   ansible.builtin.stat:
     path: "{{ splunk_auth_dir }}/{{ splunk_install_app }}_splunk.secret"
-  become: no
+  become: false
   register: splunk_secret_file
   delegate_to: localhost
   when: splunk_secret_share[splunk_install_app] == true
@@ -113,7 +113,7 @@
     dest: "{{ splunk_auth_dir }}/{{ splunk_install_app }}_splunk.secret"
     rsync_path: "{{ become_method|default('sudo') }} -u {{splunk_user}} rsync"
     mode: pull
-  become: no
+  become: false
   when:
     - splunk_secret_share[splunk_install_app] == true
     - splunk_secret_file.stat.exists == false
@@ -127,7 +127,7 @@
     state: link
     src: "splunk_splunk.secret"
     dest: "{{ splunk_auth_dir }}/splunkforwarder_splunk.secret"
-  become: no
+  become: false
   delegate_to: localhost
   when:
     - splunk_secret_share.splunk == true

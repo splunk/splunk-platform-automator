@@ -1,5 +1,4 @@
 ---
-
 - name: Find splunk archive files
   tags:
     - splunk
@@ -11,7 +10,7 @@
     recurse: no
   register: splunk_archive_files
   delegate_to: localhost
-  become: no
+  become: false
 
 - name: Find latest splunk version
   tags:
@@ -50,7 +49,7 @@
     - splunk
     - splunk_software
   ansible.builtin.fail:
-    msg: "Cannot find splunk binary for version '{{ splunk_target_version }}' in directory {{splunk_software}}"
+    msg: "Cannot find splunk binary for version '{{ splunk_target_version }}' in directory {{ splunk_software }}"
   when: splunk_archive is not defined or splunk_archive|length == 0
 
 - name: List found splunk archive

@@ -17,7 +17,7 @@
     - "{{ ip_addr|default() }}"
   register: cert_keys
   delegate_to: localhost
-  become: no
+  become: false
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
 - name: Check pem filename to copy
@@ -36,7 +36,7 @@
     - "{{ ip_addr|default() }}"
   register: cert_pems
   delegate_to: localhost
-  become: no
+  become: false
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
 - name: Set cert file names
@@ -83,8 +83,8 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
   loop:
-    - '{{ splunk_ssl.web.config.privKeyPath|dirname }}'
-    - '{{ splunk_ssl.web.config.serverCert|dirname }}'
+    - "{{ splunk_ssl.web.config.privKeyPath|dirname }}"
+    - "{{ splunk_ssl.web.config.serverCert|dirname }}"
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
 - name: Copy certs file for web ssl
@@ -98,10 +98,16 @@
     dest: "{{ splunk_home }}/{{ item.dest }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: '0600'
+    mode: "0600"
   loop:
-    - { src: '{{ key_file }}', dest: '{{ splunk_ssl.web.config.privKeyPath|dirname }}' }
-    - { src: '{{ pem_file }}', dest: '{{ splunk_ssl.web.config.serverCert|dirname }}' }
+    - {
+        src: "{{ key_file }}",
+        dest: "{{ splunk_ssl.web.config.privKeyPath|dirname }}",
+      }
+    - {
+        src: "{{ pem_file }}",
+        dest: "{{ splunk_ssl.web.config.serverCert|dirname }}",
+      }
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
 
 - name: Link certs file for web ssl
@@ -117,6 +123,6 @@
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
   loop:
-    - { src: '{{ key_file }}', dest: '{{ splunk_ssl.web.config.privKeyPath }}' }
-    - { src: '{{ pem_file }}', dest: '{{ splunk_ssl.web.config.serverCert }}' }
+    - { src: "{{ key_file }}", dest: "{{ splunk_ssl.web.config.privKeyPath }}" }
+    - { src: "{{ pem_file }}", dest: "{{ splunk_ssl.web.config.serverCert }}" }
   when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true

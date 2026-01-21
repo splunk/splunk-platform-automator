@@ -10,7 +10,7 @@
   ansible.builtin.file:
     path: "../{{splunk_save_baseconfig_apps_dir|default('apps')}}/{{inventory_hostname}}/{{ app_path }}/{{ app_dest_name }}"
     state: directory
-  become: no
+  become: false
   delegate_to: localhost
 
 - name: Save app content to ansible host
@@ -24,4 +24,4 @@
     dest: "../{{splunk_save_baseconfig_apps_dir|default('apps')}}/{{inventory_hostname}}/{{ app_path }}/"
     rsync_path: "sudo -u {{splunk_user}} rsync"
     mode: pull
-  become: no
+  become: false

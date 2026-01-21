@@ -12,7 +12,7 @@
     - "{{ splunk_ssl.outputs.config.sslRootCAPath|basename|default('cacert.pem') }}"
   register: cacert_pems
   delegate_to: localhost
-  become: no
+  become: false
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true
 
 - name: Check sslCertPath filename to copy
@@ -26,7 +26,7 @@
     - "{{ splunk_ssl.outputs.config.sslCertPath|basename|default('client.pem') }}"
   register: client_pems
   delegate_to: localhost
-  become: no
+  become: false
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true
 
 - name: Set cert file names
@@ -82,8 +82,14 @@
     dest: "{{ item.dest }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: '0600'
+    mode: "0600"
   loop:
-    - { src: '{{ cacert_pem }}', dest: "{{ app_path }}/{{ app_dest_name }}/default" }
-    - { src: '{{ client_pem }}', dest: "{{ app_path }}/{{ app_dest_name }}/default" }
+    - {
+        src: "{{ cacert_pem }}",
+        dest: "{{ app_path }}/{{ app_dest_name }}/default",
+      }
+    - {
+        src: "{{ client_pem }}",
+        dest: "{{ app_path }}/{{ app_dest_name }}/default",
+      }
   when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true

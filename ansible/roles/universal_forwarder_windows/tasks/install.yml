@@ -12,7 +12,7 @@
     recurse: no
   register: splunk_archive_files
   delegate_to: localhost
-  become: no
+  become: false
 
 - name: Find latest splunk version
   tags:

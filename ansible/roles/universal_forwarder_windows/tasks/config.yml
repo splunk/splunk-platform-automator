@@ -7,7 +7,7 @@
     - splunk_baseconfig
     - universal_forwarder_windows
     - org_all_deploymentclient
-  become: no
+  become: false
   ansible.builtin.find:
     path: "{{ splunk_baseconfig }}/"
     pattern: "org_all_deploymentclient"
@@ -27,8 +27,8 @@
     src: "{{ baseapp_dir.files.0.path }}/"
     dest: "{{ app_path }}/{{ app_dest_name }}"
   vars:
-    app_name: 'org_all_deploymentclient'
-    app_path: '{{splunk_home}}/etc/apps'
+    app_name: "org_all_deploymentclient"
+    app_path: "{{splunk_home}}/etc/apps"
   notify: Restart splunk
 
 - name: "(org_all_deploymentclient) setting deployment server"
@@ -39,9 +39,9 @@
     - org_all_deploymentclient
   win_lineinfile:
     path: "{{ app_path }}/{{ app_dest_name }}/local/deploymentclient.conf"
-    regexp: '^targetUri ='
-    line: 'targetUri = {{splunk_deployment_server|first}}:8089'
+    regexp: "^targetUri ="
+    line: "targetUri = {{splunk_deployment_server|first}}:8089"
   vars:
-    app_name: 'org_all_deploymentclient'
-    app_path: '{{splunk_home}}/etc/apps'
+    app_name: "org_all_deploymentclient"
+    app_path: "{{splunk_home}}/etc/apps"
   notify: Restart splunk

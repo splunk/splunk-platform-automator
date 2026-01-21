@@ -12,7 +12,7 @@
   ansible.builtin.file:
     path: "../{{splunk_save_baseconfig_apps_dir|default('apps')}}/{{inventory_hostname}}/{{ splunk_install_dir }}/splunk/etc/system/local/"
     state: directory
-  become: no
+  become: false
   delegate_to: localhost
 
 - name: Save serverclass file to ansible host
@@ -28,4 +28,4 @@
     dest: "../{{splunk_save_baseconfig_apps_dir|default('apps')}}/{{splunk_deployment_server|first}}/{{ splunk_install_dir }}/splunk/etc/system/local/"
     rsync_path: "{{ become_method|default('sudo') }} -u {{splunk_user}} rsync"
     mode: pull
-  become: no
+  become: false

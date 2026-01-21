@@ -3,14 +3,13 @@
 
 - name: Test user switching and file creation in /tmp
   hosts: all
-  become: no
+  become: false
 
   vars:
     splunk_user: splunk
     splunk_group: splunk
 
   tasks:
-
     - name: Call check_ansible_requirements role common
       include_role:
         name: common
@@ -52,8 +51,8 @@
       file:
         path: /tmp/splunk.conf
         state: touch
-        owner: '{{splunk_user}}'
-        group: '{{splunk_group}}'
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
       become: true
       become_user: "{{splunk_user}}"
       when:
