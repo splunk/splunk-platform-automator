@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+<% splunk_environments.each do |splunkenv| %>
+  <% @env_name = splunkenv['splunk_env_name'] %>
+tmux new-session -s <%= @env_name %> -n "Shell" -d
+  <% @window = 1 %>
+  <% @pane = 0 %>
+  <% groups["splunk_env_"+splunkenv['splunk_env_name']].each do |hostname| %>
+    <% @host = settings['splunk_hosts'].find {|i| i["name"] == hostname } %>
+    <%# if groups['role_cluster_master'] and !groups['role_cluster_master'].include? hostname and !host_vars[hostname]['idxcluster'].nil? %>
+tmux new-window -n "<%= @host['name']%>" -t <%= @env_name %>
+tmux send-keys -t <%= @env_name %>:<%= @window %>.<%= @pane %> 'vssh <%= @host['name']%>' C-m
+tmux send-keys -t <%= @env_name %>:<%= @window %>.<%= @pane %> 'clear' C-m
+tmux send-keys -t <%= @env_name %>:<%= @window %>.<%= @pane %> 's' C-m
+    <%# end %>
+    <% if groups['role_cluster_master'] and groups['role_cluster_master'].include? hostname %>
+tmux new-window -n "IDX Cluster" -t <%= @env_name %>
+          <% @window += 1 %>
+          <% if groups['role_indexer'] %>
+            <% groups['role_indexer'].each do |indexer| %>
+            <% if groups["splunk_env_"+splunkenv['splunk_env_name']].include? indexer %>
+              <% if @pane > 0 %>
+tmux split-window -h -t <%= @env_name %>:<%= @window %>.<%= @pane-1 %>
+              <% end %>
+tmux send-keys -t <%= @env_name %>:<%= @window %>.<%= @pane %> 'vssh <%= indexer %>' C-m
+              <% @pane += 1 %>
+            <% end %>
+            <% end %>
+          <% end %>
+          <% @pane = 0 %>
+tmux select-layout -t <%= @env_name %>:<%= @window %> tiled
+tmux select-window -t <%= @env_name %>:<%= @window %>
+tmux select-pane -t <%= @env_name %>:<%= @window %>.<%= @pane %>
+tmux set-window-option synchronize-panes on
+tmux send-keys -t <%= @env_name %>:<%= @window %>.<%= @pane %> 'clear' C-m
+tmux send-keys -t <%= @env_name %>:<%= @window %>.<%= @pane %> 's' C-m
+    <% end %>
+
+    <% if groups['role_deployer'] and groups['role_deployer'].include? hostname %>
+tmux new-window -n "SH Cluster" -t <%= @env_name %>
+            <% @window += 1 %>
+            <% if groups['role_search_head'] %>
+              <% groups['role_search_head'].each do |search_head| %>
+                <% if @pane > 0 %>
+tmux split-window -h -t <%= @env_name %>:<%= @window %>.<%= @pane-1 %>
+                <% end %>
+tmux send-keys -t <%= @env_name %>:<%= @window %>.<%= @pane %> 'vssh <%= search_head %>' C-m
+                <% @pane += 1 %>
+              <% end %>
+            <% end %>
+            <% @pane = 0 %>
+tmux select-layout -t <%= @env_name %>:<%= @window %> tiled
+tmux select-window -t <%= @env_name %>:<%= @window %>
+tmux select-pane -t <%= @env_name %>:<%= @window %>.<%= @pane %>
+tmux set-window-option synchronize-panes on
+tmux send-keys -t <%= @env_name %>:<%= @window %>.<%= @pane %> 'clear' C-m
+tmux send-keys -t <%= @env_name %>:<%= @window %>.<%= @pane %> 's' C-m
+    <% end %>
+    <% @window += 1 %>
+  <% end %>
+tmux select-window -t <%= @env_name %>:0
+tmux select-pane -t <%= @env_name %>:0.0
+<% end %>
+
+tmux attach-session

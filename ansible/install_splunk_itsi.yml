@@ -1,0 +1,230 @@
+---
+# This playbook installs splunk apps
+
+################### Cluster Master Tasks #####################
+- name: install ITSI on cluster master
+  hosts: cm*
+  become: yes
+  become_user: root
+
+  vars:
+    splunk_user: splunk
+    splunk_group: splunk
+    splunk_home: /opt/splunk
+    splunk_admin_password: fiducialab
+    itsi_pkgs:
+      - SA-IndexCreation
+      - Splunk_TA_Infrastructure
+
+  tasks:
+    - name: install ITSI apps on CM
+      copy:
+        src: "../../app_repo/itsi_4.2.0/{{ item }}"
+        dest: "{{ splunk_home }}/etc/master-apps/"
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+      with_items: "{{itsi_pkgs}}"
+
+    - name: install ITSI demo apps on CM
+      copy:
+        src: "../../app_repo/demo-itsi/splunk/etc/apps/{{ item }}"
+        dest: "{{ splunk_home }}/etc/master-apps/"
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+      with_items:
+        - itsidemo_index_creation
+
+    - name: create local directories
+      file:
+        state: directory
+        dest: "{{ splunk_home }}/etc/master-apps/{{ item }}/local/"
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+      with_items:
+        - "{{itsi_pkgs}}"
+        - itsidemo_index_creation
+
+    - name:  copy indexes to local dir
+      copy:
+        remote_src: yes
+        src: "{{ splunk_home }}/etc/master-apps/{{ item }}/default/indexes.conf"
+        dest: "{{ splunk_home }}/etc/master-apps/{{ item }}/local/"
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+      with_items:
+        - "{{itsi_pkgs}}"
+        - itsidemo_index_creation
+
+    - name: set volume in homePath
+      replace:
+        path: "{{ splunk_home }}/etc/master-apps/{{ item }}/local/indexes.conf"
+        regexp: '^(homePath\s+=\s+)[^\/]+\/'
+        replace: '\1volume:primary/'
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+        mode: 0644
+      with_items:
+        - "{{itsi_pkgs}}"
+        - itsidemo_index_creation
+
+    - name: set volume in coldPath
+      replace:
+        path: "{{ splunk_home }}/etc/master-apps/{{ item }}/local/indexes.conf"
+        regexp: '^(coldPath\s+=\s+)[^\/]+\/'
+        replace: '\1volume:primary/'
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+        mode: 0644
+      with_items:
+        - "{{itsi_pkgs}}"
+        - itsidemo_index_creation
+
+    - name:
+      ini_file:
+        path: "{{ splunk_home }}/etc/master-apps/{{ item }}/local/indexes.conf"
+        section: volume:primary
+        option: maxVolumeDataSizeMB
+        value: "30000"
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+        mode: 0644
+      with_items:
+        - fid-ka_indexer_volume_indexes
+
+    - name:
+      ini_file:
+        path: "{{ splunk_home }}/etc/master-apps/{{ item }}/local/server.conf"
+        section: diskUsage
+        option: minFreeSpace
+        value: "500"
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+        mode: 0644
+      with_items:
+        - fid-ka_indexer_volume_indexes
+
+    - name: push shcluster bundle
+      shell: "{{ splunk_home }}/bin/splunk apply cluster-bundle  -auth admin:{{ splunk_admin_password }}"
+      become: yes
+      become_user: "{{ splunk_user }}"
+
+
+
+################### License Master Tasks #####################
+
+- name: install ITSI on license master
+  hosts: ds*
+  become: yes
+  become_user: root
+
+  vars:
+    splunk_user: splunk
+    splunk_group: splunk
+    splunk_home: /opt/splunk
+    splunk_service_name: splunk
+    itsi_pkgs:
+      - SA-ITSI-Licensechecker
+      - SA-UserAccess
+
+  tasks:
+    - name: install ITSI apps on LM
+      copy:
+        src: "../../app_repo/itsi_4.2.0/{{ item }}"
+        dest: "{{ splunk_home }}/etc/apps/"
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+      with_items: "{{itsi_pkgs}}"
+
+    - name: restart splunk
+      service:
+        name: "{{splunk_service_name}}"
+        state: restarted
+      become: yes
+      become_user: root
+
+################### ITSI Search Head Tasks #####################
+
+- name: install ITSI
+  hosts: itsi*
+  become: yes
+  become_user: root
+
+  vars:
+    splunk_user: splunk
+    splunk_group: splunk
+    splunk_home: /opt/splunk
+    splunk_service_name: splunk
+
+  tasks:
+#    - name: upload and unarchive ITSI
+#      unarchive: src="../../app_repo/splunk-it-service-intelligence_420.spl" dest="{{ splunk_home }}/etc/apps" owner={{ splunk_user }} group={{ splunk_group }} creates=yes
+#      become: yes
+#      become_user: "{{ splunk_user }}"
+
+    - name: upload and unarchive ITSI Demo
+      unarchive: src="../../app_repo/itsidemo-v4.2.tgz" dest="/var/tmp" owner={{ splunk_user }} group={{ splunk_group }} creates=yes
+      become: yes
+      become_user: "{{ splunk_user }}"
+
+    - name: stop splunk
+      service:
+        name: "{{splunk_service_name}}"
+        state: stopped
+      become: yes
+      become_user: root
+
+    - name: Disable systemd control
+      replace:
+        path: "{{ splunk_home }}/etc/splunk-launch.conf"
+        regexp: '^(SPLUNK_SERVER_NAME=.*)$'
+        replace: '#\1'
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+        mode: 0644
+
+    - name: install ITSI Demo
+      shell: "cd /var/tmp/demo-itsi; {{ splunk_home }}/bin/splunk cmd python configureITSIdemo.py --user admin --passwd fiducialab"
+      become: yes
+      become_user: "{{ splunk_user }}"
+
+    - name: create local directories
+      file:
+        state: directory
+        dest: "{{ splunk_home }}/etc/apps/{{ item }}/local/"
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+      with_items:
+        - SA-ITOA
+
+    - name: set limits.conf workaround
+      ini_file:
+        path: "{{ splunk_home }}/etc/apps/{{ item }}/local/limits.conf"
+        section: search
+        option: phased_execution_mode
+        value: "auto"
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+        mode: 0644
+      with_items:
+        - SA-ITOA
+
+    - name: stop splunk
+      shell: "{{ splunk_home }}/bin/splunk stop"
+      become: yes
+      become_user: "{{ splunk_user }}"
+
+    - name: Enable systemd control
+      replace:
+        path: "{{ splunk_home }}/etc/splunk-launch.conf"
+        regexp: '^#(SPLUNK_SERVER_NAME=.*)$'
+        replace: '\1'
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+        mode: 0644
+
+    - name: start splunk
+      service:
+        name: "{{splunk_service_name}}"
+        state: started
+      become: yes
+      become_user: root

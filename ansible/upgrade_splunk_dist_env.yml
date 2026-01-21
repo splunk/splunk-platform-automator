@@ -1,0 +1,42 @@
+---
+# This playbook upgrades the splunk software
+
+# This example upgrades from 6.6.x to 7.0.x or from 7.0.x to 7.1.x
+
+# Upgrade each tier separately
+# https://docs.splunk.com/Documentation/Splunk/latest/Indexer/Upgradeacluster#Upgrade_each_tier_separately
+
+# You must follow this order of upgrade when upgrading the tiers in discrete operations:
+# 1. Upgrade the master node.
+# 2. Upgrade the search head tier.
+# 3. Upgrade the peer node tier.
+
+
+- name: upgrade cluster master
+  hosts: role_cluster_master
+  become: yes
+  become_user: root
+
+  tasks:
+    - name: call upgrade splunk from role splunk_software
+      include_role:
+        name: splunk_software
+        tasks_from: upgrade
+
+
+# Upgrading a search cluster version 6.4+
+# https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/UpgradeaSHC#Perform_a_member-by-member_upgrade
+
+- name: upgrade search head cluster (one by one)
+  hosts: role_search_head
+  become: yes
+  become_user: root
+  serial: 1
+
+  tasks:
+    - name: call upgrade splunk from role splunk_software
+      include_role:
+        name: splunk_software
+        tasks_from: upgrade
+
+,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_master,role_monitoring_console,role_search_head,role_universal_forwarder
