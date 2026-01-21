@@ -1,8 +1,11 @@
 ---
 # Main playbook for this role
 
-- ansible.builtin.import_tasks: "install_app.yml"
-- ansible.builtin.import_tasks: "{{app_name}}.yml"
+- name: Import install_app tasks
+  ansible.builtin.import_tasks: "install_app.yml"
+
+- name: Import specific app tasks
+  ansible.builtin.import_tasks: "{{ app_name }}.yml"
 
 - name: Call save_app
   tags:
