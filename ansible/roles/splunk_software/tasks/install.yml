@@ -11,7 +11,7 @@
     state: directory
     owner: root
     group: root
-    mode: 0755
+    mode: '0755'
 
 - name: Create splunk directory
   tags:
@@ -23,7 +23,7 @@
     state: directory
     owner: "{{ splunk_user }}"
     group: "{{ splunk_group }}"
-    mode: 0755
+    mode: '0755'
 
 - name: Find target version
   tags:
@@ -57,7 +57,7 @@
     dest: "{{ splunk_home }}/etc/auth/splunk.secret"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0400
+    mode: '0400'
   when: splunk_secret_share[splunk_install_app] == true and splunk_secret_file.stat.exists == true
 
 - name: Create hashed password for new password policy
@@ -85,7 +85,7 @@
     value: "{{ item.varvalue }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   loop:
     - { varkey: "USERNAME", varvalue: "admin" }
     - { varkey: "HASHED_PASSWORD", varvalue: "{{ admin_hash_pw.stdout }}" }
@@ -103,7 +103,7 @@
     value: wiredTiger
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   when: 
     - splunk_installed_version is version_compare('8.1', '>=')
     - splunk_install_app == "splunk"
@@ -121,7 +121,7 @@
     state: present
     owner: "{{ splunk_user }}"
     group: "{{ splunk_group }}"
-    mode: 0644
+    mode: '0644'
   when:
     - splunk_fips|default(false) == true
 

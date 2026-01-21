@@ -19,7 +19,7 @@
 #    state: directory
 #    owner: "{{splunk_user}}"
 #    group: "{{splunk_group}}"
-#    mode: 0755
+#    mode: '0755'
 #  loop: "{{ splunk_indexer_volumes | dict2items }}"
 #  when: splunk_indexer_volumes_local|length > 0
 

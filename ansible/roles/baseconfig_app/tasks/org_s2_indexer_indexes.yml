@@ -23,7 +23,7 @@
     state: "absent"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
 
 - name: "({{ app_name }}) remove comments"
@@ -39,7 +39,7 @@
     state: "absent"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
 
 - name: "({{ app_name }}) set indexer volume variables for remote volumes"
@@ -68,6 +68,6 @@
     value: "volume:{{splunk_volume_defaults.remotePath}}/$_index_name"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   when: splunk_volume_defaults.remotePath is defined

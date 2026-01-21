@@ -85,7 +85,7 @@
     path: /var/lib/ldap/DB_CONFIG
     owner: ldap
     group: ldap
-    mode: 0644
+    mode: '0644'
 
 - name: Add more schemas
   tags:

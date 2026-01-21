@@ -22,5 +22,5 @@
     value: "https://{{splunk_license_manager|first}}:8089"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0644
+    mode: '0644'
   notify: Restart splunk

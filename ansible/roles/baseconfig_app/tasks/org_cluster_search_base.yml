@@ -22,7 +22,7 @@
     value: searchhead
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
 
 - name: "({{ app_name }}) setting clustering manager_uri"
@@ -37,7 +37,7 @@
     value: "{% set comma = joiner(',') %}{% for peer in splunk_search_peer_idxc_list %}{{ comma() }}{{splunk_clustermanager_var}}:{{ peer }}{% endfor %}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   when: splunk_search_peer_idxc_list|length > 0
 
@@ -52,7 +52,7 @@
     replace: "[{{splunk_clustermanager_var}}:{{ splunk_search_peer_idxc_list|first }}]"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
 
 - name: "({{ app_name }}) remove {{splunk_clustermanager_var}}:two cluster manager group"
@@ -66,7 +66,7 @@
     state: absent
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   loop:
     - clustermaster
     - clustermanager
@@ -84,7 +84,7 @@
     value: "{{ hostvars[item.value]['idxc_password'] }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   loop: "{{ splunk_search_peer_idxc_list | dict2items }}"
   when: app_local.stat.exists == false and app_path == splunk_home + '/etc/apps'
@@ -101,7 +101,7 @@
     value: "{{ hostvars[item.value]['idxc_password'] }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   loop: "{{ splunk_search_peer_idxc_list | dict2items }}"
   when: app_path != splunk_home + '/etc/apps'
@@ -118,7 +118,7 @@
     value: "https://{{ item.value }}:8089"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   loop: "{{ splunk_search_peer_idxc_list | dict2items }}"
 
@@ -134,7 +134,7 @@
     value: "{% if hostvars[item.value]['idxc_available_sites']|default([])|length > 0 %}true{% else %}false{% endif %}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   loop: "{{ splunk_search_peer_idxc_list | dict2items }}"
 
@@ -150,6 +150,6 @@
     value: "{{splunk_shc_site}}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   when: splunk_shc_site is defined

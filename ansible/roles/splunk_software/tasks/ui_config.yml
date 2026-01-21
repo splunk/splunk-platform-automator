@@ -23,7 +23,7 @@
     state: touch
     owner: "{{ splunk_user }}"
     group: "{{ splunk_group }}"
-    mode: 0600
+    mode: '0600'
   when: splunk_install_app == "splunk" and not splunk_first_login.stat.exists
 
 - name: Set user/passwd info to login page
@@ -69,7 +69,7 @@
     value: "<big>{{splunk_loginpage_hostname_info|default()}}{{splunk_loginpage_role_info|default()}}{{splunk_loginpage_user_info|default()}}</big>"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0644
+    mode: '0644'
   notify: Restart splunk
   when:
     - splunk_install_app == "splunk"

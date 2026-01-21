@@ -62,7 +62,7 @@
         replace: '\1volume:primary/'
         owner: "{{splunk_user}}"
         group: "{{splunk_group}}"
-        mode: 0644
+        mode: '0644'
       with_items:
         - "{{itsi_pkgs}}"
         - itsidemo_index_creation
@@ -74,7 +74,7 @@
         replace: '\1volume:primary/'
         owner: "{{splunk_user}}"
         group: "{{splunk_group}}"
-        mode: 0644
+        mode: '0644'
       with_items:
         - "{{itsi_pkgs}}"
         - itsidemo_index_creation
@@ -87,7 +87,7 @@
         value: "30000"
         owner: "{{splunk_user}}"
         group: "{{splunk_group}}"
-        mode: 0644
+        mode: '0644'
       with_items:
         - fid-ka_indexer_volume_indexes
 
@@ -99,7 +99,7 @@
         value: "500"
         owner: "{{splunk_user}}"
         group: "{{splunk_group}}"
-        mode: 0644
+        mode: '0644'
       with_items:
         - fid-ka_indexer_volume_indexes
 
@@ -180,7 +180,7 @@
         replace: '#\1'
         owner: "{{splunk_user}}"
         group: "{{splunk_group}}"
-        mode: 0644
+        mode: '0644'
 
     - name: Install ITSI Demo
       shell: "cd /var/tmp/demo-itsi; {{ splunk_home }}/bin/splunk cmd python configureITSIdemo.py --user admin --passwd fiducialab"
@@ -204,7 +204,7 @@
         value: "auto"
         owner: "{{splunk_user}}"
         group: "{{splunk_group}}"
-        mode: 0644
+        mode: '0644'
       with_items:
         - SA-ITOA
 
@@ -220,7 +220,7 @@
         replace: '\1'
         owner: "{{splunk_user}}"
         group: "{{splunk_group}}"
-        mode: 0644
+        mode: '0644'
 
     - name: Start splunk
       service:

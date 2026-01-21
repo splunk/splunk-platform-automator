@@ -31,7 +31,7 @@
     value: "{{splunk_shc_pass}}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   when: "grep_result.rc == 1"
 
@@ -46,7 +46,7 @@
     value: "{{splunk_shc_label}}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
 
 - name: Apply baseconfig app org_all_deploymentclient

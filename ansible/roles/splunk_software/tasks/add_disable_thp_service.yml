@@ -10,7 +10,7 @@
     dest: "/etc/systemd/system/disable-thp.service"
     owner: root
     group: root
-    mode: 0644
+    mode: '0644'
   when: use_systemctl == true
 
 - name: Commit changes to systemctl

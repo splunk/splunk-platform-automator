@@ -22,7 +22,7 @@
     value: "{{ splunk_outputs_tcpout_list|map('regex_replace','^(.*)$','\\1_indexers')|join(',') }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0644
+    mode: '0644'
   notify: Restart splunk
   when: splunk_outputs_idxc_list|length > 0 or splunk_outputs_idx_list|length > 0
 
@@ -37,7 +37,7 @@
     replace: "[tcpout:{{ splunk_outputs_idxc_list|first+'_indexers' }}]"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0644
+    mode: '0644'
   notify: Restart splunk
   when: splunk_outputs_idxc_list|length > 0
 
@@ -82,7 +82,7 @@
     value: "{% set comma = joiner(',') %}{% for idx in item.value %}{{ comma() }}{{ idx }}:{{idx_port}}{% endfor %}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0644
+    mode: '0644'
   notify: Restart splunk
   loop: "{{ splunk_outputs_idxc_list | dict2items }}"
   when: splunk_outputs_idxc_list|length > 0
@@ -99,7 +99,7 @@
     value: "{{ item.idxc_name+'_indexers' }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0644
+    mode: '0644'
   notify: Restart splunk
   loop: "{{ splunk_outputs_discovery_idxc_list }}"
   when: splunk_outputs_discovery_idxc_list|length > 0
@@ -116,7 +116,7 @@
     value: "{{ item.password }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0644
+    mode: '0644'
   notify: Restart splunk
   loop: "{{ splunk_outputs_discovery_idxc_list }}"
   when: splunk_outputs_discovery_idxc_list|length > 0
@@ -133,7 +133,7 @@
     value: "https://{{item.master }}:8089"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0644
+    mode: '0644'
   notify: Restart splunk
   loop: "{{ splunk_outputs_discovery_idxc_list }}"
   when: splunk_outputs_discovery_idxc_list|length > 0
@@ -163,7 +163,7 @@
     replace: "[tcpout:all_indexers]"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0644
+    mode: '0644'
   notify: Restart splunk
   when: splunk_outputs_idxc_list|length == 0 and splunk_outputs_idx_list|length > 0
 
@@ -179,7 +179,7 @@
     value: "{% set comma = joiner(',') %}{% for idx in splunk_outputs_idx_list %}{{ comma() }}{{ idx }}:{{idx_port}}{% endfor %}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0644
+    mode: '0644'
   notify: Restart splunk
   when: splunk_outputs_idx_list|length > 0
 
@@ -196,7 +196,7 @@
     value: "{{ item.value }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   loop: "{{ splunk_ssl.outputs.config | dict2items }}"
   when:
@@ -216,7 +216,7 @@
     value: "$SPLUNK_HOME/etc/apps/{{ app_dest_name }}/default/{{ item.varvalue|basename }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   loop:
     - {

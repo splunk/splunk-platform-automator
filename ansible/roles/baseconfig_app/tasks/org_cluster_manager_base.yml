@@ -13,7 +13,7 @@
     value: "{{splunk_cluster_manager_mode}}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
 
 - name: "({{ app_name }}) setting replication factor"
@@ -28,7 +28,7 @@
     value: "{{splunk_idxc_rf}}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
 
 - name: "({{ app_name }}) setting search factor"
@@ -43,7 +43,7 @@
     value: "{{splunk_idxc_sf}}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
 
 - name: "({{ app_name }}) setting cluster label"
@@ -58,7 +58,7 @@
     value: "{{splunk_idxc_label}}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
 
 - name: "({{ app_name }}) setting unhashed clustering pass4SymmKey"
@@ -73,7 +73,7 @@
     value: "{{splunk_idxc_pass}}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   when: app_local.stat.exists == false
 
@@ -89,7 +89,7 @@
     value: "{{idxc_discovery_password}}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   when: app_local.stat.exists == false and idxc_discovery_password is defined
 
@@ -105,6 +105,6 @@
     value: "true"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   when: splunk_installed_version is version_compare('6.4.0', '>=') and splunk_volume_defaults.remotePath is not defined

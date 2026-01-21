@@ -8,7 +8,7 @@
   ansible.builtin.copy:
     src: home/ansible_user/bashrc.splunk
     dest: "~{{ ansible_user }}/.bashrc.splunk"
-    mode: 0644
+    mode: '0644'
   become: true
   become_user: "{{ ansible_user }}"
 

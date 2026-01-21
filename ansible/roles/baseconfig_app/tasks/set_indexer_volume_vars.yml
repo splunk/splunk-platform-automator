@@ -13,7 +13,7 @@
     value: "{{ volume_var.value }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0644
+    mode: '0644'
   loop: "{{ volume_vars | dict2items }}"
   loop_control:
     loop_var: volume_var

@@ -14,7 +14,7 @@
     value: "{{ item.value }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   loop: "{{ splunk_ssl.outputs.config | dict2items }}"
   when: splunk_ssl.outputs.enable == true
@@ -32,7 +32,7 @@
     value: "$SPLUNK_HOME/etc/apps/{{ app_dest_name }}/default/{{ item.varvalue|basename }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   loop:
     - { varkey: "sslRootCAPath", varvalue: "{{ splunk_ssl.outputs.config.sslRootCAPath|default('cacert.pem') }}" }

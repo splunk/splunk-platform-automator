@@ -14,7 +14,7 @@
     value: "1"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   when: splunk_ssl.inputs.enable == true
 
@@ -31,7 +31,7 @@
     value: "0"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   when: splunk_ssl.inputs.enable == true
 
@@ -48,7 +48,7 @@
     value: "{{ item.value }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0600
+    mode: '0600'
   notify: Restart splunk
   loop: "{{ splunk_ssl.inputs.config | dict2items }}"
   when: splunk_ssl.inputs.enable == true

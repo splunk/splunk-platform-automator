@@ -30,7 +30,7 @@
     dest: /etc/polkit-1/rules.d/10-{{ splunk_service_name }}.rules
     owner: "root"
     group: "root"
-    mode: 0644
+    mode: '0644'
   when:
     - systemd_version_output.stdout|int >= 226
     - polkit_version_output.stdout is version_compare('0.105', '>')
@@ -45,7 +45,7 @@
     dest: /etc/polkit-1/localauthority/50-local.d/{{ splunk_service_name }}.pkla
     owner: "root"
     group: "root"
-    mode: 0644
+    mode: '0644'
   when:
     - systemd_version_output.stdout|int >= 226
     - polkit_version_output.stdout is version_compare('0.105', '<=')

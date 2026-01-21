@@ -81,6 +81,6 @@
     value: "{{splunk_home}}/var/lib/splunk"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0644
+    mode: '0644'
   notify: Restart splunk
   when: splunk_indexer_volumes_local|length < 1 or splunk_volume_defaults.homePath is not defined

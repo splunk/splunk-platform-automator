@@ -10,7 +10,7 @@
     section: "{{ item.section }}"
     option: "{{ item.key }}"
     value: "{{ item.value }}"
-    mode: 0600
+    mode: '0600'
   become: true
   become_user: "{{ splunk_user }}"
   notify: Restart splunk

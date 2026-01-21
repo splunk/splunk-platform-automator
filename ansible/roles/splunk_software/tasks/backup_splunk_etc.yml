@@ -10,7 +10,7 @@
     state: directory
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0755
+    mode: '0755'
   become: true
   become_user: root
 

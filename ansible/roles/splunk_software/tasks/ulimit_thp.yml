@@ -46,7 +46,7 @@
     dest: "/etc/security/limits.d/splunk.conf"
     owner: root
     group: root
-    mode: 0644
+    mode: '0644'
   when: splunk_initd.stat.exists == true
 
 - name: Add disable_huge and change_ulimits functions to /etc/init.d/splunk

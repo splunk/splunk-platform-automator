@@ -40,7 +40,7 @@
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../template/terraform_aws.tfvars.j2"
         dest: "{{ terraform_dir }}/terraform.tfvars"
-        mode: "0644"
+        mode: '0644'
       tags:
         - generate
         - always
@@ -117,7 +117,7 @@
 
           {% endfor %}
         dest: "{{ playbook_dir }}/../inventory/hosts"
-        mode: "0644"
+        mode: '0644'
       when: terraform_outputs.outputs.ansible_inventory is defined
       register: inventory_result
       tags:

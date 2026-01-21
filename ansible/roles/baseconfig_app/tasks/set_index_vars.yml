@@ -15,7 +15,7 @@
       {%- if index_var.value != "null" -%}{{index_var.value}}{%- else -%}{%- endif -%}
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: 0644
+    mode: '0644'
     allow_no_value: >-
       {%- if index_var.key != "null" -%}false{%- else -%}true{%- endif -%}
   loop: "{{ (index_vars | length > 0) | ternary(index_vars | dict2items, [{'key': 'null', 'value': 'null'}]) }}"
