@@ -143,6 +143,19 @@ class InventoryModule(BaseInventoryPlugin):
         if len(check_arch) < 1:
             raise AnsibleParserError("Error: No archive found matching pattern '%s' in directory %s" % (archive_pattern,directory))
 
+    def _check_requirements(self):
+        '''Check if required python libraries are installed'''
+        requirements = ['jmespath', 'lxml']
+        missing = []
+        for req in requirements:
+            try:
+                __import__(req)
+            except ImportError:
+                missing.append(req)
+        
+        if missing:
+            raise AnsibleParserError("Missing required python libraries: {}. Please run 'pip install -r requirements.txt' to install them.".format(", ".join(missing)))
+
     def _init_inventory(self):
         if not os.path.isdir("inventory"):
             try:
@@ -584,6 +597,10 @@ class InventoryModule(BaseInventoryPlugin):
                 raise AnsibleParserError("Ansible version %s is not supported. Only versions 2.10.x or higher are working." % ansible_version)
         except ValueError:
             pass
+
+        # Check for required python libraries
+        self._check_requirements()
+
         # Read the inventory YAML file
         self._read_config_data(path)
         try:
