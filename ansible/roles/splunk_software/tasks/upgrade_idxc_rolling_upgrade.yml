@@ -14,9 +14,9 @@
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
   ansible.builtin.set_fact:
-    idxc_peerid: "{{ idxc_name_peerids | json_query(query) }}"
+    idxc_peerid: "{{ idxc_name_peerids | json_query(peerid_query) }}"
   vars:
-    query: "[? name=='{{ inventory_hostname }}'].peerid"
+    peerid_query: "[? name=='{{ inventory_hostname }}'].peerid"
 
 - name: Call get_idxc_peer_status
   tags:
@@ -73,7 +73,7 @@
     validate_certs: false
   register: splunk_rest_output_local
   vars:
-    splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|to_json|from_json }}"
+    splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|ansible.builtin.from_json }}"
   check_mode: false
   until: "splunk_rest_json_output_local.entry[0].content.status == 'Down'"
   # Wait 30 minutes to complete this step
@@ -110,7 +110,7 @@
     validate_certs: false
   register: splunk_rest_output_local
   vars:
-    splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|to_json|from_json }}"
+    splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|ansible.builtin.from_json }}"
   check_mode: false
   until: "splunk_rest_json_output_local.entry[0].content.status == 'Up'"
   # Wait 10 minutes to complete this step

@@ -1,5 +1,4 @@
 ---
-
 - name: Check cluster state
   tags:
     - splunk
@@ -23,7 +22,7 @@
     shc_rolling_upgrade_flag: "{{ splunk_rest_json_output.entry[0].content.captain.rolling_upgrade_flag|bool }}"
     shc_service_ready_flag: "{{ splunk_rest_json_output.entry[0].content.captain.service_ready_flag|bool }}"
   vars:
-    splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
+    splunk_rest_json_output: "{{ splunk_rest_output.content|ansible.builtin.from_json }}"
   when: inventory_hostname == splunk_shc_host_list|first
 
 - name: Finalize rolling upgrade
@@ -38,7 +37,7 @@
     splunk_rest_endpoint: /services/shcluster/captain/control/control/upgrade-finalize
     http_method: POST
   when:
-    - inventory_hostname == splunk_shc_host_list|first 
+    - inventory_hostname == splunk_shc_host_list|first
     - shc_rolling_upgrade_flag == true
 
 - name: Finalize output
@@ -50,7 +49,7 @@
   ansible.builtin.debug:
     msg: "{{ splunk_rest_json_output.messages[0].text }}"
   when:
-    - inventory_hostname == splunk_shc_host_list|first 
+    - inventory_hostname == splunk_shc_host_list|first
     - shc_rolling_upgrade_flag == true
   changed_when: shc_rolling_upgrade_flag == true
 
@@ -63,5 +62,5 @@
   ansible.builtin.debug:
     msg: "Cluster searchable rolling was already finalized."
   when:
-    - inventory_hostname == splunk_shc_host_list|first 
+    - inventory_hostname == splunk_shc_host_list|first
     - shc_rolling_upgrade_flag == false

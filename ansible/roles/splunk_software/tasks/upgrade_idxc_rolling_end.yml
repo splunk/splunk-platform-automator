@@ -1,5 +1,4 @@
 ---
-
 - name: Check cluster state
   tags:
     - splunk
@@ -21,7 +20,7 @@
     idxc_searchable_rolling: "{{ splunk_rest_json_output.entry[0].content.searchable_rolling|bool }}"
     idxc_service_ready_flag: "{{ splunk_rest_json_output.entry[0].content.service_ready_flag|bool }}"
   vars:
-    splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
+    splunk_rest_json_output: "{{ splunk_rest_output.content|ansible.builtin.from_json }}"
 
 - name: Finalize rolling upgrade
   tags:

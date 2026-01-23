@@ -1,5 +1,4 @@
 ---
-
 - name: Check search head cluster state
   tags:
     - splunk
@@ -23,7 +22,7 @@
     shc_rolling_upgrade_flag: "{{ splunk_rest_json_output.entry[0].content.captain.rolling_upgrade_flag|bool }}"
     shc_service_ready_flag: "{{ splunk_rest_json_output.entry[0].content.captain.service_ready_flag|bool }}"
   vars:
-    splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
+    splunk_rest_json_output: "{{ splunk_rest_output.content|ansible.builtin.from_json }}"
   when: inventory_hostname == splunk_shc_host_list|first
 
 - name: Fail if search head cluster service_ready_flag not ok
@@ -59,7 +58,7 @@
   ansible.builtin.set_fact:
     kv_stre_status: "{{ splunk_rest_json_output.entry[0].content.current.status }}"
   vars:
-    splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
+    splunk_rest_json_output: "{{ splunk_rest_output.content|ansible.builtin.from_json }}"
   when: inventory_hostname == splunk_shc_host_list|first
 
 - name: Fail if KV store cluster status not 'ready'
@@ -86,7 +85,7 @@
     splunk_rest_endpoint: /services/shcluster/captain/control/control/upgrade-init
     http_method: POST
   when:
-    - inventory_hostname == splunk_shc_host_list|first 
+    - inventory_hostname == splunk_shc_host_list|first
     - shc_rolling_upgrade_flag == false
 
 - name: Init output
@@ -98,7 +97,7 @@
   ansible.builtin.debug:
     msg: "{{ splunk_rest_json_output.messages[0].text }}"
   when:
-    - inventory_hostname == splunk_shc_host_list|first 
+    - inventory_hostname == splunk_shc_host_list|first
     - shc_rolling_upgrade_flag == false
   changed_when: shc_rolling_upgrade_flag == false
 
@@ -111,5 +110,5 @@
   ansible.builtin.debug:
     msg: "Cluster is already in searchable rolling upgrade mode."
   when:
-    - inventory_hostname == splunk_shc_host_list|first 
+    - inventory_hostname == splunk_shc_host_list|first
     - shc_rolling_upgrade_flag == true
