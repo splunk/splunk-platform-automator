@@ -5,10 +5,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
-## 2.3.1-dev - ongoing
+## [2.3.1] - 2026-01-23
 
 ### Added
 
+- Added `bin/spash` wrapper script to easily connect to valid Ansible hosts via SSH
+  - Lists available hosts and their roles with `./bin/spash -l`
+  - Connects to hosts using Ansible inventory details
 - Added check for Ansible version compatibility (greater than 2.10)
 - Added requirements for community collections
 
@@ -19,6 +22,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Relaxed Ansible version check in inventory plugin to support versions > 2.16.x
 - Fixed Splunk version detection logic for Splunk 10+
 - Fixed Ansible linting issues:
   - Added names to anonymous tasks
