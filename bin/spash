@@ -1,0 +1,142 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import json
+import subprocess
+import argparse
+
+def get_inventory_data():
+    """Retrieves inventory data from ansible-inventory."""
+    try:
+        # Run ansible-inventory to get the full inventory in JSON format
+        result = subprocess.run(
+            ['ansible-inventory', '--list'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        output = result.stdout
+        # JSON should start with {
+        if '{' in output:
+             output = output[output.find('{'):]
+        return json.loads(output)
+    except subprocess.CalledProcessError as e:
+        print(f"Error running ansible-inventory: {e.stderr}", file=sys.stderr)
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"Error parsing inventory JSON: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def get_host_vars(inventory, hostname):
+    """Finds variables for a specific host in the inventory."""
+    # Check if host exists in _meta (common in dynamic inventory)
+    if '_meta' in inventory and 'hostvars' in inventory['_meta']:
+        if hostname in inventory['_meta']['hostvars']:
+            return inventory['_meta']['hostvars'][hostname]
+    
+    return {}
+
+def list_hosts(inventory):
+    """Lists all hosts in the inventory."""
+    hosts = []
+    if '_meta' in inventory and 'hostvars' in inventory['_meta']:
+        hosts = list(inventory['_meta']['hostvars'].keys())
+    else:
+        # Fallback if _meta is not present (less common with --list)
+        # Traverse groups
+        for group in inventory:
+             if group == "_meta": continue
+             if 'hosts' in inventory[group]:
+                 hosts.extend(inventory[group]['hosts'])
+    
+    # Deduplicate and sort
+    hosts = sorted(list(set(hosts)))
+    for host in hosts:
+        print(host)
+
+def main():
+    parser = argparse.ArgumentParser(description="SSH into an Ansible host.")
+    parser.add_argument("host", nargs='?', help="The name of the host to connect to")
+    parser.add_argument("-l", "--list", action="store_true", help="List available hosts")
+    parser.add_argument("args", nargs=argparse.REMAINDER, help="Additional arguments to pass to ssh")
+    args = parser.parse_args()
+
+    if args.list:
+        inventory = get_inventory_data()
+        list_hosts(inventory)
+        sys.exit(0)
+
+    if not args.host:
+        parser.print_help()
+        sys.exit(1)
+
+    target_host = args.host
+    extra_args = args.args
+
+    inventory = get_inventory_data()
+    
+    # Check if host is known
+    all_hosts = []
+    if '_meta' in inventory and 'hostvars' in inventory['_meta']:
+        all_hosts = list(inventory['_meta']['hostvars'].keys())
+    
+    if target_host not in all_hosts:
+        print(f"Error: Host '{target_host}' not found in inventory.", file=sys.stderr)
+        matches = [h for h in all_hosts if target_host in h]
+        if matches:
+            print(f"Did you mean: {', '.join(matches)}?", file=sys.stderr)
+        sys.exit(1)
+
+    host_vars = get_host_vars(inventory, target_host)
+    
+    # Resolve connection details
+    # Priority: ansible_host > public_dns_name > target_host
+    real_host = host_vars.get('ansible_host') or host_vars.get('public_dns_name') or target_host
+    
+    # User resolution
+    # Priority: ansible_user
+    user = host_vars.get('ansible_user')
+
+    # Key resolution
+    # Priority: ansible_ssh_private_key_file
+    key_file = host_vars.get('ansible_ssh_private_key_file')
+
+    if key_file:
+         # Expand user path for key file
+         key_file = os.path.expanduser(key_file)
+    
+    # Proxy (Jump Host)
+    ssh_common_args = host_vars.get('ansible_ssh_common_args', '')
+    
+    # Construct SSH command
+    ssh_cmd = ['ssh']
+    
+    if key_file:
+        if os.path.exists(key_file):
+            ssh_cmd.extend(['-i', key_file])
+        else:
+             print(f"Warning: Private key file '{key_file}' not found.", file=sys.stderr)
+
+    if user:
+        ssh_cmd.extend(['-l', user])
+
+    if ssh_common_args:
+         ssh_cmd.extend(ssh_common_args.split())
+
+    # Add strict host key checking=no for convenience
+    ssh_cmd.extend(['-o', 'StrictHostKeyChecking=no'])
+    ssh_cmd.extend(['-o', 'UserKnownHostsFile=/dev/null'])
+
+    ssh_cmd.append(real_host)
+
+    if extra_args:
+        ssh_cmd.extend(extra_args)
+
+    print(f"Connecting to {target_host} ({real_host}){f' as {user}' if user else ''}...")
+    
+    # Replace current process with ssh
+    os.execvp('ssh', ssh_cmd)
+
+if __name__ == '__main__':
+    main()
