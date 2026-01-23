@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - Added `bin/spash` wrapper script to easily connect to valid Ansible hosts via SSH
   - Lists available hosts and their roles with `./bin/spash -l`
   - Connects to hosts using Ansible inventory details
+  - Added scp support to copy files to/from hosts with `-c` option
 - Added check for Ansible version compatibility (greater than 2.10)
 - Added requirements for community collections
 

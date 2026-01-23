@@ -51,7 +51,9 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
       - [User vagrant](#user-vagrant)
       - [User splunk](#user-splunk)
     - [Copy files](#copy-files)
-      - [scp example](#scp-example)
+      - [Copy with spash (Splunk Platform Automator Shell)](#copy-with-spash-splunk-platform-automator-shell)
+      - [Copy with vagrant scp](#copy-with-vagrant-scp)
+        - [scp example](#scp-example)
     - [Ansible playbooks only](#ansible-playbooks-only)
     - [Build your own Python version](#build-your-own-python-version)
     - [Create vitualenv for specific Ansible version](#create-vitualenv-for-specific-ansible-version)
@@ -95,19 +97,19 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 
 ### Framework Installation
 
-1. Make sure you have Python 3.6+ installed. If not available for your distro, you can [build your own Python version](#build-your-own-python-version).
-    1. [Install needed python libraries](#install-needed-python-libraries-in-your-virtualenv)
-1. Download and install [Vagrant](https://www.vagrantup.com). Is you are using the AWS plugin, see version hints [here](#install-and-configure-aws-support-optional)
+1. Make sure you have Python 3.9+ installed. If not available for your distro, you can [build your own Python version](#build-your-own-python-version).
+    - [Install needed python libraries](#install-needed-python-libraries-in-your-virtualenv)
+1. (Optional) Download and install [Vagrant](https://www.vagrantup.com). If you are using the VirtualBox plugin.
 1. Install Ansible, I personally prefer [Brew](https://brew.sh) (on OSX) which makes it as easy as `brew install ansible`. For [supported Ansible versions check here](#supported-ansible-versions)
 1. Create a folder called `Vagrant` and change into it.
 1. Download and extract a [Splunk Platform Automator release here](https://github.com/splunk/splunk-platform-automator/tags) or clone from GitHub when using the master branch: `git clone https://github.com/splunk/splunk-platform-automator.git`
 1. Create a folder called `Software`.
 1. Download the tgz. archive for the Splunk Software and put in the `Software` directory
-    1. [Splunk Enterprise](http://www.splunk.com/en_us/download/splunk-enterprise.html)
-    1. [Splunk Universal Forwarder](http://www.splunk.com/en_us/download/universal-forwarder.html)
-1. Download Splunk Professional Services Best Practices Base Config Apps and extract them into the `Software` directory
-    1. [Configurations Base Apps](https://drive.google.com/open?id=107qWrfsv17j5bLxc21ymTagjtHG0AobF)
-    1. [Configurations Cluster Apps](https://drive.google.com/open?id=10aVQXjbgQC99b9InTvncrLFWUrXci3gz)
+    - [Splunk Enterprise](http://www.splunk.com/en_us/download/splunk-enterprise.html)
+    - [Splunk Universal Forwarder](http://www.splunk.com/en_us/download/universal-forwarder.html)
+1. Copy Splunk Professional Services Best Practices Base Config Apps and extract them into the `Software` directory. The Apps are not available for public download, please contact your Splunk Professional Services representative to get them.
+    - Configurations Base Apps
+    - Configurations Cluster Apps
 1. If you have a Splunk License file, link it to the name `Splunk_Enterprise.lic` inside the `Software` directory.
 
 Your directory structure should now look like this:
@@ -154,13 +156,13 @@ export PATH="$PATH:/mnt/c/Program Files/Oracle/VirtualBox"
 1. Install either of the aws vagrant plugins:
     - [vagrant-aws](https://github.com/mitchellh/vagrant-aws): This is te orig plugin but not maintained anymore and has issues with newer vagrant versions on OSX. The last working version of vagrant is 2.3.4. Install it with `vagrant plugin install vagrant-aws`
     - [vagrant-gecko-aws](https://github.com/geckoboard/vagrant-aws): This is a clone of the orig project and does support newer versions (up to 2.3.7) of vagrant. Install it with `vagrant plugin install vagrant-gecko-aws --entry-point vagrant-aws`
-2. Download the vagrant dummy box for aws: `vagrant box add aws-dummy https://github.com/mitchellh/vagrant-aws/raw/master/dummy.box`
-3. Generate AWS ACCESS Keys, described [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html#cli-configure-quickstart-creds)
-4. Optional, but recommended:
+1. Download the vagrant dummy box for aws: `vagrant box add aws-dummy https://github.com/mitchellh/vagrant-aws/raw/master/dummy.box`
+1. Generate AWS ACCESS Keys, described [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html#cli-configure-quickstart-creds)
+1. Optional, but recommended:
     - Add AWS_ACCESS_KEY_ID=\<your access key ID\> as environment variable
     - Add AWS_SECRET_ACCESS_KEY=\<your secret access key\> as environment variable
-5. Create an ssh key pair described [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair) and store the public key on your disk for later reference in the config file
-6. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it for example 'Splunk_Basic' and add the following TCP ports
+1. Create an ssh key pair described [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair) and store the public key on your disk for later reference in the config file
+1. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it for example 'Splunk_Basic' and add the following TCP ports
 
 #### Example Basic AWS Security Group 'Splunk_Basic'
 
@@ -305,7 +307,7 @@ vagrant
 
 There is one single configuration file, where all settings for your deployment are defined. Copy one configuration file from the [examples](examples) to `config/splunk_config.yml` and adjust the setting to your needs. For a standard setup you should be fine with most of the default settings, but there are a lot of things you can adjust for special cases. See the [configuration description](examples/configuration_description.yml) file, where all existing values are described.
 
-AWS: See [instruction here](#deploying-on-amazon-cloud) when deploying into Amazon Cloud. You can start with [splunk_config_aws.yml](examples/splunk_config_aws.yml) for a simple environment. Copy `splunk_idxclusters`, `splunk_shclusters` and `splunk_hosts` sections from other examples for more complex deployments.
+AWS: See [instruction here](#option-b-aws-with-terraform-recommended-for-aws) when deploying into Amazon Cloud. You can start with [splunk_config_aws.yml](examples/splunk_config_terraform_aws.yml) for a simple environment. Copy `splunk_idxclusters`, `splunk_shclusters` and `splunk_hosts` sections from other examples for more complex deployments.
 
 ### Start the deployment
 
@@ -342,6 +344,7 @@ vagrant up; ansible-playbook ansible/deploy_site.yml
 **Modern, declarative infrastructure provisioning using Terraform managed by Ansible playbooks.**
 
 **Prerequisites:**
+
 - Terraform 1.3.0+ installed
 - AWS CLI installed (required for instance status checks)
 - `community.general` Ansible collection: `ansible-galaxy collection install community.general`
@@ -351,7 +354,7 @@ vagrant up; ansible-playbook ansible/deploy_site.yml
 
 **Quick Start:**
 
-1. Configure `config/splunk_config.yml` with a `terraform.aws` section:
+- Configure `config/splunk_config.yml` with a `terraform.aws` section:
 
 ```yaml
 terraform:
@@ -373,25 +376,26 @@ splunk_hosts:
         root_volume_size: 100
 ```
 
-2. Provision infrastructure:
+- Provision infrastructure:
 
 ```bash
 ansible-playbook ansible/provision_terraform_aws.yml
 ```
 
-3. Deploy Splunk:
+- Deploy Splunk:
 
 ```bash
 ansible-playbook ansible/deploy_site.yml
 ```
 
-4. Destroy infrastructure:
+- Destroy infrastructure:
 
 ```bash
 ansible-playbook ansible/destroy_terraform_aws.yml
 ```
 
 **Features:**
+
 - ✅ Single source of truth in `splunk_config.yml`
 - ✅ Automatic Ansible inventory generation
 - ✅ Support for `iter` to generate multiple hosts with numbering
@@ -400,6 +404,7 @@ ansible-playbook ansible/destroy_terraform_aws.yml
 - ✅ AWS credentials can be in config or environment variables
 
 **Documentation:**
+
 - [Ansible-Terraform Integration Guide](docs/Ansible_Terraform_AWS_Integration.md) - Complete documentation
 - [Terraform AWS README](terraform/aws/README.md) - Terraform configuration details
 
@@ -414,9 +419,9 @@ ansible-playbook ansible/destroy_terraform_aws.yml
 To use the Vagrant AWS plugin:
 
 1. Follow the [AWS plugin installation instructions](#install-and-configure-aws-support-optional---legacy-vagrant-plugin)
-2. Configure `config/splunk_config.yml` with an `aws` section (see [splunk_config_aws.yml](examples/splunk_config_aws.yml))
-3. Run `vagrant up` to create instances
-4. Run `ansible-playbook ansible/deploy_site.yml` to deploy Splunk
+1. Configure `config/splunk_config.yml` with an `aws` section (see [splunk_config_aws.yml](examples/splunk_config_aws.yml))
+1. Run `vagrant up` to create instances
+1. Run `ansible-playbook ansible/deploy_site.yml` to deploy Splunk
 
 ### Stop hosts
 
@@ -494,13 +499,27 @@ alias
 
 ### Copy files
 
+#### Copy with spash (Splunk Platform Automator Shell)
+
+`spash` can also be used to copy files to and from hosts using the scp protocol. It automatically resolves the connection details from the inventory.
+
+```bash
+# Copy a local file to a remote host
+./bin/spash -c local_file.txt idx1:/tmp/
+
+# Copy a remote file to the current directory
+./bin/spash -c idx1:/opt/splunk/etc/system/local/server.conf .
+```
+
+#### Copy with vagrant scp
+
 You can copy files from your host system to the virtual nodes with the vagrant command. You need to install the vagrant plugin `vagrant-scp` to have this feature available. Check [Vagrant Docs](https://www.vagrantup.com/docs/plugins/usage.html) on how to do this.
 
 ```bash
 vagrant scp <files> <target_on_dest> [vm_name]
 ```
 
-#### scp example
+##### scp example
 
 ```bash
 vagrant scp ../app_dir/splunk-add-on-for-unix-and-linux_831.tgz /var/tmp uf

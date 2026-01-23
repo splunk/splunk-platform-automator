@@ -67,41 +67,12 @@ def list_hosts(inventory):
             
         print(f"{host}{roles_str}")
 
-def main():
-    parser = argparse.ArgumentParser(description="SSH into an Ansible host.")
-    parser.add_argument("host", nargs='?', help="The name of the host to connect to")
-    parser.add_argument("-l", "--list", action="store_true", help="List available hosts")
-    parser.add_argument("args", nargs=argparse.REMAINDER, help="Additional arguments to pass to ssh")
-    args = parser.parse_args()
-
-    if args.list:
-        inventory = get_inventory_data()
-        list_hosts(inventory)
-        sys.exit(0)
-
-    if not args.host:
-        parser.print_help()
-        sys.exit(1)
-
-    target_host = args.host
-    extra_args = args.args
-
-    inventory = get_inventory_data()
-    
-    # Check if host is known
-    all_hosts = []
-    if '_meta' in inventory and 'hostvars' in inventory['_meta']:
-        all_hosts = list(inventory['_meta']['hostvars'].keys())
-    
-    if target_host not in all_hosts:
-        print(f"Error: Host '{target_host}' not found in inventory.", file=sys.stderr)
-        matches = [h for h in all_hosts if target_host in h]
-        if matches:
-            print(f"Did you mean: {', '.join(matches)}?", file=sys.stderr)
-        sys.exit(1)
-
+def resolve_connection_details(target_host, inventory):
+    """Resolves a target host alias to connection details."""
     host_vars = get_host_vars(inventory, target_host)
-    
+    if not host_vars:
+        return None
+
     # Resolve connection details
     # Priority: ansible_host > public_dns_name > target_host
     real_host = host_vars.get('ansible_host') or host_vars.get('public_dns_name') or target_host
@@ -121,34 +92,131 @@ def main():
     # Proxy (Jump Host)
     ssh_common_args = host_vars.get('ansible_ssh_common_args', '')
     
-    # Construct SSH command
-    ssh_cmd = ['ssh']
+    return {
+        'real_host': real_host,
+        'user': user,
+        'key_file': key_file,
+        'ssh_common_args': ssh_common_args
+    }
+
+def main():
+    parser = argparse.ArgumentParser(description="SSH or SCP into/with an Ansible host.")
+    parser.add_argument("host", nargs='?', help="The name of the host to connect to or copy source/destination")
+    parser.add_argument("-l", "--list", action="store_true", help="List available hosts")
+    parser.add_argument("-c", "--copy", action="store_true", help="Use scp to copy files")
+    parser.add_argument("args", nargs=argparse.REMAINDER, help="Additional arguments to pass to ssh/scp")
+    args = parser.parse_args()
+
+    if args.list:
+        inventory = get_inventory_data()
+        list_hosts(inventory)
+        sys.exit(0)
+
+    if not args.host:
+        parser.print_help()
+        sys.exit(1)
+
+    inventory = get_inventory_data()
     
-    if key_file:
-        if os.path.exists(key_file):
-            ssh_cmd.extend(['-i', key_file])
-        else:
-             print(f"Warning: Private key file '{key_file}' not found.", file=sys.stderr)
+    # Check if host is known
+    all_hosts = []
+    if '_meta' in inventory and 'hostvars' in inventory['_meta']:
+        all_hosts = list(inventory['_meta']['hostvars'].keys())
 
-    if user:
-        ssh_cmd.extend(['-l', user])
+    if args.copy:
+        # SCP Mode
+        cmd_args = [args.host]
+        if args.args:
+            cmd_args.extend(args.args)
+            
+        scp_cmd = ['scp']
+        resolved_details = None
+        processed_args = []
+        
+        for arg in cmd_args:
+            # Simple heuristic for remote path: has colon and starts with a known host
+            if ':' in arg:
+                parts = arg.split(':', 1)
+                candidate_host = parts[0]
+                path = parts[1]
+                
+                if candidate_host in all_hosts:
+                    if not resolved_details:
+                        resolved_details = resolve_connection_details(candidate_host, inventory)
+                    
+                    if resolved_details:
+                        # Replace alias with real connection string
+                        # user@host:path
+                        remote_str = resolved_details['real_host']
+                        if resolved_details['user']:
+                            remote_str = f"{resolved_details['user']}@{remote_str}"
+                        processed_args.append(f"{remote_str}:{path}")
+                        continue
+            
+            processed_args.append(arg)
+            
+        # Build scp command
+        if resolved_details:
+             if resolved_details['key_file']:
+                if os.path.exists(resolved_details['key_file']):
+                    scp_cmd.extend(['-i', resolved_details['key_file']])
+                else:
+                     print(f"Warning: Private key file '{resolved_details['key_file']}' not found.", file=sys.stderr)
+             
+             if resolved_details['ssh_common_args']:
+                  scp_cmd.extend(resolved_details['ssh_common_args'].split())
 
-    if ssh_common_args:
-         ssh_cmd.extend(ssh_common_args.split())
+        # Add strict host key checking=no for convenience
+        scp_cmd.extend(['-o', 'StrictHostKeyChecking=no'])
+        scp_cmd.extend(['-o', 'UserKnownHostsFile=/dev/null'])
 
-    # Add strict host key checking=no for convenience
-    ssh_cmd.extend(['-o', 'StrictHostKeyChecking=no'])
-    ssh_cmd.extend(['-o', 'UserKnownHostsFile=/dev/null'])
+        scp_cmd.extend(processed_args)
+        
+        print(f"Copying: {' '.join(scp_cmd)}")
+        os.execvp('scp', scp_cmd)
 
-    ssh_cmd.append(real_host)
-
-    if extra_args:
-        ssh_cmd.extend(extra_args)
-
-    print(f"Connecting to {target_host} ({real_host}){f' as {user}' if user else ''}...")
+    else:
+        # SSH Mode
+        target_host = args.host
+        extra_args = args.args
     
-    # Replace current process with ssh
-    os.execvp('ssh', ssh_cmd)
+        if target_host not in all_hosts:
+            print(f"Error: Host '{target_host}' not found in inventory.", file=sys.stderr)
+            matches = [h for h in all_hosts if target_host in h]
+            if matches:
+                print(f"Did you mean: {', '.join(matches)}?", file=sys.stderr)
+            sys.exit(1)
+
+        details = resolve_connection_details(target_host, inventory)
+        
+        # Construct SSH command
+        ssh_cmd = ['ssh']
+        
+        if details['key_file']:
+            if os.path.exists(details['key_file']):
+                ssh_cmd.extend(['-i', details['key_file']])
+            else:
+                 print(f"Warning: Private key file '{details['key_file']}' not found.", file=sys.stderr)
+
+        if details['user']:
+            ssh_cmd.extend(['-l', details['user']])
+
+        if details['ssh_common_args']:
+             ssh_cmd.extend(details['ssh_common_args'].split())
+
+        # Add strict host key checking=no for convenience
+        ssh_cmd.extend(['-o', 'StrictHostKeyChecking=no'])
+        ssh_cmd.extend(['-o', 'UserKnownHostsFile=/dev/null'])
+
+        ssh_cmd.append(details['real_host'])
+
+        if extra_args:
+            ssh_cmd.extend(extra_args)
+
+        print(f"Connecting to {target_host} ({details['real_host']}){f' as {details['user']}' if details['user'] else ''}...")
+        
+        # Replace current process with ssh
+        os.execvp('ssh', ssh_cmd)
 
 if __name__ == '__main__':
     main()
