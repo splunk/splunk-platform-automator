@@ -38,22 +38,34 @@ def get_host_vars(inventory, hostname):
     return {}
 
 def list_hosts(inventory):
-    """Lists all hosts in the inventory."""
-    hosts = []
+    """Lists all hosts in the inventory with their roles."""
+    hosts = set()
     if '_meta' in inventory and 'hostvars' in inventory['_meta']:
-        hosts = list(inventory['_meta']['hostvars'].keys())
+        hosts.update(inventory['_meta']['hostvars'].keys())
     else:
-        # Fallback if _meta is not present (less common with --list)
-        # Traverse groups
+        # Fallback if _meta is not present
         for group in inventory:
              if group == "_meta": continue
              if 'hosts' in inventory[group]:
-                 hosts.extend(inventory[group]['hosts'])
+                 hosts.update(inventory[group]['hosts'])
     
-    # Deduplicate and sort
-    hosts = sorted(list(set(hosts)))
-    for host in hosts:
-        print(host)
+    hosts_sorted = sorted(list(hosts))
+    
+    for host in hosts_sorted:
+        roles = []
+        for group in inventory:
+            if group.startswith('role_'):
+                if 'hosts' in inventory[group] and host in inventory[group]['hosts']:
+                    # Format: role_deployment_server -> Deployment Server
+                    role_name = group[5:].replace('_', ' ').title()
+                    roles.append(role_name)
+        
+        roles_str = ""
+        if roles:
+            roles.sort()
+            roles_str = f" ({', '.join(roles)})"
+            
+        print(f"{host}{roles_str}")
 
 def main():
     parser = argparse.ArgumentParser(description="SSH into an Ansible host.")
