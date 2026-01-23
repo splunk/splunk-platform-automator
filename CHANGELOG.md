@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
-## [2.3.1] - 2026-01-23
+## 2.3.1-dev - ongoing
 
 ### Added
 
@@ -22,7 +22,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- Relaxed Ansible version check in inventory plugin to support versions > 2.16.x
+- Fixed premature terraform provisioning
 - Fixed Splunk version detection logic for Splunk 10+
 - Fixed Ansible linting issues:
   - Added names to anonymous tasks
