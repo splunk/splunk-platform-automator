@@ -3,6 +3,9 @@
 ![Splunk Platform Automator Overview](https://github.com/splunk/splunk-platform-automator/blob/master/pic/splunk-platform-automator_overview.png)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](#license)
+[![Ansible](https://img.shields.io/badge/Ansible-2.10%2B-red.svg?logo=ansible&logoColor=white)](#supported-ansible-versions)
+[![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg?logo=python&logoColor=white)](#build-your-own-python-version)
+[![Terraform](https://img.shields.io/badge/Terraform-1.3.0%2B-purple.svg?logo=terraform&logoColor=white)](#option-b-aws-with-terraform-recommended-for-aws)
 
 Ever wanted to build a complex Splunk environment for testing, which looks as close as possible to a production deployment? Need to test a Splunk upgrade? See how Splunk indexer- or search head clustering works? Or just need to verify some configuration changes? This is the right place for you! The aim of this framework is to produce a Splunk environment in a fast and convenient way for testing purposes or maybe also for production use. The created Splunk installation and setup follows best practices. There are many ways to configure a Splunk environment in terms of configuration file locations, so this is just another example how to do it.
 
@@ -589,17 +592,8 @@ source ansible_414/bin/activate
 The following Ansible versions are tested and working with Splunk Platform Automator.
 
 - :x: Ansible 2.9.x and below (EOL)
-- :white_check_mark: Ansible 2.10.x (EOL)
-- :white_check_mark: Ansible 2.11.x (EOL)
-- :white_check_mark: Ansible 2.12.x (EOL)
-- :white_check_mark: Ansible 2.13.x (EOL)
-- :white_check_mark: Ansible 2.14.x (EOL)
-- :white_check_mark: Ansible 2.15.x (EOL)
-- :white_check_mark: Ansible 2.16.x (EOL)
-- :white_check_mark: Ansible 2.17.x (EOL)
-- :white_check_mark: Ansible 2.18.x (EOL)
-- :white_check_mark: Ansible 2.19.x (EOL)
-- :white_check_mark: Ansible 2.20.x (EOL)
+- :white_check_mark: Ansible 2.10.x - 2.17.x (EOL)
+- :white_check_mark: Ansible 2.18.x - 2.20.x
 
 Check the [Ansible Support Matrix](https://docs.ansible.com/ansible/latest/reference_appendices/release_and_maintenance.html#ansible-core-support-matrix) for the most current information.
 
