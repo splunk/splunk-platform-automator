@@ -6,7 +6,7 @@
     - splunk_rest
   ansible.builtin.shell: '/opt/splunk/bin/splunk cmd splunkd rest --noauth {{ http_method|default("GET") }} {{ splunk_rest_endpoint|default("/") }} output_mode={{ splunk_rest_output_mode|default("json") }} {%- if splunk_rest_output_mode|default("json") == "json" -%}| tail -1{%- endif -%}'
   register: splunk_rest_output
-  when: splunk_rest_noauth|default(false) == true
+  when: splunk_rest_noauth|default(false)|bool == true
 
 - name: Get rest output
   tags:
@@ -14,7 +14,7 @@
     - splunk_software
     - splunk_rest
   ansible.builtin.set_fact:
-    splunk_rest_json_output: "{{ splunk_rest_output.stdout|to_json|from_json }}"
+    splunk_rest_json_output: "{{ splunk_rest_output.stdout|ansible.builtin.from_json }}"
   when:
     - splunk_rest_noauth|default(false)|bool == true
     - splunk_rest_output_mode|default("json") == "json"
@@ -45,7 +45,7 @@
     - splunk_software
     - splunk_rest
   ansible.builtin.set_fact:
-    splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
+    splunk_rest_json_output: "{{ splunk_rest_output.content|ansible.builtin.from_json }}"
   when:
     - splunk_rest_noauth|default(false)|bool == false
     - splunk_rest_output_mode|default("json") == "json"
