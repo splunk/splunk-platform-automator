@@ -34,8 +34,7 @@
     - search_head
     - search_peer
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk add search-server {{ item }}:8089 -remoteUsername admin -remotePassword {{splunk_admin_password}} -auth admin:{{splunk_admin_password}}"
-  loop:
-    - "{{ splunk_search_peer_idx_list | difference(current_dservers) }}"
+  loop: "{{ (splunk_search_peer_idx_list if (splunk_search_peer_idx_list | type_debug == 'list') else (splunk_search_peer_idx_list | from_yaml)) | difference(current_dservers) }}"
   become: true
   become_user: "{{ splunk_user }}"
   when: "splunk_search_peer_idx_list|difference(current_dservers)|length > 0"
