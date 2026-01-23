@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - Updated all Ansible tasks to use Fully Qualified Collection Names (FQCNs)
+- Added names to anonymous tasks
 
 ### Fixed
 
@@ -24,10 +25,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
   - Corrected boolean syntax
   - Fixed loop usage and filters
   - Fixed handler notifications
+  - Standardized octal file modes to quoted strings (e.g., `'0644'`)
 - Fixed deprecation warnings:
   - Replaced legacy fact variables (e.g., `ansible_os_family`) with `ansible_facts` syntax
-  - Pinned collection versions in `requirements.yml` to support Ansible 2.10 without module util warnings
-- Fixed conditional type error in indexer cluster task
+- Fixed conditional type errors in several tasks
 
 ## [2.3.0](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.3.0) - 2026-01-18
 
