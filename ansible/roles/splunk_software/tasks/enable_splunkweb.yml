@@ -1,6 +1,5 @@
 ---
-
-- name: "({{ app_name }}) remove startwebserver in web.conf"
+- name: "Remove startwebserver in web.conf"
   tags:
     - splunk
     - splunk_webserver
@@ -11,7 +10,7 @@
     state: absent
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: '0644'
+    mode: "0644"
   register: startwebserver
 
 - name: Start splunkweb
