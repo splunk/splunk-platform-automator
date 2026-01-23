@@ -45,6 +45,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
     - [Rerun provisioning](#rerun-provisioning)
     - [Login to the hosts](#login-to-the-hosts)
       - [Login to Splunk Browser Interface](#login-to-splunk-browser-interface)
+      - [Login with spash (Splunk Platform Automator Shell)](#login-with-spash-splunk-platform-automator-shell)
       - [Login by SSH](#login-by-ssh)
     - [Environment Users](#environment-users)
       - [User vagrant](#user-vagrant)
@@ -450,6 +451,23 @@ If something changes along the way and you need to update the linkpage just call
 
 ```bash
 ansible-playbook ansible/create_linkpage.yml
+```
+
+#### Login with spash (Splunk Platform Automator Shell)
+
+`spash` is a helper script that makes SSH connections easier by looking up host details directly from the Ansible inventory. It handles keys, users, and IP addresses automatically.
+
+**Usage:**
+
+```bash
+# SSH into a host (matches partial names)
+./bin/spash <hostname>
+
+# List all available hosts
+./bin/spash -l
+
+# Pass extra arguments to SSH
+./bin/spash idx1 -L 8089:localhost:8089
 ```
 
 #### Login by SSH
