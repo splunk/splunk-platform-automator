@@ -16,6 +16,13 @@
       tags:
         - always
 
+    - name: Load AWS defaults
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../defaults/aws.yml"
+        name: default_config
+      tags:
+        - always
+
     - name: Validate terraform section exists
       ansible.builtin.assert:
         that:

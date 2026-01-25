@@ -11,8 +11,8 @@ resource "null_resource" "remote_command" {
 
     connection {
       type        = "ssh"
-      user        = local.ssh_username
-      private_key = file(var.ssh_private_key_file)
+      user        = coalesce(var.host_configs[each.key].ssh_username, local.ssh_username)
+      private_key = file(coalesce(var.host_configs[each.key].ssh_private_key_file, var.ssh_private_key_file))
       host        = each.value.public_ip
       timeout     = "5m"
     }
