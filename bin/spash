@@ -297,7 +297,7 @@ def main():
     parser = argparse.ArgumentParser(description="SSH or SCP into/with an Ansible host.")
     parser.add_argument("host", nargs='?', help="The name of the host to connect to or copy source/destination")
     parser.add_argument("-l", "--list", action="store_true", help="List available hosts")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output (with -l)")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output (with -l), performs live check for status")
     parser.add_argument("-c", "--copy", action="store_true", help="Use scp to copy files")
     parser.add_argument("args", nargs=argparse.REMAINDER, help="Additional arguments to pass to ssh/scp")
     args = parser.parse_args()
