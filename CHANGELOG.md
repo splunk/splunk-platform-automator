@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - Fixed premature terraform provisioning
+- Fixed terraform variable precedence order
 - Fixed Splunk version detection logic for Splunk 10+
 - Fixed Ansible linting issues:
   - Added names to anonymous tasks
