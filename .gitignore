@@ -43,6 +43,7 @@ __pycache__/
 .terraform.*
 *.tfvars
 *.tfstate
+*.tfstate.*
 *.tfstate.backup
 tfplan
 ancustom
