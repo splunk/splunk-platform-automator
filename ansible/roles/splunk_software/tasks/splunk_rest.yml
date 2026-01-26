@@ -30,8 +30,7 @@
     password: "{{ splunk_admin_password }}"
     method: "{{ http_method|default('GET') }}"
     body_format: form-urlencoded
-    body:
-      output_mode: "{{ splunk_rest_output_mode|default('json') }}"
+    body: "{{ (splunk_rest_body | default({})) | combine({'output_mode': splunk_rest_output_mode|default('json')}) }}"
     return_content: true
     force_basic_auth: true
     validate_certs: false
