@@ -34,46 +34,45 @@
   failed_when: "need_shcluster_init.rc > 1"
   changed_when: "need_shcluster_init.rc == 0"
 
-- name: Init shcluster member
-  tags:
-    - splunk
-    - search_head
-    - shcluster
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk init shcluster-config -shcluster_label {{ splunk_shc_label }} -mgmt_uri https://{{ inventory_hostname }}:8089 -replication_port {{splunk_shc_replication_port}} -secret '{{splunk_shc_pass}}' -conf_deploy_fetch_url https://{{splunk_shc_deployer}}:8089 -auth admin:{{splunk_admin_password}}"
-  become: true
-  become_user: "{{ splunk_user }}"
+- name: Initialize, restart and wait for shcluster
   when: need_shcluster_init.rc == 0
+  block:
+    - name: Init shcluster member
+      tags:
+        - splunk
+        - search_head
+        - shcluster
+      ansible.builtin.command: "{{ splunk_home }}/bin/splunk init shcluster-config -shcluster_label {{ splunk_shc_label }} -mgmt_uri https://{{ inventory_hostname }}:8089 -replication_port {{splunk_shc_replication_port}} -secret '{{splunk_shc_pass}}' -conf_deploy_fetch_url https://{{splunk_shc_deployer}}:8089 -auth admin:{{splunk_admin_password}}"
+      become: true
+      become_user: "{{ splunk_user }}"
 
-- name: Restart splunk for cluster init (service restart)
-  tags:
-    - splunk
-    - search_head
-    - shcluster
-  ansible.builtin.include_role:
-    name: splunk_software
-    tasks_from: restart_splunk
-  when: need_shcluster_init.rc == 0
+    - name: Restart splunk for cluster init (service restart)
+      tags:
+        - splunk
+        - search_head
+        - shcluster
+      ansible.builtin.include_role:
+        name: splunk_software
+        tasks_from: restart_splunk
 
-- name: Wait for splunkd port
-  tags:
-    - splunk
-    - search_head
-    - shcluster
-  ansible.builtin.include_role:
-    name: splunk_common
-    tasks_from: wait_for_splunkd_port
-  when: need_shcluster_init.rc == 0
+    - name: Wait for splunkd port
+      tags:
+        - splunk
+        - search_head
+        - shcluster
+      ansible.builtin.include_role:
+        name: splunk_common
+        tasks_from: wait_for_splunkd_port
 
-# If we have plenty of apps, splunkd does several restarts and needs some time
-- name: Wait for splunkd full service
-  tags:
-    - splunk
-    - search_head
-    - shcluster
-  ansible.builtin.include_role:
-    name: splunk_common
-    tasks_from: wait_for_splunkd_full
-  when: need_shcluster_init.rc == 0
+    # If we have plenty of apps, splunkd does several restarts and needs some time
+    - name: Wait for splunkd full service
+      tags:
+        - splunk
+        - search_head
+        - shcluster
+      ansible.builtin.include_role:
+        name: splunk_common
+        tasks_from: wait_for_splunkd_full
 
 - name: Check shcluster status
   tags:
@@ -99,61 +98,60 @@
   become_user: "{{ splunk_user }}"
   when: inventory_hostname == splunk_shc_host_list|first and shcluster_status.changed == true
 
-- name: Wait for the search head cluster status to be available
-  tags:
-    - splunk
-    - search_head
-    - shcluster
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
-  become: true
-  become_user: "{{ splunk_user }}"
-  check_mode: false
-  register: shcluster_ready
-  until: "shcluster_ready.stdout.find('service_ready_flag') != -1"
-  retries: 15
-  delay: 10
-  delegate_to: "{{splunk_shc_host_list|first}}"
+- name: Add node to SHC and wait for it
   when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
+  block:
+    - name: Wait for the search head cluster status to be available
+      tags:
+        - splunk
+        - search_head
+        - shcluster
+      ansible.builtin.command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
+      become: true
+      become_user: "{{ splunk_user }}"
+      check_mode: false
+      register: shcluster_ready
+      until: "shcluster_ready.stdout.find('service_ready_flag') != -1"
+      retries: 15
+      delay: 10
+      delegate_to: "{{splunk_shc_host_list|first}}"
 
-- name: Add node to search head cluster
-  tags:
-    - splunk
-    - search_head
-    - shcluster
-    - shc_add_member
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk add shcluster-member -current_member_uri https://{{splunk_shc_host_list|first}}:8089 -auth admin:{{ splunk_admin_password }}"
-  become: true
-  become_user: "{{ splunk_user }}"
-  when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
+    - name: Add node to search head cluster
+      tags:
+        - splunk
+        - search_head
+        - shcluster
+        - shc_add_member
+      ansible.builtin.command: "{{ splunk_home }}/bin/splunk add shcluster-member -current_member_uri https://{{splunk_shc_host_list|first}}:8089 -auth admin:{{ splunk_admin_password }}"
+      become: true
+      become_user: "{{ splunk_user }}"
 
-- name: Find splunk servername
-  tags:
-    - splunk
-    - search_head
-    - shcluster
-    - shc_add_member
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk show servername -auth admin:{{ splunk_admin_password }}"
-  become: true
-  become_user: "{{ splunk_user }}"
-  check_mode: false
-  changed_when: false
-  register: splunk_servername
-  when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
+    - name: Find splunk servername
+      tags:
+        - splunk
+        - search_head
+        - shcluster
+        - shc_add_member
+      ansible.builtin.command: "{{ splunk_home }}/bin/splunk show servername -auth admin:{{ splunk_admin_password }}"
+      become: true
+      become_user: "{{ splunk_user }}"
+      check_mode: false
+      changed_when: false
+      register: splunk_servername
 
-- name: Wait for the node to join the cluster
-  tags:
-    - splunk
-    - search_head
-    - shcluster
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
-  become: true
-  become_user: "{{ splunk_user }}"
-  check_mode: false
-  register: shcluster_join
-  until: "shcluster_join.stdout.find('label :' + splunk_servername.stdout.split(':')[1]) != -1"
-  retries: 15
-  delay: 10
-  when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
+    - name: Wait for the node to join the cluster
+      tags:
+        - splunk
+        - search_head
+        - shcluster
+      ansible.builtin.command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
+      become: true
+      become_user: "{{ splunk_user }}"
+      check_mode: false
+      register: shcluster_join
+      until: "shcluster_join.stdout.find('label :' + splunk_servername.stdout.split(':')[1]) != -1"
+      retries: 15
+      delay: 10
 
 - name: Check for first shc bundle push
   tags:
