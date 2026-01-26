@@ -1,0 +1,17 @@
+---
+# Simple connectivity check for Ansible hosts
+- name: Verify Ansible Connectivity
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Ping hosts (wait for connection)
+      ansible.builtin.ping:
+      register: ping_result
+      retries: 30
+      delay: 10
+      until: ping_result is succeeded
+      ignore_errors: false
+
+    - name: Display success
+      ansible.builtin.debug:
+        msg: "✅ {{ inventory_hostname }} is reachable."

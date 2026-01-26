@@ -1,0 +1,60 @@
+---
+- name: Verify Data Flow (SPL Search)
+  hosts: role_search_head
+  # Run on search heads if available, otherwise indexers (for single node)
+  # using order: sorted to ensure consistency or limit to 1
+  order: sorted
+  become: true
+  become_user: root
+  gather_facts: false
+
+  tasks:
+    - name: Select Search Target
+      set_fact:
+        is_search_target: true
+      when:
+        - inventory_hostname == ansible_play_hosts[0]
+
+    - name: Run internal log search
+      include_role:
+        name: splunk_software
+        tasks_from: splunk_rest
+      vars:
+        # Search for hosts sending data to _internal in the last 15 minutes
+        splunk_rest_endpoint: /services/search/jobs
+        http_method: POST
+        # stats count by host to get list of hosts
+        #search: "search index=_internal earliest=-15m | stats count by host"
+        splunk_rest_body:
+          search: "| tstats count WHERE index=_internal earliest=-5m by host"
+          exec_mode: oneshot
+        splunk_rest_output_mode: json
+        splunk_rest_output_show: true
+      when: is_search_target | default(false)
+
+    - name: Debug raw stats output
+      debug:
+        var: splunk_rest_output.content
+      when: is_search_target | default(false)
+
+    - name: Parse search results
+      set_fact:
+        sending_hosts: "{{ splunk_rest_output.content | from_json | json_query('results[*].host') }}"
+      when: is_search_target | default(false)
+
+    - name: Display sending hosts
+      debug:
+        var: sending_hosts
+      when: is_search_target | default(false)
+
+    # Verify that we (the current host) are in the list?
+    # Or verify that ALL expected hosts are in the list?
+    # For a generic test, let's at least assert that the list is not empty.
+    # A more advanced test would require passing the expected host list.
+
+    - name: Assert data is flowing
+      assert:
+        that:
+          - sending_hosts | length > 0
+        fail_msg: "No hosts found sending data to _internal!"
+      when: is_search_target | default(false)

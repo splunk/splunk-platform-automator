@@ -1,0 +1,55 @@
+---
+# splunk_config.yml for testing
+plugin: splunk-platform-automator
+
+# General settings
+general:
+#  url_locale: en-GB
+
+os:
+  #  time_zone: "Europe/Zurich"
+  # Set hostname to ansible_inventory name
+  set_hostname: true
+
+# Terraform configuration for AWS infrastructure
+terraform:
+  aws:
+    #access_key_id: '' # defaults to ENV['AWS_ACCESS_KEY_ID']
+    #secret_access_key: '' # ENV['AWS_SECRET_ACCESS_KEY']
+    region: "eu-central-1"
+    ami_id: "ami-03cbad7144aeda3eb" # Redhat 9 (eu-central-1)
+    key_name: "aws_key"
+    ssh_private_key_file: "~/.ssh/aws_key.pem"
+    security_group_names: ["Splunk_Basic"]
+    instance_type: "c5.4xlarge"
+    root_volume_size: 50
+    tags:
+      Env: "SPA Testing"
+      splunkit_data_classification: public
+      splunkit_environment_type: non-prd
+
+# Splunk default settings
+splunk_defaults:
+  splunk_download:
+    splunk: true
+    splunkforwarder: true
+  splunk_set_servername: true
+  splunk_set_default_hostname: true
+  splunk_loginpage_print_userpw: false
+
+  # Enable ssl by default to secure internet facing connections.
+  splunk_ssl:
+    web:
+      enable: true
+    inputs:
+      enable: true
+    outputs:
+      enable: true
+
+# Splunk hosts with its settings
+splunk_hosts:
+  # Simple Single Node for Testing
+  - name: shidx
+    roles:
+      - indexer
+      - search_head

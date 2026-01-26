@@ -1,0 +1,55 @@
+---
+- name: Find Search Head Cluster Member
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Find SHC member
+      set_fact:
+        shc_member: >-
+          {{
+            groups.keys()
+            | select('match', '^shcluster_')
+            | map('extract', groups)
+            | flatten
+            | intersect(groups['role_search_head'] | default([]))
+            | first | default('')
+          }}
+
+    - name: Debug SHC member finding
+      debug:
+        msg:
+          - "Found SHC member: '{{ shc_member }}'"
+          - "Role search head group: {{ groups['role_search_head'] | default('undefined') }}"
+          - "All groups: {{ groups.keys() }}"
+
+    - name: Add to target group
+      add_host:
+        name: "{{ shc_member }}"
+        groups: target_shc_group
+      when: shc_member != ''
+      changed_when: false
+
+- name: Check Search Head Cluster Health
+  hosts: target_shc_group
+  become: true
+  become_user: root
+  gather_facts: false
+
+  tasks:
+    - name: Check SHC status
+      include_role:
+        name: splunk_software
+        tasks_from: splunk_rest
+      vars:
+        splunk_rest_endpoint: /services/shcluster/status
+        splunk_rest_output_mode: json
+
+    - name: Parse cluster status
+      set_fact:
+        shc_service_ready: "{{ splunk_rest_output.content | from_json | json_query('entry[0].content.captain.service_ready_flag') | bool }}"
+
+    - name: Assert SHC Service Ready
+      assert:
+        that:
+          - shc_service_ready == true
+        fail_msg: "Search Head Cluster is not ready! service_ready_flag is false."
