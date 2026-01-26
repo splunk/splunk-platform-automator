@@ -157,17 +157,38 @@ class InventoryModule(BaseInventoryPlugin):
             raise AnsibleParserError("Missing required python libraries: {}. Please run 'pip install -r requirements.txt' to install them.".format(", ".join(missing)))
 
     def _init_inventory(self):
-        if not os.path.isdir("inventory"):
+        # Calculate correct path to inventory dir relative to this script
+        # Script location: ansible/plugins/inventory/splunk-platform-automator.py
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        inventory_dir = os.path.join(base_dir, "inventory")
+
+        if not os.path.isdir(inventory_dir):
             try:
-                os.mkdir("inventory")
+                os.mkdir(inventory_dir)
             except Exception as e:
                 raise AnsibleParserError('Cannot create inventory directory. Error: {}'.format(e))
-        if not os.path.exists(os.path.join("inventory", "hosts")):
+        if not os.path.exists(os.path.join(inventory_dir, "hosts")):
             try:
-                with open(os.path.join("inventory", "hosts"), 'w') as f:
+                with open(os.path.join(inventory_dir, "hosts"), 'w') as f:
                     f.write('')
             except Exception as e:
-                raise AnsibleParserError('Cannot create inventory/hosts file. Error: {}'.format(e))            
+                raise AnsibleParserError('Cannot create inventory/hosts file. Error: {}'.format(e))
+        
+        # Create symlink for group_vars to ensure they are picked up
+        # inventory/group_vars -> ../ansible/group_vars
+        group_vars_source = os.path.join(base_dir, "ansible", "group_vars")
+        group_vars_link = os.path.join(inventory_dir, "group_vars")
+        
+        if not os.path.exists(group_vars_link):
+            try:
+                # We need a relative path for the symlink to be portable if possible, 
+                # but absolute is safer given we calculated base_dir
+                # Actually, os.symlink(src, dst)
+                # Let's use relative path: ../ansible/group_vars
+                os.symlink("../ansible/group_vars", group_vars_link)
+            except Exception as e:
+                # If symlink fails (e.g. Windows), we might warn but usually ignored
+                pass            
 
     def _set_virtualization(self, splunk_config):
         '''Set virtualization type based on the definition in the config file'''
