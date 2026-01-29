@@ -27,9 +27,9 @@ locals {
 
 resource "aws_instance" "splunk" {
   for_each               = var.host_configs
-  ami                    = var.ami_id
+  ami                    = coalesce(each.value.ami_id, var.ami_id)
   instance_type          = each.value.instance_type
-  key_name               = var.key_name
+  key_name               = coalesce(each.value.key_name, var.key_name)
   vpc_security_group_ids = data.aws_security_groups.selected.ids
 
   # Enable detailed monitoring for better visibility

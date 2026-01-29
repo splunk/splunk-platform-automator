@@ -142,7 +142,7 @@ if provider == "aws"
   if File.file?(File.join(config_dir, "aws_ec2.yml"))
     aws_ec2 = YAML.load_file(File.join(config_dir, "aws_ec2.yml"))
   end
-  if aws_ec2 == false
+  if !aws_ec2
     aws_ec2 = {}
   end
   if aws_ec2.has_key?("filters")

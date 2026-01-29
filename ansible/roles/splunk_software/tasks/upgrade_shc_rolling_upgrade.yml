@@ -20,7 +20,7 @@
     sh_status: "{{ splunk_rest_json_output.entry[0].content.status }}"
     sh_restart_state: "{{ splunk_rest_json_output.entry[0].content.restart_state }}"
   vars:
-    splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
+    splunk_rest_json_output: "{{ splunk_rest_output.content|ansible.builtin.from_json }}"
 
 - name: Fail if peer has wrong state
   tags:
@@ -56,7 +56,7 @@
   ansible.builtin.set_fact:
     shc_captain: "{{ splunk_rest_json_output.entry[0].content.captain.label }}"
   vars:
-    splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
+    splunk_rest_json_output: "{{ splunk_rest_output.content|ansible.builtin.from_json }}"
 
 - name: Fail if search head is captain
   tags:
@@ -113,7 +113,7 @@
     validate_certs: false
   register: splunk_rest_output_local
   vars:
-    splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|to_json|from_json }}"
+    splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|ansible.builtin.from_json }}"
   check_mode: false
   # Real Time searches are never going to stop, so we do not check for them here
   until: "splunk_rest_json_output_local.entry[0].content.active_historical_search_count == 0"
@@ -180,7 +180,7 @@
     sh_status: "{{ splunk_rest_json_output.entry[0].content.status }}"
     sh_restart_state: "{{ splunk_rest_json_output.entry[0].content.restart_state }}"
   vars:
-    splunk_rest_json_output: "{{ splunk_rest_output.content|to_json|from_json }}"
+    splunk_rest_json_output: "{{ splunk_rest_output.content|ansible.builtin.from_json }}"
 
 - name: Remove manual detention mode on search head
   tags:
@@ -216,7 +216,7 @@
     validate_certs: false
   register: splunk_rest_output_local
   vars:
-    splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|to_json|from_json }}"
+    splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|ansible.builtin.from_json }}"
   check_mode: false
   until: "splunk_rest_json_output_local.entry[0].content.status == 'Up'"
   # Wait 10 minutes to complete this step

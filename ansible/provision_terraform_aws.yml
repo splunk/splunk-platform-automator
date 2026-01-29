@@ -16,6 +16,13 @@
       tags:
         - always
 
+    - name: Load AWS defaults
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../defaults/aws.yml"
+        name: default_config
+      tags:
+        - always
+
     - name: Validate terraform section exists
       ansible.builtin.assert:
         that:
@@ -50,22 +57,12 @@
         msg: "Generated {{ terraform_dir }}/terraform.tfvars from {{ config_file }}"
       tags: generate
 
-    - name: Initialize Terraform
-      community.general.terraform:
-        project_path: "{{ terraform_dir }}"
-        force_init: true
-      environment: "{{ terraform_env | default({}) }}"
-      register: terraform_init
-      tags:
-        - init
-        - plan
-        - apply
-
     - name: Run Terraform Plan
       community.general.terraform:
         project_path: "{{ terraform_dir }}"
         state: planned
         plan_file: "{{ terraform_dir }}/tfplan"
+        force_init: true
       environment: "{{ terraform_env | default({}) }}"
       register: terraform_plan
       tags:
@@ -127,7 +124,7 @@
     - name: Confirm inventory generation
       ansible.builtin.debug:
         msg: "✅ Generated Ansible inventory at {{ playbook_dir }}/../inventory/hosts"
-      when: 
+      when:
         - terraform_outputs.outputs.ansible_inventory is defined
         - inventory_result is changed
       tags:

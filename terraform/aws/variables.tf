@@ -38,6 +38,10 @@ variable "security_group_names" {
 variable "host_configs" {
   type = map(object({
     instance_type         = optional(string, "t2.micro")
+    ami_id                = optional(string)
+    key_name              = optional(string)
+    ssh_username          = optional(string)
+    ssh_private_key_file  = optional(string)
     root_volume_size      = optional(number, 50)
     root_volume_type      = optional(string, "gp3")
     root_volume_encrypted = optional(bool, true)

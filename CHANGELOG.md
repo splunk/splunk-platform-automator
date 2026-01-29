@@ -5,10 +5,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
-## 2.3.1-dev - ongoing
+## [2.3.1](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.3.1) - 2026-01-25
 
 ### Added
 
+- Added `bin/spash` wrapper script to easily connect to valid Ansible hosts via SSH
+  - Lists available hosts and their roles with `./bin/spash -l`
+    - Added option `-v` to check the status of the hosts (ansible ping/aws status)
+  - Connects to hosts using Ansible inventory details
+  - Added scp support to copy files to/from hosts with `-c` option
 - Added check for Ansible version compatibility (greater than 2.10)
 - Added requirements for community collections
 
@@ -19,6 +24,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Fixed premature terraform provisioning
+- Fixed terraform variable precedence order
 - Fixed Splunk version detection logic for Splunk 10+
 - Fixed Ansible linting issues:
   - Added names to anonymous tasks
