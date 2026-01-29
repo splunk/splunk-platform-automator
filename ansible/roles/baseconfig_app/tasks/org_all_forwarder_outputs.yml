@@ -22,7 +22,7 @@
     value: "{{ splunk_outputs_tcpout_list|map('regex_replace','^(.*)$','\\1_indexers')|join(',') }}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: '0644'
+    mode: "0644"
   notify: Restart splunk
   when: splunk_outputs_idxc_list|length > 0 or splunk_outputs_idx_list|length > 0
 
@@ -37,7 +37,7 @@
     replace: "[tcpout:{{ splunk_outputs_idxc_list|first+'_indexers' }}]"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: '0644'
+    mode: "0644"
   notify: Restart splunk
   when: splunk_outputs_idxc_list|length > 0
 
@@ -82,61 +82,61 @@
     value: "{% set comma = joiner(',') %}{% for idx in item.value %}{{ comma() }}{{ idx }}:{{idx_port}}{% endfor %}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: '0644'
+    mode: "0644"
   notify: Restart splunk
   loop: "{{ splunk_outputs_idxc_list | dict2items }}"
   when: splunk_outputs_idxc_list|length > 0
 
-- name: "({{ app_name }}) setting indexerDiscovery for indexer clusters"
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - org_all_forwarder_outputs
-  community.general.ini_file:
-    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
-    section: tcpout:{{ item.idxc_name+'_indexers' }}
-    option: indexerDiscovery
-    value: "{{ item.idxc_name+'_indexers' }}"
-    owner: "{{splunk_user}}"
-    group: "{{splunk_group}}"
-    mode: '0644'
-  notify: Restart splunk
-  loop: "{{ splunk_outputs_discovery_idxc_list }}"
+- name: Configure indexer discovery
   when: splunk_outputs_discovery_idxc_list|length > 0
+  block:
+    - name: "({{ app_name }}) setting indexerDiscovery for indexer clusters"
+      tags:
+        - splunk
+        - splunk_baseconfig
+        - org_all_forwarder_outputs
+      community.general.ini_file:
+        path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+        section: tcpout:{{ item.idxc_name+'_indexers' }}
+        option: indexerDiscovery
+        value: "{{ item.idxc_name+'_indexers' }}"
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+        mode: "0644"
+      notify: Restart splunk
+      loop: "{{ splunk_outputs_discovery_idxc_list }}"
 
-- name: "({{ app_name }}) setting indexer discovery password"
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - org_all_forwarder_outputs
-  community.general.ini_file:
-    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
-    section: indexer_discovery:{{ item.idxc_name+'_indexers' }}
-    option: pass4SymmKey
-    value: "{{ item.password }}"
-    owner: "{{splunk_user}}"
-    group: "{{splunk_group}}"
-    mode: '0644'
-  notify: Restart splunk
-  loop: "{{ splunk_outputs_discovery_idxc_list }}"
-  when: splunk_outputs_discovery_idxc_list|length > 0
+    - name: "({{ app_name }}) setting indexer discovery password"
+      tags:
+        - splunk
+        - splunk_baseconfig
+        - org_all_forwarder_outputs
+      community.general.ini_file:
+        path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+        section: indexer_discovery:{{ item.idxc_name+'_indexers' }}
+        option: pass4SymmKey
+        value: "{{ item.password }}"
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+        mode: "0644"
+      notify: Restart splunk
+      loop: "{{ splunk_outputs_discovery_idxc_list }}"
 
-- name: "({{ app_name }}) setting indexer discovery manager_uri"
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - org_all_forwarder_outputs
-  community.general.ini_file:
-    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
-    section: indexer_discovery:{{ item.idxc_name+'_indexers' }}
-    option: "{{splunk_manager_uri_var}}"
-    value: "https://{{item.master }}:8089"
-    owner: "{{splunk_user}}"
-    group: "{{splunk_group}}"
-    mode: '0644'
-  notify: Restart splunk
-  loop: "{{ splunk_outputs_discovery_idxc_list }}"
-  when: splunk_outputs_discovery_idxc_list|length > 0
+    - name: "({{ app_name }}) setting indexer discovery manager_uri"
+      tags:
+        - splunk
+        - splunk_baseconfig
+        - org_all_forwarder_outputs
+      community.general.ini_file:
+        path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+        section: indexer_discovery:{{ item.idxc_name+'_indexers' }}
+        option: "{{splunk_manager_uri_var}}"
+        value: "https://{{item.master }}:8089"
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+        mode: "0644"
+      notify: Restart splunk
+      loop: "{{ splunk_outputs_discovery_idxc_list }}"
 
 - name: "({{ app_name }}) setting ssl in tcpout stanza for clustered indexers"
   tags:
@@ -163,7 +163,7 @@
     replace: "[tcpout:all_indexers]"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: '0644'
+    mode: "0644"
   notify: Restart splunk
   when: splunk_outputs_idxc_list|length == 0 and splunk_outputs_idx_list|length > 0
 
@@ -179,55 +179,54 @@
     value: "{% set comma = joiner(',') %}{% for idx in splunk_outputs_idx_list %}{{ comma() }}{{ idx }}:{{idx_port}}{% endfor %}"
     owner: "{{splunk_user}}"
     group: "{{splunk_group}}"
-    mode: '0644'
+    mode: "0644"
   notify: Restart splunk
   when: splunk_outputs_idx_list|length > 0
 
-- name: "({{ app_name }}) setting other ssl configs in tcpout stanza for non clustered indexers"
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - org_all_forwarder_outputs
-    - outputs_ssl
-  community.general.ini_file:
-    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
-    section: tcpout:all_indexers
-    option: "{{ item.key }}"
-    value: "{{ item.value }}"
-    owner: "{{splunk_user}}"
-    group: "{{splunk_group}}"
-    mode: '0600'
-  notify: Restart splunk
-  loop: "{{ splunk_ssl.outputs.config | dict2items }}"
+- name: Configure SSL for non-clustered indexers
   when:
     - splunk_outputs_idx_list|length > 0
     - splunk_ssl.outputs.enable == true
+  block:
+    - name: "({{ app_name }}) setting other ssl configs in tcpout stanza for non clustered indexers"
+      tags:
+        - splunk
+        - splunk_baseconfig
+        - org_all_forwarder_outputs
+        - outputs_ssl
+      community.general.ini_file:
+        path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+        section: tcpout:all_indexers
+        option: "{{ item.key }}"
+        value: "{{ item.value }}"
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+        mode: "0600"
+      notify: Restart splunk
+      loop: "{{ splunk_ssl.outputs.config | dict2items }}"
 
-- name: "({{ app_name }}) setting ssl certfile configs in tcpout stanza for non clustered indexers"
-  tags:
-    - splunk
-    - splunk_baseconfig
-    - org_all_forwarder_outputs
-    - outputs_ssl
-  community.general.ini_file:
-    path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
-    section: tcpout:all_indexers
-    option: "{{ item.varkey }}"
-    value: "$SPLUNK_HOME/etc/apps/{{ app_dest_name }}/default/{{ item.varvalue|basename }}"
-    owner: "{{splunk_user}}"
-    group: "{{splunk_group}}"
-    mode: '0600'
-  notify: Restart splunk
-  loop:
-    - {
-        varkey: "sslRootCAPath",
-        varvalue: "{{ splunk_ssl.outputs.config.sslRootCAPath|default('cacert.pem') }}",
-      }
-    - {
-        varkey: "sslCertPath",
-        varvalue: "{{ splunk_ssl.outputs.config.sslCertPath|default('client.pem') }}",
-      }
-  when:
-    - splunk_outputs_idx_list|length > 0
-    - splunk_ssl.outputs.enable == true
-    - splunk_ssl.outputs.own_certs == true
+    - name: "({{ app_name }}) setting ssl certfile configs in tcpout stanza for non clustered indexers"
+      tags:
+        - splunk
+        - splunk_baseconfig
+        - org_all_forwarder_outputs
+        - outputs_ssl
+      community.general.ini_file:
+        path: "{{ app_path }}/{{ app_dest_name }}/local/outputs.conf"
+        section: tcpout:all_indexers
+        option: "{{ item.varkey }}"
+        value: "$SPLUNK_HOME/etc/apps/{{ app_dest_name }}/default/{{ item.varvalue|basename }}"
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+        mode: "0600"
+      notify: Restart splunk
+      loop:
+        - {
+            varkey: "sslRootCAPath",
+            varvalue: "{{ splunk_ssl.outputs.config.sslRootCAPath|default('cacert.pem') }}",
+          }
+        - {
+            varkey: "sslCertPath",
+            varvalue: "{{ splunk_ssl.outputs.config.sslCertPath|default('client.pem') }}",
+          }
+      when: splunk_ssl.outputs.own_certs == true
