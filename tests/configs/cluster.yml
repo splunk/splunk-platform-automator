@@ -1,0 +1,56 @@
+---
+# Test Configuration: Single Node Deployment
+# A minimal Splunk deployment with indexer + search_head on one host.
+
+plugin: splunk-platform-automator
+
+# General settings
+general:
+  # url_locale: en-GB
+
+os:
+  # Set hostname to ansible_inventory name
+  set_hostname: true
+
+# Terraform configuration for AWS infrastructure
+terraform:
+  aws:
+    # Credentials default to ENV vars: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+    region: "eu-central-1"
+    ami_id: "ami-03cbad7144aeda3eb" # Redhat 9 (eu-central-1)
+    key_name: "aws_key"
+    ssh_private_key_file: "~/.ssh/aws_key.pem"
+    security_group_names: ["Splunk_Basic"]
+    instance_type: "c5.4xlarge"
+    root_volume_size: 50
+    tags:
+      Env: "SPA Testing (Single Node 2)"
+      TestConfig: "single_node"
+      splunkit_data_classification: public
+      splunkit_environment_type: non-prd
+
+# Splunk default settings
+splunk_defaults:
+  splunk_download:
+    splunk: true
+    splunkforwarder: true
+  splunk_set_servername: true
+  splunk_set_default_hostname: true
+  splunk_loginpage_print_userpw: false
+
+  # Enable SSL for internet-facing connections
+  splunk_ssl:
+    web:
+      enable: true
+    inputs:
+      enable: true
+    outputs:
+      enable: true
+
+# Splunk hosts
+splunk_hosts:
+  # Single node with indexer + search_head roles
+  - name: shidx2
+    roles:
+      - indexer
+      - search_head
