@@ -88,8 +88,8 @@ class TestSplunkVerification:
     
     def _check_deployment_complete(self):
         """Verify that deployment was completed."""
-        # Check if the workspace indicates deployment is done
-        if not getattr(self.manager, 'is_deployed', False):
+        # Check if the workspace indicates Splunk is configured
+        if not getattr(self.manager, 'is_splunk_configured', False):
             # Try to check if splunk is actually running by looking for indicators
             # This allows verification to run even if deployment tests were run separately
             config_path = os.path.join(self.work_dir, 'config', 'splunk_config.yml')

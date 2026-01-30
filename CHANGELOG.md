@@ -7,6 +7,16 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ## 2.3.2-dev - ongoing
 
+### Added
+
+- Added pytest-based test framework for automated deployment and verification testing:
+  - Sequential deployment tests with dependency tracking (`is_provisioned`, `is_splunk_installed`, `is_splunk_configured`)
+  - Integrated verification tests (data flow, IDXC health, SHC health)
+  - Parallel execution support for multiple configurations using pytest-xdist
+  - `--local` mode to run verification tests against existing local deployments
+  - Automatic workspace isolation with per-config venvs and temp directories
+  - Infrastructure auto-teardown after test completion
+
 ### Changed
 
 - Optimized Ansible performance:

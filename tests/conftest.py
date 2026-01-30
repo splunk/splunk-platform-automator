@@ -31,12 +31,19 @@ def pytest_generate_tests(metafunc):
     """
     Dynamically parametrize tests based on config files found in tests/configs/.
     This runs at collection time.
+    
+    In --local mode, uses 'local' as the single config identifier.
     """
     if "config_file" in metafunc.fixturenames:
-        configs = get_test_configs()
-        if not configs:
-            configs = ["NO_CONFIGS_FOUND"]
-        metafunc.parametrize("config_file", configs, scope="class")
+        # Check for --local flag
+        if metafunc.config.getoption("--local", default=False):
+            # In local mode, use a single 'local' identifier
+            metafunc.parametrize("config_file", ["local"], scope="class")
+        else:
+            configs = get_test_configs()
+            if not configs:
+                configs = ["NO_CONFIGS_FOUND"]
+            metafunc.parametrize("config_file", configs, scope="class")
 
 
 class WorkspaceManager:
@@ -57,7 +64,7 @@ class WorkspaceManager:
         self.splunk_env_id = None
         self.config_data = None
         self.is_provisioned = False
-        self.is_deployed = False
+        self.is_splunk_installed = False
         
     def setup(self) -> dict:
         """Create isolated workspace with cloned codebase and venv."""
@@ -245,6 +252,89 @@ class WorkspaceManager:
             shutil.rmtree(self.work_dir, ignore_errors=True)
 
 
+class LocalWorkspaceManager:
+    """
+    Simplified workspace manager for running against existing local deployment.
+    
+    Uses the project root directly (no temp directory or venv creation).
+    Infrastructure is NOT destroyed on teardown.
+    """
+    
+    def __init__(self, project_root: str):
+        self.project_root = project_root
+        self.work_dir = project_root
+        self.splunk_env_id = "local"
+        self.config_data = None
+        self.is_provisioned = True  # Assume existing deployment
+        self.is_splunk_installed = True  # Assume Splunk is installed
+        self.is_splunk_configured = True  # Assume Splunk is configured
+        
+        # Load config from project root
+        config_path = os.path.join(project_root, 'config', 'splunk_config.yml')
+        if os.path.isfile(config_path):
+            with open(config_path, 'r') as f:
+                self.config_data = yaml.safe_load(f)
+    
+    @property
+    def venv_bin(self) -> str:
+        """Use system PATH for ansible-playbook."""
+        return ""
+    
+    def get_ansible_playbook_bin(self) -> str:
+        """Get ansible-playbook from PATH or common locations."""
+        # Try PATH first
+        import shutil as sh
+        path = sh.which("ansible-playbook")
+        if path:
+            return path
+        # Common locations
+        for loc in ["/usr/local/bin/ansible-playbook", "/opt/homebrew/bin/ansible-playbook"]:
+            if os.path.isfile(loc):
+                return loc
+        return "ansible-playbook"
+    
+    def get_ansible_env(self) -> dict:
+        """Get environment variables for Ansible execution."""
+        env = os.environ.copy()
+        env['ANSIBLE_CONFIG'] = os.path.join(self.work_dir, 'ansible.cfg')
+        return env
+    
+    def get_all_roles(self) -> set:
+        """Extract all roles from config."""
+        all_roles = set()
+        if self.config_data and 'splunk_hosts' in self.config_data:
+            for host in self.config_data['splunk_hosts']:
+                if 'roles' in host:
+                    all_roles.update(host['roles'])
+        return all_roles
+    
+    def get_env_data(self) -> dict:
+        """Return workspace environment data."""
+        return {
+            "work_dir": self.work_dir,
+            "splunk_env_id": self.splunk_env_id,
+            "is_local": True
+        }
+    
+    def destroy_infrastructure(self):
+        """No-op for local mode - we don't destroy existing infrastructure."""
+        print("[LOCAL] Skipping infrastructure destroy in local mode")
+    
+    def cleanup(self):
+        """No-op for local mode - we don't cleanup the project directory."""
+        pass
+
+
+def pytest_addoption(parser):
+    """Add custom command-line options."""
+    parser.addoption(
+        "--local",
+        action="store_true",
+        default=False,
+        help="Run verification against existing local deployment (no workspace creation)"
+    )
+
+
 # Global workspace storage for class-scoped fixture
 _workspaces = {}
 
@@ -254,13 +344,21 @@ def workspace_manager(request, worker_id, config_file):
     """
     Creates an isolated deployment workspace for each test class (config).
     
-    Lifecycle:
+    If --local flag is passed, uses LocalWorkspaceManager which runs against
+    the existing local deployment without creating a temp workspace.
+    
+    Lifecycle (normal mode):
     1. Create temp directory
     2. Clone the codebase (excluding .git, .vagrant, etc.)
     3. Create dedicated venv with Ansible
     4. Generate unique SplunkEnvID
     5. Yield workspace manager
     6. Teardown: destroy infrastructure, cleanup temp directory
+    
+    Lifecycle (--local mode):
+    1. Use project root directly
+    2. Use existing config/splunk_config.yml
+    3. Skip teardown (infrastructure persists)
     
     Args:
         request: pytest request fixture
@@ -270,7 +368,17 @@ def workspace_manager(request, worker_id, config_file):
     
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     
-    # Create workspace manager
+    # Check for --local flag
+    if request.config.getoption("--local"):
+        print("\n[LOCAL] Running in local mode against existing deployment")
+        manager = LocalWorkspaceManager(project_root)
+        _workspaces[config_file] = manager
+        yield manager
+        # No teardown in local mode
+        _workspaces.pop(config_file, None)
+        return
+    
+    # Normal mode: create isolated workspace
     manager = WorkspaceManager(config_file, worker_id, project_root)
     manager.setup()
     

@@ -11,6 +11,13 @@
 #   ./run_verification_tests.sh                            # Run all verification tests
 #   ./run_verification_tests.sh -k "single_node"           # Run only single_node config
 #   ./run_verification_tests.sh -n 2                       # Run with 2 parallel workers
+#   ./run_verification_tests.sh --local                    # Run against existing local deployment
+#   ./run_verification_tests.sh --local -s                 # Local mode with output visible
+#
+# The --local flag runs tests against your existing local deployment:
+#   - Uses config/splunk_config.yml from the project root
+#   - Does NOT create a temp workspace or venv
+#   - Does NOT destroy infrastructure after tests
 #
 # Note: When using -n for parallel execution, tests are grouped by config file
 #       to maintain sequential dependencies within each test suite.

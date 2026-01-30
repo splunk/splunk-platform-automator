@@ -55,10 +55,15 @@ Sequential tests that build the environment:
 | 8 | `test_08_setup_splunk_roles` | `setup_splunk_roles.yml` |
 | 9 | `test_09_setup_splunk_conf` | `setup_splunk_conf.yml` |
 | 10 | `test_10_setup_other_roles` | `setup_other_roles.yml` |
+| 11 | `test_11_verify_data_flow` | Verify data in `_internal` index |
+| 12 | `test_12_check_idxc_health` | Indexer cluster health (if applicable) |
+| 13 | `test_13_check_shc_health` | SHC cluster health (if applicable) |
 
-### Phase 2: Verification (`test_verification.py`)
+> **Note:** Verification tests (11-13) are now integrated into the deployment suite. They run after deployment is complete but before infrastructure is torn down.
 
-Health checks after deployment:
+### Legacy: Standalone Verification (`test_verification.py`)
+
+For standalone verification against existing infrastructure:
 
 | Test | Description | Condition |
 |------|-------------|-----------|
@@ -83,7 +88,21 @@ Health checks after deployment:
 ./tests/run_deployment_tests.sh -n 2
 ```
 
-### Run Verification Tests
+### Run Verification Against Local Deployment
+
+Run verification tests against an existing deployment (no workspace creation, no teardown):
+
+```bash
+./tests/run_verification_tests.sh --local -s
+```
+
+This mode:
+- Uses `config/splunk_config.yml` from the project root
+- Does NOT create a temp workspace or venv
+- Does NOT destroy infrastructure after tests
+- Uses ansible-playbook from your system PATH
+
+### Run Standalone Verification Tests
 ```bash
 ./tests/run_verification_tests.sh
 ```

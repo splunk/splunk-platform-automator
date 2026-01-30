@@ -232,6 +232,11 @@ class TestSplunkDeployment:
         result = self._run_playbook("ansible/install_splunk.yml")
         
         assert result.returncode == 0, "install_splunk.yml failed"
+        
+        # Mark Splunk as installed for dependent tests
+        self.manager.is_splunk_installed = True
+        self.__class__.is_splunk_installed = True
+        
         print("[DEPLOY] Splunk software installed")
     
     # =========================================================================
@@ -244,13 +249,18 @@ class TestSplunkDeployment:
         Runs: ansible/setup_splunk_roles.yml
         - Configures clustering, replication, etc.
         """
-        if not getattr(self, 'is_provisioned', False):
-            pytest.fail("Previous step failed: Infrastructure not provisioned")
+        if not getattr(self, 'is_splunk_installed', False):
+            pytest.fail("Previous step failed: Splunk not installed")
         
         print("\n[DEPLOY] Running setup_splunk_roles.yml...")
         result = self._run_playbook("ansible/setup_splunk_roles.yml")
         
         assert result.returncode == 0, "setup_splunk_roles.yml failed"
+        
+        # Mark Splunk as configured for dependent tests
+        self.manager.is_splunk_configured = True
+        self.__class__.is_splunk_configured = True
+        
         print("[DEPLOY] Splunk roles configured")
     
     # =========================================================================
@@ -263,8 +273,8 @@ class TestSplunkDeployment:
         Runs: ansible/setup_splunk_conf.yml
         - Applies custom .conf file settings
         """
-        if not getattr(self, 'is_provisioned', False):
-            pytest.fail("Previous step failed: Infrastructure not provisioned")
+        if not getattr(self, 'is_splunk_installed', False):
+            pytest.fail("Previous step failed: Splunk not installed")
         
         print("\n[DEPLOY] Running setup_splunk_conf.yml...")
         result = self._run_playbook("ansible/setup_splunk_conf.yml")
@@ -290,9 +300,92 @@ class TestSplunkDeployment:
         
         assert result.returncode == 0, "setup_other_roles.yml failed"
         
-        # Mark deployment as complete
-        self.manager.is_deployed = True
-        self.__class__.is_deployed = True
-        
         print("[DEPLOY] Deployment complete!")
         print(f"[DEPLOY] Environment ID: {self.splunk_env_id}")
+    
+    # =========================================================================
+    # VERIFICATION TESTS (run after deployment, before teardown)
+    # =========================================================================
+    
+    def _run_verification_playbook(self, playbook_name: str):
+        """Run a verification playbook from ansible/verification/ directory."""
+        return self._run_playbook(f"ansible/verification/{playbook_name}")
+    
+    def _get_all_roles(self) -> set:
+        """Extract all roles from config."""
+        return self.manager.get_all_roles()
+    
+    # =========================================================================
+    # Test 11: Verify Data Flow
+    # =========================================================================
+    def test_11_verify_data_flow(self, config_file):
+        """
+        Step 11: Verify data is flowing into Splunk.
+        
+        Runs: ansible/verification/verify_data_flow.yml
+        - Searches _internal index for data
+        - Asserts hosts are sending data
+        """
+        if not getattr(self, 'is_splunk_configured', False):
+            pytest.fail("Previous step failed: Splunk not configured")
+        
+        print(f"\n[VERIFY] Verifying data flow for environment: {self.splunk_env_id}")
+        
+        result = self._run_verification_playbook("verify_data_flow.yml")
+        
+        assert result.returncode == 0, "Data flow verification failed - no data in _internal index"
+        print("[VERIFY] Data flow verification passed")
+    
+    # =========================================================================
+    # Test 12: Check Indexer Cluster Health
+    # =========================================================================
+    def test_12_check_idxc_health(self, config_file):
+        """
+        Step 12: Verify Indexer Cluster health.
+        
+        Runs: ansible/verification/check_idxc_health.yml
+        - Checks cluster manager for service_ready_flag
+        
+        Skipped if 'cluster_manager' role is not in config.
+        """
+        if not getattr(self, 'is_splunk_configured', False):
+            pytest.fail("Previous step failed: Splunk not configured")
+        
+        roles = self._get_all_roles()
+        
+        if 'cluster_manager' not in roles:
+            pytest.skip("No cluster_manager role in configuration - skipping IDXC health check")
+        
+        print("\n[VERIFY] Checking Indexer Cluster health...")
+        
+        result = self._run_verification_playbook("check_idxc_health.yml")
+        
+        assert result.returncode == 0, "Indexer Cluster health check failed"
+        print("[VERIFY] Indexer Cluster is healthy")
+    
+    # =========================================================================
+    # Test 13: Check Search Head Cluster Health
+    # =========================================================================
+    def test_13_check_shc_health(self, config_file):
+        """
+        Step 13: Verify Search Head Cluster health.
+        
+        Runs: ansible/verification/check_shc_health.yml
+        - Checks SHC captain for service_ready_flag
+        
+        Skipped if 'deployer' role is not in config.
+        """
+        if not getattr(self, 'is_splunk_configured', False):
+            pytest.fail("Previous step failed: Splunk not configured")
+        
+        roles = self._get_all_roles()
+        
+        if 'deployer' not in roles:
+            pytest.skip("No deployer role in configuration - skipping SHC health check")
+        
+        print("\n[VERIFY] Checking Search Head Cluster health...")
+        
+        result = self._run_verification_playbook("check_shc_health.yml")
+        
+        assert result.returncode == 0, "Search Head Cluster health check failed"
+        print("[VERIFY] Search Head Cluster is healthy")
