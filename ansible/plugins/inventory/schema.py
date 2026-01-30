@@ -1,0 +1,423 @@
+"""
+Pydantic schema models for Splunk Platform Automator configuration validation.
+
+This module provides comprehensive validation for splunk_config.yml files,
+ensuring configurations are valid before Ansible inventory processing begins.
+"""
+
+from __future__ import annotations
+
+from enum import Enum
+from typing import Any, Dict, List, Optional, Union
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
+
+
+# =============================================================================
+# Enums for allowed values
+# =============================================================================
+
+class AllowedRole(str, Enum):
+    """Allowed Splunk roles for hosts."""
+    cluster_manager = "cluster_manager"
+    deployer = "deployer"
+    deployment_server = "deployment_server"
+    heavy_forwarder = "heavy_forwarder"
+    indexer = "indexer"
+    license_manager = "license_manager"
+    monitoring_console = "monitoring_console"
+    search_head = "search_head"
+    universal_forwarder = "universal_forwarder"
+    universal_forwarder_windows = "universal_forwarder_windows"
+
+
+# Roles that are allowed to have a 'site' variable
+ROLES_WITH_SITE = {AllowedRole.indexer, AllowedRole.search_head, AllowedRole.cluster_manager}
+
+
+# =============================================================================
+# Sub-models for nested configuration sections
+# =============================================================================
+
+class GeneralConfig(BaseModel):
+    """General settings section."""
+    model_config = ConfigDict(extra='forbid')
+    
+    url_locale: Optional[str] = Field(
+        None, 
+        pattern=r'^[a-z]{2}[_-][A-Z]{2}$',
+        description="Language locale for links (e.g., 'en-GB')"
+    )
+
+
+class VirtualBoxSyncedFolder(BaseModel):
+    """VirtualBox synced folder configuration."""
+    source: str
+    target: str
+
+
+class VirtualBoxConfig(BaseModel):
+    """VirtualBox virtualization settings."""
+    model_config = ConfigDict(extra='allow')
+    
+    start_ip: Optional[str] = Field(None, description="Starting IP address (192.68.56.0/21 range)")
+    box: Optional[str] = Field(None, description="Vagrant box name")
+    memory: Optional[int] = Field(None, ge=256, description="Memory in MB (min 256)")
+    cpus: Optional[int] = Field(None, ge=1, description="Number of CPUs (min 1)")
+    install_vbox_additions: Optional[bool] = Field(None, description="Install VBox guest additions")
+    synced_folder: Optional[List[VirtualBoxSyncedFolder]] = None
+
+
+class AwsTerraformConfig(BaseModel):
+    """AWS configuration for Terraform provisioning."""
+    model_config = ConfigDict(extra='allow')
+    
+    region: Optional[str] = Field(None, description="AWS region")
+    ami_id: Optional[str] = Field(None, description="AMI ID")
+    key_name: Optional[str] = Field(None, description="SSH key name")
+    ssh_private_key_file: Optional[str] = Field(None, description="Path to SSH private key")
+    security_group_names: Optional[List[str]] = Field(None, description="Security group names")
+    instance_type: Optional[str] = Field(None, description="EC2 instance type")
+    root_volume_size: Optional[int] = Field(None, ge=8, description="Root volume size in GB")
+    tags: Optional[Dict[str, str]] = Field(None, description="AWS resource tags")
+
+
+class TerraformConfig(BaseModel):
+    """Terraform provisioning settings."""
+    model_config = ConfigDict(extra='allow')
+    
+    aws: Optional[AwsTerraformConfig] = None
+
+
+class OsConfig(BaseModel):
+    """Operating system configuration."""
+    model_config = ConfigDict(extra='allow')
+    
+    remote_command: Optional[str] = None
+    time_zone: Optional[str] = None
+    enable_time_sync_cron: Optional[bool] = None
+    packages: Optional[List[str]] = None
+    set_hostname: Optional[bool] = None
+    disable_selinux: Optional[bool] = None
+    disable_apparmor: Optional[bool] = None
+    update_hosts_file: Optional[bool] = None
+    splunk_group_create: Optional[bool] = None
+    splunk_user_create: Optional[bool] = None
+
+
+class SplunkDownloadConfig(BaseModel):
+    """Splunk download settings."""
+    splunk: Optional[bool] = None
+    splunkforwarder: Optional[bool] = None
+
+
+class SplunkSslEndpointConfig(BaseModel):
+    """SSL endpoint configuration."""
+    model_config = ConfigDict(extra='allow')
+    
+    enable: Optional[bool] = None
+    own_certs: Optional[bool] = None
+    config: Optional[Dict[str, Any]] = None
+
+
+class SplunkSslConfig(BaseModel):
+    """Splunk SSL settings."""
+    web: Optional[SplunkSslEndpointConfig] = None
+    inputs: Optional[SplunkSslEndpointConfig] = None
+    outputs: Optional[SplunkSslEndpointConfig] = None
+
+
+class SplunkSecretShareConfig(BaseModel):
+    """Splunk secret sharing configuration."""
+    splunk: Optional[bool] = None
+    splunkforwarder: Optional[bool] = None
+    equal: Optional[bool] = None
+
+
+class SplunkVolumeConfig(BaseModel):
+    """Splunk indexer volume configuration."""
+    model_config = ConfigDict(extra='allow')
+    
+    path: Optional[str] = None
+    maxVolumeDataSizeMB: Optional[int] = None
+
+
+class SplunkVolumeDefaultsConfig(BaseModel):
+    """Splunk volume defaults configuration."""
+    model_config = ConfigDict(extra='allow')
+    
+    VolumeDataSize_Free_MB: Optional[int] = None
+    homePath: Optional[str] = None
+    coldPath: Optional[str] = None
+
+
+class SplunkDefaultsConfig(BaseModel):
+    """Splunk default settings applied to all hosts."""
+    model_config = ConfigDict(extra='allow')
+    
+    splunk_env_name: Optional[str] = None
+    splunk_version: Optional[str] = None
+    splunk_architecture: Optional[str] = Field(None, pattern=r'^(amd64|x86_64|arm64)$')
+    splunk_fips: Optional[bool] = None
+    splunk_download: Optional[SplunkDownloadConfig] = None
+    splunk_admin_password: Optional[str] = None
+    splunk_license_file: Optional[Union[str, List[str]]] = None
+    splunk_license_server: Optional[str] = None
+    splunk_set_servername: Optional[bool] = None
+    splunk_set_default_hostname: Optional[bool] = None
+    splunk_loginpage_print_hostname: Optional[bool] = None
+    splunk_loginpage_print_userpw: Optional[bool] = None
+    splunk_loginpage_print_roles: Optional[bool] = None
+    splunk_use_policykit: Optional[bool] = None
+    splunk_kv_store_engine_wiredtiger: Optional[bool] = None
+    splunk_conf: Optional[Dict[str, Dict[str, Any]]] = None
+    splunk_indexes: Optional[Dict[str, Any]] = None
+    splunk_indexes_default_paths: Optional[bool] = None
+    splunk_indexer_volumes: Optional[Dict[str, SplunkVolumeConfig]] = None
+    splunk_volume_defaults: Optional[SplunkVolumeDefaultsConfig] = None
+    splunk_ssl: Optional[SplunkSslConfig] = None
+    splunk_secret_share: Optional[SplunkSecretShareConfig] = None
+
+
+class SplunkDirsConfig(BaseModel):
+    """Splunk directory paths."""
+    model_config = ConfigDict(extra='allow')
+    
+    splunk_baseconfig_dir: Optional[str] = None
+    splunk_software_dir: Optional[str] = None
+
+
+class SplunkAppsConfig(BaseModel):
+    """Splunk apps configuration."""
+    model_config = ConfigDict(extra='allow')
+    
+    splunk_save_baseconfig_apps_dir: Optional[str] = None
+    splunk_save_baseconfig_apps: Optional[bool] = None
+    splunk_save_serverclass: Optional[bool] = None
+
+
+class SplunkSystemdConfig(BaseModel):
+    """Splunk systemd configuration."""
+    model_config = ConfigDict(extra='allow')
+
+
+class SplunkEnvironment(BaseModel):
+    """Splunk environment definition."""
+    model_config = ConfigDict(extra='allow')
+    
+    splunk_env_name: str
+    splunk_version: Optional[str] = None
+    splunk_admin_password: Optional[str] = None
+    splunk_license_file: Optional[str] = None
+    splunk_indexes: Optional[Dict[str, Any]] = None
+
+
+class IdxClusterConfig(BaseModel):
+    """Indexer cluster configuration."""
+    model_config = ConfigDict(extra='allow')
+    
+    idxc_name: str
+    idxc_password: Optional[str] = None
+    idxc_replication_port: Optional[int] = Field(None, ge=1, le=65535)
+    idxc_site_rf: Optional[str] = None
+    idxc_site_sf: Optional[str] = None
+    idxc_rf: Optional[int] = Field(None, ge=1)
+    idxc_sf: Optional[int] = Field(None, ge=1)
+    idxc_discovery_password: Optional[str] = None
+
+
+class ShClusterConfig(BaseModel):
+    """Search head cluster configuration."""
+    model_config = ConfigDict(extra='allow')
+    
+    shc_name: str
+    shc_site: Optional[str] = None
+    shc_password: Optional[str] = None
+    shc_replication_port: Optional[int] = Field(None, ge=1, le=65535)
+
+
+class HostIteration(BaseModel):
+    """Host iteration for generating multiple hosts."""
+    prefix: Optional[str] = None
+    numbers: str = Field(..., pattern=r'^\d+\.\.\d+$', description="Range like '1..3'")
+    postfix: Optional[str] = None
+
+
+class CustomConfig(BaseModel):
+    """Custom/arbitrary settings (for ansible connection vars, etc.)."""
+    model_config = ConfigDict(extra='allow')
+
+
+class SplunkHost(BaseModel):
+    """Individual Splunk host configuration."""
+    model_config = ConfigDict(extra='allow')
+    
+    # Host identification - exactly one must be specified
+    name: Optional[str] = None
+    list: Optional[List[str]] = None
+    iter: Optional[HostIteration] = None
+    
+    # Required
+    roles: List[AllowedRole] = Field(..., min_length=1, description="At least one role required")
+    
+    # Optional settings
+    splunk_env: Optional[str] = None
+    site: Optional[str] = None
+    cname: Optional[str] = None
+    idxcluster: Optional[str] = None
+    shcluster: Optional[str] = None
+    ip_addr: Optional[str] = None
+    
+    # Host-level overrides
+    splunk_version: Optional[str] = None
+    splunk_architecture: Optional[str] = None
+    splunk_admin_password: Optional[str] = None
+    splunk_license_file: Optional[str] = None
+    splunk_outputs: Optional[str] = None
+    splunk_search_peers: Optional[str] = None
+    splunk_conf: Optional[Dict[str, Dict[str, Any]]] = None
+    splunk_fips: Optional[bool] = None
+    
+    # Nested configs
+    os: Optional[OsConfig] = None
+    aws: Optional[Dict[str, Any]] = None
+    virtualbox: Optional[VirtualBoxConfig] = None
+    custom: Optional[CustomConfig] = None
+    terraform: Optional[TerraformConfig] = None
+
+    @model_validator(mode='after')
+    def validate_host_identifier(self) -> 'SplunkHost':
+        """Ensure exactly one of name, list, or iter is specified."""
+        identifiers = [self.name, self.list, self.iter]
+        count = sum(1 for i in identifiers if i is not None)
+        
+        if count == 0:
+            raise ValueError("Host must have exactly one of: 'name', 'list', or 'iter'")
+        if count > 1:
+            raise ValueError("Host cannot have multiple identifiers. Use only one of: 'name', 'list', or 'iter'")
+        
+        return self
+
+    @model_validator(mode='after')
+    def validate_site_with_roles(self) -> 'SplunkHost':
+        """Ensure 'site' is only used with allowed roles."""
+        if self.site is not None:
+            allowed_site_roles = {AllowedRole.indexer, AllowedRole.search_head, AllowedRole.cluster_manager}
+            if not any(role in allowed_site_roles for role in self.roles):
+                allowed_names = ', '.join(r.value for r in allowed_site_roles)
+                raise ValueError(f"'site' is only allowed for roles: {allowed_names}")
+        return self
+
+    @model_validator(mode='after')
+    def validate_cluster_manager_has_idxcluster(self) -> 'SplunkHost':
+        """Ensure cluster_manager role has idxcluster specified."""
+        if AllowedRole.cluster_manager in self.roles and not self.idxcluster:
+            raise ValueError("'idxcluster' must be specified for hosts with role 'cluster_manager'")
+        return self
+
+
+# =============================================================================
+# Root configuration model
+# =============================================================================
+
+class SplunkConfig(BaseModel):
+    """
+    Root configuration model for splunk_config.yml.
+    
+    Required fields:
+    - plugin: Must be 'splunk-platform-automator'
+    - splunk_hosts: List of host configurations (at least one)
+    
+    All other sections are optional.
+    """
+    model_config = ConfigDict(extra='allow')
+    
+    # Required fields
+    plugin: str = Field(..., pattern=r'^splunk-platform-automator$')
+    splunk_hosts: List[SplunkHost] = Field(..., min_length=1, description="At least one host required")
+    
+    # Optional sections
+    general: Optional[GeneralConfig] = None
+    custom: Optional[CustomConfig] = None
+    os: Optional[OsConfig] = None
+    virtualbox: Optional[VirtualBoxConfig] = None
+    aws: Optional[Dict[str, Any]] = None
+    terraform: Optional[TerraformConfig] = None
+    splunk_defaults: Optional[SplunkDefaultsConfig] = None
+    splunk_dirs: Optional[SplunkDirsConfig] = None
+    splunk_apps: Optional[SplunkAppsConfig] = None
+    splunk_systemd: Optional[SplunkSystemdConfig] = None
+    splunk_environments: Optional[List[SplunkEnvironment]] = None
+    splunk_idxclusters: Optional[List[IdxClusterConfig]] = None
+    splunk_shclusters: Optional[List[ShClusterConfig]] = None
+
+    @field_validator('plugin')
+    @classmethod
+    def validate_plugin_name(cls, v: str) -> str:
+        if v != 'splunk-platform-automator':
+            raise ValueError(f"Invalid plugin: '{v}'. Must be 'splunk-platform-automator'")
+        return v
+
+
+# =============================================================================
+# Validation helper function
+# =============================================================================
+
+class ConfigValidationError(Exception):
+    """Custom exception for configuration validation errors."""
+    
+    def __init__(self, errors: List[Dict[str, Any]]):
+        self.errors = errors
+        super().__init__(self._format_errors())
+    
+    def _format_errors(self) -> str:
+        """Format validation errors into readable message."""
+        lines = ["Configuration validation failed:"]
+        for error in self.errors:
+            loc = " -> ".join(str(l) for l in error.get('loc', []))
+            msg = error.get('msg', 'Unknown error')
+            lines.append(f"  - {loc}: {msg}")
+        return "\n".join(lines)
+
+
+def validate_config(config_data: Dict[str, Any]) -> SplunkConfig:
+    """
+    Validate a configuration dictionary against the schema.
+    
+    Args:
+        config_data: Dictionary loaded from splunk_config.yml
+        
+    Returns:
+        Validated SplunkConfig model instance
+        
+    Raises:
+        ConfigValidationError: If validation fails, with detailed error messages
+    """
+    from pydantic import ValidationError
+    
+    try:
+        return SplunkConfig.model_validate(config_data)
+    except ValidationError as e:
+        raise ConfigValidationError(e.errors())
+
+
+def validate_config_file(file_path: str) -> SplunkConfig:
+    """
+    Validate a configuration file.
+    
+    Args:
+        file_path: Path to splunk_config.yml file
+        
+    Returns:
+        Validated SplunkConfig model instance
+        
+    Raises:
+        ConfigValidationError: If validation fails
+        FileNotFoundError: If file doesn't exist
+        yaml.YAMLError: If YAML parsing fails
+    """
+    import yaml
+    
+    with open(file_path, 'r') as f:
+        config_data = yaml.safe_load(f)
+    
+    return validate_config(config_data)
