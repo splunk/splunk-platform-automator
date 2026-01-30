@@ -16,6 +16,12 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
   - `--local` mode to run verification tests against existing local deployments
   - Automatic workspace isolation with per-config venvs and temp directories
   - Infrastructure auto-teardown after test completion
+- Added Pydantic-based schema validation for `splunk_config.yml`:
+  - Validates configuration structure before Ansible processing
+  - Enforces required fields, valid roles, and business rules
+  - Provides clear error messages for invalid configurations
+  - New `schema.py` module and `test_schema.py` unit tests
+  - Run with `./tests/run_schema_tests.sh`
 
 ### Changed
 
