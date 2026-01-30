@@ -32,8 +32,10 @@ tests/
 ├── pytest.ini                 # Pytest configuration
 ├── requirements.txt           # Test dependencies
 ├── test_deployment.py         # Phase 1: Infrastructure + Splunk deployment
+├── test_schema.py             # Schema validation unit tests
 ├── test_verification.py       # Phase 2: Health verification tests
 ├── run_deployment_tests.sh    # Helper script for deployment tests
+├── run_schema_tests.sh        # Helper script for schema validation tests
 └── run_verification_tests.sh  # Helper script for verification tests
 ```
 
@@ -70,6 +72,31 @@ For standalone verification against existing infrastructure:
 | `test_01_verify_data_flow` | Check _internal index | Always |
 | `test_02_check_idxc_health` | Indexer cluster health | `cluster_manager` role |
 | `test_03_check_shc_health` | Search head cluster health | `deployer` role |
+
+### Schema Validation (`test_schema.py`)
+
+Unit tests for YAML configuration schema validation using Pydantic. These tests run **without infrastructure** and validate the `splunk_config.yml` structure before Ansible processing.
+
+| Category | Tests | Description |
+|----------|-------|-------------|
+| Valid Configs | 10 | Minimal, full, all roles, clusters |
+| Invalid Configs | 16 | Missing fields, wrong types, business rule violations |
+| Cluster Configs | 3 | IDXC and SHC configurations |
+| Multi-Role Hosts | 2 | Hosts with multiple roles |
+
+**Run schema tests:**
+```bash
+./tests/run_schema_tests.sh
+./tests/run_schema_tests.sh -v          # Verbose output
+./tests/run_schema_tests.sh -k "invalid" # Only invalid config tests
+```
+
+**Key validations:**
+- `plugin` must be `splunk-platform-automator`
+- `splunk_hosts` required with at least one host
+- Valid roles: `cluster_manager`, `deployer`, `deployment_server`, `heavy_forwarder`, `indexer`, `license_manager`, `monitoring_console`, `search_head`, `universal_forwarder`, `universal_forwarder_windows`
+- `cluster_manager` requires `idxcluster`
+- `site` only allowed for `indexer`, `search_head`, `cluster_manager`
 
 ## Running Tests
 

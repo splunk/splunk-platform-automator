@@ -1,3 +1,4 @@
 ansible >= 3.4.0 # this is ansible-core 2.10.0
 jmespath # required for json_query calls
 lxml     # required for license file checks
+pydantic >= 2.0 # required for config schema validation
