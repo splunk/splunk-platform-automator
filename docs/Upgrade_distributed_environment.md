@@ -103,7 +103,7 @@ Sometime it happens after running the peer offline command the indexer does the 
 It can happen that it goes back to status Up and the process does not proceed. You can send the offline call again manually:
 
 ```
-ansible-playbook ansible/call_splunk_rest.yml -e "splunk_rest_endpoint=/services/cluster/slave/control/control/decommission" -e "http_method=POST" --limit <indexer_name>
+ansible-playbook ansible/call_splunk_rest.yml -e "splunk_software_rest_endpoint=/services/cluster/slave/control/control/decommission" -e "splunk_software_rest_method=POST" --limit <indexer_name>
 ```
 
 ## Upgrade Heavy Forwarders
