@@ -25,12 +25,12 @@
     - splunk_software
     - splunk_rest
   ansible.builtin.uri:
-    url: "https://localhost:8089/{{ splunk_software_rest_endpoint|default('/') }}"
+    url: "https://localhost:8089{{ splunk_software_rest_endpoint|default('/') }}{% if splunk_software_rest_method|default('GET') == 'GET' %}?output_mode={{ splunk_software_rest_output_mode|default('json') }}{% endif %}"
     user: admin
     password: "{{ splunk_admin_password }}"
     method: "{{ splunk_software_rest_method|default('GET') }}"
     body_format: form-urlencoded
-    body: "{{ (splunk_software_rest_body | default({})) | combine({'output_mode': splunk_software_rest_output_mode|default('json')}) }}"
+    body: "{{ (splunk_software_rest_body | default({})) | combine({'output_mode': splunk_software_rest_output_mode|default('json')}) if splunk_software_rest_method|default('GET') == 'POST' else omit }}"
     return_content: true
     force_basic_auth: true
     validate_certs: false
