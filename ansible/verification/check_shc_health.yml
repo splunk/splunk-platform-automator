@@ -41,12 +41,12 @@
         name: splunk_software
         tasks_from: splunk_rest
       vars:
-        splunk_rest_endpoint: /services/shcluster/status
-        splunk_rest_output_mode: json
+        splunk_software_rest_endpoint: /services/shcluster/status
+        splunk_software_rest_output_mode: json
 
     - name: Parse cluster status
       ansible.builtin.set_fact:
-        shc_service_ready: "{{ splunk_rest_output.content | from_json | json_query('entry[0].content.captain.service_ready_flag') | bool }}"
+        shc_service_ready: "{{ splunk_software_rest_output.content | from_json | json_query('entry[0].content.captain.service_ready_flag') | bool }}"
 
     - name: Assert SHC Service Ready
       ansible.builtin.assert:

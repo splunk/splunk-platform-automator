@@ -17,7 +17,7 @@
     - splunk_upgrade_idxc_rolling
   ansible.builtin.include_tasks: splunk_rest.yml
   vars:
-    splunk_rest_endpoint: /services/cluster/master/status
+    splunk_software_rest_endpoint: /services/cluster/master/status
 
 - name: Set state variables
   tags:
@@ -26,10 +26,10 @@
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
   ansible.builtin.set_fact:
-    idxc_searchable_rolling: "{{ splunk_rest_json_output.entry[0].content.searchable_rolling|bool }}"
-    idxc_service_ready_flag: "{{ splunk_rest_json_output.entry[0].content.service_ready_flag|bool }}"
+    idxc_searchable_rolling: "{{ splunk_software_rest_json_output.entry[0].content.searchable_rolling|bool }}"
+    idxc_service_ready_flag: "{{ splunk_software_rest_json_output.entry[0].content.service_ready_flag|bool }}"
   vars:
-    splunk_rest_json_output: "{{ splunk_rest_output.content|ansible.builtin.from_json }}"
+    splunk_software_rest_json_output: "{{ splunk_software_rest_output.content|ansible.builtin.from_json }}"
 
 - name: Fail if cluster service_ready_flag not ok
   tags:
@@ -50,7 +50,7 @@
     - splunk_upgrade_idxc_rolling
   ansible.builtin.include_tasks: splunk_rest.yml
   vars:
-    splunk_rest_endpoint: /services/cluster/master/health
+    splunk_software_rest_endpoint: /services/cluster/master/health
   when: idxc_searchable_rolling == false
 
 - name: Fail if cluster preflight not ok
@@ -63,7 +63,7 @@
     msg: "Cluster Health preflight check was not successfull!"
   when:
     - idxc_searchable_rolling == false
-    - splunk_rest_json_output.entry[0].content.pre_flight_check|int != 1
+    - splunk_software_rest_json_output.entry[0].content.pre_flight_check|int != 1
 
 - name: Init rolling upgrade
   tags:
@@ -74,8 +74,8 @@
     - splunk_upgrade_idxc_rolling
   ansible.builtin.include_tasks: splunk_rest.yml
   vars:
-    splunk_rest_endpoint: /services/cluster/master/control/control/rolling_upgrade_init
-    http_method: POST
+    splunk_software_rest_endpoint: /services/cluster/master/control/control/rolling_upgrade_init
+    splunk_software_rest_method: POST
   when: idxc_searchable_rolling == false
 
 - name: Init output
@@ -85,7 +85,7 @@
     - splunk_upgrade
     - splunk_upgrade_idxc_rolling
   ansible.builtin.debug:
-    msg: "{{ splunk_rest_json_output.messages[0].text }}"
+    msg: "{{ splunk_software_rest_json_output.messages[0].text }}"
   when: idxc_searchable_rolling == false
   changed_when: idxc_searchable_rolling == false
 

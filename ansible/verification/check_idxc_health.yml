@@ -11,12 +11,12 @@
         name: splunk_software
         tasks_from: splunk_rest
       vars:
-        splunk_rest_endpoint: /services/cluster/master/status
-        splunk_rest_output_mode: json
+        splunk_software_rest_endpoint: /services/cluster/master/status
+        splunk_software_rest_output_mode: json
 
     - name: Parse cluster status
       ansible.builtin.set_fact:
-        idxc_service_ready: "{{ splunk_rest_output.content | from_json | json_query('entry[0].content.service_ready_flag') | bool }}"
+        idxc_service_ready: "{{ splunk_software_rest_output.content | from_json | json_query('entry[0].content.service_ready_flag') | bool }}"
 
     - name: Asset Cluster Healthy
       ansible.builtin.assert:

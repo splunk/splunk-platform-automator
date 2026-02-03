@@ -8,7 +8,7 @@
     - splunk_rest
   ansible.builtin.import_tasks: splunk_rest.yml
   vars:
-    splunk_rest_endpoint: /services/cluster/master/peers
+    splunk_software_rest_endpoint: /services/cluster/master/peers
   delegate_to: "{{ splunk_idxc_cm }}"
 
 - name: Create peerid list
@@ -17,6 +17,6 @@
     - splunk_software
     - splunk_rest
   ansible.builtin.set_fact:
-    idxc_name_peerids: "{{ splunk_rest_json_output | json_query(jmesquery) }}"
+    idxc_name_peerids: "{{ splunk_software_rest_json_output | json_query(jmesquery) }}"
   vars:
     jmesquery: "entry[*].{name: content.label, peerid: name}"

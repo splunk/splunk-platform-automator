@@ -8,7 +8,7 @@
     - splunk_upgrade_shc_rolling
   ansible.builtin.include_tasks: splunk_rest.yml
   vars:
-    splunk_rest_endpoint: /services/shcluster/member/info
+    splunk_software_rest_endpoint: /services/shcluster/member/info
 
 - name: Set state variables
   tags:
@@ -17,10 +17,10 @@
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
   ansible.builtin.set_fact:
-    sh_status: "{{ splunk_rest_json_output.entry[0].content.status }}"
-    sh_restart_state: "{{ splunk_rest_json_output.entry[0].content.restart_state }}"
+    sh_status: "{{ splunk_software_rest_json_output.entry[0].content.status }}"
+    sh_restart_state: "{{ splunk_software_rest_json_output.entry[0].content.restart_state }}"
   vars:
-    splunk_rest_json_output: "{{ splunk_rest_output.content|ansible.builtin.from_json }}"
+    splunk_software_rest_json_output: "{{ splunk_software_rest_output.content|ansible.builtin.from_json }}"
 
 - name: Fail if peer has wrong state
   tags:
@@ -45,7 +45,7 @@
     - splunk_upgrade_shc_rolling
   ansible.builtin.include_tasks: splunk_rest.yml
   vars:
-    splunk_rest_endpoint: /services/shcluster/status?advanced=1
+    splunk_software_rest_endpoint: /services/shcluster/status?advanced=1
 
 - name: Set state variables
   tags:
@@ -54,9 +54,9 @@
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
   ansible.builtin.set_fact:
-    shc_captain: "{{ splunk_rest_json_output.entry[0].content.captain.label }}"
+    shc_captain: "{{ splunk_software_rest_json_output.entry[0].content.captain.label }}"
   vars:
-    splunk_rest_json_output: "{{ splunk_rest_output.content|ansible.builtin.from_json }}"
+    splunk_software_rest_json_output: "{{ splunk_software_rest_output.content|ansible.builtin.from_json }}"
 
 - name: Fail if search head is captain
   tags:
@@ -88,8 +88,8 @@
     - splunk_upgrade_shc_rolling
   ansible.builtin.include_tasks: splunk_rest.yml
   vars:
-    splunk_rest_endpoint: /services/shcluster/member/control/control/set_manual_detention?manual_detention=on
-    http_method: POST
+    splunk_software_rest_endpoint: /services/shcluster/member/control/control/set_manual_detention?manual_detention=on
+    splunk_software_rest_method: POST
   when: sh_status == 'Up'
 
 # There is not 'loop until' with include_tasks. So, we need to code the rest call directly here.
@@ -111,12 +111,12 @@
     return_content: true
     force_basic_auth: true
     validate_certs: false
-  register: splunk_rest_output_local
+  register: splunk_software_rest_output_local
   vars:
-    splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|ansible.builtin.from_json }}"
+    splunk_software_rest_json_output_local: "{{ splunk_software_rest_output_local.content|ansible.builtin.from_json }}"
   check_mode: false
   # Real Time searches are never going to stop, so we do not check for them here
-  until: "splunk_rest_json_output_local.entry[0].content.active_historical_search_count == 0"
+  until: "splunk_software_rest_json_output_local.entry[0].content.active_historical_search_count == 0"
   # Wait 60 minutes to complete this step
   retries: 60
   delay: 60
@@ -168,7 +168,7 @@
     - splunk_upgrade_shc_rolling
   ansible.builtin.include_tasks: splunk_rest.yml
   vars:
-    splunk_rest_endpoint: /services/shcluster/member/info
+    splunk_software_rest_endpoint: /services/shcluster/member/info
 
 - name: Set state variables
   tags:
@@ -177,10 +177,10 @@
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
   ansible.builtin.set_fact:
-    sh_status: "{{ splunk_rest_json_output.entry[0].content.status }}"
-    sh_restart_state: "{{ splunk_rest_json_output.entry[0].content.restart_state }}"
+    sh_status: "{{ splunk_software_rest_json_output.entry[0].content.status }}"
+    sh_restart_state: "{{ splunk_software_rest_json_output.entry[0].content.restart_state }}"
   vars:
-    splunk_rest_json_output: "{{ splunk_rest_output.content|ansible.builtin.from_json }}"
+    splunk_software_rest_json_output: "{{ splunk_software_rest_output.content|ansible.builtin.from_json }}"
 
 - name: Remove manual detention mode on search head
   tags:
@@ -191,8 +191,8 @@
     - splunk_upgrade_shc_rolling
   ansible.builtin.include_tasks: splunk_rest.yml
   vars:
-    splunk_rest_endpoint: /services/shcluster/member/control/control/set_manual_detention?manual_detention=off
-    http_method: POST
+    splunk_software_rest_endpoint: /services/shcluster/member/control/control/set_manual_detention?manual_detention=off
+    splunk_software_rest_method: POST
   when: sh_status == 'ManualDetention'
 
 # There is not 'loop until' with include_tasks. So, we need to code the rest call directly here.
@@ -214,11 +214,11 @@
     return_content: true
     force_basic_auth: true
     validate_certs: false
-  register: splunk_rest_output_local
+  register: splunk_software_rest_output_local
   vars:
-    splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|ansible.builtin.from_json }}"
+    splunk_software_rest_json_output_local: "{{ splunk_software_rest_output_local.content|ansible.builtin.from_json }}"
   check_mode: false
-  until: "splunk_rest_json_output_local.entry[0].content.status == 'Up'"
+  until: "splunk_software_rest_json_output_local.entry[0].content.status == 'Up'"
   # Wait 10 minutes to complete this step
   retries: 40
   delay: 15

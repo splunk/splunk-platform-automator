@@ -8,7 +8,7 @@
     - splunk_upgrade_shc_rolling
   ansible.builtin.include_tasks: splunk_rest.yml
   vars:
-    splunk_rest_endpoint: /services/shcluster/status?advanced=1
+    splunk_software_rest_endpoint: /services/shcluster/status?advanced=1
   when: inventory_hostname == splunk_shc_host_list|first
 
 - name: Set state variables
@@ -18,11 +18,11 @@
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
   ansible.builtin.set_fact:
-    shc_rolling_restart_flag: "{{ splunk_rest_json_output.entry[0].content.captain.rolling_restart_flag|bool }}"
-    shc_rolling_upgrade_flag: "{{ splunk_rest_json_output.entry[0].content.captain.rolling_upgrade_flag|bool }}"
-    shc_service_ready_flag: "{{ splunk_rest_json_output.entry[0].content.captain.service_ready_flag|bool }}"
+    shc_rolling_restart_flag: "{{ splunk_software_rest_json_output.entry[0].content.captain.rolling_restart_flag|bool }}"
+    shc_rolling_upgrade_flag: "{{ splunk_software_rest_json_output.entry[0].content.captain.rolling_upgrade_flag|bool }}"
+    shc_service_ready_flag: "{{ splunk_software_rest_json_output.entry[0].content.captain.service_ready_flag|bool }}"
   vars:
-    splunk_rest_json_output: "{{ splunk_rest_output.content|ansible.builtin.from_json }}"
+    splunk_software_rest_json_output: "{{ splunk_software_rest_output.content|ansible.builtin.from_json }}"
   when: inventory_hostname == splunk_shc_host_list|first
 
 - name: Fail if search head cluster service_ready_flag not ok
@@ -46,7 +46,7 @@
     - splunk_upgrade_shc_rolling
   ansible.builtin.include_tasks: splunk_rest.yml
   vars:
-    splunk_rest_endpoint: /services/kvstore/status
+    splunk_software_rest_endpoint: /services/kvstore/status
   when: inventory_hostname == splunk_shc_host_list|first
 
 - name: Set state variables
@@ -56,9 +56,9 @@
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
   ansible.builtin.set_fact:
-    kv_stre_status: "{{ splunk_rest_json_output.entry[0].content.current.status }}"
+    kv_stre_status: "{{ splunk_software_rest_json_output.entry[0].content.current.status }}"
   vars:
-    splunk_rest_json_output: "{{ splunk_rest_output.content|ansible.builtin.from_json }}"
+    splunk_software_rest_json_output: "{{ splunk_software_rest_output.content|ansible.builtin.from_json }}"
   when: inventory_hostname == splunk_shc_host_list|first
 
 - name: Fail if KV store cluster status not 'ready'
@@ -82,8 +82,8 @@
     - splunk_upgrade_shc_rolling
   ansible.builtin.include_tasks: splunk_rest.yml
   vars:
-    splunk_rest_endpoint: /services/shcluster/captain/control/control/upgrade-init
-    http_method: POST
+    splunk_software_rest_endpoint: /services/shcluster/captain/control/control/upgrade-init
+    splunk_software_rest_method: POST
   when:
     - inventory_hostname == splunk_shc_host_list|first
     - shc_rolling_upgrade_flag == false
@@ -95,7 +95,7 @@
     - splunk_upgrade
     - splunk_upgrade_shc_rolling
   ansible.builtin.debug:
-    msg: "{{ splunk_rest_json_output.messages[0].text }}"
+    msg: "{{ splunk_software_rest_json_output.messages[0].text }}"
   when:
     - inventory_hostname == splunk_shc_host_list|first
     - shc_rolling_upgrade_flag == false

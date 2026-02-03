@@ -48,8 +48,8 @@
     - splunk_upgrade_idxc_rolling
   ansible.builtin.include_tasks: splunk_rest.yml
   vars:
-    splunk_rest_endpoint: /services/cluster/slave/control/control/decommission
-    http_method: POST
+    splunk_software_rest_endpoint: /services/cluster/slave/control/control/decommission
+    splunk_software_rest_method: POST
   when: idxc_peer_status == 'Up'
 
 # There is not 'loop until' with include_tasks. So, we need to code the rest call directly here.
@@ -71,11 +71,11 @@
     return_content: true
     force_basic_auth: true
     validate_certs: false
-  register: splunk_rest_output_local
+  register: splunk_software_rest_output_local
   vars:
-    splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|ansible.builtin.from_json }}"
+    splunk_software_rest_json_output_local: "{{ splunk_software_rest_output_local.content|ansible.builtin.from_json }}"
   check_mode: false
-  until: "splunk_rest_json_output_local.entry[0].content.status == 'Down'"
+  until: "splunk_software_rest_json_output_local.entry[0].content.status == 'Down'"
   # Wait 30 minutes to complete this step
   retries: 30
   delay: 60
@@ -108,11 +108,11 @@
     return_content: true
     force_basic_auth: true
     validate_certs: false
-  register: splunk_rest_output_local
+  register: splunk_software_rest_output_local
   vars:
-    splunk_rest_json_output_local: "{{ splunk_rest_output_local.content|ansible.builtin.from_json }}"
+    splunk_software_rest_json_output_local: "{{ splunk_software_rest_output_local.content|ansible.builtin.from_json }}"
   check_mode: false
-  until: "splunk_rest_json_output_local.entry[0].content.status == 'Up'"
+  until: "splunk_software_rest_json_output_local.entry[0].content.status == 'Up'"
   # Wait 10 minutes to complete this step
   retries: 40
   delay: 15

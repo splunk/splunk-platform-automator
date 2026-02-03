@@ -21,25 +21,25 @@
         tasks_from: splunk_rest
       vars:
         # Search for hosts sending data to _internal in the last 15 minutes
-        splunk_rest_endpoint: /services/search/jobs
-        http_method: POST
+        splunk_software_rest_endpoint: /services/search/jobs
+        splunk_software_rest_method: POST
         # stats count by host to get list of hosts
         #search: "search index=_internal earliest=-15m | stats count by host"
-        splunk_rest_body:
+        splunk_software_rest_body:
           search: "| tstats count WHERE index=_internal earliest=-5m by host"
           exec_mode: oneshot
-        splunk_rest_output_mode: json
-        splunk_rest_output_show: true
+        splunk_software_rest_output_mode: json
+        splunk_software_rest_output_show: true
       when: is_search_target | default(false)
 
     - name: Debug raw stats output
       ansible.builtin.debug:
-        var: splunk_rest_output.content
+        var: splunk_software_rest_output.content
       when: is_search_target | default(false)
 
     - name: Parse search results
       ansible.builtin.set_fact:
-        sending_hosts: "{{ splunk_rest_output.content | from_json | json_query('results[*].host') }}"
+        sending_hosts: "{{ splunk_software_rest_output.content | from_json | json_query('results[*].host') }}"
       when: is_search_target | default(false)
 
     - name: Display sending hosts

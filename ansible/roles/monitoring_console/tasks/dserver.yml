@@ -12,7 +12,7 @@
     name: splunk_software
     tasks_from: splunk_rest
   vars:
-    splunk_rest_endpoint: /services/search/distributed/peers
+    splunk_software_rest_endpoint: /services/search/distributed/peers
 
 - name: Create current_dservers list
   tags:
@@ -22,7 +22,7 @@
     - dserver
     - splunk_rest
   ansible.builtin.set_fact:
-    current_dservers: "{{ splunk_rest_json_output | json_query(jmesquery) | map('regex_replace', ':\\d+$', '') }}"
+    current_dservers: "{{ splunk_software_rest_json_output | json_query(jmesquery) | map('regex_replace', ':\\d+$', '') }}"
   vars:
     jmesquery: "entry[*].name"
 
