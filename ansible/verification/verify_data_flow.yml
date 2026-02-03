@@ -10,13 +10,13 @@
 
   tasks:
     - name: Select Search Target
-      set_fact:
+      ansible.builtin.set_fact:
         is_search_target: true
       when:
         - inventory_hostname == ansible_play_hosts[0]
 
     - name: Run internal log search
-      include_role:
+      ansible.builtin.include_role:
         name: splunk_software
         tasks_from: splunk_rest
       vars:
@@ -33,17 +33,17 @@
       when: is_search_target | default(false)
 
     - name: Debug raw stats output
-      debug:
+      ansible.builtin.debug:
         var: splunk_rest_output.content
       when: is_search_target | default(false)
 
     - name: Parse search results
-      set_fact:
+      ansible.builtin.set_fact:
         sending_hosts: "{{ splunk_rest_output.content | from_json | json_query('results[*].host') }}"
       when: is_search_target | default(false)
 
     - name: Display sending hosts
-      debug:
+      ansible.builtin.debug:
         var: sending_hosts
       when: is_search_target | default(false)
 
@@ -53,7 +53,7 @@
     # A more advanced test would require passing the expected host list.
 
     - name: Assert data is flowing
-      assert:
+      ansible.builtin.assert:
         that:
           - sending_hosts | length > 0
         fail_msg: "No hosts found sending data to _internal!"
