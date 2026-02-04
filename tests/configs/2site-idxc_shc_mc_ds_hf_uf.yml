@@ -1,0 +1,133 @@
+---
+# Test Configuration: Single Node Deployment
+# A minimal Splunk deployment with indexer + search_head on one host.
+
+plugin: splunk-platform-automator
+
+# General settings
+general:
+  # url_locale: en-GB
+
+os:
+  # Set hostname to ansible_inventory name
+  set_hostname: true
+
+# Terraform configuration for AWS infrastructure
+terraform:
+  aws:
+    # Credentials default to ENV vars: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+    region: "eu-central-1"
+    ami_id: "ami-03cbad7144aeda3eb" # Redhat 9 (eu-central-1)
+    key_name: "aws_key"
+    ssh_private_key_file: "~/.ssh/aws_key.pem"
+    security_group_names: ["Splunk_Basic"]
+    instance_type: "c5.4xlarge"
+    root_volume_size: 50
+    tags:
+      Env: "SPA Testing (2 site IDX Cluster, SH Cluster, MC, DS, HF, UF)"
+      TestConfig: "2site-idxc_shc_mc_ds_hf_uf"
+      splunkit_data_classification: public
+      splunkit_environment_type: non-prd
+
+# Splunk default settings
+splunk_defaults:
+  splunk_download:
+    splunk: true
+    splunkforwarder: true
+  splunk_set_servername: true
+  splunk_set_default_hostname: true
+  splunk_loginpage_print_userpw: false
+
+  # Enable SSL for internet-facing connections
+  splunk_ssl:
+    web:
+      enable: true
+    inputs:
+      enable: true
+    outputs:
+      enable: true
+
+  splunk_conf:
+    system/local/server.conf:
+      diskUsage:
+        minFreeSpace: 500
+    system/local/alert_actions.conf:
+      email:
+        allowedDomainList: allow_all
+
+# Indexer Cluster settings
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: splunkidxc
+    idxc_replication_port: 9887
+    idxc_site_rf: "origin:2, total:3"
+    idxc_site_sf: "origin:1, total:2"
+
+# Search Head Cluster settings
+splunk_shclusters:
+  - shc_name: shc1
+    shc_site: site0
+    shc_password: splunkshc
+    shc_replication_port: 9887
+
+# Splunk hosts with its settings
+splunk_hosts:
+  #########################
+  # Multi instance Example
+  #########################
+
+  # Monitoring Console
+  - name: mc
+    roles:
+      - monitoring_console
+      - license_manager
+
+  # Deployment Server
+  - name: ds
+    roles:
+      - deployment_server
+      - deployer
+    shcluster: shc1
+
+  # Cluster Manager
+  - name: cm
+    roles:
+      - cluster_manager
+    idxcluster: idxc1
+    site: site0
+
+  # Cluster Indexers (site1)
+  - iter:
+      prefix: idx1
+      numbers: 1..2
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site1
+
+  # Cluster Indexers (site2)
+  - iter:
+      prefix: idx2
+      numbers: 1..2
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site2
+
+  # Search Heads
+  - iter:
+      prefix: sh
+      numbers: 1..3
+    roles:
+      - search_head
+    shcluster: shc1
+
+  # Search Head
+  - name: hf
+    roles:
+      - heavy_forwarder
+
+  # Search Head
+  - name: uf
+    roles:
+      - universal_forwarder
