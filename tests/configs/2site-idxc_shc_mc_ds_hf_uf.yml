@@ -24,13 +24,18 @@ terraform:
     instance_type: "c5.4xlarge"
     root_volume_size: 50
     tags:
-      Env: "SPA Testing (2 site IDX Cluster, SH Cluster, MC, DS, HF, UF)"
+      Env: "SPA Testing (2 site IDXC, SHC, MC, DS, HF, UF)"
       TestConfig: "2site-idxc_shc_mc_ds_hf_uf"
       splunkit_data_classification: public
       splunkit_environment_type: non-prd
 
 # Splunk default settings
 splunk_defaults:
+  # splunk_env_name: splk
+  # splunk_version: "10.2.0"
+  # splunk_admin_password: 'splunklab'
+  splunk_license_file: Splunk_Enterprise.lic
+
   splunk_download:
     splunk: true
     splunkforwarder: true
