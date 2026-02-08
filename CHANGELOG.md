@@ -5,7 +5,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
-## 2.3.2-dev - ongoing
+## 2.3.3-dev - ongoing
+
+### Added
+
+### Changed
+
+### Fixed
+
+## [2.3.2](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.3.2) - 2026-02-08
 
 ### Added
 
@@ -26,7 +34,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - Optimized Ansible performance:
-  - Grouped tasks with standard `when` conditions into blocks to reduce conditional checks in `serverclass.yml`, `shcluster.yml`, and `org_all_forwarder_outputs.yml`
+  - Grouped tasks with standard `when` conditions into blocks to reduce conditional checks
   - Increased Ansible forks to 20 for better parallelism
   - Enabled smart fact gathering and JSON fact caching in `ansible.cfg`
 
