@@ -13,6 +13,7 @@
       vars:
         splunk_software_rest_endpoint: /services/cluster/master/status
         splunk_software_rest_output_mode: json
+        splunk_software_rest_output_show: false
 
     - name: Parse cluster status
       ansible.builtin.set_fact:
