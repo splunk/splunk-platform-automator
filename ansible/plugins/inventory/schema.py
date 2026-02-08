@@ -357,6 +357,136 @@ class SplunkConfig(BaseModel):
             raise ValueError(f"Invalid plugin: '{v}'. Must be 'splunk-platform-automator'")
         return v
 
+    @model_validator(mode='after')
+    def validate_deployer_requires_shc(self) -> 'SplunkConfig':
+        """Ensure deployer role has at least 3 search heads (SHC minimum).
+        
+        Only validates when search heads are explicitly defined in the config.
+        A deployer with 0 search heads is allowed (external SHC scenario).
+        """
+        has_deployer = False
+        search_head_count = 0
+        
+        for host in self.splunk_hosts:
+            if AllowedRole.deployer in host.roles:
+                has_deployer = True
+            if AllowedRole.search_head in host.roles:
+                # Count hosts based on identifier type
+                if host.name:
+                    search_head_count += 1
+                elif host.list:
+                    search_head_count += len(host.list)
+                elif host.iter:
+                    # Parse range like '1..3' to count hosts
+                    parts = host.iter.numbers.split('..')
+                    start, end = int(parts[0]), int(parts[1])
+                    search_head_count += (end - start + 1)
+        
+        # Only validate if search heads are defined (1 or 2 is invalid with deployer)
+        if has_deployer and search_head_count > 0 and search_head_count < 3:
+            raise ValueError(
+                f"A deployer requires a Search Head Cluster with at least 3 search heads. "
+                f"Found {search_head_count} search head(s)."
+            )
+        
+        return self
+
+    @model_validator(mode='after')
+    def validate_shc_members_have_shcluster(self) -> 'SplunkConfig':
+        """Ensure at least 3 search heads have shcluster flag when deployer exists.
+        
+        If a deployer role is defined, at least 3 search_head roles must have
+        an shcluster specified to form a valid Search Head Cluster.
+        Standalone search heads without shcluster are allowed alongside SHC members.
+        """
+        has_deployer = False
+        shc_member_count = 0
+        
+        for host in self.splunk_hosts:
+            if AllowedRole.deployer in host.roles:
+                has_deployer = True
+            
+            if AllowedRole.search_head in host.roles and host.shcluster:
+                # Count SHC members based on identifier type
+                if host.name:
+                    shc_member_count += 1
+                elif host.list:
+                    shc_member_count += len(host.list)
+                elif host.iter:
+                    parts = host.iter.numbers.split('..')
+                    start, end = int(parts[0]), int(parts[1])
+                    shc_member_count += (end - start + 1)
+        
+        if has_deployer and shc_member_count < 3:
+            raise ValueError(
+                f"When a deployer is defined, at least 3 search heads must have 'shcluster' specified. "
+                f"Found {shc_member_count} search head(s) with shcluster."
+            )
+        
+        return self
+
+    @model_validator(mode='after')
+    def validate_idxc_members_have_idxcluster(self) -> 'SplunkConfig':
+        """Ensure at least 2 indexers have idxcluster flag when cluster_manager exists.
+        
+        If a cluster_manager role is defined, at least 2 indexer roles must have
+        an idxcluster specified to form a valid Indexer Cluster.
+        Standalone indexers without idxcluster are allowed alongside IDXC members.
+        """
+        has_cluster_manager = False
+        idxc_member_count = 0
+        
+        for host in self.splunk_hosts:
+            if AllowedRole.cluster_manager in host.roles:
+                has_cluster_manager = True
+            
+            if AllowedRole.indexer in host.roles and host.idxcluster:
+                # Count IDXC members based on identifier type
+                if host.name:
+                    idxc_member_count += 1
+                elif host.list:
+                    idxc_member_count += len(host.list)
+                elif host.iter:
+                    parts = host.iter.numbers.split('..')
+                    start, end = int(parts[0]), int(parts[1])
+                    idxc_member_count += (end - start + 1)
+        
+        if has_cluster_manager and idxc_member_count < 2:
+            raise ValueError(
+                f"When a cluster_manager is defined, at least 2 indexers must have 'idxcluster' specified. "
+                f"Found {idxc_member_count} indexer(s) with idxcluster."
+            )
+        
+        return self
+
+    @model_validator(mode='after')
+    def validate_license_manager_requires_license_file(self) -> 'SplunkConfig':
+        """Ensure license_manager role has splunk_license_file defined.
+        
+        If a license_manager role is defined, the splunk_defaults must include
+        a splunk_license_file setting.
+        """
+        has_license_manager = False
+        
+        for host in self.splunk_hosts:
+            if AllowedRole.license_manager in host.roles:
+                has_license_manager = True
+                break
+        
+        if has_license_manager:
+            # Check if splunk_license_file is defined in splunk_defaults
+            has_license_file = (
+                self.splunk_defaults is not None and 
+                self.splunk_defaults.splunk_license_file is not None
+            )
+            if not has_license_file:
+                raise ValueError(
+                    "When a license_manager role is defined, 'splunk_license_file' must be specified "
+                    "in splunk_defaults."
+                )
+        
+        return self
+
 
 # =============================================================================
 # Validation helper function
