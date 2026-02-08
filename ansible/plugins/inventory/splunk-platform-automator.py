@@ -95,12 +95,19 @@ from pathlib import Path
 from collections import abc
 
 # Schema validation imports
+SCHEMA_VALIDATION_AVAILABLE = False
 try:
-    from .schema import validate_config, ConfigValidationError
+    # Use absolute import with plugin directory in path (works with Ansible plugin loader)
+    import sys
+    import os
+    plugin_dir = os.path.dirname(os.path.abspath(__file__))
+    if plugin_dir not in sys.path:
+        sys.path.insert(0, plugin_dir)
+    from schema import validate_config, ConfigValidationError
     SCHEMA_VALIDATION_AVAILABLE = True
 except ImportError:
     # Graceful fallback if pydantic is not installed
-    SCHEMA_VALIDATION_AVAILABLE = False
+    pass
 
 class InventoryModule(BaseInventoryPlugin):
     NAME = 'splunk-platform-automator'
@@ -331,7 +338,7 @@ class InventoryModule(BaseInventoryPlugin):
         # Get allowed roles from schema (used for creating role groups)
         # Note: Role and hostvar validation is now handled by schema.py
         if SCHEMA_VALIDATION_AVAILABLE:
-            from .schema import AllowedRole
+            from schema import AllowedRole
             allowed_roles = [r.value for r in AllowedRole]
         else:
             allowed_roles = ['cluster_manager','deployer','deployment_server','heavy_forwarder','indexer','license_manager','monitoring_console','search_head','universal_forwarder','universal_forwarder_windows']
@@ -395,19 +402,20 @@ class InventoryModule(BaseInventoryPlugin):
 
                 # Work through the given roles (validation handled by schema.py)
                 for role in splunkhost['roles']:
-                    # Check license file for license_manager role (runtime check - cannot be done by schema)
+                    # Check license file exists for license_manager role (runtime filesystem check)
+                    # Note: The required splunk_license_file variable check is handled by schema.py
                     if role == "license_manager":
-                        if 'splunk_license_file' not in self.environments[splunk_env]['splunk_defaults']:
-                            raise AnsibleParserError("Error: Missing splunk_license_file variable for role %s in splunk_env %s" % (role,splunk_env))
                         license_list = []
-                        if isinstance(self.environments[splunk_env]['splunk_defaults']['splunk_license_file'], list):
-                            license_list = self.environments[splunk_env]['splunk_defaults']['splunk_license_file']
-                        else:
-                            license_list.append(self.environments[splunk_env]['splunk_defaults']['splunk_license_file'])
-                        for license_file_name in license_list:
-                            license_file = os.path.join(cwd, self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'],license_file_name)
-                            if not os.path.isfile(license_file):
-                                raise AnsibleParserError("Error: Cannot read license file %s" % license_file)
+                        license_file_value = self.environments[splunk_env]['splunk_defaults'].get('splunk_license_file')
+                        if license_file_value:
+                            if isinstance(license_file_value, list):
+                                license_list = license_file_value
+                            else:
+                                license_list.append(license_file_value)
+                            for license_file_name in license_list:
+                                license_file = os.path.join(cwd, self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'],license_file_name)
+                                if not os.path.isfile(license_file):
+                                    raise AnsibleParserError("Error: Cannot read license file %s" % license_file)
 
                     # Note: cluster_manager + idxcluster validation is handled by schema.py
                     
