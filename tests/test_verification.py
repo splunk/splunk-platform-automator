@@ -143,6 +143,7 @@ class TestSplunkVerification:
     # =========================================================================
     # Test 03: Wait for Bucket Fixup
     # =========================================================================
+    @pytest.mark.always_run
     def test_03_wait_for_bucket_fixup(self, config_file):
         """
         Step 03: Wait for bucket fixup tasks to complete.
@@ -169,6 +170,7 @@ class TestSplunkVerification:
     # =========================================================================
     # Test 04: Check Indexer Cluster Health
     # =========================================================================
+    @pytest.mark.always_run
     def test_04_check_idxc_health(self, config_file):
         """
         Step 04: Verify Indexer Cluster health.
@@ -195,6 +197,7 @@ class TestSplunkVerification:
     # =========================================================================
     # Test 05: Check Search Head Cluster Health
     # =========================================================================
+    @pytest.mark.always_run
     def test_05_check_shc_health(self, config_file):
         """
         Step 05: Verify Search Head Cluster health.

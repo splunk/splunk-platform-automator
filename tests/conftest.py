@@ -427,6 +427,10 @@ def pytest_runtest_makereport(item, call):
 def pytest_runtest_setup(item):
     """Skip tests if previous incremental test failed."""
     if "incremental" in item.keywords:
+        # Check for always_run marker
+        if "always_run" in item.keywords:
+            return
+
         previousfailed = getattr(item.parent, "_previousfailed", None)
         if previousfailed is not None:
             pytest.xfail(f"Previous test failed: {previousfailed.name}")
