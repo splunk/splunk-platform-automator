@@ -33,6 +33,23 @@
       loop_control:
         label: "Checking fixup level: {{ item }}"
 
+    - name: Wait for Indexer Cluster to be ready
+      ansible.builtin.uri:
+        url: "https://localhost:{{ splunkd_port | default(8089) }}/services/cluster/manager/status"
+        method: GET
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        body_format: form-urlencoded
+        validate_certs: false
+        force_basic_auth: true
+        body:
+          output_mode: json
+      register: cluster_status
+      until: (cluster_status.json.entry[0].content.service_ready_flag | default(false) | bool)
+      retries: 60
+      delay: 5
+      changed_when: false
+
     - name: Display fixup status
       ansible.builtin.debug:
         msg: "✅ All bucket fixup tasks complete"
