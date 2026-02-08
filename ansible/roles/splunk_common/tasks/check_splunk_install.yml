@@ -1,46 +1,42 @@
 ---
+- name: Detect Installed Splunk App
+  block:
+    - name: "Check for {{ splunk_install_dir }}/splunk directory"
+      tags:
+        - splunk
+        - splunk_common
+      ansible.builtin.stat:
+        path: "{{ splunk_install_dir }}/splunk"
+      register: splunk_install_app_dir
 
-- name: "check for existing {{splunk_install_dir}}/{{splunk_install_app_var}} dir"
-  tags:
-    - splunk
-    - splunk_common
-  ansible.builtin.stat:
-    path: "{{splunk_install_dir}}/{{splunk_install_app_var}}"
-  vars:
-    splunk_install_app_var: splunk
-  register: splunk_install_app_dir
+    - name: "Check for {{ splunk_install_dir }}/splunkforwarder directory"
+      tags:
+        - splunk
+        - splunk_common
+      ansible.builtin.stat:
+        path: "{{ splunk_install_dir }}/splunkforwarder"
+      register: splunkforwarder_install_app_dir
+
+    - name: Set splunk_install_app=splunk
+      tags:
+        - splunk
+        - splunk_common
+      ansible.builtin.set_fact:
+        splunk_install_app: splunk
+      when:
+        - splunk_install_app_dir.stat is defined
+        - splunk_install_app_dir.stat.exists == true
+
+    - name: Set splunk_install_app=splunkforwarder
+      tags:
+        - splunk
+        - splunk_common
+      ansible.builtin.set_fact:
+        splunk_install_app: splunkforwarder
+      when:
+        - splunkforwarder_install_app_dir.stat is defined
+        - splunkforwarder_install_app_dir.stat.exists == true
   when: splunk_install_app is not defined
-
-- name: "check for existing {{splunk_install_dir}}/{{splunk_install_app_var}} dir"
-  tags:
-    - splunk
-    - splunk_common
-  ansible.builtin.stat:
-    path: "{{splunk_install_dir}}/{{splunk_install_app_var}}"
-  vars:
-    splunk_install_app_var: splunkforwarder
-  register: splunkforwarder_install_app_dir
-  when: splunk_install_app is not defined
-
-- name: Set var splunk_install_app=splunk
-  tags:
-    - splunk
-    - splunk_common
-  ansible.builtin.set_fact:
-    splunk_install_app: splunk
-  when:
-    - splunk_install_app_dir.stat is defined
-    - splunk_install_app_dir.stat.exists == true
-
-- name: Set var splunk_install_app=splunkforwarder
-  tags:
-    - splunk
-    - splunk_common
-  ansible.builtin.set_fact:
-    splunk_install_app: splunkforwarder
-  when:
-    - splunkforwarder_install_app_dir.stat is defined
-    - splunkforwarder_install_app_dir.stat.exists == true
 
 - name: "check for existing splunk install"
   tags:

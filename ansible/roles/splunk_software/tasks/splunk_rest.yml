@@ -1,72 +1,80 @@
 ---
-- name: 'call Splunk rest (noauth): {{ splunk_software_rest_method|default("GET") }} {{ splunk_software_rest_endpoint|default("/") }}'
-  tags:
-    - splunk
-    - splunk_software
-    - splunk_rest
-  ansible.builtin.shell: '/opt/splunk/bin/splunk cmd splunkd rest --noauth {{ splunk_software_rest_method|default("GET") }} {{ splunk_software_rest_endpoint|default("/") }} output_mode={{ splunk_software_rest_output_mode|default("json") }} {%- if splunk_software_rest_output_mode|default("json") == "json" -%}| tail -1{%- endif -%}'
-  register: splunk_software_rest_output
+# =============================================================================
+# No-Auth Execution Block
+# =============================================================================
+- name: Execute No-Auth REST Calls
+  block:
+    - name: 'call Splunk rest (noauth): {{ splunk_software_rest_method|default("GET") }} {{ splunk_software_rest_endpoint|default("/") }}'
+      tags:
+        - splunk
+        - splunk_software
+        - splunk_rest
+      ansible.builtin.shell: '/opt/splunk/bin/splunk cmd splunkd rest --noauth {{ splunk_software_rest_method|default("GET") }} {{ splunk_software_rest_endpoint|default("/") }} output_mode={{ splunk_software_rest_output_mode|default("json") }} {%- if splunk_software_rest_output_mode|default("json") == "json" -%}| tail -1{%- endif -%}'
+      register: splunk_software_rest_output
+
+    - name: Get rest output
+      tags:
+        - splunk
+        - splunk_software
+        - splunk_rest
+      ansible.builtin.set_fact:
+        splunk_software_rest_json_output: "{{ splunk_software_rest_output.stdout|ansible.builtin.from_json }}"
+      when: splunk_software_rest_output_mode|default("json") == "json"
   when: splunk_software_rest_noauth|default(false)|bool == true
 
-- name: Get rest output
-  tags:
-    - splunk
-    - splunk_software
-    - splunk_rest
-  ansible.builtin.set_fact:
-    splunk_software_rest_json_output: "{{ splunk_software_rest_output.stdout|ansible.builtin.from_json }}"
-  when:
-    - splunk_software_rest_noauth|default(false)|bool == true
-    - splunk_software_rest_output_mode|default("json") == "json"
+# =============================================================================
+# Authenticated Execution Block
+# =============================================================================
+- name: Execute Authenticated REST Calls
+  block:
+    - name: 'call Splunk rest (auth): {{ splunk_software_rest_method|default("GET") }} {{ splunk_software_rest_endpoint|default("/") }}'
+      tags:
+        - splunk
+        - splunk_software
+        - splunk_rest
+      ansible.builtin.uri:
+        url: "https://localhost:8089{{ splunk_software_rest_endpoint|default('/') }}{% if splunk_software_rest_method|default('GET') == 'GET' %}?output_mode={{ splunk_software_rest_output_mode|default('json') }}{% endif %}"
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        method: "{{ splunk_software_rest_method|default('GET') }}"
+        body_format: form-urlencoded
+        body: "{{ (splunk_software_rest_body | default({})) | combine({'output_mode': splunk_software_rest_output_mode|default('json')}) if splunk_software_rest_method|default('GET') == 'POST' else omit }}"
+        return_content: true
+        force_basic_auth: true
+        validate_certs: false
+      register: splunk_software_rest_output
+      changed_when: splunk_software_rest_method|default('GET') == 'POST'
 
-- name: 'call Splunk rest (auth): {{ splunk_software_rest_method|default("GET") }} {{ splunk_software_rest_endpoint|default("/") }}'
-  tags:
-    - splunk
-    - splunk_software
-    - splunk_rest
-  ansible.builtin.uri:
-    url: "https://localhost:8089{{ splunk_software_rest_endpoint|default('/') }}{% if splunk_software_rest_method|default('GET') == 'GET' %}?output_mode={{ splunk_software_rest_output_mode|default('json') }}{% endif %}"
-    user: admin
-    password: "{{ splunk_admin_password }}"
-    method: "{{ splunk_software_rest_method|default('GET') }}"
-    body_format: form-urlencoded
-    body: "{{ (splunk_software_rest_body | default({})) | combine({'output_mode': splunk_software_rest_output_mode|default('json')}) if splunk_software_rest_method|default('GET') == 'POST' else omit }}"
-    return_content: true
-    force_basic_auth: true
-    validate_certs: false
-  register: splunk_software_rest_output
-  when: splunk_software_rest_noauth|default(true)|bool == true
-  changed_when: splunk_software_rest_method|default('GET') == 'POST'
+    - name: Get rest output
+      tags:
+        - splunk
+        - splunk_software
+        - splunk_rest
+      ansible.builtin.set_fact:
+        splunk_software_rest_json_output: "{{ splunk_software_rest_output.content|ansible.builtin.from_json }}"
+      when: splunk_software_rest_output_mode|default("json") == "json"
+  when: splunk_software_rest_noauth|default(false)|bool == false
 
-- name: Get rest output
-  tags:
-    - splunk
-    - splunk_software
-    - splunk_rest
-  ansible.builtin.set_fact:
-    splunk_software_rest_json_output: "{{ splunk_software_rest_output.content|ansible.builtin.from_json }}"
-  when:
-    - splunk_software_rest_noauth|default(false)|bool == false
-    - splunk_software_rest_output_mode|default("json") == "json"
+# =============================================================================
+# Debug Output Block
+# =============================================================================
+- name: Debug Output
+  block:
+    - name: Output raw content (XML/String)
+      tags:
+        - splunk
+        - splunk_software
+        - splunk_rest
+      ansible.builtin.debug:
+        var: splunk_software_rest_output
+      when: splunk_software_rest_output_mode|default("json") != "json"
 
-- name: Output json
-  tags:
-    - splunk
-    - splunk_software
-    - splunk_rest
-  ansible.builtin.debug:
-    var: splunk_software_rest_output
-  when:
-    - splunk_software_rest_output_show|default(false)|bool == true
-    - splunk_software_rest_output_mode|default("json") == "xml"
-
-- name: Output json
-  tags:
-    - splunk
-    - splunk_software
-    - splunk_rest
-  ansible.builtin.debug:
-    var: splunk_software_rest_json_output
-  when:
-    - splunk_software_rest_output_show|default(false)|bool == true
-    - splunk_software_rest_output_mode|default("json") == "json"
+    - name: Output parsed JSON
+      tags:
+        - splunk
+        - splunk_software
+        - splunk_rest
+      ansible.builtin.debug:
+        var: splunk_software_rest_json_output
+      when: splunk_software_rest_output_mode|default("json") == "json"
+  when: splunk_software_rest_output_show|default(false)|bool == true
