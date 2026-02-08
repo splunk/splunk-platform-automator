@@ -339,33 +339,12 @@ class TestSplunkDeployment:
         print("[WAIT] All Splunk services are running")
     
     # =========================================================================
-    # Test 12: Verify Data Flow
-    # =========================================================================
-    def test_12_verify_data_flow(self, config_file):
-        """
-        Step 12: Verify data is flowing into Splunk.
-        
-        Runs: ansible/verification/verify_data_flow.yml
-        - Searches _internal index for data
-        - Asserts hosts are sending data
-        """
-        if not getattr(self, 'is_splunk_configured', False):
-            pytest.fail("Previous step failed: Splunk not configured")
-        
-        print(f"\n[VERIFY] Verifying data flow for environment: {self.splunk_env_id}")
-        
-        result = self._run_verification_playbook("verify_data_flow.yml")
-        
-        assert result.returncode == 0, "Data flow verification failed - no data in _internal index"
-        print("[VERIFY] Data flow verification passed")
-    
-    # =========================================================================
-    # Test 13: Wait for Bucket Fixup
+    # Test 12: Wait for Bucket Fixup
     # =========================================================================
     @pytest.mark.always_run
-    def test_13_wait_for_bucket_fixup(self, config_file):
+    def test_12_wait_for_bucket_fixup(self, config_file):
         """
-        Step 13: Wait for bucket fixup tasks to complete.
+        Step 12: Wait for bucket fixup tasks to complete.
         
         Runs: ansible/verification/wait_for_bucket_fixup.yml
         - Waits for replication_factor, search_factor, and generation fixups
@@ -388,12 +367,12 @@ class TestSplunkDeployment:
         print("[WAIT] Bucket fixup tasks complete")
     
     # =========================================================================
-    # Test 14: Check Indexer Cluster Health
+    # Test 13: Check Indexer Cluster Health
     # =========================================================================
     @pytest.mark.always_run
-    def test_14_check_idxc_health(self, config_file):
+    def test_13_check_idxc_health(self, config_file):
         """
-        Step 14: Verify Indexer Cluster health.
+        Step 13: Verify Indexer Cluster health.
         
         Runs: ansible/verification/check_idxc_health.yml
         - Checks cluster manager for service_ready_flag
@@ -415,6 +394,34 @@ class TestSplunkDeployment:
         assert result.returncode == 0, "Indexer Cluster health check failed"
         print("[VERIFY] Indexer Cluster is healthy")
     
+    # =========================================================================
+    # Test 14: Wait for Search Head Cluster Captain
+    # =========================================================================
+    @pytest.mark.always_run
+    def test_14_wait_for_shc_captain(self, config_file):
+        """
+        Step 14: Wait for Search Head Cluster to be ready.
+        
+        Runs: ansible/verification/wait_for_shc_captain.yml
+        - Waits for captain to report service_ready_flag = true
+        
+        Skipped if 'deployer' role is not in config.
+        """
+        if not getattr(self, 'is_splunk_configured', False):
+            pytest.fail("Previous step failed: Splunk not configured")
+        
+        roles = self._get_all_roles()
+        
+        if 'deployer' not in roles:
+            pytest.skip("No deployer role in configuration - skipping SHC wait")
+        
+        print("\n[WAIT] Waiting for Search Head Cluster to be ready...")
+        
+        result = self._run_verification_playbook("wait_for_shc_captain.yml")
+        
+        assert result.returncode == 0, "Wait for SHC Captain failed or timed out"
+        print("[WAIT] Search Head Cluster is ready")
+
     # =========================================================================
     # Test 15: Check Search Head Cluster Health
     # =========================================================================
@@ -442,4 +449,27 @@ class TestSplunkDeployment:
         
         assert result.returncode == 0, "Search Head Cluster health check failed"
         print("[VERIFY] Search Head Cluster is healthy")
+
+
+
+    # =========================================================================
+    # Test 16: Verify Data Flow
+    # =========================================================================
+    def test_16_verify_data_flow(self, config_file):
+        """
+        Step 16: Verify data is flowing into Splunk.
+        
+        Runs: ansible/verification/verify_data_flow.yml
+        - Searches _internal index for data
+        - Asserts hosts are sending data
+        """
+        if not getattr(self, 'is_splunk_configured', False):
+            pytest.fail("Previous step failed: Splunk not configured")
+        
+        print(f"\n[VERIFY] Verifying data flow for environment: {self.splunk_env_id}")
+        
+        result = self._run_verification_playbook("verify_data_flow.yml")
+        
+        assert result.returncode == 0, "Data flow verification failed - no data in _internal index"
+        print("[VERIFY] Data flow verification passed")
 

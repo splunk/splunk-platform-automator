@@ -15,8 +15,6 @@
             | first | default('')
           }}
 
-
-
     - name: Add to target group
       ansible.builtin.add_host:
         name: "{{ shc_member }}"
@@ -24,27 +22,26 @@
       when: shc_member != ''
       changed_when: false
 
-- name: Check Search Head Cluster Health
+- name: Wait for Search Head Cluster Captain
   hosts: target_shc_group
   become: true
   become_user: root
   gather_facts: false
 
   tasks:
-    - name: Check SHC status
-      ansible.builtin.include_role:
-        name: splunk_software
-        tasks_from: splunk_rest
-      vars:
-        splunk_software_rest_endpoint: /services/shcluster/status
-        splunk_software_rest_output_mode: json
-
-    - name: Parse cluster status
-      ansible.builtin.set_fact:
-        shc_service_ready: "{{ splunk_software_rest_output.content | from_json | json_query('entry[0].content.captain.service_ready_flag') | bool }}"
-
-    - name: Assert SHC Service Ready
-      ansible.builtin.assert:
-        that:
-          - shc_service_ready
-        fail_msg: "Search Head Cluster is not ready! service_ready_flag is false."
+    - name: Wait for SHC to be ready
+      ansible.builtin.uri:
+        url: "https://localhost:8089/services/shcluster/status"
+        method: GET
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        body_format: form-urlencoded
+        validate_certs: false
+        force_basic_auth: true
+        body:
+          output_mode: json
+      register: shc_status
+      until: (shc_status.json.entry[0].content.captain.service_ready_flag | default(false) | bool)
+      retries: 60
+      delay: 10
+      changed_when: false
