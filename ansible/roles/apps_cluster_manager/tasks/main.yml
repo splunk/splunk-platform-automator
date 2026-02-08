@@ -1,0 +1,62 @@
+---
+# Cluster Manager Apps - Runs on cluster_manager hosts
+# Calculates and deploys apps that should be distributed via cluster manager
+# Note: apps_common dependency handles config merging
+
+- name: Initialize cluster manager apps list
+  tags:
+    - splunk
+    - splunk_apps
+    - cluster_manager
+  ansible.builtin.set_fact:
+    cm_apps: []
+
+- name: Filter apps for cluster manager distribution
+  tags:
+    - splunk
+    - splunk_apps
+    - cluster_manager
+  ansible.builtin.set_fact:
+    cm_apps: "{{ cm_apps + [item] }}"
+  loop: "{{ splunk_app_deployment.apps | default([]) }}"
+  when:
+    - item.target_roles is defined
+    - item.target_roles | intersect(['indexer']) | length > 0
+    - item.deployment_target | default('auto') != 'direct'
+
+- name: Debug cluster manager apps
+  tags:
+    - splunk
+    - splunk_apps
+    - cluster_manager
+  ansible.builtin.debug:
+    msg:
+      - "========================================="
+      - "CLUSTER MANAGER: {{ inventory_hostname }}"
+      - "========================================="
+      - "Total apps for CM distribution: {{ cm_apps | length }}"
+      - "Apps: {{ cm_apps | map(attribute='name') | list | join(', ') if cm_apps | length > 0 else '(none)' }}"
+      - "========================================="
+    verbosity: 0
+
+- name: Process cluster manager apps
+  tags:
+    - splunk
+    - splunk_apps
+    - cluster_manager
+  block:
+    - name: Process each cluster manager app
+      ansible.builtin.include_tasks: "process_cm_app.yml"
+      loop: "{{ cm_apps }}"
+      loop_control:
+        loop_var: app_item
+        label: "{{ app_item.name }}"
+  when: cm_apps | length > 0
+
+- name: Cluster manager apps complete
+  tags:
+    - splunk
+    - splunk_apps
+    - cluster_manager
+  ansible.builtin.debug:
+    msg: "Cluster manager app processing complete on {{ inventory_hostname }}"

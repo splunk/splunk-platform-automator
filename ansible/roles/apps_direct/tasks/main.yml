@@ -1,0 +1,83 @@
+---
+# Direct Deployment Apps - Runs on all hosts except manager roles
+# Handles apps that should be installed directly to etc/apps
+# Note: apps_common dependency handles config merging
+
+- name: Get current host roles
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    current_host_roles: "{{ group_names | select('match', '^role_.*') | map('regex_replace', '^role_', '') | list }}"
+
+- name: Initialize direct apps list
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    direct_apps: []
+
+- name: Check each app for direct deployment eligibility
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    direct_apps: "{{ direct_apps + [item] }}"
+  loop: "{{ splunk_app_deployment.apps | default([]) }}"
+  when:
+    - item.target_roles is defined
+    - current_host_roles | intersect(item.target_roles) | length > 0
+    - >-
+      (item.deployment_target | default('auto') == 'direct')
+      or
+      (
+        item.deployment_target | default('auto') != 'direct' and
+        current_host_roles | intersect(['deployment_server', 'cluster_manager', 'deployer']) | length == 0 and
+        current_host_roles | intersect(['universal_forwarder', 'heavy_forwarder']) | length == 0 and
+        (
+          (current_host_roles | intersect(['indexer']) | length > 0 and group_names | select('match', '^idxcluster_') | list | length == 0)
+          or
+          (current_host_roles | intersect(['search_head']) | length > 0 and group_names | select('match', '^shcluster_') | list | length == 0)
+        )
+      )
+
+- name: Debug direct deployment apps
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.debug:
+    msg:
+      - "========================================="
+      - "DIRECT DEPLOYMENT: {{ inventory_hostname }}"
+      - "========================================="
+      - "Host roles: {{ current_host_roles | join(', ') }}"
+      - "Total apps for direct deployment: {{ direct_apps | length }}"
+      - "Apps: {{ direct_apps | map(attribute='name') | list | join(', ') if direct_apps | length > 0 else '(none)' }}"
+      - "========================================="
+    verbosity: 0
+
+- name: Process direct deployment apps
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  block:
+    - name: Process each direct deployment app
+      ansible.builtin.include_tasks: "process_direct_app.yml"
+      loop: "{{ direct_apps }}"
+      loop_control:
+        loop_var: app_item
+        label: "{{ app_item.name }}"
+  when: direct_apps | length > 0
+
+- name: Direct deployment apps complete
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.debug:
+    msg: "Direct deployment app processing complete on {{ inventory_hostname }}"

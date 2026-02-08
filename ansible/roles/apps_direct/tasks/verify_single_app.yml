@@ -1,0 +1,34 @@
+---
+# Verify a single app deployment
+# Variables expected:
+#   - verify_app_item: The app configuration
+#   - verify_app_full_path: Full path to app (uses app_item.target_path override if set)
+
+- name: "Check if {{ verify_app_item.name }} exists"
+  tags:
+    - splunk
+    - splunk_apps
+    - verify
+  ansible.builtin.stat:
+    path: "{{ verify_app_full_path }}"
+  register: app_check
+  become: true
+
+- name: "Verify {{ verify_app_item.name }} presence/absence"
+  tags:
+    - splunk
+    - splunk_apps
+    - verify
+  ansible.builtin.set_fact:
+    direct_mismatches: "{{ direct_mismatches + [mismatch_entry] }}"
+  vars:
+    app_state: "{{ verify_app_item.state | default('installed') }}"
+    should_exist: "{{ app_state != 'absent' }}"
+    actually_exists: "{{ app_check.stat.exists }}"
+    mismatch_entry:
+      app: "{{ verify_app_item.name }}"
+      issue: "{{ 'MISSING: App should be installed but not found' if (should_exist and not actually_exists) else 'UNEXPECTED: App should be absent but is installed' }}"
+      severity: "error"
+      expected_state: "{{ app_state }}"
+      actual_state: "{{ 'installed' if actually_exists else 'absent' }}"
+  when: should_exist != actually_exists

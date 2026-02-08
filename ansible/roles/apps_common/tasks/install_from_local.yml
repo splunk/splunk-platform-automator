@@ -1,0 +1,77 @@
+---
+# Install app from local repository to target directory
+# Required vars (same as splunkbase - set by calling role's install_app.yml):
+#   - app_name: Name of the app
+#   - app_item: App configuration object
+#   - target_path: Full path where app should be installed (e.g. splunk_home/etc/deployment-apps/AppName)
+
+# Calculate local source path the same way as splunk_app_deployment:
+# - If app_item.local_path is set: use it (absolute path)
+# - Else: use local_app_repo_path / (app_item.path or app_item.name)
+- name: "Set local source path for {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.set_fact:
+    local_source_path: "{{ app_item.local_path | default(splunk_app_deployment.local_app_repo_path | default(splunk_app_deployment_defaults.local_app_repo_path) + '/' + (app_item.path | default(app_item.name))) }}"
+
+- name: "Check if local app source exists for {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.stat:
+    path: "{{ local_source_path }}"
+  register: local_app_source
+  delegate_to: localhost
+  become: false
+
+- name: "Fail if local app source not found for {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.fail:
+    msg: "Local app source not found: {{ local_source_path }}"
+  when: not local_app_source.stat.exists
+
+- name: "Sync {{ app_name }} to target"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.posix.synchronize:
+    src: "{{ local_source_path }}/"
+    dest: "{{ target_path }}/"
+    delete: yes
+    recursive: yes
+    archive: no
+    checksum: yes
+    rsync_opts:
+      - "--exclude=.git"
+      - "--exclude=.gitignore"
+      - "--no-owner"
+      - "--no-group"
+  register: local_app_synced
+
+- name: "Set correct permissions on {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.file:
+    path: "{{ target_path }}"
+    state: directory
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    recurse: yes
+  become: true
+
+- name: "Set update status for {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.set_fact:
+    update_needed: "{{ local_app_synced.changed }}"

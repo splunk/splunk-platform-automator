@@ -1,0 +1,137 @@
+---
+# Remove Splunk Apps (processes apps with state: absent from config)
+# Uses the same four roles as deploy_splunk_apps.yml with a filtered app list.
+
+- name: Pre-removal checks and filter apps
+  hosts: localhost
+  gather_facts: no
+  become: false
+
+  tasks:
+    - name: Check if splunk_app_deployment is defined
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.fail:
+        msg: |
+          ERROR: No 'splunk_app_deployment' section found in config file.
+
+          Please add the 'splunk_app_deployment' section to your config/splunk_config.yml
+          and define apps with state: absent for removal.
+
+          Example:
+            splunk_app_deployment:
+              apps:
+                - name: "app_to_remove"
+                  source: splunkbase
+                  app_id: 123
+                  state: absent
+                  target_roles: [search_head]
+      when: splunk_app_deployment is not defined
+
+    - name: Filter apps with state=absent
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.set_fact:
+        apps_to_remove: "{{ splunk_app_deployment.apps | default([]) | selectattr('state', 'defined') | selectattr('state', 'equalto', 'absent') | list }}"
+        cacheable: true
+
+    - name: Display apps marked for removal
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.debug:
+        msg: |
+          Found {{ apps_to_remove | length }} app(s) marked for removal (state: absent):
+          {% for app in apps_to_remove %}
+          - {{ app.name }} (target_roles: {{ app.target_roles | default(['none']) | join(', ') }})
+          {% endfor %}
+      when: apps_to_remove | length > 0
+
+    - name: No apps to remove
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.debug:
+        msg: |
+          No apps marked for removal found in configuration.
+          All apps are in desired state (nothing to remove).
+
+          To remove apps, set state: absent in config/splunk_config.yml:
+
+          Example:
+            splunk_app_deployment:
+              apps:
+                - name: "app_to_remove"
+                  source: splunkbase
+                  app_id: 123
+                  state: absent
+                  target_roles: [search_head, indexer]
+      when: apps_to_remove | length == 0
+
+    - name: Create filtered config for removal only
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.set_fact:
+        splunk_app_deployment_filtered: "{{ splunk_app_deployment | combine({'apps': apps_to_remove}, recursive=True) }}"
+        cacheable: true
+
+- name: Remove apps from Deployment Server
+  hosts: role_deployment_server
+  become: true
+  become_user: root
+  gather_facts: yes
+  vars:
+    splunk_app_deployment: "{{ hostvars['localhost']['splunk_app_deployment_filtered'] }}"
+  roles:
+    - role: apps_deployment_server
+
+- name: Remove apps from Cluster Managers
+  hosts: role_cluster_manager
+  become: true
+  become_user: root
+  gather_facts: yes
+  vars:
+    splunk_app_deployment: "{{ hostvars['localhost']['splunk_app_deployment_filtered'] }}"
+  roles:
+    - role: apps_cluster_manager
+
+- name: Remove apps from Deployers
+  hosts: role_deployer
+  become: true
+  become_user: root
+  gather_facts: yes
+  vars:
+    splunk_app_deployment: "{{ hostvars['localhost']['splunk_app_deployment_filtered'] }}"
+  roles:
+    - role: apps_deployer
+
+- name: Remove apps directly from hosts
+  hosts: role_search_head,role_indexer,role_heavy_forwarder,role_license_manager,role_monitoring_console,role_universal_forwarder
+  become: true
+  become_user: root
+  gather_facts: yes
+  vars:
+    splunk_app_deployment: "{{ hostvars['localhost']['splunk_app_deployment_filtered'] }}"
+  roles:
+    - role: apps_direct
+
+- name: Removal summary
+  hosts: localhost
+  gather_facts: no
+  become: false
+  tasks:
+    - name: Display completion message
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.debug:
+        msg:
+          - "========================================="
+          - "SPLUNK APP REMOVAL COMPLETE"
+          - "========================================="
+          - "Apps marked state: absent have been removed from their targets"
+          - "========================================="
+      when: hostvars['localhost']['apps_to_remove'] | default([]) | length > 0

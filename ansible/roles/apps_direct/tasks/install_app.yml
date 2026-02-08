@@ -1,0 +1,21 @@
+---
+# Install app to etc/apps directory
+
+- name: "Set paths for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    app_name: "{{ app_item.name }}"
+    app_cache_dir: "{{ splunk_app_deployment.temp_dir | default('/tmp/splunk_apps') }}/{{ app_item.name }}"
+    splunk_home: "{{ splunk_install_dir | default('/opt') }}/{{ splunk_install_app | default('splunk') }}"
+    # Use app_item.target_path override if set, else calculate from deployment method
+    app_target_path: "{{ app_item.target_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/apps/' ~ app_item.name) }}"
+
+- name: "Install {{ app_item.name }} from {{ app_item.source }}"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: "install_from_{{ app_item.source }}.yml"
+  vars:
+    target_path: "{{ app_target_path }}"

@@ -1,0 +1,139 @@
+---
+# Configure deployment server serverclass for app distribution
+
+- name: "Set serverclass path for {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    serverclass_conf_path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+
+- name: "Read current serverclass.conf for {{ serverclass_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.slurp:
+    path: "{{ serverclass_conf_path }}"
+  register: serverclass_file
+  failed_when: false
+
+- name: "Parse current whitelist for {{ serverclass_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    current_whitelist: "{{ serverclass_file.content | default('') | b64decode | regex_findall('\\[serverClass:' + serverclass_name + '\\][\\s\\S]*?(?=\\n\\[|$)') | first | default('') | regex_findall('whitelist\\.\\d+\\s*=\\s*(.+)') }}"
+  when: serverclass_file.content is defined
+
+- name: "Set empty current whitelist if file doesn't exist"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    current_whitelist: []
+  when: serverclass_file.content is not defined
+
+- name: "Compare whitelists for {{ serverclass_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    whitelist_needs_update: "{{ (current_whitelist | sort) != (app_whitelist_hosts | default([]) | sort) }}"
+
+- name: "Debug whitelist comparison for {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.debug:
+    msg:
+      - "Current whitelist: {{ current_whitelist | join(', ') if current_whitelist | length > 0 else '(empty)' }}"
+      - "Desired whitelist: {{ app_whitelist_hosts | join(', ') if app_whitelist_hosts | length > 0 else '(empty)' }}"
+      - "Needs update: {{ whitelist_needs_update }}"
+    verbosity: 0
+
+- name: "Remove {{ serverclass_name }} serverclass section for update"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  community.general.ini_file:
+    path: "{{ serverclass_conf_path }}"
+    section: "serverClass:{{ serverclass_name }}"
+    state: absent
+  when: whitelist_needs_update | bool
+  notify: Reload deploy-server
+
+- name: "Remove {{ serverclass_name }} app subsection when clearing serverclass"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  community.general.ini_file:
+    path: "{{ serverclass_conf_path }}"
+    section: "serverClass:{{ serverclass_name }}:app:{{ app_name }}"
+    state: absent
+  when:
+    - whitelist_needs_update | bool
+    - app_whitelist_hosts | default([]) | length == 0
+  notify: Reload deploy-server
+
+- name: "Set {{ serverclass_name }} server class whitelist"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  community.general.ini_file:
+    path: "{{ serverclass_conf_path }}"
+    section: "serverClass:{{ serverclass_name }}"
+    option: "whitelist.{{ idx }}"
+    value: "{{ item }}"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: "0600"
+  loop: "{{ app_whitelist_hosts | default([]) }}"
+  loop_control:
+    index_var: idx
+  when: 
+    - app_whitelist_hosts | default([]) | length > 0
+    - whitelist_needs_update | bool
+  notify: Reload deploy-server
+
+- name: "Define {{ serverclass_name }} server class app settings"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  community.general.ini_file:
+    path: "{{ serverclass_conf_path }}"
+    section: "serverClass:{{ serverclass_name }}:app:{{ app_name }}"
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: "0600"
+  loop:
+    - { option: 'restartSplunkd', value: "{{ app_item.restart_required | default(true) | string }}" }
+    - { option: 'stateOnClient', value: 'enabled' }
+  when: 
+    - app_whitelist_hosts | default([]) | length > 0
+    - whitelist_needs_update | bool
+  notify: Reload deploy-server
+
+- name: "Serverclass configuration complete for {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.debug:
+    msg:
+      - "{% if whitelist_needs_update | default(false) %}Serverclass UPDATED{% else %}Serverclass UNCHANGED{% endif %} for {{ app_name }}"
+      - "ServerClass: {{ serverclass_name }}"
+      - "Current: {{ current_whitelist | join(', ') if current_whitelist | length > 0 else '(empty)' }}"
+      - "Desired: {{ app_whitelist_hosts | join(', ') if app_whitelist_hosts | length > 0 else '(empty)' }}"
+    verbosity: 0

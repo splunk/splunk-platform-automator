@@ -1,0 +1,261 @@
+---
+# Example Splunk App Deployment Configuration
+# Add this section to your config/splunk_config.yml file
+
+# Splunk App Deployment Configuration
+splunk_app_deployment:
+  # ===========================================
+  # CREDENTIALS (Optional - defaults to environment variables)
+  # ===========================================
+  # By default, credentials are pulled from environment variables:
+  #   - SPLUNKBASE_USERNAME
+  #   - SPLUNKBASE_PASSWORD
+  #
+  # Export before running: 
+  #   export SPLUNKBASE_USERNAME='your_email@example.com'
+  #   export SPLUNKBASE_PASSWORD='your_password'
+  #
+  # You can override the defaults here if needed:
+  # splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
+  # splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
+  
+  # Alternative: Use Ansible Vault (recommended for production)
+  # splunkbase_username: "{{ vault_splunkbase_username }}"
+  # splunkbase_password: "{{ vault_splunkbase_password }}"
+  
+  # ===========================================
+  # LOCAL APP REPOSITORY (Optional - has default)
+  # ===========================================
+  # Default: "../apps" (relative to ansible directory)
+  # Override if your apps are in a different location:
+  # local_app_repo_path: "../app_repo"  # Path relative to ansible directory
+  
+  # ===========================================
+  # OPERATIONAL SETTINGS (Optional - has defaults)
+  # ===========================================
+  # These settings have sensible defaults and can be overridden:
+  # temp_dir: "/tmp/splunk_apps"                           # Download cache directory
+  # backup_location: "{{ splunk_home }}/var/backup/apps"   # Backup directory
+  # backup_apps_before_update: true                        # Backup before updating
+  # restart_after_deployment: true                         # Restart Splunk after deployment
+  # download_timeout: 120                                  # Download timeout in seconds
+  # retry_count: 3                                         # Number of download retries
+  # splunkbase_api_url: "https://splunkbase.splunk.com/api/v1"  # Splunkbase API URL
+  
+  # Example: Override operational settings if needed
+  # temp_dir: "/data/splunk_app_cache"
+  # backup_location: "/backup/splunk/apps"
+  # download_timeout: 300
+  
+  # ===========================================
+  # APP DEFINITIONS
+  # ===========================================
+  apps:
+    # -------------------------------------------
+    # Example 1: Splunk Add-on from Splunkbase (Auto-calculated location)
+    # -------------------------------------------
+    - name: "Splunk_TA_nix"
+      source: splunkbase
+      app_id: 833  # Find this in the Splunkbase URL
+      version: "latest"  # Optional - defaults to "latest" if not specified
+      state: installed    # Optional - defaults to "installed" (can be "installed" or "absent")
+      target_roles:
+        - search_head
+        - indexer
+        - heavy_forwarder
+      # target_path: auto  # Default - automatically calculated
+      # For search_heads with SHC: goes to deployer etc/shcluster/apps
+      # For indexers with cluster: goes to cluster_manager etc/manager-apps
+      # For any role with deployment_server: goes to deployment_server etc/deployment-apps
+      # Otherwise: goes to host directly etc/apps
+      restart_required: true
+    
+    # -------------------------------------------
+    # Example 2: Search App from Splunkbase
+    # -------------------------------------------
+    - name: "Splunk_Security_Essentials"
+      source: splunkbase
+      app_id: 3435
+      version: "3.7.0"  # Pinned to specific version
+      target_roles:
+        - search_head
+      target_path: "etc/apps"
+      restart_required: true
+    
+    # -------------------------------------------
+    # Example 3: ML Toolkit (Auto-deployed to SHC)
+    # -------------------------------------------
+    - name: "Splunk_ML_Toolkit"
+      source: splunkbase
+      app_id: 2890
+      version: "5.4.2"
+      target_roles:
+        - search_head  # Automatically goes to deployer if SHC exists
+      # target_path: auto  # Will calculate: etc/shcluster/apps on deployer
+      restart_required: false
+    
+    # -------------------------------------------
+    # Example 4: Universal Forwarder App (via Deployment Server)
+    # -------------------------------------------
+    - name: "Splunk_TA_nix"
+      source: splunkbase
+      app_id: 833
+      target_roles:
+        - universal_forwarder
+      # Deployment server options (only used if host is a deployment client)
+      serverclass: "linux_forwarders"  # Optional: custom serverclass name (default: app_<appname>)
+      deployment_whitelist: "*"         # Optional: whitelist pattern (default: *)
+      # deployment_blacklist: "*.dev.*" # Optional: exclude certain clients
+      restart_required: true
+    
+    # -------------------------------------------
+    # Example 5: Custom Local App
+    # -------------------------------------------
+    - name: "my_custom_search_app"
+      source: local
+      path: "my_custom_search_app"  # Directory name in app_repo
+      target_roles:
+        - search_head
+      target_path: "etc/apps"
+      restart_required: true
+    
+    # -------------------------------------------
+    # Example 6: Base Configuration App (Manual override)
+    # -------------------------------------------
+    - name: "org_all_search_base"
+      source: local
+      path: "org_all_search_base"
+      target_roles:
+        - deployment_server
+      target_path: "etc/deployment-apps"  # Manual override
+      serverclass: "all_forwarders"
+      deployment_whitelist: "*"
+      restart_required: false
+    
+    # -------------------------------------------
+    # Example 7: Indexer Cluster Bundle (Auto or Manual)
+    # -------------------------------------------
+    - name: "org_cluster_indexer_base"
+      source: local
+      path: "org_cluster_indexer_base"
+      target_roles:
+        - indexer  # Auto: goes to cluster_manager etc/manager-apps
+      # target_path: auto  # OR manual override:
+      # target_path: "etc/manager-apps"
+      restart_required: false
+    
+    # -------------------------------------------
+    # Example 8: App with Multiple Versions
+    # -------------------------------------------
+    - name: "Splunk_TA_windows"
+      source: splunkbase
+      app_id: 742
+      version: "8.8.2"
+      state: installed  # Optional - defaults to "installed"
+      target_roles:
+        - search_head
+      target_path: "etc/apps"
+      restart_required: true
+      backup_before_update: true  # Backup existing version
+    
+    # -------------------------------------------
+    # Example 8: Premium App (Requires License)
+    # -------------------------------------------
+    - name: "Splunk_Enterprise_Security"
+      source: splunkbase
+      app_id: 263
+      version: "7.3.2"
+      state: installed
+      target_roles:
+        - search_head
+      target_path: "etc/apps"
+      restart_required: true
+      notes: "Requires ES license"
+    
+    # -------------------------------------------
+    # Example 9: Remove an App (State Management)
+    # -------------------------------------------
+    - name: "deprecated_app"
+      source: splunkbase  # source required even for removal
+      app_id: 999
+      state: absent  # Remove this app
+      target_roles:
+        - search_head
+        - indexer
+      # When state=absent:
+      # - App is backed up before removal
+      # - App directory is deleted
+      # - Splunk is restarted
+      # - Idempotent (won't fail if app doesn't exist)
+    
+    # -------------------------------------------
+    # Example 10: Minimal App Definition (Uses Defaults)
+    # -------------------------------------------
+    - name: "Splunk_TA_aws"
+      source: splunkbase
+      app_id: 1876
+      target_roles:
+        - search_head
+      # version: "latest" (default)
+      # state: installed (default)
+
+  # ===========================================
+  # HOST-SPECIFIC APPS (Optional Override)
+  # ===========================================
+  # Deploy specific apps to individual hosts
+  # Useful for testing or host-specific configurations
+  host_specific_apps:
+    - hostname: "sh1"  # Must match inventory hostname
+      apps:
+        - name: "custom_sh1_app"
+          source: local
+          path: "custom_sh1_app"
+          target_path: "etc/apps"
+          restart_required: true
+    
+    - hostname: "idx11"
+      apps:
+        - name: "custom_idx_monitoring"
+          source: local
+          path: "custom_idx_monitoring"
+          target_path: "etc/apps"
+          restart_required: false
+
+# ===========================================
+# TARGET LOCATIONS REFERENCE
+# ===========================================
+# etc/apps                    - Standard apps location
+# etc/deployment-apps         - Deployment Server apps
+# etc/shcluster/apps         - Search Head Cluster apps (on Deployer)
+# etc/manager-apps           - Indexer Cluster apps (on Cluster Manager)
+# etc/master-apps            - Legacy name for manager-apps
+
+# ===========================================
+# SPLUNKBASE APP ID REFERENCE
+# ===========================================
+# Find app IDs in Splunkbase URLs:
+# https://splunkbase.splunk.com/app/833/   <- 833 is the app_id
+#
+# Common Apps:
+# - Splunk_TA_nix: 833
+# - Splunk_TA_windows: 742
+# - Splunk_TA_aws: 1876
+# - Splunk DB Connect: 2686
+# - ML Toolkit: 2890
+# - Splunk Security Essentials: 3435
+# - Splunk Enterprise Security: 263
+# - Splunk IT Service Intelligence: 1841
+
+# ===========================================
+# TARGET ROLES REFERENCE
+# ===========================================
+# Available roles from your configuration:
+# - search_head
+# - indexer
+# - cluster_manager
+# - deployment_server
+# - deployer
+# - heavy_forwarder
+# - universal_forwarder
+# - license_manager
+# - monitoring_console

@@ -1,0 +1,52 @@
+---
+# Remove app from target directory
+# Required vars:
+#   - app_name: Name of the app
+#   - app_target_path: Full path to the app directory
+
+- name: "Check if {{ app_name }} exists"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.stat:
+    path: "{{ app_target_path }}"
+  register: app_to_remove
+
+- name: "Debug removal for {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.debug:
+    msg:
+      - "App: {{ app_name }}"
+      - "Path: {{ app_target_path }}"
+      - "Exists: {{ app_to_remove.stat.exists }}"
+    verbosity: 0
+
+- name: "Backup {{ app_name }} before removal"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.archive:
+    path: "{{ app_target_path }}"
+    dest: "{{ splunk_app_deployment.backup_location | default('/tmp/splunk_app_backups') }}/{{ app_name }}_removal_{{ ansible_date_time.date }}.tgz"
+  when:
+    - app_to_remove.stat.exists
+    - splunk_app_deployment.backup_apps_before_update | default(true)
+
+- name: "Remove {{ app_name }} from target"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.file:
+    path: "{{ app_target_path }}"
+    state: absent
+  register: app_removed
+  when: app_to_remove.stat.exists
+
+- name: "Set update status for {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.set_fact:
+    update_needed: "{{ app_removed.changed | default(false) }}"

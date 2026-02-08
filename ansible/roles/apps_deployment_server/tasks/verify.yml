@@ -1,0 +1,178 @@
+---
+# Verify Deployment Server Apps
+# Checks if apps are deployed to deployment-apps directory correctly
+
+- name: Initialize verification results
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+    - verify
+  ansible.builtin.set_fact:
+    ds_verification_results: []
+    ds_apps_expected: []
+    ds_apps_found: []
+    ds_mismatches: []
+
+- name: Filter apps for deployment server distribution
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+    - verify
+  ansible.builtin.set_fact:
+    ds_apps_expected: "{{ ds_apps_expected + [item] }}"
+  loop: "{{ splunk_app_deployment.apps | default([]) }}"
+  when:
+    - item.target_roles is defined
+    - item.target_roles | intersect(['universal_forwarder', 'heavy_forwarder']) | length > 0
+    - item.deployment_target | default('auto') != 'direct'
+
+- name: Check deployment-apps directory exists
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+    - verify
+  ansible.builtin.stat:
+    path: "{{ splunk_home }}/etc/deployment-apps"
+  register: deployment_apps_dir
+  become: true
+
+- name: List actual apps in deployment-apps
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+    - verify
+  ansible.builtin.find:
+    paths: "{{ splunk_home }}/etc/deployment-apps"
+    file_type: directory
+    recurse: no
+  register: actual_apps
+  when: deployment_apps_dir.stat.exists
+  become: true
+
+- name: Extract app names from filesystem
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+    - verify
+  ansible.builtin.set_fact:
+    ds_apps_found: "{{ actual_apps.files | map(attribute='path') | map('basename') | list }}"
+  when: deployment_apps_dir.stat.exists and actual_apps.files is defined
+
+- name: Verify each expected app
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+    - verify
+  ansible.builtin.include_tasks: verify_single_app.yml
+  loop: "{{ ds_apps_expected }}"
+  loop_control:
+    loop_var: verify_app_item
+    label: "{{ verify_app_item.name }}"
+  vars:
+    verify_base_path: "{{ splunk_home }}/etc/deployment-apps"
+    # Use app_item.target_path override if set, else path from deployment method
+    verify_app_full_path: "{{ verify_app_item.target_path | default(verify_base_path ~ '/' ~ verify_app_item.name) }}"
+
+- name: Check for unexpected apps
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+    - verify
+  ansible.builtin.set_fact:
+    ds_mismatches: "{{ ds_mismatches + [{'app': item, 'issue': 'UNEXPECTED: App exists but not in config', 'severity': 'warning'}] }}"
+  loop: "{{ ds_apps_found }}"
+  when:
+    - ds_apps_found | length > 0
+    - item not in (ds_apps_expected | map(attribute='name') | list)
+    # Exclude framework/shipped apps (prefix _) and env-prefixed apps (splunk_app_prefix_); still verify if explicitly in splunk_app_deployment.apps
+    - not (item is match('^_.*'))
+    - not (item is match('^' + splunk_app_prefix + '_.*'))
+
+- name: Initialize expected serverclass names for verification
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+    - verify
+  ansible.builtin.set_fact:
+    ds_expected_serverclass_names: []
+
+- name: Build expected serverclass names (only apps with state=installed)
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+    - verify
+  ansible.builtin.set_fact:
+    ds_expected_serverclass_names: "{{ ds_expected_serverclass_names + [item.serverclass | default('app_' + item.name)] }}"
+  loop: "{{ ds_apps_expected }}"
+  when: item.state | default('installed') == 'installed'
+
+- name: Read serverclass.conf for verification
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+    - verify
+  ansible.builtin.slurp:
+    path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+  register: ds_serverclass_file
+  failed_when: false
+  become: true
+
+- name: Check for stale serverclass sections
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+    - verify
+  ansible.builtin.set_fact:
+    ds_mismatches: "{{ ds_mismatches + [{'app': item, 'issue': 'STALE SERVERCLASS: Section should be removed (app state=absent or not in config)', 'severity': 'warning'}] }}"
+  loop: "{{ ((ds_serverclass_file.content | default('') | b64decode) | regex_findall('\\[serverClass:([^\\]]+)\\]')) | default([]) | flatten | unique | list | reject('match', '.*:app:.*') | list }}"
+  when:
+    - ds_serverclass_file.content is defined
+    - ds_serverclass_file.content | length > 0
+    # Section not in expected (app should be present with this serverclass name)
+    - item not in (ds_expected_serverclass_names | default([]))
+    # Exclude framework/shipped (prefix _) and env-prefixed (splunk_app_prefix_) sections; same logic as unexpected-apps exclusion
+    - not (item is match('^_.*'))
+    - not (item is match('^' + splunk_app_prefix + '_.*'))
+
+- name: Build issues list for display
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+    - verify
+  ansible.builtin.set_fact:
+    ds_issues_display: "{{ ds_issues_display | default([]) + ['  - ' + item.app + ': ' + item.issue] }}"
+  loop: "{{ ds_mismatches }}"
+  when: ds_mismatches | length > 0
+
+- name: Display verification results
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+    - verify
+  ansible.builtin.debug:
+    msg: "{{ ['=========================================', 'DEPLOYMENT SERVER VERIFICATION: ' + inventory_hostname, '=========================================', 'Expected apps: ' + (ds_apps_expected | map(attribute='name') | list | join(', ') if ds_apps_expected | length > 0 else '(none)'), 'Found apps: ' + (ds_apps_found | join(', ') if ds_apps_found | length > 0 else '(none)'), 'Mismatches: ' + (ds_mismatches | length | string)] + (['Issues found:'] + ds_issues_display if ds_mismatches | length > 0 else ['  ✓ All apps deployed correctly']) + ['========================================='] }}"
+
+- name: Fail if mismatches found and fail_on_mismatch is true
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+    - verify
+  ansible.builtin.fail:
+    msg: "Deployment server app verification failed: {{ ds_mismatches | length }} mismatch(es) found"
+  when:
+    - fail_on_mismatch | default(false) | bool
+    - ds_mismatches | length > 0

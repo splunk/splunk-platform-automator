@@ -1,0 +1,7 @@
+---
+# Remove app from shcluster/apps directory
+
+- name: "Remove {{ app_name }} using shared task"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: remove_app.yml

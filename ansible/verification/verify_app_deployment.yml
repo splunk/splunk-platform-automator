@@ -1,0 +1,78 @@
+---
+# Verify App Deployment
+# Checks if apps defined in splunk_config.yml are actually deployed correctly
+# Usage:
+#   ansible-playbook ansible/verification/verify_app_deployment.yml -i config/splunk_config.yml
+#   ansible-playbook ansible/verification/verify_app_deployment.yml -i config/splunk_config.yml -e fail_on_mismatch=true
+
+- name: Verify Deployment Server App Distribution
+  hosts: role_deployment_server
+  gather_facts: false
+  tasks:
+    - name: Run deployment server verification
+      ansible.builtin.include_role:
+        name: apps_deployment_server
+        tasks_from: verify.yml
+
+- name: Verify Cluster Manager App Distribution
+  hosts: role_cluster_manager
+  gather_facts: false
+  tasks:
+    - name: Run cluster manager verification
+      ansible.builtin.include_role:
+        name: apps_cluster_manager
+        tasks_from: verify.yml
+
+- name: Verify Deployer App Distribution
+  hosts: role_deployer
+  gather_facts: false
+  tasks:
+    - name: Run deployer verification
+      ansible.builtin.include_role:
+        name: apps_deployer
+        tasks_from: verify.yml
+
+- name: Verify Direct App Deployments
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Run direct deployment verification
+      ansible.builtin.include_role:
+        name: apps_direct
+        tasks_from: verify.yml
+
+- name: Summary Report
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Initialize combined verification summary
+      ansible.builtin.set_fact:
+        combined_verification_summary: []
+
+    - name: Collect Deployment Server findings
+      ansible.builtin.set_fact:
+        combined_verification_summary: "{{ combined_verification_summary + ['=== DEPLOYMENT SERVER: ' + item + ' ==='] + (hostvars[item].ds_issues_display | default([])) }}"
+      loop: "{{ groups['role_deployment_server'] | default([]) }}"
+      when: hostvars[item].ds_mismatches | default([]) | length > 0
+
+    - name: Collect Cluster Manager findings
+      ansible.builtin.set_fact:
+        combined_verification_summary: "{{ combined_verification_summary + ['=== CLUSTER MANAGER: ' + item + ' ==='] + (hostvars[item].cm_issues_display | default([])) }}"
+      loop: "{{ groups['role_cluster_manager'] | default([]) }}"
+      when: hostvars[item].cm_mismatches | default([]) | length > 0
+
+    - name: Collect Deployer findings
+      ansible.builtin.set_fact:
+        combined_verification_summary: "{{ combined_verification_summary + ['=== DEPLOYER: ' + item + ' ==='] + (hostvars[item].deployer_issues_display | default([])) }}"
+      loop: "{{ groups['role_deployer'] | default([]) }}"
+      when: hostvars[item].deployer_mismatches | default([]) | length > 0
+
+    - name: Collect Direct Deployment findings
+      ansible.builtin.set_fact:
+        combined_verification_summary: "{{ combined_verification_summary + ['=== DIRECT: ' + item + ' ==='] + (hostvars[item].direct_issues_display | default([])) }}"
+      loop: "{{ groups['all'] | default([]) }}"
+      when: hostvars[item].direct_mismatches | default([]) | length > 0
+
+    - name: Display combined verification summary
+      ansible.builtin.debug:
+        msg: "{{ ['==============================================', 'APP DEPLOYMENT VERIFICATION – COMBINED SUMMARY', '=============================================='] + (combined_verification_summary | length > 0 and (['Issues found:'] + combined_verification_summary) or ['  ✓ No issues – all apps deployed correctly']) + ['==============================================', 'Run with -e fail_on_mismatch=true to fail on discrepancies', '=============================================='] }}"

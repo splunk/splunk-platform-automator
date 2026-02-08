@@ -67,6 +67,10 @@ DOCUMENTATION = r'''
             description: splunk_apps settings
             type: dictionary
             required: false
+        splunk_app_deployment:
+            description: splunk_app_deployment settings (Splunkbase and local app deployment)
+            type: dictionary
+            required: false
         splunk_systemd:
             description: splunk_systemd settings
             type: dictionary
@@ -94,20 +98,19 @@ import os
 from pathlib import Path
 from collections import abc
 
-# Schema validation imports
-SCHEMA_VALIDATION_AVAILABLE = False
+# Schema validation (required: pydantic must be installed; see requirements.txt)
+import sys
+plugin_dir = os.path.dirname(os.path.abspath(__file__))
+if plugin_dir not in sys.path:
+    sys.path.insert(0, plugin_dir)
 try:
-    # Use absolute import with plugin directory in path (works with Ansible plugin loader)
-    import sys
-    import os
-    plugin_dir = os.path.dirname(os.path.abspath(__file__))
-    if plugin_dir not in sys.path:
-        sys.path.insert(0, plugin_dir)
-    from schema import validate_config, ConfigValidationError
-    SCHEMA_VALIDATION_AVAILABLE = True
-except ImportError:
-    # Graceful fallback if pydantic is not installed
-    pass
+    from schema import validate_config, ConfigValidationError, AllowedRole
+except ImportError as e:
+    raise ImportError(
+        "Schema validation requires pydantic. Install with: pip install pydantic>=2.4.0. "
+        "See requirements.txt. Error: %s" % e
+    ) from e
+
 
 class InventoryModule(BaseInventoryPlugin):
     NAME = 'splunk-platform-automator'
@@ -258,6 +261,10 @@ class InventoryModule(BaseInventoryPlugin):
             #TODO: maybe self.groups is not needed, can do populate directly
             self.groups['all'].update(merged_section)
 
+        # Handle splunk_app_deployment as a nested dictionary (do NOT flatten)
+        if isinstance(self.configfiles.get('splunk_app_deployment'), dict):
+            self.groups['all']['splunk_app_deployment'] = self.configfiles['splunk_app_deployment']
+
         # Check Base Config App availability
         cwd = os.getcwd()
         splunk_baseconfig_dir = os.path.join(cwd,self.groups['all']['splunk_baseconfig_dir'])
@@ -336,12 +343,7 @@ class InventoryModule(BaseInventoryPlugin):
         #TODO: set ansible_host: self.inventory.set_variable(hostname, 'ansible_host', data['Mgmt IP'])
         
         # Get allowed roles from schema (used for creating role groups)
-        # Note: Role and hostvar validation is now handled by schema.py
-        if SCHEMA_VALIDATION_AVAILABLE:
-            from schema import AllowedRole
-            allowed_roles = [r.value for r in AllowedRole]
-        else:
-            allowed_roles = ['cluster_manager','deployer','deployment_server','heavy_forwarder','indexer','license_manager','monitoring_console','search_head','universal_forwarder','universal_forwarder_windows']
+        allowed_roles = [r.value for r in AllowedRole]
 
         # Creating some data structure for collecting information later on
         for environment in self.environments:
@@ -594,16 +596,15 @@ class InventoryModule(BaseInventoryPlugin):
         # Check for required python libraries
         self._check_requirements()
 
-        # Validate configuration schema before processing
-        if SCHEMA_VALIDATION_AVAILABLE:
-            try:
-                with open(path, 'r') as f:
-                    raw_config = yaml.safe_load(f)
-                validate_config(raw_config)
-            except ConfigValidationError as e:
-                raise AnsibleParserError(str(e))
-            except Exception as e:
-                raise AnsibleParserError(f"Failed to validate configuration: {e}")
+        # Load config and validate with schema (required; fails before any playbook runs)
+        with open(path, 'r') as f:
+            raw_config = yaml.safe_load(f)
+        try:
+            validate_config(raw_config)
+        except ConfigValidationError as e:
+            raise AnsibleParserError(str(e))
+        except Exception as e:
+            raise AnsibleParserError("Failed to validate configuration: %s" % e)
 
         # Read the inventory YAML file
         self._read_config_data(path)
@@ -613,7 +614,7 @@ class InventoryModule(BaseInventoryPlugin):
             for section in ['plugin', 'splunk_hosts']:
                 configfiles[section] = self.get_option(section)
             # Store the optional sections from the YAML file
-            for section in ['general', 'custom', 'os', 'splunk_dirs', 'splunk_defaults', 'splunk_environments', 'splunk_apps', 'splunk_systemd', 'splunk_idxclusters', 'splunk_shclusters', 'virtualbox', 'aws']:
+            for section in ['general', 'custom', 'os', 'splunk_dirs', 'splunk_defaults', 'splunk_environments', 'splunk_apps', 'splunk_app_deployment', 'splunk_systemd', 'splunk_idxclusters', 'splunk_shclusters', 'virtualbox', 'aws']:
                 configfiles[section] = self.get_option(section)
             setattr(self, 'configfiles', configfiles)
         except Exception as e:

@@ -1,0 +1,62 @@
+---
+# Deployment Server Apps - Runs on deployment_server hosts
+# Calculates and deploys apps that should be distributed via deployment server
+# Note: apps_common dependency handles config merging
+
+- name: Initialize deployment server apps list
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    ds_apps: []
+
+- name: Filter apps for deployment server distribution
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    ds_apps: "{{ ds_apps + [item] }}"
+  loop: "{{ splunk_app_deployment.apps | default([]) }}"
+  when:
+    - item.target_roles is defined
+    - item.target_roles | intersect(['universal_forwarder', 'heavy_forwarder']) | length > 0
+    - item.deployment_target | default('auto') != 'direct'
+
+- name: Debug deployment server apps
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.debug:
+    msg:
+      - "========================================="
+      - "DEPLOYMENT SERVER: {{ inventory_hostname }}"
+      - "========================================="
+      - "Total apps for DS distribution: {{ ds_apps | length }}"
+      - "Apps: {{ ds_apps | map(attribute='name') | list | join(', ') if ds_apps | length > 0 else '(none)' }}"
+      - "========================================="
+    verbosity: 0
+
+- name: Process deployment server apps
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  block:
+    - name: Process each deployment server app
+      ansible.builtin.include_tasks: "process_ds_app.yml"
+      loop: "{{ ds_apps }}"
+      loop_control:
+        loop_var: app_item
+        label: "{{ app_item.name }}"
+  when: ds_apps | length > 0
+
+- name: Deployment server apps complete
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.debug:
+    msg: "Deployment server app processing complete on {{ inventory_hostname }}"

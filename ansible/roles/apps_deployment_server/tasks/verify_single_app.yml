@@ -1,0 +1,67 @@
+---
+# Verify a single app deployment
+# Variables expected:
+#   - verify_app_item: The app configuration
+#   - verify_app_full_path: Full path to app (uses app_item.target_path override if set)
+
+- name: "Check if {{ verify_app_item.name }} exists"
+  tags:
+    - splunk
+    - splunk_apps
+    - verify
+  ansible.builtin.stat:
+    path: "{{ verify_app_full_path }}"
+  register: app_check
+  become: true
+
+- name: "Compute expected whitelist hosts for {{ verify_app_item.name }} (for report) – manual"
+  tags:
+    - splunk
+    - splunk_apps
+    - verify
+  ansible.builtin.set_fact:
+    verify_expected_whitelist_hosts: "{{ [verify_app_item.deployment_whitelist] if verify_app_item.deployment_whitelist is string else verify_app_item.deployment_whitelist }}"
+  when:
+    - verify_app_item.state | default('installed') != 'absent'
+    - verify_app_item.deployment_whitelist is defined
+
+- name: "Compute expected whitelist hosts for {{ verify_app_item.name }} (for report) – from target_roles"
+  tags:
+    - splunk
+    - splunk_apps
+    - verify
+  ansible.builtin.set_fact:
+    verify_expected_whitelist_hosts: >-
+      {{
+        verify_app_item.target_roles | default([])
+        | map('regex_replace', '^(.*)$', 'role_\1')
+        | map('extract', groups)
+        | flatten
+        | reject('in', groups | select('match', '^idxcluster_') | map('extract', groups) | flatten | list)
+        | reject('in', groups | select('match', '^shcluster_') | map('extract', groups) | flatten | list)
+        | unique
+        | list
+      }}
+  when:
+    - verify_app_item.state | default('installed') != 'absent'
+    - verify_app_item.deployment_whitelist is not defined
+
+- name: "Verify {{ verify_app_item.name }} presence/absence"
+  tags:
+    - splunk
+    - splunk_apps
+    - verify
+  ansible.builtin.set_fact:
+    ds_mismatches: "{{ ds_mismatches + [mismatch_entry] }}"
+  vars:
+    app_state: "{{ verify_app_item.state | default('installed') }}"
+    should_exist: "{{ app_state != 'absent' }}"
+    actually_exists: "{{ app_check.stat.exists }}"
+    missing_hosts_suffix: "{{ ' (expected hosts: ' + (verify_expected_whitelist_hosts | default([]) | join(', ')) + ')' if (should_exist and not actually_exists and (verify_expected_whitelist_hosts | default([]) | length > 0)) else '' }}"
+    mismatch_entry:
+      app: "{{ verify_app_item.name }}"
+      issue: "{{ ('MISSING: App should be installed but not found' if (should_exist and not actually_exists) else 'UNEXPECTED: App should be absent but is installed') + (missing_hosts_suffix | default('')) }}"
+      severity: "error"
+      expected_state: "{{ app_state }}"
+      actual_state: "{{ 'installed' if actually_exists else 'absent' }}"
+  when: should_exist != actually_exists

@@ -1,0 +1,108 @@
+---
+# Deploy Splunk Apps - Orchestrator Playbook
+# Runs specialized roles in sequence for different deployment methods
+
+- name: Pre-deployment checks
+  hosts: localhost
+  gather_facts: no
+  become: false
+  
+  tasks:
+    - name: Verify app configuration
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.debug:
+        msg: "Deploying {{ splunk_app_deployment.apps | default([]) | length }} apps"
+      run_once: true
+      when: splunk_app_deployment is defined
+    
+    - name: Verify Splunkbase credentials (if needed)
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.fail:
+        msg: "Splunkbase credentials not configured. Set SPLUNKBASE_USERNAME and SPLUNKBASE_PASSWORD environment variables or configure in splunk_config.yml"
+      run_once: true
+      vars:
+        env_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
+        env_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
+        has_splunkbase_apps: "{{ splunk_app_deployment.apps | default([]) | selectattr('source', 'equalto', 'splunkbase') | list | length > 0 }}"
+      when:
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+        - has_splunkbase_apps
+        - env_username == ''
+        - env_password == ''
+
+# Step 1: Deploy apps to Deployment Server
+- name: Deploy apps to Deployment Server
+  hosts: role_deployment_server
+  become: true
+  become_user: root
+  gather_facts: yes
+  
+  roles:
+    - role: apps_deployment_server
+      when: 
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+
+# Step 2: Deploy apps to Cluster Managers
+- name: Deploy apps to Cluster Managers
+  hosts: role_cluster_manager
+  become: true
+  become_user: root
+  gather_facts: yes
+  
+  roles:
+    - role: apps_cluster_manager
+      when:
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+
+# Step 3: Deploy apps to Deployers
+- name: Deploy apps to Deployers
+  hosts: role_deployer
+  become: true
+  become_user: root
+  gather_facts: yes
+  
+  roles:
+    - role: apps_deployer
+      when:
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+
+# Step 4: Deploy apps directly to remaining hosts
+- name: Deploy apps directly to hosts
+  hosts: role_search_head,role_indexer,role_heavy_forwarder,role_license_manager,role_monitoring_console,role_universal_forwarder
+  become: true
+  become_user: root
+  gather_facts: yes
+  
+  roles:
+    - role: apps_direct
+      when:
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+
+# Final summary
+- name: Deployment summary
+  hosts: localhost
+  gather_facts: no
+  become: false
+  
+  tasks:
+    - name: Display completion message
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.debug:
+        msg:
+          - "========================================="
+          - "SPLUNK APP DEPLOYMENT COMPLETE"
+          - "========================================="
+          - "All apps have been deployed to their targets"
+          - "Check handler notifications for any required restarts/reloads"
+          - "========================================="

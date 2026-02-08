@@ -1,0 +1,35 @@
+---
+# Default values for Splunk App Deployment
+# These can be overridden in config/splunk_config.yml under splunk_app_deployment
+
+splunk_app_deployment_defaults:
+  # Temp directory for downloads
+  temp_dir: "/tmp/splunk_apps"
+  
+  # Backup settings
+  backup_apps_before_update: true
+  backup_location: "/tmp/splunk_app_backups"
+  
+  # Restart behavior
+  restart_after_deployment: true
+  restart_timeout: 300
+  
+  # Download settings
+  download_timeout: 120
+  retry_count: 3
+  
+  # Splunkbase settings
+  splunkbase_api_url: "https://splunkbase.splunk.com/api/v1"
+  # Splunkbase credentials - should be overridden via environment variables or config
+  # Recommended: Use environment variables SPLUNKBASE_USERNAME and SPLUNKBASE_PASSWORD
+  splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
+  splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
+  
+  # Local app repository settings
+  local_app_repo_path: "{{ playbook_dir }}/../apps"
+  
+  # Cache settings
+  cache_downloads: true
+  
+  # Apps list (empty by default, populated from config)
+  apps: []

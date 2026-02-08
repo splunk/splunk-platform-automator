@@ -1,0 +1,36 @@
+---
+# apps_common main tasks - ensures configuration is available
+# This role provides shared functionality for all app deployment roles
+
+- name: Merge app deployment config with defaults
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.set_fact:
+    splunk_app_deployment: "{{ splunk_app_deployment_defaults | combine(splunk_app_deployment | default({}), recursive=True) }}"
+  when: splunk_app_deployment is defined or splunk_app_deployment_defaults is defined
+
+- name: Ensure temp directory exists on localhost for downloads
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.file:
+    path: "{{ splunk_app_deployment.temp_dir | default('/tmp/splunk_apps') }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+  become: false
+  when: splunk_app_deployment is defined
+
+- name: Ensure backup directory exists
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.file:
+    path: "{{ splunk_app_deployment.backup_location | default('/tmp/splunk_app_backups') }}"
+    state: directory
+    mode: '0755'
+  when:
+    - splunk_app_deployment is defined
+    - splunk_app_deployment.backup_apps_before_update | default(true)

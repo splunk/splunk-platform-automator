@@ -14,6 +14,8 @@
 *.log
 # Config directory
 /config
+# Dev docs directory
+/docs_dev
 **/splunk_config.yml
 # Auth directory
 /auth

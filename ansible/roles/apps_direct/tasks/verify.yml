@@ -1,0 +1,152 @@
+---
+# Verify Direct Deployment Apps
+# Checks if apps are deployed directly to etc/apps on relevant hosts
+
+- name: Get current host roles
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.set_fact:
+    current_host_roles: "{{ group_names | select('match', '^role_.*') | map('regex_replace', '^role_', '') | list }}"
+
+- name: Initialize verification results
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.set_fact:
+    direct_verification_results: []
+    direct_apps_expected: []
+    direct_apps_found: []
+    direct_mismatches: []
+
+- name: Filter apps for direct deployment on this host
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.set_fact:
+    direct_apps_expected: "{{ direct_apps_expected + [item] }}"
+  loop: "{{ splunk_app_deployment.apps | default([]) }}"
+  when:
+    - item.target_roles is defined
+    - current_host_roles | intersect(item.target_roles) | length > 0
+    - >-
+      (item.deployment_target | default('auto') == 'direct')
+      or
+      (
+        item.deployment_target | default('auto') != 'direct' and
+        current_host_roles | intersect(['deployment_server', 'cluster_manager', 'deployer']) | length == 0 and
+        current_host_roles | intersect(['universal_forwarder', 'heavy_forwarder']) | length == 0 and
+        (
+          (current_host_roles | intersect(['indexer']) | length > 0 and group_names | select('match', '^idxcluster_') | list | length == 0)
+          or
+          (current_host_roles | intersect(['search_head']) | length > 0 and group_names | select('match', '^shcluster_') | list | length == 0)
+        )
+      )
+
+- name: Check apps directory exists
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.stat:
+    path: "{{ splunk_home }}/etc/apps"
+  register: apps_dir
+  when: direct_apps_expected | length > 0
+  become: true
+
+- name: List actual apps in etc/apps
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.find:
+    paths: "{{ splunk_home }}/etc/apps"
+    file_type: directory
+    recurse: no
+  register: actual_apps
+  when:
+    - direct_apps_expected | length > 0
+    - apps_dir.stat.exists
+  become: true
+
+- name: Extract app names from filesystem
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.set_fact:
+    direct_apps_found: "{{ actual_apps.files | map(attribute='path') | map('basename') | list }}"
+  when:
+    - direct_apps_expected | length > 0
+    - apps_dir.stat.exists
+    - actual_apps.files is defined
+
+- name: Verify each expected app
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.include_tasks: verify_single_app.yml
+  loop: "{{ direct_apps_expected }}"
+  loop_control:
+    loop_var: verify_app_item
+    label: "{{ verify_app_item.name }}"
+  vars:
+    verify_base_path: "{{ splunk_home }}/etc/apps"
+    verify_app_full_path: "{{ verify_app_item.target_path | default(verify_base_path ~ '/' ~ verify_app_item.name) }}"
+  when: direct_apps_expected | length > 0
+
+- name: Build issues list for display
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.set_fact:
+    direct_issues_display: "{{ direct_issues_display | default([]) + ['  - ' + item.app + ': ' + item.issue] }}"
+  loop: "{{ direct_mismatches }}"
+  when:
+    - direct_apps_expected | length > 0
+    - direct_mismatches | length > 0
+
+- name: Display verification results
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.debug:
+    msg: "{{ ['=========================================', 'DIRECT DEPLOYMENT VERIFICATION: ' + inventory_hostname, '=========================================', 'Host roles: ' + (current_host_roles | join(', ')), 'Expected apps: ' + (direct_apps_expected | map(attribute='name') | list | join(', ') if direct_apps_expected | length > 0 else '(none)'), 'Found apps (partial): ' + (direct_apps_found[:5] | join(', ') if direct_apps_found | length > 0 else '(none)') + ('...' if direct_apps_found | length > 5 else ''), 'Mismatches: ' + (direct_mismatches | length | string)] + (['Issues found:'] + direct_issues_display if direct_mismatches | length > 0 else ['  ✓ All apps deployed correctly']) + ['========================================='] }}"
+  when: direct_apps_expected | length > 0
+
+- name: Skip verification on this host
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.debug:
+    msg: "Skipping direct deployment verification on {{ inventory_hostname }} (no apps expected)"
+  when: direct_apps_expected | length == 0
+
+- name: Fail if mismatches found and fail_on_mismatch is true
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.fail:
+    msg: "Direct deployment app verification failed on {{ inventory_hostname }}: {{ direct_mismatches | length }} mismatch(es) found"
+  when:
+    - fail_on_mismatch | default(false) | bool
+    - direct_mismatches | length > 0

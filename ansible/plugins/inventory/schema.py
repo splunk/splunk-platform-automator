@@ -187,12 +187,23 @@ class SplunkDirsConfig(BaseModel):
 
 
 class SplunkAppsConfig(BaseModel):
-    """Splunk apps configuration."""
+    """Splunk apps configuration (legacy baseconfig apps)."""
     model_config = ConfigDict(extra='allow')
     
     splunk_save_baseconfig_apps_dir: Optional[str] = None
     splunk_save_baseconfig_apps: Optional[bool] = None
     splunk_save_serverclass: Optional[bool] = None
+
+
+class SplunkAppDeploymentConfig(BaseModel):
+    """Splunk app deployment configuration (Splunkbase and local apps)."""
+    model_config = ConfigDict(extra='allow')
+    
+    splunkbase_username: Optional[str] = None
+    splunkbase_password: Optional[str] = None
+    local_app_repo_path: Optional[str] = None
+    apps: Optional[List[Dict[str, Any]]] = None
+    host_specific_apps: Optional[List[Dict[str, Any]]] = None
 
 
 class SplunkSystemdConfig(BaseModel):
@@ -345,6 +356,7 @@ class SplunkConfig(BaseModel):
     splunk_defaults: Optional[SplunkDefaultsConfig] = None
     splunk_dirs: Optional[SplunkDirsConfig] = None
     splunk_apps: Optional[SplunkAppsConfig] = None
+    splunk_app_deployment: Optional[SplunkAppDeploymentConfig] = None
     splunk_systemd: Optional[SplunkSystemdConfig] = None
     splunk_environments: Optional[List[SplunkEnvironment]] = None
     splunk_idxclusters: Optional[List[IdxClusterConfig]] = None
@@ -485,6 +497,53 @@ class SplunkConfig(BaseModel):
                     "in splunk_defaults."
                 )
         
+        return self
+
+    @model_validator(mode='after')
+    def validate_no_direct_deploy_to_shc_members(self) -> 'SplunkConfig':
+        """Fail if any app is configured for direct deployment to search_head while SHC members exist.
+
+        Apps must not use deployment_target: direct with target_roles including search_head when
+        there are search heads in a Search Head Cluster; SHC members receive apps via the Deployer.
+        """
+        dep = self.splunk_app_deployment
+        if not dep or not dep.apps:
+            return self
+
+        # Check if any search head host is an SHC member (has shcluster set)
+        has_shc_member = False
+        for host in self.splunk_hosts:
+            if AllowedRole.search_head not in host.roles or not host.shcluster:
+                continue
+            has_shc_member = True
+            break
+
+        if not has_shc_member:
+            return self
+
+        # Find apps with deployment_target: direct and search_head in target_roles
+        apps_direct_to_shc: List[Dict[str, Any]] = []
+        for app in dep.apps:
+            target_roles = app.get("target_roles") or []
+            if not isinstance(target_roles, list):
+                continue
+            if app.get("deployment_target") != "direct":
+                continue
+            if "search_head" in target_roles:
+                apps_direct_to_shc.append(app)
+
+        if apps_direct_to_shc:
+            names = ", ".join(app.get("name", "?") for app in apps_direct_to_shc)
+            raise ValueError(
+                "Invalid app deployment config: at least one app is set to deploy directly "
+                "(deployment_target: direct) to search_head while there are search heads in a "
+                "Search Head Cluster (SHC). SHC members must receive apps via the Deployer, not "
+                "direct deployment. Apps with deployment_target: direct and target_roles including "
+                f"search_head: {names}. Fix: remove deployment_target: direct for these apps or "
+                "restrict target_roles so they do not include search_head when SHC is in use; "
+                "deploy SHC apps via the Deployer (omit deployment_target or set deployment_target: auto)."
+            )
+
         return self
 
 

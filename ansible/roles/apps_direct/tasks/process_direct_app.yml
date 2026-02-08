@@ -1,0 +1,54 @@
+---
+# Process a single direct deployment app
+
+- name: "Set defaults for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    app_state: "{{ app_item.state | default('installed') }}"
+    app_version: "{{ app_item.version | default('latest') }}"
+
+- name: "Debug {{ app_item.name }} deployment"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.debug:
+    msg:
+      - "App: {{ app_item.name }}"
+      - "State: {{ app_state }}"
+      - "Version: {{ app_version }}"
+      - "Location: etc/apps/"
+    verbosity: 0
+
+- name: "Install {{ app_item.name }}"
+  ansible.builtin.include_tasks: "install_app.yml"
+  when: app_state == 'installed'
+
+- name: "Set target path for removal of {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    app_name: "{{ app_item.name }}"
+    app_target_path: "{{ app_item.target_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/apps/' ~ app_item.name) }}"
+  when: app_state == 'absent'
+
+- name: "Remove {{ app_item.name }}"
+  ansible.builtin.include_tasks: "remove_app.yml"
+  when: app_state == 'absent'
+
+- name: "Notify Splunk restart for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.command: /bin/true
+  notify: Restart Splunk
+  changed_when: update_needed | default(false)
+  when: 
+    - update_needed | default(false)
+    - app_item.restart_required | default(true)

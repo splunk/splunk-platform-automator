@@ -1,0 +1,52 @@
+---
+# Deploy Splunk Apps from Splunkbase and Local Repository
+
+- name: Deploy Splunk Apps to Environment
+  hosts: role_cluster_manager,role_deployer,role_deployment_server,role_search_head,role_indexer,role_heavy_forwarder,role_license_manager,role_monitoring_console,role_universal_forwarder
+  become: true
+  become_user: root
+  gather_facts: yes
+  
+  pre_tasks:
+    - name: Verify app configuration
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.debug:
+        msg: "Deploying {{ splunk_app_deployment.apps | default([]) | length }} apps"
+      run_once: true
+      delegate_to: localhost
+      when: splunk_app_deployment is defined
+    
+    - name: Verify Splunkbase credentials (if needed)
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.fail:
+        msg: "Splunkbase credentials not configured. Set SPLUNKBASE_USERNAME and SPLUNKBASE_PASSWORD environment variables."
+      run_once: true
+      delegate_to: localhost
+      vars:
+        # Check environment variables directly (same as defaults)
+        env_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
+        env_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
+        # Check if user explicitly set them in config
+        config_username: "{{ splunk_app_deployment.splunkbase_username | default('') }}"
+        config_password: "{{ splunk_app_deployment.splunkbase_password | default('') }}"
+      when:
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+        - splunk_app_deployment.apps | selectattr('source', 'equalto', 'splunkbase') | list | length > 0
+        - (env_username == '' or env_password == '') and (config_username == '' or config_password == '')
+  
+  roles:
+    - role: splunk_app_deployment
+      when: splunk_app_deployment is defined and splunk_app_deployment.apps is defined
+  
+  post_tasks:
+    - name: App deployment summary
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.debug:
+        msg: "App deployment complete on {{ inventory_hostname }}"

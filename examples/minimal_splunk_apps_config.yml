@@ -1,0 +1,68 @@
+---
+# Example: Add this to your config/splunk_config.yml
+
+# Splunk App Deployment Configuration
+splunk_app_deployment:
+  # ===================================================================
+  # CREDENTIALS (Optional - defaults to environment variables)
+  # ===================================================================
+  # By default, these are pulled from environment variables:
+  #   - SPLUNKBASE_USERNAME
+  #   - SPLUNKBASE_PASSWORD
+  #
+  # You only need to specify these if overriding the environment variable defaults:
+  # splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
+  # splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
+  
+  # ===================================================================
+  # LOCAL APP REPOSITORY (Optional - has default)
+  # ===================================================================
+  # Default: "../apps" (relative to ansible directory)
+  # Only specify if your apps are in a different location:
+  # local_app_repo_path: "../app_repo"
+  
+  # ===================================================================
+  # APP DEFINITIONS
+  # ===================================================================
+  apps:
+    # Example 1: Deploy Splunk Add-on for Unix/Linux from Splunkbase
+    - name: "Splunk_TA_nix"
+      source: splunkbase
+      app_id: 833
+      # version: "latest"  # Optional - defaults to "latest"
+      # state: installed   # Optional - defaults to "installed"
+      target_roles:
+        - search_head
+        - indexer
+      # target_path: auto (calculated automatically based on cluster membership)
+    
+    # Example 2: Deploy custom local app
+    # - name: "my_custom_app"
+    #   source: local
+    #   path: "my_custom_app"  # Directory in app_repo/
+    #   version: "1.0.0"        # Optional - defaults to "latest"
+    #   state: installed        # Optional - defaults to "installed"
+    #   target_roles:
+    #     - search_head
+    
+    # Example 3: Remove an app
+    # - name: "deprecated_app"
+    #   source: splunkbase  # source required even for removal
+    #   app_id: 999
+    #   state: absent       # Remove this app
+    #   target_roles:
+    #     - search_head
+    #     - indexer
+
+# ===================================================================
+# USAGE INSTRUCTIONS
+# ===================================================================
+# 1. Set environment variables (required for Splunkbase apps):
+#    export SPLUNKBASE_USERNAME='your_email@example.com'
+#    export SPLUNKBASE_PASSWORD='your_password'
+#
+# 2. Deploy apps:
+#    ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml
+#
+# 3. Remove apps (those with state: absent):
+#    ansible-playbook ansible/remove_splunk_apps.yml -i config/splunk_config.yml

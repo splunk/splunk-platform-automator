@@ -1,0 +1,89 @@
+---
+# Process a single deployment server app
+
+- name: "Set defaults for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    app_state: "{{ app_item.state | default('installed') }}"
+    app_version: "{{ app_item.version | default('latest') }}"
+    serverclass_name: "{{ app_item.serverclass | default('app_' + app_item.name) }}"
+
+- name: "Calculate whitelist for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    # Get hosts with target_roles, exclude clustered hosts
+    app_whitelist_hosts: >-
+      {{
+        app_item.target_roles | default([])
+        | map('regex_replace', '^(.*)$', 'role_\1')
+        | map('extract', groups)
+        | flatten
+        | reject('in', groups | select('match', '^idxcluster_') | map('extract', groups) | flatten | list)
+        | reject('in', groups | select('match', '^shcluster_') | map('extract', groups) | flatten | list)
+        | unique
+        | list
+      }}
+  when:
+    - app_item.deployment_whitelist is not defined
+    - app_state == 'installed'
+
+- name: "Use manual whitelist for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    app_whitelist_hosts: "{{ [app_item.deployment_whitelist] if app_item.deployment_whitelist is string else app_item.deployment_whitelist }}"
+  when:
+    - app_item.deployment_whitelist is defined
+    - app_state == 'installed'
+
+- name: "Empty whitelist for removal of {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    app_whitelist_hosts: []
+  when: app_state == 'absent'
+
+- name: "Debug {{ app_item.name }} deployment"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.debug:
+    msg:
+      - "App: {{ app_item.name }}"
+      - "State: {{ app_state }}"
+      - "Version: {{ app_version }}"
+      - "Serverclass: {{ serverclass_name }}"
+      - "Whitelist: {{ app_whitelist_hosts | join(', ') if app_whitelist_hosts | length > 0 else '(empty)' }}"
+    verbosity: 0
+
+- name: "Install {{ app_item.name }}"
+  ansible.builtin.include_tasks: "install_app.yml"
+  when: app_state == 'installed'
+
+- name: "Set target path for removal of {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    app_name: "{{ app_item.name }}"
+    app_target_path: "{{ app_item.target_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/deployment-apps/' ~ app_item.name) }}"
+  when: app_state == 'absent'
+
+- name: "Remove {{ app_item.name }}"
+  ansible.builtin.include_tasks: "remove_app.yml"
+  when: app_state == 'absent'
+
+- name: "Configure serverclass for {{ app_item.name }}"
+  ansible.builtin.include_tasks: "configure_serverclass.yml"

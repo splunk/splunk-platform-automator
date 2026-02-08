@@ -15,7 +15,7 @@
   until: "shcluster_ready.stdout.find('service_ready_flag : 1') != -1 and shcluster_ready.stdout.find('status : Down') != 0"
   retries: 15
   delay: 10
-  delegate_to: "{{splunk_shc_host_list|first}}"
+  delegate_to: "{{ splunk_shc_host_list|first }}"
   notify: Push shcluster bundle
 
 - name: Push shcluster bundle
@@ -24,28 +24,42 @@
     - splunk_common
     - search_head
     - shcluster
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk apply shcluster-bundle -target https://{{splunk_shc_host_list|first}}:8089 -auth admin:{{ splunk_admin_password }} --answer-yes"
+    - deployer
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk apply shcluster-bundle -target https://{{ splunk_shc_host_list | first }}:8089 -auth admin:{{ splunk_admin_password }} --answer-yes"
   become: true
   become_user: "{{ splunk_user }}"
   delegate_to: "{{ splunk_shc_deployer }}"
+
+- name: Apply indexer cluster bundle
+  tags:
+    - splunk
+    - splunk_common
+    - indexer
+    - idxcluster
+    - cluster_manager
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk apply cluster-bundle -auth admin:{{ splunk_admin_password }} --answer-yes"
+  become: true
+  become_user: "{{ splunk_user }}"
+  delegate_to: "{{ splunk_idxc_cm }}"
 
 - name: Reload deploy-server
   tags:
     - splunk
     - splunk_common
     - deployment_server
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk reload deploy-server -auth admin:{{splunk_admin_password}}"
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk reload deploy-server -auth admin:{{ splunk_admin_password }}"
   become: true
   become_user: "{{ splunk_user }}"
-  delegate_to: "{{splunk_deployment_server|first}}"
+  delegate_to: "{{ splunk_deployment_server | first }}"
 
 - name: Restart splunk
   tags:
     - splunk
     - splunk_common
     - splunk_software
+    - direct_deployment
   ansible.builtin.service:
-    name: "{{splunk_service_name}}"
+    name: "{{ splunk_service_name }}"
     state: restarted
   become: true
   become_user: root

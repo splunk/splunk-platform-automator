@@ -304,6 +304,31 @@ class TestSplunkDeployment:
         print(f"[DEPLOY] Environment ID: {self.splunk_env_id}")
     
     # =========================================================================
+    # Test 11: Deploy Splunk Apps
+    # =========================================================================
+    def test_11_deploy_splunk_apps(self, config_file):
+        """
+        Step 11: Deploy Splunk apps according to configuration.
+        
+        Runs: ansible/deploy_splunk_apps.yml
+        - Deploys apps via deployment server, cluster manager, deployer, and direct
+        """
+        if not getattr(self, 'is_splunk_configured', False):
+            pytest.fail("Previous step failed: Splunk not configured")
+        
+        print("\n[DEPLOY] Deploying Splunk apps...")
+        
+        result = self._run_playbook("ansible/deploy_splunk_apps.yml")
+        
+        assert result.returncode == 0, "deploy_splunk_apps.yml failed"
+        
+        # Mark apps as deployed for dependent tests
+        self.manager.is_apps_deployed = True
+        self.__class__.is_apps_deployed = True
+        
+        print("[DEPLOY] Splunk apps deployed successfully")
+    
+    # =========================================================================
     # VERIFICATION TESTS (run after deployment, before teardown)
     # =========================================================================
     
@@ -316,11 +341,11 @@ class TestSplunkDeployment:
         return self.manager.get_all_roles()
     
     # =========================================================================
-    # Test 11: Wait for Splunk Services
+    # Test 12: Wait for Splunk Services
     # =========================================================================
-    def test_11_wait_for_splunk(self, config_file):
+    def test_12_wait_for_splunk(self, config_file):
         """
-        Step 11: Wait for Splunk to be fully running on all hosts.
+        Step 12: Wait for Splunk to be fully running on all hosts.
         
         Runs: ansible/verification/wait_for_splunk.yml
         - Waits for splunkd port to be listening
@@ -345,7 +370,7 @@ class TestSplunkDeployment:
     def test_12_wait_for_bucket_fixup(self, config_file):
         """
         Step 12: Wait for bucket fixup tasks to complete.
-        
+
         Runs: ansible/verification/wait_for_bucket_fixup.yml
         - Waits for replication_factor, search_factor, and generation fixups
         
@@ -373,7 +398,7 @@ class TestSplunkDeployment:
     def test_13_check_idxc_health(self, config_file):
         """
         Step 13: Verify Indexer Cluster health.
-        
+
         Runs: ansible/verification/check_idxc_health.yml
         - Checks cluster manager for service_ready_flag
         
@@ -401,24 +426,24 @@ class TestSplunkDeployment:
     def test_14_wait_for_shc_captain(self, config_file):
         """
         Step 14: Wait for Search Head Cluster to be ready.
-        
+
         Runs: ansible/verification/wait_for_shc_captain.yml
         - Waits for captain to report service_ready_flag = true
-        
+
         Skipped if 'deployer' role is not in config.
         """
         if not getattr(self, 'is_splunk_configured', False):
             pytest.fail("Previous step failed: Splunk not configured")
-        
+
         roles = self._get_all_roles()
-        
+
         if 'deployer' not in roles:
             pytest.skip("No deployer role in configuration - skipping SHC wait")
-        
+
         print("\n[WAIT] Waiting for Search Head Cluster to be ready...")
-        
+
         result = self._run_verification_playbook("wait_for_shc_captain.yml")
-        
+
         assert result.returncode == 0, "Wait for SHC Captain failed or timed out"
         print("[WAIT] Search Head Cluster is ready")
 
@@ -450,26 +475,49 @@ class TestSplunkDeployment:
         assert result.returncode == 0, "Search Head Cluster health check failed"
         print("[VERIFY] Search Head Cluster is healthy")
 
-
-
     # =========================================================================
     # Test 16: Verify Data Flow
     # =========================================================================
     def test_16_verify_data_flow(self, config_file):
         """
         Step 16: Verify data is flowing into Splunk.
-        
+
         Runs: ansible/verification/verify_data_flow.yml
         - Searches _internal index for data
         - Asserts hosts are sending data
         """
         if not getattr(self, 'is_splunk_configured', False):
             pytest.fail("Previous step failed: Splunk not configured")
-        
+
         print(f"\n[VERIFY] Verifying data flow for environment: {self.splunk_env_id}")
-        
+
         result = self._run_verification_playbook("verify_data_flow.yml")
-        
+
         assert result.returncode == 0, "Data flow verification failed - no data in _internal index"
         print("[VERIFY] Data flow verification passed")
 
+    # =========================================================================
+    # Test 17: Verify App Deployment
+    # =========================================================================
+    def test_17_verify_app_deployment(self, config_file):
+        """
+        Step 17: Verify apps are deployed correctly.
+
+        Runs: ansible/verification/verify_app_deployment.yml
+        - Checks all deployment locations (deployment-apps, manager-apps, shcluster/apps, etc/apps)
+        - Verifies apps match configuration (installed/absent)
+        - FAILS if any mismatches found
+        """
+        if not getattr(self, 'is_apps_deployed', False):
+            pytest.fail("Previous step failed: Apps not deployed")
+
+        print(f"\n[VERIFY] Verifying app deployment for environment: {self.splunk_env_id}")
+
+        # Run with fail_on_mismatch=true to ensure pytest fails if apps don't match config
+        result = self._run_playbook(
+            "ansible/verification/verify_app_deployment.yml",
+            ["-e", "fail_on_mismatch=true"]
+        )
+
+        assert result.returncode == 0, "App deployment verification failed - apps do not match configuration"
+        print("[VERIFY] App deployment verification passed - all apps match configuration")

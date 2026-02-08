@@ -1,0 +1,280 @@
+---
+# Install app from Splunkbase to target directory
+# Required vars:
+#   - app_name: Name of the app
+#   - app_item: App configuration object
+#   - app_version: Version to install
+#   - target_path: Full path where app should be installed
+#   - app_cache_dir: Temporary directory for downloads
+#   - splunk_home: Splunk home directory
+
+- name: Create app cache directory on localhost
+  tags:
+    - splunk
+    - splunk_apps
+    - splunkbase
+  ansible.builtin.file:
+    path: "{{ app_cache_dir }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: "Get app info from Splunkbase for {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - splunkbase
+  ansible.builtin.uri:
+    url: "{{ splunk_app_deployment.splunkbase_api_url }}/app/{{ app_item.app_id }}/?include=release,releases"
+    method: GET
+    user: "{{ splunk_app_deployment.splunkbase_username }}"
+    password: "{{ splunk_app_deployment.splunkbase_password }}"
+    force_basic_auth: yes
+    return_content: yes
+    status_code: [200, 404]
+  register: splunkbase_app_info
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Fail if app not found on Splunkbase
+  tags:
+    - splunk
+    - splunk_apps
+    - splunkbase
+  ansible.builtin.fail:
+    msg: "App {{ app_name }} (ID: {{ app_item.app_id }}) not found on Splunkbase"
+  when: splunkbase_app_info.status == 404
+
+- name: "Debug Splunkbase API response for {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - splunkbase
+  ansible.builtin.debug:
+    msg: "API Response: {{ splunkbase_app_info.json }}"
+    verbosity: 1
+  when: 
+    - app_version == 'latest'
+    - splunkbase_app_info.status == 200
+
+- name: "Set version and download path from API (latest)"
+  tags:
+    - splunk
+    - splunk_apps
+    - splunkbase
+  ansible.builtin.set_fact:
+    resolved_version: >-
+      {%- if splunkbase_app_info.json.release is defined -%}
+        {{ splunkbase_app_info.json.release.title }}
+      {%- elif splunkbase_app_info.json.releases is defined and splunkbase_app_info.json.releases | length > 0 -%}
+        {{ splunkbase_app_info.json.releases[0].title }}
+      {%- else -%}
+        unknown
+      {%- endif -%}
+    release_path: >-
+      {%- if splunkbase_app_info.json.release is defined -%}
+        {{ splunkbase_app_info.json.release.path }}
+      {%- elif splunkbase_app_info.json.releases is defined and splunkbase_app_info.json.releases | length > 0 -%}
+        {{ splunkbase_app_info.json.releases[0].path }}
+      {%- else -%}
+        unknown
+      {%- endif -%}
+  when: 
+    - app_version == 'latest'
+    - splunkbase_app_info.status == 200
+
+- name: Fail if version could not be determined
+  tags:
+    - splunk
+    - splunk_apps
+    - splunkbase
+  ansible.builtin.fail:
+    msg: |
+      Could not determine version for app {{ app_name }}.
+      API response structure: {{ splunkbase_app_info.json.keys() | list }}
+      Try specifying an explicit version instead of 'latest'.
+  when:
+    - app_version == 'latest'
+    - splunkbase_app_info.status == 200
+    - resolved_version is not defined or resolved_version == 'unknown'
+
+- name: "Set version and download path (specific version)"
+  tags:
+    - splunk
+    - splunk_apps
+    - splunkbase
+  ansible.builtin.set_fact:
+    resolved_version: "{{ app_version }}"
+    release_path: >-
+      {%- set matching_release = splunkbase_app_info.json.releases | selectattr('title', 'equalto', app_version) | first | default(none) -%}
+      {%- if matching_release -%}
+        {{ matching_release.path }}
+      {%- else -%}
+        unknown
+      {%- endif -%}
+  when: app_version != 'latest'
+
+- name: Fail if specific version not found
+  tags:
+    - splunk
+    - splunk_apps
+    - splunkbase
+  ansible.builtin.fail:
+    msg: |
+      Could not find version {{ app_version }} for app {{ app_name }}.
+      Available versions: {{ splunkbase_app_info.json.releases | map(attribute='title') | list }}
+  when:
+    - app_version != 'latest'
+    - release_path is not defined or release_path == 'unknown'
+
+- name: "Check if {{ app_name }} already exists"
+  tags:
+    - splunk
+    - splunk_apps
+    - splunkbase
+  ansible.builtin.stat:
+    path: "{{ target_path }}/default/app.conf"
+  register: existing_app
+
+- name: "Get current version of {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - splunkbase
+  ansible.builtin.slurp:
+    src: "{{ target_path }}/default/app.conf"
+  register: current_app_conf
+  when: existing_app.stat.exists
+
+- name: "Parse current version"
+  tags:
+    - splunk
+    - splunk_apps
+    - splunkbase
+  ansible.builtin.set_fact:
+    current_version: "{{ (current_app_conf.content | b64decode | regex_search('version\\s*=\\s*(.+)', '\\1') | first | trim) if current_app_conf is defined and current_app_conf.content is defined else 'unknown' }}"
+  when: existing_app.stat.exists
+
+- name: "Determine if update needed for {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - splunkbase
+  ansible.builtin.set_fact:
+    update_needed: "{{ not existing_app.stat.exists or (current_version | default('unknown')) != resolved_version }}"
+
+- name: "Debug update status for {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - splunkbase
+  ansible.builtin.debug:
+    msg:
+      - "App: {{ app_name }}"
+      - "Target: {{ target_path }}"
+      - "Current version: {{ current_version | default('not installed') }}"
+      - "Target version: {{ resolved_version }}"
+      - "Update needed: {{ update_needed }}"
+    verbosity: 0
+
+- name: "Download and install {{ app_name }}"
+  when: update_needed | bool
+  block:
+    - name: Authenticate with Splunkbase
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.builtin.uri:
+        url: "https://splunkbase.splunk.com/api/account:login"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          username: "{{ splunk_app_deployment.splunkbase_username }}"
+          password: "{{ splunk_app_deployment.splunkbase_password }}"
+        return_content: yes
+        status_code: [200]
+      register: splunkbase_auth
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Extract auth token
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.builtin.set_fact:
+        splunkbase_auth_token: "{{ splunkbase_auth.content | regex_search('<id>([^<]+)</id>', '\\1') | first }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: "Download {{ app_name }} from Splunkbase"
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.builtin.get_url:
+        url: "{{ release_path }}"
+        dest: "{{ app_cache_dir }}/{{ app_name }}.tgz"
+        headers:
+          X-Auth-Token: "{{ splunkbase_auth_token }}"
+        mode: '0644'
+        timeout: "{{ splunk_app_deployment.download_timeout | default(120) }}"
+      register: download_result
+      until: download_result is succeeded
+      retries: "{{ splunk_app_deployment.retry_count | default(3) }}"
+      delay: 10
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: "Backup existing {{ app_name }}"
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.builtin.archive:
+        path: "{{ target_path }}"
+        dest: "{{ splunk_app_deployment.backup_location | default('/tmp/splunk_app_backups') }}/{{ app_name }}_{{ ansible_date_time.date }}.tgz"
+      when:
+        - existing_app.stat.exists
+        - splunk_app_deployment.backup_apps_before_update | default(true)
+
+    - name: "Remove old {{ app_name }}"
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.builtin.file:
+        path: "{{ target_path }}"
+        state: absent
+      when: existing_app.stat.exists
+
+    - name: "Extract {{ app_name }} to target"
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.builtin.unarchive:
+        src: "{{ app_cache_dir }}/{{ app_name }}.tgz"
+        dest: "{{ target_path | dirname }}"
+        remote_src: no
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+      register: extract_result
+
+    - name: "Set permissions on {{ app_name }}"
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.builtin.file:
+        path: "{{ target_path }}"
+        state: directory
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+        recurse: yes

@@ -1,0 +1,127 @@
+---
+# Verify Deployer Apps
+# Checks if apps are deployed to shcluster/apps directory correctly
+
+- name: Initialize verification results
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+    - verify
+  ansible.builtin.set_fact:
+    deployer_verification_results: []
+    deployer_apps_expected: []
+    deployer_apps_found: []
+    deployer_mismatches: []
+
+- name: Filter apps for deployer distribution
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+    - verify
+  ansible.builtin.set_fact:
+    deployer_apps_expected: "{{ deployer_apps_expected + [item] }}"
+  loop: "{{ splunk_app_deployment.apps | default([]) }}"
+  when:
+    - item.target_roles is defined
+    - item.target_roles | intersect(['search_head']) | length > 0
+    - item.deployment_target | default('auto') != 'direct'
+
+- name: Check shcluster/apps directory exists
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+    - verify
+  ansible.builtin.stat:
+    path: "{{ splunk_home }}/etc/shcluster/apps"
+  register: shcluster_apps_dir
+  become: true
+
+- name: List actual apps in shcluster/apps
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+    - verify
+  ansible.builtin.find:
+    paths: "{{ splunk_home }}/etc/shcluster/apps"
+    file_type: directory
+    recurse: no
+  register: actual_apps
+  when: shcluster_apps_dir.stat.exists
+  become: true
+
+- name: Extract app names from filesystem
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+    - verify
+  ansible.builtin.set_fact:
+    deployer_apps_found: "{{ actual_apps.files | map(attribute='path') | map('basename') | list }}"
+  when: shcluster_apps_dir.stat.exists and actual_apps.files is defined
+
+- name: Verify each expected app
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+    - verify
+  ansible.builtin.include_tasks: verify_single_app.yml
+  loop: "{{ deployer_apps_expected }}"
+  loop_control:
+    loop_var: verify_app_item
+    label: "{{ verify_app_item.name }}"
+  vars:
+    verify_base_path: "{{ splunk_home }}/etc/shcluster/apps"
+    verify_app_full_path: "{{ verify_app_item.target_path | default(verify_base_path ~ '/' ~ verify_app_item.name) }}"
+
+- name: Check for unexpected apps
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+    - verify
+  ansible.builtin.set_fact:
+    deployer_mismatches: "{{ deployer_mismatches + [{'app': item, 'issue': 'UNEXPECTED: App exists but not in config', 'severity': 'warning'}] }}"
+  loop: "{{ deployer_apps_found }}"
+  when:
+    - deployer_apps_found | length > 0
+    - item not in (deployer_apps_expected | map(attribute='name') | list)
+    # Exclude framework/shipped apps (prefix _) and env-prefixed apps (splunk_app_prefix_); still verify if explicitly in splunk_app_deployment.apps
+    - not (item is match('^_.*'))
+    - not (item is match('^' + splunk_app_prefix + '_.*'))
+
+- name: Build issues list for display
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+    - verify
+  ansible.builtin.set_fact:
+    deployer_issues_display: "{{ deployer_issues_display | default([]) + ['  - ' + item.app + ': ' + item.issue] }}"
+  loop: "{{ deployer_mismatches }}"
+  when: deployer_mismatches | length > 0
+
+- name: Display verification results
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+    - verify
+  ansible.builtin.debug:
+    msg: "{{ ['=========================================', 'DEPLOYER VERIFICATION: ' + inventory_hostname, '=========================================', 'Expected apps: ' + (deployer_apps_expected | map(attribute='name') | list | join(', ') if deployer_apps_expected | length > 0 else '(none)'), 'Found apps: ' + (deployer_apps_found | join(', ') if deployer_apps_found | length > 0 else '(none)'), 'Mismatches: ' + (deployer_mismatches | length | string)] + (['Issues found:'] + deployer_issues_display if deployer_mismatches | length > 0 else ['  ✓ All apps deployed correctly']) + ['========================================='] }}"
+
+- name: Fail if mismatches found and fail_on_mismatch is true
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+    - verify
+  ansible.builtin.fail:
+    msg: "Deployer app verification failed: {{ deployer_mismatches | length }} mismatch(es) found"
+  when:
+    - fail_on_mismatch | default(false) | bool
+    - deployer_mismatches | length > 0

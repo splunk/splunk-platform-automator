@@ -96,7 +96,7 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 1. Make sure you have Python 3.9+ installed. If not available for your distro, you can [build your own Python version](#build-your-own-python-version).
     - [Install needed python libraries](#install-needed-python-libraries-in-your-virtualenv)
 1. (Optional) Download and install [Vagrant](https://www.vagrantup.com). If you are using the VirtualBox plugin.
-1. Install Ansible, I personally prefer [Brew](https://brew.sh) (on OSX) which makes it as easy as `brew install ansible`. For [supported Ansible versions check here](#supported-ansible-versions)
+1. Install Ansible, I personally prefer [Brew](https://brew.sh) (on OSX) which makes it as easy as `brew install ansible`. If you use Brew, also install pydantic (required for config schema validation): `brew install pydantic`. For [supported Ansible versions check here](#supported-ansible-versions)
 1. Create a folder called `Vagrant` and change into it.
 1. Download and extract a [Splunk Platform Automator release here](https://github.com/splunk/splunk-platform-automator/tags) or clone from GitHub when using the master branch: `git clone https://github.com/splunk/splunk-platform-automator.git`
 1. Create a folder called `Software`.
