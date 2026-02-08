@@ -87,7 +87,7 @@
     mode: '0600'
   notify: Restart splunk
   loop: "{{ splunk_search_peer_idxc_list | dict2items }}"
-  when: app_local.stat.exists == false and app_path == splunk_home + '/etc/apps'
+  when: not app_local.stat.exists and app_path == splunk_home + '/etc/apps'
 
 - name: "({{ app_name }}) setting static unhashed pass4SymmKey on {{splunk_clustermanager_var}} stanza"
   tags:

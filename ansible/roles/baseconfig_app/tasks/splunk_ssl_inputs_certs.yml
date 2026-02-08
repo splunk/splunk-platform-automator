@@ -13,7 +13,7 @@
   register: cacert_pems
   delegate_to: localhost
   become: false
-  when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
+  when: splunk_ssl.inputs.enable and splunk_ssl.inputs.own_certs
 
 - name: Check serverCert filename to copy
   tags:
@@ -27,7 +27,7 @@
   register: server_pems
   delegate_to: localhost
   become: false
-  when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
+  when: splunk_ssl.inputs.enable and splunk_ssl.inputs.own_certs
 
 - name: Set cert file names
   tags:
@@ -35,9 +35,9 @@
     - splunk_baseconfig
     - inputs_ssl
   ansible.builtin.set_fact:
-    cacert_pem: "{% for result in cacert_pems.results %}{% if result.stat.exists == true %}{{ result.item }}{% endif %}{% endfor %}"
-    server_pem: "{% for result in server_pems.results %}{% if result.stat.exists == true %}{{ result.item }}{% endif %}{% endfor %}"
-  when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
+    cacert_pem: "{% for result in cacert_pems.results %}{% if result.stat.exists %}{{ result.item }}{% endif %}{% endfor %}"
+    server_pem: "{% for result in server_pems.results %}{% if result.stat.exists %}{{ result.item }}{% endif %}{% endfor %}"
+  when: splunk_ssl.inputs.enable and splunk_ssl.inputs.own_certs
 
 - name: Fail if no cacert found
   tags:
@@ -46,7 +46,7 @@
     - inputs_ssl
   ansible.builtin.fail:
     msg: "Cannot find a cacert.pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
-  when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true and cacert_pem == ""
+  when: splunk_ssl.inputs.enable and splunk_ssl.inputs.own_certs and cacert_pem == ""
 
 - name: Fail if no pem cert found
   tags:
@@ -55,7 +55,7 @@
     - inputs_ssl
   ansible.builtin.fail:
     msg: "Cannot find a .pem file for host '{{ inventory_hostname }}' in the '{{ splunk_auth_dir }}' directory!"
-  when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true and server_pem == ""
+  when: splunk_ssl.inputs.enable and splunk_ssl.inputs.own_certs and server_pem == ""
 
 - name: Create path for custom certs
   tags:
@@ -71,7 +71,7 @@
   loop:
     - "{{ splunk_ssl.inputs.config.rootCA|replace('$SPLUNK_HOME/', '')|dirname }}"
     - "{{ splunk_ssl.inputs.config.serverCert|replace('$SPLUNK_HOME/', '')|dirname }}"
-  when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
+  when: splunk_ssl.inputs.enable and splunk_ssl.inputs.own_certs
 
 - name: Copy certs file for inputs ssl
   tags:
@@ -93,4 +93,4 @@
         src: "{{ server_pem }}",
         dest: "{{ splunk_ssl.inputs.config.serverCert|replace('$SPLUNK_HOME/', '')|dirname }}",
       }
-  when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true
+  when: splunk_ssl.inputs.enable and splunk_ssl.inputs.own_certs

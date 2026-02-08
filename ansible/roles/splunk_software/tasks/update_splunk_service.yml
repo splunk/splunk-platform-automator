@@ -15,7 +15,7 @@
     mode: '0644'
     no_extra_spaces: yes
   loop: "{{ splunk_systemd_services_updates }}"
-  when: use_systemctl == true and splunk_systemd_services[splunk_service_name] is defined
+  when: use_systemctl and splunk_systemd_services[splunk_service_name] is defined
 
 - name: Commit changes to systemctl
   tags:
@@ -23,4 +23,4 @@
     - splunk_software
     - splunk_unit_file
   ansible.builtin.command: systemctl daemon-reload
-  when: use_systemctl == true
+  when: use_systemctl

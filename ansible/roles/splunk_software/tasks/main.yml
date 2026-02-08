@@ -40,7 +40,7 @@
   become: false
   register: splunk_secret_file
   delegate_to: localhost
-  when: splunk_secret_share[splunk_install_app] == true
+  when: splunk_secret_share[splunk_install_app]
 
 - name: Fail if no splunk.secret is there and more than one host is deployed
   tags:
@@ -50,8 +50,8 @@
   ansible.builtin.fail:
     msg: "Cannot find secret file {{ splunk_auth_dir }}/{{ splunk_install_app }}_splunk.secret. You must first install {{ splunk_install_app }} on one host only."
   when: 
-    - splunk_secret_share[splunk_install_app] == true
-    - splunk_secret_file.stat.exists == false
+    - splunk_secret_share[splunk_install_app]
+    - not splunk_secret_file.stat.exists
     - play_hosts|length > 1
 
 - name: "install the splunk software"
@@ -59,7 +59,7 @@
     - splunk
     - splunk_software
   ansible.builtin.include_tasks: install.yml
-  when: splunk_path.stat.exists == false
+  when: not splunk_path.stat.exists
 
 - name: Call ulimit_thp
   tags:
@@ -68,8 +68,8 @@
   ansible.builtin.include_tasks: ulimit_thp.yml
   when:
     - splunk_install_app == 'splunk'
-    - use_systemctl == true
-    - use_splunk_systemd|default(false) == false
+    - use_systemctl
+    - not use_splunk_systemd|default(false)
 
 - name: Call add_disable_thp_service
   tags:
@@ -78,8 +78,8 @@
   ansible.builtin.include_tasks: add_disable_thp_service.yml
   when:
     - splunk_install_app == 'splunk'
-    - use_systemctl == true
-    - use_splunk_systemd|default(false) == true
+    - use_systemctl
+    - use_splunk_systemd|default(false)
 
 - name: Call update_splunk_service
   tags:
@@ -87,8 +87,8 @@
     - splunk_software
   ansible.builtin.include_tasks: update_splunk_service.yml
   when:
-    - use_systemctl == true
-    - use_splunk_systemd|default(false) == true
+    - use_systemctl
+    - use_splunk_systemd|default(false)
     - splunk_systemd_services[splunk_service_name] is defined
 
 - name: "user interface configuration"
@@ -115,8 +115,8 @@
     mode: pull
   become: false
   when:
-    - splunk_secret_share[splunk_install_app] == true
-    - splunk_secret_file.stat.exists == false
+    - splunk_secret_share[splunk_install_app]
+    - not splunk_secret_file.stat.exists
 
 - name: Link splunkforwarder to splunk secret file
   tags:
@@ -130,7 +130,7 @@
   become: false
   delegate_to: localhost
   when:
-    - splunk_secret_share.splunk == true
-    - splunk_secret_share.splunkforwarder == true
-    - splunk_secret_share.equal == true
-    - splunk_secret_file.stat.exists == false
+    - splunk_secret_share.splunk
+    - splunk_secret_share.splunkforwarder
+    - splunk_secret_share.equal
+    - not splunk_secret_file.stat.exists

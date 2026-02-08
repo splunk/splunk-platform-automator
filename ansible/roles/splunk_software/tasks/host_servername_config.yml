@@ -15,7 +15,7 @@
     group: "{{splunk_group}}"
     mode: '0600'
   notify: Restart splunk
-  when: splunk_set_servername|default(false) == true
+  when: splunk_set_servername|default(false)
 
 - name: Set default-hostname to {{inventory_hostname}}
   tags:
@@ -31,4 +31,4 @@
     group: "{{splunk_group}}"
     mode: '0600'
   notify: Restart splunk
-  when: splunk_set_default_hostname|default(false) == true
+  when: splunk_set_default_hostname|default(false)

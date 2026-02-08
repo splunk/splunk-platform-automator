@@ -24,7 +24,7 @@
     index_vars: "{{ item.value }}"
     splunk_indexes: { "default": {} }
   when:
-    - splunk_indexes_default_paths|default(false) == true
+    - splunk_indexes_default_paths|default(false)
     - splunk_indexes_path_settings|default({})|length > 0
 
 - name: "({{ app_name }}) set index path options"
@@ -38,7 +38,7 @@
     index_name: "{{ item.key }}"
     index_vars: "{{ item.value }}"
   when:
-    - splunk_indexes_default_paths|default(false) == false
+    - not splunk_indexes_default_paths|default(false)
     - splunk_indexes_path_settings|default({})|length > 0
 
 - name: "({{ app_name }}) set index options"

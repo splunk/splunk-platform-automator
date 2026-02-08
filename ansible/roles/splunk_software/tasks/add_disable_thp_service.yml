@@ -11,7 +11,7 @@
     owner: root
     group: root
     mode: '0644'
-  when: use_systemctl == true
+  when: use_systemctl
 
 - name: Commit changes to systemctl
   tags:
@@ -19,7 +19,7 @@
     - splunk_software
     - splunk_install
   ansible.builtin.command: systemctl daemon-reload
-  when: use_systemctl == true
+  when: use_systemctl
 
 - name: Enable and start disable-thp service
   tags:
@@ -30,4 +30,4 @@
     name: disable-thp
     state: started
     enabled: yes
-  when: use_systemctl == true
+  when: use_systemctl

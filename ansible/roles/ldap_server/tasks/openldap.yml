@@ -32,7 +32,7 @@
     - ldap
   ansible.builtin.shell: slappasswd -s {{ldap_root_passwd}}
   register: ldap_root_hash
-  when: ldap_config.stat.exists == false
+  when: not ldap_config.stat.exists
 
 - name: Define ldap db config file
   tags:
@@ -40,13 +40,13 @@
   ansible.builtin.template:
     src: var/tmp/db.ldif.j2
     dest: /var/tmp/db.ldif
-  when: ldap_config.stat.exists == false
+  when: not ldap_config.stat.exists
 
 - name: Add ldap db config file
   tags:
     - ldap
   ansible.builtin.shell: ldapmodify -Y EXTERNAL  -H ldapi:/// -f /var/tmp/db.ldif
-  when: ldap_config.stat.exists == false
+  when: not ldap_config.stat.exists
 
 - name: "check for ldap monitor config file"
   ansible.builtin.stat: path="/var/tmp/monitor.ldif"
@@ -58,13 +58,13 @@
   ansible.builtin.template:
     src: var/tmp/monitor.ldif.j2
     dest: /var/tmp/monitor.ldif
-  when: ldap_monitor_config.stat.exists == false
+  when: not ldap_monitor_config.stat.exists
 
 - name: Add ldap monitor config
   tags:
     - ldap
   ansible.builtin.shell: ldapmodify -Y EXTERNAL  -H ldapi:/// -f /var/tmp/monitor.ldif
-  when: ldap_monitor_config.stat.exists == false
+  when: not ldap_monitor_config.stat.exists
 
 - name: Check for ldap DB_CONFIG file
   tags:
@@ -76,7 +76,7 @@
   tags:
     - ldap
   ansible.builtin.shell: cp /usr/share/openldap-servers/DB_CONFIG.example /var/lib/ldap/DB_CONFIG
-  when: ldap_db_config.stat.exists == false
+  when: not ldap_db_config.stat.exists
 
 - name: Set correct file permissions for DB_CONFIG
   tags:
@@ -95,7 +95,7 @@
     - /etc/openldap/schema/cosine.ldif
     - /etc/openldap/schema/nis.ldif
     - /etc/openldap/schema/inetorgperson.ldif
-  when: ldap_db_config.stat.exists == false
+  when: not ldap_db_config.stat.exists
 
 - name: "check for ldap base config file"
   tags:
@@ -109,10 +109,10 @@
   ansible.builtin.template:
     src: var/tmp/base.ldif.j2
     dest: /var/tmp/base.ldif
-  when: ldap_base_config.stat.exists == false
+  when: not ldap_base_config.stat.exists
 
 - name: Build lDAP directory sturcture
   tags:
     - ldap
   ansible.builtin.shell: ldapadd -x -w {{ldap_root_passwd}} -D "cn=ldapadm,{{ldap_dc}}" -f /var/tmp/base.ldif
-  when: ldap_base_config.stat.exists == false
+  when: not ldap_base_config.stat.exists

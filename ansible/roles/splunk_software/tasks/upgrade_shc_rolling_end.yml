@@ -38,7 +38,7 @@
     splunk_software_rest_method: POST
   when:
     - inventory_hostname == splunk_shc_host_list|first
-    - shc_rolling_upgrade_flag == true
+    - shc_rolling_upgrade_flag
 
 - name: Finalize output
   tags:
@@ -50,8 +50,8 @@
     msg: "{{ splunk_software_rest_json_output.messages[0].text }}"
   when:
     - inventory_hostname == splunk_shc_host_list|first
-    - shc_rolling_upgrade_flag == true
-  changed_when: shc_rolling_upgrade_flag == true
+    - shc_rolling_upgrade_flag
+  changed_when: shc_rolling_upgrade_flag
 
 - name: Finalize output
   tags:
@@ -63,4 +63,4 @@
     msg: "Cluster searchable rolling was already finalized."
   when:
     - inventory_hostname == splunk_shc_host_list|first
-    - shc_rolling_upgrade_flag == false
+    - not shc_rolling_upgrade_flag

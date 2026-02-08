@@ -40,7 +40,7 @@
   ansible.builtin.set_fact:
     boot_start_migration: true
   when:
-    - check_splunk_init.stat.exists == true
+    - check_splunk_init.stat.exists
     - splunk_target_version is version_compare('7.2.2', '>=')
 
 - name: Remove init.d, ulimit settings and THP scripts
@@ -49,7 +49,7 @@
     - splunk_software
     - splunk_upgrade
   ansible.builtin.include_tasks: remove_init_and_ulimit.yml
-  when: boot_start_migration|default(false) == true
+  when: boot_start_migration|default(false)
 
 - name: Call disable_boot-start
   tags:
@@ -58,8 +58,8 @@
     - splunk_upgrade
   ansible.builtin.include_tasks: disable_boot-start.yml
   when:
-    - use_systemctl == true
-    - use_splunk_systemd|default(false) == true
+    - use_systemctl
+    - use_splunk_systemd|default(false)
 
 - name: Call remove_custom_policykit
   tags:
@@ -68,8 +68,8 @@
     - splunk_upgrade
   ansible.builtin.include_tasks: remove_custom_policykit.yml
   when:
-    - use_systemctl == true
-    - use_splunk_systemd|default(false) == true
+    - use_systemctl
+    - use_splunk_systemd|default(false)
 
 - name: Call remove_splunk_sudoers
   tags:
@@ -78,8 +78,8 @@
     - splunk_upgrade
   ansible.builtin.include_tasks: remove_splunk_sudoers.yml
   when:
-    - use_systemctl == true
-    - use_splunk_systemd|default(false) == true
+    - use_systemctl
+    - use_splunk_systemd|default(false)
 
 - name: Call remove_disable_thp_service
   tags:
@@ -89,8 +89,8 @@
   ansible.builtin.include_tasks: remove_disable_thp_service.yml
   when:
     - splunk_install_app == 'splunk'
-    - use_systemctl == true
-    - use_splunk_systemd|default(false) == true
+    - use_systemctl
+    - use_splunk_systemd|default(false)
 
 - name: Upload and extract the splunk software
   tags:
@@ -98,7 +98,7 @@
     - splunk_software
     - splunk_upgrade
   ansible.builtin.include_tasks: upload_and_extract.yml
-  when: splunk_path.stat.exists == true
+  when: splunk_path.stat.exists
 
 - name: Set enable boot-start args
   tags:
@@ -113,7 +113,7 @@
     - splunk_software
     - splunk_install
   ansible.builtin.include_tasks: enable_boot-start.yml
-  when: boot_start_migration|default(false) == true or use_systemctl == true and use_splunk_systemd|default(false) == true
+  when: boot_start_migration|default(false) or use_systemctl and use_splunk_systemd|default(false)
 
 - name: Call check_systemd_file from splunk_common
   tags:
@@ -131,8 +131,8 @@
     - splunk_upgrade
   ansible.builtin.include_tasks: update_splunk_service.yml
   when:
-    - use_systemctl == true
-    - use_splunk_systemd|default(false) == true
+    - use_systemctl
+    - use_splunk_systemd|default(false)
     - splunk_systemd_services[splunk_service_name] is defined
 
 - name: Call add_disable_thp_service
@@ -144,8 +144,8 @@
   ansible.builtin.include_tasks: add_disable_thp_service.yml
   when:
     - splunk_install_app == 'splunk'
-    - use_systemctl == true
-    - use_splunk_systemd|default(false) == true
+    - use_systemctl
+    - use_splunk_systemd|default(false)
 
 - name: Call add_custom_policykit
   tags:
@@ -155,9 +155,9 @@
     - splunk_polkit
   ansible.builtin.include_tasks: add_custom_policykit.yml
   when: 
-    - use_policykit == true
-    - use_systemctl == true
-    - use_splunk_systemd|default(false) == true
+    - use_policykit
+    - use_systemctl
+    - use_splunk_systemd|default(false)
     - splunk_create_polkit_rules is not defined
 
 - name: Call add_splunk_sudoers
@@ -168,9 +168,9 @@
     - splunk_sudoers
   ansible.builtin.include_tasks: add_splunk_sudoers.yml
   when: 
-    - use_policykit == false
-    - use_systemctl == true
-    - use_splunk_systemd|default(false) == true
+    - not use_policykit
+    - use_systemctl
+    - use_splunk_systemd|default(false)
 
 - name: Start splunk by service control
   tags:

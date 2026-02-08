@@ -12,4 +12,4 @@
 - name: Fail if acl is not installed
   ansible.builtin.fail:
     msg: "Package 'acl' is not installed. This is required for Ansible."
-  when: acl.stat.exists == false
+  when: not acl.stat.exists

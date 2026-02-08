@@ -14,4 +14,4 @@
     - splunk_common
   ansible.builtin.set_fact:
     use_systemctl: true
-  when: systemctl.stat.exists == true
+  when: systemctl.stat.exists

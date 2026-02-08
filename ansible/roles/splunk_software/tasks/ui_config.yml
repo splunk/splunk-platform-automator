@@ -34,7 +34,7 @@
     - splunk_user_password
   ansible.builtin.set_fact:
     splunk_loginpage_user_info: "<br><br><b>User: </b>admin<br><b>Password: </b>{{splunk_admin_password}}"
-  when: splunk_loginpage_print_userpw|default(true) == true
+  when: splunk_loginpage_print_userpw|default(true)
 
 - name: Set splunk roles info to login page
   tags:
@@ -44,7 +44,7 @@
     - splunk_roles_info
   ansible.builtin.set_fact:
     splunk_loginpage_role_info: "<br><b>Splunk Roles: </b>{{splunk_roles}}"
-  when: splunk_loginpage_print_roles|default(true) == true
+  when: splunk_loginpage_print_roles|default(true)
 
 - name: Set hostname info to login page
   tags:
@@ -54,7 +54,7 @@
     - splunk_roles_info
   ansible.builtin.set_fact:
     splunk_loginpage_hostname_info: "<b>Hostname: </b>{{inventory_hostname}}"
-  when: splunk_loginpage_print_hostname|default(true) == true
+  when: splunk_loginpage_print_hostname|default(true)
 
 - name: Add user and roles info to login page
   tags:
@@ -73,4 +73,4 @@
   notify: Restart splunk
   when:
     - splunk_install_app == "splunk"
-    - splunk_loginpage_print_userpw|default(true) == true or splunk_loginpage_print_roles|default(true) == true or splunk_loginpage_print_hostname|default(true) == true
+    - splunk_loginpage_print_userpw|default(true) or splunk_loginpage_print_roles|default(true) or splunk_loginpage_print_hostname|default(true)

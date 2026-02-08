@@ -15,56 +15,59 @@
         name: common
         tasks_from: check_ansible_requirements.yml
 
-    - name: "touch file for the ansible {{ansible_user}}"
-      file:
+    - name: "Touch file for the ansible {{ ansible_user }}"
+      ansible.builtin.file:
         path: /tmp/user.conf
         state: touch
+        mode: "0644"
 
-    - name: "remove file for the ansible {{ansible_user}}"
-      file:
+    - name: "Remove file for the ansible {{ ansible_user }}"
+      ansible.builtin.file:
         path: /tmp/user.conf
         state: absent
 
-    - name: "touch file for technical user root"
-      file:
+    - name: "Touch file for technical user root"
+      ansible.builtin.file:
         path: /tmp/root.conf
         state: touch
+        mode: "0644"
       become: true
       become_user: root
 
-    - name: "remove file for technical user root"
-      file:
+    - name: "Remove file for technical user root"
+      ansible.builtin.file:
         path: /tmp/root.conf
         state: absent
       become: true
       become_user: root
 
     - name: Determine available groups
-      getent:
+      ansible.builtin.getent:
         database: group
 
     - name: Determine available users
-      getent:
+      ansible.builtin.getent:
         database: passwd
 
-    - name: "touch file for splunk user {{splunk_user}}"
-      file:
+    - name: "Touch file for splunk user {{ splunk_user }}"
+      ansible.builtin.file:
         path: /tmp/splunk.conf
         state: touch
-        owner: "{{splunk_user}}"
-        group: "{{splunk_group}}"
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        mode: "0644"
       become: true
-      become_user: "{{splunk_user}}"
+      become_user: "{{ splunk_user }}"
       when:
         - splunk_group in ansible_facts.getent_group
         - splunk_user in ansible_facts.getent_passwd
 
-    - name: "remove file for splunk user {{splunk_user}}"
-      file:
+    - name: "Remove file for splunk user {{ splunk_user }}"
+      ansible.builtin.file:
         path: /tmp/splunk.conf
         state: absent
       become: true
-      become_user: "{{splunk_user}}"
+      become_user: "{{ splunk_user }}"
       when:
         - splunk_group in ansible_facts.getent_group
         - splunk_user in ansible_facts.getent_passwd

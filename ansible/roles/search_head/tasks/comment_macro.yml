@@ -23,7 +23,7 @@
   check_mode: no
   failed_when: "grep_result.rc > 1"
   changed_when: "grep_result.rc == 1"
-  when: localmeta_result.stat.exists == true
+  when: localmeta_result.stat.exists
 
 - name: "allow the comment macro for all apps"
   tags:
@@ -50,4 +50,4 @@
       }
   # don't restart because it dusturbes the SHC configuration
   #  notify: Restart splunk
-  when: localmeta_result.stat.exists == false or grep_result.rc == 1
+  when: not localmeta_result.stat.exists or grep_result.rc == 1

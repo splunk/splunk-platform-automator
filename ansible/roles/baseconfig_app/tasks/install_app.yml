@@ -45,7 +45,7 @@
     mode: '0644'
   with_fileglob:
     - "{{ baseapp_dir.files.0.path }}/local/*"
-  when: app_local.stat.exists == false
+  when: not app_local.stat.exists
 
 - name: "({{ app_name }}) create metadata directory"
   tags:

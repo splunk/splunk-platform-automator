@@ -22,5 +22,5 @@
     - name: Asset Cluster Healthy
       ansible.builtin.assert:
         that:
-          - idxc_service_ready == true
+          - idxc_service_ready
         fail_msg: "Indexer Cluster is not healthy! service_ready_flag is false."

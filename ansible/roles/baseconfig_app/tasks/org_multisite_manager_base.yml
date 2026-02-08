@@ -222,7 +222,7 @@
     group: "{{splunk_group}}"
     mode: '0600'
   notify: Restart splunk
-  when: app_local.stat.exists == false
+  when: not app_local.stat.exists
 
 - name: "({{ app_name }}) setting unhashed indexer discovery pass4SymmKey"
   tags:
@@ -238,7 +238,7 @@
     group: "{{splunk_group}}"
     mode: '0600'
   notify: Restart splunk
-  when: app_local.stat.exists == false and idxc_discovery_password is defined
+  when: not app_local.stat.exists and idxc_discovery_password is defined
 
 - name: "({{ app_name }}) setting summary_replication = true"
   tags:

@@ -96,10 +96,10 @@
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk bootstrap shcluster-captain -auth admin:{{ splunk_admin_password }}"
   become: true
   become_user: "{{ splunk_user }}"
-  when: inventory_hostname == splunk_shc_host_list|first and shcluster_status.changed == true
+  when: inventory_hostname == splunk_shc_host_list|first and shcluster_status.changed
 
 - name: Add node to SHC and wait for it
-  when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed == true
+  when: inventory_hostname != splunk_shc_host_list|first and shcluster_status.changed
   block:
     - name: Wait for the search head cluster status to be available
       tags:
@@ -167,7 +167,7 @@
   register: deploy_apps_stat
   when:
     - inventory_hostname == splunk_shc_host_list|last
-    - shcluster_status.changed == true
+    - shcluster_status.changed
 
 - name: Push shc bundle if needed
   tags:
@@ -177,11 +177,11 @@
   ansible.builtin.debug:
     msg: register shc bundle push
   notify: Wait for SHC service ready and call push bundle
-  changed_when: deploy_apps_stat.stat.exists|default(false) == false
+  changed_when: not deploy_apps_stat.stat.exists|default(false)
   when:
-    - deploy_apps_stat.stat.exists|default(false) == false
+    - not deploy_apps_stat.stat.exists|default(false)
     - inventory_hostname == splunk_shc_host_list|last
-    - shcluster_status.changed == true
+    - shcluster_status.changed
 
 # Add single indexers as search peers
 - name: Call search_peers from role search_head

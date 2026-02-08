@@ -17,7 +17,7 @@
     mode: '0600'
   notify: Restart splunk
   loop: "{{ splunk_ssl.outputs.config | dict2items }}"
-  when: splunk_ssl.outputs.enable == true
+  when: splunk_ssl.outputs.enable
 
 - name: "({{ app_name }}) setting ssl cert path in tcpout stanza for clustered indexers"
   tags:
@@ -38,5 +38,5 @@
     - { varkey: "sslRootCAPath", varvalue: "{{ splunk_ssl.outputs.config.sslRootCAPath|default('cacert.pem') }}" }
     - { varkey: "sslCertPath", varvalue: "{{ splunk_ssl.outputs.config.sslCertPath|default('client.pem') }}" }
   when:
-    - splunk_ssl.outputs.enable == true
-    - splunk_ssl.outputs.own_certs == true
+    - splunk_ssl.outputs.enable
+    - splunk_ssl.outputs.own_certs

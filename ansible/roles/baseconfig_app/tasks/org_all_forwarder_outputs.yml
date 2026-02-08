@@ -48,7 +48,7 @@
     - org_all_forwarder_outputs
   ansible.builtin.set_fact:
     idx_port: "{{ inputs_port }}"
-  when: splunk_ssl.outputs.enable != true
+  when: not splunk_ssl.outputs.enable
 
 - name: Set ssl input port
   tags:
@@ -57,7 +57,7 @@
     - org_all_forwarder_outputs
   ansible.builtin.set_fact:
     idx_port: "{{ inputs_port_ssl }}"
-  when: splunk_ssl.outputs.enable == true
+  when: splunk_ssl.outputs.enable
 
 - name: Install certs for outputs ssl
   tags:
@@ -68,7 +68,7 @@
   ansible.builtin.include_role:
     name: baseconfig_app
     tasks_from: splunk_ssl_outputs_certs
-  when: splunk_ssl.outputs.enable == true and splunk_ssl.outputs.own_certs == true
+  when: splunk_ssl.outputs.enable and splunk_ssl.outputs.own_certs
 
 - name: "({{ app_name }}) setting server in tcpout stanza for clustered indexers"
   tags:
@@ -150,7 +150,7 @@
   loop: "{{ splunk_outputs_idxc_list | list }}"
   loop_control:
     loop_var: index_cluster_name
-  when: splunk_outputs_idxc_list|length > 0 and splunk_ssl.outputs.enable == true
+  when: splunk_outputs_idxc_list|length > 0 and splunk_ssl.outputs.enable
 
 - name: "({{ app_name }}) rename tcpout:primary_indexers if non clustered indexers"
   tags:
@@ -186,7 +186,7 @@
 - name: Configure SSL for non-clustered indexers
   when:
     - splunk_outputs_idx_list|length > 0
-    - splunk_ssl.outputs.enable == true
+    - splunk_ssl.outputs.enable
   block:
     - name: "({{ app_name }}) setting other ssl configs in tcpout stanza for non clustered indexers"
       tags:
@@ -229,4 +229,4 @@
             varkey: "sslCertPath",
             varvalue: "{{ splunk_ssl.outputs.config.sslCertPath|default('client.pem') }}",
           }
-      when: splunk_ssl.outputs.own_certs == true
+      when: splunk_ssl.outputs.own_certs

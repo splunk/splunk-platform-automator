@@ -8,7 +8,7 @@
   service_facts:
   register: services_state
   when:
-    - disable_apparmor|default(false) == true
+    - disable_apparmor|default(false)
 
 - name: Stop and disable AppArmor
   tags:
@@ -19,6 +19,6 @@
     state: stopped
     enabled: no
   when:
-    - disable_apparmor|default(false) == true
+    - disable_apparmor|default(false)
     - services_state.ansible_facts.services['apparmor.service'] is defined
     - services_state.ansible_facts.services['apparmor.service']['status'] == 'enabled'

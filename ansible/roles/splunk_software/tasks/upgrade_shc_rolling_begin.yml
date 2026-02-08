@@ -35,7 +35,7 @@
     msg: "Search Head Cluster is not healthy!"
   when:
     - inventory_hostname == splunk_shc_host_list|first
-    - shc_service_ready_flag == false or shc_rolling_restart_flag == true
+    - not shc_service_ready_flag or shc_rolling_restart_flag
 
 - name: Check KV store cluster state
   tags:
@@ -86,7 +86,7 @@
     splunk_software_rest_method: POST
   when:
     - inventory_hostname == splunk_shc_host_list|first
-    - shc_rolling_upgrade_flag == false
+    - not shc_rolling_upgrade_flag
 
 - name: Init output
   tags:
@@ -98,8 +98,8 @@
     msg: "{{ splunk_software_rest_json_output.messages[0].text }}"
   when:
     - inventory_hostname == splunk_shc_host_list|first
-    - shc_rolling_upgrade_flag == false
-  changed_when: shc_rolling_upgrade_flag == false
+    - not shc_rolling_upgrade_flag
+  changed_when: not shc_rolling_upgrade_flag
 
 - name: Init output
   tags:
@@ -111,4 +111,4 @@
     msg: "Cluster is already in searchable rolling upgrade mode."
   when:
     - inventory_hostname == splunk_shc_host_list|first
-    - shc_rolling_upgrade_flag == true
+    - shc_rolling_upgrade_flag

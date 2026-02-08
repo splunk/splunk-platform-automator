@@ -17,7 +17,7 @@
   check_mode: no
   changed_when: false
   register: version_output
-  when: splunk_is_installed|default(false) == true
+  when: splunk_is_installed|default(false)
 
 - name: Set splunk_installed_version variable
   tags:
@@ -42,7 +42,7 @@
     - splunk_software
   ansible.builtin.set_fact:
     splunk_service_name: "splunkforwarder"
-  when: use_systemctl == true
+  when: use_systemctl
         and version_output.stdout is defined
         and splunk_installed_version is version_compare('7.2.2', '>=')
         and splunk_install_app == "splunkforwarder"

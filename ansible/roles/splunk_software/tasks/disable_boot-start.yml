@@ -7,8 +7,8 @@
     - splunk_uninstall
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk disable boot-start"
   when:
-    - use_systemctl == true
-    - use_splunk_systemd|default(false) == true
+    - use_systemctl
+    - use_splunk_systemd|default(false)
 
 - name: Remove {{splunk_service_name}}.service file
   tags:
@@ -18,7 +18,7 @@
   ansible.builtin.file:
     path: "/etc/systemd/system/{{splunk_service_name}}.service"
     state: absent
-  when: use_systemctl == true
+  when: use_systemctl
 
 - name: Commit changes to systemctl
   tags:
@@ -26,4 +26,4 @@
     - splunk_software
     - splunk_uninstall
   ansible.builtin.command: systemctl daemon-reload
-  when: use_systemctl == true
+  when: use_systemctl

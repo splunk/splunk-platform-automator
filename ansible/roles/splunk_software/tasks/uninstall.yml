@@ -19,8 +19,8 @@
     path: "/etc/systemd/system/{{splunk_service_name}}.service"
   register: check_systemd_unit_file
   when:
-    - use_systemctl == true
-    - use_splunk_systemd|default(false) == true
+    - use_systemctl
+    - use_splunk_systemd|default(false)
 
 - name: Stop and disable {{splunk_service_name}} service
   tags:
@@ -32,9 +32,9 @@
     state: stopped
     enabled: no
   when:
-    - use_systemctl == true
-    - use_splunk_systemd|default(false) == true
-    - check_systemd_unit_file.stat.exists == true
+    - use_systemctl
+    - use_splunk_systemd|default(false)
+    - check_systemd_unit_file.stat.exists
 
 - name: Check for thp service file
   ansible.builtin.stat:
@@ -48,8 +48,8 @@
     - splunk_uninstall
   ansible.builtin.include_tasks: remove_disable_thp_service.yml
   when:
-    - use_systemctl == true
-    - check_thp_systemd.stat.exists == true
+    - use_systemctl
+    - check_thp_systemd.stat.exists
 
 - name: Check if splunk is stopped
   tags:
@@ -79,10 +79,10 @@
     - splunk_uninstall
   ansible.builtin.include_tasks: disable_boot-start.yml
   when:
-    - use_systemctl == true
-    - use_splunk_systemd|default(false) == true
-    - check_systemd_unit_file.stat.exists == true
-    - check_splunk_binary_file.stat.exists == true
+    - use_systemctl
+    - use_splunk_systemd|default(false)
+    - check_systemd_unit_file.stat.exists
+    - check_splunk_binary_file.stat.exists
 
 - name: Remove init.d scripts
   tags:

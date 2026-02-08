@@ -57,7 +57,7 @@
     - splunk_install
     - universal_forwarder_windows
   ansible.builtin.include_tasks: install.yml
-  when: splunk_path.stat.exists == false
+  when: not splunk_path.stat.exists
 
 - name: "config the splunk software"
   tags:

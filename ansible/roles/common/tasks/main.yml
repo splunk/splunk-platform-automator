@@ -26,7 +26,7 @@
 - name: Call Disable SELinux
   ansible.builtin.include_tasks: disable_selinux.yml
   when:
-    - disable_selinux|default(false) == true
+    - disable_selinux|default(false)
     - ansible_facts['os_family']|lower != 'windows'
     - "'role_universal_forwarder' not in group_names"
 
@@ -34,16 +34,16 @@
   ansible.builtin.include_tasks: disable_apparmor.yml
   when:
     - ansible_facts['os_family']|lower != 'windows'
-    - disable_apparmor|default(false) == true
+    - disable_apparmor|default(false)
 
 - name: Call Update hosts file
   ansible.builtin.include_tasks: hosts.yml
   when:
     - ansible_facts['os_family']|lower != 'windows'
-    - update_hosts_file|default(false) == true
+    - update_hosts_file|default(false)
 
 - name: Call Fix time sync
   ansible.builtin.include_tasks: fix_time_sync.yml
   when:
     - ansible_facts['os_family']|lower != 'windows'
-    - enable_time_sync_cron|default(false) == true
+    - enable_time_sync_cron|default(false)

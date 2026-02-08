@@ -17,4 +17,4 @@
     - splunk_command
   ansible.builtin.debug:
     var: splunk_command_output.stdout_lines
-  when: splunk_command_output_show|default(true)|bool == true
+  when: splunk_command_output_show|default(true)|bool

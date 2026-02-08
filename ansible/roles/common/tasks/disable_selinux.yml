@@ -7,7 +7,7 @@
   changed_when: false
   failed_when: "selinux_state.rc > 1"
   register: selinux_state
-  when: disable_selinux|default(false) == true
+  when: disable_selinux|default(false)
 
 - name: Disable SELinux
   tags:
@@ -17,9 +17,9 @@
     state: disabled
   register: need_reboot
   when:
-    - disable_selinux|default(false) == true
+    - disable_selinux|default(false)
     - selinux_state.stdout|lower == "enforcing"
 
 - name: Reboot the server and wait for it to come back up.
   reboot:
-  when: need_reboot.reboot_required|default(false) == true
+  when: need_reboot.reboot_required|default(false)

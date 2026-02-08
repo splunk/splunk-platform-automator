@@ -14,4 +14,4 @@
     - save_baseconfig
     - save_baseconfig_apps
   ansible.builtin.include_tasks: "save_app.yml"
-  when: splunk_save_baseconfig_apps|default(false) == true
+  when: splunk_save_baseconfig_apps|default(false)

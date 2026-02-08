@@ -34,7 +34,7 @@
               echo never > ${THP}/${SETTING}
           fi
       done
-  when: splunk_initd.stat.exists == true
+  when: splunk_initd.stat.exists
 
 - name: "install /etc/security/limits.d/splunk.conf"
   tags:
@@ -47,7 +47,7 @@
     owner: root
     group: root
     mode: '0644'
-  when: splunk_initd.stat.exists == true
+  when: splunk_initd.stat.exists
 
 - name: Add disable_huge and change_ulimits functions to /etc/init.d/splunk
   tags:
@@ -80,7 +80,7 @@
         ulimit -Hf unlimited
         ulimit -Sf unlimited
       }
-  when: splunk_initd.stat.exists == true
+  when: splunk_initd.stat.exists
 
 - name: Enable usage of functions during start in /etc/init.d/splunk
   tags:
@@ -95,7 +95,7 @@
     content: |2
           disable_huge
           change_ulimit
-  when: splunk_initd.stat.exists == true
+  when: splunk_initd.stat.exists
 
 - name: Enable usage of functions during restart in /etc/init.d/splunk
   tags:
@@ -110,11 +110,11 @@
     content: |2
           disable_huge
           change_ulimit
-  when: splunk_initd.stat.exists == true
+  when: splunk_initd.stat.exists
 
 - name: Commit changes to systemctl
   tags:
     - splunk
     - splunk_software
   ansible.builtin.command: systemctl daemon-reload
-  when: use_systemctl == true and splunk_initd.stat.exists == true
+  when: use_systemctl and splunk_initd.stat.exists

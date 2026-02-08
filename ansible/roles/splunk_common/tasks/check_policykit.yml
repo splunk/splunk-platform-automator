@@ -15,8 +15,8 @@
   ansible.builtin.fail:
     msg: "Policykit (polkit) is not installed. Install the policykit package or set splunk_use_policykit to false."
   when:
-    - splunk_use_policykit|default(true) == true
-    - policykit.stat.exists == false
+    - splunk_use_policykit|default(true)
+    - not policykit.stat.exists
 
 - name: Set policykit
   tags:
@@ -25,5 +25,5 @@
   ansible.builtin.set_fact:
     use_policykit: true
   when:
-    - splunk_use_policykit|default(true) == true
-    - policykit.stat.exists == true
+    - splunk_use_policykit|default(true)
+    - policykit.stat.exists

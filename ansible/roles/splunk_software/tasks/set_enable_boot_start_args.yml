@@ -15,7 +15,7 @@
   ansible.builtin.set_fact:
     splunk_systemd_managed: "-systemd-managed 1"
   when:
-    - use_systemctl == true
+    - use_systemctl
     - version_output.stdout is defined
     - splunk_installed_version is version_compare('7.2.2', '>=')
 
@@ -26,7 +26,7 @@
   ansible.builtin.set_fact:
     splunk_unit_file_name: "-systemd-unit-file-name {{splunk_service_name}}"
   when:
-    - use_systemctl == true
+    - use_systemctl
     - version_output.stdout is defined
     - splunk_installed_version is version_compare('7.2.2', '>=')
 
@@ -37,7 +37,7 @@
   ansible.builtin.set_fact:
     splunk_create_polkit_rules: "-create-polkit-rules 1"
   when:
-    - use_policykit == true
-    - use_systemctl == true
+    - use_policykit
+    - use_systemctl
     - version_output.stdout is defined
     - splunk_installed_version is version_compare('8.1.1', '>=')

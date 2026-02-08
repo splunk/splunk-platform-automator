@@ -31,7 +31,7 @@
   ansible.builtin.include_role:
     name: baseconfig_app
     tasks_from: splunk_ssl_web_certs
-  when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
+  when: splunk_ssl.web.enable and splunk_ssl.web.own_certs
 
 - name: Apply baseconfig app org_all_search_base
   tags:
@@ -193,7 +193,7 @@
     - save_baseconfig
     - save_serverclass
   ansible.builtin.include_tasks: "save_serverclass.yml"
-  when: splunk_save_serverclass|default(false) == true
+  when: splunk_save_serverclass|default(false)
 
 - name: Call update_dserver from role monitoring_console
   tags:

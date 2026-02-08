@@ -54,7 +54,7 @@
     group: "{{splunk_group}}"
     mode: '0600'
   notify: Restart splunk
-  when: app_local.stat.exists == false
+  when: not app_local.stat.exists
 
 - name: "({{ app_name }}) setting replication port"
   tags:
@@ -85,7 +85,7 @@
     group: "{{splunk_group}}"
     mode: '0600'
   notify: Restart splunk
-  when: splunk_ssl.inputs.enable == true
+  when: splunk_ssl.inputs.enable
 
 - name: "({{ app_name }}) enable ssl in inputs.conf"
   tags:
@@ -102,7 +102,7 @@
     group: "{{splunk_group}}"
     mode: '0600'
   notify: Restart splunk
-  when: splunk_ssl.inputs.enable == true
+  when: splunk_ssl.inputs.enable
 
 - name: "({{ app_name }}) setting ssl configs in inputs.conf"
   tags:
@@ -120,7 +120,7 @@
     mode: '0600'
   notify: Restart splunk
   loop: "{{ splunk_ssl.inputs.config | dict2items }}"
-  when: splunk_ssl.inputs.enable == true
+  when: splunk_ssl.inputs.enable
 
 - name: "({{ app_name }}) call set_bucket_tunings"
   tags:

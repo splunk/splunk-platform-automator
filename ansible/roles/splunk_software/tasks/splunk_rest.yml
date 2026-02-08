@@ -20,7 +20,7 @@
       ansible.builtin.set_fact:
         splunk_software_rest_json_output: "{{ splunk_software_rest_output.stdout|ansible.builtin.from_json }}"
       when: splunk_software_rest_output_mode|default("json") == "json"
-  when: splunk_software_rest_noauth|default(false)|bool == true
+  when: splunk_software_rest_noauth|default(false)|bool
 
 # =============================================================================
 # Authenticated Execution Block
@@ -53,7 +53,7 @@
       ansible.builtin.set_fact:
         splunk_software_rest_json_output: "{{ splunk_software_rest_output.content|ansible.builtin.from_json }}"
       when: splunk_software_rest_output_mode|default("json") == "json"
-  when: splunk_software_rest_noauth|default(false)|bool == false
+  when: not splunk_software_rest_noauth|default(false)|bool
 
 # =============================================================================
 # Debug Output Block
@@ -77,4 +77,4 @@
       ansible.builtin.debug:
         var: splunk_software_rest_json_output
       when: splunk_software_rest_output_mode|default("json") == "json"
-  when: splunk_software_rest_output_show|default(false)|bool == true
+  when: splunk_software_rest_output_show|default(false)|bool

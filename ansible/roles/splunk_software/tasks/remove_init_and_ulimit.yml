@@ -14,7 +14,7 @@
     - splunk_software
     - splunk_remove_init
   ansible.builtin.command: "{{ splunk_home }}/bin/splunk disable boot-start"
-  when: check_splunk_init.stat.exists == true
+  when: check_splunk_init.stat.exists
 
 - name: Find rc.d file to remove
   tags:
@@ -55,7 +55,7 @@
     - splunk_software
     - splunk_remove_init
   ansible.builtin.command: systemctl daemon-reload
-  when: use_systemctl == true
+  when: use_systemctl
 
 - name: Check /etc/rc.local
   tags:
@@ -75,7 +75,7 @@
     path: /etc/rc.local
     state: absent
     marker: "# {mark} ANSIBLE MANAGED BLOCK (THP)"
-  when: check_rc_local.stat.exists == true
+  when: check_rc_local.stat.exists
 
 - name: "remove /etc/security/limits.d/splunk.conf"
   tags:

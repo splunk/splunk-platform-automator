@@ -9,7 +9,7 @@
   ansible.builtin.group:
     name: "{{ splunk_group }}"
     state: present
-  when: splunk_group_create|default(true) == true
+  when: splunk_group_create|default(true)
 
 - name: Add splunk user
   tags:
@@ -23,7 +23,7 @@
     shell: /bin/bash
     create_home: true
     state: present
-  when: splunk_user_create|default(true) == true
+  when: splunk_user_create|default(true)
 
 - name: Adding splunk aliases
   tags:

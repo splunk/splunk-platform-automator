@@ -44,7 +44,7 @@
   ansible.builtin.include_role:
     name: baseconfig_app
     tasks_from: splunk_ssl_web_certs
-  when: splunk_ssl.web.enable == true and splunk_ssl.web.own_certs == true
+  when: splunk_ssl.web.enable and splunk_ssl.web.own_certs
 
 - name: Apply baseconfig app org_all_search_base
   tags:

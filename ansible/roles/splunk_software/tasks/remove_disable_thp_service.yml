@@ -9,7 +9,7 @@
     name: disable-thp
     state: stopped
     enabled: no
-  when: use_systemctl == true
+  when: use_systemctl
 
 - name: Remove disable-thp.service systemd file
   tags:
@@ -19,7 +19,7 @@
   ansible.builtin.file:
     path: /etc/systemd/system/disable-thp.service
     state: absent
-  when: use_systemctl == true
+  when: use_systemctl
 
 - name: Commit changes to systemctl
   tags:
@@ -27,4 +27,4 @@
     - splunk_software
     - splunk_install
   ansible.builtin.command: systemctl daemon-reload
-  when: use_systemctl == true
+  when: use_systemctl
