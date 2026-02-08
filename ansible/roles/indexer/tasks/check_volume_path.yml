@@ -1,7 +1,7 @@
 ---
 # Check if we can access the storage layer for storing buckets
 
-- name: "getting volume status"
+- name: Getting volume status
   tags:
     - splunk
     - indexer
@@ -10,38 +10,42 @@
     path: "{{ volume_path }}"
   register: volumepath
 
-- name: "check if volume exists"
+- name: Check if volume exists
   tags:
     - splunk
     - indexer
     - check_volume_path
-  ansible.builtin.fail:
-    msg: "volume:{{ volume_name }} path: {{ volume_path }} does not exist"
-  when: volumepath.stat.exists == false
+  ansible.builtin.assert:
+    that:
+      - volumepath.stat.exists
+    fail_msg: "volume:{{ volume_name }} path: {{ volume_path }} does not exist"
 
-- name: "check if volume path is a directory"
+- name: Check if volume path is a directory
   tags:
     - splunk
     - indexer
     - check_volume_path
-  ansible.builtin.fail:
-    msg: "volume:{{ volume_name }} path: {{ volume_path }} is not a directory"
-  when: volumepath.stat.isdir == false
+  ansible.builtin.assert:
+    that:
+      - volumepath.stat.isdir
+    fail_msg: "volume:{{ volume_name }} path: {{ volume_path }} is not a directory"
 
-- name: "check if volume path is own by splunk user"
+- name: Check if volume path is own by splunk user
   tags:
     - splunk
     - indexer
     - check_volume_path
-  ansible.builtin.fail:
-    msg: "volume:{{ volume_name }} path: {{ volume_path }} is not owned by user {{splunk_user}}"
-  when: volumepath.stat.pw_name != splunk_user
+  ansible.builtin.assert:
+    that:
+      - volumepath.stat.pw_name == splunk_user
+    fail_msg: "volume:{{ volume_name }} path: {{ volume_path }} is not owned by user {{splunk_user}}"
 
-- name: "check if volume path is writeable"
+- name: Check if volume path is writeable
   tags:
     - splunk
     - indexer
     - check_volume_path
-  ansible.builtin.fail:
-    msg: "volume:{{ volume_name }} path: {{ volume_path }} is not writable by user {{splunk_user}}"
-  when: volumepath.stat.wusr == false
+  ansible.builtin.assert:
+    that:
+      - volumepath.stat.wusr
+    fail_msg: "volume:{{ volume_name }} path: {{ volume_path }} is not writable by user {{splunk_user}}"
