@@ -75,14 +75,25 @@ class TestValidConfigurations:
         ]
         hosts = []
         for i, role in enumerate(all_roles):
-            host = {"name": f"host_{i}", "roles": [role]}
+            # Use iter for search_head to create 3 hosts (SHC minimum when deployer exists)
+            if role == "search_head":
+                host = {"iter": {"numbers": "1..3"}, "roles": [role], "shcluster": "shc1"}
+            # Use iter for indexer to create 2 hosts (IDXC minimum when cluster_manager exists)
+            elif role == "indexer":
+                host = {"iter": {"numbers": "1..2"}, "roles": [role], "idxcluster": "idxc1"}
+            else:
+                host = {"name": f"host_{i}", "roles": [role]}
             # cluster_manager requires idxcluster
             if role == "cluster_manager":
                 host["idxcluster"] = "idxc1"
+            # deployer requires shcluster
+            if role == "deployer":
+                host["shcluster"] = "shc1"
             hosts.append(host)
         
         config = {
             "plugin": "splunk-platform-automator",
+            "splunk_defaults": {"splunk_license_file": "Splunk.License"},
             "splunk_hosts": hosts
         }
         result = validate_config(config)
@@ -120,7 +131,8 @@ class TestValidConfigurations:
                     "roles": ["cluster_manager"],
                     "site": "site0",
                     "idxcluster": "idxc1"
-                }
+                },
+                {"iter": {"numbers": "1..2"}, "roles": ["indexer"], "idxcluster": "idxc1"}
             ]
         }
         result = validate_config(config)
@@ -135,7 +147,8 @@ class TestValidConfigurations:
                     "name": "cm",
                     "roles": ["cluster_manager"],
                     "idxcluster": "idxc1"
-                }
+                },
+                {"iter": {"numbers": "1..2"}, "roles": ["indexer"], "idxcluster": "idxc1"}
             ]
         }
         result = validate_config(config)
@@ -384,7 +397,8 @@ class TestClusterConfigurations:
             ],
             "splunk_hosts": [
                 {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
-                {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"}
+                {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"name": "idx2", "roles": ["indexer"], "idxcluster": "idxc1"}
             ]
         }
         result = validate_config(config)
@@ -404,7 +418,7 @@ class TestClusterConfigurations:
             ],
             "splunk_hosts": [
                 {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
-                {"name": "sh1", "roles": ["search_head"], "shcluster": "shc1"}
+                {"iter": {"numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"}
             ]
         }
         result = validate_config(config)
@@ -425,6 +439,62 @@ class TestClusterConfigurations:
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(config)
         assert "port" in str(exc_info.value).lower() or "65535" in str(exc_info.value)
+
+    def test_cluster_manager_requires_idxcluster_on_indexers(self):
+        """Test that at least 2 indexers must have idxcluster when cluster_manager exists."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+                {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
+                # Only 1 IDXC member - not enough
+            ]
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "2" in str(exc_info.value) and "idxcluster" in str(exc_info.value).lower()
+
+    def test_deployer_requires_minimum_search_heads(self):
+        """Test that deployer with fewer than 3 search heads raises error."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "dep", "roles": ["deployer"]},
+                {"name": "sh1", "roles": ["search_head"]}
+            ]
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "3 search heads" in str(exc_info.value)
+
+    def test_deployer_requires_shcluster_on_search_heads(self):
+        """Test that at least 3 search heads must have shcluster when deployer exists."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
+                {"name": "sh1", "roles": ["search_head"], "shcluster": "shc1"},
+                {"name": "sh2", "roles": ["search_head"], "shcluster": "shc1"},
+                # Only 2 SHC members - not enough
+            ]
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        # Either validator may trigger - both require at least 3
+        assert "3" in str(exc_info.value)
+
+    def test_license_manager_requires_license_file(self):
+        """Test that license_manager role requires splunk_license_file."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "lm", "roles": ["license_manager"]}
+            ]
+            # No splunk_defaults with splunk_license_file
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "splunk_license_file" in str(exc_info.value)
 
 
 class TestMultiRoleHosts:
@@ -447,7 +517,8 @@ class TestMultiRoleHosts:
         config = {
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [
-                {"name": "ds", "roles": ["deployment_server", "deployer"]}
+                {"name": "ds", "roles": ["deployment_server", "deployer"], "shcluster": "shc1"},
+                {"iter": {"numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"}
             ]
         }
         result = validate_config(config)
