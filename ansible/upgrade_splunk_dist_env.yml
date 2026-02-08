@@ -11,7 +11,6 @@
 # 2. Upgrade the search head tier.
 # 3. Upgrade the peer node tier.
 
-
 - name: Upgrade cluster master
   hosts: role_cluster_master
   become: true
@@ -19,10 +18,9 @@
 
   tasks:
     - name: Call upgrade splunk from role splunk_software
-      include_role:
+      ansible.builtin.include_role:
         name: splunk_software
         tasks_from: upgrade
-
 
 # Upgrading a search cluster version 6.4+
 # https://docs.splunk.com/Documentation/Splunk/latest/DistSearch/UpgradeaSHC#Perform_a_member-by-member_upgrade
@@ -35,8 +33,6 @@
 
   tasks:
     - name: Call upgrade splunk from role splunk_software
-      include_role:
+      ansible.builtin.include_role:
         name: splunk_software
         tasks_from: upgrade
-
-,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_master,role_monitoring_console,role_search_head,role_universal_forwarder

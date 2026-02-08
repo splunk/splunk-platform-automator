@@ -8,7 +8,7 @@
 
   tasks:
     - name: Call splunk_conf role
-      include_role:
+      ansible.builtin.include_role:
         name: splunk_conf
       when:
         - splunk_conf is defined

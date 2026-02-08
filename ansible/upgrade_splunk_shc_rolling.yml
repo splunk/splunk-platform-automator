@@ -7,9 +7,8 @@
   become_user: root
 
   tasks:
-
     - name: Call upgrade_shc_rolling_begin
-      include_role:
+      ansible.builtin.include_role:
         name: splunk_software
         tasks_from: upgrade_shc_rolling_begin
 
@@ -20,9 +19,8 @@
   become_user: root
 
   tasks:
-
     - name: Call upgrade_shc_rolling_check
-      include_role:
+      ansible.builtin.include_role:
         name: splunk_software
         tasks_from: upgrade_shc_rolling_check
 
@@ -32,8 +30,7 @@
   become_user: root
 
   tasks:
-
     - name: Call upgrade_shc_rolling_end
-      include_role:
+      ansible.builtin.include_role:
         name: splunk_software
         tasks_from: upgrade_shc_rolling_end

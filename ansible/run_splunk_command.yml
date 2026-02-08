@@ -1,5 +1,4 @@
 ---
-
 # Usage: run_splunk_command.yml --limit <hostname> -e "splunk_command='show shcluster-status'"
 
 - name: Run Splunk command
@@ -8,8 +7,7 @@
   become_user: root
 
   tasks:
-
     - name: Call splunk_command from role splunk_common
-      include_role:
+      ansible.builtin.include_role:
         name: splunk_software
         tasks_from: splunk_command

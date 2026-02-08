@@ -9,9 +9,8 @@
   become_user: root
 
   tasks:
-
     - name: Install certs for inputs ssl
-      include_role:
+      ansible.builtin.include_role:
         name: baseconfig_app
         tasks_from: splunk_ssl_inputs_certs
       when: splunk_ssl.inputs.enable == true and splunk_ssl.inputs.own_certs == true

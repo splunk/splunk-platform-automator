@@ -1,13 +1,11 @@
 ---
-
 - name: Backup splunk config
   hosts: role_cluster_manager,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_manager,role_monitoring_console,role_search_head,role_universal_forwarder
   become: true
   become_user: root
 
   tasks:
-
     - name: Call backup_splunk_etc splunk from role splunk_software
-      include_role:
+      ansible.builtin.include_role:
         name: splunk_software
         tasks_from: backup_splunk_etc

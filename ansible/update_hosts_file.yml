@@ -5,9 +5,8 @@
   hosts: all,!role_universal_forwarder_windows
 
   tasks:
-
     - name: Call hosts from role common
-      include_role:
+      ansible.builtin.include_role:
         name: common
         tasks_from: hosts
 
@@ -15,8 +14,7 @@
   hosts: role_universal_forwarder_windows
 
   tasks:
-
     - name: Call restart splunk from role splunk_software
-      include_role:
+      ansible.builtin.include_role:
         name: universal_forwarder_windows
         tasks_from: hosts

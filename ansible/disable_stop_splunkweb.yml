@@ -1,13 +1,11 @@
 ---
-
 - name: Disable splunkweb
   hosts: all,!role_universal_forwarder,!role_universal_forwarder_windows
   become: true
   become_user: root
 
   tasks:
-
     - name: Call disable_splunkwebfrom role splunk_common
-      include_role:
+      ansible.builtin.include_role:
         name: splunk_software
         tasks_from: disable_splunkweb.yml

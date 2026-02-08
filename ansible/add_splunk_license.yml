@@ -7,8 +7,7 @@
   become_user: root
 
   tasks:
-
     - name: Call license from role license_manager
-      include_role:
+      ansible.builtin.include_role:
         name: license_manager
         tasks_from: license

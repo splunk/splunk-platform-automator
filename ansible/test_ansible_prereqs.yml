@@ -11,7 +11,7 @@
 
   tasks:
     - name: Call check_ansible_requirements role common
-      include_role:
+      ansible.builtin.include_role:
         name: common
         tasks_from: check_ansible_requirements.yml
 
@@ -70,6 +70,6 @@
         - splunk_user in ansible_facts.getent_passwd
 
     - name: Call check_policykit role splunk_common
-      include_role:
+      ansible.builtin.include_role:
         name: splunk_common
         tasks_from: check_policykit.yml

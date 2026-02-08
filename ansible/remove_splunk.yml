@@ -9,6 +9,6 @@
   tasks:
 
     - name: Call uninstall from role splunk_software
-      include_role:
+      ansible.builtin.include_role:
         name: splunk_software
         tasks_from: uninstall
