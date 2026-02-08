@@ -316,11 +316,34 @@ class TestSplunkDeployment:
         return self.manager.get_all_roles()
     
     # =========================================================================
-    # Test 11: Verify Data Flow
+    # Test 11: Wait for Splunk Services
     # =========================================================================
-    def test_11_verify_data_flow(self, config_file):
+    def test_11_wait_for_splunk(self, config_file):
         """
-        Step 11: Verify data is flowing into Splunk.
+        Step 11: Wait for Splunk to be fully running on all hosts.
+        
+        Runs: ansible/verification/wait_for_splunk.yml
+        - Waits for splunkd port to be listening
+        - Waits for splunkd process to be running
+        
+        This ensures Splunk is ready after any restarts during deployment.
+        """
+        if not getattr(self, 'is_splunk_configured', False):
+            pytest.fail("Previous step failed: Splunk not configured")
+        
+        print("\n[WAIT] Waiting for Splunk services to be fully running...")
+        
+        result = self._run_verification_playbook("wait_for_splunk.yml")
+        
+        assert result.returncode == 0, "Timeout waiting for Splunk services to start"
+        print("[WAIT] All Splunk services are running")
+    
+    # =========================================================================
+    # Test 12: Verify Data Flow
+    # =========================================================================
+    def test_12_verify_data_flow(self, config_file):
+        """
+        Step 12: Verify data is flowing into Splunk.
         
         Runs: ansible/verification/verify_data_flow.yml
         - Searches _internal index for data
@@ -337,11 +360,38 @@ class TestSplunkDeployment:
         print("[VERIFY] Data flow verification passed")
     
     # =========================================================================
-    # Test 12: Check Indexer Cluster Health
+    # Test 13: Wait for Bucket Fixup
     # =========================================================================
-    def test_12_check_idxc_health(self, config_file):
+    def test_13_wait_for_bucket_fixup(self, config_file):
         """
-        Step 12: Verify Indexer Cluster health.
+        Step 13: Wait for bucket fixup tasks to complete.
+        
+        Runs: ansible/verification/wait_for_bucket_fixup.yml
+        - Waits for replication_factor, search_factor, and generation fixups
+        
+        Skipped if 'cluster_manager' role is not in config.
+        """
+        if not getattr(self, 'is_splunk_configured', False):
+            pytest.fail("Previous step failed: Splunk not configured")
+        
+        roles = self._get_all_roles()
+        
+        if 'cluster_manager' not in roles:
+            pytest.skip("No cluster_manager role in configuration - skipping bucket fixup wait")
+        
+        print("\n[WAIT] Waiting for bucket fixup tasks to complete...")
+        
+        result = self._run_verification_playbook("wait_for_bucket_fixup.yml")
+        
+        assert result.returncode == 0, "Bucket fixup wait failed or timed out"
+        print("[WAIT] Bucket fixup tasks complete")
+    
+    # =========================================================================
+    # Test 14: Check Indexer Cluster Health
+    # =========================================================================
+    def test_14_check_idxc_health(self, config_file):
+        """
+        Step 14: Verify Indexer Cluster health.
         
         Runs: ansible/verification/check_idxc_health.yml
         - Checks cluster manager for service_ready_flag
@@ -364,11 +414,11 @@ class TestSplunkDeployment:
         print("[VERIFY] Indexer Cluster is healthy")
     
     # =========================================================================
-    # Test 13: Check Search Head Cluster Health
+    # Test 15: Check Search Head Cluster Health
     # =========================================================================
-    def test_13_check_shc_health(self, config_file):
+    def test_15_check_shc_health(self, config_file):
         """
-        Step 13: Verify Search Head Cluster health.
+        Step 15: Verify Search Head Cluster health.
         
         Runs: ansible/verification/check_shc_health.yml
         - Checks SHC captain for service_ready_flag
@@ -389,3 +439,4 @@ class TestSplunkDeployment:
         
         assert result.returncode == 0, "Search Head Cluster health check failed"
         print("[VERIFY] Search Head Cluster is healthy")
+

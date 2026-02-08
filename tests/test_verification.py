@@ -97,11 +97,33 @@ class TestSplunkVerification:
                 pytest.fail("Deployment not complete: splunk_config.yml not found")
     
     # =========================================================================
-    # Test 01: Verify Data Flow
+    # Test 01: Wait for Splunk Services
     # =========================================================================
-    def test_01_verify_data_flow(self, config_file):
+    def test_01_wait_for_splunk(self, config_file):
         """
-        Verify that data is flowing into Splunk.
+        Step 01: Wait for Splunk to be fully running on all hosts.
+        
+        Runs: ansible/verification/wait_for_splunk.yml
+        - Waits for splunkd port to be listening
+        - Waits for splunkd process to be running
+        
+        This ensures Splunk is ready before running other verification tests.
+        """
+        self._check_deployment_complete()
+        
+        print("\n[WAIT] Waiting for Splunk services to be fully running...")
+        
+        result = self._run_verification_playbook("wait_for_splunk.yml")
+        
+        assert result.returncode == 0, "Timeout waiting for Splunk services to start"
+        print("[WAIT] All Splunk services are running")
+
+    # =========================================================================
+    # Test 02: Verify Data Flow
+    # =========================================================================
+    def test_02_verify_data_flow(self, config_file):
+        """
+        Step 02: Verify data is flowing into Splunk.
         
         Runs: ansible/verification/verify_data_flow.yml
         - Searches _internal index for data
@@ -117,13 +139,39 @@ class TestSplunkVerification:
         
         assert result.returncode == 0, "Data flow verification failed - no data in _internal index"
         print("[VERIFY] Data flow verification passed")
+
+    # =========================================================================
+    # Test 03: Wait for Bucket Fixup
+    # =========================================================================
+    def test_03_wait_for_bucket_fixup(self, config_file):
+        """
+        Step 03: Wait for bucket fixup tasks to complete.
+        
+        Runs: ansible/verification/wait_for_bucket_fixup.yml
+        - Waits for replication_factor, search_factor, and generation fixups
+        
+        Skipped if 'cluster_manager' role is not in config.
+        """
+        self._check_deployment_complete()
+        
+        roles = self._get_all_roles()
+        
+        if 'cluster_manager' not in roles:
+            pytest.skip("No cluster_manager role in configuration - skipping bucket fixup wait")
+        
+        print("\n[WAIT] Waiting for bucket fixup tasks to complete...")
+        
+        result = self._run_verification_playbook("wait_for_bucket_fixup.yml")
+        
+        assert result.returncode == 0, "Bucket fixup wait failed or timed out"
+        print("[WAIT] Bucket fixup tasks complete")
     
     # =========================================================================
-    # Test 02: Check Indexer Cluster Health
+    # Test 04: Check Indexer Cluster Health
     # =========================================================================
-    def test_02_check_idxc_health(self, config_file):
+    def test_04_check_idxc_health(self, config_file):
         """
-        Verify Indexer Cluster health.
+        Step 04: Verify Indexer Cluster health.
         
         Runs: ansible/verification/check_idxc_health.yml
         - Checks cluster manager for service_ready_flag
@@ -145,11 +193,11 @@ class TestSplunkVerification:
         print("[VERIFY] Indexer Cluster is healthy")
     
     # =========================================================================
-    # Test 03: Check Search Head Cluster Health
+    # Test 05: Check Search Head Cluster Health
     # =========================================================================
-    def test_03_check_shc_health(self, config_file):
+    def test_05_check_shc_health(self, config_file):
         """
-        Verify Search Head Cluster health.
+        Step 05: Verify Search Head Cluster health.
         
         Runs: ansible/verification/check_shc_health.yml
         - Checks SHC captain for service_ready_flag
