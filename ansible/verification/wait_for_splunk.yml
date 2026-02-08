@@ -1,0 +1,31 @@
+---
+# Wait for Splunk to be fully running on all hosts
+# Run this after deployment and before verification tests
+# Splunk services may have been restarted and need time to fully start
+
+- name: Wait for Splunk Services
+  hosts: splunk_host
+  gather_facts: false
+  tasks:
+    - name: Wait for splunkd management port to be listening
+      ansible.builtin.wait_for:
+        port: "{{ splunkd_port | default(8089) }}"
+        host: "{{ ansible_host | default(inventory_hostname) }}"
+        delay: 5
+        timeout: 300
+      delegate_to: localhost
+      become: false
+
+    - name: Wait for splunkd to be fully started
+      ansible.builtin.shell: '{{ splunk_home }}/bin/splunk status | grep -q "splunkd is running"'
+      become: true
+      become_user: "{{ splunk_user }}"
+      check_mode: false
+      register: splunk_status
+      until: splunk_status.rc == 0
+      retries: 30
+      delay: 10
+
+    - name: Display Splunk status
+      ansible.builtin.debug:
+        msg: "✅ {{ inventory_hostname }}: Splunk is running"

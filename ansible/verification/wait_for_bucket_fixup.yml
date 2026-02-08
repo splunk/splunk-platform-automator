@@ -1,0 +1,38 @@
+---
+# Wait for bucket fixup tasks to complete on the indexer cluster
+# Run this before checking IDXC health after a fresh deployment or rolling restart
+
+- name: Wait for Bucket Fixup Tasks
+  hosts: role_cluster_manager
+  become: true
+  become_user: root
+  gather_facts: false
+
+  vars:
+    # Fixup levels to check - these are the main ones that indicate cluster issues
+    fixup_levels:
+      - replication_factor
+      - search_factor
+      - generation
+
+  tasks:
+    - name: Check and wait for bucket fixup completion
+      ansible.builtin.uri:
+        url: "https://localhost:{{ splunkd_port | default(8089) }}/services/cluster/manager/fixup?level={{ item }}&output_mode=json"
+        method: GET
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        validate_certs: false
+        force_basic_auth: true
+      register: fixup_status
+      until: (fixup_status.json.entry | default([]) | length) == 0
+      retries: 60
+      delay: 30
+      changed_when: false
+      loop: "{{ fixup_levels }}"
+      loop_control:
+        label: "Checking fixup level: {{ item }}"
+
+    - name: Display fixup status
+      ansible.builtin.debug:
+        msg: "✅ All bucket fixup tasks complete"
