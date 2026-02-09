@@ -26,6 +26,7 @@ terraform:
     tags:
       Env: "SPA Testing (2 site IDXC, SHC, MC, DS, HF, UF)"
       TestConfig: "2site-idxc_shc_mc_ds_hf_uf"
+      SPADirName: "{{ playbook_dir | dirname | basename }}"
       splunkit_data_classification: public
       splunkit_environment_type: non-prd
 

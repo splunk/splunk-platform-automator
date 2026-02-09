@@ -26,6 +26,7 @@ terraform:
     tags:
       Env: "SPA Testing (Single Node)"
       TestConfig: "single_node"
+      SPADirName: "{{ playbook_dir | dirname | basename }}"
       splunkit_data_classification: public
       splunkit_environment_type: non-prd
 
