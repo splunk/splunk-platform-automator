@@ -1,6 +1,5 @@
 ---
-
-- name: "check for systemctl"
+- name: Check for systemctl
   tags:
     - splunk
     - splunk_common

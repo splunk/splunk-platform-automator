@@ -1,6 +1,5 @@
 ---
-
-- name: "check for policykit"
+- name: Check for policykit
   tags:
     - splunk
     - splunk_common

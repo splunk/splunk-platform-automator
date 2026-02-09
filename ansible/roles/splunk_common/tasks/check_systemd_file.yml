@@ -1,6 +1,5 @@
 ---
-
-- name: "check for splunk systemd service file"
+- name: Check for splunk systemd service file
   tags:
     - splunk
     - splunk_common
