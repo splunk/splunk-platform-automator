@@ -21,11 +21,12 @@ terraform:
     key_name: "aws_key"
     ssh_private_key_file: "~/.ssh/aws_key.pem"
     security_group_names: ["Splunk_Basic"]
-    instance_type: "c5.4xlarge"
+    instance_type: "t3.2xlarge"
     root_volume_size: 50
     tags:
       Env: "SPA Testing (2 site IDXC, SHC, MC, DS, HF, UF)"
       TestConfig: "2site-idxc_shc_mc_ds_hf_uf"
+      SPADirName: "{{ playbook_dir | dirname | basename }}"
       splunkit_data_classification: public
       splunkit_environment_type: non-prd
 

@@ -8,7 +8,7 @@
   ansible.builtin.debug:
     msg: "role '{{ role_name }}' start"
 
-- name: "create splunk user and group"
+- name: Create splunk user and group
   tags:
     - splunk
     - splunk_software
@@ -54,7 +54,7 @@
     - not splunk_secret_file.stat.exists
     - play_hosts|length > 1
 
-- name: "install the splunk software"
+- name: Install the splunk software
   tags:
     - splunk
     - splunk_software
@@ -91,13 +91,13 @@
     - use_splunk_systemd|default(false)
     - splunk_systemd_services[splunk_service_name] is defined
 
-- name: "user interface configuration"
+- name: User interface configuration
   tags:
     - splunk
     - splunk_software
   ansible.builtin.include_tasks: ui_config.yml
 
-- name: "host and servername settings"
+- name: Host and servername settings
   tags:
     - splunk
     - splunk_software
