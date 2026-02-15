@@ -1,0 +1,41 @@
+---
+# Extract ITSI license/access apps to etc/apps on license manager
+# Runs only on role_license_manager. Notifies "Restart splunk" so the license server picks up the apps (app_path set in role main.yml).
+
+- name: "Set ITSI version check apps and base for license manager"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_version_check_apps: "{{ itsi_lm_apps }}"
+    apps_itsi_version_check_base: "{{ apps_itsi_splunk_home }}/etc/apps"
+
+- name: "Check existing ITSI version on license manager (all apps)"
+  ansible.builtin.include_tasks: itsi_version_check.yml
+
+- name: "Build extra_opts for ITSI license apps unarchive"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    itsi_lm_extra_opts: "{{ ['--dereference'] + itsi_lm_apps }}"
+  when: apps_itsi_update_needed | default(true)
+
+- name: "Upload and unarchive ITSI license apps to etc/apps"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.unarchive:
+    src: "{{ apps_itsi_spl_path }}"
+    dest: "{{ apps_itsi_splunk_home }}/etc/apps"
+    remote_src: "{{ splunk_app_deployment.target_download | default(false) }}"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    extra_opts: "{{ itsi_lm_extra_opts }}"
+  notify: "Restart splunk"
+  become: true
+  become_user: "{{ splunk_user | default('splunk') }}"
+  when: apps_itsi_update_needed | default(true)

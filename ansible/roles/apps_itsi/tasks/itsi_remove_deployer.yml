@@ -1,0 +1,27 @@
+---
+# Remove ITSI apps from deployer (shcluster/apps). Called from process_deployer_app when state absent.
+# Includes common to resolve archive and build app list, then removes from shcluster/apps.
+
+- name: "Set app_path so splunk_common 'Restart splunk' handler runs when notified"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    app_path: "{{ splunk_home }}/etc/apps"
+
+- name: "Resolve archive and build ITSI app list for removal (deployer)"
+  ansible.builtin.include_tasks: itsi_remove_common.yml
+
+- name: "Remove ITSI apps from deployer (shcluster/apps)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ splunk_home }}/etc/shcluster/apps/{{ item }}"
+    state: absent
+  loop: "{{ itsi_sh_apps_from_archive if (splunk_app_deployment.target_download | default(false)) else hostvars['localhost']['itsi_sh_apps_from_archive'] }}"
+  loop_control:
+    label: "{{ item }}"
+  notify: "Push shcluster bundle"

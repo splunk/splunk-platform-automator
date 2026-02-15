@@ -17,7 +17,7 @@
     - splunk_apps
     - deployment_server
   ansible.builtin.set_fact:
-    # Get hosts with target_roles, exclude clustered hosts
+    # Get hosts with target_roles; exclude clustered hosts and roles that always get apps direct (never from DS)
     app_whitelist_hosts: >-
       {{
         app_item.target_roles | default([])
@@ -26,6 +26,9 @@
         | flatten
         | reject('in', groups | select('match', '^idxcluster_') | map('extract', groups) | flatten | list)
         | reject('in', groups | select('match', '^shcluster_') | map('extract', groups) | flatten | list)
+        | reject('in', groups.role_license_manager | default([]))
+        | reject('in', groups.role_search_head | default([]))
+        | reject('in', groups.role_indexer | default([]))
         | unique
         | list
       }}

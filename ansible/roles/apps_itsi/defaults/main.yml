@@ -1,0 +1,36 @@
+---
+# Defaults for Splunk IT Service Intelligence (ITSI) premium pack deployment
+# Override in splunk_config.yml under the app's entry.
+# Index paths default to splunk_volume_defaults (framework) when not set.
+
+# ITSI version (used for SA-ITOA config and optional path derivation when source is local)
+itsi_version: "4.21.0"
+
+# Splunkbase app_id for ITSI when source: splunkbase
+itsi_splunkbase_app_id: 1841
+
+# Index volume names (only used when app_item does not set itsi_index_*; otherwise framework splunk_volume_defaults is used)
+itsi_index_home_path: "volume:primary"
+itsi_index_cold_path: "volume:primary"
+
+# Apps to extract from the .spl per role (do not change unless you know the bundle layout)
+itsi_cm_apps:
+  - SA-IndexCreation
+itsi_lm_apps:
+  - SA-ITSI-Licensechecker
+  - SA-UserAccess
+# Search head gets full archive; these get index config overlay
+itsi_sh_indexer_apps:
+  - SA-IndexCreation
+
+# App list for SH/deployer comes from the archive (app conf cache or remove list). No fallback; if empty we fail.
+itsi_sh_apps: []
+
+# Optional: disable notable event actions (uncomment and set in app config if needed)
+# itsi_notification_disable:
+#   - remedy
+#   - puppet
+#   - victorops
+#   - remedy_incident
+#   - itsi_event_action_send_to_phantom
+#   - service_now

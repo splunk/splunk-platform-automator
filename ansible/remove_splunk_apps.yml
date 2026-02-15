@@ -1,6 +1,12 @@
 ---
 # Remove Splunk Apps (processes apps with state: absent from config)
 # Uses the same four roles as deploy_splunk_apps.yml with a filtered app list.
+#
+# Flow: Play 1 filters to apps with state=absent and sets splunk_app_deployment_filtered.
+# Plays 2–5 run the same roles as deploy, passing that filtered config so each role only
+# processes apps to remove. ITSI removal is handled by those roles via role-specific task
+# files: itsi_remove_deployer.yml, itsi_remove_cluster_manager.yml, itsi_remove_license_manager.yml,
+# itsi_remove_search_head.yml (invoked from process_deployer_app, process_cm_app, process_direct_app).
 
 - name: Pre-removal checks and filter apps
   hosts: localhost
@@ -85,8 +91,16 @@
   gather_facts: yes
   vars:
     splunk_app_deployment: "{{ hostvars['localhost']['splunk_app_deployment_filtered'] }}"
-  roles:
-    - role: apps_deployment_server
+  tasks:
+    - name: Show removal config (apps to remove)
+      ansible.builtin.debug:
+        msg: "Removal config has {{ splunk_app_deployment.apps | default([]) | length }} app(s) to remove: {{ splunk_app_deployment.apps | default([]) | map(attribute='name') | list }}"
+      when: hostvars['localhost']['apps_to_remove'] | default([]) | length > 0
+
+    - name: Run deployment server role for app removal
+      ansible.builtin.include_role:
+        name: apps_deployment_server
+      when: hostvars['localhost']['apps_to_remove'] | default([]) | length > 0
 
 - name: Remove apps from Cluster Managers
   hosts: role_cluster_manager
@@ -95,8 +109,11 @@
   gather_facts: yes
   vars:
     splunk_app_deployment: "{{ hostvars['localhost']['splunk_app_deployment_filtered'] }}"
-  roles:
-    - role: apps_cluster_manager
+  tasks:
+    - name: Run cluster manager role for app removal
+      ansible.builtin.include_role:
+        name: apps_cluster_manager
+      when: hostvars['localhost']['apps_to_remove'] | default([]) | length > 0
 
 - name: Remove apps from Deployers
   hosts: role_deployer
@@ -105,8 +122,11 @@
   gather_facts: yes
   vars:
     splunk_app_deployment: "{{ hostvars['localhost']['splunk_app_deployment_filtered'] }}"
-  roles:
-    - role: apps_deployer
+  tasks:
+    - name: Run deployer role for app removal
+      ansible.builtin.include_role:
+        name: apps_deployer
+      when: hostvars['localhost']['apps_to_remove'] | default([]) | length > 0
 
 - name: Remove apps directly from hosts
   hosts: role_search_head,role_indexer,role_heavy_forwarder,role_license_manager,role_monitoring_console,role_universal_forwarder
@@ -115,8 +135,11 @@
   gather_facts: yes
   vars:
     splunk_app_deployment: "{{ hostvars['localhost']['splunk_app_deployment_filtered'] }}"
-  roles:
-    - role: apps_direct
+  tasks:
+    - name: Run direct deployment role for app removal
+      ansible.builtin.include_role:
+        name: apps_direct
+      when: hostvars['localhost']['apps_to_remove'] | default([]) | length > 0
 
 - name: Removal summary
   hosts: localhost

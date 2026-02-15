@@ -1,0 +1,31 @@
+---
+# Remove ITSI apps from search head (etc/apps). Called from process_direct_app when state absent and role search_head.
+# Includes common to resolve archive and build app list, then removes from etc/apps (with optional itsi_sh_name/itsi_shc_name filter).
+
+- name: "Set app_path so splunk_common 'Restart splunk' handler runs when notified"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    app_path: "{{ splunk_home }}/etc/apps"
+
+- name: "Resolve archive and build ITSI app list for removal (search head)"
+  ansible.builtin.include_tasks: itsi_remove_common.yml
+
+- name: "Remove ITSI apps from search head (etc/apps)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ splunk_home }}/etc/apps/{{ item }}"
+    state: absent
+  loop: "{{ itsi_sh_apps_from_archive if (splunk_app_deployment.target_download | default(false)) else hostvars['localhost']['itsi_sh_apps_from_archive'] }}"
+  loop_control:
+    label: "{{ item }}"
+  notify: "Restart splunk"
+  when: >-
+    (app_item.itsi_sh_name is not defined and app_item.itsi_shc_name is not defined)
+    or (app_item.itsi_sh_name is defined and inventory_hostname == app_item.itsi_sh_name)
+    or (app_item.itsi_shc_name is defined and inventory_hostname in (groups['shcluster_' + app_item.itsi_shc_name] | default([])))

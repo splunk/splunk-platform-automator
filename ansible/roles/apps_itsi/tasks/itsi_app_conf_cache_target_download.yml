@@ -1,0 +1,119 @@
+---
+# ITSI app.conf cache and expected versions when archive is on target (target_download).
+# Extract only default/app.conf from the archive on each target, read [launcher] version, set apps_itsi_expected_versions.
+# Include this file only when: splunk_app_deployment.target_download | default(false)
+
+- name: "Ensure ITSI app.conf cache dir exists (target_download)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ apps_itsi_cache_dir }}/itsi_app_confs/{{ apps_itsi_resolved_version }}"
+    state: directory
+    mode: '0755'
+
+# .spl is gzip/tar format; list with tar tzf (same as .tgz)
+- name: "List ITSI archive for app.conf paths (target_download)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.shell:
+    cmd: "tar tzf '{{ apps_itsi_spl_path }}' | grep -E '/default/app\\.conf$'"
+  register: itsi_app_conf_list_tar
+  changed_when: false
+
+- name: "Set ITSI app.conf paths from archive listing (target_download)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    itsi_app_conf_paths: "{{ (itsi_app_conf_list_tar.stdout_lines | default([])) | map('trim') | select() | list }}"
+  when: itsi_app_conf_list_tar is defined and (itsi_app_conf_list_tar.stdout_lines | default([]) | length > 0)
+
+# Derive app names (first path component) for later use
+- name: "Set ITSI app names from app.conf paths (target_download)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    itsi_app_conf_app_names: "{{ (itsi_app_conf_paths | default([])) | map('regex_replace', '^([^/]+)/.*', '\\1') | unique | list }}"
+  when: itsi_app_conf_paths is defined and (itsi_app_conf_paths | length > 0)
+
+# Only apps needed for this host: full list for deployer/SH, role-specific for LM/CM
+- name: "Set ITSI apps needed for this host (target_download)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    itsi_app_conf_app_names_needed: "{{ itsi_app_conf_app_names if (inventory_hostname in (groups['role_deployer'] | default([])) or inventory_hostname in (groups['role_search_head'] | default([]))) else (itsi_lm_apps if inventory_hostname in (groups['role_license_manager'] | default([])) else itsi_cm_apps) }}"
+  when: itsi_app_conf_app_names is defined and (itsi_app_conf_app_names | length > 0)
+
+# Reduce paths to only those for apps needed (e.g. for license_manager only SA-ITSI-Licensechecker and SA-UserAccess)
+- name: "Initialize ITSI app.conf paths filtered (target_download)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    itsi_app_conf_paths_filtered: []
+  when: itsi_app_conf_app_names_needed is defined
+
+- name: "Set ITSI app.conf paths needed for this host (target_download)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    itsi_app_conf_paths_filtered: "{{ itsi_app_conf_paths_filtered | default([]) + [item] }}"
+  loop: "{{ itsi_app_conf_paths | default([]) }}"
+  loop_control:
+    label: "{{ (item.split('/') | first) }}"
+  when:
+    - itsi_app_conf_paths is defined
+    - itsi_app_conf_app_names_needed is defined
+    - (item.split('/') | first) in itsi_app_conf_app_names_needed
+
+# .spl is gzip/tar format; extract with tar -xzf (same as .tgz) — only apps needed
+- name: "Extract ITSI app.conf files from archive to cache (target_download)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.shell:
+    cmd: "tar -xzf '{{ apps_itsi_spl_path }}' -C '{{ apps_itsi_cache_dir }}/itsi_app_confs/{{ apps_itsi_resolved_version }}' {{ itsi_app_conf_paths_filtered | default(itsi_app_conf_paths) | join(' ') }}"
+  args:
+    creates: "{{ apps_itsi_cache_dir }}/itsi_app_confs/{{ apps_itsi_resolved_version }}/{{ ((itsi_app_conf_paths_filtered | default(itsi_app_conf_paths)) | default([]) | first) | default('SA-ITSI/default/app.conf') }}"
+  when: (itsi_app_conf_paths_filtered | default(itsi_app_conf_paths) | default([]) | length) > 0
+
+# Read version from [launcher] section only for apps needed
+- name: "Get version from [launcher] in cached app.conf (target_download)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.shell:
+    cmd: |
+      f="{{ apps_itsi_cache_dir }}/itsi_app_confs/{{ apps_itsi_resolved_version }}/{{ item }}/default/app.conf"
+      sed -n '/\[launcher\]/,/^\[/p' "$f" | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//'
+  loop: "{{ itsi_app_conf_app_names_needed | default(itsi_app_conf_app_names) | default([]) }}"
+  register: itsi_cached_versions
+  changed_when: false
+  when: (itsi_app_conf_app_names_needed | default(itsi_app_conf_app_names) | default([]) | length) > 0
+
+- name: "Build ITSI expected versions dict from [launcher] version (target_download)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_expected_versions: "{{ apps_itsi_expected_versions | default({}) | combine({ item.item: (item.stdout | default('') | trim) }) }}"
+  loop: "{{ itsi_cached_versions.results | default([]) }}"
+  when:
+    - itsi_cached_versions is defined
+    - itsi_cached_versions.results is defined
+    - (itsi_cached_versions.results | length > 0)

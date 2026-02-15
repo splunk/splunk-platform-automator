@@ -1,0 +1,6 @@
+---
+# Depends on splunk_common for variables (splunk_home, splunk_user, splunk_service_name, etc.)
+# and for handlers: "Restart splunk", "Apply indexer cluster bundle".
+
+dependencies:
+  - role: splunk_common

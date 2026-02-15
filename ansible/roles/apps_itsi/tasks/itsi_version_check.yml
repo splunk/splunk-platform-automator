@@ -1,0 +1,79 @@
+---
+# Compare all ITSI app versions on target to expected versions from cache.
+# Expects: apps_itsi_version_check_apps (list of app names), apps_itsi_version_check_base (path to etc/apps or shcluster/apps or manager-apps), apps_itsi_expected_versions (dict from itsi_app_conf_cache).
+
+- name: "Filter expected versions to apps needed for this role"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_expected_versions_filtered: "{{ dict(apps_itsi_version_check_apps | zip(apps_itsi_version_check_apps | map('extract', apps_itsi_expected_versions | default({})) | map('default', '') | list)) }}"
+
+# Run version read as splunk user so we can read etc/apps, manager-apps, or shcluster/apps
+- name: "Get version from [launcher] in target app.conf"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.shell:
+    cmd: |
+      f="{{ apps_itsi_version_check_base }}/{{ item }}/default/app.conf"
+      sed -n '/\[launcher\]/,/^\[/p' "$f" | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//'
+  loop: "{{ apps_itsi_version_check_apps }}"
+  register: itsi_version_check_versions
+  changed_when: false
+  failed_when: false
+  become: true
+  become_user: "{{ splunk_user | default('splunk') }}"
+
+- name: "Build current ITSI versions dict from [launcher] version"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_current_versions: "{{ apps_itsi_current_versions | default({}) | combine({ item.item: (item.stdout | default('') | trim) }) }}"
+  loop: "{{ itsi_version_check_versions.results | default([]) }}"
+  when:
+    - not (item.failed | default(false))
+    - item.stdout is defined
+    - (item.stdout | default('') | trim) != ''
+
+- name: "Set apps_itsi_current_versions when no apps installed"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_current_versions: {}
+  when: (itsi_version_check_versions.results | default([]) | selectattr('stdout', 'defined') | map(attribute='stdout') | map('trim') | select | list | length) == 0
+
+- name: "Determine if ITSI update needed (any app missing or version differs)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_update_needed: "{{ _no_expected or _current_ne_expected }}"
+  vars:
+    _exp: "{{ apps_itsi_expected_versions_filtered | default({}) }}"
+    _cur: "{{ apps_itsi_current_versions | default({}) }}"
+    _apps: "{{ apps_itsi_version_check_apps }}"
+    _no_expected: "{{ _exp | length == 0 }}"
+    _cur_list: "{{ _apps | map('extract', _cur) | map('default', '__missing__') | list }}"
+    _exp_list: "{{ _apps | map('extract', _exp) | map('default', '') | list }}"
+    _current_ne_expected: "{{ _cur_list != _exp_list }}"
+
+- name: "Debug ITSI version status"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.debug:
+    msg:
+      - "ITSI version check base: {{ apps_itsi_version_check_base }}"
+      - "Apps: {{ apps_itsi_version_check_apps }}"
+      - "Current versions: {{ dict(apps_itsi_version_check_apps | zip(apps_itsi_version_check_apps | map('extract', apps_itsi_current_versions | default({})) | map('default', '') | list)) }}"
+      - "Expected versions: {{ apps_itsi_expected_versions_filtered | default({}) }}"
+      - "Update needed: {{ apps_itsi_update_needed }}"

@@ -1,0 +1,157 @@
+---
+# Extract full ITSI bundle to etc/apps, configure SA-IndexCreation and SA-ITOA
+# Runs only on role_search_head
+
+- name: "Set ITSI version check apps and base for search head (from archive list)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_version_check_apps: "{{ apps_itsi_archive_app_list }}"
+    apps_itsi_version_check_base: "{{ apps_itsi_splunk_home }}/etc/apps"
+  vars:
+    apps_itsi_archive_app_list: "{{ hostvars['localhost']['itsi_app_conf_app_names'] if not (splunk_app_deployment.target_download | default(false)) else (itsi_app_conf_app_names | default([])) }}"
+
+- name: "Fail when ITSI app list from archive is missing (search head)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.fail:
+    msg: "ITSI app list from archive is required for search head. Ensure app conf cache ran (controller or target_download) and archive lists app.confs."
+  when: (apps_itsi_version_check_apps | default([]) | length) == 0
+
+- name: "Check existing ITSI version on search head (all apps)"
+  ansible.builtin.include_tasks: itsi_version_check.yml
+
+- name: "Deploy and configure ITSI on search head"
+  when: apps_itsi_update_needed | default(true)
+  block:
+    - name: "Upload and unarchive full ITSI to etc/apps on search head"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.unarchive:
+        src: "{{ apps_itsi_spl_path }}"
+        dest: "{{ apps_itsi_splunk_home }}/etc/apps"
+        remote_src: "{{ splunk_app_deployment.target_download | default(false) }}"
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+      notify: "Restart splunk"
+      become: true
+      become_user: "{{ splunk_user | default('splunk') }}"
+
+    - name: "Create local directories for ITSI indexer apps on search head"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.file:
+        state: directory
+        path: "{{ apps_itsi_splunk_home }}/etc/apps/{{ item }}/local"
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+      loop: "{{ itsi_sh_indexer_apps }}"
+
+    - name: "Copy indexes.conf to local for ITSI indexer apps on search head"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.copy:
+        remote_src: true
+        force: false
+        src: "{{ apps_itsi_splunk_home }}/etc/apps/{{ item }}/default/indexes.conf"
+        dest: "{{ apps_itsi_splunk_home }}/etc/apps/{{ item }}/local/"
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+      loop: "{{ itsi_sh_indexer_apps }}"
+      notify: "Restart splunk"
+
+    - name: "Set volume in homePath for ITSI indexes on search head"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.replace:
+        path: "{{ apps_itsi_splunk_home }}/etc/apps/{{ item }}/local/indexes.conf"
+        regexp: '^(homePath\s+=\s+)[^\/]+\/'
+        replace: '\1{{ apps_itsi_home_path }}/'
+      loop: "{{ itsi_sh_indexer_apps }}"
+      notify: "Restart splunk"
+
+    - name: "Set volume in coldPath for ITSI indexes on search head"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.replace:
+        path: "{{ apps_itsi_splunk_home }}/etc/apps/{{ item }}/local/indexes.conf"
+        regexp: '^(coldPath\s+=\s+)[^\/]+\/'
+        replace: '\1{{ apps_itsi_cold_path }}/'
+      loop: "{{ itsi_sh_indexer_apps }}"
+      notify: "Restart splunk"
+
+    - name: "Create SA-ITOA local directory on search head"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.file:
+        path: "{{ apps_itsi_splunk_home }}/etc/apps/SA-ITOA/local"
+        state: directory
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+        mode: "0755"
+
+    - name: "Set auto refresh for ITSI service analyzer on search head"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.ini_file:
+        path: "{{ apps_itsi_splunk_home }}/etc/apps/SA-ITOA/local/itsi_service_analyzer.conf"
+        section: "auto_refresh"
+        option: "{{ item.key }}"
+        value: "{{ item.value }}"
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+        mode: "0644"
+      loop:
+        - { key: 'disabled', value: '0' }
+        - { key: 'interval', value: '60' }
+      notify: "Restart splunk"
+
+    - name: "Configure notable events to use event time on search head"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.ini_file:
+        path: "{{ apps_itsi_splunk_home }}/etc/apps/SA-ITOA/local/alert_actions.conf"
+        section: "itsi_event_generator"
+        option: "param.is_use_event_time"
+        value: "1"
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+        mode: "0644"
+      notify: "Restart splunk"
+
+    - name: "Disable unneeded notable event actions on search head"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.ini_file:
+        path: "{{ apps_itsi_splunk_home }}/etc/apps/SA-ITOA/local/notable_event_actions.conf"
+        section: "{{ item }}"
+        option: "disabled"
+        value: "1"
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+        mode: "0644"
+      loop: "{{ apps_itsi_notification_disable | default([]) }}"
+      notify: "Restart splunk"
+      when: apps_itsi_notification_disable is defined and apps_itsi_notification_disable | length > 0

@@ -14,10 +14,11 @@ This guide covers the complete Splunk app deployment system, including:
 
 1. [Deployment Methods](#deployment-methods)
 2. [App Configuration](#app-configuration)
-3. [State Management](#state-management)
-4. [Clustered Environments](#clustered-environments)
-5. [Deployment Server Setup](#deployment-server-setup)
-6. [Troubleshooting](#troubleshooting)
+3. [Premium packs (ITSI)](#premium-packs-splunk-it-service-intelligence-itsi)
+4. [State Management](#state-management)
+5. [Clustered Environments](#clustered-environments)
+6. [Deployment Server Setup](#deployment-server-setup)
+7. [Troubleshooting](#troubleshooting)
 
 
 ## Deployment Methods
@@ -128,6 +129,76 @@ splunk_app_deployment:
   deployment_whitelist: ["host1", "host2"]  # Optional: Manual whitelist (default: auto-calculated)
   serverclass: "custom_class"         # Optional: Custom serverclass name (default: app_<appname>)
 ```
+
+### Premium packs: Splunk IT Service Intelligence (ITSI)
+
+Premium packs are delivered as a **single archive (`.spl` or `.tgz`) that contains multiple apps**. They require role-specific extraction and configuration, so they use a dedicated path instead of the standard install.
+
+**Source:** Use either **Splunkbase** or **local**:
+
+- **`source: splunkbase`** – Downloads ITSI from Splunkbase (default **`app_id: 1841`**). Set **`version`** (e.g. `"4.21.0"`) or `"latest"`. Respects **`splunk_app_deployment.target_download`**: when `true`, each target host downloads the archive from Splunkbase (reduces controller→host transfer); when `false`, the controller downloads once and the file is used for all hosts.
+- **`source: local`** – Use a local file. Set **`path`** to the filename under `local_app_repo_path` or an absolute path (e.g. `splunk-it-service-intelligence_4210.spl`).
+
+**Target roles:** You can omit **`target_roles`**. The role then deploys to every role that exists in your inventory:
+
+- **Cluster Manager** (if any) – Extracts selected apps (e.g. SA-IndexCreation) to `manager-apps/`, configures index volumes from the framework (`splunk_volume_defaults`), and triggers cluster bundle push.
+- **License Manager** (if any) – Extracts license/access apps to `etc/apps/` and restarts Splunk.
+- **Search Head** (if any) – Extracts the full bundle to `etc/apps/`, configures index volumes and SA-ITOA, and restarts Splunk.
+
+For **single-node** installs (one host has all roles), all of the above runs on that host.
+
+**Optional search head targeting:** If you have a dedicated search head or SHC for ITSI:
+
+- **`itsi_sh_name`** – Deploy ITSI only to this single search head (inventory host name).
+- **`itsi_shc_name`** – Deploy ITSI only to search heads in this search head cluster (e.g. `shc_itsi`).
+
+If neither is set, ITSI is deployed to all search heads (and all SHC members) that are in scope.
+
+**Index paths:** If you do not set **`itsi_index_home_path`** / **`itsi_index_cold_path`**, the role uses the same volumes as the rest of the framework: **`splunk_volume_defaults.homePath`** and **`splunk_volume_defaults.coldPath`** (see `baseconfig_app` / `org_all_indexes`).
+
+**Minimal config examples:**
+
+```yaml
+# From Splunkbase (target roles auto from inventory)
+- name: "Splunk IT Service Intelligence"
+  source: splunkbase
+  app_id: 1841
+  version: "latest"
+  premium_app: itsi
+
+# From local repo (optional target_roles)
+- name: "Splunk IT Service Intelligence"
+  source: local
+  path: "splunk-it-service-intelligence_4210.spl"
+  premium_app: itsi
+
+# Deploy only to a dedicated ITSI search head cluster
+- name: "Splunk IT Service Intelligence"
+  source: splunkbase
+  app_id: 1841
+  version: "latest"
+  premium_app: itsi
+  itsi_shc_name: "shc_itsi"
+```
+
+**Optional ITSI-only options** (under the same app entry):
+
+| Option | Description |
+|--------|-------------|
+| `itsi_version` | Version string (e.g. `"4.21.0"`); used for default local filename when `path` is omitted. |
+| `itsi_index_home_path` | Override index volume for homePath (e.g. `volume:primary`). Default: framework `splunk_volume_defaults.homePath`. |
+| `itsi_index_cold_path` | Override index volume for coldPath. Default: framework `splunk_volume_defaults.coldPath`. |
+| `itsi_sh_name` | Deploy ITSI only to this single search head (inventory host name). |
+| `itsi_shc_name` | Deploy ITSI only to search heads in this SHC (e.g. `shc1`). |
+| `itsi_notification_disable` | List of notable event action names to disable (e.g. `["remedy", "victorops"]`). |
+
+**Version check:** Before deploying, the role reads the `[launcher]` version from each app’s `app.conf` in the archive and on the target. It only deploys (or updates) when at least one app is missing or has a different version. The list of apps to check is taken from the archive (no hardcoded fallback).
+
+**App list from archive:** The list of ITSI apps (for version check, deploy, and removal) is always derived from the archive (list or extracted `app.conf` cache). If the archive cannot be listed or the list is empty, the playbook fails. Do not rely on a default app list.
+
+**Removal:** With **`state: absent`**, the role removes ITSI per role: manager-apps (CM), license/access apps (LM), deployer (`shcluster/apps`), and the full set of ITSI apps on search heads (`etc/apps`). The app list for removal is built from the archive (list contents); the same `itsi_sh_name` / `itsi_shc_name` targeting applies for removal on search heads. If the archive is not available or cannot be listed, removal fails (no fallback list).
+
+No `auto_config` flag is required: with **`premium_app: itsi`**, the role both extracts and applies ITSI-specific configuration.
 
 ### Splunkbase apps: name must match archive folder
 

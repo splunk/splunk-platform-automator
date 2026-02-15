@@ -23,9 +23,18 @@
       - "Location: etc/apps/"
     verbosity: 0
 
-- name: "Install {{ app_item.name }}"
+- name: "Install {{ app_item.name }} (premium pack ITSI)"
+  ansible.builtin.include_role:
+    name: apps_itsi
+  when:
+    - app_state == 'installed'
+    - (app_item.premium_app | default('')) == 'itsi'
+
+- name: "Install {{ app_item.name }} (standard)"
   ansible.builtin.include_tasks: "install_app.yml"
-  when: app_state == 'installed'
+  when:
+    - app_state == 'installed'
+    - (app_item.premium_app | default('')) != 'itsi'
 
 - name: "Apply customizations for {{ app_item.name }}"
   ansible.builtin.include_role:
@@ -37,6 +46,25 @@
     - app_state == 'installed'
     - app_item.customizations is defined
 
+- name: "Remove {{ app_item.name }} (premium app ITSI, license manager)"
+  ansible.builtin.include_role:
+    name: apps_itsi
+    tasks_from: itsi_remove_license_manager.yml
+  when:
+    - app_state == 'absent'
+    - (app_item.premium_app | default('')) == 'itsi'
+    - inventory_hostname in (groups.role_license_manager | default([]))
+    - inventory_hostname not in (groups.role_search_head | default([]))
+
+- name: "Remove {{ app_item.name }} (premium app ITSI, search head)"
+  ansible.builtin.include_role:
+    name: apps_itsi
+    tasks_from: itsi_remove_search_head.yml
+  when:
+    - app_state == 'absent'
+    - (app_item.premium_app | default('')) == 'itsi'
+    - inventory_hostname in (groups.role_search_head | default([]))
+
 - name: "Set target path for removal of {{ app_item.name }}"
   tags:
     - splunk
@@ -45,11 +73,15 @@
   ansible.builtin.set_fact:
     app_name: "{{ app_item.name }}"
     app_target_path: "{{ app_item.target_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/apps/' ~ app_item.name) }}"
-  when: app_state == 'absent'
+  when:
+    - app_state == 'absent'
+    - (app_item.premium_app | default('')) != 'itsi'
 
-- name: "Remove {{ app_item.name }}"
+- name: "Remove {{ app_item.name }} (standard)"
   ansible.builtin.include_tasks: "remove_app.yml"
-  when: app_state == 'absent'
+  when:
+    - app_state == 'absent'
+    - (app_item.premium_app | default('')) != 'itsi'
 
 - name: "Notify Splunk restart for {{ app_item.name }}"
   tags:

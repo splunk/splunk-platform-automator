@@ -1,0 +1,10 @@
+---
+# Download ITSI from Splunkbase (app_id 1841). Include only the branch that runs to avoid skipped tasks.
+
+- name: "Download ITSI from Splunkbase (controller)"
+  ansible.builtin.include_tasks: itsi_download_splunkbase_controller.yml
+  when: not (splunk_app_deployment.target_download | default(false))
+
+- name: "Download ITSI from Splunkbase (target_download)"
+  ansible.builtin.include_tasks: itsi_download_splunkbase_target_download.yml
+  when: splunk_app_deployment.target_download | default(false)

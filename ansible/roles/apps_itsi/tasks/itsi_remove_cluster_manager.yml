@@ -1,0 +1,24 @@
+---
+# Remove ITSI apps from cluster manager (manager-apps). Called from process_cm_app when state absent.
+# No archive listing needed; uses itsi_cm_apps from defaults.
+
+- name: "Set app_path so splunk_common 'Restart splunk' handler runs when notified"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    app_path: "{{ splunk_home }}/etc/apps"
+
+- name: "Remove ITSI apps from cluster manager (manager-apps)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ splunk_home }}/etc/manager-apps/{{ item }}"
+    state: absent
+  loop: "{{ itsi_cm_apps }}"
+  loop_control:
+    label: "{{ item }}"
+  notify: "Apply indexer cluster bundle"

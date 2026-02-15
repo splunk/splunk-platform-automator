@@ -20,9 +20,12 @@
     cm_apps: "{{ cm_apps + [item] }}"
   loop: "{{ splunk_app_deployment.apps | default([]) }}"
   when:
-    - item.target_roles is defined
-    - item.target_roles | intersect(['indexer']) | length > 0
     - item.deployment_target | default('auto') != 'direct'
+    - >-
+      (item.premium_app | default('')) == 'itsi' and (groups.role_cluster_manager | default([]) | length > 0)
+      or (item.target_roles is defined and (
+        (item.target_roles | intersect(['indexer']) | length > 0) or (item.target_roles | intersect(['cluster_manager']) | length > 0)
+      ))
 
 - name: Debug cluster manager apps
   tags:

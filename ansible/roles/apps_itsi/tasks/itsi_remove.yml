@@ -1,0 +1,14 @@
+---
+# DEPRECATED: Use role-specific remove task files instead.
+# - Cluster manager: itsi_remove_cluster_manager.yml (from process_cm_app)
+# - License manager: itsi_remove_license_manager.yml (from process_direct_app when role_license_manager)
+# - Deployer: itsi_remove_deployer.yml (from process_deployer_app)
+# - Search head: itsi_remove_search_head.yml (from process_direct_app when role_search_head)
+# This file is no longer used by process_deployer_app, process_cm_app, or process_direct_app.
+
+- name: "ITSI removal is split by role; do not use itsi_remove.yml"
+  ansible.builtin.fail:
+    msg: >-
+      Use role-specific ITSI remove task files: itsi_remove_cluster_manager.yml,
+      itsi_remove_license_manager.yml, itsi_remove_deployer.yml, itsi_remove_search_head.yml.
+      Call the one that matches your deployment target (from process_cm_app, process_direct_app, process_deployer_app).

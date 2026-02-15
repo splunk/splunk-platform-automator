@@ -1,0 +1,104 @@
+---
+# ITSI premium pack: deploy one .spl/.tgz to cluster manager, license manager, and search heads
+# Supports source: splunkbase (app_id 1841) or local. Index paths default to splunk_volume_defaults.
+# Depends on splunk_common for splunk_home, splunk_user, splunk_service_name and "Restart splunk" handler.
+# Optional: app_item.itsi_version, itsi_index_home_path, itsi_index_cold_path, itsi_notification_disable,
+#           itsi_sh_name (single SH host), itsi_shc_name (SHC name for dedicated ITSI SHC)
+
+- name: "Set app_path so splunk_common 'Restart splunk' handler runs when notified"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    app_path: "{{ splunk_home }}/etc/apps"
+
+- name: "Set ITSI paths and archive source (local) or cache dir (splunkbase)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_splunk_home: "{{ splunk_home }}"
+    apps_itsi_version_resolved: "{{ app_item.itsi_version | default(itsi_version) }}"
+    apps_itsi_resolved_version: "{{ app_item.itsi_version | default(itsi_version) }}"
+    # Default index volume from framework (baseconfig_app org_all_indexes / splunk_volume_defaults)
+    apps_itsi_home_path: "{{ app_item.itsi_index_home_path | default('volume:' + (splunk_volume_defaults.homePath | default('primary'))) }}"
+    apps_itsi_cold_path: "{{ app_item.itsi_index_cold_path | default('volume:' + (splunk_volume_defaults.coldPath | default('primary'))) }}"
+    apps_itsi_notification_disable: "{{ app_item.itsi_notification_disable | default(itsi_notification_disable | default([])) }}"
+    apps_itsi_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/ITSI"
+    apps_itsi_repo_path: "{{ splunk_app_deployment.local_app_repo_path | default(splunk_app_deployment_defaults.local_app_repo_path) }}"
+    apps_itsi_default_filename: "splunk-it-service-intelligence_{{ (app_item.itsi_version | default(itsi_version)) | string | replace('.', '') }}.spl"
+
+- name: "Set ITSI archive path for local source"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_spl_path: "{{ app_item.local_path | default(app_item.path if (app_item.path is defined and app_item.path is search('^/')) else (apps_itsi_repo_path + '/' + (app_item.path | default(apps_itsi_default_filename)))) }}"
+  when: (app_item.source | default('local')) != 'splunkbase'
+
+- name: "Download ITSI from Splunkbase"
+  ansible.builtin.include_tasks: itsi_download_splunkbase.yml
+  when: (app_item.source | default('local')) == 'splunkbase'
+
+- name: "Set ITSI archive path from Splunkbase controller download (for this host)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_spl_path: "{{ hostvars['localhost']['apps_itsi_spl_path'] }}"
+  when:
+    - (app_item.source | default('local')) == 'splunkbase'
+    - not (splunk_app_deployment.target_download | default(false))
+
+# When source is local, verify archive exists (path already set above)
+- name: "Check ITSI archive exists (local)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.stat:
+    path: "{{ apps_itsi_spl_path }}"
+  register: apps_itsi_spl_file
+  delegate_to: localhost
+  become: false
+  when: (app_item.source | default('local')) != 'splunkbase'
+
+- name: "Fail if ITSI archive not found (local)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.fail:
+    msg: "ITSI archive not found: {{ apps_itsi_spl_path }}"
+  when:
+    - (app_item.source | default('local')) != 'splunkbase'
+    - not apps_itsi_spl_file.stat.exists
+
+- name: "Ensure ITSI app.conf cache and expected versions (for all-app version check)"
+  ansible.builtin.include_tasks: itsi_app_conf_cache.yml
+
+- name: "Run ITSI deployment for cluster manager"
+  ansible.builtin.include_tasks: itsi_cluster_manager.yml
+  when: inventory_hostname in (groups.role_cluster_manager | default([]))
+
+- name: "Run ITSI deployment for license manager"
+  ansible.builtin.include_tasks: itsi_license_manager.yml
+  when: inventory_hostname in (groups.role_license_manager | default([]))
+
+- name: "Run ITSI deployment for deployer (shcluster/apps)"
+  ansible.builtin.include_tasks: itsi_deployer.yml
+  when: inventory_hostname in (groups.role_deployer | default([]))
+
+- name: "Run ITSI deployment for search head (all or filtered by itsi_sh_name / itsi_shc_name)"
+  ansible.builtin.include_tasks: itsi_search_head.yml
+  when: >-
+    inventory_hostname in (groups.role_search_head | default([]))
+    and (
+      (app_item.itsi_sh_name is not defined and app_item.itsi_shc_name is not defined)
+      or (app_item.itsi_sh_name is defined and inventory_hostname == app_item.itsi_sh_name)
+      or (app_item.itsi_shc_name is defined and inventory_hostname in (groups['shcluster_' + app_item.itsi_shc_name] | default([])))
+    )

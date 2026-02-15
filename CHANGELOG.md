@@ -26,6 +26,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
   - Customizations run in order: deploy app → remove → local_configs → run_playbook/run_role. Setting `update_needed: true` in a custom task file triggers the correct deployment handler.
   - **Example playbook** `ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml`: Enables Splunk_TA_nix script inputs (performance metrics); optional `extra_vars.ta_nix_script_index`. Equivalent behavior via `local_configs` is documented for universal_forwarder.
   - **Documentation**: [App_Deployment_Customizations.md](docs/App_Deployment_Customizations.md) (user manual). App deployment doc names normalized to `App_Deployment_*`.
+- **Premium apps (ITSI)** – Splunk IT Service Intelligence as a premium pack (single archive, multiple apps, role-specific extraction):
+  - **Config**: `premium_app: itsi` on the app entry; optional `itsi_version`, `itsi_sh_name` / `itsi_shc_name`, `itsi_notification_disable`. Source Splunkbase (app_id 1841) or local path.
+  - **Roles**: Cluster Manager (selected apps to `manager-apps`), License Manager (license/access apps to `etc/apps`), Deployer (full bundle to `shcluster/apps`), Search Head (full bundle to `etc/apps`). Respects `target_download` for controller vs per-target download and cache.
+  - **Version check**: Reads `[launcher]` version from each app’s `app.conf` in the archive and on the target; only deploys when at least one app is missing or version differs. App list and expected versions come from the archive (app-conf cache or listing); no hardcoded fallback—playbook fails if the list cannot be obtained.
+  - **Removal**: Per-role removal (CM, LM, deployer, search head) with app list built from the archive; same `itsi_sh_name` / `itsi_shc_name` targeting for search heads. Fails if archive is not available or not listable.
+  - **Task structure**: Splunkbase download and app-conf cache split into controller vs `target_download` task files to avoid skipped tasks; removal split into role-specific task files (e.g. `itsi_remove_deployer.yml`, `itsi_remove_search_head.yml`).
+  - **Docs**: [App_Deployment_Guide.md](docs/App_Deployment_Guide.md) (Premium packs: ITSI), [App_Deployment_Removing_Apps.md](docs/App_Deployment_Removing_Apps.md) (Premium apps (ITSI) removal).
 
 ### Changed
 

@@ -1,0 +1,109 @@
+---
+# ITSI app.conf cache and expected versions when archive is on controller (not target_download).
+# Extract only default/app.conf from the archive, read [launcher] version, build apps_itsi_expected_versions.
+# Include this file only when: not (splunk_app_deployment.target_download | default(false))
+
+- name: "Ensure ITSI app.conf cache dir exists (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ apps_itsi_cache_dir }}/itsi_app_confs/{{ apps_itsi_resolved_version }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+
+# .spl is gzip/tar format; list with tar tzf (same as .tgz)
+- name: "List ITSI archive for app.conf paths (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.shell:
+    cmd: "tar tzf '{{ apps_itsi_spl_path }}' | grep -E '/default/app\\.conf$'"
+  register: itsi_app_conf_list_tar
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+
+- name: "Set ITSI app.conf paths from archive listing (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    itsi_app_conf_paths: "{{ (itsi_app_conf_list_tar.stdout_lines | default([])) | map('trim') | select() | list }}"
+  delegate_to: localhost
+  run_once: true
+  when: itsi_app_conf_list_tar is defined and (itsi_app_conf_list_tar.stdout_lines | default([]) | length > 0)
+
+# Derive app names (first path component) for later use
+- name: "Set ITSI app names from app.conf paths (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    itsi_app_conf_app_names: "{{ (itsi_app_conf_paths | default([])) | map('regex_replace', '^([^/]+)/.*', '\\1') | unique | list }}"
+  delegate_to: localhost
+  run_once: true
+  when: itsi_app_conf_paths is defined and (itsi_app_conf_paths | length > 0)
+
+# .spl is gzip/tar format; extract with tar -xzf (same as .tgz)
+- name: "Extract ITSI app.conf files from archive to cache (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.shell:
+    cmd: "tar -xzf '{{ apps_itsi_spl_path }}' -C '{{ apps_itsi_cache_dir }}/itsi_app_confs/{{ apps_itsi_resolved_version }}' {{ itsi_app_conf_paths | join(' ') }}"
+  args:
+    creates: "{{ apps_itsi_cache_dir }}/itsi_app_confs/{{ apps_itsi_resolved_version }}/{{ (itsi_app_conf_paths | default([]) | first) | default('SA-ITSI/default/app.conf') }}"
+  delegate_to: localhost
+  run_once: true
+  when: itsi_app_conf_paths is defined and (itsi_app_conf_paths | length > 0)
+
+# Read version from [launcher] section of each cached app.conf
+- name: "Get version from [launcher] in cached app.conf (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.shell:
+    cmd: |
+      f="{{ apps_itsi_cache_dir }}/itsi_app_confs/{{ apps_itsi_resolved_version }}/{{ item }}/default/app.conf"
+      sed -n '/\[launcher\]/,/^\[/p' "$f" | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//'
+  loop: "{{ itsi_app_conf_app_names | default([]) }}"
+  register: itsi_cached_versions
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+  when: itsi_app_conf_app_names is defined and (itsi_app_conf_app_names | length > 0)
+
+- name: "Build ITSI expected versions dict from [launcher] version (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_expected_versions: "{{ apps_itsi_expected_versions | default({}) | combine({ item.item: (item.stdout | default('') | trim) }) }}"
+  loop: "{{ itsi_cached_versions.results | default([]) }}"
+  delegate_to: localhost
+  run_once: true
+  when:
+    - itsi_cached_versions is defined
+    - itsi_cached_versions.results is defined
+    - (itsi_cached_versions.results | length > 0)
+
+- name: "Propagate ITSI expected versions to all hosts"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_expected_versions: "{{ hostvars['localhost']['apps_itsi_expected_versions'] | default({}) }}"
+  when:
+    - hostvars['localhost'] is defined
+    - (hostvars['localhost']['apps_itsi_expected_versions'] | default({}) | length > 0)

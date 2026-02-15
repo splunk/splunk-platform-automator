@@ -20,9 +20,16 @@
     deployer_apps: "{{ deployer_apps + [item] }}"
   loop: "{{ splunk_app_deployment.apps | default([]) }}"
   when:
-    - item.target_roles is defined
-    - item.target_roles | intersect(['search_head']) | length > 0
     - item.deployment_target | default('auto') != 'direct'
+    - >-
+      (item.premium_app | default('')) == 'itsi' and (
+        (item.target_roles is defined and item.target_roles | intersect(['search_head']) | length > 0)
+        or (item.target_roles is not defined and groups.role_search_head | default([]) | length > 0)
+      ) and (item.itsi_shc_name is not defined or inventory_hostname in (groups['shcluster_' + item.itsi_shc_name] | default([])))
+      or (
+        item.target_roles is defined
+        and item.target_roles | intersect(['search_head']) | length > 0
+      )
 
 - name: Debug deployer apps
   tags:

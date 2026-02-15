@@ -266,6 +266,10 @@ ansible-playbook ansible/shcluster_deployer.yml -i config/splunk_config.yml
 **Deployment Server**:
 After removing app from Deployment Server (`etc/deployment-apps`), clients will update on their next check-in (default 60 seconds).
 
+### Premium apps (ITSI)
+
+Removal of **Splunk IT Service Intelligence (ITSI)** is done per role (Cluster Manager, License Manager, Deployer, Search Head). The list of app directories to remove is **built from the archive** (the playbook lists the archive contents). The archive must be present and listable (e.g. `tar tzf`); if it cannot be obtained, removal fails. There is no fallback app list. See the [App Deployment Guide](App_Deployment_Guide.md#premium-packs-splunk-it-service-intelligence-itsi) for ITSI config options and `itsi_sh_name` / `itsi_shc_name` targeting.
+
 ### App Dependencies
 
 **Check for dependencies** before removing:

@@ -1,0 +1,11 @@
+---
+# Extract default/app.conf from ITSI archive, build apps_itsi_expected_versions for version check.
+# Include only the branch that runs (controller vs target_download) to avoid skipped tasks.
+
+- name: "Ensure ITSI app.conf cache and expected versions (controller)"
+  ansible.builtin.include_tasks: itsi_app_conf_cache_controller.yml
+  when: not (splunk_app_deployment.target_download | default(false))
+
+- name: "Ensure ITSI app.conf cache and expected versions (target_download)"
+  ansible.builtin.include_tasks: itsi_app_conf_cache_target_download.yml
+  when: splunk_app_deployment.target_download | default(false)

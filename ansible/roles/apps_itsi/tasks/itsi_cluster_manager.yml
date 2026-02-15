@@ -1,0 +1,100 @@
+---
+# Extract selected ITSI apps to manager-apps and configure SA-IndexCreation indexes
+# Runs only on role_cluster_manager
+
+- name: "Set ITSI version check apps and base for cluster manager"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_version_check_apps: "{{ itsi_cm_apps }}"
+    apps_itsi_version_check_base: "{{ apps_itsi_splunk_home }}/etc/manager-apps"
+
+- name: "Check existing ITSI version on cluster manager (all apps)"
+  ansible.builtin.include_tasks: itsi_version_check.yml
+
+- name: "Set notify handler for cluster manager (Restart splunk when no indexer cluster)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_cm_notify: "{{ 'Apply indexer cluster bundle' if (group_names | select('match', '^idxcluster_') | list | length > 0) else 'Restart splunk' }}"
+
+- name: "Deploy and configure ITSI on cluster manager"
+  when: apps_itsi_update_needed | default(true)
+  block:
+    - name: "Build extra_opts for ITSI CM unarchive"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.set_fact:
+        itsi_cm_extra_opts: "{{ ['--dereference'] + itsi_cm_apps }}"
+
+    - name: "Upload and unarchive ITSI indexer apps to manager-apps"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.unarchive:
+        src: "{{ apps_itsi_spl_path }}"
+        dest: "{{ apps_itsi_splunk_home }}/etc/manager-apps"
+        remote_src: "{{ splunk_app_deployment.target_download | default(false) }}"
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+        extra_opts: "{{ itsi_cm_extra_opts }}"
+      notify: "{{ apps_itsi_cm_notify }}"
+      become: true
+      become_user: "{{ splunk_user | default('splunk') }}"
+
+    - name: "Create local directories for ITSI indexer apps on CM"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.file:
+        state: directory
+        path: "{{ apps_itsi_splunk_home }}/etc/manager-apps/{{ item }}/local"
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+      loop: "{{ itsi_cm_apps }}"
+
+    - name: "Copy indexes.conf to local for ITSI indexer apps on CM"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.copy:
+        remote_src: true
+        src: "{{ apps_itsi_splunk_home }}/etc/manager-apps/{{ item }}/default/indexes.conf"
+        dest: "{{ apps_itsi_splunk_home }}/etc/manager-apps/{{ item }}/local/"
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+      loop: "{{ itsi_cm_apps }}"
+      notify: "{{ apps_itsi_cm_notify }}"
+
+    - name: "Set volume in homePath for ITSI indexes on CM"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.replace:
+        path: "{{ apps_itsi_splunk_home }}/etc/manager-apps/{{ item }}/local/indexes.conf"
+        regexp: '^(homePath\s+=\s+)[^\/]+\/'
+        replace: '\1{{ apps_itsi_home_path }}/'
+      loop: "{{ itsi_cm_apps }}"
+      notify: "{{ apps_itsi_cm_notify }}"
+
+    - name: "Set volume in coldPath for ITSI indexes on CM"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.replace:
+        path: "{{ apps_itsi_splunk_home }}/etc/manager-apps/{{ item }}/local/indexes.conf"
+        regexp: '^(coldPath\s+=\s+)[^\/]+\/'
+        replace: '\1{{ apps_itsi_cold_path }}/'
+      loop: "{{ itsi_cm_apps }}"
+      notify: "{{ apps_itsi_cm_notify }}"

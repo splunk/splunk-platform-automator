@@ -1,0 +1,117 @@
+---
+# Download ITSI from Splunkbase on each target (target_download). Each host downloads to its own cache.
+# Include only when: splunk_app_deployment.target_download | default(false)
+
+- name: "Get ITSI app info from Splunkbase (target)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.uri:
+    url: "{{ splunk_app_deployment.splunkbase_api_url }}/app/{{ app_item.app_id | default(itsi_splunkbase_app_id) | default(1841) }}/?include=release,releases"
+    method: GET
+    user: "{{ splunk_app_deployment.splunkbase_username }}"
+    password: "{{ splunk_app_deployment.splunkbase_password }}"
+    force_basic_auth: true
+    return_content: true
+    status_code: [200, 404]
+  register: apps_itsi_splunkbase_info
+
+- name: "Fail if ITSI not found on Splunkbase"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.fail:
+    msg: "ITSI app (ID: {{ app_item.app_id | default(itsi_splunkbase_app_id) | default(1841) }}) not found on Splunkbase"
+  when: apps_itsi_splunkbase_info.status == 404
+
+- name: "Set ITSI version and release path (latest) from API"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_resolved_version: "{{ apps_itsi_splunkbase_info.json.release.title if apps_itsi_splunkbase_info.json.release is defined else (apps_itsi_splunkbase_info.json.releases[0].title if apps_itsi_splunkbase_info.json.releases is defined and apps_itsi_splunkbase_info.json.releases | length > 0 else 'unknown') }}"
+    apps_itsi_release_path: "{{ apps_itsi_splunkbase_info.json.release.path if apps_itsi_splunkbase_info.json.release is defined else (apps_itsi_splunkbase_info.json.releases[0].path if apps_itsi_splunkbase_info.json.releases is defined and apps_itsi_splunkbase_info.json.releases | length > 0 else '') }}"
+  when: (app_item.version | default('latest')) == 'latest'
+
+- name: "Set ITSI version and release path (specific version)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_resolved_version: "{{ app_item.version }}"
+    apps_itsi_release_path: "{{ (apps_itsi_splunkbase_info.json.releases | selectattr('title', 'equalto', app_item.version) | list | first).path if (apps_itsi_splunkbase_info.json.releases | selectattr('title', 'equalto', app_item.version) | list | length > 0) else '' }}"
+  when: (app_item.version | default('latest')) != 'latest'
+
+- name: "Fail if ITSI version not found on Splunkbase"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.fail:
+    msg: "ITSI version {{ app_item.version }} not found. Available: {{ apps_itsi_splunkbase_info.json.releases | map(attribute='title') | list }}"
+  when:
+    - (app_item.version | default('latest')) != 'latest'
+    - apps_itsi_release_path | default('') == ''
+
+- name: "Create ITSI cache directory on target"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ apps_itsi_cache_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: "Authenticate with Splunkbase for ITSI (target)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.uri:
+    url: "https://splunkbase.splunk.com/api/account:login"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: "{{ splunk_app_deployment.splunkbase_username }}"
+      password: "{{ splunk_app_deployment.splunkbase_password }}"
+    return_content: true
+    status_code: [200]
+  register: apps_itsi_splunkbase_auth
+
+- name: "Set Splunkbase auth token for ITSI (target)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_splunkbase_token: "{{ apps_itsi_splunkbase_auth.content | regex_search('<id>([^<]+)</id>', '\\1') | first }}"
+
+- name: "Download ITSI from Splunkbase (target)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.get_url:
+    url: "{{ apps_itsi_release_path }}"
+    dest: "{{ apps_itsi_cache_dir }}/itsi_{{ apps_itsi_resolved_version }}.tgz"
+    headers:
+      X-Auth-Token: "{{ apps_itsi_splunkbase_token }}"
+    mode: '0644'
+    timeout: "{{ splunk_app_deployment.download_timeout | default(120) }}"
+  register: apps_itsi_download_result
+  until: apps_itsi_download_result is succeeded
+  retries: "{{ splunk_app_deployment.retry_count | default(3) }}"
+  delay: 10
+
+- name: "Set ITSI archive path from Splunkbase (target)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_spl_path: "{{ apps_itsi_download_result.dest }}"
