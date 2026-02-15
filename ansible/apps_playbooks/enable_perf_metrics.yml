@@ -1,0 +1,62 @@
+---
+# Enable Splunk_TA_nix script inputs (performance metrics) in the app's local/inputs.conf.
+#
+# Use from app customizations: run_playbook: "ansible/apps_playbooks/enable_perf_metrics.yml"
+#
+# Framework vars: app_path, app_name
+# Optional extra_vars: ta_nix_script_index (default: itsi_im_metrics)
+
+- name: "Set script input stanzas (same as UF in config/splunk_config.yml)"
+  ansible.builtin.set_fact:
+    _ta_nix_script_stanzas:
+      - "script://./bin/vmstat_metric.sh"
+      - "script://./bin/iostat_metric.sh"
+      - "script://./bin/ps_metric.sh"
+      - "script://./bin/df_metric.sh"
+      - "script://./bin/interfaces_metric.sh"
+      - "script://./bin/cpu_metric.sh"
+  when: app_path is defined
+
+- name: "Resolve script index from extra_vars (avoids template recursion)"
+  ansible.builtin.set_fact:
+    _ta_nix_index: "{{ (customization_extra_vars | default({})).get('ta_nix_script_index', 'itsi_im_metrics') }}"
+  when: app_path is defined
+
+- name: "Build list of section/key/value for inputs.conf (disabled + index per stanza)"
+  ansible.builtin.set_fact:
+    _ta_nix_ini_entries: "{{ _ta_nix_ini_entries | default([]) + [{'section': item, 'key': 'disabled', 'value': '0'}, {'section': item, 'key': 'index', 'value': _ta_nix_index}] }}"
+  loop: "{{ _ta_nix_script_stanzas }}"
+  loop_control:
+    label: "{{ item }}"
+  when: app_path is defined and _ta_nix_script_stanzas is defined and _ta_nix_index is defined
+
+- name: "Ensure local directory exists for {{ app_name }}"
+  ansible.builtin.file:
+    path: "{{ app_path }}/local"
+    state: directory
+    mode: '0755'
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+  when: app_path is defined
+
+- name: "Set script input options in {{ app_name }} (disabled = 0, index from extra_vars)"
+  community.general.ini_file:
+    path: "{{ app_path }}/local/inputs.conf"
+    section: "{{ item.section }}"
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    mode: '0600'
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+  loop: "{{ _ta_nix_ini_entries }}"
+  loop_control:
+    label: "{{ item.section }} {{ item.key }}"
+  register: _perf_metrics_ini_result
+  when: app_path is defined and _ta_nix_ini_entries is defined
+
+- name: "Set update_needed so deployment handler runs (Restart Splunk, Reload deploy-server, etc.)"
+  ansible.builtin.set_fact:
+    update_needed: true
+  when:
+    - _perf_metrics_ini_result is defined
+    - (_perf_metrics_ini_result.get('results', []) | selectattr('changed') | list | length) > 0

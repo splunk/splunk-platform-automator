@@ -1,0 +1,107 @@
+---
+# Apply app customizations (remove, local_configs, run_playbook/run_role)
+# Expects: app_path (or app_target_path), app_item with optional customizations
+# Called from apps_direct, apps_deployer, apps_cluster_manager, apps_deployment_server
+# after the app is installed. Include only when app_item.customizations is defined.
+
+- name: "Set app path for customizations"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.set_fact:
+    customization_app_path: "{{ app_path | default(app_target_path) }}"
+
+# --- 1) Remove files/directories from the app ---
+- name: "Remove paths from app {{ app_item.name }} (customizations)"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.file:
+    path: "{{ customization_app_path }}/{{ item }}"
+    state: absent
+  loop: "{{ app_item.customizations.remove }}"
+  register: customization_remove_result
+  when:
+    - app_item.customizations.remove is defined
+    - app_item.customizations.remove | length > 0
+
+# --- 2) Local configs: create config files in app's local/ folder ---
+- name: "Ensure local directory exists for app {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.file:
+    path: "{{ customization_app_path }}/local"
+    state: directory
+    mode: '0755'
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+  register: customization_local_dir_result
+  when: app_item.customizations.local_configs is defined
+
+- name: "Build flattened list of local_configs (path, section, option, value)"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.set_fact:
+    app_local_config_flat: "{% set ns = namespace(list=[]) %}{% for filename, sections in app_item.customizations.local_configs.items() %}{% for section_name, opts in sections.items() %}{% for k, v in opts.items() %}{% set _ = ns.list.append({'path': customization_app_path + '/local/' + filename, 'section': section_name, 'option': k, 'value': v | string}) %}{% endfor %}{% endfor %}{% endfor %}{{ ns.list }}"
+  when: app_item.customizations.local_configs is defined
+
+- name: "Set local config option in app {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+  community.general.ini_file:
+    path: "{{ item.path }}"
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    mode: '0600'
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+  loop: "{{ app_local_config_flat | default([]) }}"
+  register: customization_local_config_result
+  when: app_local_config_flat is defined and app_local_config_flat | length > 0
+
+- name: "Set update_needed when customizations made changes"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.set_fact:
+    update_needed: "{{ update_needed | default(false) | bool or ((customization_remove_result | default({})).get('results', []) | selectattr('changed') | list | length > 0) or ((customization_local_config_result | default({})).get('results', []) | selectattr('changed') | list | length > 0) or ((customization_local_dir_result | default({})).get('changed', false)) }}"
+
+# --- 3) Run custom playbook or role ---
+- name: "Set extra vars for custom role/task"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.set_fact:
+    customization_extra_vars: "{{ (app_item.customizations.extra_vars | default({})) | combine({'app_path': customization_app_path, 'app_name': app_item.name}) }}"
+  when: app_item.customizations.run_role is defined or app_item.customizations.run_playbook is defined
+
+- block:
+    - name: "Run custom role for app {{ app_item.name }}"
+      ansible.builtin.include_role:
+        name: "{{ app_item.customizations.run_role }}"
+      vars:
+        app_path: "{{ customization_app_path }}"
+        app_name: "{{ app_item.name }}"
+        customization_extra_vars: "{{ customization_extra_vars }}"
+  when:
+    - app_item.customizations.run_role is defined
+    - app_item.customizations.run_role | length > 0
+
+- block:
+    - name: "Resolve extra vars for task file (avoids template recursion in included tasks)"
+      ansible.builtin.set_fact:
+        _customization_extra_vars_resolved: "{{ customization_extra_vars | default({}) }}"
+
+    - name: "Run custom task file for app {{ app_item.name }}"
+      ansible.builtin.include_tasks: "{{ (playbook_dir | dirname) }}/{{ app_item.customizations.run_playbook }}"
+      vars:
+        app_path: "{{ customization_app_path }}"
+        app_name: "{{ app_item.name }}"
+        customization_extra_vars: "{{ _customization_extra_vars_resolved }}"
+  when:
+    - app_item.customizations.run_playbook is defined
+    - app_item.customizations.run_playbook | length > 0

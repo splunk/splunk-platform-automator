@@ -17,6 +17,15 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
   - **Sources**: Splunkbase (with env-based credentials) or local path; idempotent install/update with optional backup.
   - **Verification**: `ansible/verification/verify_app_deployment.yml` and role-specific verification tasks to confirm deployed apps match config.
   - **Docs**: [App_Deployment.md](docs/App_Deployment.md), [App_Deployment_Guide.md](docs/App_Deployment_Guide.md), [App_Deployment_Quick_Start.md](docs/App_Deployment_Quick_Start.md), [App_Deployment_FAQ.md](docs/App_Deployment_FAQ.md), [App_Deployment_Target_Logic.md](docs/App_Deployment_Target_Logic.md), [App_Deployment_Verification.md](docs/App_Deployment_Verification.md), [App_Deployment_Removing_Apps.md](docs/App_Deployment_Removing_Apps.md).
+- **App deployment customizations** – Per-app, per-role options to modify deployed apps after install:
+  - **`remove`**: Delete files or directories from the app (paths relative to app root).
+  - **`local_configs`**: Create or update Splunk `.conf` files in the app’s `local/` folder (same structure as `splunk_conf` in `splunk_config.yml`).
+  - **`run_playbook`** / **`run_role`**: Run a custom Ansible task file or role for that app (path from project root; `app_path`, `app_name`, and optional `extra_vars` provided by the framework).
+  - Same app can appear multiple times in `splunk_app_deployment.apps` with different `target_roles` and different `customizations`.
+  - Customizations run in order: deploy app → remove → local_configs → run_playbook/run_role. Setting `update_needed: true` in a custom task file triggers the correct deployment handler.
+  - **Example playbook** `ansible/apps_playbooks/enable_perf_metrics.yml`: Enables Splunk_TA_nix script inputs (performance metrics); optional `extra_vars.ta_nix_script_index`. Equivalent behavior via `local_configs` is documented for universal_forwarder.
+  - **Documentation**: [App_Deployment_Customizations.md](docs/App_Deployment_Customizations.md) (user manual). App deployment doc names normalized to `App_Deployment_*`.
+
 ### Changed
 
 ### Fixed

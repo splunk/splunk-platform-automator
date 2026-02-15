@@ -2,6 +2,15 @@
 # apps_common main tasks - ensures configuration is available
 # This role provides shared functionality for all app deployment roles
 
+- name: Set default app_path and app_name for config merge (used in extra_vars in config)
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.set_fact:
+    app_path: "{{ app_path | default('') }}"
+    app_name: "{{ app_name | default('') }}"
+  when: splunk_app_deployment is defined or splunk_app_deployment_defaults is defined
+
 - name: Merge app deployment config with defaults
   tags:
     - splunk

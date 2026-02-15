@@ -1,0 +1,60 @@
+---
+# Example: App deployment with customizations (concept)
+# See docs/App_Deployment_Customizations.md for full specification.
+#
+# This shows the same app (Splunk_TA_nix) defined multiple times with different
+# target_roles and different customizations per role.
+# local_configs: key = config filename only (e.g. inputs.conf); files are always in the app's local/ folder.
+# Same structure as splunk_conf: filename -> section name -> options.
+
+splunk_app_deployment:
+  apps:
+    # --- Search heads: remove indexes.conf, add inputs.conf in local/ to enable TCP ---
+    - name: "Splunk_TA_nix"
+      source: splunkbase
+      app_id: 833
+      version: "latest"
+      target_roles:
+        - search_head
+      customizations:
+        remove:
+          - default/indexes.conf
+        local_configs:
+          inputs.conf:
+            "tcp://5514":
+              disabled: 0
+
+    # --- Indexers: only remove inputs.conf ---
+    - name: "Splunk_TA_nix"
+      source: splunkbase
+      app_id: 833
+      version: "latest"
+      target_roles:
+        - indexer
+      customizations:
+        remove:
+          - default/inputs.conf
+
+    # --- Heavy forwarders: custom playbook ---
+    - name: "Splunk_TA_nix"
+      source: splunkbase
+      app_id: 833
+      version: "latest"
+      target_roles:
+        - heavy_forwarder
+      customizations:
+        run_playbook: "ansible/apps_playbooks/enable_perf_metrics.yml"
+        extra_vars:
+          app_path: "{{ app_path }}"
+          app_name: "{{ app_name }}"
+
+    # --- Optional: run a role instead of a playbook ---
+    # - name: "Splunk_TA_windows"
+    #   source: splunkbase
+    #   app_id: 742
+    #   target_roles:
+    #     - indexer
+    #   customizations:
+    #     run_role: "my_namespace.custom_ta_windows_setup"
+    #     extra_vars:
+    #       app_path: "{{ app_path }}"

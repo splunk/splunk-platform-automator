@@ -27,6 +27,16 @@
   ansible.builtin.include_tasks: "install_app.yml"
   when: app_state == 'installed'
 
+- name: "Apply customizations for {{ app_item.name }}"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: apply_customizations.yml
+  vars:
+    app_path: "{{ app_item.target_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/shcluster/apps/' ~ app_item.name) }}"
+  when:
+    - app_state == 'installed'
+    - app_item.customizations is defined
+
 - name: "Set target path for removal of {{ app_item.name }}"
   tags:
     - splunk
