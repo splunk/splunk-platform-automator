@@ -52,7 +52,7 @@ splunk_app_deployment:
       target_roles:
         - heavy_forwarder
       customizations:
-        run_playbook: "ansible/apps_playbooks/enable_perf_metrics.yml"
+        run_playbook: "ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml"
         extra_vars:
           app_path: "{{ app_path }}"
 ```
@@ -126,7 +126,7 @@ Run custom Ansible for this app on the host. Use when you need more than `remove
 
 | Option        | Description |
 |---------------|-------------|
-| `run_playbook` | Path to a task file from the **project root** (e.g. `ansible/apps_playbooks/enable_perf_metrics.yml`). |
+| `run_playbook` | Path to a task file from the **project root** (e.g. `ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml`). |
 | `run_role`     | Fully qualified role name (e.g. `my_namespace.custom_app_setup`). |
 | `extra_vars`   | Optional dict of variables; `app_name` and `app_path` are provided by the framework. |
 
@@ -134,11 +134,11 @@ Use **one** of `run_playbook` or `run_role` per entry. For `run_playbook`, the p
 
 **Triggering the deployment handler:** The framework does not know if your task file changed anything. To trigger the correct handler (Restart Splunk, Reload deploy-server, Push shcluster bundle, or Apply indexer cluster bundle) after your custom tasks run, set the fact `update_needed: true` when you make changes. The calling role will then run its “notify when update_needed” task and fire the right handler. In your task file, either set it when you have changes (e.g. register the task and then `set_fact: update_needed: true` when `result is changed`), or set it at the end if your playbook always modifies the app.
 
-**Example – enable same performance metrics via playbook:** the repo includes `ansible/apps_playbooks/enable_perf_metrics.yml`, which enables the same Splunk_TA_nix script inputs as the `local_configs` example above. Use it for roles where you prefer a task file (e.g. heavy_forwarder), with optional `ta_nix_script_index` in `extra_vars`:
+**Example – enable same performance metrics via playbook:** the repo includes `ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml`, which enables the same Splunk_TA_nix script inputs as the `local_configs` example above. Use it for roles where you prefer a task file (e.g. heavy_forwarder), with optional `ta_nix_script_index` in `extra_vars`:
 
 ```yaml
 customizations:
-  run_playbook: "ansible/apps_playbooks/enable_perf_metrics.yml"
+  run_playbook: "ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml"
   extra_vars:
     ta_nix_script_index: "itsi_im_metrics"   # optional; default is itsi_im_metrics
 ```

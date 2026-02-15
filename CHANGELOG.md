@@ -23,7 +23,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
   - **`run_playbook`** / **`run_role`**: Run a custom Ansible task file or role for that app (path from project root; `app_path`, `app_name`, and optional `extra_vars` provided by the framework).
   - Same app can appear multiple times in `splunk_app_deployment.apps` with different `target_roles` and different `customizations`.
   - Customizations run in order: deploy app → remove → local_configs → run_playbook/run_role. Setting `update_needed: true` in a custom task file triggers the correct deployment handler.
-  - **Example playbook** `ansible/apps_playbooks/enable_perf_metrics.yml`: Enables Splunk_TA_nix script inputs (performance metrics); optional `extra_vars.ta_nix_script_index`. Equivalent behavior via `local_configs` is documented for universal_forwarder.
+  - **Example playbook** `ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml`: Enables Splunk_TA_nix script inputs (performance metrics); optional `extra_vars.ta_nix_script_index`. Equivalent behavior via `local_configs` is documented for universal_forwarder.
   - **Documentation**: [App_Deployment_Customizations.md](docs/App_Deployment_Customizations.md) (user manual). App deployment doc names normalized to `App_Deployment_*`.
 
 ### Changed

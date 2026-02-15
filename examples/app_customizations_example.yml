@@ -43,7 +43,7 @@ splunk_app_deployment:
       target_roles:
         - heavy_forwarder
       customizations:
-        run_playbook: "ansible/apps_playbooks/enable_perf_metrics.yml"
+        run_playbook: "ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml"
         extra_vars:
           app_path: "{{ app_path }}"
           app_name: "{{ app_name }}"

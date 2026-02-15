@@ -1,7 +1,7 @@
 ---
 # Enable Splunk_TA_nix script inputs (performance metrics) in the app's local/inputs.conf.
 #
-# Use from app customizations: run_playbook: "ansible/apps_playbooks/enable_perf_metrics.yml"
+# Use from app customizations: run_playbook: "ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml"
 #
 # Framework vars: app_path, app_name
 # Optional extra_vars: ta_nix_script_index (default: itsi_im_metrics)
