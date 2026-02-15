@@ -36,7 +36,7 @@ splunk_app_deployment:
   splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
   
   apps:
-    - name: "Splunk_TA_nix"
+    - name: "Splunk_TA_nix"   # For Splunkbase: must match the app folder name inside the archive
       source: splunkbase
       app_id: 833
       version: "latest"
@@ -44,6 +44,8 @@ splunk_app_deployment:
         - indexer
         - search_head
 ```
+
+For Splunkbase apps, **`name`** must match the top-level folder name in the app archive; otherwise the playbook fails (see [App Deployment Guide](docs/App_Deployment_Guide.md#splunkbase-apps-name-must-match-archive-folder)).
 
 ### 4. Deploy
 

@@ -145,6 +145,17 @@ apps:
 3. Logs: `tail -100 /opt/splunk/var/log/splunk/splunkd.log`
 4. Validation: `/opt/splunk/bin/splunk btool check`
 
+### Playbook fails: "App archive top-level folder does not match app name"
+
+**Cause**: For Splunkbase apps, the **`name`** in your config must match the **top-level folder name** inside the app archive. If they differ, the playbook removes the wrongly extracted directory and fails.
+
+**Common reason**: The wrong **`app_id`** was specified (e.g. a different Splunkbase app), so the downloaded archive has a different folder name than your `name`.
+
+**Solution**:
+1. Check the Splunkbase app page for the correct **app_id** and the app’s internal folder name.
+2. Set **`name`** to that exact folder name (e.g. `Splunk_TA_snow`, `Splunk_TA_nix`).
+3. Set **`app_id`** to the correct Splunkbase app ID for that app.
+
 ### App went to the wrong location
 
 **Check**:

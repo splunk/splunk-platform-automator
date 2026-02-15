@@ -158,6 +158,15 @@
     current_version: "{{ (current_app_conf.content | b64decode | regex_search('version\\s*=\\s*(.+)', '\\1') | first | trim) if current_app_conf is defined and current_app_conf.content is defined else 'unknown' }}"
   when: existing_app.stat.exists
 
+- name: "Set current version when app not installed"
+  tags:
+    - splunk
+    - splunk_apps
+    - splunkbase
+  ansible.builtin.set_fact:
+    current_version: "not installed"
+  when: not existing_app.stat.exists
+
 - name: "Determine if update needed for {{ app_name }}"
   tags:
     - splunk
@@ -219,7 +228,7 @@
         - splunkbase
       ansible.builtin.get_url:
         url: "{{ release_path }}"
-        dest: "{{ app_cache_dir }}/{{ app_name }}.tgz"
+        dest: "{{ app_cache_dir }}/{{ app_name }}_{{ resolved_version }}.tgz"
         headers:
           X-Auth-Token: "{{ splunkbase_auth_token }}"
         mode: '0644'
@@ -260,12 +269,40 @@
         - splunk_apps
         - splunkbase
       ansible.builtin.unarchive:
-        src: "{{ app_cache_dir }}/{{ app_name }}.tgz"
+        src: "{{ app_cache_dir }}/{{ app_name }}_{{ resolved_version }}.tgz"
         dest: "{{ target_path | dirname }}"
         remote_src: no
+        list_files: true
         owner: "{{ splunk_user | default('splunk') }}"
         group: "{{ splunk_group | default('splunk') }}"
       register: extract_result
+
+    - name: "Remove wrongly extracted directory (top-level does not match app name)"
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.builtin.file:
+        path: "{{ (target_path | dirname) ~ '/' ~ (extract_result.files[0] | split('/') | first) }}"
+        state: absent
+      when:
+        - extract_result.files is defined
+        - extract_result.files | length > 0
+        - (extract_result.files[0] | split('/') | first) != (target_path | basename)
+
+    - name: "Fail when app archive top-level folder does not match app name (wrong app_id?)"
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.builtin.fail:
+        msg: >-
+          App archive top-level folder '{{ extract_result.files[0] | split('/') | first }}' does not match app name '{{ app_name }}'.
+          Check app_id ({{ app_item.app_id }}) in splunk_app_deployment.apps - you may have specified the wrong Splunkbase app.
+      when:
+        - extract_result.files is defined
+        - extract_result.files | length > 0
+        - (extract_result.files[0] | split('/') | first) != (target_path | basename)
 
     - name: "Set permissions on {{ app_name }}"
       tags:

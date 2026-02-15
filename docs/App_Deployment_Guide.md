@@ -117,6 +117,14 @@ splunk_app_deployment:
   serverclass: "custom_class"         # Optional: Custom serverclass name (default: app_<appname>)
 ```
 
+### Splunkbase apps: name must match archive folder
+
+For apps from **Splunkbase** (`source: splunkbase`), the **`name`** in your config must be exactly the same as the **top-level folder name** inside the app archive downloaded from Splunkbase.
+
+- The playbook downloads the app by `app_id` and checks that the archive’s top-level folder matches `name`.
+- If they differ (for example you used the wrong `app_id` for another app), the playbook **removes the extracted directory** and **fails** with a clear message asking you to check `app_id`.
+- Use the app’s official internal name: e.g. `Splunk_TA_nix`, `Splunk_TA_snow`, `Splunk_SA_CIM`. You can confirm the folder name from the Splunkbase app page or by inspecting the downloaded `.tgz`.
+
 ## State Management
 
 ### Installing Apps
