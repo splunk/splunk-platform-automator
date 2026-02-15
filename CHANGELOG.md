@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **App Deployment** – New automated deployment of Splunk apps from Splunkbase or local filesystem, with per-host routing:
+  - **Config**: `splunk_app_deployment` in `splunk_config.yml` (credentials, `apps` list with `name`, `source` (splunkbase/local), `app_id` or `path`, `version`, `target_roles`, optional `state`, `deployment_target`, `serverclass`, etc.).
+  - **Playbooks**: `ansible/deploy_splunk_apps.yml` (deploy/update apps), `ansible/remove_splunk_apps.yml` (remove apps with `state: absent`).
+  - **Routing**: Apps are deployed to the correct location per host—Deployment Server (`etc/deployment-apps`), Cluster Manager (`etc/manager-apps`), Search Head Cluster Deployer (`etc/shcluster/apps`), or directly to the host (`etc/apps`). Routing respects cluster membership and optional `deployment_target: direct`.
+  - **Roles**: `apps_deployment_server`, `apps_cluster_manager`, `apps_deployer`, `apps_direct` (shared logic in `apps_common`). Handlers: Restart Splunk, Reload deploy-server, Push shcluster bundle, Apply indexer cluster bundle.
+  - **Sources**: Splunkbase (with env-based credentials) or local path; idempotent install/update with optional backup.
+  - **Verification**: `ansible/verification/verify_app_deployment.yml` and role-specific verification tasks to confirm deployed apps match config.
+  - **Docs**: [App_Deployment.md](docs/App_Deployment.md), [App_Deployment_Guide.md](docs/App_Deployment_Guide.md), [App_Deployment_Quick_Start.md](docs/App_Deployment_Quick_Start.md), [App_Deployment_FAQ.md](docs/App_Deployment_FAQ.md), [App_Deployment_Target_Logic.md](docs/App_Deployment_Target_Logic.md), [App_Deployment_Verification.md](docs/App_Deployment_Verification.md), [App_Deployment_Removing_Apps.md](docs/App_Deployment_Removing_Apps.md).
 ### Changed
 
 ### Fixed
