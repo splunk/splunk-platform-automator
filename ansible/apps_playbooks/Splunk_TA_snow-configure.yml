@@ -1,0 +1,116 @@
+---
+# Configure Splunk Add-on for ServiceNow (Splunk_TA_snow): account, settings, alert action, incident input.
+#
+# Use from app customizations: run_playbook: "ansible/apps_playbooks/Splunk_TA_snow-configure.yml"
+#
+# Framework vars: app_path, app_name
+# extra_vars (required): snow_connection, snow_url, snow_user, snow_password, snow_index
+# extra_vars (optional): dns_name (for alert action splunk_url), since_when (default: 7 days ago),
+#   disable_ssl_certificate_validation (default: '0'), record_count (default: '3000')
+
+- name: "Resolve ServiceNow extra_vars (avoids template recursion)"
+  ansible.builtin.set_fact:
+    _snow_connection: "{{ (customization_extra_vars | default({})).get('snow_connection', 'ServiceNow') }}"
+    _snow_url: "{{ (customization_extra_vars | default({})).get('snow_url') }}"
+    _snow_user: "{{ (customization_extra_vars | default({})).get('snow_user') }}"
+    _snow_password: "{{ (customization_extra_vars | default({})).get('snow_password') }}"
+    _snow_index: "{{ (customization_extra_vars | default({})).get('snow_index', 'snow_incidents') }}"
+    _snow_dns_name: "{{ (customization_extra_vars | default({})).get('dns_name', '') }}"
+    _snow_disable_ssl: "{{ (customization_extra_vars | default({})).get('disable_ssl_certificate_validation', '0') }}"
+    _snow_record_count: "{{ (customization_extra_vars | default({})).get('record_count', '3000') }}"
+    _snow_since_when: "{{ (customization_extra_vars | default({})).get('since_when', (ansible_facts['date_time'].year ~ '-' ~ ansible_facts['date_time'].month ~ '-' ~ (ansible_facts['date_time'].day | int - 7) ~ ' ' ~ ansible_facts['date_time'].time)) }}"
+  when: app_path is defined
+
+- name: "Ensure local directory exists for {{ app_name }}"
+  ansible.builtin.file:
+    path: "{{ app_path }}/local"
+    state: directory
+    mode: '0755'
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+  register: _snow_local_dir_result
+  when: app_path is defined
+
+- name: "Set ServiceNow account in {{ app_name }}"
+  community.general.ini_file:
+    path: "{{ app_path }}/local/splunk_ta_snow_account.conf"
+    section: "{{ _snow_connection }}"
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    mode: '0644'
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+  loop:
+    - { key: 'auth_type', value: 'basic' }
+    - { key: 'disable_ssl_certificate_validation', value: "{{ _snow_disable_ssl }}" }
+    - { key: 'password', value: "{{ _snow_password }}" }
+    - { key: 'record_count', value: "{{ _snow_record_count }}" }
+    - { key: 'url', value: "{{ _snow_url }}" }
+    - { key: 'username', value: "{{ _snow_user }}" }
+  register: _snow_account_result
+  when: app_path is defined and _snow_connection is defined and _snow_url is defined and _snow_user is defined and _snow_password is defined
+
+- name: "Set ServiceNow settings in {{ app_name }}"
+  community.general.ini_file:
+    path: "{{ app_path }}/local/splunk_ta_snow_settings.conf"
+    section: "filter_parameter_migration"
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    mode: '0644'
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+  loop:
+    - { key: 'has_migrated', value: '1' }
+  register: _snow_settings_result
+  when: app_path is defined
+
+- name: "Set alert action snow_incident in {{ app_name }}"
+  community.general.ini_file:
+    path: "{{ app_path }}/local/alert_actions.conf"
+    section: "snow_incident"
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    mode: '0644'
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+  loop:
+    - { key: 'param.account', value: "{{ _snow_connection }}" }
+    - { key: 'param.contact_type', value: 'email' }
+    - { key: 'param.state', value: '' }
+    - { key: 'param.impact', value: '2' }
+    - { key: 'param.urgency', value: '2' }
+    - { key: 'param.short_description', value: '$result.itsi_group_title$' }
+    - { key: 'param.splunk_url', value: "https://{{ _snow_dns_name }}:8000/{{ url_locale | default('en-GB') }}/app/itsi/itsi_event_management?episodeid=$result.itsi_group_id$" }
+  register: _snow_alert_result
+  when: app_path is defined and _snow_connection is defined
+
+- name: "Enable incident import (snow://incident) in {{ app_name }}"
+  community.general.ini_file:
+    path: "{{ app_path }}/local/inputs.conf"
+    section: "snow://incident"
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    mode: '0644'
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+  loop:
+    - { key: 'account', value: "{{ _snow_connection }}" }
+    - { key: 'index', value: "{{ _snow_index }}" }
+    - { key: 'interval', value: '300' }
+    - { key: 'id_field', value: 'sys_id' }
+    - { key: 'since_when', value: "{{ _snow_since_when }}" }
+    - { key: 'timefield', value: 'sys_updated_on' }
+    - { key: 'disabled', value: '0' }
+  register: _snow_inputs_result
+  when: app_path is defined and _snow_connection is defined
+
+- name: "Set update_needed so deployment handler runs"
+  ansible.builtin.set_fact:
+    update_needed: true
+  when:
+    - app_path is defined
+    - (_snow_local_dir_result is defined and _snow_local_dir_result.changed) or
+      (_snow_account_result is defined and (_snow_account_result.get('results', []) | selectattr('changed') | list | length) > 0) or
+      (_snow_settings_result is defined and (_snow_settings_result.get('results', []) | selectattr('changed') | list | length) > 0) or
+      (_snow_alert_result is defined and (_snow_alert_result.get('results', []) | selectattr('changed') | list | length) > 0) or
+      (_snow_inputs_result is defined and (_snow_inputs_result.get('results', []) | selectattr('changed') | list | length) > 0)
