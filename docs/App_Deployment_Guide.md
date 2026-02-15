@@ -72,6 +72,18 @@ For each host with target_role:
 
 ## App Configuration
 
+### Top-level download option: target_download
+
+Under `splunk_app_deployment` you can set:
+
+```yaml
+splunk_app_deployment:
+  target_download: false   # default: when true, each target downloads from Splunkbase
+```
+
+- **`target_download: false`** (default): The Ansible controller downloads each Splunkbase app once, then copies and extracts it to each target. Best when the controller has good bandwidth to Splunkbase and to the targets.
+- **`target_download: true`**: Each target host downloads the app from Splunkbase. Use this when upload speed from the Ansible host to targets is slow (e.g. large apps); each target only needs outbound access to Splunkbase and uses its own download.
+
 ### Basic App Definition
 
 ```yaml

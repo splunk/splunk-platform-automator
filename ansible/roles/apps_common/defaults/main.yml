@@ -17,6 +17,8 @@ splunk_app_deployment_defaults:
   # Download settings
   download_timeout: 120
   retry_count: 3
+  # When true, each target downloads the app from Splunkbase (avoids slow upload from Ansible host for large apps)
+  target_download: false
   
   # Splunkbase settings
   splunkbase_api_url: "https://splunkbase.splunk.com/api/v1"
@@ -28,7 +30,7 @@ splunk_app_deployment_defaults:
   # Local app repository settings
   local_app_repo_path: "{{ playbook_dir }}/../apps"
   
-  # Cache settings
+  # Cache settings: when true, keep downloaded .tgz in temp_dir after extraction; when false, remove after extraction
   cache_downloads: true
   
   # Apps list (empty by default, populated from config)
