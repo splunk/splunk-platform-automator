@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Fixed missing outputs.conf configuration for Splunk 9.2+ on Deployment Servers not acting as indexers
+
 ## [2.3.2](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.3.2) - 2026-02-08
 
 ### Added

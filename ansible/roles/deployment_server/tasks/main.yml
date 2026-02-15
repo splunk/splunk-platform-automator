@@ -176,6 +176,25 @@
     loop_var: search_peer_name
   when: splunk_idxc_cm_list|length > 0
 
+- name: Configure indexAndForward in outputs.conf
+  tags:
+    - splunk
+    - deployment_server
+    - outputs_conf
+  community.general.ini_file:
+    path: "{{ splunk_home }}/etc/system/local/outputs.conf"
+    section: indexAndForward
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    mode: '0644'
+  loop:
+    - { key: 'index', value: 'true' }
+    - { key: 'selectiveIndexing', value: 'true' }
+  when:
+    - splunk_installed_version is version_compare('9.2', '>=')
+    - inventory_hostname not in groups.role_indexer
+  notify: Restart splunk
+
 - name: Call serverclass
   tags:
     - splunk
