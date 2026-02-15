@@ -1,4 +1,4 @@
-# Splunk App Deployment Verification System
+# App Deployment Verification
 
 ## Overview
 
@@ -312,6 +312,6 @@ If verification is skipped for a host, it means no apps are expected there based
 
 ## See Also
 
-- [Splunk App Deployment Guide](Splunk_App_Deployment_Guide.md)
+- [App Deployment Guide](App_Deployment_Guide.md)
 - [Deployment Server Setup](Deployment_Server_Setup.md)
 - [Verification README](../ansible/verification/README.md)

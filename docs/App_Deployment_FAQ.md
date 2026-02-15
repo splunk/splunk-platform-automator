@@ -1,4 +1,4 @@
-# Splunk App Deployment - FAQ
+# App Deployment – FAQ
 
 Frequently Asked Questions about the Splunk App Deployment role.
 
@@ -371,7 +371,7 @@ Yes! The role is idempotent:
 
 ## Still Have Questions?
 
-- Check the [main documentation](Splunk_App_Deployment.md)
-- Read the [Quick Start guide](Splunk_App_Deployment_Quick_Start.md)
-- Review the [Target Logic](Splunk_App_Deployment_Target_Logic.md)
-- Check [Target Logic](Splunk_App_Deployment_Target_Logic.md) and [Guide](Splunk_App_Deployment_Guide.md)
+- Check the [main documentation](App_Deployment.md)
+- Read the [Quick Start guide](App_Deployment_Quick_Start.md)
+- Review the [Target Logic](App_Deployment_Target_Logic.md)
+- Check [Target Logic](App_Deployment_Target_Logic.md) and [Guide](App_Deployment_Guide.md)

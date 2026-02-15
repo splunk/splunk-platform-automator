@@ -1,8 +1,8 @@
-# Splunk App Deployment – Target Logic
+# App Deployment – Target Logic
 
 ## Overview
 
-This document describes how the app deployment system decides **where** each app is deployed (Deployment Server, Cluster Manager, Deployer, or directly to a host). For configuration syntax and playbook usage, see [Splunk_App_Deployment_Guide.md](Splunk_App_Deployment_Guide.md) and [Splunk_App_Deployment_Quick_Start.md](Splunk_App_Deployment_Quick_Start.md).
+This document describes how the app deployment system decides **where** each app is deployed (Deployment Server, Cluster Manager, Deployer, or directly to a host). For configuration syntax and playbook usage, see [App_Deployment_Guide.md](App_Deployment_Guide.md) and [App_Deployment_Quick_Start.md](App_Deployment_Quick_Start.md).
 
 ## Deployment Routing Summary
 

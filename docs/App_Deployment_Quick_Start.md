@@ -1,4 +1,4 @@
-# Splunk App Deployment - Quick Start Guide
+# App Deployment – Quick Start Guide
 
 ## TL;DR - Get Started in 5 Minutes
 
@@ -118,7 +118,7 @@ The role **automatically determines** where to deploy apps based on your environ
   deployment_target: "direct"   # Bypass cluster manager
 ```
 
-**Learn More**: See `docs/Splunk_App_Deployment_Target_Logic.md` for detailed decision tree.
+**Learn More**: See `docs/App_Deployment_Target_Logic.md` for detailed decision tree.
 
 ---
 
@@ -542,7 +542,7 @@ ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml \
 
 ## Next Steps
 
-1. **Review the Full Proposal**: See `docs/Splunk_App_Deployment_Proposal.md`
+1. **Review the full guide**: See `docs/App_Deployment_Guide.md`
 2. **Check Example Config**: See `examples/splunk_apps_config_example.yml`
 3. **Start with Phase 1**: Implement Splunkbase integration first
 4. **Test in Non-Production**: Always test in a dev environment first
@@ -552,7 +552,7 @@ ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml \
 
 ## Support & Documentation
 
-- **Full Proposal**: `docs/Splunk_App_Deployment_Proposal.md`
+- **Full Guide**: `docs/App_Deployment_Guide.md`
 - **Example Config**: `examples/splunk_apps_config_example.yml`
 - **Splunkbase API**: https://dev.splunk.com/enterprise/docs/releaseapps/splunkbase/
 - **Ansible Docs**: https://docs.ansible.com/

@@ -1,4 +1,4 @@
-# Removing Splunk Apps
+# App Deployment – Removing Apps
 
 **Playbook**: `ansible/remove_splunk_apps.yml`  
 **Purpose**: Safely remove Splunk apps from your environment
@@ -473,8 +473,8 @@ Both playbooks:
 ## See Also
 
 - **Deploy Apps**: `ansible/deploy_splunk_apps.yml`
-- **App Deployment Guide**: [Splunk_App_Deployment_Guide.md](Splunk_App_Deployment_Guide.md)
-- **Target Logic**: [Splunk_App_Deployment_Target_Logic.md](Splunk_App_Deployment_Target_Logic.md)
+- **App Deployment Guide**: [App_Deployment_Guide.md](App_Deployment_Guide.md)
+- **Target Logic**: [App_Deployment_Target_Logic.md](App_Deployment_Target_Logic.md)
 
 ---
 

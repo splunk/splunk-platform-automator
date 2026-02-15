@@ -1,4 +1,4 @@
-# Splunk App Deployment
+# App Deployment
 
 Ansible role for automated deployment of Splunk apps from Splunkbase and local repositories with intelligent per-host cluster detection.
 
@@ -61,18 +61,18 @@ ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml
 
 | Document | Purpose |
 |----------|---------|
-| **[Main Documentation](docs/Splunk_App_Deployment.md)** | Complete user guide |
-| **[Quick Start Guide](docs/Splunk_App_Deployment_Quick_Start.md)** | 5-minute quick start |
-| **[FAQ](docs/Splunk_App_Deployment_FAQ.md)** | Common questions and answers |
-| **[Target Logic](docs/Splunk_App_Deployment_Target_Logic.md)** | Deployment routing details |
-| **[Target Logic](docs/Splunk_App_Deployment_Target_Logic.md)** | Implementation logic and role filters |
+| **[Main Documentation](docs/App_Deployment.md)** | Complete user guide |
+| **[Quick Start Guide](docs/App_Deployment_Quick_Start.md)** | 5-minute quick start |
+| **[FAQ](docs/App_Deployment_FAQ.md)** | Common questions and answers |
+| **[Target Logic](docs/App_Deployment_Target_Logic.md)** | Deployment routing details |
 
 ### Related Documentation
 
 | Document | Purpose |
 |----------|---------|
 | **[App Deployment Verification](docs/App_Deployment_Verification.md)** | Verify deployed apps match config |
-| **[Removing Splunk Apps](docs/Removing_Splunk_Apps.md)** | Remove apps with `state: absent` |
+| **[App Deployment Removing Apps](docs/App_Deployment_Removing_Apps.md)** | Remove apps with `state: absent` |
+| **[App Deployment Customizations](docs/App_Deployment_Customizations.md)** | Per-app, per-role customizations (remove files, local_configs, run playbook) |
 
 ## 🌟 Key Features
 

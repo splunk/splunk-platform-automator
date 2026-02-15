@@ -1,4 +1,4 @@
-# Splunk App Deployment - Complete Guide
+# App Deployment – Complete Guide
 
 ## Overview
 
