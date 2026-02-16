@@ -1,0 +1,10 @@
+---
+# Download Splunkbase app archive (auth + get_url). Expects splunkbase_release_path, splunkbase_archive_path already set (e.g. from resolve_splunkbase_version).
+
+- name: "Download Splunkbase archive (controller)"
+  ansible.builtin.include_tasks: download_splunkbase_archive_controller.yml
+  when: not (splunk_app_deployment.target_download | default(false))
+
+- name: "Download Splunkbase archive (target)"
+  ansible.builtin.include_tasks: download_splunkbase_archive_target.yml
+  when: splunk_app_deployment.target_download | default(false)

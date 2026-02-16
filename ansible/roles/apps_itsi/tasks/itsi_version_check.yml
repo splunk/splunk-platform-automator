@@ -1,6 +1,6 @@
 ---
 # Compare all ITSI app versions on target to expected versions from cache.
-# Expects: apps_itsi_version_check_apps (list of app names), apps_itsi_version_check_base (path to etc/apps or shcluster/apps or manager-apps), apps_itsi_expected_versions (dict from itsi_app_conf_cache).
+# Expects: apps_itsi_version_check_apps (list of app names), apps_itsi_version_check_base (path), apps_itsi_expected_versions (dict from app conf cache).
 
 - name: "Filter expected versions to apps needed for this role"
   tags:
@@ -11,7 +11,8 @@
     apps_itsi_expected_versions_filtered: "{{ dict(apps_itsi_version_check_apps | zip(apps_itsi_version_check_apps | map('extract', apps_itsi_expected_versions | default({})) | map('default', '') | list)) }}"
 
 # Run version read as splunk user so we can read etc/apps, manager-apps, or shcluster/apps
-- name: "Get version from [launcher] in target app.conf"
+# Use [launcher], then [id], then first version= in file (same as app conf cache)
+- name: "Get version from [launcher] or [id] or first version= in target app.conf"
   tags:
     - splunk
     - splunk_apps
@@ -19,7 +20,14 @@
   ansible.builtin.shell:
     cmd: |
       f="{{ apps_itsi_version_check_base }}/{{ item }}/default/app.conf"
-      sed -n '/\[launcher\]/,/^\[/p' "$f" | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//'
+      v=$(sed -n '/\[launcher\]/,/^\[/p' "$f" | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//')
+      if [ -z "$v" ]; then
+        v=$(sed -n '/\[id\]/,/^\[/p' "$f" | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//')
+      fi
+      if [ -z "$v" ]; then
+        v=$(grep -E '^\s*version\s*=' "$f" | head -1 | sed -E 's/^[^=]*=\s*//')
+      fi
+      echo -n "$v"
   loop: "{{ apps_itsi_version_check_apps }}"
   register: itsi_version_check_versions
   changed_when: false

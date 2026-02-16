@@ -1,0 +1,75 @@
+---
+# Resolve Splunkbase app version on controller. Sets splunkbase_resolved_version, splunkbase_release_path, splunkbase_archive_path on localhost.
+# Expects: splunkbase_app_id, splunkbase_cache_dir, splunkbase_dest_slug. Optional: splunkbase_version (default 'latest'), splunkbase_fail_msg_app_name.
+
+- name: "Get app info from Splunkbase (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.uri:
+    url: "{{ splunk_app_deployment.splunkbase_api_url }}/app/{{ splunkbase_app_id }}/?include=release,releases"
+    method: GET
+    user: "{{ splunk_app_deployment.splunkbase_username }}"
+    password: "{{ splunk_app_deployment.splunkbase_password }}"
+    force_basic_auth: true
+    return_content: true
+    status_code: [200, 404]
+  register: splunkbase_app_info
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: "Fail if app not found on Splunkbase (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.fail:
+    msg: "{{ splunkbase_fail_msg_app_name | default('App') }} (ID: {{ splunkbase_app_id }}) not found on Splunkbase"
+  when: splunkbase_app_info.status == 404
+  run_once: true
+  delegate_to: localhost
+
+- name: "Propagate Splunkbase API result to all hosts (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.set_fact:
+    splunkbase_app_info: "{{ hostvars['localhost']['splunkbase_app_info'] }}"
+  when: hostvars['localhost'] is defined and hostvars['localhost']['splunkbase_app_info'] is defined
+
+- name: "Set app version and release path (latest) from API (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.set_fact:
+    splunkbase_resolved_version: "{{ splunkbase_app_info.json.release.title if splunkbase_app_info.json.release is defined else (splunkbase_app_info.json.releases[0].title if splunkbase_app_info.json.releases is defined and splunkbase_app_info.json.releases | length > 0 else 'unknown') }}"
+    splunkbase_release_path: "{{ splunkbase_app_info.json.release.path if splunkbase_app_info.json.release is defined else (splunkbase_app_info.json.releases[0].path if splunkbase_app_info.json.releases is defined and splunkbase_app_info.json.releases | length > 0 else '') }}"
+  when: (splunkbase_version | default('latest')) == 'latest'
+
+- name: "Set app version and release path (specific version) (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.set_fact:
+    splunkbase_resolved_version: "{{ splunkbase_version }}"
+    splunkbase_release_path: "{{ (splunkbase_app_info.json.releases | selectattr('title', 'equalto', splunkbase_version) | list | first).path if (splunkbase_app_info.json.releases | selectattr('title', 'equalto', splunkbase_version) | list | length > 0) else '' }}"
+  when: (splunkbase_version | default('latest')) != 'latest'
+
+- name: "Fail if app version not found on Splunkbase (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.fail:
+    msg: "{{ splunkbase_fail_msg_app_name | default('App') }} version {{ splunkbase_version }} not found. Available: {{ splunkbase_app_info.json.releases | map(attribute='title') | list }}"
+  when:
+    - (splunkbase_version | default('latest')) != 'latest'
+    - splunkbase_release_path | default('') == ''
+
+- name: "Set archive path for download (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.set_fact:
+    splunkbase_archive_path: "{{ splunkbase_cache_dir }}/{{ splunkbase_dest_slug }}_{{ splunkbase_resolved_version }}.tgz"
+  delegate_to: localhost
+  run_once: true

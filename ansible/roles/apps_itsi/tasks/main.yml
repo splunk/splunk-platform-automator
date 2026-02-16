@@ -36,23 +36,42 @@
     - splunk_apps
     - itsi
   ansible.builtin.set_fact:
-    apps_itsi_spl_path: "{{ app_item.local_path | default(app_item.path if (app_item.path is defined and app_item.path is search('^/')) else (apps_itsi_repo_path + '/' + (app_item.path | default(apps_itsi_default_filename)))) }}"
+    apps_itsi_spl_path: "{{ _local_path }}"
+  vars:
+    _local_path: "{{ app_item.local_path | default(app_item.path if (app_item.path is defined and app_item.path is search('^/')) else (apps_itsi_repo_path + '/' + (app_item.path | default(apps_itsi_default_filename)))) }}"
   when: (app_item.source | default('local')) != 'splunkbase'
 
-- name: "Download ITSI from Splunkbase"
-  ansible.builtin.include_tasks: itsi_download_splunkbase.yml
+- name: "Set Splunkbase download vars and download ITSI from Splunkbase (common)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
   when: (app_item.source | default('local')) == 'splunkbase'
+  block:
+    - name: "Set Splunkbase download vars for ITSI"
+      ansible.builtin.set_fact:
+        splunkbase_app_id: "{{ app_item.app_id | default(itsi_splunkbase_app_id) | default(1841) }}"
+        splunkbase_version: "{{ app_item.version | default('latest') }}"
+        splunkbase_cache_dir: "{{ apps_itsi_cache_dir }}"
+        splunkbase_dest_slug: "itsi"
+        splunkbase_fail_msg_app_name: "ITSI"
+    - name: "Download app from Splunkbase (common)"
+      ansible.builtin.include_role:
+        name: apps_common
+        tasks_from: download_from_splunkbase.yml
 
-- name: "Set ITSI archive path from Splunkbase controller download (for this host)"
+- name: "Set ITSI resolved version and archive path from common download"
   tags:
     - splunk
     - splunk_apps
     - itsi
   ansible.builtin.set_fact:
-    apps_itsi_spl_path: "{{ hostvars['localhost']['apps_itsi_spl_path'] }}"
-  when:
-    - (app_item.source | default('local')) == 'splunkbase'
-    - not (splunk_app_deployment.target_download | default(false))
+    apps_itsi_resolved_version: "{{ _resolved }}"
+    apps_itsi_spl_path: "{{ _archive_path }}"
+  vars:
+    _resolved: "{{ splunkbase_resolved_version if (splunk_app_deployment.target_download | default(false)) else hostvars['localhost']['splunkbase_resolved_version'] | default('') }}"
+    _archive_path: "{{ splunkbase_archive_path if (splunk_app_deployment.target_download | default(false)) else hostvars['localhost']['splunkbase_archive_path'] | default('') }}"
+  when: (app_item.source | default('local')) == 'splunkbase'
 
 # When source is local, verify archive exists (path already set above)
 - name: "Check ITSI archive exists (local)"
@@ -78,8 +97,47 @@
     - (app_item.source | default('local')) != 'splunkbase'
     - not apps_itsi_spl_file.stat.exists
 
-- name: "Ensure ITSI app.conf cache and expected versions (for all-app version check)"
-  ansible.builtin.include_tasks: itsi_app_conf_cache.yml
+- name: "Set app conf cache vars for ITSI"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    app_conf_archive_path: "{{ apps_itsi_spl_path }}"
+    app_conf_cache_dir: "{{ apps_itsi_cache_dir }}"
+    app_conf_cache_subdir: "itsi_app_confs"
+    app_conf_resolved_version: "{{ apps_itsi_resolved_version }}"
+
+# Restrict cache to LM/CM app list only when this host is not also a deployer.
+# When LM and deployer share a host, we must build expected_versions for all apps so the deployer version check has full data.
+- name: "Set app conf apps needed for this host (target_download, LM/CM only, skip when also deployer)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    app_conf_app_names_needed: "{{ itsi_lm_apps if inventory_hostname in (groups['role_license_manager'] | default([])) else itsi_cm_apps }}"
+  when:
+    - splunk_app_deployment.target_download | default(false)
+    - inventory_hostname in (groups['role_license_manager'] | default([])) or inventory_hostname in (groups['role_cluster_manager'] | default([]))
+    - not (inventory_hostname in (groups['role_deployer'] | default([])))
+
+- name: "Ensure app conf cache and expected versions (common)"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: app_conf_cache.yml
+
+- name: "Set ITSI expected versions and app names from common cache"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_expected_versions: "{{ _exp_versions }}"
+    itsi_app_conf_app_names: "{{ _app_names }}"
+  vars:
+    _exp_versions: "{{ app_conf_expected_versions if (splunk_app_deployment.target_download | default(false)) else hostvars['localhost']['app_conf_expected_versions'] | default({}) }}"
+    _app_names: "{{ app_conf_app_names if (splunk_app_deployment.target_download | default(false)) else hostvars['localhost']['app_conf_app_names'] | default([]) }}"
 
 - name: "Run ITSI deployment for cluster manager"
   ansible.builtin.include_tasks: itsi_cluster_manager.yml

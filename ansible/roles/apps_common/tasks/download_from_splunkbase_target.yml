@@ -1,0 +1,9 @@
+---
+# Full download from Splunkbase on target: resolve version then download archive.
+# Expects: splunkbase_app_id, splunkbase_cache_dir, splunkbase_dest_slug. Optional: splunkbase_version, splunkbase_fail_msg_app_name.
+
+- name: "Resolve Splunkbase version (target)"
+  ansible.builtin.include_tasks: resolve_splunkbase_version_target.yml
+
+- name: "Download Splunkbase archive (target)"
+  ansible.builtin.include_tasks: download_splunkbase_archive_target.yml

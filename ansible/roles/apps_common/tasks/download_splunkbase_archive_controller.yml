@@ -1,0 +1,69 @@
+---
+# Download Splunkbase app archive on controller. Expects splunkbase_release_path, splunkbase_archive_path, splunkbase_cache_dir.
+
+- name: "Create app cache directory (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.file:
+    path: "{{ splunkbase_cache_dir }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: "Authenticate with Splunkbase (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.uri:
+    url: "https://splunkbase.splunk.com/api/account:login"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: "{{ splunk_app_deployment.splunkbase_username }}"
+      password: "{{ splunk_app_deployment.splunkbase_password }}"
+    return_content: true
+    status_code: [200]
+  register: splunkbase_auth
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: "Set Splunkbase auth token (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.set_fact:
+    splunkbase_token: "{{ splunkbase_auth.content | regex_search('<id>([^<]+)</id>', '\\1') | first }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: "Download app from Splunkbase (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.get_url:
+    url: "{{ splunkbase_release_path }}"
+    dest: "{{ splunkbase_archive_path }}"
+    headers:
+      X-Auth-Token: "{{ splunkbase_token }}"
+    mode: '0644'
+    timeout: "{{ splunk_app_deployment.download_timeout | default(120) }}"
+  register: splunkbase_download_result
+  until: splunkbase_download_result is succeeded
+  retries: "{{ splunk_app_deployment.retry_count | default(3) }}"
+  delay: 10
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: "Set archive path from download result (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.set_fact:
+    splunkbase_archive_path: "{{ splunkbase_download_result.dest }}"
+  delegate_to: localhost
+  run_once: true

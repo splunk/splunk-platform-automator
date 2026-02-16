@@ -1,0 +1,13 @@
+---
+# Extract default/app.conf from an app archive and build expected versions (app name -> [launcher] version).
+# Caller must set: app_conf_archive_path, app_conf_cache_dir, app_conf_cache_subdir (e.g. 'itsi_app_confs'),
+#   app_conf_resolved_version. Optional for target: app_conf_app_names_needed (list of app names to restrict to).
+# After include: app_conf_expected_versions (dict), app_conf_app_names (list). Controller propagates to all hosts.
+
+- name: "Ensure app conf cache and expected versions (controller)"
+  ansible.builtin.include_tasks: app_conf_cache_controller.yml
+  when: not (splunk_app_deployment.target_download | default(false))
+
+- name: "Ensure app conf cache and expected versions (target)"
+  ansible.builtin.include_tasks: app_conf_cache_target.yml
+  when: splunk_app_deployment.target_download | default(false)
