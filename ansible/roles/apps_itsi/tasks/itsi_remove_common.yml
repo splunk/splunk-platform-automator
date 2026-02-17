@@ -38,3 +38,79 @@
   ansible.builtin.fail:
     msg: "ITSI app list from archive is required for removal. Archive must be present and listable; use apps_common download and app conf cache."
   when: (itsi_sh_apps_from_archive | default([]) | length) == 0
+
+# Clear ITSI cache (archive + itsi_app_confs) created during removal only when cache_downloads=false.
+- name: "Remove ITSI archive after removal (controller, Splunkbase)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ _itsi_removal_archive_path }}"
+    state: absent
+  delegate_to: localhost
+  run_once: true
+  become: false
+  vars:
+    _itsi_removal_version: "{{ (hostvars['localhost'] | default({})).get('splunkbase_resolved_version', '') or ((_itsi_removal_archive_path_result | default({})).ansible_facts | default({})).get('splunkbase_resolved_version', '') or (app_item.itsi_version | default(itsi_version)) }}"
+    _itsi_removal_archive_path: "{{ ((_itsi_removal_archive_path_result | default({})).ansible_facts | default({})).get('_itsi_removal_controller_archive_path', '') or (hostvars['localhost'] | default({})).get('_itsi_removal_controller_archive_path', '') or (hostvars['localhost'] | default({})).get('splunkbase_archive_path', '') or ((splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir)) ~ '/ITSI/itsi_' ~ (_itsi_removal_version | default('')) ~ '.tgz') }}"
+  when:
+    - not (splunk_app_deployment.target_download | default(false))
+    - (app_item.source | default('local')) == 'splunkbase'
+    - not (splunk_app_deployment.cache_downloads | default(true))
+    - _itsi_removal_archive_path | default('') | length > 0
+
+- name: "Remove ITSI app conf cache version folder after removal (controller, Splunkbase)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ (splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir)) }}/ITSI/itsi_app_confs/{{ (hostvars['localhost'] | default({})).get('splunkbase_resolved_version', '') }}"
+    state: absent
+  delegate_to: localhost
+  run_once: true
+  become: false
+  when:
+    - not (splunk_app_deployment.target_download | default(false))
+    - (app_item.source | default('local')) == 'splunkbase'
+    - not (splunk_app_deployment.cache_downloads | default(true))
+
+- name: "Remove ITSI app conf cache version folder after removal (controller, local)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ (splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir)) }}/ITSI/itsi_app_confs/{{ app_item.itsi_version | default(itsi_version) }}"
+    state: absent
+  when:
+    - not (splunk_app_deployment.target_download | default(false))
+    - (app_item.source | default('local')) == 'local'
+    - not (splunk_app_deployment.cache_downloads | default(true))
+
+- name: "Remove ITSI archive after removal (target, Splunkbase)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ _itsi_removal_target_archive_path | default(splunkbase_archive_path) }}"
+    state: absent
+  when:
+    - splunk_app_deployment.target_download | default(false)
+    - (app_item.source | default('local')) == 'splunkbase'
+    - not (splunk_app_deployment.cache_downloads | default(true))
+    - (_itsi_removal_target_archive_path | default(splunkbase_archive_path) | default('')) | length > 0
+
+- name: "Remove ITSI app conf cache version folder after removal (target)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ (splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir)) }}/ITSI/itsi_app_confs/{{ _itsi_removal_target_version | default(splunkbase_resolved_version) | default(app_item.itsi_version) | default(itsi_version) }}"
+    state: absent
+  when:
+    - splunk_app_deployment.target_download | default(false)
+    - not (splunk_app_deployment.cache_downloads | default(true))

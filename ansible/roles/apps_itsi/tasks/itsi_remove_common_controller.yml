@@ -45,6 +45,11 @@
       ansible.builtin.set_fact:
         itsi_sh_apps_from_archive: "{{ app_conf_app_names | default([]) }}"
       register: _itsi_controller_app_list
+
+    - name: "Set ITSI controller archive path on localhost for later cleanup (cache_downloads=false)"
+      ansible.builtin.set_fact:
+        _itsi_removal_controller_archive_path: "{{ splunkbase_archive_path }}"
+      register: _itsi_removal_archive_path_result
   delegate_to: localhost
   run_once: true
   when: (app_item.source | default('local')) == 'splunkbase'

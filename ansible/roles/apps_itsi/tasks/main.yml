@@ -207,6 +207,66 @@
       or (app_item.itsi_shc_name is defined and inventory_hostname in (groups['shcluster_' + app_item.itsi_shc_name] | default([])))
     )
 
+# When Splunkbase and cache_downloads=false, remove archive and itsi_app_confs (used for version check and/or install).
+# Run regardless of whether we actually installed, since we always download for version check.
+- name: "Remove ITSI archive (controller, cache_downloads=false)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ apps_itsi_spl_path }}"
+    state: absent
+  delegate_to: localhost
+  run_once: true
+  become: false
+  when:
+    - (app_item.source | default('local')) == 'splunkbase'
+    - not (splunk_app_deployment.target_download | default(false))
+    - not (splunk_app_deployment.cache_downloads | default(true))
+
+- name: "Remove ITSI app conf cache version folder (controller, cache_downloads=false)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ apps_itsi_cache_dir }}/itsi_app_confs/{{ apps_itsi_resolved_version }}"
+    state: absent
+  delegate_to: localhost
+  run_once: true
+  become: false
+  when:
+    - (app_item.source | default('local')) == 'splunkbase'
+    - not (splunk_app_deployment.target_download | default(false))
+    - not (splunk_app_deployment.cache_downloads | default(true))
+
+- name: "Remove ITSI archive (target, cache_downloads=false)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ apps_itsi_spl_path }}"
+    state: absent
+  when:
+    - (app_item.source | default('local')) == 'splunkbase'
+    - splunk_app_deployment.target_download | default(false)
+    - not (splunk_app_deployment.cache_downloads | default(true))
+
+- name: "Remove ITSI app conf cache version folder (target, cache_downloads=false)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ apps_itsi_cache_dir }}/itsi_app_confs/{{ apps_itsi_resolved_version }}"
+    state: absent
+  when:
+    - (app_item.source | default('local')) == 'splunkbase'
+    - splunk_app_deployment.target_download | default(false)
+    - not (splunk_app_deployment.cache_downloads | default(true))
+
 # When included from apps_direct (process_direct_app), set update_needed so "Set app_path..." and "Notify Splunk restart" run.
 - name: "Set update_needed for direct deployment handler notification"
   tags:

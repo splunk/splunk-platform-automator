@@ -38,3 +38,27 @@
     name: apps_common
     tasks_from: app_conf_cache.yml
   when: (app_item.source | default('local')) == 'splunkbase' or (app_item.source | default('local')) == 'local'
+
+# Capture archive path and version for cleanup when cache_downloads=false (so cleanup in itsi_remove_common has reliable vars).
+- name: "Set ITSI target archive path and version for later cleanup (cache_downloads=false)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    _itsi_removal_target_archive_path: "{{ splunkbase_archive_path }}"
+    _itsi_removal_target_version: "{{ splunkbase_resolved_version if (app_item.source | default('local')) == 'splunkbase' else (app_item.itsi_version | default(itsi_version)) }}"
+  when:
+    - (app_item.source | default('local')) == 'splunkbase'
+    - not (splunk_app_deployment.cache_downloads | default(true))
+
+- name: "Set ITSI target version only for later cleanup (cache_downloads=false, local source)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    _itsi_removal_target_version: "{{ app_item.itsi_version | default(itsi_version) }}"
+  when:
+    - (app_item.source | default('local')) == 'local'
+    - not (splunk_app_deployment.cache_downloads | default(true))

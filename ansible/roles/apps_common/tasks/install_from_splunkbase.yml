@@ -109,6 +109,25 @@
 - name: "Download and install {{ app_name }}"
   when: update_needed | bool
   block:
+    - name: "Set flag to remove controller archive after install when cache_downloads=false"
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.builtin.set_fact:
+        _remove_controller_archive_after_install: "{{ not (splunk_app_deployment.target_download | default(false)) and not (splunk_app_deployment.cache_downloads | default(true)) }}"
+
+    - name: "Set controller archive path on localhost for post-install removal (cache_downloads=false)"
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.builtin.set_fact:
+        _controller_archive_path_to_remove: "{{ (hostvars['localhost'] | default({})).get('splunkbase_archive_path', '') }}"
+      delegate_to: localhost
+      run_once: true
+      when: _remove_controller_archive_after_install | default(false) | bool
+
     - name: "Backup existing {{ app_name }}"
       tags:
         - splunk
@@ -190,13 +209,12 @@
         - splunk_apps
         - splunkbase
       ansible.builtin.file:
-        path: "{{ app_download_archive_path }}"
+        path: "{{ (hostvars['localhost'] | default({})).get('_controller_archive_path_to_remove', '') or app_download_archive_path }}"
         state: absent
       delegate_to: localhost
       run_once: true
-      when:
-        - not (splunk_app_deployment.target_download | default(false))
-        - not (splunk_app_deployment.cache_downloads | default(true))
+      become: false
+      when: _remove_controller_archive_after_install | default(false) | bool
 
     - name: "Remove downloaded archive after extraction (target, cache_downloads=false)"
       tags:
