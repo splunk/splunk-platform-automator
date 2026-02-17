@@ -12,7 +12,7 @@
     apps_itsi_version_check_apps: "{{ apps_itsi_archive_app_list }}"
     apps_itsi_version_check_base: "{{ apps_itsi_splunk_home }}/{{ apps_itsi_sh_apps_base }}"
   vars:
-    apps_itsi_archive_app_list: "{{ hostvars['localhost']['itsi_app_conf_app_names'] if not (splunk_app_deployment.target_download | default(false)) else (itsi_app_conf_app_names | default([])) }}"
+    apps_itsi_archive_app_list: "{{ itsi_app_conf_app_names | default([]) }}"
 
 - name: "Fail when ITSI app list from archive is missing"
   tags:

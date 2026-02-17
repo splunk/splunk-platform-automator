@@ -28,7 +28,7 @@
     - splunk_apps
     - splunkbase
   ansible.builtin.set_fact:
-    resolved_version: "{{ splunkbase_resolved_version if (splunk_app_deployment.target_download | default(false)) else hostvars['localhost']['splunkbase_resolved_version'] | default(splunkbase_resolved_version) }}"
+    resolved_version: "{{ splunkbase_resolved_version if (splunk_app_deployment.target_download | default(false)) else (((_splunkbase_resolve_result | default({})).ansible_facts | default({}))._splunkbase_resolved_version | default(splunkbase_resolved_version)) }}"
 
 - name: "Check if {{ app_name }} already exists"
   tags:
@@ -103,7 +103,7 @@
     - splunk_apps
     - splunkbase
   ansible.builtin.set_fact:
-    app_download_archive_path: "{{ splunkbase_archive_path if (splunk_app_deployment.target_download | default(false)) else hostvars['localhost']['splunkbase_archive_path'] }}"
+    app_download_archive_path: "{{ splunkbase_archive_path if (splunk_app_deployment.target_download | default(false)) else (((_splunkbase_download_result | default({})).ansible_facts | default({}))._splunkbase_archive_path | default('')) }}"
   when: update_needed | bool
 
 - name: "Download and install {{ app_name }}"

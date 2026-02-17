@@ -12,6 +12,7 @@
     mode: '0755'
   delegate_to: localhost
   run_once: true
+  become: false
 
 - name: "List app archive for app.conf paths (controller)"
   tags:
@@ -23,6 +24,7 @@
   changed_when: false
   delegate_to: localhost
   run_once: true
+  become: false
 
 - name: "Set app conf paths from archive listing (controller)"
   tags:
@@ -32,6 +34,7 @@
     app_conf_paths: "{{ (app_conf_list_tar.stdout_lines | default([])) | map('trim') | select() | list }}"
   delegate_to: localhost
   run_once: true
+  become: false
   when: app_conf_list_tar is defined and (app_conf_list_tar.stdout_lines | default([]) | length > 0)
 
 - name: "Set app names from app.conf paths (controller)"
@@ -42,6 +45,7 @@
     app_conf_app_names: "{{ (app_conf_paths | default([])) | map('regex_replace', '^([^/]+)/.*', '\\1') | unique | list }}"
   delegate_to: localhost
   run_once: true
+  become: false
   when: app_conf_paths is defined and (app_conf_paths | length > 0)
 
 - name: "Extract app conf files from archive to cache (controller)"
@@ -54,6 +58,7 @@
     creates: "{{ app_conf_cache_dir }}/{{ app_conf_cache_subdir }}/{{ app_conf_resolved_version }}/{{ (app_conf_paths | default([]) | first) | default('') }}"
   delegate_to: localhost
   run_once: true
+  become: false
   when: app_conf_paths is defined and (app_conf_paths | length > 0)
 
 - name: "Get version from [launcher] or [id] or first version= in cached app.conf (controller)"
@@ -70,12 +75,13 @@
       if [ -z "$v" ]; then
         v=$(grep -E '^\s*version\s*=' "$f" | head -1 | sed -E 's/^[^=]*=\s*//')
       fi
-      echo -n "$v"
+      printf '%s' "$v"
   loop: "{{ app_conf_app_names | default([]) }}"
   register: app_conf_cached_versions
   changed_when: false
   delegate_to: localhost
   run_once: true
+  become: false
   when: app_conf_app_names is defined and (app_conf_app_names | length > 0)
 
 - name: "Build app conf expected versions dict (controller)"
@@ -87,6 +93,7 @@
   loop: "{{ app_conf_cached_versions.results | default([]) }}"
   delegate_to: localhost
   run_once: true
+  become: false
   when:
     - app_conf_cached_versions is defined
     - app_conf_cached_versions.results is defined

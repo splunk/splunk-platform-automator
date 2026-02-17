@@ -5,6 +5,14 @@
   ansible.builtin.include_tasks: download_splunkbase_archive_controller.yml
   when: not (splunk_app_deployment.target_download | default(false))
 
+- name: "Capture archive path on localhost for propagation (controller)"
+  ansible.builtin.set_fact:
+    _splunkbase_archive_path: "{{ splunkbase_archive_path }}"
+  register: _splunkbase_download_result
+  delegate_to: localhost
+  run_once: true
+  when: not (splunk_app_deployment.target_download | default(false))
+
 - name: "Download Splunkbase archive (target)"
   ansible.builtin.include_tasks: download_splunkbase_archive_target.yml
   when: splunk_app_deployment.target_download | default(false)

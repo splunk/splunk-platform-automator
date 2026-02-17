@@ -83,7 +83,7 @@
       if [ -z "$v" ]; then
         v=$(grep -E '^\s*version\s*=' "$f" | head -1 | sed -E 's/^[^=]*=\s*//')
       fi
-      echo -n "$v"
+      printf '%s' "$v"
   loop: "{{ app_conf_app_names_needed | default(app_conf_app_names) | default([]) }}"
   register: app_conf_cached_versions
   changed_when: false

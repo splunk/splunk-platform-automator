@@ -1,0 +1,69 @@
+---
+# ITSI removal (controller): download from Splunkbase via apps_common, then build app list via app conf cache.
+# Only included by itsi_remove_common.yml when not target_download.
+# Splunkbase path runs in a block delegated to localhost so we use localhost vars (splunkbase_archive_path) without HostVarsVars access.
+
+- name: "Set Splunkbase download vars for ITSI removal (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    splunkbase_app_id: "{{ app_item.app_id | default(itsi_splunkbase_app_id) | default(1841) }}"
+    splunkbase_version: "{{ app_item.version | default('latest') }}"
+    splunkbase_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/ITSI"
+    splunkbase_dest_slug: "itsi"
+    splunkbase_fail_msg_app_name: "ITSI"
+  when: (app_item.source | default('local')) == 'splunkbase'
+
+- name: "Download ITSI from Splunkbase (controller, common)"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: download_from_splunkbase.yml
+  when: (app_item.source | default('local')) == 'splunkbase'
+
+# Run on localhost so we can use splunkbase_archive_path / splunkbase_resolved_version directly (no hostvars read).
+- name: "Set app conf cache vars and run app conf cache (controller, Splunkbase)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  block:
+    - name: "Set app conf cache vars for ITSI removal (controller, from Splunkbase)"
+      ansible.builtin.set_fact:
+        app_conf_archive_path: "{{ splunkbase_archive_path }}"
+        app_conf_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/ITSI"
+        app_conf_cache_subdir: "itsi_app_confs"
+        app_conf_resolved_version: "{{ splunkbase_resolved_version }}"
+
+    - name: "Ensure app conf cache and app list (controller, common)"
+      ansible.builtin.include_role:
+        name: apps_common
+        tasks_from: app_conf_cache.yml
+
+    - name: "Set itsi_sh_apps_from_archive on localhost for propagation (register for other hosts)"
+      ansible.builtin.set_fact:
+        itsi_sh_apps_from_archive: "{{ app_conf_app_names | default([]) }}"
+      register: _itsi_controller_app_list
+  delegate_to: localhost
+  run_once: true
+  when: (app_item.source | default('local')) == 'splunkbase'
+
+# Local source: set vars on current host and run app conf cache (controller branch runs with delegate_to: localhost).
+- name: "Set app conf cache vars for ITSI removal (controller, local)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    app_conf_archive_path: "{{ itsi_remove_archive_path }}"
+    app_conf_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/ITSI"
+    app_conf_cache_subdir: "itsi_app_confs"
+    app_conf_resolved_version: "{{ app_item.itsi_version | default(itsi_version) }}"
+  when: (app_item.source | default('local')) == 'local'
+
+- name: "Ensure app conf cache and app list (controller, common, local)"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: app_conf_cache.yml
+  when: (app_item.source | default('local')) == 'local'

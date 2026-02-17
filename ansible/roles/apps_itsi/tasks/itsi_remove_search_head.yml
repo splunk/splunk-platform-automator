@@ -25,7 +25,7 @@
   ansible.builtin.file:
     path: "{{ splunk_home }}/{{ apps_itsi_sh_remove_base }}/{{ item }}"
     state: absent
-  loop: "{{ itsi_sh_apps_from_archive if (splunk_app_deployment.target_download | default(false)) else hostvars['localhost']['itsi_sh_apps_from_archive'] }}"
+  loop: "{{ itsi_sh_apps_from_archive }}"
   loop_control:
     label: "{{ item }}"
   notify: "{{ apps_itsi_sh_remove_notify }}"

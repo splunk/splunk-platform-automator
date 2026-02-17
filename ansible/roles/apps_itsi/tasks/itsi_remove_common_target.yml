@@ -1,0 +1,40 @@
+---
+# ITSI removal (target): download from Splunkbase via apps_common, then build app list via app conf cache.
+# Only included by itsi_remove_common.yml when target_download.
+
+- name: "Set Splunkbase download vars for ITSI removal (target)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    splunkbase_app_id: "{{ app_item.app_id | default(itsi_splunkbase_app_id) | default(1841) }}"
+    splunkbase_version: "{{ app_item.version | default('latest') }}"
+    splunkbase_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/ITSI"
+    splunkbase_dest_slug: "itsi"
+    splunkbase_fail_msg_app_name: "ITSI"
+  when: (app_item.source | default('local')) == 'splunkbase'
+
+- name: "Download ITSI from Splunkbase (target, common)"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: download_from_splunkbase.yml
+  when: (app_item.source | default('local')) == 'splunkbase'
+
+- name: "Set app conf cache vars for ITSI removal (target)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    app_conf_archive_path: "{{ splunkbase_archive_path if (app_item.source | default('local')) == 'splunkbase' else itsi_remove_archive_path }}"
+    app_conf_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/ITSI"
+    app_conf_cache_subdir: "itsi_app_confs"
+    app_conf_resolved_version: "{{ splunkbase_resolved_version if (app_item.source | default('local')) == 'splunkbase' else (app_item.itsi_version | default(itsi_version)) }}"
+  when: (app_item.source | default('local')) == 'splunkbase' or (app_item.source | default('local')) == 'local'
+
+- name: "Ensure app conf cache and app list (target, common)"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: app_conf_cache.yml
+  when: (app_item.source | default('local')) == 'splunkbase' or (app_item.source | default('local')) == 'local'

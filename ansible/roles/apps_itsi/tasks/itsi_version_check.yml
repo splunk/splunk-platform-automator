@@ -27,7 +27,7 @@
       if [ -z "$v" ]; then
         v=$(grep -E '^\s*version\s*=' "$f" | head -1 | sed -E 's/^[^=]*=\s*//')
       fi
-      echo -n "$v"
+      printf '%s' "$v"
   loop: "{{ apps_itsi_version_check_apps }}"
   register: itsi_version_check_versions
   changed_when: false

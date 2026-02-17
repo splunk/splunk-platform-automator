@@ -8,6 +8,14 @@
   ansible.builtin.include_tasks: resolve_splunkbase_version_controller.yml
   when: not (splunk_app_deployment.target_download | default(false))
 
+- name: "Capture resolved version on localhost for propagation (controller)"
+  ansible.builtin.set_fact:
+    _splunkbase_resolved_version: "{{ splunkbase_resolved_version }}"
+  register: _splunkbase_resolve_result
+  delegate_to: localhost
+  run_once: true
+  when: not (splunk_app_deployment.target_download | default(false))
+
 - name: "Resolve Splunkbase version (target)"
   ansible.builtin.include_tasks: resolve_splunkbase_version_target.yml
   when: splunk_app_deployment.target_download | default(false)
