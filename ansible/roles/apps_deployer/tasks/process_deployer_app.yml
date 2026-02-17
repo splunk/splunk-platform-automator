@@ -49,7 +49,10 @@
 - name: "Remove {{ app_item.name }} (premium app ITSI, deployer)"
   ansible.builtin.include_role:
     name: apps_itsi
-    tasks_from: itsi_remove_deployer.yml
+    tasks_from: itsi_remove_search_head.yml
+  vars:
+    apps_itsi_sh_remove_base: "etc/shcluster/apps"
+    apps_itsi_sh_remove_notify: "Push shcluster bundle"
   when:
     - app_state == 'absent'
     - (app_item.premium_app | default('')) == 'itsi'

@@ -1,0 +1,27 @@
+---
+# Remove ITSI from direct-deployment host. Branch by role: license manager, search head, or standalone indexer.
+# Called from process_direct_app when state absent and premium_app is itsi (single entry point like install).
+
+- name: "Remove ITSI (license manager)"
+  ansible.builtin.include_tasks: itsi_remove_license_manager.yml
+  when:
+    - inventory_hostname in (groups.role_license_manager | default([]))
+    - not (inventory_hostname in (groups.role_search_head | default([])))
+
+- name: "Remove ITSI (search head)"
+  ansible.builtin.include_tasks: itsi_remove_search_head.yml
+  vars:
+    apps_itsi_sh_remove_base: "etc/apps"
+    apps_itsi_sh_remove_notify: "Restart splunk"
+    apps_itsi_sh_remove_file_when: "{{ (app_item.itsi_sh_name is not defined and app_item.itsi_shc_name is not defined) or (app_item.itsi_sh_name is defined and inventory_hostname == app_item.itsi_sh_name) or (app_item.itsi_shc_name is defined and inventory_hostname in (groups['shcluster_' + app_item.itsi_shc_name] | default([]))) }}"
+  when: inventory_hostname in (groups.role_search_head | default([]))
+
+- name: "Remove ITSI (standalone indexer)"
+  ansible.builtin.include_tasks: itsi_remove_indexer.yml
+  vars:
+    apps_itsi_indexer_remove_base: "etc/apps"
+    apps_itsi_indexer_remove_notify: "Restart splunk"
+  when:
+    - inventory_hostname in (groups.role_indexer | default([]))
+    - (group_names | select('match', '^idxcluster_') | list | length) == 0
+    - not (inventory_hostname in (groups.role_search_head | default([])))

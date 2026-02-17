@@ -5,8 +5,8 @@
 # Flow: Play 1 filters to apps with state=absent and sets splunk_app_deployment_filtered.
 # Plays 2–5 run the same roles as deploy, passing that filtered config so each role only
 # processes apps to remove. ITSI removal is handled by those roles via role-specific task
-# files: itsi_remove_deployer.yml, itsi_remove_cluster_manager.yml, itsi_remove_license_manager.yml,
-# itsi_remove_search_head.yml (invoked from process_deployer_app, process_cm_app, process_direct_app).
+# files: itsi_remove_indexer.yml, itsi_remove_license_manager.yml, itsi_remove_search_head.yml
+# (invoked from process_deployer_app, process_cm_app, process_direct_app).
 
 - name: Pre-removal checks and filter apps
   hosts: localhost

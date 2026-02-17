@@ -64,4 +64,4 @@
   become: true
   become_user: root
   delegate_to: "{{ inventory_hostname }}"
-  when: app_path == splunk_home + '/etc/apps'
+  when: restart_splunk_direct_etc_apps | default(false) | bool or (app_path is defined and splunk_home is defined and app_path == splunk_home + '/etc/apps')

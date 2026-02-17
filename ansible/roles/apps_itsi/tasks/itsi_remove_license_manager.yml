@@ -2,13 +2,14 @@
 # Remove ITSI apps from license manager (etc/apps). Called from process_direct_app when state absent and role license_manager.
 # No archive listing needed; uses itsi_lm_apps from defaults.
 
-- name: "Set app_path so splunk_common 'Restart splunk' handler runs when notified"
+- name: "Set app_path and restart flag so splunk_common 'Restart splunk' handler runs when notified"
   tags:
     - splunk
     - splunk_apps
     - itsi
   ansible.builtin.set_fact:
     app_path: "{{ splunk_home }}/etc/apps"
+    restart_splunk_direct_etc_apps: true
 
 - name: "Remove ITSI apps from license manager (etc/apps)"
   tags:

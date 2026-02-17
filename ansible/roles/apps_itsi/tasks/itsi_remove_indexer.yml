@@ -1,0 +1,28 @@
+---
+# Remove ITSI indexer apps (itsi_cm_apps) from cluster manager or standalone indexer.
+# Caller must set before include: apps_itsi_indexer_remove_base (e.g. etc/manager-apps or etc/apps),
+#   apps_itsi_indexer_remove_notify (handler: 'Apply indexer cluster bundle' or 'Restart splunk').
+# For 'Restart splunk', app_path is set so the handler condition is satisfied.
+
+- name: "Set app_path and restart flag for Restart splunk handler when removing from etc/apps"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    app_path: "{{ splunk_home }}/etc/apps"
+    restart_splunk_direct_etc_apps: true
+  when: apps_itsi_indexer_remove_notify == 'Restart splunk'
+
+- name: "Remove ITSI indexer apps from {{ apps_itsi_indexer_remove_base }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ splunk_home }}/{{ apps_itsi_indexer_remove_base }}/{{ item }}"
+    state: absent
+  loop: "{{ itsi_cm_apps }}"
+  loop_control:
+    label: "{{ item }}"
+  notify: "{{ apps_itsi_indexer_remove_notify }}"

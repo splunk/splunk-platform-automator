@@ -49,7 +49,10 @@
 - name: "Remove {{ app_item.name }} (premium app ITSI, cluster manager)"
   ansible.builtin.include_role:
     name: apps_itsi
-    tasks_from: itsi_remove_cluster_manager.yml
+    tasks_from: itsi_remove_indexer.yml
+  vars:
+    apps_itsi_indexer_remove_base: "etc/manager-apps"
+    apps_itsi_indexer_remove_notify: "Apply indexer cluster bundle"
   when:
     - app_state == 'absent'
     - (app_item.premium_app | default('')) == 'itsi'

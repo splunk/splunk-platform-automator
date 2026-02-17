@@ -1,6 +1,6 @@
 ---
 # Shared removal logic for deployer and search head: resolve archive path, list archive to get app names.
-# Only included by itsi_remove_deployer.yml and itsi_remove_search_head.yml.
+# Only included by itsi_remove_search_head.yml (deployer and search head removal).
 # Requires: app_item. Optional: splunk_app_deployment, splunk_app_deployment_defaults.
 
 - name: "Resolve ITSI archive path for removal (local or controller cache)"

@@ -108,9 +108,9 @@
     app_conf_cache_subdir: "itsi_app_confs"
     app_conf_resolved_version: "{{ apps_itsi_resolved_version }}"
 
-# Restrict cache to LM/CM app list only when this host is not also a deployer.
-# When LM and deployer share a host, we must build expected_versions for all apps so the deployer version check has full data.
-- name: "Set app conf apps needed for this host (target_download, LM/CM only, skip when also deployer)"
+# Restrict cache to LM/CM app list only when this host is not also deployer, search head, or standalone indexer.
+# When LM/CM/deployer/SH/indexer share a host, we must build expected_versions for all apps so each role's version check has full data.
+- name: "Set app conf apps needed for this host (target_download, LM/CM only, skip when also deployer, search head, or standalone indexer)"
   tags:
     - splunk
     - splunk_apps
@@ -121,6 +121,8 @@
     - splunk_app_deployment.target_download | default(false)
     - inventory_hostname in (groups['role_license_manager'] | default([])) or inventory_hostname in (groups['role_cluster_manager'] | default([]))
     - not (inventory_hostname in (groups['role_deployer'] | default([])))
+    - not (inventory_hostname in (groups['role_search_head'] | default([])))
+    - not (inventory_hostname in (groups['role_indexer'] | default([])) and ((group_names | select('match', '^idxcluster_') | list | length) == 0))
 
 - name: "Ensure app conf cache and expected versions (common)"
   ansible.builtin.include_role:
@@ -139,20 +141,38 @@
     _exp_versions: "{{ app_conf_expected_versions if (splunk_app_deployment.target_download | default(false)) else hostvars['localhost']['app_conf_expected_versions'] | default({}) }}"
     _app_names: "{{ app_conf_app_names if (splunk_app_deployment.target_download | default(false)) else hostvars['localhost']['app_conf_app_names'] | default([]) }}"
 
-- name: "Run ITSI deployment for cluster manager"
-  ansible.builtin.include_tasks: itsi_cluster_manager.yml
+- name: "Run ITSI deployment for cluster manager (manager-apps)"
+  ansible.builtin.include_tasks: itsi_install_indexer.yml
+  vars:
+    apps_itsi_indexer_apps_base: "etc/manager-apps"
+    apps_itsi_indexer_notify: "{{ 'Apply indexer cluster bundle' if (group_names | select('match', '^idxcluster_') | list | length > 0) else 'Restart splunk' }}"
   when: inventory_hostname in (groups.role_cluster_manager | default([]))
 
+- name: "Run ITSI deployment for standalone indexer (etc/apps)"
+  ansible.builtin.include_tasks: itsi_install_indexer.yml
+  vars:
+    apps_itsi_indexer_apps_base: "etc/apps"
+    apps_itsi_indexer_notify: "Restart splunk"
+  when: >-
+    inventory_hostname in (groups.role_indexer | default([]))
+    and (group_names | select('match', '^idxcluster_') | list | length) == 0
+
 - name: "Run ITSI deployment for license manager"
-  ansible.builtin.include_tasks: itsi_license_manager.yml
+  ansible.builtin.include_tasks: itsi_install_license_manager.yml
   when: inventory_hostname in (groups.role_license_manager | default([]))
 
 - name: "Run ITSI deployment for deployer (shcluster/apps)"
-  ansible.builtin.include_tasks: itsi_deployer.yml
+  ansible.builtin.include_tasks: itsi_install_search_head.yml
+  vars:
+    apps_itsi_sh_apps_base: "etc/shcluster/apps"
+    apps_itsi_sh_notify: "{{ 'Push shcluster bundle' if (group_names | select('match', '^shcluster_') | list | length > 0) else 'Restart splunk' }}"
   when: inventory_hostname in (groups.role_deployer | default([]))
 
-- name: "Run ITSI deployment for search head (all or filtered by itsi_sh_name / itsi_shc_name)"
-  ansible.builtin.include_tasks: itsi_search_head.yml
+- name: "Run ITSI deployment for search head (etc/apps, all or filtered by itsi_sh_name / itsi_shc_name)"
+  ansible.builtin.include_tasks: itsi_install_search_head.yml
+  vars:
+    apps_itsi_sh_apps_base: "etc/apps"
+    apps_itsi_sh_notify: "Restart splunk"
   when: >-
     inventory_hostname in (groups.role_search_head | default([]))
     and (

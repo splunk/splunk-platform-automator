@@ -46,24 +46,13 @@
     - app_state == 'installed'
     - app_item.customizations is defined
 
-- name: "Remove {{ app_item.name }} (premium app ITSI, license manager)"
+- name: "Remove {{ app_item.name }} (premium app ITSI)"
   ansible.builtin.include_role:
     name: apps_itsi
-    tasks_from: itsi_remove_license_manager.yml
+    tasks_from: itsi_remove_direct.yml
   when:
     - app_state == 'absent'
     - (app_item.premium_app | default('')) == 'itsi'
-    - inventory_hostname in (groups.role_license_manager | default([]))
-    - inventory_hostname not in (groups.role_search_head | default([]))
-
-- name: "Remove {{ app_item.name }} (premium app ITSI, search head)"
-  ansible.builtin.include_role:
-    name: apps_itsi
-    tasks_from: itsi_remove_search_head.yml
-  when:
-    - app_state == 'absent'
-    - (app_item.premium_app | default('')) == 'itsi'
-    - inventory_hostname in (groups.role_search_head | default([]))
 
 - name: "Set target path for removal of {{ app_item.name }}"
   tags:
@@ -83,6 +72,20 @@
     - app_state == 'absent'
     - (app_item.premium_app | default('')) != 'itsi'
 
+# Set app_path and splunk_home so "Restart splunk" handler can run; use a dedicated flag so handler is not skipped by role/default context.
+- name: "Set app_path, splunk_home and restart flag for Restart splunk handler (direct etc/apps)"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    splunk_home: "{{ splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') }}"
+    app_path: "{{ splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/apps' }}"
+    restart_splunk_direct_etc_apps: true
+  when:
+    - update_needed | default(false)
+    - app_item.restart_required | default(true)
+
 - name: "Notify Splunk restart for {{ app_item.name }}"
   tags:
     - splunk
@@ -91,6 +94,6 @@
   ansible.builtin.command: /bin/true
   notify: Restart splunk
   changed_when: update_needed | default(false)
-  when: 
+  when:
     - update_needed | default(false)
     - app_item.restart_required | default(true)
