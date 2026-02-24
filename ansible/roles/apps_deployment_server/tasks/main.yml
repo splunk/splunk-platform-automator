@@ -21,8 +21,8 @@
   loop: "{{ splunk_app_deployment.apps | default([]) }}"
   when:
     - item.target_roles is defined
-    - item.target_roles | intersect(['universal_forwarder', 'heavy_forwarder']) | length > 0
     - item.deployment_target | default('auto') != 'direct'
+    - (item.premium_app | default('')) != 'itsi'
 
 - name: Debug deployment server apps
   tags:

@@ -40,6 +40,11 @@
             or (item.itsi_shc_name is defined and inventory_hostname in (groups['shcluster_' + item.itsi_shc_name] | default([])))
           )
         )
+        or (
+          current_host_roles | intersect(['indexer']) | length > 0
+          and (group_names | select('match', '^idxcluster_') | list | length == 0)
+          and current_host_roles | intersect(['search_head']) | length == 0
+        )
       )
       or (
         item.target_roles is defined
@@ -49,14 +54,13 @@
           or
           (
             item.deployment_target | default('auto') != 'direct'
+            and (groups['role_deployment_server'] | default([]) | length == 0)
             and current_host_roles | intersect(['deployment_server', 'cluster_manager', 'deployer']) | length == 0
             and current_host_roles | intersect(['universal_forwarder', 'heavy_forwarder']) | length == 0
             and (
               (current_host_roles | intersect(['indexer']) | length > 0 and group_names | select('match', '^idxcluster_') | list | length == 0)
               or
               (current_host_roles | intersect(['search_head']) | length > 0 and group_names | select('match', '^shcluster_') | list | length == 0)
-              or
-              (current_host_roles | intersect(['license_manager']) | length > 0)
             )
           )
         )
