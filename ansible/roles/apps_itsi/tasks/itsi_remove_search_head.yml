@@ -2,7 +2,7 @@
 # Remove ITSI apps from deployer (shcluster/apps) or search head (etc/apps).
 # Caller must set: apps_itsi_sh_remove_base (e.g. etc/shcluster/apps or etc/apps),
 #   apps_itsi_sh_remove_notify ('Push shcluster bundle' or 'Restart splunk').
-# Optional: apps_itsi_sh_remove_file_when (for search head itsi_sh_name/itsi_shc_name filter; default true).
+# Optional: apps_itsi_sh_remove_file_when (for search head app_sh_name/app_shc_name filter; default true).
 
 - name: "Set app_path and restart flag for Restart splunk handler when removing from etc/apps"
   tags:
