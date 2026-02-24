@@ -35,7 +35,7 @@
   when:
     - >-
       (item.premium_app | default('')) == 'itsi' and (
-        current_host_roles | intersect(['license_manager']) | length > 0
+        (current_host_roles | intersect(['license_manager']) | length > 0 and current_host_roles | intersect(['search_head']) | length == 0)
         or (
           current_host_roles | intersect(['search_head']) | length > 0
           and (group_names | select('match', '^shcluster_') | list | length == 0)
