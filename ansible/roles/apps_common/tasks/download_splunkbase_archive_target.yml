@@ -1,5 +1,9 @@
 ---
-# Download Splunkbase app archive on target. Expects splunkbase_release_path, splunkbase_archive_path, splunkbase_cache_dir.
+# Download Splunkbase app archive on target. Runs resolve first (get app info, set path) then auth and get_url.
+# Expects: splunkbase_app_id, splunkbase_cache_dir, splunkbase_dest_slug. Optional: splunkbase_version, splunkbase_fail_msg_app_name.
+
+- name: "Resolve Splunkbase version (target)"
+  ansible.builtin.include_tasks: resolve_splunkbase_version_target.yml
 
 - name: "Create app cache directory (target)"
   tags:

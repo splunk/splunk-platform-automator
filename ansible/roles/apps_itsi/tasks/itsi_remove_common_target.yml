@@ -18,7 +18,7 @@
 - name: "Download ITSI from Splunkbase (target, common)"
   ansible.builtin.include_role:
     name: apps_common
-    tasks_from: download_from_splunkbase.yml
+    tasks_from: download_splunkbase_archive.yml
   when: (app_item.source | default('local')) == 'splunkbase'
 
 - name: "Set app conf cache vars for ITSI removal (target)"

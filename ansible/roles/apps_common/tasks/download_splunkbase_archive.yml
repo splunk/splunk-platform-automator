@@ -1,5 +1,7 @@
 ---
-# Download Splunkbase app archive (auth + get_url). Expects splunkbase_release_path, splunkbase_archive_path already set (e.g. from resolve_splunkbase_version).
+# Download Splunkbase app archive: resolve version then auth + get_url. Entry point for "get archive from Splunkbase" (controller or target).
+# Caller must set: splunkbase_app_id, splunkbase_cache_dir, splunkbase_dest_slug. Optional: splunkbase_version, splunkbase_fail_msg_app_name.
+# After include: splunkbase_resolved_version, splunkbase_archive_path are set (on localhost when controller; propagate in caller if needed).
 
 - name: "Download Splunkbase archive (controller)"
   ansible.builtin.include_tasks: download_splunkbase_archive_controller.yml

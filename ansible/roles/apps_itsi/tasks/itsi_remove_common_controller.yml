@@ -19,7 +19,7 @@
 - name: "Download ITSI from Splunkbase (controller, common)"
   ansible.builtin.include_role:
     name: apps_common
-    tasks_from: download_from_splunkbase.yml
+    tasks_from: download_splunkbase_archive.yml
   when: (app_item.source | default('local')) == 'splunkbase'
 
 # Run on localhost so we can use splunkbase_archive_path / splunkbase_resolved_version directly (no hostvars read).

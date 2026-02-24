@@ -59,7 +59,7 @@
     - name: "Download app from Splunkbase (common)"
       ansible.builtin.include_role:
         name: apps_common
-        tasks_from: download_from_splunkbase.yml
+        tasks_from: download_splunkbase_archive.yml
     - name: "Capture ITSI download path and version on localhost for propagation"
       ansible.builtin.set_fact:
         itsi_download_archive_path: "{{ splunkbase_archive_path }}"
