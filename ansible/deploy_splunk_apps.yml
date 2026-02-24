@@ -35,39 +35,6 @@
         - env_username == ''
         - env_password == ''
 
-    - name: Build (app name, deployment_target) keys for duplicate check
-      tags:
-        - splunk
-        - splunk_apps
-      ansible.builtin.set_fact:
-        _app_deploy_keys: "{{ _app_deploy_keys | default([]) + [item.name | string + '|' + (item.deployment_target | default('auto') | string)] }}"
-      loop: "{{ splunk_app_deployment.apps | default([]) }}"
-      when:
-        - splunk_app_deployment is defined
-        - splunk_app_deployment.apps is defined
-
-    - name: Find duplicate (app name, deployment_target) keys
-      tags:
-        - splunk
-        - splunk_apps
-      ansible.builtin.set_fact:
-        _app_duplicate_keys: "{{ _app_duplicate_keys | default([]) + [item] }}"
-      loop: "{{ _app_deploy_keys | default([]) | unique }}"
-      when:
-        - _app_deploy_keys is defined
-        - (_app_deploy_keys | select('equalto', item) | list | length) > 1
-
-    - name: Fail when same app is defined twice with same deployment_target
-      tags:
-        - splunk
-        - splunk_apps
-      ansible.builtin.fail:
-        msg: >-
-          Duplicate app configuration: the same app name with the same deployment_target is defined more than once.
-          Duplicates (name|deployment_target): {{ _app_duplicate_keys | default([]) | join(', ') }}.
-          Use one entry per (name, deployment_target) and combine target_roles/customizations there, or use a different deployment_target (e.g. direct) for one of the entries.
-      when: _app_duplicate_keys | default([]) | length > 0
-
 # Step 1: Deploy apps to Deployment Server
 - name: Deploy apps to Deployment Server
   hosts: role_deployment_server
