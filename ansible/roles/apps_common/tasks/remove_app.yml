@@ -32,7 +32,7 @@
     dest: "{{ splunk_app_deployment.backup_location | default('/tmp/splunk_app_backups') }}/{{ app_name }}_removal_{{ ansible_date_time.date }}.tgz"
   when:
     - app_to_remove.stat.exists
-    - splunk_app_deployment.backup_apps_before_update | default(true)
+    - splunk_app_deployment.backup_apps_before_update | default(false)
 
 - name: "Remove {{ app_name }} from target"
   tags:

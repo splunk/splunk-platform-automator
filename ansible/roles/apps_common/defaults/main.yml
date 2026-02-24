@@ -6,8 +6,8 @@ splunk_app_deployment_defaults:
   # Temp directory for downloads
   temp_dir: "/tmp/splunk_apps"
   
-  # Backup settings
-  backup_apps_before_update: true
+  # Backup settings (backup before update/removal; set true to enable)
+  backup_apps_before_update: false
   backup_location: "/tmp/splunk_app_backups"
   
   # Restart behavior

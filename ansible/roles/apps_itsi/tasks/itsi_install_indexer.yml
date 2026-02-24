@@ -26,7 +26,7 @@
       ansible.builtin.set_fact:
         itsi_indexer_extra_opts: "{{ ['--dereference'] + itsi_cm_apps }}"
 
-    - name: "Upload and unarchive ITSI indexer apps to {{ apps_itsi_indexer_apps_base }}"
+    - name: "Transfer and unarchive ITSI indexer apps to {{ apps_itsi_indexer_apps_base }}"
       tags:
         - splunk
         - splunk_apps

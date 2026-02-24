@@ -23,7 +23,7 @@
     itsi_lm_extra_opts: "{{ ['--dereference'] + itsi_lm_apps }}"
   when: apps_itsi_update_needed | default(true)
 
-- name: "Upload and unarchive ITSI license apps to etc/apps"
+- name: "Transfer and unarchive ITSI license apps to etc/apps"
   tags:
     - splunk
     - splunk_apps

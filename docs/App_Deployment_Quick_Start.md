@@ -428,7 +428,7 @@ splunkbase_password: "MyP@ssw0rd123"      # ❌ BAD!
 **Solution**:
 1. The role should handle this automatically
 2. If you want to force reinstall, manually remove the app first
-3. Or use the `backup_before_update: true` option
+3. Or set `backup_apps_before_update: true` in `splunk_app_deployment` to enable backup before update (default is `false`)
 
 ### Problem: Download timeout
 

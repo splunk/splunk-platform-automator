@@ -29,7 +29,7 @@
 - name: "Deploy and configure ITSI"
   when: apps_itsi_update_needed | default(true)
   block:
-    - name: "Upload and unarchive full ITSI to {{ apps_itsi_sh_apps_base }}"
+    - name: "Transfer and unarchive full ITSI to {{ apps_itsi_sh_apps_base }}"
       tags:
         - splunk
         - splunk_apps

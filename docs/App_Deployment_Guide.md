@@ -85,6 +85,8 @@ splunk_app_deployment:
 - **`target_download: false`** (default): The Ansible controller downloads each Splunkbase app once, then copies and extracts it to each target. Best when the controller has good bandwidth to Splunkbase and to the targets.
 - **`target_download: true`**: Each target host downloads the app from Splunkbase. Use this when upload speed from the Ansible host to targets is slow (e.g. large apps); each target only needs outbound access to Splunkbase and uses its own download.
 
+- **`backup_apps_before_update: false`** (default): Do not create a backup of the existing app before update or removal. Set to `true` to enable backups (stored in `backup_location`, default `/tmp/splunk_app_backups`).
+
 ### Basic App Definition
 
 ```yaml

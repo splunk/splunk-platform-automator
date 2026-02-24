@@ -42,4 +42,4 @@
     mode: '0755'
   when:
     - splunk_app_deployment is defined
-    - splunk_app_deployment.backup_apps_before_update | default(true)
+    - splunk_app_deployment.backup_apps_before_update | default(false)

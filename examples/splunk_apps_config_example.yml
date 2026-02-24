@@ -36,7 +36,7 @@ splunk_app_deployment:
   # These settings have sensible defaults and can be overridden:
   # temp_dir: "/tmp/splunk_apps"                           # Download cache directory
   # backup_location: "{{ splunk_home }}/var/backup/apps"   # Backup directory
-  # backup_apps_before_update: true                        # Backup before updating
+  # backup_apps_before_update: false                       # Default: no backup before update; set true to enable
   # restart_after_deployment: true                         # Restart Splunk after deployment
   # download_timeout: 120                                  # Download timeout in seconds
   # retry_count: 3                                         # Number of download retries
