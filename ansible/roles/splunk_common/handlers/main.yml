@@ -18,6 +18,7 @@
   delegate_to: "{{ splunk_shc_host_list|first }}"
   notify: Push shcluster bundle
 
+# SHC captain may return 503 (e.g. kvstore-upgrade in progress) if not ready; retry with delay
 - name: Push shcluster bundle
   tags:
     - splunk
@@ -29,6 +30,10 @@
   become: true
   become_user: "{{ splunk_user }}"
   delegate_to: "{{ splunk_shc_deployer }}"
+  register: shcluster_bundle_result
+  until: shcluster_bundle_result.rc == 0
+  retries: 6
+  delay: 15
 
 - name: Apply indexer cluster bundle
   tags:
