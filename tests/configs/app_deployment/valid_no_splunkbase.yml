@@ -1,0 +1,8 @@
+# Extra vars for deploy_splunk_apps.yml: valid config, no Splunkbase apps.
+# Pre-deployment play should pass (downstream plays skip for lack of hosts).
+splunk_app_deployment:
+  apps:
+    - name: org_some_local_app
+      source: local
+      target_roles:
+        - search_head

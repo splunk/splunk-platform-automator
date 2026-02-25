@@ -16,24 +16,20 @@
         msg: "Deploying {{ splunk_app_deployment.apps | default([]) | length }} apps"
       run_once: true
       when: splunk_app_deployment is defined
-    
+
     - name: Verify Splunkbase credentials (if needed)
       tags:
         - splunk
         - splunk_apps
-      ansible.builtin.fail:
-        msg: "Splunkbase credentials not configured. Set SPLUNKBASE_USERNAME and SPLUNKBASE_PASSWORD environment variables or configure in splunk_config.yml"
+      ansible.builtin.assert:
+        that:
+          - (lookup('env', 'SPLUNKBASE_USERNAME') | default('', true) | trim | length) > 0 or (splunk_app_deployment.splunkbase_username | default('', true) | trim | length) > 0
+          - (lookup('env', 'SPLUNKBASE_PASSWORD') | default('', true) | trim | length) > 0 or (splunk_app_deployment.splunkbase_password | default('', true) | trim | length) > 0
+        fail_msg: "Splunkbase credentials not configured. Set SPLUNKBASE_USERNAME and SPLUNKBASE_PASSWORD environment variables or configure in splunk_config.yml"
       run_once: true
-      vars:
-        env_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
-        env_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
-        has_splunkbase_apps: "{{ splunk_app_deployment.apps | default([]) | selectattr('source', 'equalto', 'splunkbase') | list | length > 0 }}"
-      when:
-        - splunk_app_deployment is defined
-        - splunk_app_deployment.apps is defined
-        - has_splunkbase_apps
-        - env_username == ''
-        - env_password == ''
+      when: >-
+        (_splunkbase_credentials_check | default(false) | bool)
+        or (splunk_app_deployment is defined and (splunk_app_deployment.apps | default([]) | selectattr('source', 'equalto', 'splunkbase') | list | length) > 0)
 
 # Step 1: Deploy apps to Deployment Server
 - name: Deploy apps to Deployment Server

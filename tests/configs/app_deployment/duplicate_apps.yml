@@ -1,0 +1,36 @@
+# Invalid: duplicate app deployment (used by tests that expect schema validation to raise).
+#
+# Schema flags duplicates in two cases (not only target_roles):
+#
+# 1) Same (name, deployment_target, target_roles) = same target hosts and directory → duplicate.
+#    Customizations (e.g. local_configs) do not change destination.
+#
+# 2) Same app name when both are deployment-server–distributed (target_roles set,
+#    deployment_target != 'direct', not premium_app) → duplicate.
+#
+# This config triggers (1): two entries with identical name, deployment_target, and target_roles.
+# The second entry adds customizations to show that customizations do not avoid the duplicate.
+splunk_app_deployment:
+  apps:
+    - name: Splunk_TA_nix
+      source: splunkbase
+      app_id: "833"
+      version: "latest"
+      deployment_target: auto
+      target_roles:
+        - search_head
+        - indexer
+
+    - name: Splunk_TA_nix
+      source: splunkbase
+      app_id: "833"
+      version: "latest"
+      deployment_target: auto
+      target_roles:
+        - universal_forwarder
+      customizations:
+        local_configs:
+          inputs.conf:
+            "script://./bin/df_metric.sh":
+              disabled: 0
+              index: itsi_im_metrics

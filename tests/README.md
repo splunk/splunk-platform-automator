@@ -27,14 +27,20 @@ This framework provides:
 tests/
 ├── configs/                    # Test case configurations
 │   ├── single_node.yml        # Single node (indexer + search_head)
-│   └── cluster.yml            # Full cluster (IDXC + SHC)
+│   ├── app_deployment/        # Extra-vars fixtures for app deployment tests
+│   │   ├── duplicate_apps.yml # Invalid: duplicate app (same name + same deployment_target + target_roles); tests schema duplicate detection
+│   │   ├── valid_no_splunkbase.yml
+│   │   └── splunkbase_no_creds.yml
+│   └── ...
 ├── conftest.py                # Pytest fixtures (workspace isolation)
 ├── pytest.ini                 # Pytest configuration
 ├── requirements.txt           # Test dependencies
 ├── test_deployment.py         # Phase 1: Infrastructure + Splunk deployment
+├── test_app_deployment.py     # App deployment pre-deployment checks (no infra)
 ├── test_schema.py             # Schema validation unit tests
 ├── test_verification.py       # Phase 2: Health verification tests
 ├── run_deployment_tests.sh    # Helper script for deployment tests
+├── run_app_deployment_tests.sh # Helper script for app deployment tests
 ├── run_schema_tests.sh        # Helper script for schema validation tests
 └── run_verification_tests.sh  # Helper script for verification tests
 ```
@@ -97,6 +103,28 @@ Unit tests for YAML configuration schema validation using Pydantic. These tests 
 - Valid roles: `cluster_manager`, `deployer`, `deployment_server`, `heavy_forwarder`, `indexer`, `license_manager`, `monitoring_console`, `search_head`, `universal_forwarder`, `universal_forwarder_windows`
 - `cluster_manager` requires `idxcluster`
 - `site` only allowed for `indexer`, `search_head`, `cluster_manager`
+- `TestAppDeploymentConfig`: valid/optional/empty `splunk_app_deployment`
+
+### App deployment tests (`test_app_deployment.py`)
+
+Automated tests for the app deployment playbook **without real Splunk hosts or AWS**:
+
+| Test | Description |
+|------|-------------|
+| `test_same_app_name_multiple_entries_with_different_target_roles_valid` | Same app with different target_roles validates (deployment target calculated from roles) |
+| `test_valid_config_no_splunkbase_passes_pre_deployment` | Pre-deployment passes with valid config and no Splunkbase apps |
+| `test_splunkbase_app_without_credentials_fails` | Playbook fails when Splunkbase app is present and credentials are unset |
+
+Fixtures (extra-vars) live in `tests/configs/app_deployment/*.yml`. Schema tests for `splunk_app_deployment` are in `test_schema.py` (`TestAppDeploymentConfig`).
+
+**Run app deployment tests:**
+```bash
+./tests/run_app_deployment_tests.sh
+./tests/run_app_deployment_tests.sh -v
+./tests/run_app_deployment_tests.sh -k "SchemaValidation"
+```
+
+Requires `ansible-playbook` on PATH for playbook tests.
 
 ## Running Tests
 
@@ -163,6 +191,10 @@ Use `-k` with test names to run only specific steps:
 # Run tests 1-2 in parallel with verbose output
 ./tests/run_deployment_tests.sh -n 2 -v -k "test_01 or test_02"
 ```
+
+### App deployment
+
+Step **test_11** runs `ansible/deploy_splunk_apps.yml`; **test_17** runs app deployment verification. For manual scenarios (DS vs direct, ITSI, cache cleanup), see [App Deployment Testing](../docs/App_Deployment_Testing.md).
 
 ## Adding New Test Configurations
 
