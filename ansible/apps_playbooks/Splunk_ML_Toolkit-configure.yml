@@ -1,0 +1,102 @@
+---
+# Configure Splunk ML Toolkit (Splunk_ML_Toolkit): scale settings (mlspl.conf) and admin capabilities (authorize.conf).
+#
+# Use from app customizations: run_playbook: "ansible/apps_playbooks/Splunk_ML_Toolkit-configure.yml"
+#
+# Framework vars: app_path, app_name
+# Optional extra_vars:
+#   python_for_scientific_computing_tarball - full path to Python for Scientific Computing tgz (if set, unarchives to apps dir)
+#   mltk_tarball - full path to splunk-ai-toolkit tgz (if set, unarchives to apps dir)
+#   mltk_max_inputs (default: 1000000), mltk_max_memory_usage_mb (default: 2000),
+#   mltk_max_model_size_mb (default: 30), mltk_max_fit_time (default: 2400)
+
+- name: "Resolve MLTK extra_vars"
+  ansible.builtin.set_fact:
+    _mltk_python_tarball: "{{ (customization_extra_vars | default({})).get('python_for_scientific_computing_tarball') }}"
+    _mltk_tarball: "{{ (customization_extra_vars | default({})).get('mltk_tarball') }}"
+    _mltk_max_inputs: "{{ (customization_extra_vars | default({})).get('mltk_max_inputs', 1000000) }}"
+    _mltk_max_memory_usage_mb: "{{ (customization_extra_vars | default({})).get('mltk_max_memory_usage_mb', 2000) }}"
+    _mltk_max_model_size_mb: "{{ (customization_extra_vars | default({})).get('mltk_max_model_size_mb', 30) }}"
+    _mltk_max_fit_time: "{{ (customization_extra_vars | default({})).get('mltk_max_fit_time', 2400) }}"
+    _apps_dir: "{{ app_path | dirname }}"
+  when: app_path is defined
+
+- name: "Upload and unarchive Python for Scientific Computing (optional)"
+  ansible.builtin.unarchive:
+    src: "{{ _mltk_python_tarball }}"
+    dest: "{{ _apps_dir }}"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+  register: _mltk_python_unarchive_result
+  when:
+    - app_path is defined
+    - _mltk_python_tarball is defined
+    - _mltk_python_tarball | length > 0
+
+- name: "Upload and unarchive Splunk AI Toolkit (optional)"
+  ansible.builtin.unarchive:
+    src: "{{ _mltk_tarball }}"
+    dest: "{{ _apps_dir }}"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+  register: _mltk_mltk_unarchive_result
+  when:
+    - app_path is defined
+    - _mltk_tarball is defined
+    - _mltk_tarball | length > 0
+
+- name: "Ensure local directory exists for {{ app_name }}"
+  ansible.builtin.file:
+    path: "{{ app_path }}/local"
+    state: directory
+    mode: '0755'
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+  register: _mltk_local_dir_result
+  when: app_path is defined
+
+- name: "Configure MLTK scale (mlspl.conf) in {{ app_name }}"
+  community.general.ini_file:
+    path: "{{ app_path }}/local/mlspl.conf"
+    section: "default"
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    mode: '0644'
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+  loop:
+    - { key: 'max_inputs', value: "{{ _mltk_max_inputs | string }}" }
+    - { key: 'max_memory_usage_mb', value: "{{ _mltk_max_memory_usage_mb | string }}" }
+    - { key: 'max_model_size_mb', value: "{{ _mltk_max_model_size_mb | string }}" }
+    - { key: 'max_fit_time', value: "{{ _mltk_max_fit_time | string }}" }
+  register: _mltk_mlspl_result
+  when: app_path is defined
+
+- name: "Set capabilities for admin role (authorize.conf) in {{ app_name }}"
+  community.general.ini_file:
+    path: "{{ app_path }}/local/authorize.conf"
+    section: "role_admin"
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    mode: '0644'
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+  loop:
+    - { key: 'apply_ai_commander_command', value: 'enabled' }
+    - { key: 'edit_ai_commander_config', value: 'enabled' }
+    - { key: 'list_ai_commander_config', value: 'enabled' }
+    - { key: 'upload_lookup_files', value: 'enabled' }
+    - { key: 'upload_onnx_model_file', value: 'enabled' }
+  register: _mltk_authorize_result
+  when: app_path is defined
+
+- name: "Set update_needed so deployment handler runs (restart/reload)"
+  ansible.builtin.set_fact:
+    update_needed: true
+  when:
+    - app_path is defined
+    - (_mltk_local_dir_result is defined and _mltk_local_dir_result.changed) or
+      (_mltk_mlspl_result is defined and (_mltk_mlspl_result.get('results', []) | selectattr('changed') | list | length) > 0) or
+      (_mltk_authorize_result is defined and (_mltk_authorize_result.get('results', []) | selectattr('changed') | list | length) > 0) or
+      (_mltk_python_unarchive_result is defined and _mltk_python_unarchive_result.changed) or
+      (_mltk_mltk_unarchive_result is defined and _mltk_mltk_unarchive_result.changed)
