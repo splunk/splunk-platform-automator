@@ -44,7 +44,7 @@
   ansible.posix.synchronize:
     src: "{{ local_source_path }}/"
     dest: "{{ target_path }}/"
-    delete: yes
+    delete: no
     recursive: yes
     archive: no
     checksum: yes
