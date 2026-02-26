@@ -5,45 +5,16 @@
 #
 # Framework vars: app_path, app_name
 # Optional extra_vars:
-#   python_for_scientific_computing_tarball - full path to Python for Scientific Computing tgz (if set, unarchives to apps dir)
-#   mltk_tarball - full path to splunk-ai-toolkit tgz (if set, unarchives to apps dir)
 #   mltk_max_inputs (default: 1000000), mltk_max_memory_usage_mb (default: 2000),
 #   mltk_max_model_size_mb (default: 30), mltk_max_fit_time (default: 2400)
 
 - name: "Resolve MLTK extra_vars"
   ansible.builtin.set_fact:
-    _mltk_python_tarball: "{{ (customization_extra_vars | default({})).get('python_for_scientific_computing_tarball') }}"
-    _mltk_tarball: "{{ (customization_extra_vars | default({})).get('mltk_tarball') }}"
     _mltk_max_inputs: "{{ (customization_extra_vars | default({})).get('mltk_max_inputs', 1000000) }}"
     _mltk_max_memory_usage_mb: "{{ (customization_extra_vars | default({})).get('mltk_max_memory_usage_mb', 2000) }}"
     _mltk_max_model_size_mb: "{{ (customization_extra_vars | default({})).get('mltk_max_model_size_mb', 30) }}"
     _mltk_max_fit_time: "{{ (customization_extra_vars | default({})).get('mltk_max_fit_time', 2400) }}"
-    _apps_dir: "{{ app_path | dirname }}"
   when: app_path is defined
-
-- name: "Upload and unarchive Python for Scientific Computing (optional)"
-  ansible.builtin.unarchive:
-    src: "{{ _mltk_python_tarball }}"
-    dest: "{{ _apps_dir }}"
-    owner: "{{ splunk_user | default('splunk') }}"
-    group: "{{ splunk_group | default('splunk') }}"
-  register: _mltk_python_unarchive_result
-  when:
-    - app_path is defined
-    - _mltk_python_tarball is defined
-    - _mltk_python_tarball | length > 0
-
-- name: "Upload and unarchive Splunk AI Toolkit (optional)"
-  ansible.builtin.unarchive:
-    src: "{{ _mltk_tarball }}"
-    dest: "{{ _apps_dir }}"
-    owner: "{{ splunk_user | default('splunk') }}"
-    group: "{{ splunk_group | default('splunk') }}"
-  register: _mltk_mltk_unarchive_result
-  when:
-    - app_path is defined
-    - _mltk_tarball is defined
-    - _mltk_tarball | length > 0
 
 - name: "Ensure local directory exists for {{ app_name }}"
   ansible.builtin.file:
@@ -97,6 +68,4 @@
     - app_path is defined
     - (_mltk_local_dir_result is defined and _mltk_local_dir_result.changed) or
       (_mltk_mlspl_result is defined and (_mltk_mlspl_result.get('results', []) | selectattr('changed') | list | length) > 0) or
-      (_mltk_authorize_result is defined and (_mltk_authorize_result.get('results', []) | selectattr('changed') | list | length) > 0) or
-      (_mltk_python_unarchive_result is defined and _mltk_python_unarchive_result.changed) or
-      (_mltk_mltk_unarchive_result is defined and _mltk_mltk_unarchive_result.changed)
+      (_mltk_authorize_result is defined and (_mltk_authorize_result.get('results', []) | selectattr('changed') | list | length) > 0)
