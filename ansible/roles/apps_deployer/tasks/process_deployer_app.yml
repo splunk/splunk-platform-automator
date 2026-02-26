@@ -1,5 +1,78 @@
 ---
 # Process a single deployer app
+# Deployer only manages SHC members. We apply hosts_whitelist first (so app is not pushed when only standalone SHs are targeted), then shc_whitelist/shc_blacklist.
+# Runs when the filtered set overlaps with SHCs this deployer serves (_app_on_deployer_scope).
+
+# --- Deployer base set = all SHC members ---
+- name: "Compute deployer base set for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+  ansible.builtin.set_fact:
+    _app_dep_base: "{{ (groups | select('match', '^shcluster_') | list | map('extract', groups) | flatten | unique) | list }}"
+
+# --- Apply hosts_whitelist so deployer only pushes when at least one SHC member is in the app's target set ---
+- name: "Initialize deployer filtered set for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+  ansible.builtin.set_fact:
+    _app_dep_filtered: "{{ _app_dep_base }}"
+
+- name: "Apply deployer hosts_whitelist for {{ app_item.name }}"
+  ansible.builtin.set_fact:
+    _app_dep_filtered: "{{ (_app_dep_filtered | default(_app_dep_base)) | intersect(app_item.hosts_whitelist | default([])) | list }}"
+  when:
+    - app_item.hosts_whitelist is defined
+    - app_item.hosts_whitelist | length > 0
+
+# --- Apply SHC filters (shc_whitelist / shc_blacklist) ---
+- name: "Build deployer SHC whitelist union for {{ app_item.name }}"
+  ansible.builtin.set_fact:
+    _dep_shc_w: "{{ _dep_shc_w | default([]) + (groups['shcluster_' ~ item] | default([])) }}"
+  loop: "{{ app_item.shc_whitelist | default([]) }}"
+  when:
+    - app_item.shc_whitelist is defined
+    - app_item.shc_whitelist | length > 0
+
+- name: "Apply deployer shc_whitelist for {{ app_item.name }}"
+  ansible.builtin.set_fact:
+    _app_dep_filtered: "{{ (_app_dep_filtered | default(_app_dep_base)) | intersect(_dep_shc_w | default([]) | unique) | list }}"
+  when:
+    - app_item.shc_whitelist is defined
+    - app_item.shc_whitelist | length > 0
+
+- name: "Build deployer SHC blacklist union for {{ app_item.name }}"
+  ansible.builtin.set_fact:
+    _dep_shc_b: "{{ _dep_shc_b | default([]) + (groups['shcluster_' ~ item] | default([])) }}"
+  loop: "{{ app_item.shc_blacklist | default([]) }}"
+  when:
+    - app_item.shc_blacklist is defined
+    - app_item.shc_blacklist | length > 0
+
+- name: "Apply deployer shc_blacklist for {{ app_item.name }}"
+  ansible.builtin.set_fact:
+    _app_dep_filtered: "{{ (_app_dep_filtered | default(_app_dep_base)) | reject('in', _dep_shc_b | default([]) | unique) | list }}"
+  when:
+    - app_item.shc_blacklist is defined
+    - app_item.shc_blacklist | length > 0
+
+# --- SHCs this deployer serves (groups this host is in that match shcluster_*) ---
+- name: "Build SHC hosts this deployer serves for {{ app_item.name }}"
+  ansible.builtin.set_fact:
+    _deployer_serves: "{{ _deployer_serves | default([]) + (groups[item] | default([])) }}"
+  loop: "{{ group_names | select('match', '^shcluster_') | list }}"
+  when: (group_names | select('match', '^shcluster_') | list | length) > 0
+
+- name: "Set deployer scope for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+  ansible.builtin.set_fact:
+    _app_on_deployer_scope: "{{ ((_app_dep_filtered | default(_app_dep_base)) | intersect(_deployer_serves | default([])) | length) > 0 }}"
 
 - name: "Set defaults for {{ app_item.name }}"
   tags:
@@ -27,12 +100,14 @@
   ansible.builtin.include_role:
     name: apps_itsi
   when:
+    - _app_on_deployer_scope | default(false)
     - app_state == 'installed'
     - (app_item.premium_app | default('')) == 'itsi'
 
 - name: "Install {{ app_item.name }} (standard)"
   ansible.builtin.include_tasks: "install_app.yml"
   when:
+    - _app_on_deployer_scope | default(false)
     - app_state == 'installed'
     - (app_item.premium_app | default('')) != 'itsi'
 
@@ -43,6 +118,7 @@
   vars:
     app_path: "{{ app_item.target_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/shcluster/apps/' ~ app_item.name) }}"
   when:
+    - _app_on_deployer_scope | default(false)
     - app_state == 'installed'
     - app_item.customizations is defined
 
@@ -54,6 +130,7 @@
     apps_itsi_sh_remove_base: "etc/shcluster/apps"
     apps_itsi_sh_remove_notify: "Push shcluster bundle"
   when:
+    - _app_on_deployer_scope | default(false)
     - app_state == 'absent'
     - (app_item.premium_app | default('')) == 'itsi'
 
@@ -66,12 +143,14 @@
     app_name: "{{ app_item.name }}"
     app_target_path: "{{ app_item.target_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/shcluster/apps/' ~ app_item.name) }}"
   when:
+    - _app_on_deployer_scope | default(false)
     - app_state == 'absent'
     - (app_item.premium_app | default('')) != 'itsi'
 
 - name: "Remove {{ app_item.name }} (standard)"
   ansible.builtin.include_tasks: "remove_app.yml"
   when:
+    - _app_on_deployer_scope | default(false)
     - app_state == 'absent'
     - (app_item.premium_app | default('')) != 'itsi'
 
@@ -83,4 +162,6 @@
   ansible.builtin.command: /bin/true
   notify: Push shcluster bundle
   changed_when: update_needed | default(false)
-  when: update_needed | default(false)
+  when:
+    - _app_on_deployer_scope | default(false)
+    - update_needed | default(false)

@@ -268,7 +268,7 @@ After removing app from Deployment Server (`etc/deployment-apps`), clients will 
 
 ### Premium apps (ITSI)
 
-Removal of **Splunk IT Service Intelligence (ITSI)** is done per role (Cluster Manager, License Manager, Deployer, Search Head). The list of app directories to remove is **built from the archive** (the playbook lists the archive contents). The archive must be present and listable (e.g. `tar tzf`); if it cannot be obtained, removal fails. There is no fallback app list. See the [App Deployment Guide](App_Deployment_Guide.md#premium-packs-splunk-it-service-intelligence-itsi) for ITSI config options and `app_sh_name` / `app_shc_name` targeting.
+Removal of **Splunk IT Service Intelligence (ITSI)** is done per role (Cluster Manager, License Manager, Deployer, Search Head). The list of app directories to remove is **built from the archive** (the playbook lists the archive contents). The archive must be present and listable (e.g. `tar tzf`); if it cannot be obtained, removal fails. There is no fallback app list. See the [App Deployment Guide](App_Deployment_Guide.md#premium-packs-splunk-it-service-intelligence-itsi) for ITSI config options and target filters (`hosts_whitelist`, `shc_whitelist`, etc.).
 
 ### App Dependencies
 

@@ -151,12 +151,12 @@ Premium packs are delivered as a **single archive (`.spl` or `.tgz`) that contai
 
 For **single-node** installs (one host has all roles), all of the above runs on that host.
 
-**Optional search head targeting:** If you have a dedicated search head or SHC for ITSI (or other premium apps):
+**Optional search head targeting:** If you have a dedicated search head or SHC for ITSI (or other premium apps), use the [target filter options](App_Deployment_Target_Filters_Concept.md):
 
-- **`app_sh_name`** – Deploy only to this single search head (inventory host name; must be a standalone search head, not part of an SHC).
-- **`app_shc_name`** – Deploy only to search heads in this search head cluster (e.g. `shc_itsi`; must match a defined `splunk_shclusters` entry).
+- **`hosts_whitelist`** – Deploy only to these hosts (e.g. a single standalone search head by inventory host name).
+- **`shc_whitelist`** – Deploy only to search heads in these SHCs (e.g. `["shc_itsi"]`; must match a defined `splunk_shclusters` entry).
 
-If neither is set, the premium app is deployed to all search heads (and all SHC members) that are in scope.
+If neither is set, the premium app is deployed to all search heads (and all SHC members) that are in scope. When there is both an SHC and at least one standalone search head (or more than one standalone SH), the schema requires **shc_whitelist** or **hosts_whitelist** to be set (use one or the other, not both; blacklists are not allowed on premium apps).
 
 **Index paths:** If you do not set **`itsi_index_home_path`** / **`itsi_index_cold_path`**, the role uses the same volumes as the rest of the framework: **`splunk_volume_defaults.homePath`** and **`splunk_volume_defaults.coldPath`** (see `baseconfig_app` / `org_all_indexes`).
 
@@ -182,7 +182,7 @@ If neither is set, the premium app is deployed to all search heads (and all SHC 
   app_id: 1841
   version: "latest"
   premium_app: itsi
-  app_shc_name: "shc_itsi"
+  shc_whitelist: ["shc_itsi"]
 ```
 
 **Optional ITSI-only options** (under the same app entry):
@@ -192,15 +192,15 @@ If neither is set, the premium app is deployed to all search heads (and all SHC 
 | `itsi_version` | Version string (e.g. `"4.21.0"`); used for default local filename when `path` is omitted. |
 | `itsi_index_home_path` | Override index volume for homePath (e.g. `volume:primary`). Default: framework `splunk_volume_defaults.homePath`. |
 | `itsi_index_cold_path` | Override index volume for coldPath. Default: framework `splunk_volume_defaults.coldPath`. |
-| `app_sh_name` | Deploy only to this single search head (inventory host name; standalone SH only). |
-| `app_shc_name` | Deploy only to search heads in this SHC (e.g. `shc1`; must match `splunk_shclusters`). |
+| `hosts_whitelist` | Deploy only to these hosts (e.g. a single standalone search head). See [target filters](App_Deployment_Target_Filters_Concept.md). |
+| `shc_whitelist` | Deploy only to search heads in these SHCs (e.g. `["shc1"]`; must match `splunk_shclusters`). |
 | `itsi_notification_disable` | List of notable event action names to disable (e.g. `["remedy", "victorops"]`). |
 
 **Version check:** Before deploying, the role reads the `[launcher]` version from each app’s `app.conf` in the archive and on the target. It only deploys (or updates) when at least one app is missing or has a different version. The list of apps to check is taken from the archive (no hardcoded fallback).
 
 **App list from archive:** The list of ITSI apps (for version check, deploy, and removal) is always derived from the archive (list or extracted `app.conf` cache). If the archive cannot be listed or the list is empty, the playbook fails. Do not rely on a default app list.
 
-**Removal:** With **`state: absent`**, the role removes ITSI per role: manager-apps (CM), license/access apps (LM), deployer (`shcluster/apps`), and the full set of ITSI apps on search heads (`etc/apps`). The app list for removal is built from the archive (list contents); the same `app_sh_name` / `app_shc_name` targeting applies for removal on search heads. If the archive is not available or cannot be listed, removal fails (no fallback list).
+**Removal:** With **`state: absent`**, the role removes ITSI per role: manager-apps (CM), license/access apps (LM), deployer (`shcluster/apps`), and the full set of ITSI apps on search heads (`etc/apps`). The app list for removal is built from the archive (list contents); the same target filters (`hosts_whitelist`, `shc_whitelist`, etc.) apply for removal on search heads. If the archive is not available or cannot be listed, removal fails (no fallback list).
 
 No `auto_config` flag is required: with **`premium_app: itsi`**, the role both extracts and applies ITSI-specific configuration.
 

@@ -11,38 +11,197 @@
     app_version: "{{ app_item.version | default('latest') }}"
     serverclass_name: "{{ app_item.serverclass | default('app_' + app_item.name) }}"
 
-- name: "Calculate whitelist for {{ app_item.name }}"
+# --- Base set for DS: target_roles minus idxcluster/shcluster members ---
+- name: "Compute base whitelist for {{ app_item.name }}"
   tags:
     - splunk
     - splunk_apps
     - deployment_server
   ansible.builtin.set_fact:
-    # Get hosts with target_roles; exclude only clustered members (SHC/IDXC). Search heads, indexers, LM get apps from DS when DS is present.
-    app_whitelist_hosts: >-
+    _app_ds_base: >-
       {{
         app_item.target_roles | default([])
         | map('regex_replace', '^(.*)$', 'role_\1')
         | map('extract', groups)
         | flatten
-        | reject('in', groups | select('match', '^idxcluster_') | map('extract', groups) | flatten | list)
-        | reject('in', groups | select('match', '^shcluster_') | map('extract', groups) | flatten | list)
+        | reject('in', (groups | select('match', '^idxcluster_') | list | map('extract', groups) | flatten | list))
+        | reject('in', (groups | select('match', '^shcluster_') | list | map('extract', groups) | flatten | list))
         | unique
         | list
       }}
   when:
-    - app_item.deployment_whitelist is not defined
     - app_state == 'installed'
+    - app_item.am_whitelist is not defined
 
-- name: "Use manual whitelist for {{ app_item.name }}"
+# --- Apply filters in order (only when not using am_whitelist for final list). SHC filters omitted: DS does not manage SHC members. ---
+- name: "Initialize filtered set for {{ app_item.name }}"
   tags:
     - splunk
     - splunk_apps
     - deployment_server
   ansible.builtin.set_fact:
-    app_whitelist_hosts: "{{ [app_item.deployment_whitelist] if app_item.deployment_whitelist is string else app_item.deployment_whitelist }}"
+    _app_ds_filtered: "{{ _app_ds_base | default([]) }}"
   when:
-    - app_item.deployment_whitelist is defined
     - app_state == 'installed'
+    - app_item.am_whitelist is not defined
+
+# Build union of IDXC members for whitelist filter
+- name: "Build IDXC whitelist union for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    _idxc_whitelist_union: "{{ _idxc_whitelist_union | default([]) + (groups['idxcluster_' ~ item] | default([])) }}"
+  loop: "{{ app_item.idxc_whitelist | default([]) }}"
+  when:
+    - app_state == 'installed'
+    - app_item.am_whitelist is not defined
+    - app_item.idxc_whitelist is defined
+    - app_item.idxc_whitelist | length > 0
+
+- name: "Apply idxc_whitelist filter for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    _app_ds_filtered: "{{ (_app_ds_filtered | default(_app_ds_base)) | intersect(_idxc_whitelist_union | default([]) | unique) | list }}"
+  when:
+    - app_state == 'installed'
+    - app_item.am_whitelist is not defined
+    - app_item.idxc_whitelist is defined
+    - app_item.idxc_whitelist | length > 0
+
+# Build union of IDXC members for blacklist filter
+- name: "Build IDXC blacklist union for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    _idxc_blacklist_union: "{{ _idxc_blacklist_union | default([]) + (groups['idxcluster_' ~ item] | default([])) }}"
+  loop: "{{ app_item.idxc_blacklist | default([]) }}"
+  when:
+    - app_state == 'installed'
+    - app_item.am_whitelist is not defined
+    - app_item.idxc_blacklist is defined
+    - app_item.idxc_blacklist | length > 0
+
+- name: "Apply idxc_blacklist filter for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    _app_ds_filtered: "{{ (_app_ds_filtered | default(_app_ds_base)) | reject('in', _idxc_blacklist_union | default([]) | unique) | list }}"
+  when:
+    - app_state == 'installed'
+    - app_item.am_whitelist is not defined
+    - app_item.idxc_blacklist is defined
+    - app_item.idxc_blacklist | length > 0
+
+# --- shc_whitelist: app targets only SHC members; DS does not serve SHC, so remove all search heads from DS set ---
+- name: "Exclude search heads from DS when shc_whitelist set for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    _app_ds_filtered: "{{ (_app_ds_filtered | default(_app_ds_base)) | reject('in', (groups['role_search_head'] | default([]))) | list }}"
+  when:
+    - app_state == 'installed'
+    - app_item.am_whitelist is not defined
+    - app_item.shc_whitelist is defined
+    - (app_item.shc_whitelist or []) | length > 0
+
+# --- hosts_whitelist/hosts_blacklist apply only to search heads (relevant role) ---
+- name: "Set DS standalone search head list for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    _ds_standalone_sh: "{{ groups['role_search_head'] | default([]) | reject('in', (groups | select('match', '^shcluster_') | list | map('extract', groups) | flatten) | list) | list }}"
+  when:
+    - app_state == 'installed'
+    - app_item.am_whitelist is not defined
+    - (app_item.hosts_whitelist is defined and app_item.hosts_whitelist | length > 0) or (app_item.hosts_blacklist is defined and app_item.hosts_blacklist | length > 0)
+
+- name: "Split DS filtered set into SH and non-SH for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    _app_ds_sh: "{{ (_app_ds_filtered | default(_app_ds_base)) | intersect(_ds_standalone_sh) | list }}"
+  when:
+    - app_state == 'installed'
+    - app_item.am_whitelist is not defined
+    - (app_item.hosts_whitelist is defined and app_item.hosts_whitelist | length > 0) or (app_item.hosts_blacklist is defined and app_item.hosts_blacklist | length > 0)
+
+- name: "Set DS non-SH subset for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    _app_ds_non_sh: "{{ (_app_ds_filtered | default(_app_ds_base)) | reject('in', _app_ds_sh | default([])) | list }}"
+  when:
+    - app_state == 'installed'
+    - app_item.am_whitelist is not defined
+    - (app_item.hosts_whitelist is defined and app_item.hosts_whitelist | length > 0) or (app_item.hosts_blacklist is defined and app_item.hosts_blacklist | length > 0)
+
+- name: "Apply hosts_whitelist filter (search heads only) for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    _app_ds_sh_filtered: "{{ (_app_ds_sh | default([])) | intersect(app_item.hosts_whitelist | default([])) | list }}"
+    _app_ds_filtered: "{{ (_app_ds_non_sh | default([])) + ((_app_ds_sh | default([])) | intersect(app_item.hosts_whitelist | default([]))) | unique | list }}"
+  when:
+    - app_state == 'installed'
+    - app_item.am_whitelist is not defined
+    - app_item.hosts_whitelist is defined
+    - app_item.hosts_whitelist | length > 0
+
+- name: "Apply hosts_blacklist filter (search heads only) for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    _app_ds_filtered: "{{ (_app_ds_non_sh | default([])) + ((_app_ds_sh_filtered | default(_app_ds_sh) | default([])) | reject('in', app_item.hosts_blacklist | default([]))) | unique | list }}"
+  when:
+    - app_state == 'installed'
+    - app_item.am_whitelist is not defined
+    - app_item.hosts_blacklist is defined
+    - app_item.hosts_blacklist | length > 0
+
+# --- Set app_whitelist_hosts: am_whitelist (and optional am_blacklist) or filtered set ---
+- name: "Set serverclass whitelist from am_whitelist for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    app_whitelist_hosts: "{{ (app_item.am_whitelist | default([])) | reject('in', app_item.am_blacklist | default([])) | list }}"
+  when:
+    - app_state == 'installed'
+    - app_item.am_whitelist is defined
+    - app_item.am_whitelist | length > 0
+
+- name: "Set serverclass whitelist from filtered set for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    app_whitelist_hosts: "{{ (_app_ds_filtered | default(_app_ds_base) | default([])) | reject('in', app_item.am_blacklist | default([])) | list }}"
+  when:
+    - app_state == 'installed'
+    - app_item.am_whitelist is not defined
 
 - name: "Empty whitelist for removal of {{ app_item.name }}"
   tags:
@@ -69,7 +228,9 @@
 
 - name: "Install {{ app_item.name }}"
   ansible.builtin.include_tasks: "install_app.yml"
-  when: app_state == 'installed'
+  when:
+    - app_state == 'installed'
+    - (app_whitelist_hosts | default([])) | length > 0
 
 - name: "Apply customizations for {{ app_item.name }}"
   ansible.builtin.include_role:
@@ -79,6 +240,7 @@
     app_path: "{{ app_item.target_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/deployment-apps/' ~ app_item.name) }}"
   when:
     - app_state == 'installed'
+    - (app_whitelist_hosts | default([])) | length > 0
     - app_item.customizations is defined
 
 - name: "Notify reload deploy-server when app or customizations changed"
@@ -107,3 +269,5 @@
 
 - name: "Configure serverclass for {{ app_item.name }}"
   ansible.builtin.include_tasks: "configure_serverclass.yml"
+  when:
+    - (app_whitelist_hosts | default([])) | length > 0 or app_state == 'absent'

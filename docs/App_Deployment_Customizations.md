@@ -8,7 +8,9 @@ Add an optional `customizations` block to any app entry in `splunk_app_deploymen
 
 - **`remove`** – Delete files or directories from the deployed app.
 - **`local_configs`** – Create or update Splunk `.conf` files in the app’s `local/` folder (same structure as `splunk_conf` in `splunk_config.yml`).
+- **`update_indexes`** – If the app has `default/indexes.conf`, copy it to `local/` and set `homePath`/`coldPath` from `splunk_volume_defaults` (same as ITSI indexer apps). Default is `false`.
 - **`run_playbook`** / **`run_role`** – Run custom Ansible for that app on the host.
+- **`run_playbook_after_restart`** – Register a task file to run **after** the deployment handler (e.g. Restart splunk) has run on that host. Use when the playbook must run once Splunk is back up (e.g. wait for port, then call REST or configure lookups). Supported for **direct deployment** only; the playbook runs in a follow-up play.
 
 Entries without `customizations` are unchanged.
 
@@ -94,6 +96,17 @@ customizations:
 
 The `local/` directory is created if it does not exist.
 
+### `update_indexes`
+
+For **normal apps only** (not premium apps like ITSI): when `true`, if the app has a `default/indexes.conf` file, the framework copies it to the app’s `local/` folder and updates `homePath` and `coldPath` to use the volume names from `splunk_volume_defaults` (same behavior as ITSI indexer apps). Use this when you want the app’s indexes to use your configured index volumes without manually maintaining `local/indexes.conf`. Default is `false`.
+
+```yaml
+customizations:
+  update_indexes: true
+```
+
+If the app does not have `default/indexes.conf`, nothing is done. The handler (Restart Splunk, Apply indexer cluster bundle, etc.) is triggered when changes are made, same as other customizations.
+
 **Example – enable Splunk_TA_nix performance metrics (e.g. universal_forwarder):** use `local_configs` to enable script inputs and set the index (as in `config/splunk_config.yml`):
 
 ```yaml
@@ -161,6 +174,27 @@ customizations:
     app_path: "{{ app_path }}"
 ```
 
+### `run_playbook_after_restart`
+
+Run a task file **after** the deployment handler (e.g. Restart splunk) has run. Use this when your playbook needs Splunk to be up (e.g. wait for splunkd port, then call REST APIs or configure lookups). The framework runs customizations and notifies the handler; at the end of the play, Ansible runs handlers; a **follow-up play** then runs your task file on each host that registered one.
+
+- **Runs on the target host**: Registration happens only when the app is deployed **directly** to the host (via `apps_direct`). The playbook then runs on that same host in the follow-up play. If the app is deployed via Deployment Server, Deployer, or Cluster Manager, the playbook is **not** registered and **does not** run on the clients — only direct deployment is supported for this feature.
+- **Path**: Same as `run_playbook` — path from project root to the task file (e.g. `ansible/apps_playbooks/Splunk_SIM_addon-configure.yml`).
+- **Vars**: `app_path`, `app_name`, and `customization_extra_vars` (including `extra_vars` from the app config) are passed into the included tasks.
+
+You can use both `run_playbook` (runs before the handler) and `run_playbook_after_restart` (runs after) for the same app if needed.
+
+**Example – SIM Add-on (configure after restart):**
+
+```yaml
+customizations:
+  run_playbook_after_restart: "ansible/apps_playbooks/Splunk_SIM_addon-configure.yml"
+  extra_vars:
+    o11y_realm: "us1"
+    o11y_org_id: "FLqQG3NA4AA"
+    o11y_api_token: "{{ vaulted_o11y_api_token }}"   # use vault or var
+```
+
 ## Execution order
 
 For each host and each matching app entry, customizations run in this order:
@@ -168,7 +202,9 @@ For each host and each matching app entry, customizations run in this order:
 1. **Deploy app** (existing logic).
 2. **remove** – delete listed files/dirs under the app.
 3. **local_configs** – create/update each config file in the app’s `local/` folder.
-4. **run_playbook** or **run_role** – run custom Ansible with `app_path` (and `app_name`) available.
+4. **update_indexes** – if enabled and the app has `default/indexes.conf`, copy to `local/` and set `homePath`/`coldPath`.
+5. **run_playbook** or **run_role** – run custom Ansible with `app_path` (and `app_name`) available.
+6. **run_playbook_after_restart** – not run here; the app is added to a per-host list. After the play finishes, Ansible runs handlers (e.g. Restart splunk). A **follow-up play** (“Run post-restart playbooks”) then runs each registered task file on that host with `app_path`, `app_name`, and `extra_vars`.
 
 So you can remove default config, then add local configs, then run a playbook that does more.
 
@@ -188,16 +224,20 @@ customizations:
       default:
         homePath: $SPLUNK_DB/default/db
 
+  update_indexes: false   # optional; when true, copy default/indexes.conf to local/ and set homePath/coldPath
+
   run_playbook: "ansible/apps_playbooks/customize_my_ta.yml"
   # OR
   run_role: "my_namespace.custom_app_setup"
+  # OR run a task file after the Restart splunk (etc.) handler has run (direct deployment only):
+  run_playbook_after_restart: "ansible/apps_playbooks/Splunk_SIM_addon-configure.yml"
 
   extra_vars:
     app_name: "{{ app_name }}"
     app_path: "{{ app_path }}"
 ```
 
-- **Modular**: Use only `remove`, only `local_configs`, only `run_playbook`/`run_role`, or any combination.
+- **Modular**: Use only `remove`, only `local_configs`, only `update_indexes`, only `run_playbook`/`run_role`, only `run_playbook_after_restart`, or any combination.
 - **Per entry**: Each app entry has its own `customizations`; the same app in multiple entries can have different customizations for different roles.
 
 ## Related documentation
