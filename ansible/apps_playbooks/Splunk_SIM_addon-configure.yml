@@ -1,0 +1,159 @@
+---
+# Configure Splunk Infrastructure Monitoring (SIM) Add-on after app is deployed and Splunk has restarted.
+#
+# Use from app customizations: run_playbook_after_restart: "ansible/apps_playbooks/Splunk_SIM_addon-configure.yml"
+# App deployment installs the app and triggers Restart splunk; this task file runs in a follow-up play after the handler.
+#
+# Framework vars: app_path, app_name (from post-restart context)
+# extra_vars (from customizations.extra_vars): o11y_realm, o11y_org_id, o11y_api_token
+
+- name: "Wait for splunkd port after restart"
+  ansible.builtin.include_role:
+    name: splunk_common
+    tasks_from: wait_for_splunkd_port
+
+- name: "Wait for splunkd full service"
+  ansible.builtin.include_role:
+    name: splunk_common
+    tasks_from: wait_for_splunkd_full
+
+- name: "Create connection (SIM API config lookup)"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/services/search/jobs"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      search: "| makeresults | eval org_id=\"{{ _sim_o11y_org_id }}\", realm=\"{{ _sim_o11y_realm }}\", default=1, enable=1| fields - _time | inputlookup sim_api_config_lookup append=true| dedup org_id, realm | eval default=if(org_id==\"{{ _sim_o11y_org_id }}\",1,0) | outputlookup sim_api_config_lookup"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: 201
+  vars:
+    _sim_o11y_org_id: "{{ (customization_extra_vars | default({})).get('o11y_org_id', '') }}"
+    _sim_o11y_realm: "{{ (customization_extra_vars | default({})).get('o11y_realm', '') }}"
+
+- name: "Ensure SIM addon local directory exists"
+  ansible.builtin.file:
+    path: "{{ app_path }}/local"
+    state: directory
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: '0755'
+
+- name: "Set connection password in SIM addon (passwords.conf)"
+  community.general.ini_file:
+    path: "{{ app_path }}/local/passwords.conf"
+    section: "credential:splunk_ta_sim:{{ (customization_extra_vars | default({})).get('o11y_org_id', '') }}:"
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: '0644'
+  loop:
+    - { key: 'password', value: "{{ (customization_extra_vars | default({})).get('o11y_api_token', '') }}" }
+  notify: Restart splunk
+
+- name: "Get all Modular Inputs from API"
+  ansible.builtin.include_role:
+    name: splunk_software
+    tasks_from: splunk_rest
+  vars:
+    splunk_software_rest_endpoint: /services/data/inputs/sim_modular_input
+  register: _sim_rest_output
+
+- name: "Create sim_modular_inputs list"
+  ansible.builtin.set_fact:
+    sim_modular_inputs_list: "{{ splunk_software_rest_json_output | json_query('entry[*].name') }}"
+
+- name: "Enable all SIM modular inputs"
+  community.general.ini_file:
+    path: "{{ app_path }}/local/inputs.conf"
+    section: "sim_modular_input://{{ item }}"
+    option: "disabled"
+    value: "0"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: '0644'
+  loop: "{{ sim_modular_inputs_list | default([]) }}"
+  notify: Restart splunk
+
+- name: "Add custom sim_modular_input (Splunk Application Performance Monitoring (APM) Errors)"
+  community.general.ini_file:
+    path: "{{ app_path }}/local/inputs.conf"
+    section: "sim_modular_input://Splunk Application Performance Monitoring (APM) Errors"
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: '0644'
+  loop:
+    - { key: 'additional_meta_data_flag', value: '1' }
+    - { key: 'index', value: 'sim_metrics' }
+    - { key: 'interval', value: '300' }
+    - { key: 'metric_resolution', value: '-1' }
+    - { key: 'sim_max_delay', value: '-1' }
+    - { key: 'sim_modinput_restart_interval_seconds', value: '3600' }
+    - { key: 'disabled', value: '0' }
+    - { key: 'signal_flow_programs', value: "\"error_durations_p99 = data('service.request' + '.duration.ns.' + 'p99', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'true'), rollup='max').mean(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='error_durations_p99') ; non_error_durations_p99 = data('service.request' + '.duration.ns.' + 'p99', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'false'), rollup='max').mean(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='non_error_durations_p99') ; error_durations = data('service.request' + '.duration.ns.' + 'median', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'true'), rollup='max').mean(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='error_durations') ; non_error_durations = data('service.request' + '.duration.ns.' + 'median', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'false'), rollup='max').mean(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='non_error_durations') ; error_counts = data('service.request' + '.count', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'true'), rollup='sum').sum(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='error_counts') ; non_error_counts = data('service.request' + '.count', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'false'), rollup='sum').sum(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='non_error_counts')\"" }
+  notify: Restart splunk
+
+- name: "Add custom sim_modular_input (Splunk Application Performance Monitoring (APM) Rate (Throughput))"
+  community.general.ini_file:
+    path: "{{ app_path }}/local/inputs.conf"
+    section: "sim_modular_input://Splunk Application Performance Monitoring (APM) Rate (Throughput)"
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: '0644'
+  loop:
+    - { key: 'additional_meta_data_flag', value: '1' }
+    - { key: 'index', value: 'sim_metrics' }
+    - { key: 'interval', value: '300' }
+    - { key: 'metric_resolution', value: '-1' }
+    - { key: 'sim_max_delay', value: '-1' }
+    - { key: 'sim_modinput_restart_interval_seconds', value: '3600' }
+    - { key: 'disabled', value: '0' }
+    - { key: 'signal_flow_programs', value: "\"thruput_avg_rate = data('service.request.count', filter=filter('sf_environment', '*') and filter('sf_service', '*') and (not filter('sf_dimensionalized', '*')), rollup='rate').sum(by=['sf_service', 'sf_environment']).publish(label='thruput_avg_rate')\"" }
+  notify: Restart splunk
+
+- name: "Add custom sim_modular_input (Splunk Real User Monitoring (RUM) Inputs)"
+  community.general.ini_file:
+    path: "{{ app_path }}/local/inputs.conf"
+    section: "sim_modular_input://Splunk Real User Monitoring (RUM) Inputs"
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: '0644'
+  loop:
+    - { key: 'additional_meta_data_flag', value: '1' }
+    - { key: 'index', value: 'sim_metrics' }
+    - { key: 'interval', value: '300' }
+    - { key: 'metric_resolution', value: '-1' }
+    - { key: 'sim_max_delay', value: '-1' }
+    - { key: 'sim_modinput_restart_interval_seconds', value: '3600' }
+    - { key: 'disabled', value: '0' }
+    - { key: 'signal_flow_programs', value: "\"data('rum.page_view.count').publish(label='rum_page_view'); data('rum.client_error.count').publish(label='rum_client_error'); data('rum.page_view.time.ns.p75').scale(0.000001).publish(label='rum_page_view_time'); data('rum.resource_request.count').publish(label='rum_resource_request'); data('rum.resource_request.time.ns.p75').scale(0.000001).publish(label='rum_resource_request_time'); data('rum.crash.count').publish(label='rum_crash_count'); data('rum.app_error.count').publish(label='rum_app_error_count'); data('rum.cold_start.time.ns.p75').scale(0.000001).publish(label='rum_cold_start_time'); data('rum.cold_start.count').publish(label='rum_cold_start_count'); data('rum.webvitals_lcp.time.ns.p75').scale(0.000001).publish(label='rum_webvitals_lcp'); data('rum.webvitals_cls.score.p75').publish(label='rum_webvitals_cls'); data('rum.webvitals_fid.time.ns.p75').scale(0.000001).publish(label='rum_webvitals_fid')\"" }
+  notify: Restart splunk
+
+- name: "Add custom sim_modular_input (Splunk Synthetics Input for Observability Cloud)"
+  community.general.ini_file:
+    path: "{{ app_path }}/local/inputs.conf"
+    section: "sim_modular_input://Splunk Synthetics Input for Observability Cloud"
+    option: "{{ item.key }}"
+    value: "{{ item.value }}"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: '0644'
+  loop:
+    - { key: 'additional_meta_data_flag', value: '1' }
+    - { key: 'index', value: 'sim_metrics' }
+    - { key: 'interval', value: '300' }
+    - { key: 'metric_resolution', value: '-1' }
+    - { key: 'sim_max_delay', value: '-1' }
+    - { key: 'sim_modinput_restart_interval_seconds', value: '3600' }
+    - { key: 'disabled', value: '0' }
+    - { key: 'signal_flow_programs', value: "\"data('*', filter=filter('sf_product', 'synthetics') and filter('test_type', '*')).publish()\"" }
+  notify: Restart splunk

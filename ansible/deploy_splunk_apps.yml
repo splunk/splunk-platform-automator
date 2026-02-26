@@ -83,6 +83,30 @@
         - splunk_app_deployment is defined
         - splunk_app_deployment.apps is defined
 
+# Step 5: Run post-restart playbooks (after Restart splunk / other handlers from direct deployment)
+# Only runs on hosts that registered playbooks via customizations.run_playbook_after_restart
+- name: Run post-restart playbooks (direct deployment)
+  hosts: role_search_head,role_indexer,role_heavy_forwarder,role_license_manager,role_monitoring_console,role_universal_forwarder
+  become: true
+  become_user: root
+  gather_facts: yes
+
+  tasks:
+    - name: "Run post-restart playbook for app"
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.include_tasks: "{{ (playbook_dir | dirname) }}/{{ post_restart_item.playbook }}"
+      vars:
+        app_path: "{{ post_restart_item.app_path }}"
+        app_name: "{{ post_restart_item.app_name }}"
+        customization_extra_vars: "{{ (post_restart_item.extra_vars | default({})) | combine({'app_path': post_restart_item.app_path, 'app_name': post_restart_item.app_name}) }}"
+      loop: "{{ post_restart_playbooks_to_run | default([]) }}"
+      loop_control:
+        label: "{{ post_restart_item.app_name }} ({{ post_restart_item.playbook | basename }})"
+        loop_var: post_restart_item
+      when: (post_restart_playbooks_to_run | default([])) | length > 0
+
 # Final summary
 - name: Deployment summary
   hosts: localhost
