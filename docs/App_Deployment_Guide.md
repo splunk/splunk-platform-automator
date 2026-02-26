@@ -151,7 +151,7 @@ Premium packs are delivered as a **single archive (`.spl` or `.tgz`) that contai
 
 For **single-node** installs (one host has all roles), all of the above runs on that host.
 
-**Optional search head targeting:** If you have a dedicated search head or SHC for ITSI (or other premium apps), use the [target filter options](App_Deployment_Target_Filters_Concept.md):
+**Optional search head targeting:** If you have a dedicated search head or SHC for ITSI (or other premium apps), use the [target filter options](App_Deployment_Target_Filters.md):
 
 - **`hosts_whitelist`** – Deploy only to these hosts (e.g. a single standalone search head by inventory host name).
 - **`shc_whitelist`** – Deploy only to search heads in these SHCs (e.g. `["shc_itsi"]`; must match a defined `splunk_shclusters` entry).
@@ -192,7 +192,7 @@ If neither is set, the premium app is deployed to all search heads (and all SHC 
 | `itsi_version` | Version string (e.g. `"4.21.0"`); used for default local filename when `path` is omitted. |
 | `itsi_index_home_path` | Override index volume for homePath (e.g. `volume:primary`). Default: framework `splunk_volume_defaults.homePath`. |
 | `itsi_index_cold_path` | Override index volume for coldPath. Default: framework `splunk_volume_defaults.coldPath`. |
-| `hosts_whitelist` | Deploy only to these hosts (e.g. a single standalone search head). See [target filters](App_Deployment_Target_Filters_Concept.md). |
+| `hosts_whitelist` | Deploy only to these hosts (e.g. a single standalone search head). See [target filters](App_Deployment_Target_Filters.md). |
 | `shc_whitelist` | Deploy only to search heads in these SHCs (e.g. `["shc1"]`; must match `splunk_shclusters`). |
 | `itsi_notification_disable` | List of notable event action names to disable (e.g. `["remedy", "victorops"]`). |
 
