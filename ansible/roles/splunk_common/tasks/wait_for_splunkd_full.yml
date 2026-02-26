@@ -12,3 +12,4 @@
   until: "splunk_helpers_pid_count.stdout|int > 2"
   retries: 60
   delay: 10
+  changed_when: false
