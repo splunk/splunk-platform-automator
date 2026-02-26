@@ -988,96 +988,8 @@ class TestAppDeploymentConfig:
         result = validate_config(config)
         assert len(result.splunk_app_deployment.apps) == 2
 
-    # --- app_sh_name / app_shc_name (premium app search head targeting) ---
-    def test_premium_app_app_shc_name_valid(self):
-        """app_shc_name must be one of splunk_shclusters; valid when it matches."""
-        config = {
-            "plugin": "splunk-platform-automator",
-            "splunk_hosts": [
-                {"name": "deployer1", "roles": ["deployer"], "shcluster": "shc1"},
-                {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
-            ],
-            "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
-            "splunk_app_deployment": {
-                "apps": [
-                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "app_shc_name": "shc1"}
-                ]
-            },
-        }
-        result = validate_config(config)
-        assert result.splunk_app_deployment.apps[0].get("app_shc_name") == "shc1"
-
-    def test_premium_app_app_shc_name_invalid_raises(self):
-        """app_shc_name must be a defined SHC name from splunk_shclusters."""
-        config = {
-            "plugin": "splunk-platform-automator",
-            "splunk_hosts": [
-                {"name": "deployer1", "roles": ["deployer"], "shcluster": "shc1"},
-                {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
-            ],
-            "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
-            "splunk_app_deployment": {
-                "apps": [
-                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "app_shc_name": "shc_other"}
-                ]
-            },
-        }
-        with pytest.raises(ConfigValidationError) as exc_info:
-            validate_config(config)
-        msg = str(exc_info.value).lower()
-        assert "app_shc_name" in msg and "shc" in msg
-
-    def test_premium_app_app_sh_name_valid(self):
-        """app_sh_name must be a standalone search head host name; valid when it matches."""
-        config = {
-            "plugin": "splunk-platform-automator",
-            "splunk_hosts": [
-                {"name": "standalone_sh", "roles": ["search_head"]},
-                {"name": "idx1", "roles": ["indexer"]},
-            ],
-            "splunk_app_deployment": {
-                "apps": [
-                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "app_sh_name": "standalone_sh"}
-                ]
-            },
-        }
-        result = validate_config(config)
-        assert result.splunk_app_deployment.apps[0].get("app_sh_name") == "standalone_sh"
-
-    def test_premium_app_app_sh_name_invalid_raises(self):
-        """app_sh_name must be a standalone search head (not in SHC); invalid when not in config."""
-        config = {
-            "plugin": "splunk-platform-automator",
-            "splunk_hosts": [{"name": "standalone_sh", "roles": ["search_head"]}, {"name": "idx1", "roles": ["indexer"]}],
-            "splunk_app_deployment": {
-                "apps": [
-                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "app_sh_name": "nonexistent_sh"}
-                ]
-            },
-        }
-        with pytest.raises(ConfigValidationError) as exc_info:
-            validate_config(config)
-        msg = str(exc_info.value).lower()
-        assert "app_sh_name" in msg
-
-    def test_premium_app_app_sh_name_and_app_shc_name_both_raises(self):
-        """Only one of app_sh_name or app_shc_name allowed per premium app."""
-        config = {
-            "plugin": "splunk-platform-automator",
-            "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
-            "splunk_app_deployment": {
-                "apps": [
-                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "app_sh_name": "sh1", "app_shc_name": "shc1"}
-                ]
-            },
-        }
-        with pytest.raises(ConfigValidationError) as exc_info:
-            validate_config(config)
-        msg = str(exc_info.value).lower()
-        assert "app_sh_name" in msg and "app_shc_name" in msg
-
-    def test_premium_app_single_standalone_sh_no_app_sh_name_allowed(self):
-        """Single standalone search head: premium app without app_sh_name or app_shc_name is allowed."""
+    def test_premium_app_single_standalone_sh_no_target_filter_required(self):
+        """Single standalone search head: premium app without shc/hosts filters is allowed."""
         config = {
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [
@@ -1093,8 +1005,8 @@ class TestAppDeploymentConfig:
         result = validate_config(config)
         assert result.splunk_app_deployment.apps[0].get("premium_app") == "itsi"
 
-    def test_premium_app_multiple_standalone_sh_requires_app_sh_name_or_app_shc_name_raises(self):
-        """More than one standalone search head: premium app must have app_sh_name or app_shc_name."""
+    def test_premium_app_multiple_standalone_sh_requires_target_filter_raises(self):
+        """Multiple standalone search heads: premium app must set shc_whitelist, hosts_whitelist, or other target filter."""
         config = {
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [
@@ -1111,11 +1023,30 @@ class TestAppDeploymentConfig:
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(config)
         msg = str(exc_info.value).lower()
-        assert "app_sh_name" in msg or "app_shc_name" in msg
         assert "premium" in msg
+        assert "shc_whitelist" in msg or "hosts_whitelist" in msg or "targeting" in msg
 
-    def test_premium_app_shc_and_standalone_sh_requires_app_sh_name_or_app_shc_name_raises(self):
-        """SHC and standalone search head: premium app must have app_sh_name or app_shc_name."""
+    def test_premium_app_multiple_standalone_sh_with_hosts_whitelist_allowed(self):
+        """Multiple standalone search heads: premium app with hosts_whitelist set is allowed."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "sh1", "roles": ["search_head"]},
+                {"name": "sh2", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "hosts_whitelist": ["sh1"]}
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert result.splunk_app_deployment.apps[0].get("premium_app") == "itsi"
+        assert result.splunk_app_deployment.apps[0].get("hosts_whitelist") == ["sh1"]
+
+    def test_premium_app_shc_and_standalone_sh_requires_target_filter_raises(self):
+        """SHC and standalone search head: premium app must set shc_whitelist or hosts_whitelist (no blacklists)."""
         config = {
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [
@@ -1134,8 +1065,351 @@ class TestAppDeploymentConfig:
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(config)
         msg = str(exc_info.value).lower()
-        assert "app_sh_name" in msg or "app_shc_name" in msg
         assert "premium" in msg
+        assert "shc_whitelist" in msg or "hosts_whitelist" in msg or "targeting" in msg
+
+    def test_premium_app_shc_and_standalone_sh_with_shc_whitelist_allowed(self):
+        """SHC and standalone search head: premium app with shc_whitelist set is allowed."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
+                {"iter": {"numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+                {"name": "standalone_sh", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+            ],
+            "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "shc_whitelist": ["shc1"]}
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert result.splunk_app_deployment.apps[0].get("premium_app") == "itsi"
+        assert result.splunk_app_deployment.apps[0].get("shc_whitelist") == ["shc1"]
+
+    def test_premium_app_idxc_whitelist_not_allowed_raises(self):
+        """Premium apps may only use hosts_whitelist and shc_whitelist (no blacklists); idxc_* is not allowed."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "standalone_sh", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+            ],
+            "splunk_idxclusters": [{"idxc_name": "idxc1"}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "idxc_whitelist": ["idxc1"]}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "premium" in msg
+        assert "idxc_whitelist" in msg
+        assert "hosts_whitelist" in msg or "shc_whitelist" in msg
+
+    def test_premium_app_am_whitelist_not_allowed_raises(self):
+        """Premium apps may not use am_whitelist or am_blacklist; only hosts_* and shc_* filters allowed."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "ds1", "roles": ["deployment_server"]}, {"name": "uf1", "roles": ["universal_forwarder"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "am_whitelist": ["*"]}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "premium" in msg
+        assert "am_whitelist" in msg
+        assert "hosts_whitelist" in msg or "shc_whitelist" in msg
+
+    def test_premium_app_hosts_blacklist_not_allowed_raises(self):
+        """Premium apps may only use hosts_whitelist and shc_whitelist; hosts_blacklist is not allowed (no blacklists)."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "sh1", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "hosts_blacklist": ["sh1"]}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "premium" in msg
+        assert "no blacklists" in msg
+        assert "hosts_blacklist" in msg
+
+    def test_premium_app_shc_blacklist_not_allowed_raises(self):
+        """Premium apps may only use hosts_whitelist and shc_whitelist; shc_blacklist is not allowed (no blacklists)."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
+                {"iter": {"numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+                {"name": "idx1", "roles": ["indexer"]},
+            ],
+            "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "shc_blacklist": ["shc1"]}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "premium" in msg
+        assert "no blacklists" in msg
+        assert "shc_blacklist" in msg
+
+    def test_premium_app_both_hosts_whitelist_and_shc_whitelist_not_allowed_raises(self):
+        """Premium apps may use hosts_whitelist OR shc_whitelist, not both."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
+                {"iter": {"numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+                {"name": "standalone_sh", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+            ],
+            "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "hosts_whitelist": ["standalone_sh"], "shc_whitelist": ["shc1"]}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "premium" in msg
+        assert "not both" in msg
+        assert "hosts_whitelist" in msg
+        assert "shc_whitelist" in msg
+
+
+class TestTargetFilterOptions:
+    """Tests for app deployment target filter options (hosts_whitelist, shc_whitelist, am_whitelist, etc.)."""
+
+    def test_app_with_hosts_whitelist_and_shc_whitelist_valid(self):
+        """App with hosts_whitelist (non-cluster hosts) and shc_whitelist (valid SHC name) validates."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "deployer1", "roles": ["deployer"], "shcluster": "shc1"},
+                {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+                {"name": "standalone_sh", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+            ],
+            "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "MyApp", "source": "local", "target_roles": ["search_head"], "shc_whitelist": ["shc1"], "hosts_whitelist": ["standalone_sh", "idx1"]}
+                ]
+            },
+        }
+        result = validate_config(config)
+        app = result.splunk_app_deployment.apps[0]
+        assert app.get("shc_whitelist") == ["shc1"]
+        assert app.get("hosts_whitelist") == ["standalone_sh", "idx1"]
+
+    def test_app_shc_whitelist_invalid_raises(self):
+        """shc_whitelist must contain only names from splunk_shclusters."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "deployer1", "roles": ["deployer"], "shcluster": "shc1"},
+                {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+            ],
+            "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "MyApp", "source": "local", "target_roles": ["search_head"], "shc_whitelist": ["shc_other"]}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "shc_whitelist" in msg or "splunk_shclusters" in msg
+
+    def test_app_shc_whitelist_requires_splunk_shclusters_raises(self):
+        """shc_whitelist or shc_blacklist requires splunk_shclusters to be defined."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "sh1", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "MyApp", "source": "local", "target_roles": ["search_head"], "shc_whitelist": ["shc1"]}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "shc_whitelist" in msg or "shc_blacklist" in msg
+        assert "splunk_shclusters" in msg
+
+    def test_app_idxc_whitelist_requires_splunk_idxclusters_raises(self):
+        """idxc_whitelist or idxc_blacklist requires splunk_idxclusters to be defined."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "idx2", "roles": ["indexer"]},
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "MyApp", "source": "local", "target_roles": ["indexer"], "idxc_whitelist": ["idxc1"]}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "idxc_whitelist" in msg or "idxc_blacklist" in msg
+        assert "splunk_idxclusters" in msg
+
+    def test_app_am_whitelist_valid(self):
+        """App with am_whitelist (serverclass patterns) validates."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "ds1", "roles": ["deployment_server"]}, {"name": "uf1", "roles": ["universal_forwarder"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "MyApp", "source": "local", "target_roles": ["universal_forwarder"], "am_whitelist": ["*"]}
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert result.splunk_app_deployment.apps[0].get("am_whitelist") == ["*"]
+
+    def test_direct_deployment_am_whitelist_not_allowed_raises(self):
+        """When deployment_target is direct, am_whitelist must not be set (deployment server is ignored)."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "sh1", "roles": ["search_head"]}, {"name": "uf1", "roles": ["universal_forwarder"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "MyApp", "source": "local", "deployment_target": "direct", "target_roles": ["search_head"], "am_whitelist": ["*"]}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "am_whitelist" in msg
+        assert "direct" in msg
+        assert "deployment_target" in msg
+
+    def test_direct_deployment_am_blacklist_not_allowed_raises(self):
+        """When deployment_target is direct, am_blacklist must not be set (deployment server is ignored)."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "sh1", "roles": ["search_head"]}, {"name": "uf1", "roles": ["universal_forwarder"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "MyApp", "source": "local", "deployment_target": "direct", "target_roles": ["search_head"], "am_blacklist": ["some_serverclass"]}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "am_blacklist" in msg
+        assert "direct" in msg
+        assert "deployment_target" in msg
+
+    def test_app_hosts_whitelist_must_exist_in_inventory_raises(self):
+        """hosts_whitelist must contain only host names from splunk_hosts."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "sh1", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "MyApp", "source": "local", "target_roles": ["search_head"], "hosts_whitelist": ["sh1", "unknown_host"]}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "hosts_whitelist" in msg
+        assert "splunk_hosts" in msg or "unknown host" in msg
+
+    def test_app_hosts_blacklist_must_exist_in_inventory_raises(self):
+        """hosts_blacklist must contain only host names from splunk_hosts."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "uf1", "roles": ["universal_forwarder"]}, {"name": "uf2", "roles": ["universal_forwarder"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "MyApp", "source": "local", "target_roles": ["universal_forwarder"], "hosts_blacklist": ["nonexistent"]}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "hosts_blacklist" in msg
+        assert "splunk_hosts" in msg or "unknown host" in msg
+
+    def test_app_hosts_whitelist_valid_when_hosts_exist(self):
+        """hosts_whitelist with host names that exist in splunk_hosts validates."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "standalone_sh", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "MyApp", "source": "local", "target_roles": ["search_head"], "hosts_whitelist": ["standalone_sh"]}
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert result.splunk_app_deployment.apps[0].get("hosts_whitelist") == ["standalone_sh"]
+
+    def test_app_hosts_whitelist_cluster_member_raises(self):
+        """hosts_whitelist and hosts_blacklist must not contain SHC or IDXC members."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "deployer1", "roles": ["deployer"], "shcluster": "shc1"},
+                {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+                {"name": "idx1", "roles": ["indexer"]},
+            ],
+            "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "MyApp", "source": "local", "target_roles": ["search_head"], "hosts_whitelist": ["sh1"]}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "hosts_whitelist" in msg or "hosts_blacklist" in msg
+        assert "cluster" in msg
+        assert "shc_whitelist" in msg or "idxc_whitelist" in msg
 
 
 if __name__ == "__main__":

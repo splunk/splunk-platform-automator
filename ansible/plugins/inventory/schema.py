@@ -259,6 +259,15 @@ class SplunkAppDeploymentConfig(BaseModel):
                 raise ValueError(
                     f"splunk_app_deployment.apps[{i}] (name={name!r}): 'deployment_target' must be one of {ALLOWED_DEPLOYMENT_TARGETS}, got {app.get('deployment_target')!r}"
                 )
+            # When deployment_target is direct, deployment server is not used; am_* filters must not be set.
+            if deployment_target == "direct":
+                for am_key in ("am_whitelist", "am_blacklist"):
+                    val = app.get(am_key)
+                    if val is not None and (not isinstance(val, list) or len(val) > 0):
+                        raise ValueError(
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): '{am_key}' must not be set when deployment_target is 'direct'; "
+                            "direct deployment ignores the deployment server, so am_* filters have no effect."
+                        )
             target_roles = app.get("target_roles")
             premium_app = app.get("premium_app")
             if premium_app is not None and target_roles is not None:
@@ -286,21 +295,29 @@ class SplunkAppDeploymentConfig(BaseModel):
                     raise ValueError(
                         f"splunk_app_deployment.apps[{i}] (name={name!r}): 'premium_app' must be one of {ALLOWED_PREMIUM_APPS}, got {premium_app!r}"
                     )
-                # app_sh_name / app_shc_name (premium app search head targeting): only one allowed; non-empty string when set
-                app_sh_name = app.get("app_sh_name")
-                app_shc_name = app.get("app_shc_name")
-                if app_sh_name is not None and app_shc_name is not None:
+            for key in ("hosts_whitelist", "hosts_blacklist", "shc_whitelist", "shc_blacklist", "idxc_whitelist", "idxc_blacklist", "am_blacklist"):
+                val = app.get(key)
+                if val is not None:
+                    if not isinstance(val, list):
+                        raise ValueError(
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): '{key}' must be a list"
+                        )
+                    for j, v in enumerate(val):
+                        if not isinstance(v, str):
+                            raise ValueError(
+                                f"splunk_app_deployment.apps[{i}] (name={name!r}): '{key}[{j}]' must be a string"
+                            )
+            am_whitelist_val = app.get("am_whitelist")
+            if am_whitelist_val is not None:
+                if not isinstance(am_whitelist_val, list):
                     raise ValueError(
-                        f"splunk_app_deployment.apps[{i}] (name={name!r}): use only one of 'app_sh_name' or 'app_shc_name' for premium app targeting, not both"
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): 'am_whitelist' must be a list (serverclass patterns)"
                     )
-                if app_sh_name is not None and (not isinstance(app_sh_name, str) or not app_sh_name.strip()):
-                    raise ValueError(
-                        f"splunk_app_deployment.apps[{i}] (name={name!r}): 'app_sh_name' must be a non-empty string (standalone search head host name)"
-                    )
-                if app_shc_name is not None and (not isinstance(app_shc_name, str) or not app_shc_name.strip()):
-                    raise ValueError(
-                        f"splunk_app_deployment.apps[{i}] (name={name!r}): 'app_shc_name' must be a non-empty string (search head cluster name)"
-                    )
+                for j, v in enumerate(am_whitelist_val):
+                    if not isinstance(v, str):
+                        raise ValueError(
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): 'am_whitelist[{j}]' must be a string"
+                        )
             state = app.get("state")
             if state is not None:
                 state_str = state.strip().lower() if isinstance(state, str) else state
@@ -367,13 +384,38 @@ class SplunkAppDeploymentConfig(BaseModel):
                     raise ValueError(
                         f"splunk_app_deployment.apps[{i}] (name={name!r}): use only one of customizations.run_playbook or customizations.run_role per entry, not both"
                     )
+                run_playbook_after_restart = customizations.get("run_playbook_after_restart")
+                if run_playbook_after_restart is not None and (not isinstance(run_playbook_after_restart, str) or not run_playbook_after_restart.strip()):
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.run_playbook_after_restart must be a non-empty string (path from project root)"
+                    )
+                if run_playbook_after_restart is not None and run_playbook_after_restart.strip() and deployment_target != "direct":
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.run_playbook_after_restart requires deployment_target to be 'direct' (got {deployment_target!r})"
+                    )
                 extra_vars = customizations.get("extra_vars")
                 if extra_vars is not None and not isinstance(extra_vars, dict):
                     raise ValueError(
                         f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.extra_vars must be a dictionary"
                     )
+                update_indexes = customizations.get("update_indexes")
+                if update_indexes is not None and not isinstance(update_indexes, bool):
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.update_indexes must be true or false when set"
+                    )
 
-        # Duplicate check: same (name, deployment target) = same target hosts and directory → flag. Customizations do not change destination.
+        # Duplicate check: same (name, deployment target, filters) = same target hosts and directory.
+        def _filter_tuple(a: dict) -> tuple:
+            return (
+                tuple(sorted(a.get("hosts_whitelist") or [])),
+                tuple(sorted(a.get("hosts_blacklist") or [])),
+                tuple(sorted(a.get("shc_whitelist") or [])),
+                tuple(sorted(a.get("shc_blacklist") or [])),
+                tuple(sorted(a.get("idxc_whitelist") or [])),
+                tuple(sorted(a.get("idxc_blacklist") or [])),
+                tuple(a.get("am_whitelist") or []),
+                tuple(sorted(a.get("am_blacklist") or [])),
+            )
         seen: Dict[tuple, int] = {}
         for i, app in enumerate(self.apps):
             name = app.get("name")
@@ -385,14 +427,13 @@ class SplunkAppDeploymentConfig(BaseModel):
             else:
                 deployment_target = "auto"
             premium_app = app.get("premium_app")
+            fkey = _filter_tuple(app)
             if premium_app and isinstance(premium_app, str) and premium_app.strip():
-                app_sh_name = app.get("app_sh_name")
-                app_shc_name = app.get("app_shc_name")
-                deploy_key = ("premium", premium_app.strip().lower(), app_sh_name if app_sh_name else app_shc_name if app_shc_name else "default")
+                deploy_key = ("premium", premium_app.strip().lower(), fkey)
             else:
                 target_roles = app.get("target_roles")
                 roles_tuple = tuple(sorted(target_roles)) if isinstance(target_roles, list) else ()
-                deploy_key = (deployment_target, roles_tuple)
+                deploy_key = (deployment_target, roles_tuple, fkey)
             key = (name, deploy_key)
             if key in seen:
                 raise ValueError(
@@ -861,6 +902,9 @@ class SplunkConfig(BaseModel):
 
         Apps must not use deployment_target: direct with target_roles including search_head when
         there are search heads in a Search Head Cluster; SHC members receive apps via the Deployer.
+        Exception: when the app has hosts_whitelist set, the target set can be restricted to
+        standalone search heads only by host name, so direct is allowed. Not when only
+        shc_whitelist or idxc_whitelist is set (SHC members must receive apps via the Deployer).
         """
         dep = self.splunk_app_deployment
         if not dep or not dep.apps:
@@ -878,6 +922,8 @@ class SplunkConfig(BaseModel):
             return self
 
         # Find apps with deployment_target: direct and search_head in target_roles
+        # Allow only when app has hosts_whitelist set: target set can be restricted to standalone SHs by host name.
+        # Do not allow when only shc_whitelist or idxc_whitelist is set (SHC members must get apps via Deployer).
         apps_direct_to_shc: List[Dict[str, Any]] = []
         for app in dep.apps:
             target_roles = app.get("target_roles") or []
@@ -885,8 +931,13 @@ class SplunkConfig(BaseModel):
                 continue
             if app.get("deployment_target") != "direct":
                 continue
-            if "search_head" in target_roles:
-                apps_direct_to_shc.append(app)
+            if "search_head" not in target_roles:
+                continue
+            # Allow only if app has hosts_whitelist (can restrict to standalone SHs); not shc_whitelist/idxc_whitelist
+            hw = app.get("hosts_whitelist") or []
+            if isinstance(hw, list) and any(isinstance(v, str) and v.strip() for v in hw):
+                continue
+            apps_direct_to_shc.append(app)
 
         if apps_direct_to_shc:
             names = ", ".join(app.get("name", "?") for app in apps_direct_to_shc)
@@ -903,8 +954,127 @@ class SplunkConfig(BaseModel):
         return self
 
     @model_validator(mode='after')
-    def validate_premium_app_requires_sh_target_when_multiple_sh(self) -> 'SplunkConfig':
-        """When there is more than one standalone search head, or both an SHC and standalone SHs, premium apps must set app_sh_name or app_shc_name."""
+    def validate_target_filter_shc_idxc_names(self) -> 'SplunkConfig':
+        """shc_whitelist/shc_blacklist must reference defined SHC names (splunk_shclusters).
+        idxc_whitelist/idxc_blacklist must reference defined IDXC names (splunk_idxclusters).
+        The corresponding cluster section must be defined when these options are used."""
+        dep = self.splunk_app_deployment
+        if not dep or not dep.apps:
+            return self
+
+        shc_names: set = set()
+        if self.splunk_shclusters:
+            for shc in self.splunk_shclusters:
+                shc_names.add(shc.shc_name)
+        idxc_names: set = set()
+        if self.splunk_idxclusters:
+            for idxc in self.splunk_idxclusters:
+                idxc_names.add(idxc.idxc_name)
+
+        for i, app in enumerate(dep.apps):
+            name = app.get("name", "?")
+
+            for key in ("shc_whitelist", "shc_blacklist"):
+                val = app.get(key)
+                if not val or not isinstance(val, list):
+                    continue
+                vals = [v.strip() for v in val if isinstance(v, str) and v.strip()]
+                if not vals:
+                    continue
+                if not self.splunk_shclusters:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): '{key}' requires splunk_shclusters to be defined. "
+                        "Add splunk_shclusters and define the SHC names used in the app."
+                    )
+                for v in vals:
+                    if v not in shc_names:
+                        raise ValueError(
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): '{key}' must contain names from splunk_shclusters. "
+                            f"Unknown SHC {v!r}. Defined: {sorted(shc_names)!r}"
+                        )
+
+            for key in ("idxc_whitelist", "idxc_blacklist"):
+                val = app.get(key)
+                if not val or not isinstance(val, list):
+                    continue
+                vals = [v.strip() for v in val if isinstance(v, str) and v.strip()]
+                if not vals:
+                    continue
+                if not self.splunk_idxclusters:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): '{key}' requires splunk_idxclusters to be defined. "
+                        "Add splunk_idxclusters and define the IDXC names used in the app."
+                    )
+                for v in vals:
+                    if v not in idxc_names:
+                        raise ValueError(
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): '{key}' must contain names from splunk_idxclusters. "
+                            f"Unknown IDXC {v!r}. Defined: {sorted(idxc_names)!r}"
+                        )
+        return self
+
+    @model_validator(mode='after')
+    def validate_target_filter_hosts_exist(self) -> 'SplunkConfig':
+        """hosts_whitelist and hosts_blacklist must contain only host names that exist in splunk_hosts
+        and must not include cluster members (SHC or IDXC); use shc_whitelist/idxc_whitelist for those."""
+        dep = self.splunk_app_deployment
+        if not dep or not dep.apps:
+            return self
+
+        def expand_host_names(host: 'SplunkHost') -> set:
+            names: set = set()
+            if host.name:
+                names.add(host.name)
+            elif host.list:
+                for h in host.list:
+                    names.add(h)
+            elif host.iter:
+                parts = host.iter.numbers.split('..')
+                start, end = int(parts[0]), int(parts[1])
+                width = len(parts[1])
+                prefix = host.iter.prefix or ""
+                postfix = host.iter.postfix or ""
+                for n in range(start, end + 1):
+                    names.add(prefix + str(n).zfill(width) + postfix)
+            return names
+
+        inventory_host_names: set = set()
+        cluster_member_host_names: set = set()
+        for host in self.splunk_hosts:
+            names = expand_host_names(host)
+            inventory_host_names.update(names)
+            if host.shcluster or host.idxcluster:
+                cluster_member_host_names.update(names)
+
+        if not inventory_host_names:
+            return self
+
+        for i, app in enumerate(dep.apps):
+            name = app.get("name", "?")
+            for key in ("hosts_whitelist", "hosts_blacklist"):
+                val = app.get(key)
+                if not val or not isinstance(val, list):
+                    continue
+                for j, v in enumerate(val):
+                    if not isinstance(v, str) or not v.strip():
+                        continue
+                    h = v.strip()
+                    if h not in inventory_host_names:
+                        raise ValueError(
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): '{key}' must contain host names from splunk_hosts. "
+                            f"Unknown host {v!r} at index {j}."
+                        )
+                    if h in cluster_member_host_names:
+                        raise ValueError(
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): '{key}' must not contain cluster members. "
+                            f"Host {v!r} is a member of an SHC or IDXC; use shc_whitelist/shc_blacklist or idxc_whitelist/idxc_blacklist instead."
+                        )
+        return self
+
+    @model_validator(mode='after')
+    def validate_premium_app_requires_target_filters_when_shc_and_standalone_sh(self) -> 'SplunkConfig':
+        """When there is both an SHC and at least one standalone search head (or more than one standalone SH),
+        premium apps must specify targeting via shc_whitelist or hosts_whitelist (blacklists are not allowed on premium apps)."""
         dep = self.splunk_app_deployment
         if not dep or not dep.apps:
             return self
@@ -926,7 +1096,6 @@ class SplunkConfig(BaseModel):
                     start, end = int(parts[0]), int(parts[1])
                     standalone_sh_count += (end - start + 1)
 
-        # Ambiguous: more than one standalone SH, or both SHC and at least one standalone SH
         ambiguous = standalone_sh_count > 1 or (has_shc and standalone_sh_count >= 1)
         if not ambiguous:
             return self
@@ -934,62 +1103,52 @@ class SplunkConfig(BaseModel):
         for i, app in enumerate(dep.apps):
             if not app.get("premium_app"):
                 continue
-            app_sh_name = app.get("app_sh_name")
-            app_shc_name = app.get("app_shc_name")
-            has_sh_set = isinstance(app_sh_name, str) and app_sh_name.strip()
-            has_shc_name_set = isinstance(app_shc_name, str) and app_shc_name.strip()
-            if not has_sh_set and not has_shc_name_set:
+            has_filter = (
+                (app.get("shc_whitelist") and len(app.get("shc_whitelist", [])) > 0)
+                or (app.get("hosts_whitelist") and len(app.get("hosts_whitelist", [])) > 0)
+            )
+            if not has_filter:
                 name = app.get("name", "?")
                 raise ValueError(
-                    f"splunk_app_deployment.apps[{i}] (name={name!r}): premium app must have 'app_sh_name' or 'app_shc_name' when "
+                    f"splunk_app_deployment.apps[{i}] (name={name!r}): premium app must specify targeting when "
                     "there is more than one standalone search head, or both a Search Head Cluster and standalone search heads. "
-                    "Set app_sh_name to a standalone search head host name, or app_shc_name to the SHC name."
+                    "Set one of: shc_whitelist (e.g. ['shc1']), or hosts_whitelist (no blacklists allowed on premium apps)."
                 )
         return self
 
     @model_validator(mode='after')
-    def validate_app_sh_name_app_shc_name_values(self) -> 'SplunkConfig':
-        """For premium apps: app_sh_name must be a standalone search head; app_shc_name must be a defined SHC name."""
+    def validate_premium_app_only_hosts_and_shc_filters(self) -> 'SplunkConfig':
+        """Premium apps may only use hosts_whitelist OR shc_whitelist (not both). No blacklists, no idxc_*/am_*."""
         dep = self.splunk_app_deployment
         if not dep or not dep.apps:
             return self
-
-        # Allowed SHC names from splunk_shclusters
-        shc_names: set = set()
-        if self.splunk_shclusters:
-            for shc in self.splunk_shclusters:
-                shc_names.add(shc.shc_name)
-
-        # Standalone search head host names (search_head role, no shcluster); from name or list only (not iter)
-        standalone_sh_names: set = set()
-        for host in self.splunk_hosts:
-            if AllowedRole.search_head not in host.roles or host.shcluster:
-                continue
-            if host.name:
-                standalone_sh_names.add(host.name)
-            elif host.list:
-                for h in host.list:
-                    standalone_sh_names.add(h)
 
         for i, app in enumerate(dep.apps):
             if not app.get("premium_app"):
                 continue
             name = app.get("name", "?")
-            app_sh_name = app.get("app_sh_name")
-            app_shc_name = app.get("app_shc_name")
-            if app_shc_name is not None:
-                if shc_names and app_shc_name not in shc_names:
+            # Not both: premium apps may use hosts_whitelist OR shc_whitelist, not both
+            hw = app.get("hosts_whitelist") or []
+            sw = app.get("shc_whitelist") or []
+            if isinstance(hw, list) and isinstance(sw, list):
+                has_hw = any(isinstance(v, str) and v.strip() for v in hw)
+                has_sw = any(isinstance(v, str) and v.strip() for v in sw)
+                if has_hw and has_sw:
                     raise ValueError(
-                        f"splunk_app_deployment.apps[{i}] (name={name!r}): 'app_shc_name' must be one of the defined search head cluster names "
-                        f"from splunk_shclusters. Allowed: {sorted(shc_names)!r}, got {app_shc_name!r}"
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): premium apps may use "
+                        "hosts_whitelist OR shc_whitelist, not both. Set only one."
                     )
-            if app_sh_name is not None:
-                if standalone_sh_names and app_sh_name not in standalone_sh_names:
+            # Only hosts_whitelist and shc_whitelist allowed; no blacklists, no idxc_*, no am_*
+            for key in ("hosts_blacklist", "shc_blacklist", "idxc_whitelist", "idxc_blacklist", "am_whitelist", "am_blacklist"):
+                val = app.get(key)
+                if not val or not isinstance(val, list):
+                    continue
+                if any(isinstance(v, str) and v.strip() for v in val):
                     raise ValueError(
-                        f"splunk_app_deployment.apps[{i}] (name={name!r}): 'app_sh_name' must be a standalone search head host name "
-                        f"(search_head role without shcluster). Allowed: {sorted(standalone_sh_names)!r}, got {app_sh_name!r}"
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): premium apps may only use "
+                        "hosts_whitelist and shc_whitelist (no blacklists). "
+                        f"'{key}' is not allowed on premium apps."
                     )
-
         return self
 
 
