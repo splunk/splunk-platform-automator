@@ -32,6 +32,11 @@
       register: _update_indexes_local_dir_result
       notify: "{{ [update_indexes_notify] if update_indexes_notify is defined else [] }}"
 
+    - name: "Check if local/indexes.conf already exists (update_indexes)"
+      ansible.builtin.stat:
+        path: "{{ customization_app_path }}/local/indexes.conf"
+      register: _indexes_local_stat
+
     - name: "Copy indexes.conf to local for app {{ app_item.name }} (update_indexes)"
       ansible.builtin.copy:
         remote_src: true
@@ -41,6 +46,7 @@
         group: "{{ splunk_group | default('splunk') }}"
       register: _update_indexes_copy_result
       notify: "{{ [update_indexes_notify] if update_indexes_notify is defined else [] }}"
+      when: not (_indexes_local_stat.stat is defined and _indexes_local_stat.stat.exists | default(false))
 
     - name: "Set volume in homePath for app {{ app_item.name }} (update_indexes)"
       ansible.builtin.replace:
