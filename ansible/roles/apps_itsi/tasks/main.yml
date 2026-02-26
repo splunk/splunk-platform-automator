@@ -3,7 +3,7 @@
 # Supports source: splunkbase (app_id 1841) or local. Index paths default to splunk_volume_defaults.
 # Depends on splunk_common for splunk_home, splunk_user, splunk_service_name and "Restart splunk" handler.
 # Optional: app_item.itsi_version, itsi_index_home_path, itsi_index_cold_path, itsi_notification_disable,
-#           app_sh_name (single SH host), app_shc_name (SHC name for dedicated ITSI SHC)
+#           hosts_whitelist / shc_whitelist (and other target filters) for search head targeting.
 
 - name: "Set app_path and restart flag so splunk_common 'Restart splunk' handler runs when notified"
   tags:
@@ -197,18 +197,12 @@
     apps_itsi_sh_notify: "{{ 'Push shcluster bundle' if (group_names | select('match', '^shcluster_') | list | length > 0) else 'Restart splunk' }}"
   when: inventory_hostname in (groups.role_deployer | default([]))
 
-- name: "Run ITSI deployment for search head (etc/apps, all or filtered by app_sh_name / app_shc_name)"
+- name: "Run ITSI deployment for search head (etc/apps, filtered set from hosts_whitelist/shc_whitelist etc.)"
   ansible.builtin.include_tasks: itsi_install_search_head.yml
   vars:
     apps_itsi_sh_apps_base: "etc/apps"
     apps_itsi_sh_notify: "Restart splunk"
-  when: >-
-    inventory_hostname in (groups.role_search_head | default([]))
-    and (
-      (app_item.app_sh_name is not defined and app_item.app_shc_name is not defined)
-      or (app_item.app_sh_name is defined and inventory_hostname == app_item.app_sh_name)
-      or (app_item.app_shc_name is defined and inventory_hostname in (groups['shcluster_' + app_item.app_shc_name] | default([])))
-    )
+  when: inventory_hostname in (groups.role_search_head | default([]))
 
 # When Splunkbase and cache_downloads=false, remove archive and itsi_app_confs (used for version check and/or install).
 # Run regardless of whether we actually installed, since we always download for version check.

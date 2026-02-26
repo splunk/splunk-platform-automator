@@ -34,11 +34,6 @@
         or (
           current_host_roles | intersect(['search_head']) | length > 0
           and (group_names | select('match', '^shcluster_') | list | length == 0)
-          and (
-            (item.app_sh_name is not defined and item.app_shc_name is not defined)
-            or (item.app_sh_name is defined and inventory_hostname == item.app_sh_name)
-            or (item.app_shc_name is defined and inventory_hostname in (groups['shcluster_' + item.app_shc_name] | default([])))
-          )
         )
         or (
           current_host_roles | intersect(['indexer']) | length > 0
