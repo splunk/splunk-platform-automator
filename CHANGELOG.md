@@ -27,6 +27,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
   - Customizations run in order: deploy app → remove → local_configs → run_playbook/run_role. Setting `update_needed: true` in a custom task file triggers the correct deployment handler.
   - **Example playbook** `ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml`: Enables Splunk_TA_nix script inputs (performance metrics); optional `extra_vars.ta_nix_script_index`. Equivalent behavior via `local_configs` is documented for universal_forwarder.
   - **Documentation**: [App_Deployment_Customizations.md](docs/App_Deployment_Customizations.md) (user manual). App deployment doc names normalized to `App_Deployment_*`.
+- **App deployment target filters** – Per-app filters to restrict which hosts receive an app:
+  - **hosts_whitelist** / **hosts_blacklist**: Include or exclude specific search heads (standalone and SHC members in deployer context).
+  - **shc_whitelist** / **shc_blacklist**: Include or exclude by search head cluster name (must match `splunk_shclusters`).
+  - **idxc_whitelist** / **idxc_blacklist**: Include or exclude by indexer cluster name (must match `splunk_idxclusters`).
+  - **am_whitelist** / **am_blacklist**: (Deployment Server / Agent Management) Control serverclass whitelist/blacklist for which clients get the app.
+  - Filters are applied in a fixed order to compute the final target set; empty result means the app is not deployed (no error). Premium apps may use only **hosts_whitelist** OR **shc_whitelist** (not both) and may not use blacklists.
+  - **Documentation**: [App_Deployment_Target_Filters.md](docs/App_Deployment_Target_Filters.md).
 - **Premium apps (ITSI)** – Splunk IT Service Intelligence as a premium pack (single archive, multiple apps, role-specific extraction):
   - **Config**: `premium_app: itsi` on the app entry; optional `itsi_version`, `hosts_whitelist` / `shc_whitelist` (and other target filters), `itsi_notification_disable`. Source Splunkbase (app_id 1841) or local path.
   - **Roles**: Cluster Manager (selected apps to `manager-apps`), License Manager (license/access apps to `etc/apps`), Deployer (full bundle to `shcluster/apps`), Search Head (full bundle to `etc/apps`). Respects `target_download` for controller vs per-target download and cache.
