@@ -1,0 +1,63 @@
+---
+# Update app indexes.conf: copy default/indexes.conf to local/ and set homePath/coldPath.
+# Expects: customization_app_path, app_item; uses splunk_user, splunk_group.
+# Paths: when update_indexes_home_path / update_indexes_cold_path are set (e.g. by ITSI), use those;
+# otherwise use splunk_volume_defaults (volume:primary or configured volumes).
+# Optional: update_indexes_notify — when set (e.g. by ITSI), the copy/replace tasks notify this handler
+# (include_role does not support notify, so the handler must be triggered from inside this task file).
+# Only runs when the app has default/indexes.conf. Sets customization_update_indexes_changed when
+# any task changes something, so the caller can set update_needed and trigger the right notify.
+
+- name: "Check if app {{ app_item.name }} has default/indexes.conf"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.stat:
+    path: "{{ customization_app_path }}/default/indexes.conf"
+  register: _indexes_conf_stat
+
+- name: "Update indexes.conf (copy to local, set homePath/coldPath) for app {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+  when: _indexes_conf_stat.stat is defined and _indexes_conf_stat.stat.exists | default(false)
+  block:
+    - name: "Ensure local directory exists for update_indexes (app {{ app_item.name }})"
+      ansible.builtin.file:
+        path: "{{ customization_app_path }}/local"
+        state: directory
+        mode: '0755'
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+      register: _update_indexes_local_dir_result
+      notify: "{{ [update_indexes_notify] if update_indexes_notify is defined else [] }}"
+
+    - name: "Copy indexes.conf to local for app {{ app_item.name }} (update_indexes)"
+      ansible.builtin.copy:
+        remote_src: true
+        src: "{{ customization_app_path }}/default/indexes.conf"
+        dest: "{{ customization_app_path }}/local/"
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+      register: _update_indexes_copy_result
+      notify: "{{ [update_indexes_notify] if update_indexes_notify is defined else [] }}"
+
+    - name: "Set volume in homePath for app {{ app_item.name }} (update_indexes)"
+      ansible.builtin.replace:
+        path: "{{ customization_app_path }}/local/indexes.conf"
+        regexp: '^(homePath\s+=\s+)[^\/]+\/'
+        replace: '\1{{ update_indexes_home_path | default("volume:" ~ ((splunk_volume_defaults | default({})).homePath | default("primary"))) }}/'
+      register: _update_indexes_home_result
+      notify: "{{ [update_indexes_notify] if update_indexes_notify is defined else [] }}"
+
+    - name: "Set volume in coldPath for app {{ app_item.name }} (update_indexes)"
+      ansible.builtin.replace:
+        path: "{{ customization_app_path }}/local/indexes.conf"
+        regexp: '^(coldPath\s+=\s+)[^\/]+\/'
+        replace: '\1{{ update_indexes_cold_path | default("volume:" ~ ((splunk_volume_defaults | default({})).coldPath | default("primary"))) }}/'
+      register: _update_indexes_cold_result
+      notify: "{{ [update_indexes_notify] if update_indexes_notify is defined else [] }}"
+
+    - name: "Set customization_update_indexes_changed when update_indexes made changes"
+      ansible.builtin.set_fact:
+        customization_update_indexes_changed: "{{ (_update_indexes_local_dir_result | default({})).get('changed', false) or (_update_indexes_copy_result | default({})).get('changed', false) or (_update_indexes_home_result | default({})).get('changed', false) or (_update_indexes_cold_result | default({})).get('changed', false) }}"

@@ -42,52 +42,18 @@
       become: true
       become_user: "{{ splunk_user | default('splunk') }}"
 
-    - name: "Create local directories for ITSI indexer apps"
+    - name: "Update indexes.conf for ITSI indexer apps (copy to local, set homePath/coldPath)"
       tags:
         - splunk
         - splunk_apps
         - itsi
-      ansible.builtin.file:
-        state: directory
-        path: "{{ apps_itsi_splunk_home }}/{{ apps_itsi_indexer_apps_base }}/{{ item }}/local"
-        owner: "{{ splunk_user | default('splunk') }}"
-        group: "{{ splunk_group | default('splunk') }}"
+      ansible.builtin.include_role:
+        name: apps_common
+        tasks_from: update_indexes.yml
+      vars:
+        customization_app_path: "{{ apps_itsi_splunk_home }}/{{ apps_itsi_indexer_apps_base }}/{{ item }}"
+        app_item: { name: "{{ item }}" }
+        update_indexes_home_path: "{{ apps_itsi_home_path }}"
+        update_indexes_cold_path: "{{ apps_itsi_cold_path }}"
+        update_indexes_notify: "{{ apps_itsi_indexer_notify }}"
       loop: "{{ itsi_cm_apps }}"
-
-    - name: "Copy indexes.conf to local for ITSI indexer apps"
-      tags:
-        - splunk
-        - splunk_apps
-        - itsi
-      ansible.builtin.copy:
-        remote_src: true
-        src: "{{ apps_itsi_splunk_home }}/{{ apps_itsi_indexer_apps_base }}/{{ item }}/default/indexes.conf"
-        dest: "{{ apps_itsi_splunk_home }}/{{ apps_itsi_indexer_apps_base }}/{{ item }}/local/"
-        owner: "{{ splunk_user | default('splunk') }}"
-        group: "{{ splunk_group | default('splunk') }}"
-      loop: "{{ itsi_cm_apps }}"
-      notify: "{{ apps_itsi_indexer_notify }}"
-
-    - name: "Set volume in homePath for ITSI indexes"
-      tags:
-        - splunk
-        - splunk_apps
-        - itsi
-      ansible.builtin.replace:
-        path: "{{ apps_itsi_splunk_home }}/{{ apps_itsi_indexer_apps_base }}/{{ item }}/local/indexes.conf"
-        regexp: '^(homePath\s+=\s+)[^\/]+\/'
-        replace: '\1{{ apps_itsi_home_path }}/'
-      loop: "{{ itsi_cm_apps }}"
-      notify: "{{ apps_itsi_indexer_notify }}"
-
-    - name: "Set volume in coldPath for ITSI indexes"
-      tags:
-        - splunk
-        - splunk_apps
-        - itsi
-      ansible.builtin.replace:
-        path: "{{ apps_itsi_splunk_home }}/{{ apps_itsi_indexer_apps_base }}/{{ item }}/local/indexes.conf"
-        regexp: '^(coldPath\s+=\s+)[^\/]+\/'
-        replace: '\1{{ apps_itsi_cold_path }}/'
-      loop: "{{ itsi_cm_apps }}"
-      notify: "{{ apps_itsi_indexer_notify }}"

@@ -63,12 +63,19 @@
   register: customization_local_config_result
   when: app_local_config_flat is defined and app_local_config_flat | length > 0
 
+# --- 4) update_indexes: copy default/indexes.conf to local/ and set homePath/coldPath (normal apps only) ---
+- name: "Update indexes.conf for app {{ app_item.name }} (customizations.update_indexes)"
+  ansible.builtin.include_tasks: update_indexes.yml
+  when:
+    - app_item.customizations.update_indexes | default(false) | bool
+    - (app_item.premium_app | default('')) | length == 0
+
 - name: "Set update_needed when customizations made changes"
   tags:
     - splunk
     - splunk_apps
   ansible.builtin.set_fact:
-    update_needed: "{{ update_needed | default(false) | bool or ((customization_remove_result | default({})).get('results', []) | selectattr('changed') | list | length > 0) or ((customization_local_config_result | default({})).get('results', []) | selectattr('changed') | list | length > 0) or ((customization_local_dir_result | default({})).get('changed', false)) }}"
+    update_needed: "{{ update_needed | default(false) | bool or ((customization_remove_result | default({})).get('results', []) | selectattr('changed') | list | length > 0) or ((customization_local_config_result | default({})).get('results', []) | selectattr('changed') | list | length > 0) or ((customization_local_dir_result | default({})).get('changed', false)) or (customization_update_indexes_changed | default(false)) }}"
 
 # --- 3) Run custom playbook or role ---
 - name: "Set extra vars for custom role/task"
@@ -105,3 +112,6 @@
   when:
     - app_item.customizations.run_playbook is defined
     - app_item.customizations.run_playbook | length > 0
+
+# run_playbook_after_restart is registered only from apps_direct (process_direct_app.yml)
+# so it runs on the target host after the handler. DS/Deployer/CM do not register it.
