@@ -286,6 +286,12 @@ class SplunkAppDeploymentConfig(BaseModel):
                             f"splunk_app_deployment.apps[{i}] (name={name!r}): 'target_roles' contains invalid role {r!r}. "
                             f"Allowed: {sorted(allowed_roles)}"
                         )
+            # Normal apps (no premium_app) must specify target_roles.
+            is_premium = premium_app and isinstance(premium_app, str) and premium_app.strip()
+            if not is_premium and (target_roles is None or not isinstance(target_roles, list) or len(target_roles) == 0):
+                raise ValueError(
+                    f"splunk_app_deployment.apps[{i}] (name={name!r}): 'target_roles' is required for normal apps (must be a non-empty list)"
+                )
             if premium_app is not None:
                 if not isinstance(premium_app, str) or not premium_app.strip():
                     raise ValueError(
@@ -1069,6 +1075,66 @@ class SplunkConfig(BaseModel):
                             f"splunk_app_deployment.apps[{i}] (name={name!r}): '{key}' must not contain cluster members. "
                             f"Host {v!r} is a member of an SHC or IDXC; use shc_whitelist/shc_blacklist or idxc_whitelist/idxc_blacklist instead."
                         )
+        return self
+
+    @model_validator(mode='after')
+    def validate_target_roles_include_host_filter_roles(self) -> 'SplunkConfig':
+        """For normal apps, target_roles must include every role that hosts in hosts_whitelist/hosts_blacklist have."""
+        dep = self.splunk_app_deployment
+        if not dep or not dep.apps:
+            return self
+
+        def expand_host_names(host: 'SplunkHost') -> set:
+            names: set = set()
+            if host.name:
+                names.add(host.name)
+            elif host.list:
+                for h in host.list:
+                    names.add(h)
+            elif host.iter:
+                parts = host.iter.numbers.split('..')
+                start, end = int(parts[0]), int(parts[1])
+                width = len(parts[1])
+                prefix = host.iter.prefix or ""
+                postfix = host.iter.postfix or ""
+                for n in range(start, end + 1):
+                    names.add(prefix + str(n).zfill(width) + postfix)
+            return names
+
+        # Map each host name to the set of role values (strings) for that host
+        host_names_to_roles: Dict[str, set] = {}
+        for host in self.splunk_hosts:
+            names = expand_host_names(host)
+            role_values = {r.value for r in host.roles}
+            for n in names:
+                host_names_to_roles.setdefault(n, set()).update(role_values)
+
+        for i, app in enumerate(dep.apps):
+            if app.get("premium_app") and isinstance(app.get("premium_app"), str) and app.get("premium_app", "").strip():
+                continue
+            name = app.get("name", "?")
+            target_roles_list = app.get("target_roles") or []
+            if not isinstance(target_roles_list, list):
+                continue
+            target_roles_set = set(target_roles_list)
+            host_filter_names = set()
+            for key in ("hosts_whitelist", "hosts_blacklist"):
+                val = app.get(key)
+                if val and isinstance(val, list):
+                    for v in val:
+                        if isinstance(v, str) and v.strip():
+                            host_filter_names.add(v.strip())
+            if not host_filter_names:
+                continue
+            required_roles = set()
+            for h in host_filter_names:
+                required_roles.update(host_names_to_roles.get(h, set()))
+            missing = required_roles - target_roles_set
+            if missing:
+                raise ValueError(
+                    f"splunk_app_deployment.apps[{i}] (name={name!r}): hosts in hosts_whitelist/hosts_blacklist have roles {sorted(required_roles)!r}; "
+                    f"target_roles must include all of them. Missing in target_roles: {sorted(missing)!r}."
+                )
         return self
 
     @model_validator(mode='after')
