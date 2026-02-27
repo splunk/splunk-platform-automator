@@ -31,7 +31,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
   - **hosts_whitelist** / **hosts_blacklist**: Include or exclude specific search heads (standalone and SHC members in deployer context).
   - **shc_whitelist** / **shc_blacklist**: Include or exclude by search head cluster name (must match `splunk_shclusters`).
   - **idxc_whitelist** / **idxc_blacklist**: Include or exclude by indexer cluster name (must match `splunk_idxclusters`).
-  - **am_whitelist** / **am_blacklist**: (Deployment Server / Agent Management) Control serverclass whitelist/blacklist for which clients get the app.
+  - **sc_whitelist** / **sc_blacklist**: (Deployment Server / Agent Management) Control serverclass whitelist/blacklist for which clients get the app.
   - Filters are applied in a fixed order to compute the final target set; empty result means the app is not deployed (no error). Premium apps may use only **hosts_whitelist** OR **shc_whitelist** (not both) and may not use blacklists.
   - **Documentation**: [App_Deployment_Target_Filters.md](docs/App_Deployment_Target_Filters.md).
 - **Premium apps (ITSI)** – Splunk IT Service Intelligence as a premium pack (single archive, multiple apps, role-specific extraction):

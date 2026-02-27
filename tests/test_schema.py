@@ -988,6 +988,56 @@ class TestAppDeploymentConfig:
         result = validate_config(config)
         assert len(result.splunk_app_deployment.apps) == 2
 
+    def test_duplicate_serverclass_explicit_raises(self):
+        """Two apps with the same explicit serverclass name must raise."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "ds", "roles": ["deployment_server"]}, {"name": "uf1", "roles": ["universal_forwarder"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "AppA", "source": "local", "target_roles": ["universal_forwarder"], "serverclass": "shared_class"},
+                    {"name": "AppB", "source": "local", "target_roles": ["universal_forwarder"], "serverclass": "shared_class"},
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "duplicate" in msg and "serverclass" in msg and "shared_class" in str(exc_info.value)
+
+    def test_duplicate_serverclass_default_and_explicit_raises(self):
+        """App with default serverclass app_Foo and another with explicit serverclass app_Foo must raise."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "ds", "roles": ["deployment_server"]}, {"name": "uf1", "roles": ["universal_forwarder"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "Foo", "source": "local", "target_roles": ["universal_forwarder"]},
+                    {"name": "Bar", "source": "local", "target_roles": ["universal_forwarder"], "serverclass": "app_Foo"},
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "duplicate" in msg and "serverclass" in msg and "app_foo" in msg
+
+    def test_different_serverclass_allowed(self):
+        """Two apps with different serverclass names (explicit or default) are allowed."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "ds", "roles": ["deployment_server"]}, {"name": "uf1", "roles": ["universal_forwarder"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "AppA", "source": "local", "target_roles": ["universal_forwarder"], "serverclass": "class_one"},
+                    {"name": "AppB", "source": "local", "target_roles": ["universal_forwarder"], "serverclass": "class_two"},
+                    {"name": "AppC", "source": "local", "target_roles": ["universal_forwarder"]},
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert len(result.splunk_app_deployment.apps) == 3
+
     def test_premium_app_single_standalone_sh_no_target_filter_required(self):
         """Single standalone search head: premium app without shc/hosts filters is allowed."""
         config = {
@@ -1111,14 +1161,14 @@ class TestAppDeploymentConfig:
         assert "idxc_whitelist" in msg
         assert "hosts_whitelist" in msg or "shc_whitelist" in msg
 
-    def test_premium_app_am_whitelist_not_allowed_raises(self):
-        """Premium apps may not use am_whitelist or am_blacklist; only hosts_* and shc_* filters allowed."""
+    def test_premium_app_sc_whitelist_not_allowed_raises(self):
+        """Premium apps may not use sc_whitelist or sc_blacklist; only hosts_* and shc_* filters allowed."""
         config = {
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [{"name": "ds1", "roles": ["deployment_server"]}, {"name": "uf1", "roles": ["universal_forwarder"]}],
             "splunk_app_deployment": {
                 "apps": [
-                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "am_whitelist": ["*"]}
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "sc_whitelist": ["*"]}
                 ]
             },
         }
@@ -1126,7 +1176,7 @@ class TestAppDeploymentConfig:
             validate_config(config)
         msg = str(exc_info.value).lower()
         assert "premium" in msg
-        assert "am_whitelist" in msg
+        assert "sc_whitelist" in msg
         assert "hosts_whitelist" in msg or "shc_whitelist" in msg
 
     def test_premium_app_hosts_blacklist_not_allowed_raises(self):
@@ -1200,7 +1250,7 @@ class TestAppDeploymentConfig:
 
 
 class TestTargetFilterOptions:
-    """Tests for app deployment target filter options (hosts_whitelist, shc_whitelist, am_whitelist, etc.)."""
+    """Tests for app deployment target filter options (hosts_whitelist, shc_whitelist, sc_whitelist, etc.)."""
 
     def test_app_with_hosts_whitelist_and_shc_whitelist_valid(self):
         """App with hosts_whitelist (non-cluster hosts) and shc_whitelist (valid SHC name) validates."""
@@ -1284,53 +1334,53 @@ class TestTargetFilterOptions:
         assert "idxc_whitelist" in msg or "idxc_blacklist" in msg
         assert "splunk_idxclusters" in msg
 
-    def test_app_am_whitelist_valid(self):
-        """App with am_whitelist (serverclass patterns) validates."""
+    def test_app_sc_whitelist_valid(self):
+        """App with sc_whitelist (serverclass patterns) validates."""
         config = {
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [{"name": "ds1", "roles": ["deployment_server"]}, {"name": "uf1", "roles": ["universal_forwarder"]}],
             "splunk_app_deployment": {
                 "apps": [
-                    {"name": "MyApp", "source": "local", "target_roles": ["universal_forwarder"], "am_whitelist": ["*"]}
+                    {"name": "MyApp", "source": "local", "target_roles": ["universal_forwarder"], "sc_whitelist": ["*"]}
                 ]
             },
         }
         result = validate_config(config)
-        assert result.splunk_app_deployment.apps[0].get("am_whitelist") == ["*"]
+        assert result.splunk_app_deployment.apps[0].get("sc_whitelist") == ["*"]
 
-    def test_direct_deployment_am_whitelist_not_allowed_raises(self):
-        """When deployment_target is direct, am_whitelist must not be set (deployment server is ignored)."""
+    def test_direct_deployment_sc_whitelist_not_allowed_raises(self):
+        """When deployment_target is direct, sc_whitelist must not be set (deployment server is ignored)."""
         config = {
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [{"name": "sh1", "roles": ["search_head"]}, {"name": "uf1", "roles": ["universal_forwarder"]}],
             "splunk_app_deployment": {
                 "apps": [
-                    {"name": "MyApp", "source": "local", "deployment_target": "direct", "target_roles": ["search_head"], "am_whitelist": ["*"]}
+                    {"name": "MyApp", "source": "local", "deployment_target": "direct", "target_roles": ["search_head"], "sc_whitelist": ["*"]}
                 ]
             },
         }
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(config)
         msg = str(exc_info.value).lower()
-        assert "am_whitelist" in msg
+        assert "sc_whitelist" in msg
         assert "direct" in msg
         assert "deployment_target" in msg
 
-    def test_direct_deployment_am_blacklist_not_allowed_raises(self):
-        """When deployment_target is direct, am_blacklist must not be set (deployment server is ignored)."""
+    def test_direct_deployment_sc_blacklist_not_allowed_raises(self):
+        """When deployment_target is direct, sc_blacklist must not be set (deployment server is ignored)."""
         config = {
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [{"name": "sh1", "roles": ["search_head"]}, {"name": "uf1", "roles": ["universal_forwarder"]}],
             "splunk_app_deployment": {
                 "apps": [
-                    {"name": "MyApp", "source": "local", "deployment_target": "direct", "target_roles": ["search_head"], "am_blacklist": ["some_serverclass"]}
+                    {"name": "MyApp", "source": "local", "deployment_target": "direct", "target_roles": ["search_head"], "sc_blacklist": ["some_serverclass"]}
                 ]
             },
         }
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(config)
         msg = str(exc_info.value).lower()
-        assert "am_blacklist" in msg
+        assert "sc_blacklist" in msg
         assert "direct" in msg
         assert "deployment_target" in msg
 

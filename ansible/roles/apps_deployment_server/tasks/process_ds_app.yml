@@ -1,5 +1,13 @@
 ---
 # Process a single deployment server app
+#
+# Serverclass whitelist/blacklist:
+# - If sc_whitelist (sc_* lists) is defined: use sc_whitelist and sc_blacklist directly for
+#   serverclass; no whitelist calculation is done (sc_* overwrites calculation).
+# - If sc_whitelist is not defined: compute serverclass whitelist from target_roles and
+#   hosts_*/idxc_*/shc_* filters (only for deployment server clients). sc_blacklist can still be set.
+# - hosts_whitelist/hosts_blacklist (and idxc_*, shc_*) are used only to calculate the whitelist
+#   when sc_whitelist is not set; they apply to DS clients only.
 
 - name: "Set defaults for {{ app_item.name }}"
   tags:
@@ -11,7 +19,7 @@
     app_version: "{{ app_item.version | default('latest') }}"
     serverclass_name: "{{ app_item.serverclass | default('app_' + app_item.name) }}"
 
-# --- Base set for DS: target_roles minus idxcluster/shcluster members ---
+# --- Base set for DS: target_roles minus idxcluster/shcluster (DS clients only). Only when sc_* not used. ---
 - name: "Compute base whitelist for {{ app_item.name }}"
   tags:
     - splunk
@@ -31,9 +39,9 @@
       }}
   when:
     - app_state == 'installed'
-    - app_item.am_whitelist is not defined
+    - app_item.sc_whitelist is not defined
 
-# --- Apply filters in order (only when not using am_whitelist for final list). SHC filters omitted: DS does not manage SHC members. ---
+# --- Apply idxc/shc/hosts filters to computed set (only when sc_whitelist not defined; DS clients only). ---
 - name: "Initialize filtered set for {{ app_item.name }}"
   tags:
     - splunk
@@ -43,7 +51,7 @@
     _app_ds_filtered: "{{ _app_ds_base | default([]) }}"
   when:
     - app_state == 'installed'
-    - app_item.am_whitelist is not defined
+    - app_item.sc_whitelist is not defined
 
 # Build union of IDXC members for whitelist filter
 - name: "Build IDXC whitelist union for {{ app_item.name }}"
@@ -56,7 +64,7 @@
   loop: "{{ app_item.idxc_whitelist | default([]) }}"
   when:
     - app_state == 'installed'
-    - app_item.am_whitelist is not defined
+    - app_item.sc_whitelist is not defined
     - app_item.idxc_whitelist is defined
     - app_item.idxc_whitelist | length > 0
 
@@ -69,7 +77,7 @@
     _app_ds_filtered: "{{ (_app_ds_filtered | default(_app_ds_base)) | intersect(_idxc_whitelist_union | default([]) | unique) | list }}"
   when:
     - app_state == 'installed'
-    - app_item.am_whitelist is not defined
+    - app_item.sc_whitelist is not defined
     - app_item.idxc_whitelist is defined
     - app_item.idxc_whitelist | length > 0
 
@@ -84,7 +92,7 @@
   loop: "{{ app_item.idxc_blacklist | default([]) }}"
   when:
     - app_state == 'installed'
-    - app_item.am_whitelist is not defined
+    - app_item.sc_whitelist is not defined
     - app_item.idxc_blacklist is defined
     - app_item.idxc_blacklist | length > 0
 
@@ -97,7 +105,7 @@
     _app_ds_filtered: "{{ (_app_ds_filtered | default(_app_ds_base)) | reject('in', _idxc_blacklist_union | default([]) | unique) | list }}"
   when:
     - app_state == 'installed'
-    - app_item.am_whitelist is not defined
+    - app_item.sc_whitelist is not defined
     - app_item.idxc_blacklist is defined
     - app_item.idxc_blacklist | length > 0
 
@@ -111,7 +119,7 @@
     _app_ds_filtered: "{{ (_app_ds_filtered | default(_app_ds_base)) | reject('in', (groups['role_search_head'] | default([]))) | list }}"
   when:
     - app_state == 'installed'
-    - app_item.am_whitelist is not defined
+    - app_item.sc_whitelist is not defined
     - app_item.shc_whitelist is defined
     - (app_item.shc_whitelist or []) | length > 0
 
@@ -125,7 +133,7 @@
     _ds_standalone_sh: "{{ groups['role_search_head'] | default([]) | reject('in', (groups | select('match', '^shcluster_') | list | map('extract', groups) | flatten) | list) | list }}"
   when:
     - app_state == 'installed'
-    - app_item.am_whitelist is not defined
+    - app_item.sc_whitelist is not defined
     - (app_item.hosts_whitelist is defined and app_item.hosts_whitelist | length > 0) or (app_item.hosts_blacklist is defined and app_item.hosts_blacklist | length > 0)
 
 - name: "Split DS filtered set into SH and non-SH for {{ app_item.name }}"
@@ -137,7 +145,7 @@
     _app_ds_sh: "{{ (_app_ds_filtered | default(_app_ds_base)) | intersect(_ds_standalone_sh) | list }}"
   when:
     - app_state == 'installed'
-    - app_item.am_whitelist is not defined
+    - app_item.sc_whitelist is not defined
     - (app_item.hosts_whitelist is defined and app_item.hosts_whitelist | length > 0) or (app_item.hosts_blacklist is defined and app_item.hosts_blacklist | length > 0)
 
 - name: "Set DS non-SH subset for {{ app_item.name }}"
@@ -149,7 +157,7 @@
     _app_ds_non_sh: "{{ (_app_ds_filtered | default(_app_ds_base)) | reject('in', _app_ds_sh | default([])) | list }}"
   when:
     - app_state == 'installed'
-    - app_item.am_whitelist is not defined
+    - app_item.sc_whitelist is not defined
     - (app_item.hosts_whitelist is defined and app_item.hosts_whitelist | length > 0) or (app_item.hosts_blacklist is defined and app_item.hosts_blacklist | length > 0)
 
 - name: "Apply hosts_whitelist filter (search heads only) for {{ app_item.name }}"
@@ -162,7 +170,7 @@
     _app_ds_filtered: "{{ (_app_ds_non_sh | default([])) + ((_app_ds_sh | default([])) | intersect(app_item.hosts_whitelist | default([]))) | unique | list }}"
   when:
     - app_state == 'installed'
-    - app_item.am_whitelist is not defined
+    - app_item.sc_whitelist is not defined
     - app_item.hosts_whitelist is defined
     - app_item.hosts_whitelist | length > 0
 
@@ -175,33 +183,35 @@
     _app_ds_filtered: "{{ (_app_ds_non_sh | default([])) + ((_app_ds_sh_filtered | default(_app_ds_sh) | default([])) | reject('in', app_item.hosts_blacklist | default([]))) | unique | list }}"
   when:
     - app_state == 'installed'
-    - app_item.am_whitelist is not defined
+    - app_item.sc_whitelist is not defined
     - app_item.hosts_blacklist is defined
     - app_item.hosts_blacklist | length > 0
 
-# --- Set app_whitelist_hosts: am_whitelist (and optional am_blacklist) or filtered set ---
-- name: "Set serverclass whitelist from am_whitelist for {{ app_item.name }}"
+# --- Serverclass: use sc_* directly (overwrite calculation) or use calculated whitelist + sc_blacklist ---
+- name: "Set serverclass whitelist from sc_whitelist for {{ app_item.name }}"
   tags:
     - splunk
     - splunk_apps
     - deployment_server
   ansible.builtin.set_fact:
-    app_whitelist_hosts: "{{ (app_item.am_whitelist | default([])) | reject('in', app_item.am_blacklist | default([])) | list }}"
+    app_whitelist_hosts: "{{ app_item.sc_whitelist | default([]) }}"
+    app_blacklist_hosts: "{{ app_item.sc_blacklist | default([]) }}"
   when:
     - app_state == 'installed'
-    - app_item.am_whitelist is defined
-    - app_item.am_whitelist | length > 0
+    - app_item.sc_whitelist is defined
+    - app_item.sc_whitelist | length > 0
 
-- name: "Set serverclass whitelist from filtered set for {{ app_item.name }}"
+- name: "Set serverclass whitelist from calculated set for {{ app_item.name }}"
   tags:
     - splunk
     - splunk_apps
     - deployment_server
   ansible.builtin.set_fact:
-    app_whitelist_hosts: "{{ (_app_ds_filtered | default(_app_ds_base) | default([])) | reject('in', app_item.am_blacklist | default([])) | list }}"
+    app_whitelist_hosts: "{{ _app_ds_filtered | default(_app_ds_base) | default([]) }}"
+    app_blacklist_hosts: "{{ app_item.sc_blacklist | default([]) }}"
   when:
     - app_state == 'installed'
-    - app_item.am_whitelist is not defined
+    - app_item.sc_whitelist is not defined
 
 - name: "Empty whitelist for removal of {{ app_item.name }}"
   tags:
@@ -210,6 +220,7 @@
     - deployment_server
   ansible.builtin.set_fact:
     app_whitelist_hosts: []
+    app_blacklist_hosts: []
   when: app_state == 'absent'
 
 - name: "Debug {{ app_item.name }} deployment"

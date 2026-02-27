@@ -9,7 +9,7 @@ For each app you can optionally set **filters** that narrow or subtract from the
 - **hosts_whitelist** / **hosts_blacklist** – Include or exclude specific hosts. These filters apply only to **search heads** (standalone and SHC members in deployer context). They do not filter license managers, indexers, or other roles.
 - **shc_whitelist** / **shc_blacklist** – Include or exclude search heads by search head cluster name.
 - **idxc_whitelist** / **idxc_blacklist** – Include or exclude indexers by indexer cluster name.
-- **am_whitelist** / **am_blacklist** – (Agent Management / Deployment Server only) Control which clients get the app via the deployment server serverclass.
+- **sc_whitelist** / **sc_blacklist** – (Agent Management / Deployment Server only) Control which clients get the app via the deployment server serverclass.
 
 **Normal apps** must set **target_roles** (e.g. `[search_head]`, `[indexer]`). The schema also requires that **target_roles** includes every role that hosts in **hosts_whitelist** or **hosts_blacklist** have. **Premium apps** (e.g. ITSI) do not use `target_roles`; their targets are determined by the premium role. Premium apps may use **hosts_whitelist** OR **shc_whitelist** (not both) and may not use blacklists.
 
@@ -27,13 +27,17 @@ Cluster names in **shc_whitelist** / **shc_blacklist** must exist in **splunk_sh
 | **shc_blacklist** | list of SHC names | Exclude hosts that are members of any of these SHCs. |
 | **idxc_whitelist** | list of IDXC names | Keep only hosts that are members of one of these indexer clusters. Names must match **splunk_idxclusters**. |
 | **idxc_blacklist** | list of IDXC names | Exclude hosts that are members of any of these indexer clusters. |
-| **am_whitelist** | list of patterns | **(Deployment Server / Agent Management)** Set the serverclass whitelist to these patterns (e.g. host names, `*` for all clients). When set, this replaces the computed target set for the serverclass. |
-| **am_blacklist** | list of host names | **(Deployment Server / Agent Management)** Exclude these hosts from receiving this app from the deployment server. Applied after am_whitelist when both are set. |
+| **sc_whitelist** | list of patterns | **(Deployment Server / Agent Management)** Set the serverclass whitelist to these patterns (e.g. host names, `*` for all clients). When set, this replaces the computed target set for the serverclass. |
+| **sc_blacklist** | list of host names | **(Deployment Server / Agent Management)** Exclude these hosts from receiving this app. Written in serverclass as `blacklist.0`, `blacklist.1`, … (indexed like whitelist). Applied after whitelist when both are set. |
 
 - All of these filters are **optional**.
-- **am_whitelist** and **am_blacklist** apply only when the app is distributed via the Deployment Server (Agent Management). **am_whitelist** accepts any pattern valid in the Splunk serverclass whitelist (e.g. host names or `*`).
+- **Deployment Server (serverclass) behaviour:**
+  - **If sc_whitelist is defined:** It is always used directly for the serverclass whitelist (and **sc_blacklist** for the serverclass blacklist). No whitelist calculation is performed; sc_* overwrites calculation.
+  - **If sc_whitelist is not defined:** The serverclass whitelist is **calculated** from **target_roles** and the hosts_*/idxc_*/shc_* filters, but only for hosts that are deployment server clients. **sc_blacklist** can still be set on the serverclass when defined.
+- **hosts_whitelist** / **hosts_blacklist** (and idxc_*, shc_*) are used only to **calculate** the serverclass whitelist when sc_whitelist is not set; they apply to DS clients only.
+- **sc_whitelist** accepts any pattern valid in the Splunk serverclass whitelist (e.g. host names or `*`). **sc_blacklist** is written as `blacklist.0`, `blacklist.1`, etc., same syntax as whitelist.
 - **Whitelists** restrict the set to the given hosts or cluster members. **Blacklists** remove the given hosts or cluster members.
-- **Premium apps** may use only **hosts_whitelist** OR **shc_whitelist** (not both) and may not use blacklists or idxc_*/am_* filters.
+- **Premium apps** may use only **hosts_whitelist** OR **shc_whitelist** (not both) and may not use blacklists or idxc_*/sc_* filters.
 - **hosts_whitelist** and **hosts_blacklist** cannot contain cluster members (SHC or IDXC); use **shc_whitelist** / **shc_blacklist** or **idxc_whitelist** / **idxc_blacklist** for cluster-level targeting.
 
 ---
@@ -49,7 +53,7 @@ For each app, the playbooks compute a **base set** of hosts (from **target_roles
 5. **hosts_whitelist** – Keep only hosts in this list.
 6. **hosts_blacklist** – Remove hosts in this list.
 
-That final set is used to decide which hosts get the app for Deployment Server (serverclass), Deployer (bundle), or direct deployment. When **am_whitelist** is set, the Deployment Server serverclass whitelist uses that value instead of the computed set; **am_blacklist** can then exclude specific hosts from that list.
+That final set is used to decide which hosts get the app for Deployment Server (serverclass), Deployer (bundle), or direct deployment. **For serverclass only:** if **sc_whitelist** is set, it is used directly (no calculation); otherwise the serverclass whitelist is the calculated set above (applied only to deployment server clients). **sc_blacklist** is written as `blacklist.0`, `blacklist.1`, etc., and Splunk excludes those hosts from the whitelist.
 
 ---
 
@@ -104,21 +108,21 @@ hosts_blacklist: [uf_old_1, uf_old_2]
 
 ```yaml
 target_roles: [universal_forwarder]
-am_whitelist: [uf1, uf2, uf3]
+sc_whitelist: [uf1, uf2, uf3]
 ```
 
 **Deployment Server: all clients (serverclass whitelist):**
 
 ```yaml
 target_roles: [universal_forwarder]
-am_whitelist: ['*']
+sc_whitelist: ['*']
 ```
 
 **Deployment Server: exclude specific host from computed set:**
 
 ```yaml
 target_roles: [search_head]
-am_blacklist: [sh_legacy]
+sc_blacklist: [sh_legacy]
 ```
 
 ---
@@ -127,7 +131,7 @@ am_blacklist: [sh_legacy]
 
 If after applying all filters the target set is **empty**:
 
-- **Deployment Server:** The app is not added to the serverclass (or the whitelist is empty). If **am_whitelist** was set, that list is still used.
+- **Deployment Server:** The app is not added to the serverclass (or the whitelist is empty). If **sc_whitelist** was set, that list is still used.
 - **Deployer:** The app is not included in the deployer bundle for that context.
 - **Direct:** The app is not added to any host.
 

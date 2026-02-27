@@ -3,7 +3,7 @@
 # Variables expected:
 #   - verify_app_item: The app configuration
 #   - verify_app_full_path: Full path to app (uses app_item.target_path override if set)
-# Expected whitelist is computed like process_ds_app: base set, idxc/hosts filters (no SHC filters; DS does not manage SHC members), then am_whitelist/am_blacklist.
+# Expected whitelist is computed like process_ds_app: base set, idxc/hosts filters (no SHC filters; DS does not manage SHC members), then sc_whitelist; sc_blacklist is written to serverclass as blacklist.0, blacklist.1, etc. Effective targets = whitelist minus blacklist.
 
 - name: "Check if {{ verify_app_item.name }} exists"
   tags:
@@ -15,20 +15,20 @@
   register: app_check
   become: true
 
-# Expected whitelist when am_whitelist is set
-- name: "Compute expected whitelist for {{ verify_app_item.name }} (am_whitelist)"
+# Expected whitelist when sc_whitelist is set
+- name: "Compute expected whitelist for {{ verify_app_item.name }} (sc_whitelist)"
   tags:
     - splunk
     - splunk_apps
     - verify
   ansible.builtin.set_fact:
-    verify_expected_whitelist_hosts: "{{ (verify_app_item.am_whitelist | default([])) | reject('in', verify_app_item.am_blacklist | default([])) | list }}"
+    verify_expected_whitelist_hosts: "{{ (verify_app_item.sc_whitelist | default([])) | reject('in', verify_app_item.sc_blacklist | default([])) | list }}"
   when:
     - verify_app_item.state | default('installed') != 'absent'
-    - verify_app_item.am_whitelist is defined
-    - verify_app_item.am_whitelist | length > 0
+    - verify_app_item.sc_whitelist is defined
+    - verify_app_item.sc_whitelist | length > 0
 
-# Base set (target_roles minus idxcluster/shcluster) when am_whitelist not set
+# Base set (target_roles minus idxcluster/shcluster) when sc_whitelist not set
 - name: "Compute expected whitelist base for {{ verify_app_item.name }}"
   tags:
     - splunk
@@ -48,7 +48,7 @@
       }}
   when:
     - verify_app_item.state | default('installed') != 'absent'
-    - verify_app_item.am_whitelist is not defined
+    - verify_app_item.sc_whitelist is not defined
 
 - name: "Initialize expected filtered set for {{ verify_app_item.name }}"
   tags:
@@ -59,7 +59,7 @@
     _verify_ds_filtered: "{{ _verify_ds_base | default([]) }}"
   when:
     - verify_app_item.state | default('installed') != 'absent'
-    - verify_app_item.am_whitelist is not defined
+    - verify_app_item.sc_whitelist is not defined
 
 # Apply same filters as process_ds_app (idxc, hosts; no SHC)
 - name: "Build verify IDXC whitelist union for {{ verify_app_item.name }}"
@@ -68,7 +68,7 @@
   loop: "{{ verify_app_item.idxc_whitelist | default([]) }}"
   when:
     - verify_app_item.state | default('installed') != 'absent'
-    - verify_app_item.am_whitelist is not defined
+    - verify_app_item.sc_whitelist is not defined
     - verify_app_item.idxc_whitelist is defined
     - verify_app_item.idxc_whitelist | length > 0
 
@@ -77,7 +77,7 @@
     _verify_ds_filtered: "{{ (_verify_ds_filtered | default(_verify_ds_base)) | intersect(_verify_idxc_w | default([]) | unique) | list }}"
   when:
     - verify_app_item.state | default('installed') != 'absent'
-    - verify_app_item.am_whitelist is not defined
+    - verify_app_item.sc_whitelist is not defined
     - verify_app_item.idxc_whitelist is defined
     - verify_app_item.idxc_whitelist | length > 0
 
@@ -87,7 +87,7 @@
   loop: "{{ verify_app_item.idxc_blacklist | default([]) }}"
   when:
     - verify_app_item.state | default('installed') != 'absent'
-    - verify_app_item.am_whitelist is not defined
+    - verify_app_item.sc_whitelist is not defined
     - verify_app_item.idxc_blacklist is defined
     - verify_app_item.idxc_blacklist | length > 0
 
@@ -96,7 +96,7 @@
     _verify_ds_filtered: "{{ (_verify_ds_filtered | default(_verify_ds_base)) | reject('in', _verify_idxc_b | default([]) | unique) | list }}"
   when:
     - verify_app_item.state | default('installed') != 'absent'
-    - verify_app_item.am_whitelist is not defined
+    - verify_app_item.sc_whitelist is not defined
     - verify_app_item.idxc_blacklist is defined
     - verify_app_item.idxc_blacklist | length > 0
 
@@ -107,7 +107,7 @@
     _verify_ds_sh: "{{ (_verify_ds_filtered | default(_verify_ds_base)) | intersect(_verify_standalone_sh) | list }}"
   when:
     - verify_app_item.state | default('installed') != 'absent'
-    - verify_app_item.am_whitelist is not defined
+    - verify_app_item.sc_whitelist is not defined
     - (verify_app_item.hosts_whitelist is defined and verify_app_item.hosts_whitelist | length > 0) or (verify_app_item.hosts_blacklist is defined and verify_app_item.hosts_blacklist | length > 0)
 
 - name: "Set verify non-SH subset for {{ verify_app_item.name }}"
@@ -115,7 +115,7 @@
     _verify_ds_non_sh: "{{ (_verify_ds_filtered | default(_verify_ds_base)) | reject('in', _verify_ds_sh | default([])) | list }}"
   when:
     - verify_app_item.state | default('installed') != 'absent'
-    - verify_app_item.am_whitelist is not defined
+    - verify_app_item.sc_whitelist is not defined
     - (verify_app_item.hosts_whitelist is defined and verify_app_item.hosts_whitelist | length > 0) or (verify_app_item.hosts_blacklist is defined and verify_app_item.hosts_blacklist | length > 0)
 
 - name: "Apply verify hosts_whitelist (search heads only) for {{ verify_app_item.name }}"
@@ -124,7 +124,7 @@
     _verify_ds_filtered: "{{ (_verify_ds_non_sh | default([])) + (_verify_ds_sh_filtered) | unique | list }}"
   when:
     - verify_app_item.state | default('installed') != 'absent'
-    - verify_app_item.am_whitelist is not defined
+    - verify_app_item.sc_whitelist is not defined
     - verify_app_item.hosts_whitelist is defined
     - verify_app_item.hosts_whitelist | length > 0
 
@@ -134,7 +134,7 @@
     _verify_ds_filtered: "{{ (_verify_ds_non_sh | default([])) + (_verify_ds_sh_filtered) | unique | list }}"
   when:
     - verify_app_item.state | default('installed') != 'absent'
-    - verify_app_item.am_whitelist is not defined
+    - verify_app_item.sc_whitelist is not defined
     - verify_app_item.hosts_blacklist is defined
     - verify_app_item.hosts_blacklist | length > 0
 
@@ -144,10 +144,10 @@
     - splunk_apps
     - verify
   ansible.builtin.set_fact:
-    verify_expected_whitelist_hosts: "{{ (_verify_ds_filtered | default(_verify_ds_base) | default([])) | reject('in', verify_app_item.am_blacklist | default([])) | list }}"
+    verify_expected_whitelist_hosts: "{{ (_verify_ds_filtered | default(_verify_ds_base) | default([])) | reject('in', verify_app_item.sc_blacklist | default([])) | list }}"
   when:
     - verify_app_item.state | default('installed') != 'absent'
-    - verify_app_item.am_whitelist is not defined
+    - verify_app_item.sc_whitelist is not defined
 
 - name: "Verify {{ verify_app_item.name }} presence/absence"
   tags:

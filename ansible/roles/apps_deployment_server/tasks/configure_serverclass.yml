@@ -26,24 +26,26 @@
     - deployment_server
   ansible.builtin.set_fact:
     current_whitelist: "{{ serverclass_file.content | default('') | b64decode | regex_findall('\\[serverClass:' + serverclass_name + '\\][\\s\\S]*?(?=\\n\\[|$)') | first | default('') | regex_findall('whitelist\\.\\d+\\s*=\\s*(.+)') }}"
+    current_blacklist: "{{ serverclass_file.content | default('') | b64decode | regex_findall('\\[serverClass:' + serverclass_name + '\\][\\s\\S]*?(?=\\n\\[|$)') | first | default('') | regex_findall('blacklist\\.\\d+\\s*=\\s*(.+)') }}"
   when: serverclass_file.content is defined
 
-- name: "Set empty current whitelist if file doesn't exist"
+- name: "Set empty current whitelist and blacklist if file doesn't exist"
   tags:
     - splunk
     - splunk_apps
     - deployment_server
   ansible.builtin.set_fact:
     current_whitelist: []
+    current_blacklist: []
   when: serverclass_file.content is not defined
 
-- name: "Compare whitelists for {{ serverclass_name }}"
+- name: "Compare whitelists and blacklists for {{ serverclass_name }}"
   tags:
     - splunk
     - splunk_apps
     - deployment_server
   ansible.builtin.set_fact:
-    whitelist_needs_update: "{{ (current_whitelist | sort) != (app_whitelist_hosts | default([]) | sort) }}"
+    whitelist_needs_update: "{{ (current_whitelist | sort) != (app_whitelist_hosts | default([]) | sort) or (current_blacklist | default([]) | sort) != (app_blacklist_hosts | default([]) | sort) }}"
 
 - name: "Debug whitelist comparison for {{ app_name }}"
   tags:
@@ -54,6 +56,8 @@
     msg:
       - "Current whitelist: {{ current_whitelist | join(', ') if current_whitelist | length > 0 else '(empty)' }}"
       - "Desired whitelist: {{ app_whitelist_hosts | join(', ') if app_whitelist_hosts | length > 0 else '(empty)' }}"
+      - "Current blacklist: {{ current_blacklist | default([]) | join(', ') if current_blacklist | default([]) | length > 0 else '(empty)' }}"
+      - "Desired blacklist: {{ app_blacklist_hosts | default([]) | join(', ') if app_blacklist_hosts | default([]) | length > 0 else '(empty)' }}"
       - "Needs update: {{ whitelist_needs_update }}"
     verbosity: 0
 
@@ -99,8 +103,29 @@
   loop: "{{ app_whitelist_hosts | default([]) }}"
   loop_control:
     index_var: idx
-  when: 
+  when:
     - app_whitelist_hosts | default([]) | length > 0
+    - whitelist_needs_update | bool
+  notify: Reload deploy-server
+
+- name: "Set {{ serverclass_name }} server class blacklist"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  community.general.ini_file:
+    path: "{{ serverclass_conf_path }}"
+    section: "serverClass:{{ serverclass_name }}"
+    option: "blacklist.{{ idx }}"
+    value: "{{ item }}"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: "0600"
+  loop: "{{ app_blacklist_hosts | default([]) }}"
+  loop_control:
+    index_var: idx
+  when:
+    - app_blacklist_hosts | default([]) | length > 0
     - whitelist_needs_update | bool
   notify: Reload deploy-server
 
@@ -136,4 +161,5 @@
       - "ServerClass: {{ serverclass_name }}"
       - "Current: {{ current_whitelist | join(', ') if current_whitelist | length > 0 else '(empty)' }}"
       - "Desired: {{ app_whitelist_hosts | join(', ') if app_whitelist_hosts | length > 0 else '(empty)' }}"
+      - "Blacklist: {{ app_blacklist_hosts | default([]) | join(', ') if app_blacklist_hosts | default([]) | length > 0 else '(empty)' }}"
     verbosity: 0

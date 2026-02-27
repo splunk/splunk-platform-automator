@@ -259,14 +259,14 @@ class SplunkAppDeploymentConfig(BaseModel):
                 raise ValueError(
                     f"splunk_app_deployment.apps[{i}] (name={name!r}): 'deployment_target' must be one of {ALLOWED_DEPLOYMENT_TARGETS}, got {app.get('deployment_target')!r}"
                 )
-            # When deployment_target is direct, deployment server is not used; am_* filters must not be set.
+            # When deployment_target is direct, deployment server is not used; sc_* filters must not be set.
             if deployment_target == "direct":
-                for am_key in ("am_whitelist", "am_blacklist"):
-                    val = app.get(am_key)
+                for sc_key in ("sc_whitelist", "sc_blacklist"):
+                    val = app.get(sc_key)
                     if val is not None and (not isinstance(val, list) or len(val) > 0):
                         raise ValueError(
-                            f"splunk_app_deployment.apps[{i}] (name={name!r}): '{am_key}' must not be set when deployment_target is 'direct'; "
-                            "direct deployment ignores the deployment server, so am_* filters have no effect."
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): '{sc_key}' must not be set when deployment_target is 'direct'; "
+                            "direct deployment ignores the deployment server, so sc_* filters have no effect."
                         )
             target_roles = app.get("target_roles")
             premium_app = app.get("premium_app")
@@ -301,7 +301,7 @@ class SplunkAppDeploymentConfig(BaseModel):
                     raise ValueError(
                         f"splunk_app_deployment.apps[{i}] (name={name!r}): 'premium_app' must be one of {ALLOWED_PREMIUM_APPS}, got {premium_app!r}"
                     )
-            for key in ("hosts_whitelist", "hosts_blacklist", "shc_whitelist", "shc_blacklist", "idxc_whitelist", "idxc_blacklist", "am_blacklist"):
+            for key in ("hosts_whitelist", "hosts_blacklist", "shc_whitelist", "shc_blacklist", "idxc_whitelist", "idxc_blacklist", "sc_blacklist"):
                 val = app.get(key)
                 if val is not None:
                     if not isinstance(val, list):
@@ -313,16 +313,16 @@ class SplunkAppDeploymentConfig(BaseModel):
                             raise ValueError(
                                 f"splunk_app_deployment.apps[{i}] (name={name!r}): '{key}[{j}]' must be a string"
                             )
-            am_whitelist_val = app.get("am_whitelist")
-            if am_whitelist_val is not None:
-                if not isinstance(am_whitelist_val, list):
+            sc_whitelist_val = app.get("sc_whitelist")
+            if sc_whitelist_val is not None:
+                if not isinstance(sc_whitelist_val, list):
                     raise ValueError(
-                        f"splunk_app_deployment.apps[{i}] (name={name!r}): 'am_whitelist' must be a list (serverclass patterns)"
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): 'sc_whitelist' must be a list (serverclass patterns)"
                     )
-                for j, v in enumerate(am_whitelist_val):
+                for j, v in enumerate(sc_whitelist_val):
                     if not isinstance(v, str):
                         raise ValueError(
-                            f"splunk_app_deployment.apps[{i}] (name={name!r}): 'am_whitelist[{j}]' must be a string"
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): 'sc_whitelist[{j}]' must be a string"
                         )
             state = app.get("state")
             if state is not None:
@@ -419,8 +419,8 @@ class SplunkAppDeploymentConfig(BaseModel):
                 tuple(sorted(a.get("shc_blacklist") or [])),
                 tuple(sorted(a.get("idxc_whitelist") or [])),
                 tuple(sorted(a.get("idxc_blacklist") or [])),
-                tuple(a.get("am_whitelist") or []),
-                tuple(sorted(a.get("am_blacklist") or [])),
+                tuple(a.get("sc_whitelist") or []),
+                tuple(sorted(a.get("sc_blacklist") or [])),
             )
         seen: Dict[tuple, int] = {}
         for i, app in enumerate(self.apps):
@@ -478,6 +478,29 @@ class SplunkAppDeploymentConfig(BaseModel):
                     "target_roles do not distinguish destination when both are managed by the same DS."
                 )
             seen_ds_name[name] = i
+
+        # Duplicate serverclass check: no two apps may have the same effective serverclass name.
+        # Effective serverclass = app.serverclass if set, else "app_<name>". Mapping multiple apps
+        # to the same serverclass is not supported until rules and logic are defined.
+        seen_sc: Dict[str, tuple] = {}  # serverclass -> (app_index, app_name)
+        for i, app in enumerate(self.apps):
+            name = app.get("name")
+            if name is None or not isinstance(name, str) or not name.strip():
+                continue
+            name = name.strip()
+            sc = app.get("serverclass")
+            if isinstance(sc, str) and sc.strip():
+                effective_sc = sc.strip()
+            else:
+                effective_sc = "app_" + name
+            if effective_sc in seen_sc:
+                first_i, first_name = seen_sc[effective_sc]
+                raise ValueError(
+                    f"Duplicate serverclass: two apps use the same serverclass name {effective_sc!r} "
+                    f"(apps[{first_i}] name={first_name!r} and apps[{i}] name={name!r}). "
+                    "Each app must have a unique serverclass; sharing serverclass names is not allowed yet. Will be provided in the future."
+                )
+            seen_sc[effective_sc] = (i, name)
         return self
 
     @model_validator(mode='after')
@@ -1184,7 +1207,7 @@ class SplunkConfig(BaseModel):
 
     @model_validator(mode='after')
     def validate_premium_app_only_hosts_and_shc_filters(self) -> 'SplunkConfig':
-        """Premium apps may only use hosts_whitelist OR shc_whitelist (not both). No blacklists, no idxc_*/am_*."""
+        """Premium apps may only use hosts_whitelist OR shc_whitelist (not both). No blacklists, no idxc_*/sc_*."""
         dep = self.splunk_app_deployment
         if not dep or not dep.apps:
             return self
@@ -1204,8 +1227,8 @@ class SplunkConfig(BaseModel):
                         f"splunk_app_deployment.apps[{i}] (name={name!r}): premium apps may use "
                         "hosts_whitelist OR shc_whitelist, not both. Set only one."
                     )
-            # Only hosts_whitelist and shc_whitelist allowed; no blacklists, no idxc_*, no am_*
-            for key in ("hosts_blacklist", "shc_blacklist", "idxc_whitelist", "idxc_blacklist", "am_whitelist", "am_blacklist"):
+            # Only hosts_whitelist and shc_whitelist allowed; no blacklists, no idxc_*, no sc_*
+            for key in ("hosts_blacklist", "shc_blacklist", "idxc_whitelist", "idxc_blacklist", "sc_whitelist", "sc_blacklist"):
                 val = app.get(key)
                 if not val or not isinstance(val, list):
                     continue
