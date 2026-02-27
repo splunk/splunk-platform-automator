@@ -33,16 +33,17 @@ splunk_app_deployment:
   # ===========================================
   # OPERATIONAL SETTINGS (Optional - has defaults)
   # ===========================================
-  # These settings have sensible defaults and can be overridden:
-  # temp_dir: "/tmp/splunk_apps"                           # Download cache directory
-  # backup_location: "{{ splunk_home }}/var/backup/apps"   # Backup directory
-  # backup_apps_before_update: false                       # Default: no backup before update; set true to enable
-  # restart_after_deployment: true                         # Restart Splunk after deployment
-  # download_timeout: 120                                  # Download timeout in seconds
-  # retry_count: 3                                         # Number of download retries
-  # splunkbase_api_url: "https://splunkbase.splunk.com/api/v1"  # Splunkbase API URL
-  
-  # Example: Override operational settings if needed
+  # Top-level only. Implemented options:
+  # temp_dir: "/tmp/splunk_apps"              # Download cache directory
+  # backup_location: "{{ splunk_home }}/var/backup/apps"
+  # restart_after_deployment: true
+  # target_download: false                    # When true, each target downloads from Splunkbase
+  # cache_downloads: true                     # When false, remove downloaded archive after extraction
+  # download_timeout: 120
+  # retry_count: 3
+  # splunkbase_api_url: "https://splunkbase.splunk.com/api/v1"
+  #
+  # Example overrides:
   # temp_dir: "/data/splunk_app_cache"
   # backup_location: "/backup/splunk/apps"
   # download_timeout: 300
@@ -102,10 +103,9 @@ splunk_app_deployment:
       app_id: 833
       target_roles:
         - universal_forwarder
-      # Deployment server options (only used if host is a deployment client)
-      serverclass: "linux_forwarders"  # Optional: custom serverclass name (default: app_<appname>)
-      deployment_whitelist: "*"         # Optional: whitelist pattern (default: *)
-      # deployment_blacklist: "*.dev.*" # Optional: exclude certain clients
+      serverclass: "linux_forwarders"   # Optional: custom serverclass (default: app_<appname>)
+      sc_whitelist: ["*"]               # Optional: serverclass whitelist (e.g. ["uf1", "uf2"] or ["*"])
+      # sc_blacklist: ["*.dev.*"]      # Optional: exclude clients; written as blacklist.0, blacklist.1, ...
       restart_required: true
     
     # -------------------------------------------
@@ -120,16 +120,16 @@ splunk_app_deployment:
       restart_required: true
     
     # -------------------------------------------
-    # Example 6: Base Configuration App (Manual override)
+    # Example 6: Base Configuration App (Deployment Server)
     # -------------------------------------------
     - name: "org_all_search_base"
       source: local
-      path: "org_all_search_base"
+      path: "org_all_search_base"       # Directory under local_app_repo_path
       target_roles:
         - deployment_server
-      target_path: "etc/deployment-apps"  # Manual override
+      target_path: "etc/deployment-apps"
       serverclass: "all_forwarders"
-      deployment_whitelist: "*"
+      sc_whitelist: ["*"]
       restart_required: false
     
     # -------------------------------------------
@@ -145,35 +145,40 @@ splunk_app_deployment:
       restart_required: false
     
     # -------------------------------------------
-    # Example 8: App with Multiple Versions
+    # Example 8: Pinned Version
     # -------------------------------------------
     - name: "Splunk_TA_windows"
       source: splunkbase
       app_id: 742
       version: "8.8.2"
-      state: installed  # Optional - defaults to "installed"
-      target_roles:
-        - search_head
-      target_path: "etc/apps"
-      restart_required: true
-      backup_before_update: true  # Backup existing version
-    
-    # -------------------------------------------
-    # Example 8: Premium App (Requires License)
-    # -------------------------------------------
-    - name: "Splunk_Enterprise_Security"
-      source: splunkbase
-      app_id: 263
-      version: "7.3.2"
       state: installed
       target_roles:
         - search_head
       target_path: "etc/apps"
       restart_required: true
-      notes: "Requires ES license"
+
+    # -------------------------------------------
+    # Example 9: Premium App – Splunk IT Service Intelligence (ITSI)
+    # -------------------------------------------
+    # ITSI is delivered as a single archive; the role extracts and deploys per role (CM, LM, Deployer, SH).
+    # No target_roles: deployment targets are determined by the premium_app role. Use hosts_whitelist
+    # OR shc_whitelist when you have multiple SHs/SHCs (required if both standalone SH and SHC exist).
+    - name: "Splunk IT Service Intelligence"
+      source: splunkbase
+      app_id: 1841
+      version: "latest"                   # Or pin e.g. "4.21.0"
+      state: installed
+      premium_app: itsi
+      # Optional: deploy only to a dedicated ITSI search head cluster (must match splunk_shclusters)
+      shc_whitelist: ["shc_itsi"]
+      # Optional: or use hosts_whitelist for a single standalone search head, e.g. hosts_whitelist: [standalone_sh]
+      # Optional ITSI options:
+      # itsi_index_home_path: "volume:primary"
+      # itsi_index_cold_path: "volume:cold"
+      # itsi_notification_disable: ["remedy", "victorops"]
     
     # -------------------------------------------
-    # Example 9: Remove an App (State Management)
+    # Example 10: Remove an App (State Management)
     # -------------------------------------------
     - name: "deprecated_app"
       source: splunkbase  # source required even for removal
@@ -182,14 +187,10 @@ splunk_app_deployment:
       target_roles:
         - search_head
         - indexer
-      # When state=absent:
-      # - App is backed up before removal
-      # - App directory is deleted
-      # - Splunk is restarted
-      # - Idempotent (won't fail if app doesn't exist)
-    
+      # When state=absent: app directory is removed; Splunk restarted if configured. Idempotent if app already missing.
+
     # -------------------------------------------
-    # Example 10: Minimal App Definition (Uses Defaults)
+    # Example 11: Minimal App Definition (Uses Defaults)
     # -------------------------------------------
     - name: "Splunk_TA_aws"
       source: splunkbase
@@ -200,26 +201,11 @@ splunk_app_deployment:
       # state: installed (default)
 
   # ===========================================
-  # HOST-SPECIFIC APPS (Optional Override)
+  # HOST-SPECIFIC APPS (Reserved – not in current implementation)
   # ===========================================
-  # Deploy specific apps to individual hosts
-  # Useful for testing or host-specific configurations
-  host_specific_apps:
-    - hostname: "sh1"  # Must match inventory hostname
-      apps:
-        - name: "custom_sh1_app"
-          source: local
-          path: "custom_sh1_app"
-          target_path: "etc/apps"
-          restart_required: true
-    
-    - hostname: "idx11"
-      apps:
-        - name: "custom_idx_monitoring"
-          source: local
-          path: "custom_idx_monitoring"
-          target_path: "etc/apps"
-          restart_required: false
+  # Per-host app overrides are not implemented. Use target_roles and filters
+  # (hosts_whitelist, shc_whitelist, sc_whitelist, etc.) in the apps list instead.
+  # See docs/App_Deployment_Target_Filters.md and docs/App_Deployment_Guide.md.
 
 # ===========================================
 # TARGET LOCATIONS REFERENCE

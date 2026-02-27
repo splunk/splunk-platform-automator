@@ -64,7 +64,7 @@
     app_conf_archive_path: "{{ itsi_remove_archive_path }}"
     app_conf_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/ITSI"
     app_conf_cache_subdir: "itsi_app_confs"
-    app_conf_resolved_version: "{{ app_item.itsi_version | default(itsi_version) }}"
+    app_conf_resolved_version: "{{ app_item.version | default('latest') }}"
   when: (app_item.source | default('local')) == 'local'
 
 - name: "Ensure app conf cache and app list (controller, common, local)"

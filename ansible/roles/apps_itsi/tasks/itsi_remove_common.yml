@@ -10,7 +10,7 @@
     - splunk_apps
     - itsi
   ansible.builtin.set_fact:
-    itsi_remove_archive_path: "{{ app_item.local_path | default(app_item.path if (app_item.path is defined and app_item.path is search('^/')) else (splunk_app_deployment.local_app_repo_path | default(splunk_app_deployment_defaults.local_app_repo_path) + '/' + (app_item.path | default('splunk-it-service-intelligence_' + ((app_item.itsi_version | default(itsi_version)) | string | replace('.', '')) + '.spl')))) }}"
+    itsi_remove_archive_path: "{{ app_item.local_path | default(app_item.path if (app_item.path is defined and app_item.path is search('^/')) else (splunk_app_deployment.local_app_repo_path | default(splunk_app_deployment_defaults.local_app_repo_path) + '/' + (app_item.path | default('splunk-it-service-intelligence_' + ((app_item.version | default('latest')) | string | replace('.', '')) + '.spl')))) }}"
   when: (app_item.source | default('local')) != 'splunkbase'
 
 - name: "Ensure ITSI archive and app list (controller)"
@@ -52,7 +52,7 @@
   run_once: true
   become: false
   vars:
-    _itsi_removal_version: "{{ (hostvars['localhost'] | default({})).get('splunkbase_resolved_version', '') or ((_itsi_removal_archive_path_result | default({})).ansible_facts | default({})).get('splunkbase_resolved_version', '') or (app_item.itsi_version | default(itsi_version)) }}"
+    _itsi_removal_version: "{{ (hostvars['localhost'] | default({})).get('splunkbase_resolved_version', '') or ((_itsi_removal_archive_path_result | default({})).ansible_facts | default({})).get('splunkbase_resolved_version', '') or (app_item.version | default('latest')) }}"
     _itsi_removal_archive_path: "{{ ((_itsi_removal_archive_path_result | default({})).ansible_facts | default({})).get('_itsi_removal_controller_archive_path', '') or (hostvars['localhost'] | default({})).get('_itsi_removal_controller_archive_path', '') or (hostvars['localhost'] | default({})).get('splunkbase_archive_path', '') or ((splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir)) ~ '/ITSI/itsi_' ~ (_itsi_removal_version | default('')) ~ '.tgz') }}"
   when:
     - not (splunk_app_deployment.target_download | default(false))
@@ -82,7 +82,7 @@
     - splunk_apps
     - itsi
   ansible.builtin.file:
-    path: "{{ (splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir)) }}/ITSI/itsi_app_confs/{{ app_item.itsi_version | default(itsi_version) }}"
+    path: "{{ (splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir)) }}/ITSI/itsi_app_confs/{{ app_item.version | default('latest') }}"
     state: absent
   when:
     - not (splunk_app_deployment.target_download | default(false))
@@ -109,7 +109,7 @@
     - splunk_apps
     - itsi
   ansible.builtin.file:
-    path: "{{ (splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir)) }}/ITSI/itsi_app_confs/{{ _itsi_removal_target_version | default(splunkbase_resolved_version) | default(app_item.itsi_version) | default(itsi_version) }}"
+    path: "{{ (splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir)) }}/ITSI/itsi_app_confs/{{ _itsi_removal_target_version | default(splunkbase_resolved_version) | default(app_item.version) | default('latest') }}"
     state: absent
   when:
     - splunk_app_deployment.target_download | default(false)

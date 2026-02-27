@@ -189,7 +189,7 @@ If neither is set, the premium app is deployed to all search heads (and all SHC 
 
 | Option | Description |
 |--------|-------------|
-| `itsi_version` | Version string (e.g. `"4.21.0"`); used for default local filename when `path` is omitted. |
+| `version` | Version string (e.g. `"4.21.0"` or `"latest"`). Same as normal apps. For local source without `path`, used to build default filename when omitted. |
 | `itsi_index_home_path` | Override index volume for homePath (e.g. `volume:primary`). Default: framework `splunk_volume_defaults.homePath`. |
 | `itsi_index_cold_path` | Override index volume for coldPath. Default: framework `splunk_volume_defaults.coldPath`. |
 | `hosts_whitelist` | Deploy only to these hosts (e.g. a single standalone search head). See [target filters](App_Deployment_Target_Filters.md). |

@@ -3,9 +3,6 @@
 # Override in splunk_config.yml under the app's entry.
 # Index paths default to splunk_volume_defaults (framework) when not set.
 
-# ITSI version (used for SA-ITOA config and optional path derivation when source is local)
-itsi_version: "4.21.0"
-
 # Splunkbase app_id for ITSI when source: splunkbase
 itsi_splunkbase_app_id: 1841
 

@@ -2,7 +2,7 @@
 # ITSI premium pack: deploy one .spl/.tgz to cluster manager, license manager, and search heads
 # Supports source: splunkbase (app_id 1841) or local. Index paths default to splunk_volume_defaults.
 # Depends on splunk_common for splunk_home, splunk_user, splunk_service_name and "Restart splunk" handler.
-# Optional: app_item.itsi_version, itsi_index_home_path, itsi_index_cold_path, itsi_notification_disable,
+# Optional: app_item.version (same as normal apps), itsi_index_home_path, itsi_index_cold_path, itsi_notification_disable,
 #           hosts_whitelist / shc_whitelist (and other target filters) for search head targeting.
 
 - name: "Set app_path and restart flag so splunk_common 'Restart splunk' handler runs when notified"
@@ -21,15 +21,15 @@
     - itsi
   ansible.builtin.set_fact:
     apps_itsi_splunk_home: "{{ splunk_home }}"
-    apps_itsi_version_resolved: "{{ app_item.itsi_version | default(itsi_version) }}"
-    apps_itsi_resolved_version: "{{ app_item.itsi_version | default(itsi_version) }}"
+    apps_itsi_version_resolved: "{{ app_item.version | default('latest') }}"
+    apps_itsi_resolved_version: "{{ app_item.version | default('latest') }}"
     # Default index volume from framework (baseconfig_app org_all_indexes / splunk_volume_defaults)
     apps_itsi_home_path: "{{ app_item.itsi_index_home_path | default('volume:' + (splunk_volume_defaults.homePath | default('primary'))) }}"
     apps_itsi_cold_path: "{{ app_item.itsi_index_cold_path | default('volume:' + (splunk_volume_defaults.coldPath | default('primary'))) }}"
     apps_itsi_notification_disable: "{{ app_item.itsi_notification_disable | default(itsi_notification_disable | default([])) }}"
     apps_itsi_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/ITSI"
     apps_itsi_repo_path: "{{ splunk_app_deployment.local_app_repo_path | default(splunk_app_deployment_defaults.local_app_repo_path) }}"
-    apps_itsi_default_filename: "splunk-it-service-intelligence_{{ (app_item.itsi_version | default(itsi_version)) | string | replace('.', '') }}.spl"
+    apps_itsi_default_filename: "splunk-it-service-intelligence_{{ (app_item.version | default('latest')) | string | replace('.', '') }}.spl"
 
 - name: "Set ITSI archive path for local source"
   tags:
