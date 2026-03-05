@@ -1,5 +1,11 @@
 ---
 # Destroy AWS infrastructure managed by Terraform
+#
+# If terraform.aws credentials in config are vault-encrypted (quoted !vault),
+# provide the vault password when running (one of):
+#   export ANSIBLE_VAULT_PASSWORD='your_password'
+#   ANSIBLE_VAULT_PASSWORD_FILE=.vault_pass ansible-playbook ...
+#   ansible-playbook --ask-vault-pass ...  # or --vault-password-file .vault_pass
 
 - name: Destroy AWS Infrastructure with Terraform
   hosts: localhost
@@ -14,11 +20,12 @@
         file: "{{ config_file }}"
       tags: always
 
-    - name: Set AWS credentials from config if provided
+    # Inline decryption: lookup decrypts vault-encrypted values or returns plain trimmed.
+    - name: Set AWS credentials from config
       ansible.builtin.set_fact:
         terraform_env:
-          AWS_ACCESS_KEY_ID: "{{ terraform.aws.access_key_id }}"
-          AWS_SECRET_ACCESS_KEY: "{{ terraform.aws.secret_access_key }}"
+          AWS_ACCESS_KEY_ID: "{{ lookup('spa_vault_decrypt', terraform.aws.access_key_id) | trim }}"
+          AWS_SECRET_ACCESS_KEY: "{{ lookup('spa_vault_decrypt', terraform.aws.secret_access_key) | trim }}"
       when:
         - terraform is defined
         - terraform.aws is defined
