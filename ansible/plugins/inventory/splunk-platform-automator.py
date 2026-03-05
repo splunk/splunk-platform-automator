@@ -105,12 +105,20 @@ if plugin_dir not in sys.path:
     sys.path.insert(0, plugin_dir)
 try:
     from schema import validate_config, ConfigValidationError, AllowedRole
+    SCHEMA_VALIDATION_AVAILABLE = True
 except ImportError as e:
+    SCHEMA_VALIDATION_AVAILABLE = False
     raise ImportError(
         "Schema validation requires pydantic. Install with: pip install pydantic>=2.4.0. "
         "See requirements.txt. Error: %s" % e
     ) from e
 
+
+# Secret resolution (vault / env)
+try:
+    from secret_resolver import load_config_with_secrets
+except ImportError:
+    load_config_with_secrets = None
 
 class InventoryModule(BaseInventoryPlugin):
     NAME = 'splunk-platform-automator'
@@ -208,14 +216,12 @@ class InventoryModule(BaseInventoryPlugin):
                 # If symlink fails (e.g. Windows), we might warn but usually ignored
                 pass            
 
-    def _set_virtualization(self, splunk_config):
-        '''Set virtualization type based on the definition in the config file'''
+    def _set_virtualization(self, resolved_config):
+        '''Set virtualization type based on the definition in the config (resolved dict).'''
         setattr(self, 'virtualization', None)
-        with open(splunk_config,"r") as file:
-            splunk_config = yaml.load(file, Loader=yaml.FullLoader)
-        supported_virtualizations = ['virtualbox','aws']
+        supported_virtualizations = ['virtualbox', 'aws']
         for virtualization in supported_virtualizations:
-            if virtualization in splunk_config:
+            if resolved_config and virtualization in resolved_config:
                 setattr(self, 'virtualization', virtualization)
 
     def _populate_defaults(self):
@@ -596,33 +602,43 @@ class InventoryModule(BaseInventoryPlugin):
         # Check for required python libraries
         self._check_requirements()
 
-        # Load config and validate with schema (required; fails before any playbook runs)
-        with open(path, 'r') as f:
-            raw_config = yaml.safe_load(f)
+        # Load config with secret resolution (!vault) and build configfiles from it
+        if load_config_with_secrets is None:
+            raise AnsibleParserError('Secret resolver module (secret_resolver) not found.')
         try:
-            validate_config(raw_config)
-        except ConfigValidationError as e:
-            raise AnsibleParserError(str(e))
-        except Exception as e:
-            raise AnsibleParserError("Failed to validate configuration: %s" % e)
+            resolved_config = load_config_with_secrets(path, resolve_secrets=True)
+        except ValueError as e:
+            raise AnsibleParserError('Secret resolution failed: %s' % e)
 
-        # Read the inventory YAML file
-        self._read_config_data(path)
-        try:
-            configfiles = {}
-            # Store the required sections from the YAML file
-            for section in ['plugin', 'splunk_hosts']:
-                configfiles[section] = self.get_option(section)
-            # Store the optional sections from the YAML file
-            for section in ['general', 'custom', 'os', 'splunk_dirs', 'splunk_defaults', 'splunk_environments', 'splunk_apps', 'splunk_app_deployment', 'splunk_systemd', 'splunk_idxclusters', 'splunk_shclusters', 'virtualbox', 'aws']:
-                configfiles[section] = self.get_option(section)
-            setattr(self, 'configfiles', configfiles)
-        except Exception as e:
-            raise AnsibleParserError('All correct options required: {}'.format(e))
+        # Validate configuration schema after resolution (so all values are plain strings)
+        if SCHEMA_VALIDATION_AVAILABLE:
+            try:
+                validate_config(resolved_config)
+            except ConfigValidationError as e:
+                raise AnsibleParserError(str(e))
+            except Exception as e:
+                raise AnsibleParserError(f"Failed to validate configuration: {e}")
+
+        # Build configfiles from resolved config (single source of truth)
+        required_sections = ['plugin', 'splunk_hosts']
+        optional_sections = [
+            'general', 'custom', 'os', 'splunk_dirs', 'splunk_defaults', 'splunk_environments',
+            'splunk_apps', 'splunk_app_deployment', 'splunk_systemd', 'splunk_idxclusters', 'splunk_shclusters',
+            'virtualbox', 'aws', 'terraform'
+        ]
+        configfiles = {}
+        for section in required_sections:
+            if section not in resolved_config:
+                raise AnsibleParserError("Required section '%s' missing in config." % section)
+            configfiles[section] = resolved_config[section]
+        for section in optional_sections:
+            configfiles[section] = resolved_config.get(section)
+        setattr(self, 'configfiles', configfiles)
+
         # Create empty inventory, to make other plugins happy
         self._init_inventory()
-        # Call our internal helper to set the used virtualization
-        self._set_virtualization(path)
+        # Set virtualization from resolved config (no file read)
+        self._set_virtualization(resolved_config)
 
         if self.virtualization == None or self.virtualization == 'virtualbox':
             # Create empty aws_ec2.yml file, otherwise inventory will fail

@@ -10,6 +10,10 @@
 # Ansible
 .ansible
 *.retry
+# Vault password (do not commit)
+.vault_pass.txt
+.vault_pass
+*vault_pass*
 # Any log file
 *.log
 # Config directory
@@ -34,6 +38,10 @@
 # Sublime
 *.sublime-project
 *.sublime-workspace
+# Test runner (vault unit tests)
+tests/.venv
+tests/.ansible_tmp
+
 # Python
 __pycache__/
 *.py[cod]

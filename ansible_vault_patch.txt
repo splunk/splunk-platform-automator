@@ -1,0 +1,106 @@
+diff --git a/ansible.cfg b/ansible.cfg
+index 95370bd..21fe4dc 100644
+--- a/ansible.cfg
++++ b/ansible.cfg
+@@ -5,6 +5,9 @@ host_key_checking = false
+ force_color = 1
+ log_path=./ansible.log
+ timeout = 30
++vault_password_file=../.vault_pass.txt
+ 
+ [inventory]
+ any_unparsed_is_failed = true
+diff --git a/ansible/plugins/inventory/splunk-platform-automator.py b/ansible/plugins/inventory/splunk-platform-automator.py
+index 686f28c..0170853 100644
+--- a/ansible/plugins/inventory/splunk-platform-automator.py
++++ b/ansible/plugins/inventory/splunk-platform-automator.py
+@@ -83,6 +83,8 @@ DOCUMENTATION = r'''
+ 
+ from ansible.plugins.inventory import BaseInventoryPlugin
+ from ansible.errors import AnsibleError, AnsibleParserError
++from ansible.constants import DEFAULT_VAULT_ID_MATCH, DEFAULT_VAULT_PASSWORD_FILE
++from ansible.parsing.vault import VaultLib, VaultSecret
+ import yaml
+ import re
+ import glob
+@@ -154,8 +156,79 @@ class InventoryModule(BaseInventoryPlugin):
+     def _set_virtualization(self, splunk_config):
+         '''Set virtualization type based on the definition in the config file'''
+         setattr(self, 'virtualization', None)
++
++        if DEFAULT_VAULT_PASSWORD_FILE:
++            with open(DEFAULT_VAULT_PASSWORD_FILE) as password_file:
++                vault_pass = password_file.read().strip().encode('utf8')
++                vault_encrypted_passwords = True
++        else:
++            vault_encrypted_passwords = False
++
++        if vault_encrypted_passwords:
++            vault = VaultLib([(DEFAULT_VAULT_ID_MATCH, VaultSecret(vault_pass))])
++
++        class VaultString:
++            def __init__(self, string):
++                self.string = string
++            def __repr__(self):
++                return self.string
++            def decrypt(self):
++                return vault.decrypt(self.string)
++            def update(self, new_value):
++                self.string = vault.encrypt(new_value).decode('utf8')
++                return 'value updated'
++
++        def vault_string_constructor(loader, node):
++            return VaultString(loader.construct_scalar(node))
++
++        def vault_string_representer(dumper, data):
++            return dumper.represent_scalar(u'!vault', u'%s' % data, style='|')
++
++        def vault_translate_string(splunk_config):
++            if 'splunk_defaults' in splunk_config \
++                and 'splunk_admin_password' in splunk_config['splunk_defaults'] \
++                and str(type(splunk_config['splunk_defaults']['splunk_admin_password'])).split('.')[-1].startswith('VaultString'):
++
++                splunk_config['splunk_defaults']['splunk_admin_password'] = splunk_config['splunk_defaults']['splunk_admin_password'].decrypt()
++
++            if 'splunk_defaults' in splunk_config \
++                and 'splunk_ssl' in splunk_config['splunk_defaults'] \
++                and 'inputs' in splunk_config['splunk_defaults']['splunk_ssl'] \
++                and 'config' in splunk_config['splunk_defaults']['splunk_ssl']['inputs'] \
++                and 'password' in splunk_config['splunk_defaults']['splunk_ssl']['inputs']['config'] \
++                and str(type(splunk_config['splunk_defaults']['splunk_ssl']['inputs']['config']['password'])).split('.')[-1].startswith('VaultString'):
++
++                splunk_config['splunk_defaults']['splunk_ssl']['inputs']['config']['password'] = splunk_config['splunk_defaults']['splunk_ssl']['inputs']['config']['password'].decrypt()
++
++            if 'splunk_idxclusters' in splunk_config:
++                for item_position in range(0, len(splunk_config['splunk_idxclusters'])):
++                    if 'idxc_password' in splunk_config['splunk_idxclusters'][item_position] \
++                        and str(type(splunk_config['splunk_idxclusters'][item_position]['idxc_password'])).split('.')[-1].startswith('VaultString'):
++
++                        splunk_config['splunk_idxclusters'][item_position]['idxc_password'] = splunk_config['splunk_idxclusters'][item_position]['idxc_password'].decrypt()
++
++            if 'splunk_shclusters' in splunk_config:
++                for item_position in range(0, len(splunk_config['splunk_shclusters'])):
++                    if 'shc_password' in splunk_config['splunk_shclusters'][item_position] \
++                        and str(type(splunk_config['splunk_shclusters'][item_position]['shc_password'])).split('.')[-1].startswith('VaultString'):
++
++                        splunk_config['splunk_shclusters'][item_position]['shc_password'] = splunk_config['splunk_shclusters'][item_position]['shc_password'].decrypt()
++
++            if 'splunk_hosts' in splunk_config:
++                for item_position in range(0, len(splunk_config['splunk_hosts'])):
++                    if 'custom' in splunk_config['splunk_hosts'][item_position]:
++                        for param in splunk_config['splunk_hosts'][item_position]['custom']:
++                            if str(type(splunk_config['splunk_hosts'][item_position]['custom'][param])).split('.')[-1].startswith('VaultString'):
++                                splunk_config['splunk_hosts'][item_position]['custom'][param] = splunk_config['splunk_hosts'][item_position]['custom'][param].decrypt()
++
+         with open(splunk_config,"r") as file:
+-            splunk_config = yaml.load(file, Loader=yaml.FullLoader)
++            if vault_encrypted_passwords:
++                yaml.SafeLoader.add_constructor(u'!vault', vault_string_constructor)
++                yaml.Dumper.add_representer(VaultString, vault_string_representer)
++                splunk_config = yaml.safe_load(file)
++                vault_translate_string(splunk_config)
++            else:
++                splunk_config = yaml.load(file, Loader=yaml.FullLoader)
+         supported_virtualizations = ['virtualbox','aws']
+         for virtualization in supported_virtualizations:
+             if virtualization in splunk_config:

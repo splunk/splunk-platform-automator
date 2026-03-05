@@ -1265,18 +1265,19 @@ class ConfigValidationError(Exception):
 def validate_config(config_data: Dict[str, Any]) -> SplunkConfig:
     """
     Validate a configuration dictionary against the schema.
-    
+
     Args:
-        config_data: Dictionary loaded from splunk_config.yml
-        
+        config_data: Dictionary loaded from splunk_config.yml (after secret
+            resolution by the inventory plugin).
+
     Returns:
         Validated SplunkConfig model instance
-        
+
     Raises:
         ConfigValidationError: If validation fails, with detailed error messages
     """
     from pydantic import ValidationError
-    
+
     try:
         return SplunkConfig.model_validate(config_data)
     except ValidationError as e:
