@@ -105,9 +105,7 @@ if plugin_dir not in sys.path:
     sys.path.insert(0, plugin_dir)
 try:
     from schema import validate_config, ConfigValidationError, AllowedRole
-    SCHEMA_VALIDATION_AVAILABLE = True
 except ImportError as e:
-    SCHEMA_VALIDATION_AVAILABLE = False
     raise ImportError(
         "Schema validation requires pydantic. Install with: pip install pydantic>=2.4.0. "
         "See requirements.txt. Error: %s" % e
@@ -610,14 +608,14 @@ class InventoryModule(BaseInventoryPlugin):
         except ValueError as e:
             raise AnsibleParserError('Secret resolution failed: %s' % e)
 
-        # Validate configuration schema after resolution (so all values are plain strings)
-        if SCHEMA_VALIDATION_AVAILABLE:
-            try:
-                validate_config(resolved_config)
-            except ConfigValidationError as e:
-                raise AnsibleParserError(str(e))
-            except Exception as e:
-                raise AnsibleParserError(f"Failed to validate configuration: {e}")
+        # Validate configuration schema after resolution (so all values are plain strings).
+        # Schema is required at import time, so validation always runs when the plugin runs.
+        try:
+            validate_config(resolved_config)
+        except ConfigValidationError as e:
+            raise AnsibleParserError(str(e))
+        except Exception as e:
+            raise AnsibleParserError(f"Failed to validate configuration: {e}")
 
         # Build configfiles from resolved config (single source of truth)
         required_sections = ['plugin', 'splunk_hosts']
