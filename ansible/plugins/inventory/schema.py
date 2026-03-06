@@ -449,9 +449,60 @@ class SplunkAppDeploymentConfig(BaseModel):
                 )
             seen[key] = i
 
-        # Duplicate check for deployment-server–distributed apps: same app name may not appear twice when both are
-        # managed by the same deployment server (target_roles set, deployment_target != 'direct', not premium).
-        # target_roles does not distinguish deployment destination here because both entries are managed by the same DS.
+        # Roles that receive apps from the deployment server (DS). UF/HF are DS clients; indexer (when not
+        # direct) can also be managed by DS and gets a serverclass. search_head-only goes via deployer.
+        DS_CLIENT_ROLES = ("universal_forwarder", "heavy_forwarder", "universal_forwarder_windows")
+        # Roles that get a serverclass on the DS when the app is DS-managed (so we must enforce unique serverclass).
+        DS_SERVERCLASS_ROLES = DS_CLIENT_ROLES + ("indexer",)
+
+        def _app_is_ds_distributed(app: dict) -> bool:
+            """True if this app is distributed via the deployment server (targets UF/HF)."""
+            deployment_target = app.get("deployment_target", "auto")
+            if isinstance(deployment_target, str):
+                deployment_target = deployment_target.strip().lower() or "auto"
+            else:
+                deployment_target = "auto"
+            if deployment_target == "direct":
+                return False
+            target_roles = app.get("target_roles")
+            if not isinstance(target_roles, list) or len(target_roles) == 0:
+                return False
+            return any(
+                r and isinstance(r, str) and r.strip().lower() in DS_CLIENT_ROLES
+                for r in target_roles
+            )
+
+        def _app_uses_ds_serverclass(app: dict) -> bool:
+            """True if this app gets a serverclass on the DS (DS-managed and targets UF/HF or indexer).
+            Excludes search_head-only (deployer); includes indexer so indexer+UF same name is flagged."""
+            if not _app_is_ds_managed(app):
+                return False
+            target_roles = app.get("target_roles")
+            if not isinstance(target_roles, list) or len(target_roles) == 0:
+                return False
+            return any(
+                r and isinstance(r, str) and r.strip().lower() in DS_SERVERCLASS_ROLES
+                for r in target_roles
+            )
+
+        def _app_is_ds_managed(app: dict) -> bool:
+            """True if this app is managed by the deployment server (would be in ds_apps)."""
+            deployment_target = app.get("deployment_target", "auto")
+            if isinstance(deployment_target, str):
+                deployment_target = deployment_target.strip().lower() or "auto"
+            else:
+                deployment_target = "auto"
+            if deployment_target == "direct":
+                return False
+            premium_app = app.get("premium_app")
+            if premium_app and isinstance(premium_app, str) and premium_app.strip():
+                return False
+            target_roles = app.get("target_roles")
+            return isinstance(target_roles, list) and len(target_roles) > 0
+
+        # Duplicate check for deployment-server–distributed apps: same app name may not appear twice when
+        # both are distributed via the deployment server (i.e. both target UF/HF). Apps that go only to
+        # deployer (search_head), cluster manager (indexer), or direct are not considered here.
         seen_ds_name: Dict[str, int] = {}
         for i, app in enumerate(self.apps):
             name = app.get("name")
@@ -461,15 +512,7 @@ class SplunkAppDeploymentConfig(BaseModel):
             premium_app = app.get("premium_app")
             if premium_app and isinstance(premium_app, str) and premium_app.strip():
                 continue
-            deployment_target = app.get("deployment_target", "auto")
-            if isinstance(deployment_target, str):
-                deployment_target = deployment_target.strip().lower() or "auto"
-            else:
-                deployment_target = "auto"
-            if deployment_target == "direct":
-                continue
-            target_roles = app.get("target_roles")
-            if not isinstance(target_roles, list) or len(target_roles) == 0:
+            if not _app_is_ds_distributed(app):
                 continue
             if name in seen_ds_name:
                 raise ValueError(
@@ -479,11 +522,13 @@ class SplunkAppDeploymentConfig(BaseModel):
                 )
             seen_ds_name[name] = i
 
-        # Duplicate serverclass check: no two apps may have the same effective serverclass name.
-        # Effective serverclass = app.serverclass if set, else "app_<name>". Mapping multiple apps
-        # to the same serverclass is not supported until rules and logic are defined.
+        # Duplicate serverclass check among apps that get a serverclass on the DS: DS-managed and target
+        # UF/HF or indexer. search_head-only excluded (deployer). So indexer (no direct) + UF same name → flagged;
+        # search_head + UF → not flagged (only UF uses serverclass).
         seen_sc: Dict[str, tuple] = {}  # serverclass -> (app_index, app_name)
         for i, app in enumerate(self.apps):
+            if not _app_uses_ds_serverclass(app):
+                continue
             name = app.get("name")
             if name is None or not isinstance(name, str) or not name.strip():
                 continue
@@ -496,9 +541,10 @@ class SplunkAppDeploymentConfig(BaseModel):
             if effective_sc in seen_sc:
                 first_i, first_name = seen_sc[effective_sc]
                 raise ValueError(
-                    f"Duplicate serverclass: two apps use the same serverclass name {effective_sc!r} "
-                    f"(apps[{first_i}] name={first_name!r} and apps[{i}] name={name!r}). "
-                    "Each app must have a unique serverclass; sharing serverclass names is not allowed yet. Will be provided in the future."
+                    f"Duplicate serverclass: two apps managed by the deployment server use the same serverclass "
+                    f"{effective_sc!r} (apps[{first_i}] and apps[{i}], both name={name!r}). "
+                    "Give each entry a unique serverclass (and target_path if they need different customizations), "
+                    "e.g. serverclass: \"app_Splunk_TA_nix_indexer\" and serverclass: \"app_Splunk_TA_nix_uf\"."
                 )
             seen_sc[effective_sc] = (i, name)
         return self

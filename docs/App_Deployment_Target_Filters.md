@@ -125,6 +125,35 @@ target_roles: [search_head]
 sc_blacklist: [sh_legacy]
 ```
 
+**Same app to different role sets via deployment server (e.g. indexer vs UF with customizations):**
+
+When the same app (e.g. `Splunk_TA_nix`) is managed by the deployment server for more than one role set (e.g. indexers and universal forwarders) with different configs or customizations, each entry must have a **unique serverclass** and, if customizations differ, a **unique target_path** so the deployment server has separate serverclass stanzas and app directories:
+
+```yaml
+# Indexer: base app, no customizations
+- name: "Splunk_TA_nix"
+  source: splunkbase
+  app_id: 833
+  version: "latest"
+  target_roles: [indexer]
+  serverclass: "app_Splunk_TA_nix_indexer"
+  target_path: "/opt/splunk/etc/deployment-apps/Splunk_TA_nix_indexer"
+
+# Universal forwarder: same app with customizations
+- name: "Splunk_TA_nix"
+  source: splunkbase
+  app_id: 833
+  version: "latest"
+  target_roles: [universal_forwarder]
+  serverclass: "app_Splunk_TA_nix_uf"
+  target_path: "/opt/splunk/etc/deployment-apps/Splunk_TA_nix_uf"
+  customizations:
+    local_configs:
+      inputs.conf: { ... }
+```
+
+If you omit **serverclass** and **target_path**, the schema reports a duplicate serverclass error when multiple entries for the same app are managed by the deployment server.
+
 ---
 
 ## Empty target set

@@ -237,11 +237,16 @@
       - "Whitelist: {{ app_whitelist_hosts | join(', ') if app_whitelist_hosts | length > 0 else '(empty)' }}"
     verbosity: 0
 
+# Install app so the deployment-apps directory exists for this serverclass. Run when we have clients (whitelist)
+# or when this entry uses a distinct serverclass/target_path (same app name, different deployment folder).
 - name: "Install {{ app_item.name }}"
   ansible.builtin.include_tasks: "install_app.yml"
   when:
     - app_state == 'installed'
-    - (app_whitelist_hosts | default([])) | length > 0
+    - >-
+      (app_whitelist_hosts | default([]) | length > 0)
+      or (app_item.serverclass is defined and app_item.serverclass | trim | length > 0)
+      or (app_item.target_path is defined and app_item.target_path | trim | length > 0)
 
 - name: "Apply customizations for {{ app_item.name }}"
   ansible.builtin.include_role:
@@ -278,7 +283,22 @@
   ansible.builtin.include_tasks: "remove_app.yml"
   when: app_state == 'absent'
 
+# When target_path is set, the app is under a different directory name; serverclass must reference that name.
+- name: "Set serverclass app name for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    serverclass_app_name: "{{ (_ds_deploy_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/deployment-apps/' ~ app_item.name)).split('/') | last }}"
+  vars:
+    _ds_deploy_path: "{{ app_item.target_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/deployment-apps/' ~ app_item.name) }}"
+  when:
+    - (app_whitelist_hosts | default([])) | length > 0 or app_state == 'absent'
+
 - name: "Configure serverclass for {{ app_item.name }}"
   ansible.builtin.include_tasks: "configure_serverclass.yml"
+  vars:
+    app_name: "{{ serverclass_app_name | default(app_item.name) }}"
   when:
     - (app_whitelist_hosts | default([])) | length > 0 or app_state == 'absent'

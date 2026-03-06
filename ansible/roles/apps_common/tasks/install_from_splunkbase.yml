@@ -164,19 +164,6 @@
         group: "{{ splunk_group | default('splunk') }}"
       register: extract_result
 
-    - name: "Remove wrongly extracted directory (top-level does not match app name)"
-      tags:
-        - splunk
-        - splunk_apps
-        - splunkbase
-      ansible.builtin.file:
-        path: "{{ (target_path | dirname) ~ '/' ~ (extract_result.files[0] | split('/') | first) }}"
-        state: absent
-      when:
-        - extract_result.files is defined
-        - extract_result.files | length > 0
-        - (extract_result.files[0] | split('/') | first) != (target_path | basename)
-
     - name: "Fail when app archive top-level folder does not match app name (wrong app_id?)"
       tags:
         - splunk
@@ -189,6 +176,18 @@
       when:
         - extract_result.files is defined
         - extract_result.files | length > 0
+        - (extract_result.files[0] | split('/') | first) != (app_name | trim)
+
+    - name: "Rename extracted directory to target_path when using custom target_path (e.g. same app, different serverclass)"
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.builtin.command: "mv '{{ (target_path | dirname) ~ '/' ~ (extract_result.files[0] | split('/') | first) }}' '{{ target_path }}'"
+      when:
+        - extract_result.files is defined
+        - extract_result.files | length > 0
+        - (extract_result.files[0] | split('/') | first) == (app_name | trim)
         - (extract_result.files[0] | split('/') | first) != (target_path | basename)
 
     - name: "Set permissions on {{ app_name }}"
