@@ -270,6 +270,7 @@ class SplunkAppDeploymentConfig(BaseModel):
                         )
             target_roles = app.get("target_roles")
             premium_app = app.get("premium_app")
+            itsi_content_pack = app.get("itsi_content_pack")
             if premium_app is not None and target_roles is not None:
                 raise ValueError(
                     f"splunk_app_deployment.apps[{i}] (name={name!r}): 'target_roles' must not be set when 'premium_app' is set; "
@@ -286,9 +287,10 @@ class SplunkAppDeploymentConfig(BaseModel):
                             f"splunk_app_deployment.apps[{i}] (name={name!r}): 'target_roles' contains invalid role {r!r}. "
                             f"Allowed: {sorted(allowed_roles)}"
                         )
-            # Normal apps (no premium_app) must specify target_roles.
+            # Normal apps (no premium_app, no itsi_content_pack) must specify target_roles.
             is_premium = premium_app and isinstance(premium_app, str) and premium_app.strip()
-            if not is_premium and (target_roles is None or not isinstance(target_roles, list) or len(target_roles) == 0):
+            is_itsi_content_pack = itsi_content_pack is True or (isinstance(itsi_content_pack, bool) and itsi_content_pack)
+            if not is_premium and not is_itsi_content_pack and (target_roles is None or not isinstance(target_roles, list) or len(target_roles) == 0):
                 raise ValueError(
                     f"splunk_app_deployment.apps[{i}] (name={name!r}): 'target_roles' is required for normal apps (must be a non-empty list)"
                 )
@@ -342,9 +344,60 @@ class SplunkAppDeploymentConfig(BaseModel):
                     raise ValueError(
                         f"splunk_app_deployment.apps[{i}] (name={name!r}): 'version' must be 'latest' or a version number (e.g. 1.0, 4.21.1), got {version!r}"
                     )
-            # Validate customizations structure if present
+            # ITSI content pack: reject top-level content_pack_install, content_pack_api, customizations; validate content_pack_apps
+            if is_itsi_content_pack:
+                for bad_key in ("content_pack_install", "content_pack_api", "customizations"):
+                    if app.get(bad_key) is not None:
+                        raise ValueError(
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): top-level '{bad_key}' is not allowed for itsi_content_pack; "
+                            "set these only inside content_pack_apps items"
+                        )
+                install_all_apps = app.get("install_all_apps")
+                if not install_all_apps:
+                    cp_apps = app.get("content_pack_apps")
+                    if cp_apps is None:
+                        raise ValueError(
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): 'content_pack_apps' is required when itsi_content_pack is true and install_all_apps is not true"
+                        )
+                    if not isinstance(cp_apps, list):
+                        raise ValueError(
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): 'content_pack_apps' must be a list of objects"
+                        )
+                    for j, cp_item in enumerate(cp_apps):
+                        if not isinstance(cp_item, dict):
+                            raise ValueError(
+                                f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}] must be an object (dict)"
+                            )
+                        cp_name = cp_item.get("name")
+                        if cp_name is None or not isinstance(cp_name, str) or not cp_name.strip():
+                            raise ValueError(
+                                f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}] must have a non-empty 'name' string"
+                            )
+                        if cp_item.get("content_pack_install"):
+                            api_opts = cp_item.get("content_pack_api")
+                            if api_opts is not None and not isinstance(api_opts, dict):
+                                raise ValueError(
+                                    f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].content_pack_api must be a dictionary"
+                                )
+                        cust = cp_item.get("customizations")
+                        if cust is not None:
+                            if not isinstance(cust, dict):
+                                raise ValueError(
+                                    f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations must be a dictionary"
+                                )
+                            rpar = cust.get("run_playbook_after_restart")
+                            if rpar is not None and (not isinstance(rpar, str) or not rpar.strip()):
+                                raise ValueError(
+                                    f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations.run_playbook_after_restart must be a non-empty string"
+                                )
+                            ev = cust.get("extra_vars")
+                            if ev is not None and not isinstance(ev, dict):
+                                raise ValueError(
+                                    f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations.extra_vars must be a dictionary"
+                                )
+            # Validate customizations structure if present (skip for itsi_content_pack; top-level customizations rejected above)
             customizations = app.get("customizations")
-            if customizations is not None:
+            if customizations is not None and not is_itsi_content_pack:
                 if not isinstance(customizations, dict):
                     raise ValueError(
                         f"splunk_app_deployment.apps[{i}] (name={name!r}): 'customizations' must be a dictionary"
@@ -436,6 +489,8 @@ class SplunkAppDeploymentConfig(BaseModel):
             fkey = _filter_tuple(app)
             if premium_app and isinstance(premium_app, str) and premium_app.strip():
                 deploy_key = ("premium", premium_app.strip().lower(), fkey)
+            elif app.get("itsi_content_pack"):
+                deploy_key = ("itsi_content_pack", fkey)
             else:
                 target_roles = app.get("target_roles")
                 roles_tuple = tuple(sorted(target_roles)) if isinstance(target_roles, list) else ()
@@ -448,6 +503,27 @@ class SplunkAppDeploymentConfig(BaseModel):
                     "only one definition per destination is allowed. Use different target_roles for different role sets."
                 )
             seen[key] = i
+
+        # When any itsi_content_pack entry with state installed exists, require at least one app with premium_app: itsi and state: installed.
+        # If all itsi_content_pack entries have state: absent, no ITSI app is required (removal scenario).
+        has_itsi_content_pack_to_install = any(
+            isinstance(a, dict)
+            and a.get("itsi_content_pack")
+            and (str(a.get("state", "installed")).strip().lower() != "absent")
+            for a in (self.apps or [])
+        )
+        if has_itsi_content_pack_to_install:
+            has_itsi_installed = any(
+                isinstance(a, dict)
+                and (a.get("premium_app") or "").strip().lower() == "itsi"
+                and (a.get("itsi_content_pack") or False) is False
+                and (str(a.get("state", "installed")).strip().lower() == "installed")
+                for a in (self.apps or [])
+            )
+            if not has_itsi_installed:
+                raise ValueError(
+                    "When any app has itsi_content_pack: true and state other than 'absent', at least one other app with premium_app: itsi and state: installed must be defined"
+                )
 
         # Roles that receive apps from the deployment server (DS). UF/HF are DS clients; indexer (when not
         # direct) can also be managed by DS and gets a serverclass. search_head-only goes via deployer.

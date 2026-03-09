@@ -1,0 +1,85 @@
+---
+# Compare content pack app versions on target to expected versions from app conf cache.
+# Expects: cp_version_check_apps (list), cp_version_check_base (path), cp_expected_versions (dict from cache).
+
+- name: "Filter expected versions to apps needed for content pack"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.set_fact:
+    cp_expected_versions_filtered: "{{ dict(cp_version_check_apps | zip(cp_version_check_apps | map('extract', cp_expected_versions | default({})) | map('default', '') | list)) }}"
+
+- name: "Get version from [launcher] or [id] or first version= in target app.conf (content pack)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.shell:
+    cmd: |
+      f="{{ cp_version_check_base }}/{{ item }}/default/app.conf"
+      v=$(sed -n '/\[launcher\]/,/^\[/p' "$f" 2>/dev/null | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//')
+      if [ -z "$v" ]; then
+        v=$(sed -n '/\[id\]/,/^\[/p' "$f" 2>/dev/null | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//')
+      fi
+      if [ -z "$v" ]; then
+        v=$(grep -E '^\s*version\s*=' "$f" 2>/dev/null | head -1 | sed -E 's/^[^=]*=\s*//')
+      fi
+      printf '%s' "$v"
+  loop: "{{ cp_version_check_apps }}"
+  register: cp_version_check_versions
+  changed_when: false
+  failed_when: false
+  become: true
+  become_user: "{{ splunk_user | default('splunk') }}"
+
+- name: "Build current content pack versions dict"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.set_fact:
+    cp_current_versions: "{{ cp_current_versions | default({}) | combine({ item.item: (item.stdout | default('') | trim) }) }}"
+  loop: "{{ cp_version_check_versions.results | default([]) }}"
+  when:
+    - not (item.failed | default(false))
+    - item.stdout is defined
+    - (item.stdout | default('') | trim) != ''
+
+- name: "Set cp_current_versions when no apps installed"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.set_fact:
+    cp_current_versions: {}
+  when: (cp_version_check_versions.results | default([]) | selectattr('stdout', 'defined') | map(attribute='stdout') | map('trim') | select | list | length) == 0
+
+- name: "Determine if content pack update needed (any app missing or version differs)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.set_fact:
+    cp_update_needed: "{{ _no_expected or _current_ne_expected }}"
+  vars:
+    _exp: "{{ cp_expected_versions_filtered | default({}) }}"
+    _cur: "{{ cp_current_versions | default({}) }}"
+    _apps: "{{ cp_version_check_apps }}"
+    _no_expected: "{{ _exp | length == 0 }}"
+    _cur_list: "{{ _apps | map('extract', _cur) | map('default', '__missing__') | list }}"
+    _exp_list: "{{ _apps | map('extract', _exp) | map('default', '') | list }}"
+    _current_ne_expected: "{{ _cur_list != _exp_list }}"
+
+- name: "Debug content pack version status"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.debug:
+    msg:
+      - "Content pack version check base: {{ cp_version_check_base }}"
+      - "Apps: {{ cp_version_check_apps }}"
+      - "Current versions: {{ dict(cp_version_check_apps | zip(cp_version_check_apps | map('extract', cp_current_versions | default({})) | map('default', '') | list)) }}"
+      - "Expected versions: {{ cp_expected_versions_filtered | default({}) }}"
+      - "Update needed: {{ cp_update_needed }}"

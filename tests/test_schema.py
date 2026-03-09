@@ -720,6 +720,132 @@ class TestAppDeploymentConfig:
             validate_config(config)
         assert "premium_app" in str(exc_info.value).lower()
 
+    # --- itsi_content_pack ---
+    def test_itsi_content_pack_valid_with_itsi_installed(self):
+        """Valid itsi_content_pack entry with ITSI app (premium_app: itsi, state: installed) is accepted."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["search_head"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
+                    {
+                        "name": "Splunk App for Content Packs",
+                        "itsi_content_pack": True,
+                        "state": "installed",
+                        "version": "2.4.0",
+                        "source": "local",
+                        "path": "content_packs.spl",
+                        "library_app": "DA-ITSI-ContentLibrary",
+                        "content_pack_apps": [
+                            {"name": "DA-ITSI-CP-monitoring-alerting", "content_pack_install": True, "content_pack_api": {"install_all": True}},
+                            {"name": "DA-ITSI-CP-splunk-observability"},
+                        ],
+                    },
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert len(result.splunk_app_deployment.apps) == 2
+        cp = result.splunk_app_deployment.apps[1]
+        assert cp.get("itsi_content_pack") is True
+        assert cp.get("content_pack_apps")[0]["name"] == "DA-ITSI-CP-monitoring-alerting"
+
+    def test_itsi_content_pack_without_itsi_raises(self):
+        """itsi_content_pack without another app with premium_app: itsi and state: installed must raise."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["search_head"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {
+                        "name": "Splunk App for Content Packs",
+                        "itsi_content_pack": True,
+                        "state": "installed",
+                        "version": "2.4.0",
+                        "source": "local",
+                        "path": "content_packs.spl",
+                        "content_pack_apps": [{"name": "DA-ITSI-CP-monitoring-alerting"}],
+                    },
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "itsi_content_pack" in str(exc_info.value).lower() or "itsi" in str(exc_info.value).lower()
+
+    def test_itsi_content_pack_top_level_content_pack_install_raises(self):
+        """itsi_content_pack with top-level content_pack_install must raise."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["search_head"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
+                    {
+                        "name": "Splunk App for Content Packs",
+                        "itsi_content_pack": True,
+                        "state": "installed",
+                        "version": "2.4.0",
+                        "source": "local",
+                        "path": "content_packs.spl",
+                        "content_pack_install": True,
+                        "content_pack_apps": [{"name": "DA-ITSI-CP-monitoring-alerting"}],
+                    },
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "content_pack_install" in str(exc_info.value).lower()
+
+    def test_itsi_content_pack_missing_content_pack_apps_raises(self):
+        """itsi_content_pack without content_pack_apps when install_all_apps is not true must raise."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["search_head"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
+                    {
+                        "name": "Splunk App for Content Packs",
+                        "itsi_content_pack": True,
+                        "state": "installed",
+                        "version": "2.4.0",
+                        "source": "local",
+                        "path": "content_packs.spl",
+                    },
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "content_pack_apps" in str(exc_info.value).lower()
+
+    def test_itsi_content_pack_item_missing_name_raises(self):
+        """content_pack_apps item without name must raise."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["search_head"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
+                    {
+                        "name": "Splunk App for Content Packs",
+                        "itsi_content_pack": True,
+                        "state": "installed",
+                        "version": "2.4.0",
+                        "source": "local",
+                        "path": "content_packs.spl",
+                        "content_pack_apps": [{"content_pack_install": True}],
+                    },
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "name" in str(exc_info.value).lower()
+
     # --- state ---
     def test_app_state_installed_absent_valid(self):
         """state: installed and state: absent are valid."""

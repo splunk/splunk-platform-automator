@@ -200,6 +200,44 @@ splunk_app_deployment:
       # version: "latest" (default)
       # state: installed (default)
 
+    # -------------------------------------------
+    # Example 12: ITSI Content Pack (per-app structure only)
+    # -------------------------------------------
+    # Deploys to the same search heads (and ITSI targets) as the ITSI app. Requires an ITSI app
+    # entry with state: installed. No target_roles or premium_app on the content pack entry.
+    # Options (content_pack_install, content_pack_api, customizations) are only per content_pack_apps item.
+    # library_app is installed in addition; run_playbook_after_restart convention: ancustom/<app_name>_configure.yml
+    - name: "Splunk App for Content Packs"
+      itsi_content_pack: true
+      state: installed
+      version: "2.4.0"
+      source: local
+      path: "splunk-app-for-content-packs_240.spl"
+      library_app: DA-ITSI-ContentLibrary
+      install_all_apps: false
+      content_pack_apps:
+        - name: DA-ITSI-CP-monitoring-alerting
+          content_pack_install: true
+          content_pack_api:
+            install_all: true
+            saved_search_action: "disable"
+            backfill: false
+            resolution: "overwrite"
+          customizations:
+            run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml"
+            extra_vars:
+              generic_alerts_index: generic_alerts
+        - name: DA-ITSI-CP-splunk-observability
+          content_pack_install: true
+          content_pack_api:
+            install_all: true
+            saved_search_action: "disable"
+            backfill: false
+            resolution: "overwrite"
+          customizations:
+            run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-splunk-observability_configure.yml"
+            extra_vars: {}
+
   # ===========================================
   # HOST-SPECIFIC APPS (Reserved – not in current implementation)
   # ===========================================

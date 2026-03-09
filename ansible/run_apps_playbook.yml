@@ -1,0 +1,53 @@
+---
+# Run an apps_playbook in isolation (no full app deployment).
+# Use -l or --limit to target specific hosts (e.g. -l sh, -l searchhead1).
+# Use the same inventory and group_vars/host_vars as full deploy so splunk_home, splunk_admin_password, etc. are set.
+#
+# Required extra vars (-e):
+#   apps_playbook: path to the task file under ansible/ (e.g. apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml)
+#   app_name: app name (e.g. DA-ITSI-CP-monitoring-alerting)
+#
+# Optional extra vars (-e):
+#   target_group: inventory group to run on (default: role_search_head)
+#   app_path_override: override app_path (default: {{ splunk_home }}/etc/apps/{{ app_name }})
+#   playbook_extra_vars: dict for the playbook (default: {}), e.g. '{"generic_alerts_index":"generic_alerts"}'
+#     (use this name to avoid template recursion; it is passed to the playbook as customization_extra_vars)
+#
+# Example (from repo root, with inventory and config):
+#   ansible-playbook -i ansible/inventory ansible/run_apps_playbook.yml \
+#     -e "apps_playbook=apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml" \
+#     -e "app_name=DA-ITSI-CP-monitoring-alerting" \
+#     -l sh
+#
+# Example with extra_vars for the configure playbook:
+#   ansible-playbook -i ansible/inventory ansible/run_apps_playbook.yml \
+#     -e "apps_playbook=apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml" \
+#     -e "app_name=DA-ITSI-CP-monitoring-alerting" \
+#     -e 'playbook_extra_vars={"generic_alerts_index":"generic_alerts"}' \
+#     -l sh
+
+- name: Run apps playbook (standalone)
+  hosts: "{{ target_group | default('role_search_head') }}"
+  gather_facts: true
+  become: true
+  become_user: root
+
+  # Use playbook_extra_vars (not customization_extra_vars) so no name collision with the var we pass into include_tasks.
+  vars:
+    _run_playbook_extra_vars: "{{ playbook_extra_vars | default({}) }}"
+
+  tasks:
+    - name: "Validate required extra vars"
+      ansible.builtin.assert:
+        that:
+          - apps_playbook is defined
+          - app_name is defined
+        fail_msg: "Pass -e apps_playbook=<path> and -e app_name=<name> (e.g. apps_playbook=apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml app_name=DA-ITSI-CP-monitoring-alerting)"
+
+    # Set app_path in task vars so it is defined in included playbook scope (with splunk_home fallback for standalone runs).
+    - name: "Run apps playbook {{ apps_playbook | basename }}"
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/{{ apps_playbook }}"
+      vars:
+        app_path: "{{ app_path_override | default((splunk_home | default('/opt/splunk')) + '/etc/apps/' + app_name) }}"
+        app_name: "{{ app_name }}"
+        customization_extra_vars: "{{ _run_playbook_extra_vars }}"

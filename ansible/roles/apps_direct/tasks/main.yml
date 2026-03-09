@@ -19,6 +19,19 @@
   ansible.builtin.set_fact:
     direct_apps: []
 
+- name: "Set ITSI direct scope for this host (for content pack eligibility)"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    itsi_direct_scope_this_host: >-
+      {{
+        (current_host_roles | intersect(['license_manager']) | length > 0 and current_host_roles | intersect(['search_head']) | length == 0)
+        or (current_host_roles | intersect(['search_head']) | length > 0 and (group_names | select('match', '^shcluster_') | list | length == 0))
+        or (current_host_roles | intersect(['indexer']) | length > 0 and (group_names | select('match', '^idxcluster_') | list | length) == 0 and current_host_roles | intersect(['search_head']) | length == 0)
+      }}
+
 - name: Check each app for direct deployment eligibility
   tags:
     - splunk
@@ -59,6 +72,12 @@
             )
           )
         )
+      )
+      or (
+        item.itsi_content_pack | default(false)
+        and itsi_direct_scope_this_host | default(false)
+        and (current_host_roles | intersect(['search_head']) | length > 0)
+        and (splunk_app_deployment.apps | default([]) | selectattr('premium_app', 'defined') | selectattr('premium_app', 'equalto', 'itsi') | list | length > 0)
       )
 
 - name: Debug direct deployment apps

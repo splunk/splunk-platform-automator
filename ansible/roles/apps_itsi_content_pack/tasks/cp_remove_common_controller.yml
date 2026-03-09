@@ -1,0 +1,68 @@
+---
+# Content pack removal (controller): download from Splunkbase via apps_common, then build app list via app conf cache.
+# Only included by cp_remove_common.yml when not target_download.
+
+- name: "Set Splunkbase download vars for content pack removal (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.set_fact:
+    splunkbase_app_id: "{{ app_item.app_id }}"
+    splunkbase_version: "{{ app_item.version | default('latest') }}"
+    splunkbase_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/content_pack_{{ app_item.name | replace(' ', '_') }}"
+    splunkbase_dest_slug: "content_pack_{{ app_item.name | replace(' ', '_') }}"
+    splunkbase_fail_msg_app_name: "{{ app_item.name }}"
+  when: (app_item.source | default('local')) == 'splunkbase'
+
+- name: "Download content pack from Splunkbase (controller, common)"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: download_splunkbase_archive.yml
+  when: (app_item.source | default('local')) == 'splunkbase'
+
+# Run on localhost so we can use splunkbase_archive_path / splunkbase_resolved_version directly.
+- name: "Set app conf cache vars and run app conf cache (controller, Splunkbase)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  block:
+    - name: "Set app conf cache vars for content pack removal (controller, from Splunkbase)"
+      ansible.builtin.set_fact:
+        app_conf_archive_path: "{{ splunkbase_archive_path }}"
+        app_conf_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/content_pack_{{ app_item.name | replace(' ', '_') }}"
+        app_conf_cache_subdir: "content_pack_app_confs"
+        app_conf_resolved_version: "{{ splunkbase_resolved_version }}"
+
+    - name: "Ensure app conf cache and app list (controller, common)"
+      ansible.builtin.include_role:
+        name: apps_common
+        tasks_from: app_conf_cache.yml
+
+    - name: "Set cp_remove_list on localhost for propagation (controller)"
+      ansible.builtin.set_fact:
+        cp_remove_list: "{{ app_conf_app_names | default([]) }}"
+      register: _cp_controller_app_list
+  delegate_to: localhost
+  run_once: true
+  when: (app_item.source | default('local')) == 'splunkbase'
+
+# Local source: set vars and run app conf cache on current host (controller runs with delegate_to: localhost for Splunkbase).
+- name: "Set app conf cache vars for content pack removal (controller, local)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.set_fact:
+    app_conf_archive_path: "{{ cp_remove_archive_path }}"
+    app_conf_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/content_pack_{{ app_item.name | replace(' ', '_') }}"
+    app_conf_cache_subdir: "content_pack_app_confs"
+    app_conf_resolved_version: "{{ app_item.version | default('latest') }}"
+  when: (app_item.source | default('local')) == 'local'
+
+- name: "Ensure app conf cache and app list (controller, common, local)"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: app_conf_cache.yml
+  when: (app_item.source | default('local')) == 'local'

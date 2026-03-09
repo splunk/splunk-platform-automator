@@ -1,0 +1,4 @@
+---
+dependencies:
+  - splunk_common
+  - apps_common

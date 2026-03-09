@@ -1,0 +1,181 @@
+---
+# Configure DA-ITSI-CP-monitoring-alerting content pack after app is deployed and content pack API install has run.
+#
+# Use from app customizations: run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml"
+#
+# Framework vars: app_path, app_name (from post-restart context)
+# Optional extra_vars: generic_alerts_index (default: generic_alerts)
+
+- name: "Resolve DA-ITSI-CP-monitoring-alerting extra_vars"
+  ansible.builtin.set_fact:
+    _cp_generic_alerts_index: "{{ (customization_extra_vars | default({})).get('generic_alerts_index', 'generic_alerts') }}"
+  when: app_path is defined
+
+- name: "Ensure DA-ITSI-CP-monitoring-alerting local directory exists"
+  ansible.builtin.file:
+    path: "{{ app_path }}/local"
+    state: directory
+    mode: "0755"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+  when: app_path is defined
+
+- name: "Enable and Schedule Lookup Generator Reports"
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/DA-ITSI-CP-monitoring-alerting/saved/searches/{{ item | urlencode }}"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      disabled: 0
+      action.webhook.enable_allowlist: 0
+      cron_schedule: 0 * * * *
+      is_scheduled: 1
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  loop:
+    - ITSI KPI Attributes Lookup Generator
+    - ITSI Episode Contact Map Generator
+  when: app_path is defined
+
+- name: "Update Lookup tables"
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/DA-ITSI-CP-monitoring-alerting/saved/searches/{{ item | urlencode }}/dispatch"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      trigger_actions: 1
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [201]
+  loop:
+    - ITSI KPI Attributes Lookup Generator
+    - ITSI Episode Contact Map Generator
+  loop_control:
+    pause: 20
+  when: app_path is defined
+
+- name: "Get NEAP Content (episodes-by-itsi-service)"
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/itsi/event_management_interface/notable_event_aggregation_policy/{{ item | urlencode }}"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: GET
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  loop:
+    - da-itsi-cp-monitoring-alerting-episodes-by-itsi-service
+  register: neap_object
+  when: app_path is defined
+
+- name: "Enable NEAP Searches"
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/itsi/event_management_interface/notable_event_aggregation_policy/da-itsi-cp-monitoring-alerting-episodes-by-itsi-service"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    headers:
+      Content-Type: application/json
+    body: "{{ (neap_object.results[0].json | default({})) | combine({'disabled': 0}) }}"
+    body_format: json
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  when:
+    - app_path is defined
+    - neap_object is defined
+    - (neap_object.results | default([]) | length) > 0
+    - neap_object.results[0].json is defined
+
+# Set macro via REST API so it works on SHC (no filesystem write) and avoids restart.
+- name: "Set macro get_itsi_universal_index via API"
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/DA-ITSI-CP-monitoring-alerting/admin/macros/get_itsi_universal_index"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      args: ""
+      definition: "index={{ _cp_generic_alerts_index }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200, 201]
+  when: app_path is defined
+
+- name: "Enable Correlation Searches"
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/itsi/saved/searches/{{ item | urlencode }}"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      disabled: 0
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  loop:
+    - Episode Monitoring - Critical Notable Event added to Episode (Recommended)
+    - Episode Monitoring - Set Episode to Highest Alarm Severity
+    - Service Monitoring - Degraded Service or KPI Returns to Normal
+    - Service Monitoring - Entity Degraded
+    - Service Monitoring - KPI Degraded
+    - Service Monitoring - Service Health Degraded
+  when: app_path is defined
+
+- name: "Disable Correlation Searches"
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/itsi/saved/searches/{{ item | urlencode }}"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      disabled: 1
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  loop:
+    - Splunk App for Infrastructure Alerts
+  when: app_path is defined
+
+- name: "Get Service Content"
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/SA-ITOA/itoa_interface/service/{{ item | urlencode }}"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: GET
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  loop:
+    - da-itsi-cp-monitoring-alerting-itsi-event-analytics
+    - da-itsi-cp-monitoring-alerting-itsi-alert-analytics
+    - da-itsi-cp-monitoring-alerting-itsi-episode-analytics
+  register: services_objects
+  when: app_path is defined
+
+- name: "Enable Services"
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/SA-ITOA/itoa_interface/service/{{ item.json._key | urlencode }}"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    headers:
+      Content-Type: application/json
+    body: "{{ item.json | combine({'enabled': 1}) }}"
+    body_format: json
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  loop: "{{ services_objects.results | default([]) }}"
+  when:
+    - app_path is defined
+    - services_objects is defined
+    - item.json is defined

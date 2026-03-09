@@ -1,0 +1,7 @@
+---
+# Defaults for ITSI content pack deployment (called with app_item from splunk_app_deployment.apps).
+# content_pack_api defaults when content_pack_install is true (per content_pack_apps item)
+cp_api_install_all: true
+cp_api_saved_search_action: "disable"
+cp_api_backfill: false
+cp_api_resolution: "overwrite"

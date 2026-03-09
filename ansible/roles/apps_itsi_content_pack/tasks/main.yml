@@ -1,0 +1,366 @@
+---
+# ITSI content pack deployment: resolve .spl, unarchive, restart, SHC wait, API install, register run_playbook_after_restart.
+# Expects app_item (itsi_content_pack, content_pack_apps, library_app, install_all_apps, source, version, path/app_id).
+# Runs on hosts in ITSI direct set (deployer or standalone SH does unarchive; first SHC member or standalone SH runs API).
+
+- name: "Remove ITSI content pack (state absent)"
+  ansible.builtin.include_tasks: cp_remove.yml
+  when: app_state | default('installed') == 'absent'
+
+- name: "Install ITSI content pack (state installed)"
+  when: app_state | default('installed') == 'installed'
+  block:
+    - name: "Set ITSI content pack vars from app_item"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        cp_app_item: "{{ app_item }}"
+        cp_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/content_pack_{{ app_item.name | replace(' ', '_') }}"
+        cp_repo_path: "{{ splunk_app_deployment.local_app_repo_path | default(splunk_app_deployment_defaults.local_app_repo_path) }}"
+        cp_splunk_home: "{{ splunk_home }}"
+        cp_apps_base: "{{ 'etc/shcluster/apps' if (inventory_hostname in (groups['role_deployer'] | default([])) and (group_names | select('match', '^shcluster_') | list | length) == 0) else 'etc/apps' }}"
+        cp_unarchive_here: "{{ (inventory_hostname in (groups['role_deployer'] | default([])) and (group_names | select('match', '^shcluster_') | list | length) == 0) or (inventory_hostname in (groups['role_search_head'] | default([])) and (group_names | select('match', '^shcluster_') | list | length) == 0) }}"
+        cp_notify: "{{ 'Push shcluster bundle' if (inventory_hostname in (groups['role_deployer'] | default([])) and (group_names | select('match', '^shcluster_') | list | length) == 0) else 'Restart splunk' }}"
+        _first_shc_member: "{{ (groups | select('match', '^shcluster_') | list | map('extract', groups) | flatten) | intersect(groups['role_search_head'] | default([])) | first | default('') }}"
+        run_cp_api_on_this_host: "{{ (inventory_hostname in (groups['role_search_head'] | default([]))) and ((group_names | select('match', '^shcluster_') | list | length) == 0 or inventory_hostname == _first_shc_member) }}"
+        cp_content_pack_apps: "{{ app_item.content_pack_apps | default([]) }}"
+        cp_library_app: "{{ app_item.library_app | default('') }}"
+        cp_install_all_apps: "{{ app_item.install_all_apps | default(false) }}"
+
+    - name: "Set list of content pack apps with content_pack_install true"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        cp_content_pack_apps_to_install: "{{ cp_content_pack_apps_to_install | default([]) + [item] }}"
+      loop: "{{ cp_content_pack_apps }}"
+      when: item.content_pack_install | default(false) | bool
+
+    - name: "Ensure cp_content_pack_apps_to_install defined"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        cp_content_pack_apps_to_install: "{{ cp_content_pack_apps_to_install | default([]) }}"
+
+    - name: "Build effective app list for content pack (names to extract or remove)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        cp_effective_app_list: "{{ ([cp_library_app] if cp_library_app else []) + (cp_content_pack_apps | map(attribute='name') | list) }}"
+      when: not cp_install_all_apps
+
+    - name: "Set content pack archive path (local)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        cp_spl_path: "{{ app_item.local_path | default(app_item.path if (app_item.path is defined and app_item.path is search('^/')) else (cp_repo_path + '/' + (app_item.path | default('content_pack.spl')))) }}"
+        cp_resolved_version: "{{ app_item.version | default('latest') }}"
+      when: (app_item.source | default('local')) != 'splunkbase'
+
+    - name: "Set Splunkbase download vars and download content pack from Splunkbase (common)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      when: (app_item.source | default('local')) == 'splunkbase'
+      block:
+        - name: "Set Splunkbase download vars for content pack"
+          ansible.builtin.set_fact:
+            splunkbase_app_id: "{{ app_item.app_id }}"
+            splunkbase_version: "{{ app_item.version | default('latest') }}"
+            splunkbase_cache_dir: "{{ cp_cache_dir }}"
+            splunkbase_dest_slug: "content_pack_{{ app_item.name | replace(' ', '_') }}"
+            splunkbase_fail_msg_app_name: "{{ app_item.name }}"
+        - name: "Download app from Splunkbase (common)"
+          ansible.builtin.include_role:
+            name: apps_common
+            tasks_from: download_splunkbase_archive.yml
+        - name: "Capture content pack download path and version on localhost for propagation"
+          ansible.builtin.set_fact:
+            cp_download_archive_path: "{{ splunkbase_archive_path }}"
+            cp_download_resolved_version: "{{ splunkbase_resolved_version }}"
+          register: _cp_download_result
+          delegate_to: localhost
+          run_once: true
+        - name: "Set content pack archive path and version from common download (ITSI-style)"
+          ansible.builtin.set_fact:
+            cp_spl_path: "{{ splunkbase_archive_path if (splunk_app_deployment.target_download | default(false)) else (((_cp_download_result | default({})).ansible_facts | default({})).cp_download_archive_path | default('')) }}"
+            cp_resolved_version: "{{ splunkbase_resolved_version if (splunk_app_deployment.target_download | default(false)) else (((_cp_download_result | default({})).ansible_facts | default({})).cp_download_resolved_version | default('')) }}"
+
+    - name: "Check content pack archive exists (local)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.stat:
+        path: "{{ cp_spl_path }}"
+      register: cp_spl_file
+      delegate_to: localhost
+      become: false
+      when:
+        - (app_item.source | default('local')) != 'splunkbase'
+        - cp_spl_path is defined
+
+    - name: "Fail if content pack archive not found (local)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.fail:
+        msg: "Content pack archive not found: {{ cp_spl_path }}"
+      when:
+        - (app_item.source | default('local')) != 'splunkbase'
+        - cp_spl_path is defined
+        - not (cp_spl_file.stat.exists | default(false))
+
+    - name: "Set app conf cache vars for content pack (install)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        app_conf_archive_path: "{{ cp_spl_path }}"
+        app_conf_cache_dir: "{{ cp_cache_dir }}"
+        app_conf_cache_subdir: "content_pack_app_confs"
+        app_conf_resolved_version: "{{ cp_resolved_version | default(app_item.version | default('latest')) }}"
+
+    - name: "Ensure app conf cache and capture result for propagation (controller)"
+      when: not (splunk_app_deployment.target_download | default(false))
+      delegate_to: localhost
+      run_once: true
+      block:
+        - name: "Ensure app conf cache (common, controller)"
+          ansible.builtin.include_role:
+            name: apps_common
+            tasks_from: app_conf_cache.yml
+        - name: "Capture content pack app list and expected versions on localhost (controller)"
+          ansible.builtin.set_fact:
+            cp_archive_app_list: "{{ app_conf_app_names | default([]) }}"
+            cp_expected_versions: "{{ app_conf_expected_versions | default({}) }}"
+          register: _cp_app_conf_result
+          delegate_to: localhost
+          run_once: true
+
+    - name: "Ensure app conf cache (common, target_download)"
+      ansible.builtin.include_role:
+        name: apps_common
+        tasks_from: app_conf_cache.yml
+      when: splunk_app_deployment.target_download | default(false)
+
+    - name: "Set content pack archive app list and expected versions from cache"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        cp_archive_app_list: "{{ app_conf_app_names if (splunk_app_deployment.target_download | default(false)) else (((_cp_app_conf_result | default({})).ansible_facts | default({})).cp_archive_app_list | default([])) }}"
+        cp_expected_versions: "{{ app_conf_expected_versions if (splunk_app_deployment.target_download | default(false)) else (((_cp_app_conf_result | default({})).ansible_facts | default({})).cp_expected_versions | default({})) }}"
+
+    - name: "Build effective app list for content pack from archive (install_all_apps)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        cp_effective_app_list: "{{ cp_archive_app_list | default([]) }}"
+      when: cp_install_all_apps
+
+    - name: "Fail when content pack app list from archive is missing (install_all_apps)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.fail:
+        msg: "Content pack app list from archive is required when install_all_apps. Ensure app conf cache ran (controller or target_download) and archive lists app.confs."
+      when: cp_install_all_apps and (cp_archive_app_list | default([]) | length) == 0
+
+    - name: "Set content pack version check apps and base (from archive list / effective list)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        cp_version_check_apps: "{{ cp_effective_app_list | default(cp_archive_app_list) | default([]) }}"
+        cp_version_check_base: "{{ cp_splunk_home }}/{{ cp_apps_base }}"
+
+    - name: "Check existing content pack version (all relevant apps)"
+      ansible.builtin.include_tasks: cp_version_check.yml
+      when: (cp_version_check_apps | default([]) | length) > 0
+
+    - name: "Set cp_update_needed when no version check ran (no apps in list)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        cp_update_needed: true
+      when: (cp_version_check_apps | default([]) | length) == 0
+
+    - name: "Unarchive content pack (selected apps) to {{ cp_apps_base }}"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.unarchive:
+        src: "{{ cp_spl_path }}"
+        dest: "{{ cp_splunk_home }}/{{ cp_apps_base }}"
+        remote_src: "{{ splunk_app_deployment.target_download | default(false) }}"
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+        extra_opts: "{{ ['--add-file'] + cp_effective_app_list | default([]) }}"
+      notify: "{{ cp_notify }}"
+      when:
+        - cp_unarchive_here
+        - cp_update_needed | default(true)
+        - not cp_install_all_apps
+        - (cp_effective_app_list | default([]) | length) > 0
+
+    - name: "Unarchive content pack (full archive) to {{ cp_apps_base }}"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.unarchive:
+        src: "{{ cp_spl_path }}"
+        dest: "{{ cp_splunk_home }}/{{ cp_apps_base }}"
+        remote_src: "{{ splunk_app_deployment.target_download | default(false) }}"
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+      notify: "{{ cp_notify }}"
+      when:
+        - cp_unarchive_here
+        - cp_update_needed | default(true)
+        - cp_install_all_apps
+
+    - name: "Flush handlers so restart/push runs before content pack API"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.meta: flush_handlers
+      when: run_cp_api_on_this_host
+
+    - name: "Set app_path and restart flag for content pack handler"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        app_path: "{{ cp_splunk_home }}/etc/apps"
+        restart_splunk_direct_etc_apps: true
+      when: cp_notify == 'Restart splunk'
+
+    - name: "Wait for splunkd before content pack API (host that runs API)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      block:
+        - name: "Wait for splunkd port"
+          ansible.builtin.include_role:
+            name: splunk_common
+            tasks_from: wait_for_splunkd_port
+        - name: "Wait for splunkd full service"
+          ansible.builtin.include_role:
+            name: splunk_common
+            tasks_from: wait_for_splunkd_full
+      when: run_cp_api_on_this_host
+
+    - name: "Wait for SHC rolling restart (service_ready_flag) before content pack API"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      when: run_cp_api_on_this_host and (group_names | select('match', '^shcluster_') | list | length) > 0
+      block:
+        - name: "Poll SHC status until service_ready_flag"
+          ansible.builtin.uri:
+            url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/services/shcluster/status?output_mode=json"
+            user: admin
+            password: "{{ splunk_admin_password }}"
+            method: GET
+            force_basic_auth: true
+            validate_certs: false
+            status_code: [200]
+          register: cp_shc_status
+          until: (cp_shc_status.json | default({}) | json_query('entry[0].content.captain.service_ready_flag') | default(false)) | bool
+          retries: 30
+          delay: 10
+          ignore_errors: true
+
+        - name: "Fail if SHC not ready after retries"
+          ansible.builtin.fail:
+            msg: "Search Head Cluster did not become ready (service_ready_flag) before content pack API."
+          when: not ((cp_shc_status.json | default({}) | json_query('entry[0].content.captain.service_ready_flag') | default(false)) | bool)
+
+    - name: "Read content pack version from app.conf for API"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.shell:
+        cmd: |
+          f="{{ cp_splunk_home }}/{{ cp_apps_base }}/{{ item.name }}/default/app.conf"
+          [ -f "$f" ] || exit 0
+          v=$(sed -n '/\[launcher\]/,/^\[/p' "$f" 2>/dev/null | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//')
+          [ -n "$v" ] || v=$(sed -n '/\[id\]/,/^\[/p' "$f" 2>/dev/null | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//')
+          [ -n "$v" ] || v=$(grep -E '^\s*version\s*=' "$f" 2>/dev/null | head -1 | sed -E 's/^[^=]*=\s*//')
+          printf '%s' "$v"
+      loop: "{{ cp_content_pack_apps_to_install | default([]) }}"
+      register: cp_version_results
+      changed_when: false
+      failed_when: false
+      become: true
+      become_user: "{{ splunk_user | default('splunk') }}"
+      when:
+        - run_cp_api_on_this_host
+        - (cp_content_pack_apps_to_install | default([]) | length) > 0
+
+    - name: "Build content pack version map for API"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        cp_version_map: "{{ cp_version_map | default({}) | combine({ item.item.name: (item.stdout | default('') | trim) }) }}"
+      loop: "{{ cp_version_results.results | default([]) }}"
+      when:
+        - run_cp_api_on_this_host
+        - cp_version_results is defined
+        - (cp_content_pack_apps_to_install | default([]) | length) > 0
+        - item.stdout is defined
+
+    - name: "Register post-restart API install for content pack (content_pack_install true)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': 'ansible/roles/apps_itsi_content_pack/tasks/cp_api_install.yml', 'app_path': cp_splunk_home + '/' + cp_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': {'version': (cp_expected_versions | default({})).get(item.name, (cp_version_map | default({})).get(item.name, '') | trim) | default('1.0'), 'install_all': (item.content_pack_api | default({})).install_all | default(cp_api_install_all), 'saved_search_action': (item.content_pack_api | default({})).saved_search_action | default(cp_api_saved_search_action), 'backfill': (item.content_pack_api | default({})).backfill | default(cp_api_backfill), 'resolution': (item.content_pack_api | default({})).resolution | default(cp_api_resolution)}}] }}"
+      loop: "{{ cp_content_pack_apps_to_install | default([]) }}"
+      when:
+        - run_cp_api_on_this_host
+        - (cp_content_pack_apps_to_install | default([]) | length) > 0
+
+    - name: "Register post-restart playbook for content pack app (direct deployment)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': item.customizations.run_playbook_after_restart, 'app_path': cp_splunk_home + '/' + cp_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': (item.customizations.extra_vars | default({}))}] }}"
+      loop: "{{ cp_content_pack_apps }}"
+      when:
+        - run_cp_api_on_this_host
+        - item.customizations is defined
+        - item.customizations.run_playbook_after_restart is defined
+        - item.customizations.run_playbook_after_restart | length > 0

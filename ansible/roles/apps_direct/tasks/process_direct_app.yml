@@ -50,6 +50,17 @@
     _idxc_hosts: "{{ (groups | select('match', '^idxcluster_') | list | map('extract', groups) | flatten) | list }}"
   when: (app_item.premium_app | default('')) == 'itsi'
 
+- name: "Compute direct base (ITSI content pack) for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    _app_dir_base: "{{ ((groups['role_search_head'] | default([]) | reject('in', _shc_hosts)) + (groups['role_deployer'] | default([]))) | unique | list }}"
+  vars:
+    _shc_hosts: "{{ (groups | select('match', '^shcluster_') | list | map('extract', groups) | flatten) | list }}"
+  when: app_item.itsi_content_pack | default(false)
+
 - name: "Set empty direct base when no match for {{ app_item.name }}"
   ansible.builtin.set_fact:
     _app_dir_base: []
@@ -201,12 +212,21 @@
     - app_state == 'installed'
     - (app_item.premium_app | default('')) == 'itsi'
 
+- name: "Install {{ app_item.name }} (ITSI content pack)"
+  ansible.builtin.include_role:
+    name: apps_itsi_content_pack
+  when:
+    - _app_on_direct_scope | default(false)
+    - app_state == 'installed'
+    - app_item.itsi_content_pack | default(false)
+
 - name: "Install {{ app_item.name }} (standard)"
   ansible.builtin.include_tasks: "install_app.yml"
   when:
     - _app_on_direct_scope | default(false)
     - app_state == 'installed'
     - (app_item.premium_app | default('')) | length == 0
+    - not (app_item.itsi_content_pack | default(false))
 
 - name: "Apply customizations for {{ app_item.name }}"
   ansible.builtin.include_role:
@@ -243,6 +263,14 @@
     - app_state == 'absent'
     - (app_item.premium_app | default('')) == 'itsi'
 
+- name: "Remove {{ app_item.name }} (ITSI content pack)"
+  ansible.builtin.include_role:
+    name: apps_itsi_content_pack
+  when:
+    - _app_on_direct_scope | default(false)
+    - app_state == 'absent'
+    - app_item.itsi_content_pack | default(false)
+
 - name: "Set target path for removal of {{ app_item.name }}"
   tags:
     - splunk
@@ -255,6 +283,7 @@
     - _app_on_direct_scope | default(false)
     - app_state == 'absent'
     - (app_item.premium_app | default('')) | length == 0
+    - not (app_item.itsi_content_pack | default(false))
 
 - name: "Remove {{ app_item.name }} (standard)"
   ansible.builtin.include_tasks: "remove_app.yml"
@@ -262,6 +291,7 @@
     - _app_on_direct_scope | default(false)
     - app_state == 'absent'
     - (app_item.premium_app | default('')) | length == 0
+    - not (app_item.itsi_content_pack | default(false))
 
 # Set app_path and splunk_home so "Restart splunk" handler can run; use a dedicated flag so handler is not skipped by role/default context.
 - name: "Set app_path, splunk_home and restart flag for Restart splunk handler (direct etc/apps)"

@@ -1,0 +1,40 @@
+---
+# Shared removal logic: get app list from content pack archive via apps_common (download + app conf cache).
+# Same pattern as ITSI itsi_remove_common: resolve archive, download if Splunkbase, build app list from archive, then remove.
+# Requires: app_item. Optional: splunk_app_deployment, splunk_app_deployment_defaults.
+# Controller vs target: when not target_download run download + app_conf_cache on localhost; when target_download run on current host.
+
+- name: "Resolve content pack archive path for removal (local source only)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.set_fact:
+    cp_remove_archive_path: "{{ app_item.local_path | default(app_item.path if (app_item.path is defined and app_item.path is search('^/')) else (splunk_app_deployment.local_app_repo_path | default(splunk_app_deployment_defaults.local_app_repo_path) + '/' + (app_item.path | default('content_pack.spl')))) }}"
+  when: (app_item.source | default('local')) != 'splunkbase'
+
+- name: "Ensure content pack archive and app list (controller)"
+  ansible.builtin.include_tasks: cp_remove_common_controller.yml
+  when: not (splunk_app_deployment.target_download | default(false))
+
+- name: "Ensure content pack archive and app list (target)"
+  ansible.builtin.include_tasks: cp_remove_common_target.yml
+  when: splunk_app_deployment.target_download | default(false)
+
+# Set cp_remove_list from app conf cache: target has app_conf_app_names; controller has register from localhost.
+- name: "Set content pack remove list from app conf cache"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.set_fact:
+    cp_remove_list: "{{ app_conf_app_names if (splunk_app_deployment.target_download | default(false)) else (((_cp_controller_app_list | default({})).ansible_facts | default({})).cp_remove_list | default(app_conf_app_names) | default([])) }}"
+
+- name: "Fail when content pack app list from archive is missing (removal)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.fail:
+    msg: "Content pack app list from archive is required for removal. Archive must be present and listable; use apps_common download and app conf cache."
+  when: (cp_remove_list | default([]) | length) == 0

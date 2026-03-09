@@ -1,0 +1,59 @@
+---
+# Remove ITSI content pack: remove app dirs from etc/apps or etc/shcluster/apps, notify restart/push.
+# Same pattern as ITSI search head remove: resolve archive, build app list from archive (apps_common app_conf_cache), then remove.
+# Expects app_item, app_state == 'absent'.
+
+- name: "Set ITSI content pack removal vars from app_item"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.set_fact:
+    cp_splunk_home: "{{ splunk_home }}"
+    cp_apps_base: "{{ 'etc/shcluster/apps' if (inventory_hostname in (groups['role_deployer'] | default([])) and (group_names | select('match', '^shcluster_') | list | length) == 0) else 'etc/apps' }}"
+    cp_notify: "{{ 'Push shcluster bundle' if (inventory_hostname in (groups['role_deployer'] | default([])) and (group_names | select('match', '^shcluster_') | list | length) == 0) else 'Restart splunk' }}"
+    cp_unarchive_here: "{{ (inventory_hostname in (groups['role_deployer'] | default([])) and (group_names | select('match', '^shcluster_') | list | length) == 0) or (inventory_hostname in (groups['role_search_head'] | default([])) and (group_names | select('match', '^shcluster_') | list | length) == 0) }}"
+    cp_content_pack_apps: "{{ app_item.content_pack_apps | default([]) }}"
+    cp_library_app: "{{ app_item.library_app | default('') }}"
+    cp_install_all_apps: "{{ app_item.install_all_apps | default(false) }}"
+
+# When not install_all_apps: remove only library_app + content_pack_apps names.
+- name: "Build content pack remove list (library_app + content_pack_apps names)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.set_fact:
+    cp_remove_list: "{{ ([cp_library_app] if cp_library_app else []) + (cp_content_pack_apps | map(attribute='name') | list) }}"
+  when: not cp_install_all_apps
+
+# When install_all_apps: resolve archive, download if Splunkbase, build app list from archive (like ITSI), then remove.
+- name: "Resolve archive and build content pack app list for removal"
+  ansible.builtin.include_tasks: cp_remove_common.yml
+  when: cp_install_all_apps
+
+- name: "Set app_path and restart flag for content pack removal"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.set_fact:
+    app_path: "{{ cp_splunk_home }}/etc/apps"
+    restart_splunk_direct_etc_apps: true
+  when: cp_notify == 'Restart splunk'
+
+- name: "Remove content pack app dirs from {{ cp_apps_base }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.file:
+    path: "{{ cp_splunk_home }}/{{ cp_apps_base }}/{{ item }}"
+    state: absent
+  loop: "{{ cp_remove_list | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  notify: "{{ cp_notify }}"
+  when:
+    - cp_unarchive_here
+    - (cp_remove_list | default([]) | length) > 0

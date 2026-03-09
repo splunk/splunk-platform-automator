@@ -204,6 +204,55 @@ If neither is set, the premium app is deployed to all search heads (and all SHC 
 
 No `auto_config` flag is required: with **`premium_app: itsi`**, the role both extracts and applies ITSI-specific configuration.
 
+### ITSI Content Packs
+
+ITSI content packs are deployed as **one app entry per content pack .spl file**. They run on the **same hosts as ITSI** (the ITSI direct set: license manager, search heads, standalone indexers). You must have at least one app entry with **`premium_app: itsi`** and **`state: installed`** for content pack entries to be valid.
+
+**Config rules:**
+
+- **Per-app structure only:** Do **not** set top-level `content_pack_install`, `content_pack_api`, or `customizations` on the content pack entry. All of these options live **only** inside **`content_pack_apps`**, as a list of objects.
+- **`content_pack_apps`:** Required when `install_all_apps` is false. Each item must have **`name`** (required; the app dir name of the content pack, e.g. `DA-ITSI-CP-monitoring-alerting`). Optional per item: **`content_pack_install`** (bool), **`content_pack_api`** (dict: `install_all`, `saved_search_action`, `backfill`, `resolution`), **`customizations`** (dict: `run_playbook_after_restart`, `extra_vars`).
+- **`library_app`:** Optional. When set (e.g. `DA-ITSI-ContentLibrary`), this app is always installed from the same .spl in addition to the apps listed in `content_pack_apps`. It is **not** listed inside `content_pack_apps`.
+- **`install_all_apps`:** Optional, default false. When true, the full archive is extracted; when false, only `library_app` (if set) and the **`name`** of each `content_pack_apps` item are extracted.
+- **Naming convention:** Use **`run_playbook_after_restart`** = `ancustom/<app_name>_configure.yml` (e.g. `ancustom/DA-ITSI-CP-monitoring-alerting_configure.yml`).
+
+**SHC behavior:** When the target is a Search Head Cluster, the playbook waits for the SHC rolling restart to complete (e.g. using `check_shc_health.yml` logic: `service_ready_flag` true) before running the ITSI content pack API install and any **`run_playbook_after_restart`** playbooks. The API and config playbooks run only on the **first SHC member** (or on the single search head when standalone).
+
+**Removal:** With **`state: absent`**, content pack app directories are removed from the system (and Splunk is restarted or the deployer bundle is pushed). There is no ITSI API uninstall; removal is the same as for the ITSI premium app (remove app dirs and restart).
+
+**Minimal content pack example:**
+
+```yaml
+# ITSI (required for content packs)
+- name: "ITSI"
+  premium_app: itsi
+  state: installed
+  version: "4.21.0"
+  source: splunkbase
+  app_id: 1841
+
+# Content pack: one entry per .spl
+- name: "Splunk App for Content Packs"
+  itsi_content_pack: true
+  state: installed
+  version: "2.4.0"
+  source: local
+  path: "splunk-app-for-content-packs_240.spl"
+  library_app: DA-ITSI-ContentLibrary
+  content_pack_apps:
+    - name: DA-ITSI-CP-monitoring-alerting
+      content_pack_install: true
+      content_pack_api:
+        install_all: true
+        saved_search_action: "disable"
+        backfill: false
+        resolution: "overwrite"
+      customizations:
+        run_playbook_after_restart: "ancustom/DA-ITSI-CP-monitoring-alerting_configure.yml"
+        extra_vars:
+          generic_alerts_index: generic_alerts
+```
+
 ### Splunkbase apps: name must match archive folder
 
 For apps from **Splunkbase** (`source: splunkbase`), the **`name`** in your config must be exactly the same as the **top-level folder name** inside the app archive downloaded from Splunkbase.
