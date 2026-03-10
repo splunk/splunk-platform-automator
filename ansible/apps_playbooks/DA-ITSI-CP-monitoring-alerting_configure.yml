@@ -11,15 +11,6 @@
     _cp_generic_alerts_index: "{{ (customization_extra_vars | default({})).get('generic_alerts_index', 'generic_alerts') }}"
   when: app_path is defined
 
-- name: "Ensure DA-ITSI-CP-monitoring-alerting local directory exists"
-  ansible.builtin.file:
-    path: "{{ app_path }}/local"
-    state: directory
-    mode: "0755"
-    owner: "{{ splunk_user | default('splunk') }}"
-    group: "{{ splunk_group | default('splunk') }}"
-  when: app_path is defined
-
 - name: "Enable and Schedule Lookup Generator Reports"
   ansible.builtin.uri:
     url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/DA-ITSI-CP-monitoring-alerting/saved/searches/{{ item | urlencode }}"

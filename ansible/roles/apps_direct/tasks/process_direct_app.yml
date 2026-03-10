@@ -3,6 +3,23 @@
 # Direct base never includes SHC members. hosts_whitelist/hosts_blacklist and shc_* apply only to search heads (relevant role);
 # idxc_* applies only to non–search-head hosts (e.g. indexers). Other roles (e.g. license_manager) are not filtered by hosts/shc.
 
+- name: "Set app_item from loop (avoid loop_var collision)"
+  ansible.builtin.set_fact:
+    app_item: "{{ _loop_app_item }}"
+
+# Content pack: assign ITSI filter vars so the same calculation code deploys to the same target as ITSI.
+- name: "Apply ITSI filter vars to content pack app (same target as ITSI)"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    app_item: "{{ (app_item | default({})) | combine(_cp_itsi_filters) }}"
+  when: (app_item | default({})).get('itsi_content_pack', false)
+  vars:
+    _itsi_cfg: "{{ (_itsi_apps_list | default([]) | first) | default({}) }}"
+    _cp_itsi_filters: "{{ {'hosts_whitelist': (_itsi_cfg | default({})).get('hosts_whitelist', []), 'shc_whitelist': (_itsi_cfg | default({})).get('shc_whitelist', []), 'hosts_blacklist': (_itsi_cfg | default({})).get('hosts_blacklist', []), 'shc_blacklist': (_itsi_cfg | default({})).get('shc_blacklist', []), 'idxc_whitelist': (_itsi_cfg | default({})).get('idxc_whitelist', []), 'idxc_blacklist': (_itsi_cfg | default({})).get('idxc_blacklist', [])} }}"
+
 # --- Direct base set: hosts that get this app via direct (before filters) ---
 - name: "Compute direct base (normal, deployment_target direct) for {{ app_item.name }}"
   tags:
@@ -10,11 +27,11 @@
     - splunk_apps
     - direct_deployment
   ansible.builtin.set_fact:
-    _app_dir_base: "{{ (app_item.target_roles | default([]) | map('regex_replace', '^(.*)$', 'role_\\1') | map('extract', groups) | flatten | unique) | list }}"
+    _app_dir_base: "{{ ((app_item | default({})).get('target_roles', []) | map('regex_replace', '^(.*)$', 'role_\\1') | map('extract', groups) | flatten | unique) | list }}"
   when:
-    - (app_item.premium_app | default('')) | length == 0
-    - app_item.target_roles is defined
-    - app_item.deployment_target | default('auto') == 'direct'
+    - ((app_item | default({})).get('premium_app', '') | length) == 0
+    - (app_item | default({})).get('target_roles') is defined
+    - (app_item | default({})).get('deployment_target', 'auto') == 'direct'
 
 - name: "Compute direct base (normal, deployment_target not direct) for {{ app_item.name }}"
   tags:
@@ -24,7 +41,7 @@
   ansible.builtin.set_fact:
     _app_dir_base: >-
       {{
-        (app_item.target_roles | default([])
+        ((app_item | default({})).get('target_roles', [])
         | map('regex_replace', '^(.*)$', 'role_\1')
         | map('extract', groups)
         | flatten
@@ -34,9 +51,9 @@
         | list
       }}
   when:
-    - (app_item.premium_app | default('')) | length == 0
-    - app_item.target_roles is defined
-    - app_item.deployment_target | default('auto') != 'direct'
+    - ((app_item | default({})).get('premium_app', '') | length) == 0
+    - (app_item | default({})).get('target_roles') is defined
+    - (app_item | default({})).get('deployment_target', 'auto') != 'direct'
 
 - name: "Compute direct base (ITSI) for {{ app_item.name }}"
   tags:
@@ -48,7 +65,7 @@
   vars:
     _shc_hosts: "{{ (groups | select('match', '^shcluster_') | list | map('extract', groups) | flatten) | list }}"
     _idxc_hosts: "{{ (groups | select('match', '^idxcluster_') | list | map('extract', groups) | flatten) | list }}"
-  when: (app_item.premium_app | default('')) == 'itsi'
+  when: (app_item | default({})).get('premium_app', '') == 'itsi'
 
 - name: "Compute direct base (ITSI content pack) for {{ app_item.name }}"
   tags:
@@ -59,7 +76,7 @@
     _app_dir_base: "{{ ((groups['role_search_head'] | default([]) | reject('in', _shc_hosts)) + (groups['role_deployer'] | default([]))) | unique | list }}"
   vars:
     _shc_hosts: "{{ (groups | select('match', '^shcluster_') | list | map('extract', groups) | flatten) | list }}"
-  when: app_item.itsi_content_pack | default(false)
+  when: (app_item | default({})).get('itsi_content_pack', false)
 
 - name: "Set empty direct base when no match for {{ app_item.name }}"
   ansible.builtin.set_fact:
@@ -91,46 +108,34 @@
 - name: "Build direct SHC whitelist union for {{ app_item.name }}"
   ansible.builtin.set_fact:
     _dir_shc_w: "{{ _dir_shc_w | default([]) + (groups['shcluster_' ~ item] | default([])) }}"
-  loop: "{{ app_item.shc_whitelist | default([]) }}"
-  when:
-    - app_item.shc_whitelist is defined
-    - app_item.shc_whitelist | length > 0
+  loop: "{{ (app_item | default({})).get('shc_whitelist', []) }}"
+  when: ((app_item | default({})).get('shc_whitelist', []) | length) > 0
 
 - name: "Apply direct shc_whitelist for {{ app_item.name }}"
   ansible.builtin.set_fact:
     _app_dir_filtered: "{{ (_app_dir_filtered | default(_app_dir_base)) | intersect(_dir_shc_w | default([]) | unique) | list }}"
-  when:
-    - app_item.shc_whitelist is defined
-    - app_item.shc_whitelist | length > 0
+  when: ((app_item | default({})).get('shc_whitelist', []) | length) > 0
 
 - name: "Build direct SHC blacklist union for {{ app_item.name }}"
   ansible.builtin.set_fact:
     _dir_shc_b: "{{ _dir_shc_b | default([]) + (groups['shcluster_' ~ item] | default([])) }}"
-  loop: "{{ app_item.shc_blacklist | default([]) }}"
-  when:
-    - app_item.shc_blacklist is defined
-    - app_item.shc_blacklist | length > 0
+  loop: "{{ (app_item | default({})).get('shc_blacklist', []) }}"
+  when: ((app_item | default({})).get('shc_blacklist', []) | length) > 0
 
 - name: "Apply direct shc_blacklist for {{ app_item.name }}"
   ansible.builtin.set_fact:
     _app_dir_filtered: "{{ (_app_dir_filtered | default(_app_dir_base)) | reject('in', _dir_shc_b | default([]) | unique) | list }}"
-  when:
-    - app_item.shc_blacklist is defined
-    - app_item.shc_blacklist | length > 0
+  when: ((app_item | default({})).get('shc_blacklist', []) | length) > 0
 
 - name: "Apply direct hosts_whitelist for {{ app_item.name }}"
   ansible.builtin.set_fact:
-    _app_dir_filtered: "{{ (_app_dir_filtered | default(_app_dir_base)) | intersect(app_item.hosts_whitelist | default([])) | list }}"
-  when:
-    - app_item.hosts_whitelist is defined
-    - app_item.hosts_whitelist | length > 0
+    _app_dir_filtered: "{{ (_app_dir_filtered | default(_app_dir_base)) | intersect((app_item | default({})).get('hosts_whitelist', []) | default([])) | list }}"
+  when: ((app_item | default({})).get('hosts_whitelist', []) | length) > 0
 
 - name: "Apply direct hosts_blacklist for {{ app_item.name }}"
   ansible.builtin.set_fact:
-    _app_dir_filtered: "{{ (_app_dir_filtered | default(_app_dir_base)) | reject('in', app_item.hosts_blacklist | default([])) | list }}"
-  when:
-    - app_item.hosts_blacklist is defined
-    - app_item.hosts_blacklist | length > 0
+    _app_dir_filtered: "{{ (_app_dir_filtered | default(_app_dir_base)) | reject('in', (app_item | default({})).get('hosts_blacklist', []) | default([])) | list }}"
+  when: ((app_item | default({})).get('hosts_blacklist', []) | length) > 0
 
 - name: "Save direct search-head filtered set for {{ app_item.name }}"
   ansible.builtin.set_fact:
@@ -143,36 +148,39 @@
 - name: "Build direct IDXC whitelist union for {{ app_item.name }}"
   ansible.builtin.set_fact:
     _dir_idxc_w: "{{ _dir_idxc_w | default([]) + (groups['idxcluster_' ~ item] | default([])) }}"
-  loop: "{{ app_item.idxc_whitelist | default([]) }}"
-  when:
-    - app_item.idxc_whitelist is defined
-    - app_item.idxc_whitelist | length > 0
+  loop: "{{ (app_item | default({})).get('idxc_whitelist', []) }}"
+  when: ((app_item | default({})).get('idxc_whitelist', []) | length) > 0
 
 - name: "Apply direct idxc_whitelist for {{ app_item.name }}"
   ansible.builtin.set_fact:
     _app_dir_filtered: "{{ (_app_dir_filtered | default(_app_dir_base)) | intersect(_dir_idxc_w | default([]) | unique) | list }}"
-  when:
-    - app_item.idxc_whitelist is defined
-    - app_item.idxc_whitelist | length > 0
+  when: ((app_item | default({})).get('idxc_whitelist', []) | length) > 0
 
 - name: "Build direct IDXC blacklist union for {{ app_item.name }}"
   ansible.builtin.set_fact:
     _dir_idxc_b: "{{ _dir_idxc_b | default([]) + (groups['idxcluster_' ~ item] | default([])) }}"
-  loop: "{{ app_item.idxc_blacklist | default([]) }}"
-  when:
-    - app_item.idxc_blacklist is defined
-    - app_item.idxc_blacklist | length > 0
+  loop: "{{ (app_item | default({})).get('idxc_blacklist', []) }}"
+  when: ((app_item | default({})).get('idxc_blacklist', []) | length) > 0
 
 - name: "Apply direct idxc_blacklist for {{ app_item.name }}"
   ansible.builtin.set_fact:
     _app_dir_filtered: "{{ (_app_dir_filtered | default(_app_dir_base)) | reject('in', _dir_idxc_b | default([]) | unique) | list }}"
-  when:
-    - app_item.idxc_blacklist is defined
-    - app_item.idxc_blacklist | length > 0
+  when: ((app_item | default({})).get('idxc_blacklist', []) | length) > 0
 
 - name: "Combine direct SH and non-SH filtered sets for {{ app_item.name }}"
   ansible.builtin.set_fact:
     _app_dir_filtered: "{{ (_app_dir_sh_filtered | default([])) + (_app_dir_filtered | default([])) | unique | list }}"
+
+- name: "Content pack deployer-only when ITSI has shc_whitelist (no direct scope in Step 4)"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    _app_dir_filtered: []
+  when:
+    - (app_item | default({})).get('itsi_content_pack', false)
+    - ((app_item | default({})).get('shc_whitelist', []) | length) > 0
 
 - name: "Set direct scope for {{ app_item.name }}"
   tags:
@@ -203,6 +211,7 @@
       - "Version: {{ app_version }}"
       - "Location: etc/apps/"
     verbosity: 0
+  when: _app_on_direct_scope | default(false)
 
 - name: "Install {{ app_item.name }} (premium pack ITSI)"
   ansible.builtin.include_role:
@@ -210,23 +219,23 @@
   when:
     - _app_on_direct_scope | default(false)
     - app_state == 'installed'
-    - (app_item.premium_app | default('')) == 'itsi'
+    - (app_item | default({})).get('premium_app', '') == 'itsi'
 
 - name: "Install {{ app_item.name }} (ITSI content pack)"
   ansible.builtin.include_role:
-    name: apps_itsi_content_pack
+    name: apps_itsi
   when:
     - _app_on_direct_scope | default(false)
     - app_state == 'installed'
-    - app_item.itsi_content_pack | default(false)
+    - (app_item | default({})).get('itsi_content_pack', false)
 
 - name: "Install {{ app_item.name }} (standard)"
   ansible.builtin.include_tasks: "install_app.yml"
   when:
     - _app_on_direct_scope | default(false)
     - app_state == 'installed'
-    - (app_item.premium_app | default('')) | length == 0
-    - not (app_item.itsi_content_pack | default(false))
+    - ((app_item | default({})).get('premium_app', '') | length) == 0
+    - not ((app_item | default({})).get('itsi_content_pack', false))
 
 - name: "Apply customizations for {{ app_item.name }}"
   ansible.builtin.include_role:
@@ -254,6 +263,14 @@
     - app_item.customizations.run_playbook_after_restart is defined
     - app_item.customizations.run_playbook_after_restart | length > 0
 
+- name: "Remove {{ app_item.name }} (ITSI content pack)"
+  ansible.builtin.include_role:
+    name: apps_itsi
+  when:
+    - _app_on_direct_scope | default(false)
+    - app_state == 'absent'
+    - (app_item | default({})).get('itsi_content_pack', false)
+
 - name: "Remove {{ app_item.name }} (premium app ITSI)"
   ansible.builtin.include_role:
     name: apps_itsi
@@ -261,15 +278,7 @@
   when:
     - _app_on_direct_scope | default(false)
     - app_state == 'absent'
-    - (app_item.premium_app | default('')) == 'itsi'
-
-- name: "Remove {{ app_item.name }} (ITSI content pack)"
-  ansible.builtin.include_role:
-    name: apps_itsi_content_pack
-  when:
-    - _app_on_direct_scope | default(false)
-    - app_state == 'absent'
-    - app_item.itsi_content_pack | default(false)
+    - (app_item | default({})).get('premium_app', '') == 'itsi'
 
 - name: "Set target path for removal of {{ app_item.name }}"
   tags:
@@ -282,16 +291,16 @@
   when:
     - _app_on_direct_scope | default(false)
     - app_state == 'absent'
-    - (app_item.premium_app | default('')) | length == 0
-    - not (app_item.itsi_content_pack | default(false))
+    - ((app_item | default({})).get('premium_app', '') | length) == 0
+    - not ((app_item | default({})).get('itsi_content_pack', false))
 
 - name: "Remove {{ app_item.name }} (standard)"
   ansible.builtin.include_tasks: "remove_app.yml"
   when:
     - _app_on_direct_scope | default(false)
     - app_state == 'absent'
-    - (app_item.premium_app | default('')) | length == 0
-    - not (app_item.itsi_content_pack | default(false))
+    - ((app_item | default({})).get('premium_app', '') | length) == 0
+    - not ((app_item | default({})).get('itsi_content_pack', false))
 
 # Set app_path and splunk_home so "Restart splunk" handler can run; use a dedicated flag so handler is not skipped by role/default context.
 - name: "Set app_path, splunk_home and restart flag for Restart splunk handler (direct etc/apps)"
@@ -307,7 +316,7 @@
     - _app_on_direct_scope | default(false)
     - update_needed | default(false)
     - app_item.restart_required | default(true)
-    - (app_item.premium_app | default('')) | length == 0
+    - ((app_item | default({})).get('premium_app', '') | length) == 0
 
 - name: "Notify Splunk restart for {{ app_item.name }}"
   tags:
@@ -321,4 +330,4 @@
     - _app_on_direct_scope | default(false)
     - update_needed | default(false)
     - app_item.restart_required | default(true)
-    - (app_item.premium_app | default('')) | length == 0
+    - ((app_item | default({})).get('premium_app', '') | length) == 0

@@ -245,3 +245,4 @@ customizations:
 - [App Deployment](App_Deployment.md) – main documentation
 - [App Deployment Guide](App_Deployment_Guide.md) – configuration and deployment methods
 - [App Deployment Verification](App_Deployment_Verification.md) – verify deployed apps
+- **Running playbooks standalone:** To run a `run_playbook` or `run_playbook_after_restart` task file manually (e.g. to re-run a configure playbook), use the wrapper `ansible/run_apps_playbook.yml`. See [App Deployment Apps Playbooks](App_Deployment_Apps_Playbooks.md).

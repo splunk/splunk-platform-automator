@@ -2,6 +2,7 @@
 # Remove ITSI content pack: remove app dirs from etc/apps or etc/shcluster/apps, notify restart/push.
 # Same pattern as ITSI search head remove: resolve archive, build app list from archive (apps_common app_conf_cache), then remove.
 # Expects app_item, app_state == 'absent'.
+# Uses shared ITSI vars set at start of content pack main.yml (apps_itsi_sh_apps_base, apps_itsi_sh_notify).
 
 - name: "Set ITSI content pack removal vars from app_item"
   tags:
@@ -10,9 +11,9 @@
     - itsi_content_pack
   ansible.builtin.set_fact:
     cp_splunk_home: "{{ splunk_home }}"
-    cp_apps_base: "{{ 'etc/shcluster/apps' if (inventory_hostname in (groups['role_deployer'] | default([])) and (group_names | select('match', '^shcluster_') | list | length) == 0) else 'etc/apps' }}"
-    cp_notify: "{{ 'Push shcluster bundle' if (inventory_hostname in (groups['role_deployer'] | default([])) and (group_names | select('match', '^shcluster_') | list | length) == 0) else 'Restart splunk' }}"
-    cp_unarchive_here: "{{ (inventory_hostname in (groups['role_deployer'] | default([])) and (group_names | select('match', '^shcluster_') | list | length) == 0) or (inventory_hostname in (groups['role_search_head'] | default([])) and (group_names | select('match', '^shcluster_') | list | length) == 0) }}"
+    cp_apps_base: "{{ apps_itsi_sh_apps_base }}"
+    cp_notify: "{{ apps_itsi_sh_notify }}"
+    cp_unarchive_here: "{{ (apps_itsi_sh_apps_base == 'etc/shcluster/apps') or (inventory_hostname in (groups['role_search_head'] | default([])) and ((group_names | select('match', '^shcluster_') | list | length) == 0)) }}"
     cp_content_pack_apps: "{{ app_item.content_pack_apps | default([]) }}"
     cp_library_app: "{{ app_item.library_app | default('') }}"
     cp_install_all_apps: "{{ app_item.install_all_apps | default(false) }}"

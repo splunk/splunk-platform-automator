@@ -11,6 +11,37 @@
   ansible.builtin.set_fact:
     deployer_apps: []
 
+- name: Set whether any ITSI app has shc_whitelist (for content pack deployer filter)
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+  ansible.builtin.set_fact:
+    deployer_itsi_has_shc_whitelist: "{{ deployer_itsi_has_shc_whitelist | default(false) | bool or ((item | default({})).get('premium_app') == 'itsi' and ((item | default({})).get('shc_whitelist') or []) | length > 0) }}"
+  loop: "{{ splunk_app_deployment.apps | default([]) }}"
+  when: splunk_app_deployment.apps | default([]) | length > 0
+
+- name: Ensure deployer_itsi_has_shc_whitelist defined
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+  ansible.builtin.set_fact:
+    deployer_itsi_has_shc_whitelist: false
+  when: deployer_itsi_has_shc_whitelist is not defined
+
+- name: "Build list of ITSI app configs (for content pack same target as ITSI)"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+  ansible.builtin.set_fact:
+    _itsi_apps_list: "{{ _itsi_apps_list | default([]) + [item] }}"
+  loop: "{{ splunk_app_deployment.apps | default([]) }}"
+  when: (item | default({})).get('premium_app', '') == 'itsi'
+  loop_control:
+    label: "{{ (item | default({})).get('name', '?') }}"
+
 - name: Filter apps for deployer distribution
   tags:
     - splunk
@@ -20,16 +51,29 @@
     deployer_apps: "{{ deployer_apps + [item] }}"
   loop: "{{ splunk_app_deployment.apps | default([]) }}"
   when:
-    - item.deployment_target | default('auto') != 'direct'
+    - (item | default({})).get('deployment_target', 'auto') != 'direct'
     - >-
-      (item.premium_app | default('')) == 'itsi' and (
-        (item.target_roles is defined and item.target_roles | intersect(['search_head']) | length > 0)
-        or (item.target_roles is not defined and groups.role_search_head | default([]) | length > 0)
+      ((item | default({})).get('premium_app', '') or '') == 'itsi' and (
+        ((item | default({})).get('shc_whitelist') or []) | length > 0
+        or ('target_roles' in (item | default({})) and (item | default({})).get('target_roles', []) | intersect(['search_head']) | length > 0)
+        or ('target_roles' not in (item | default({})) and groups.role_search_head | default([]) | length > 0)
       )
       or (
-        item.target_roles is defined
-        and item.target_roles | intersect(['search_head']) | length > 0
+        (item | default({})).get('itsi_content_pack', false)
+        and deployer_itsi_has_shc_whitelist | default(false)
       )
+      or (
+        ((item | default({})).get('premium_app', '') or '') != 'itsi'
+        and not (item | default({})).get('itsi_content_pack', false)
+        and 'target_roles' in (item | default({}))
+        and (item | default({})).get('target_roles', []) | intersect(['search_head']) | length > 0
+      )
+
+- name: Set first SHC member for post-restart playbooks (shared, from apps_common)
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: set_shc_first_member.yml
+  when: deployer_apps | length > 0
 
 - name: Debug deployer apps
   tags:
@@ -46,6 +90,73 @@
       - "========================================="
     verbosity: 0
 
+# Ensure ITSI is installed before content packs; remove content packs before ITSI.
+# Build install/absent lists via loop so items without 'state' key use .get('state','installed').
+- name: "Build deployer install list (state != absent)"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+  ansible.builtin.set_fact:
+    _dep_inst: "{{ _dep_inst | default([]) + [item] }}"
+  loop: "{{ deployer_apps }}"
+  when:
+    - deployer_apps | length > 0
+    - (item | default({})).get('state', 'installed') != 'absent'
+  loop_control:
+    label: "{{ (item | default({})).get('name', '?') }}"
+
+- name: "Build deployer absent list (state == absent)"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+  ansible.builtin.set_fact:
+    _dep_abs: "{{ _dep_abs | default([]) + [item] }}"
+  loop: "{{ deployer_apps }}"
+  when:
+    - deployer_apps | length > 0
+    - (item | default({})).get('state', 'installed') == 'absent'
+  loop_control:
+    label: "{{ (item | default({})).get('name', '?') }}"
+
+# Normalize lists so every item has premium_app and itsi_content_pack (selectattr/rejectattr fail on missing keys).
+- name: "Normalize deployer install list for sort"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+  ansible.builtin.set_fact:
+    _dep_inst_n: "{{ _dep_inst_n | default([]) + [{'premium_app': '', 'itsi_content_pack': false} | combine(item)] }}"
+  loop: "{{ _dep_inst | default([]) }}"
+  when: deployer_apps | length > 0
+
+- name: "Normalize deployer absent list for sort"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+  ansible.builtin.set_fact:
+    _dep_abs_n: "{{ _dep_abs_n | default([]) + [{'premium_app': '', 'itsi_content_pack': false} | combine(item)] }}"
+  loop: "{{ _dep_abs | default([]) }}"
+  when: deployer_apps | length > 0
+
+# Inline sort using normalized lists so _dep_inst_n/_dep_abs_n have default keys and selectattr does not fail.
+- name: "Sort deployer apps (install: ITSI then CP then rest; remove: CP then ITSI then rest)"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+  ansible.builtin.set_fact:
+    deployer_apps: >-
+      {{ (_dep_inst_n | default([]) | selectattr('premium_app', 'equalto', 'itsi') | list)
+      + (_dep_inst_n | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | selectattr('itsi_content_pack') | list)
+      + (_dep_inst_n | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('itsi_content_pack') | list)
+      + (_dep_abs_n | default([]) | selectattr('itsi_content_pack') | list)
+      + (_dep_abs_n | default([]) | selectattr('premium_app', 'equalto', 'itsi') | list)
+      + (_dep_abs_n | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('itsi_content_pack') | list) }}
+  when: deployer_apps | length > 0
+
 - name: Process deployer apps
   tags:
     - splunk
@@ -56,8 +167,8 @@
       ansible.builtin.include_tasks: "process_deployer_app.yml"
       loop: "{{ deployer_apps }}"
       loop_control:
-        loop_var: app_item
-        label: "{{ app_item.name }}"
+        loop_var: _loop_app_item
+        label: "{{ _loop_app_item.name }}"
   when: deployer_apps | length > 0
 
 - name: Deployer apps complete

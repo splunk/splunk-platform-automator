@@ -32,6 +32,18 @@
         or (current_host_roles | intersect(['indexer']) | length > 0 and (group_names | select('match', '^idxcluster_') | list | length) == 0 and current_host_roles | intersect(['search_head']) | length == 0)
       }}
 
+- name: "Build list of ITSI app configs (for content pack eligibility)"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    _itsi_apps_list: "{{ _itsi_apps_list | default([]) + [item] }}"
+  loop: "{{ splunk_app_deployment.apps | default([]) }}"
+  when: (item | default({})).get('premium_app', '') == 'itsi'
+  loop_control:
+    label: "{{ (item | default({})).get('name', '?') }}"
+
 - name: Check each app for direct deployment eligibility
   tags:
     - splunk
@@ -40,13 +52,16 @@
   ansible.builtin.set_fact:
     direct_apps: "{{ direct_apps + [item] }}"
   loop: "{{ splunk_app_deployment.apps | default([]) }}"
+  # Content pack: only add when ITSI app would be direct for this host (ITSI has no shc_whitelist)
   when:
+    # ITSI: same roles as before; for standalone SH do not add when ITSI has shc_whitelist (deployer-only)
     - >-
-      (item.premium_app | default('')) == 'itsi' and (
+      ((item | default({})).get('premium_app', '') or '') == 'itsi' and (
         (current_host_roles | intersect(['license_manager']) | length > 0 and current_host_roles | intersect(['search_head']) | length == 0)
         or (
           current_host_roles | intersect(['search_head']) | length > 0
           and (group_names | select('match', '^shcluster_') | list | length == 0)
+          and ((item | default({})).get('shc_whitelist') or []) | length == 0
         )
         or (
           current_host_roles | intersect(['indexer']) | length > 0
@@ -55,13 +70,13 @@
         )
       )
       or (
-        item.target_roles is defined
-        and current_host_roles | intersect(item.target_roles) | length > 0
+        'target_roles' in (item | default({}))
+        and current_host_roles | intersect((item | default({})).get('target_roles', [])) | length > 0
         and (
-          (item.deployment_target | default('auto') == 'direct')
+          ((item | default({})).get('deployment_target', 'auto') == 'direct')
           or
           (
-            item.deployment_target | default('auto') != 'direct'
+            (item | default({})).get('deployment_target', 'auto') != 'direct'
             and (groups['role_deployment_server'] | default([]) | length == 0)
             and current_host_roles | intersect(['deployment_server', 'cluster_manager', 'deployer']) | length == 0
             and current_host_roles | intersect(['universal_forwarder', 'heavy_forwarder']) | length == 0
@@ -74,10 +89,11 @@
         )
       )
       or (
-        item.itsi_content_pack | default(false)
+        (item | default({})).get('itsi_content_pack', false)
         and itsi_direct_scope_this_host | default(false)
         and (current_host_roles | intersect(['search_head']) | length > 0)
-        and (splunk_app_deployment.apps | default([]) | selectattr('premium_app', 'defined') | selectattr('premium_app', 'equalto', 'itsi') | list | length > 0)
+        and (_itsi_apps_list | default([]) | length > 0)
+        and ((_itsi_apps_list | default([]) | first | default({})).get('shc_whitelist', []) | default([]) | length == 0)
       )
 
 - name: Debug direct deployment apps
@@ -96,6 +112,52 @@
       - "========================================="
     verbosity: 0
 
+# Ensure ITSI is installed before content packs; remove content packs before ITSI.
+# Build install/absent lists via loop so items without 'state' key use .get('state','installed').
+- name: "Build direct install list (state != absent)"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    _dir_inst: "{{ _dir_inst | default([]) + [item] }}"
+  loop: "{{ direct_apps }}"
+  when:
+    - direct_apps | length > 0
+    - (item | default({})).get('state', 'installed') != 'absent'
+  loop_control:
+    label: "{{ (item | default({})).get('name', '?') }}"
+
+- name: "Build direct absent list (state == absent)"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    _dir_abs: "{{ _dir_abs | default([]) + [item] }}"
+  loop: "{{ direct_apps }}"
+  when:
+    - direct_apps | length > 0
+    - (item | default({})).get('state', 'installed') == 'absent'
+  loop_control:
+    label: "{{ (item | default({})).get('name', '?') }}"
+
+- name: "Sort direct apps (install: ITSI then CP then rest; remove: CP then ITSI then rest)"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    direct_apps: "{{ (_dir_inst_itsi | default([]) | list) + (_dir_inst_cp | default([]) | list) + (_dir_inst_other | default([]) | list) + (_dir_abs_cp | default([]) | list) + (_dir_abs_itsi | default([]) | list) + (_dir_abs_other | default([]) | list) }}"
+  vars:
+    _dir_inst_itsi: "{{ _dir_inst | default([]) | selectattr('premium_app', 'equalto', 'itsi') | list }}"
+    _dir_inst_cp: "{{ _dir_inst | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | selectattr('itsi_content_pack', 'defined') | selectattr('itsi_content_pack') | list }}"
+    _dir_inst_other: "{{ _dir_inst | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('itsi_content_pack') | list }}"
+    _dir_abs_cp: "{{ _dir_abs | default([]) | selectattr('itsi_content_pack', 'defined') | selectattr('itsi_content_pack') | list }}"
+    _dir_abs_itsi: "{{ _dir_abs | default([]) | selectattr('premium_app', 'equalto', 'itsi') | list }}"
+    _dir_abs_other: "{{ _dir_abs | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('itsi_content_pack') | list }}"
+  when: direct_apps | length > 0
+
 - name: Process direct deployment apps
   tags:
     - splunk
@@ -106,8 +168,8 @@
       ansible.builtin.include_tasks: "process_direct_app.yml"
       loop: "{{ direct_apps }}"
       loop_control:
-        loop_var: app_item
-        label: "{{ app_item.name }}"
+        loop_var: _loop_app_item
+        label: "{{ _loop_app_item.name }}"
   when: direct_apps | length > 0
 
 - name: Direct deployment apps complete

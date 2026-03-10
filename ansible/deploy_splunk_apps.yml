@@ -84,7 +84,9 @@
         - splunk_app_deployment.apps is defined
 
 # Step 5: Run post-restart playbooks (after Restart splunk / other handlers from direct deployment)
-# Only runs on hosts that registered playbooks via customizations.run_playbook_after_restart
+# Default: runbooks run on the host that has the app (from Step 4 direct deployment); each host has its own list.
+# Deployer+SHC only: apps deployed via deployer have no etc/apps on ds; we accumulate playbooks on ds and load them
+# onto the first SHC member here so they run once there. Post-restart runbooks never run on the deployer.
 - name: Run post-restart playbooks (direct deployment)
   hosts: role_search_head,role_indexer,role_heavy_forwarder,role_license_manager,role_monitoring_console,role_universal_forwarder
   become: true
@@ -92,6 +94,19 @@
   gather_facts: yes
 
   tasks:
+    # Deployer+SHC only: load deployer-accumulated playbooks onto first SHC member (content pack / standard apps with run_playbook_after_restart).
+    - name: "Load post-restart playbooks for first SHC member (from deployer)"
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.set_fact:
+        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + (hostvars[_deployer_host]._pending_post_restart_first_shc | default([])) }}"
+      when:
+        - (groups['role_deployer'] | default([]) | length) > 0
+        - inventory_hostname == (hostvars[_deployer_host]._first_shc_member | default(''))
+      vars:
+        _deployer_host: "{{ groups['role_deployer'] | first }}"
+
     - name: "Run post-restart playbook for app"
       tags:
         - splunk
@@ -105,7 +120,9 @@
       loop_control:
         label: "{{ post_restart_item.app_name }} ({{ post_restart_item.playbook | basename }})"
         loop_var: post_restart_item
-      when: (post_restart_playbooks_to_run | default([])) | length > 0
+      when:
+        - (post_restart_playbooks_to_run | default([])) | length > 0
+        - inventory_hostname not in (groups['role_deployer'] | default([]))
 
 # Final summary
 - name: Deployment summary

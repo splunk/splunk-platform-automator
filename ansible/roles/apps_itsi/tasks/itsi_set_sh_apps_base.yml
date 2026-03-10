@@ -1,0 +1,21 @@
+---
+# Shared: set search head apps base path and API-host flags for ITSI (and content pack) deployment.
+# Same logic as ITSI main.yml deployer vs search head blocks: deployer → etc/shcluster/apps, else etc/apps.
+# Include from apps_itsi (or apps_itsi_content_pack) so destination and API host selection are consistent.
+# Sets: apps_itsi_sh_apps_base, apps_itsi_sh_notify, _first_shc_member, run_cp_api_on_this_host (content pack uses latter two).
+# _first_shc_member comes from apps_common (set_shc_first_member.yml). Override: itsi_content_pack_api_host or splunk_shc_post_restart_playbook_host.
+
+- name: "Set first SHC member (shared logic from apps_common)"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: set_shc_first_member.yml
+
+- name: "Set ITSI search head apps base and content pack API host (shared)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_sh_apps_base: "{{ 'etc/shcluster/apps' if (inventory_hostname in (groups['role_deployer'] | default([]))) else 'etc/apps' }}"
+    apps_itsi_sh_notify: "{{ 'Push shcluster bundle' if (inventory_hostname in (groups['role_deployer'] | default([]))) else 'Restart splunk' }}"
+    run_cp_api_on_this_host: "{{ (inventory_hostname not in (groups['role_deployer'] | default([]))) and (inventory_hostname in (groups['role_search_head'] | default([]))) and ((group_names | select('match', '^shcluster_') | list | length) == 0 or inventory_hostname == _first_shc_member) }}"

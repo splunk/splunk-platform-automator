@@ -3,6 +3,31 @@
 # Included from deploy_splunk_apps.yml Step 5 when content_pack_install is true.
 # Expects: app_name, customization_extra_vars (version, install_all, saved_search_action, backfill, resolution).
 # Only runs POST install when the content pack is not already installed (GET check).
+# When running on an SHC member, wait for SHC to be in good shape (service_ready_flag) before calling the API.
+
+- name: "Wait for SHC service_ready_flag before content pack API (post-restart on SHC member)"
+  when: group_names | select('match', '^shcluster_') | list | length > 0
+  block:
+    - name: "Poll SHC status until service_ready_flag (post-restart)"
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/services/shcluster/status?output_mode=json"
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        method: GET
+        force_basic_auth: true
+        validate_certs: false
+        status_code: [200]
+      register: cp_api_shc_status
+      until: (cp_api_shc_status.json | default({}) | json_query('entry[0].content.captain.service_ready_flag') | default(false)) | bool
+      retries: 30
+      delay: 10
+      ignore_errors: true
+
+    - name: "Fail if SHC not ready before content pack API (post-restart)"
+      ansible.builtin.fail:
+        msg: "Search Head Cluster did not become ready (service_ready_flag) before content pack API."
+      when: not ((cp_api_shc_status.json | default({}) | json_query('entry[0].content.captain.service_ready_flag') | default(false)) | bool)
+
 - name: "Check if content pack already installed"
   ansible.builtin.uri:
     url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/SA-ITOA/itoa_interface/content_pack/{{ app_name }}/{{ customization_extra_vars.version | default('1.0') }}"
