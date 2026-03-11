@@ -44,14 +44,18 @@ Cluster names in **shc_whitelist** / **shc_blacklist** must exist in **splunk_sh
 
 ## How filters are applied
 
-For each app, the playbooks compute a **base set** of hosts (from **target_roles** and deployment method for normal apps, or from the premium role for premium apps). Filters are then applied in this **fixed order** to produce the final target set:
+For each app, the playbooks compute a **base set** of hosts (from **target_roles** and deployment method for normal apps, or from the premium role for premium apps). Filters are then applied in a **fixed order** that depends on context:
 
-1. **shc_whitelist** – Keep only hosts in one of the listed SHCs.
-2. **shc_blacklist** – Remove hosts in any of the listed SHCs.
-3. **idxc_whitelist** – Keep only hosts in one of the listed indexer clusters.
-4. **idxc_blacklist** – Remove hosts in any of the listed indexer clusters.
-5. **hosts_whitelist** – Keep only hosts in this list.
-6. **hosts_blacklist** – Remove hosts in this list.
+**Search heads (Deployer and direct SH subset):** The same order is used for both deployer distribution and direct deployment to search heads. Implementation is shared in role `apps_common`, task file `apply_shc_host_filters.yml`:
+
+1. **hosts_whitelist** – Keep only hosts in this list.
+2. **shc_whitelist** – Keep only hosts in one of the listed SHCs.
+3. **shc_blacklist** – Remove hosts in any of the listed SHCs.
+4. **hosts_blacklist** – Remove hosts in this list.
+
+**Indexers (direct non–search-head subset only):** idxc_whitelist and idxc_blacklist are applied in that order; hosts_* and shc_* do not apply to indexers.
+
+**Deployment Server (serverclass):** When the serverclass whitelist is calculated (no **sc_whitelist** set), the effective order is as above for the relevant roles (SH vs indexer). **sc_blacklist** is written to the serverclass and applied by Splunk after the whitelist.
 
 That final set is used to decide which hosts get the app for Deployment Server (serverclass), Deployer (bundle), or direct deployment. **For serverclass only:** if **sc_whitelist** is set, it is used directly (no calculation); otherwise the serverclass whitelist is the calculated set above (applied only to deployment server clients). **sc_blacklist** is written as `blacklist.0`, `blacklist.1`, etc., and Splunk excludes those hosts from the whitelist.
 

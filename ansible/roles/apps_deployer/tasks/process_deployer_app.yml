@@ -8,10 +8,6 @@
     app_item: "{{ _loop_app_item }}"
 
 # Reset loop-accumulated vars so each app iteration starts clean (content pack must not inherit ITSI iteration state).
-- name: "Reset deployer filter accumulators for {{ app_item.name }}"
-  ansible.builtin.set_fact:
-    _dep_shc_w: []
-    _dep_shc_b: []
 
 # Content pack: assign ITSI filter vars so the same calculation code deploys to the same target as ITSI.
 # On deployer we only merge shc_whitelist/shc_blacklist so _app_dep_filtered is not emptied by ITSI's hosts_whitelist (which may target only standalone SHs).
@@ -36,42 +32,17 @@
   ansible.builtin.set_fact:
     _app_dep_base: "{{ (groups | select('match', '^shcluster_') | list | map('extract', groups) | flatten | unique) | list }}"
 
-# --- Apply hosts_whitelist so deployer only pushes when at least one SHC member is in the app's target set ---
-- name: "Initialize deployer filtered set for {{ app_item.name }}"
-  tags:
-    - splunk
-    - splunk_apps
-    - deployer
-  ansible.builtin.set_fact:
-    _app_dep_filtered: "{{ _app_dep_base }}"
+# --- Apply shared SHC/hosts filters (same logic as direct SH subset) ---
+# Use include_tasks so _filter_result is in the same scope (include_role does not expose set_fact to caller).
+- name: "Apply shared SHC/hosts filters for deployer {{ app_item.name }}"
+  ansible.builtin.include_tasks: ../../apps_common/tasks/apply_shc_host_filters.yml
+  vars:
+    _filter_base: "{{ _app_dep_base }}"
+    _filter_app_item: "{{ app_item }}"
 
-- name: "Apply deployer hosts_whitelist for {{ app_item.name }}"
+- name: "Set deployer filtered set from shared result for {{ app_item.name }}"
   ansible.builtin.set_fact:
-    _app_dep_filtered: "{{ (_app_dep_filtered | default(_app_dep_base)) | intersect((app_item | default({})).get('hosts_whitelist', []) | default([])) | list }}"
-  when: ((app_item | default({})).get('hosts_whitelist', []) | length) > 0
-
-# --- Apply SHC filters (shc_whitelist / shc_blacklist) ---
-- name: "Build deployer SHC whitelist union for {{ app_item.name }}"
-  ansible.builtin.set_fact:
-    _dep_shc_w: "{{ _dep_shc_w | default([]) + (groups['shcluster_' ~ item] | default([])) }}"
-  loop: "{{ (app_item | default({})).get('shc_whitelist', []) }}"
-  when: ((app_item | default({})).get('shc_whitelist', []) | length) > 0
-
-- name: "Apply deployer shc_whitelist for {{ app_item.name }}"
-  ansible.builtin.set_fact:
-    _app_dep_filtered: "{{ (_app_dep_filtered | default(_app_dep_base)) | intersect(_dep_shc_w | default([]) | unique) | list }}"
-  when: ((app_item | default({})).get('shc_whitelist', []) | length) > 0
-
-- name: "Build deployer SHC blacklist union for {{ app_item.name }}"
-  ansible.builtin.set_fact:
-    _dep_shc_b: "{{ _dep_shc_b | default([]) + (groups['shcluster_' ~ item] | default([])) }}"
-  loop: "{{ (app_item | default({})).get('shc_blacklist', []) }}"
-  when: ((app_item | default({})).get('shc_blacklist', []) | length) > 0
-
-- name: "Apply deployer shc_blacklist for {{ app_item.name }}"
-  ansible.builtin.set_fact:
-    _app_dep_filtered: "{{ (_app_dep_filtered | default(_app_dep_base)) | reject('in', _dep_shc_b | default([]) | unique) | list }}"
-  when: ((app_item | default({})).get('shc_blacklist', []) | length) > 0
+    _app_dep_filtered: "{{ _filter_result | default(_app_dep_base) }}"
 
 # --- SHCs this deployer serves (groups this host is in that match shcluster_*) ---
 - name: "Build SHC hosts this deployer serves for {{ app_item.name }}"
@@ -87,6 +58,19 @@
     - deployer
   ansible.builtin.set_fact:
     _app_on_deployer_scope: "{{ ((_app_dep_filtered | default(_app_dep_base)) | intersect(_deployer_serves | default([])) | length) > 0 }}"
+
+# ITSI with hosts_whitelist targeting only non-SHC hosts: do not run on deployer (no SHC members to push to).
+- name: "Force deployer scope false for ITSI when hosts_whitelist has no SHC members"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+  ansible.builtin.set_fact:
+    _app_on_deployer_scope: false
+  when:
+    - (app_item | default({})).get('premium_app', '') == 'itsi'
+    - ((app_item | default({})).get('hosts_whitelist', []) | default([]) | length) > 0
+    - ((app_item | default({})).get('hosts_whitelist', []) | default([]) | intersect(_deployer_shc_member_hosts | default([])) | length) == 0
 
 # Content pack on deployer: always in scope when this deployer serves any SHC (same targets as ITSI).
 - name: "Set deployer scope true for ITSI content pack when deployer serves SHC"
@@ -130,6 +114,7 @@
     - _app_on_deployer_scope | default(false)
     - app_state == 'installed'
     - (app_item | default({})).get('premium_app', '') == 'itsi'
+    - (_app_dep_filtered | default([]) | length) > 0
 
 - name: "Install {{ app_item.name }} (ITSI content pack)"
   ansible.builtin.include_role:
@@ -202,6 +187,26 @@
     - (_first_shc_member | default('')) | length > 0
   vars:
     _dep_shc_apps_base: "{{ (hostvars[_first_shc_member].splunk_home | default((hostvars[_first_shc_member].splunk_install_dir | default('/opt')) ~ '/' ~ (hostvars[_first_shc_member].splunk_install_app | default('splunk')))) ~ '/etc/apps' }}"
+
+# Also accumulate on deployer so Step 5 can load onto first SHC member (delegate_to set_fact can be overwritten by Step 4 on that host).
+- name: "Accumulate post-restart playbooks for first SHC member (standard app, deployer)"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+  ansible.builtin.set_fact:
+    _pending_post_restart_first_shc: "{{ (_pending_post_restart_first_shc | default([])) + [{'playbook': app_item.customizations.run_playbook_after_restart, 'app_path': _dep_shc_apps_base_std + '/' + app_item.name, 'app_name': app_item.name, 'extra_vars': (app_item.customizations.extra_vars | default({}))}] }}"
+  when:
+    - _app_on_deployer_scope | default(false)
+    - app_state == 'installed'
+    - (app_item | default({})).get('premium_app', '') != 'itsi'
+    - not (app_item | default({})).get('itsi_content_pack', false)
+    - app_item.customizations is defined
+    - app_item.customizations.run_playbook_after_restart is defined
+    - app_item.customizations.run_playbook_after_restart | length > 0
+    - (_first_shc_member | default('')) | length > 0
+  vars:
+    _dep_shc_apps_base_std: "{{ (hostvars[_first_shc_member].splunk_home | default((hostvars[_first_shc_member].splunk_install_dir | default('/opt')) ~ '/' ~ (hostvars[_first_shc_member].splunk_install_app | default('splunk')))) ~ '/etc/apps' }}"
 
 - name: "Remove {{ app_item.name }} (ITSI content pack, deployer)"
   ansible.builtin.include_role:

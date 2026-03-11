@@ -326,6 +326,34 @@ class SplunkAppDeploymentConfig(BaseModel):
                         raise ValueError(
                             f"splunk_app_deployment.apps[{i}] (name={name!r}): 'sc_whitelist[{j}]' must be a string"
                         )
+            # Normal apps only: cluster/filter keys require matching target_roles.
+            if not is_premium and not is_itsi_content_pack and isinstance(target_roles, list) and len(target_roles) > 0:
+                _tr_norm = [str(r).strip().lower() for r in target_roles if r]
+                has_shc = (
+                    (app.get("shc_whitelist") and len(app.get("shc_whitelist")) > 0)
+                    or (app.get("shc_blacklist") and len(app.get("shc_blacklist")) > 0)
+                )
+                if has_shc and "search_head" not in _tr_norm:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): shc_whitelist/shc_blacklist require target_roles to include 'search_head'"
+                    )
+                has_idxc = (
+                    (app.get("idxc_whitelist") and len(app.get("idxc_whitelist")) > 0)
+                    or (app.get("idxc_blacklist") and len(app.get("idxc_blacklist")) > 0)
+                )
+                if has_idxc and "indexer" not in _tr_norm:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): idxc_whitelist/idxc_blacklist require target_roles to include 'indexer'"
+                    )
+                _ds_connected_roles = ("universal_forwarder", "heavy_forwarder", "universal_forwarder_windows", "indexer")
+                has_sc = (
+                    (app.get("sc_whitelist") and len(app.get("sc_whitelist")) > 0)
+                    or (app.get("sc_blacklist") and len(app.get("sc_blacklist")) > 0)
+                )
+                if has_sc and not any(r in _tr_norm for r in _ds_connected_roles):
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): sc_whitelist/sc_blacklist require target_roles to include at least one role connected to the deployment server (e.g. universal_forwarder, heavy_forwarder, indexer)"
+                    )
             state = app.get("state")
             if state is not None:
                 state_str = state.strip().lower() if isinstance(state, str) else state
@@ -448,10 +476,25 @@ class SplunkAppDeploymentConfig(BaseModel):
                     raise ValueError(
                         f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.run_playbook_after_restart must be a non-empty string (path from project root)"
                     )
-                if run_playbook_after_restart is not None and run_playbook_after_restart.strip() and deployment_target != "direct":
-                    raise ValueError(
-                        f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.run_playbook_after_restart requires deployment_target to be 'direct' (got {deployment_target!r})"
+                # run_playbook_after_restart: allowed only for direct or deployer→SHC (runs on target or first SH).
+                # Disallow for apps deployed from cluster manager (idxc) or deployment server (DS); for those
+                # only run_playbook is allowed and must run on cm or deployment_server.
+                if run_playbook_after_restart is not None and run_playbook_after_restart.strip():
+                    no_search_head = "search_head" not in (target_roles or [])
+                    uses_ds = bool(
+                        (app.get("sc_whitelist") and len(app.get("sc_whitelist")) > 0)
+                        or (app.get("sc_blacklist") and len(app.get("sc_blacklist")) > 0)
                     )
+                    if deployment_target != "direct" and no_search_head:
+                        raise ValueError(
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.run_playbook_after_restart is not allowed for apps deployed from a cluster manager; "
+                            "use deployment_target 'direct' or include search_head in target_roles (deployer→SHC runs on first SH in cluster)"
+                        )
+                    if uses_ds:
+                        raise ValueError(
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.run_playbook_after_restart is not allowed for apps deployed from a deployment server; "
+                            "for idxc/DS apps use run_playbook only (runs on cluster manager or deployment_server)"
+                        )
                 extra_vars = customizations.get("extra_vars")
                 if extra_vars is not None and not isinstance(extra_vars, dict):
                     raise ValueError(
@@ -1162,6 +1205,117 @@ class SplunkConfig(BaseModel):
                             f"splunk_app_deployment.apps[{i}] (name={name!r}): '{key}' must contain names from splunk_idxclusters. "
                             f"Unknown IDXC {v!r}. Defined: {sorted(idxc_names)!r}"
                         )
+        return self
+
+    @model_validator(mode='after')
+    def validate_cluster_and_ds_filters_have_matching_hosts(self) -> 'SplunkConfig':
+        """When using shc_*/idxc_* filters, targeted clusters must have hosts with the relevant role.
+        When using sc_* filters, there must be a deployment server host."""
+        dep = self.splunk_app_deployment
+        if not dep or not dep.apps:
+            return self
+
+        # SHC names that have at least one search_head member
+        shc_clusters_with_search_head: set = set()
+        for host in self.splunk_hosts:
+            if AllowedRole.search_head not in host.roles:
+                continue
+            sc = getattr(host, "shcluster", None)
+            if sc and isinstance(sc, str) and sc.strip():
+                shc_clusters_with_search_head.add(sc.strip())
+
+        # IDXC names that have at least one indexer member
+        idxc_clusters_with_indexer: set = set()
+        for host in self.splunk_hosts:
+            if AllowedRole.indexer not in host.roles:
+                continue
+            ic = getattr(host, "idxcluster", None)
+            if ic and isinstance(ic, str) and ic.strip():
+                idxc_clusters_with_indexer.add(ic.strip())
+
+        has_deployment_server = any(
+            AllowedRole.deployment_server in host.roles for host in self.splunk_hosts
+        )
+
+        shc_names: set = set()
+        if self.splunk_shclusters:
+            for shc in self.splunk_shclusters:
+                shc_names.add(shc.shc_name)
+        idxc_names: set = set()
+        if self.splunk_idxclusters:
+            for idxc in self.splunk_idxclusters:
+                idxc_names.add(idxc.idxc_name)
+
+        for i, app in enumerate(dep.apps):
+            name = app.get("name", "?")
+            if app.get("premium_app") and isinstance(app.get("premium_app"), str) and (app.get("premium_app") or "").strip():
+                continue
+            if app.get("itsi_content_pack") is True:
+                continue
+
+            target_roles_list = app.get("target_roles") or []
+            if not isinstance(target_roles_list, list):
+                continue
+            _tr_norm = [str(r).strip().lower() for r in target_roles_list if r]
+
+            # shc_*: targeted clusters must include at least one cluster that has a search_head
+            shc_w = [v.strip() for v in (app.get("shc_whitelist") or []) if isinstance(v, str) and v.strip()]
+            shc_b = [v.strip() for v in (app.get("shc_blacklist") or []) if isinstance(v, str) and v.strip()]
+            if shc_w or shc_b:
+                if "search_head" not in _tr_norm:
+                    continue  # already validated in validate_apps_structure
+                if not shc_names:
+                    continue  # already validated in validate_target_filter_shc_idxc_names
+                effectively_targeted = set(shc_w) if shc_w else (shc_names - set(shc_b))
+                if not effectively_targeted:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): shc_blacklist excludes all defined SHCs; "
+                        "no search head cluster is targeted. Adjust shc_whitelist or shc_blacklist."
+                    )
+                overlap = effectively_targeted & shc_clusters_with_search_head
+                if not overlap:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): shc_whitelist/shc_blacklist target SHC(s) {sorted(effectively_targeted)!r}, "
+                        f"but no host with role search_head is in those clusters. "
+                        f"Search head cluster members (hosts with search_head and shcluster set): {sorted(shc_clusters_with_search_head)!r}. "
+                        "Ensure targeted clusters have at least one search head member in splunk_hosts."
+                    )
+
+            # idxc_*: targeted clusters must include at least one cluster that has an indexer
+            idxc_w = [v.strip() for v in (app.get("idxc_whitelist") or []) if isinstance(v, str) and v.strip()]
+            idxc_b = [v.strip() for v in (app.get("idxc_blacklist") or []) if isinstance(v, str) and v.strip()]
+            if idxc_w or idxc_b:
+                if "indexer" not in _tr_norm:
+                    continue
+                if not idxc_names:
+                    continue
+                effectively_targeted = set(idxc_w) if idxc_w else (idxc_names - set(idxc_b))
+                if not effectively_targeted:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): idxc_blacklist excludes all defined IDXCs; "
+                        "no indexer cluster is targeted. Adjust idxc_whitelist or idxc_blacklist."
+                    )
+                overlap = effectively_targeted & idxc_clusters_with_indexer
+                if not overlap:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): idxc_whitelist/idxc_blacklist target IDXC(s) {sorted(effectively_targeted)!r}, "
+                        f"but no host with role indexer is in those clusters. "
+                        f"Indexer cluster members (hosts with indexer and idxcluster set): {sorted(idxc_clusters_with_indexer)!r}. "
+                        "Ensure targeted clusters have at least one indexer member in splunk_hosts."
+                    )
+
+            # sc_*: deployment server must exist
+            sc_w = app.get("sc_whitelist") and len(app.get("sc_whitelist")) > 0
+            sc_b = app.get("sc_blacklist") and len(app.get("sc_blacklist")) > 0
+            if sc_w or sc_b:
+                _ds_roles = ("universal_forwarder", "heavy_forwarder", "universal_forwarder_windows", "indexer")
+                if not any(r in _tr_norm for r in _ds_roles):
+                    continue
+                if not has_deployment_server:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): sc_whitelist/sc_blacklist require at least one host with role deployment_server "
+                        "so that apps can be deployed to forwarders/indexers. Add a host with role deployment_server in splunk_hosts."
+                    )
         return self
 
     @model_validator(mode='after')

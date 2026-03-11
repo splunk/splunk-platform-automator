@@ -21,13 +21,17 @@
     _cp_itsi_filters: "{{ {'hosts_whitelist': (_itsi_cfg | default({})).get('hosts_whitelist', []), 'shc_whitelist': (_itsi_cfg | default({})).get('shc_whitelist', []), 'hosts_blacklist': (_itsi_cfg | default({})).get('hosts_blacklist', []), 'shc_blacklist': (_itsi_cfg | default({})).get('shc_blacklist', []), 'idxc_whitelist': (_itsi_cfg | default({})).get('idxc_whitelist', []), 'idxc_blacklist': (_itsi_cfg | default({})).get('idxc_blacklist', [])} }}"
 
 # --- Direct base set: hosts that get this app via direct (before filters) ---
+# When deployment_target is direct, only standalone hosts (not SHC/IDXC members) are in scope; SHC members get apps via deployer.
 - name: "Compute direct base (normal, deployment_target direct) for {{ app_item.name }}"
   tags:
     - splunk
     - splunk_apps
     - direct_deployment
   ansible.builtin.set_fact:
-    _app_dir_base: "{{ ((app_item | default({})).get('target_roles', []) | map('regex_replace', '^(.*)$', 'role_\\1') | map('extract', groups) | flatten | unique) | list }}"
+    _app_dir_base: "{{ ((app_item | default({})).get('target_roles', []) | map('regex_replace', '^(.*)$', 'role_\\1') | map('extract', groups) | flatten | reject('in', _dir_idxc_all) | reject('in', _dir_shc_all) | unique) | list }}"
+  vars:
+    _dir_idxc_all: "{{ (groups | dict2items | selectattr('key', 'match', '^idxcluster_') | map(attribute='value') | flatten) | list }}"
+    _dir_shc_all: "{{ (groups | dict2items | selectattr('key', 'match', '^shcluster_') | map(attribute='value') | flatten) | list }}"
   when:
     - ((app_item | default({})).get('premium_app', '') | length) == 0
     - (app_item | default({})).get('target_roles') is defined
@@ -39,17 +43,10 @@
     - splunk_apps
     - direct_deployment
   ansible.builtin.set_fact:
-    _app_dir_base: >-
-      {{
-        ((app_item | default({})).get('target_roles', [])
-        | map('regex_replace', '^(.*)$', 'role_\1')
-        | map('extract', groups)
-        | flatten
-        | reject('in', (groups | select('match', '^idxcluster_') | list | map('extract', groups) | flatten | list))
-        | reject('in', (groups | select('match', '^shcluster_') | list | map('extract', groups) | flatten | list))
-        | unique
-        | list
-      }}
+    _app_dir_base: "{{ ((app_item | default({})).get('target_roles', []) | map('regex_replace', '^(.*)$', 'role_\\1') | map('extract', groups) | flatten | reject('in', _dir_idxc_all) | reject('in', _dir_shc_all) | unique) | list }}"
+  vars:
+    _dir_idxc_all: "{{ (groups | dict2items | selectattr('key', 'match', '^idxcluster_') | map(attribute='value') | flatten) | list }}"
+    _dir_shc_all: "{{ (groups | dict2items | selectattr('key', 'match', '^shcluster_') | map(attribute='value') | flatten) | list }}"
   when:
     - ((app_item | default({})).get('premium_app', '') | length) == 0
     - (app_item | default({})).get('target_roles') is defined
@@ -101,45 +98,17 @@
     # Exclude all search heads (standalone + SHC) so SHC members are never in non-SH bucket and get direct deployment
     _app_dir_direct_non_sh: "{{ (_app_dir_base | default([])) | reject('in', (groups['role_search_head'] | default([]))) | list }}"
 
-- name: "Restrict direct filtered set to search heads only for {{ app_item.name }} (before hosts/shc filters)"
-  ansible.builtin.set_fact:
-    _app_dir_filtered: "{{ _app_dir_direct_sh | default([]) }}"
-
-- name: "Build direct SHC whitelist union for {{ app_item.name }}"
-  ansible.builtin.set_fact:
-    _dir_shc_w: "{{ _dir_shc_w | default([]) + (groups['shcluster_' ~ item] | default([])) }}"
-  loop: "{{ (app_item | default({})).get('shc_whitelist', []) }}"
-  when: ((app_item | default({})).get('shc_whitelist', []) | length) > 0
-
-- name: "Apply direct shc_whitelist for {{ app_item.name }}"
-  ansible.builtin.set_fact:
-    _app_dir_filtered: "{{ (_app_dir_filtered | default(_app_dir_base)) | intersect(_dir_shc_w | default([]) | unique) | list }}"
-  when: ((app_item | default({})).get('shc_whitelist', []) | length) > 0
-
-- name: "Build direct SHC blacklist union for {{ app_item.name }}"
-  ansible.builtin.set_fact:
-    _dir_shc_b: "{{ _dir_shc_b | default([]) + (groups['shcluster_' ~ item] | default([])) }}"
-  loop: "{{ (app_item | default({})).get('shc_blacklist', []) }}"
-  when: ((app_item | default({})).get('shc_blacklist', []) | length) > 0
-
-- name: "Apply direct shc_blacklist for {{ app_item.name }}"
-  ansible.builtin.set_fact:
-    _app_dir_filtered: "{{ (_app_dir_filtered | default(_app_dir_base)) | reject('in', _dir_shc_b | default([]) | unique) | list }}"
-  when: ((app_item | default({})).get('shc_blacklist', []) | length) > 0
-
-- name: "Apply direct hosts_whitelist for {{ app_item.name }}"
-  ansible.builtin.set_fact:
-    _app_dir_filtered: "{{ (_app_dir_filtered | default(_app_dir_base)) | intersect((app_item | default({})).get('hosts_whitelist', []) | default([])) | list }}"
-  when: ((app_item | default({})).get('hosts_whitelist', []) | length) > 0
-
-- name: "Apply direct hosts_blacklist for {{ app_item.name }}"
-  ansible.builtin.set_fact:
-    _app_dir_filtered: "{{ (_app_dir_filtered | default(_app_dir_base)) | reject('in', (app_item | default({})).get('hosts_blacklist', []) | default([])) | list }}"
-  when: ((app_item | default({})).get('hosts_blacklist', []) | length) > 0
+# --- Apply shared hosts/shc filters to search-head subset (same logic as deployer) ---
+# Use include_tasks so _filter_result is in the same scope (include_role does not expose set_fact to caller).
+- name: "Apply shared SHC/hosts filters for direct SH subset {{ app_item.name }}"
+  ansible.builtin.include_tasks: ../../apps_common/tasks/apply_shc_host_filters.yml
+  vars:
+    _filter_base: "{{ _app_dir_direct_sh | default([]) }}"
+    _filter_app_item: "{{ app_item }}"
 
 - name: "Save direct search-head filtered set for {{ app_item.name }}"
   ansible.builtin.set_fact:
-    _app_dir_sh_filtered: "{{ _app_dir_filtered | default([]) }}"
+    _app_dir_sh_filtered: "{{ _filter_result | default(_app_dir_direct_sh) | default([]) }}"
 
 - name: "Set direct filtered set to non–search-head subset for {{ app_item.name }} (before idxc filters)"
   ansible.builtin.set_fact:

@@ -87,6 +87,10 @@
             )
           )
         )
+        and (
+          (current_host_roles | intersect(['search_head']) | length == 0)
+          or (group_names | select('match', '^shcluster_') | list | length == 0)
+        )
       )
       or (
         (item | default({})).get('itsi_content_pack', false)
@@ -142,21 +146,26 @@
   loop_control:
     label: "{{ (item | default({})).get('name', '?') }}"
 
+# Keep "other" items by rejecting itsi_content_pack == true (not rejectattr('itsi_content_pack'))
+# so apps without the key (e.g. Splunk_TA_nix) are kept and the sorted list is non-empty.
 - name: "Sort direct apps (install: ITSI then CP then rest; remove: CP then ITSI then rest)"
   tags:
     - splunk
     - splunk_apps
     - direct_deployment
   ansible.builtin.set_fact:
-    direct_apps: "{{ (_dir_inst_itsi | default([]) | list) + (_dir_inst_cp | default([]) | list) + (_dir_inst_other | default([]) | list) + (_dir_abs_cp | default([]) | list) + (_dir_abs_itsi | default([]) | list) + (_dir_abs_other | default([]) | list) }}"
+    direct_apps: "{{ _dir_sorted }}"
   vars:
     _dir_inst_itsi: "{{ _dir_inst | default([]) | selectattr('premium_app', 'equalto', 'itsi') | list }}"
     _dir_inst_cp: "{{ _dir_inst | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | selectattr('itsi_content_pack', 'defined') | selectattr('itsi_content_pack') | list }}"
-    _dir_inst_other: "{{ _dir_inst | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('itsi_content_pack') | list }}"
+    _dir_inst_other: "{{ _dir_inst | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('itsi_content_pack', 'equalto', true) | list }}"
     _dir_abs_cp: "{{ _dir_abs | default([]) | selectattr('itsi_content_pack', 'defined') | selectattr('itsi_content_pack') | list }}"
     _dir_abs_itsi: "{{ _dir_abs | default([]) | selectattr('premium_app', 'equalto', 'itsi') | list }}"
-    _dir_abs_other: "{{ _dir_abs | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('itsi_content_pack') | list }}"
-  when: direct_apps | length > 0
+    _dir_abs_other: "{{ _dir_abs | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('itsi_content_pack', 'equalto', true) | list }}"
+    _dir_sorted: "{{ (_dir_inst_itsi | default([]) | list) + (_dir_inst_cp | default([]) | list) + (_dir_inst_other | default([]) | list) + (_dir_abs_cp | default([]) | list) + (_dir_abs_itsi | default([]) | list) + (_dir_abs_other | default([]) | list) }}"
+  when:
+    - direct_apps | length > 0
+    - _dir_sorted | length > 0
 
 - name: Process direct deployment apps
   tags:

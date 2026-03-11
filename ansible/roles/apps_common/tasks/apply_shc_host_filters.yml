@@ -1,0 +1,46 @@
+---
+# Shared SHC/hosts filter logic for normal apps (and ITSI/content pack after they inherit filter vars).
+# Caller must pass _filter_base (list of host names to filter) and _filter_app_item (app config dict with
+# hosts_whitelist, hosts_blacklist, shc_whitelist, shc_blacklist). Result is in _filter_result.
+# Filter order: hosts_whitelist (intersect) → shc_whitelist (intersect) → shc_blacklist (reject) → hosts_blacklist (reject).
+
+- name: "Reset shared filter accumulators for {{ (_filter_app_item | default({})).get('name', '?') }}"
+  ansible.builtin.set_fact:
+    _filter_shc_w: []
+    _filter_shc_b: []
+
+- name: "Initialize shared filter result for {{ (_filter_app_item | default({})).get('name', '?') }}"
+  ansible.builtin.set_fact:
+    _filter_result: "{{ _filter_base | default([]) }}"
+
+- name: "Apply shared hosts_whitelist for {{ (_filter_app_item | default({})).get('name', '?') }}"
+  ansible.builtin.set_fact:
+    _filter_result: "{{ (_filter_result | default(_filter_base)) | intersect((_filter_app_item | default({})).get('hosts_whitelist', []) | default([])) | list }}"
+  when: ((_filter_app_item | default({})).get('hosts_whitelist', []) | length) > 0
+
+- name: "Build shared SHC whitelist union for {{ (_filter_app_item | default({})).get('name', '?') }}"
+  ansible.builtin.set_fact:
+    _filter_shc_w: "{{ _filter_shc_w | default([]) + (groups['shcluster_' ~ item] | default([])) }}"
+  loop: "{{ (_filter_app_item | default({})).get('shc_whitelist', []) }}"
+  when: ((_filter_app_item | default({})).get('shc_whitelist', []) | length) > 0
+
+- name: "Apply shared shc_whitelist for {{ (_filter_app_item | default({})).get('name', '?') }}"
+  ansible.builtin.set_fact:
+    _filter_result: "{{ (_filter_result | default(_filter_base)) | intersect(_filter_shc_w | default([]) | unique) | list }}"
+  when: ((_filter_app_item | default({})).get('shc_whitelist', []) | length) > 0
+
+- name: "Build shared SHC blacklist union for {{ (_filter_app_item | default({})).get('name', '?') }}"
+  ansible.builtin.set_fact:
+    _filter_shc_b: "{{ _filter_shc_b | default([]) + (groups['shcluster_' ~ item] | default([])) }}"
+  loop: "{{ (_filter_app_item | default({})).get('shc_blacklist', []) }}"
+  when: ((_filter_app_item | default({})).get('shc_blacklist', []) | length) > 0
+
+- name: "Apply shared shc_blacklist for {{ (_filter_app_item | default({})).get('name', '?') }}"
+  ansible.builtin.set_fact:
+    _filter_result: "{{ (_filter_result | default(_filter_base)) | reject('in', _filter_shc_b | default([]) | unique) | list }}"
+  when: ((_filter_app_item | default({})).get('shc_blacklist', []) | length) > 0
+
+- name: "Apply shared hosts_blacklist for {{ (_filter_app_item | default({})).get('name', '?') }}"
+  ansible.builtin.set_fact:
+    _filter_result: "{{ (_filter_result | default(_filter_base)) | reject('in', (_filter_app_item | default({})).get('hosts_blacklist', []) | default([])) | list }}"
+  when: ((_filter_app_item | default({})).get('hosts_blacklist', []) | length) > 0
