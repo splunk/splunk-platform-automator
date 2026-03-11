@@ -389,19 +389,18 @@
         - apps_itsi_sh_apps_base == 'etc/shcluster/apps'
         - _first_shc_member | length > 0
 
-    - name: "Register post-restart API install on first SHC member (deployer path)"
+    # Deployer path: accumulate cp_api_install on deployer so Step 5 loads onto first SHC member (delegate_to set_fact does not persist to Step 5).
+    - name: "Accumulate post-restart API install for first SHC member (deployer path)"
       tags:
         - splunk
         - splunk_apps
         - itsi_content_pack
       ansible.builtin.set_fact:
-        post_restart_playbooks_to_run: "{{ (hostvars[_first_shc_member].post_restart_playbooks_to_run | default([])) + [{'playbook': 'ansible/roles/apps_itsi_content_pack/tasks/cp_api_install.yml', 'app_path': _shc_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': {'version': (cp_expected_versions | default({})).get(item.name, (cp_version_map | default({})).get(item.name, '') | trim) | default('1.0'), 'install_all': (item.content_pack_api | default({})).install_all | default(cp_api_install_all), 'saved_search_action': (item.content_pack_api | default({})).saved_search_action | default(cp_api_saved_search_action), 'backfill': (item.content_pack_api | default({})).backfill | default(cp_api_backfill), 'resolution': (item.content_pack_api | default({})).resolution | default(cp_api_resolution)}}] }}"
+        _pending_post_restart_first_shc: "{{ (_pending_post_restart_first_shc | default([])) + [{'playbook': 'ansible/roles/apps_itsi_content_pack/tasks/cp_api_install.yml', 'app_path': _shc_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': {'version': (cp_expected_versions | default({})).get(item.name, (cp_version_map | default({})).get(item.name, '') | trim) | default('1.0'), 'install_all': (item.content_pack_api | default({})).install_all | default(cp_api_install_all), 'saved_search_action': (item.content_pack_api | default({})).saved_search_action | default(cp_api_saved_search_action), 'backfill': (item.content_pack_api | default({})).backfill | default(cp_api_backfill), 'resolution': (item.content_pack_api | default({})).resolution | default(cp_api_resolution)}}] }}"
       loop: "{{ cp_content_pack_apps_to_install | default([]) }}"
-      delegate_to: "{{ _first_shc_member }}"
       when:
         - apps_itsi_sh_apps_base == 'etc/shcluster/apps'
         - (_first_shc_member | default('')) | length > 0
-        - _first_shc_member not in (groups['role_deployer'] | default([]))
         - _shc_apps_base is defined
         - (cp_content_pack_apps_to_install | default([]) | length) > 0
 
