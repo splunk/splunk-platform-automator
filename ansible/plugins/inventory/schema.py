@@ -476,24 +476,14 @@ class SplunkAppDeploymentConfig(BaseModel):
                     raise ValueError(
                         f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.run_playbook_after_restart must be a non-empty string (path from project root)"
                     )
-                # run_playbook_after_restart: allowed only for direct or deployer→SHC (runs on target or first SH).
-                # Disallow for apps deployed from cluster manager (idxc) or deployment server (DS); for those
-                # only run_playbook is allowed and must run on cm or deployment_server.
+                # run_playbook_after_restart: allowed for direct or deployer→SHC (runs on target or first SH).
+                # Disallow only for apps deployed from cluster manager (idxc, no search_head).
                 if run_playbook_after_restart is not None and run_playbook_after_restart.strip():
                     no_search_head = "search_head" not in (target_roles or [])
-                    uses_ds = bool(
-                        (app.get("sc_whitelist") and len(app.get("sc_whitelist")) > 0)
-                        or (app.get("sc_blacklist") and len(app.get("sc_blacklist")) > 0)
-                    )
                     if deployment_target != "direct" and no_search_head:
                         raise ValueError(
                             f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.run_playbook_after_restart is not allowed for apps deployed from a cluster manager; "
                             "use deployment_target 'direct' or include search_head in target_roles (deployer→SHC runs on first SH in cluster)"
-                        )
-                    if uses_ds:
-                        raise ValueError(
-                            f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.run_playbook_after_restart is not allowed for apps deployed from a deployment server; "
-                            "for idxc/DS apps use run_playbook only (runs on cluster manager or deployment_server)"
                         )
                 extra_vars = customizations.get("extra_vars")
                 if extra_vars is not None and not isinstance(extra_vars, dict):
@@ -1237,6 +1227,19 @@ class SplunkConfig(BaseModel):
             AllowedRole.deployment_server in host.roles for host in self.splunk_hosts
         )
 
+        # DS client roles that have at least one host (deployment clients of the deployment server)
+        _ds_role_enums = (
+            AllowedRole.universal_forwarder,
+            AllowedRole.heavy_forwarder,
+            AllowedRole.universal_forwarder_windows,
+            AllowedRole.indexer,
+        )
+        ds_client_roles_with_hosts: set = set()
+        for host in self.splunk_hosts:
+            for r in host.roles:
+                if r in _ds_role_enums:
+                    ds_client_roles_with_hosts.add(r.value)
+
         shc_names: set = set()
         if self.splunk_shclusters:
             for shc in self.splunk_shclusters:
@@ -1304,17 +1307,26 @@ class SplunkConfig(BaseModel):
                         "Ensure targeted clusters have at least one indexer member in splunk_hosts."
                     )
 
-            # sc_*: deployment server must exist
+            # sc_*: deployment server must exist and at least one host with a target role must be a deployment client
             sc_w = app.get("sc_whitelist") and len(app.get("sc_whitelist")) > 0
             sc_b = app.get("sc_blacklist") and len(app.get("sc_blacklist")) > 0
             if sc_w or sc_b:
                 _ds_roles = ("universal_forwarder", "heavy_forwarder", "universal_forwarder_windows", "indexer")
-                if not any(r in _tr_norm for r in _ds_roles):
+                app_ds_roles = set(_tr_norm) & set(_ds_roles)
+                if not app_ds_roles:
                     continue
                 if not has_deployment_server:
                     raise ValueError(
                         f"splunk_app_deployment.apps[{i}] (name={name!r}): sc_whitelist/sc_blacklist require at least one host with role deployment_server "
                         "so that apps can be deployed to forwarders/indexers. Add a host with role deployment_server in splunk_hosts."
+                    )
+                # At least one of the app's target roles (DS roles) must have a host that is a deployment client
+                overlap = app_ds_roles & ds_client_roles_with_hosts
+                if not overlap:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): sc_whitelist/sc_blacklist require at least one host with one of target_roles {sorted(app_ds_roles)!r} "
+                        f"to be a deployment client of the deployment server. Hosts with those roles in splunk_hosts: {sorted(ds_client_roles_with_hosts)!r}. "
+                        "Add a host with one of the app's target_roles (e.g. universal_forwarder, heavy_forwarder, indexer)."
                     )
         return self
 
