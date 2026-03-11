@@ -9,41 +9,49 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- **App Deployment** – New automated deployment of Splunk apps from Splunkbase or local filesystem, with per-host routing:
-  - **Config**: `splunk_app_deployment` in `splunk_config.yml` (credentials, `apps` list with `name`, `source` (splunkbase/local), `app_id` or `path`, `version`, `target_roles`, optional `state`, `deployment_target`, `serverclass`, etc.).
-  - **Playbooks**: `ansible/deploy_splunk_apps.yml` (deploy/update apps), `ansible/remove_splunk_apps.yml` (remove apps with `state: absent`).
-  - **Routing**: Apps are deployed to the correct location per host—Deployment Server (`etc/deployment-apps`), Cluster Manager (`etc/manager-apps`), Search Head Cluster Deployer (`etc/shcluster/apps`), or directly to the host (`etc/apps`). Routing respects cluster membership and optional `deployment_target: direct`.
-  - **Roles**: `apps_deployment_server`, `apps_cluster_manager`, `apps_deployer`, `apps_direct` (shared logic in `apps_common`). Handlers: Restart Splunk, Reload deploy-server, Push shcluster bundle, Apply indexer cluster bundle.
-  - **Sources**: Splunkbase (with env-based credentials) or local path; idempotent install/update with optional backup.
-  - **Download options**: `target_download` (default false)—when true, each target downloads Splunkbase apps itself (avoids slow upload from Ansible host for large apps); `cache_downloads` (default true)—when false, remove downloaded `.tgz` after extraction.
-  - **Verification**: `ansible/verification/verify_app_deployment.yml` and role-specific verification tasks to confirm deployed apps match config.
-  - **Docs**: [App_Deployment.md](docs/App_Deployment.md), [App_Deployment_Guide.md](docs/App_Deployment_Guide.md), [App_Deployment_Quick_Start.md](docs/App_Deployment_Quick_Start.md), [App_Deployment_FAQ.md](docs/App_Deployment_FAQ.md), [App_Deployment_Target_Logic.md](docs/App_Deployment_Target_Logic.md), [App_Deployment_Verification.md](docs/App_Deployment_Verification.md), [App_Deployment_Removing_Apps.md](docs/App_Deployment_Removing_Apps.md).
-- **App deployment customizations** – Per-app, per-role options to modify deployed apps after install:
-  - **`remove`**: Delete files or directories from the app (paths relative to app root).
-  - **`local_configs`**: Create or update Splunk `.conf` files in the app’s `local/` folder (same structure as `splunk_conf` in `splunk_config.yml`).
-  - **`run_playbook`** / **`run_role`**: Run a custom Ansible task file or role for that app (path from project root; `app_path`, `app_name`, and optional `extra_vars` provided by the framework).
-  - **`run_playbook_after_restart`**: Register a task file to run **after** the deployment handler (e.g. Restart splunk) has run on the host. Use when the playbook must run once Splunk is back up (e.g. wait for port, then call REST or configure lookups). Supported for **direct deployment** only; requires `deployment_target: direct` (enforced by schema). The playbook runs in a follow-up play in `deploy_splunk_apps.yml` with `app_path`, `app_name`, and `extra_vars` passed in. Example: `ansible/apps_playbooks/Splunk_SIM_addon-configure.yml` for the Splunk Infrastructure Monitoring add-on.
-  - Same app can appear multiple times in `splunk_app_deployment.apps` with different `target_roles` and different `customizations`.
-  - Customizations run in order: deploy app → remove → local_configs → run_playbook/run_role. Setting `update_needed: true` in a custom task file triggers the correct deployment handler.
-  - **Example playbook** `ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml`: Enables Splunk_TA_nix script inputs (performance metrics); optional `extra_vars.ta_nix_script_index`. Equivalent behavior via `local_configs` is documented for universal_forwarder.
-  - **Documentation**: [App_Deployment_Customizations.md](docs/App_Deployment_Customizations.md) (user manual). App deployment doc names normalized to `App_Deployment_*`.
-- **App deployment target filters** – Per-app filters to restrict which hosts receive an app:
-  - **hosts_whitelist** / **hosts_blacklist**: Include or exclude specific search heads (standalone and SHC members in deployer context).
-  - **shc_whitelist** / **shc_blacklist**: Include or exclude by search head cluster name (must match `splunk_shclusters`).
-  - **idxc_whitelist** / **idxc_blacklist**: Include or exclude by indexer cluster name (must match `splunk_idxclusters`).
-  - **sc_whitelist** / **sc_blacklist**: (Deployment Server / Agent Management) Control serverclass whitelist/blacklist for which clients get the app.
-  - Filters are applied in a fixed order to compute the final target set; empty result means the app is not deployed (no error). Premium apps may use only **hosts_whitelist** OR **shc_whitelist** (not both) and may not use blacklists.
-  - **Documentation**: [App_Deployment_Target_Filters.md](docs/App_Deployment_Target_Filters.md).
-- **Premium apps (ITSI)** – Splunk IT Service Intelligence as a premium pack (single archive, multiple apps, role-specific extraction):
-  - **Config**: `premium_app: itsi` on the app entry; optional `version` (same as normal apps), `hosts_whitelist` / `shc_whitelist` (and other target filters), `itsi_notification_disable`. Source Splunkbase (app_id 1841) or local path.
-  - **Roles**: Cluster Manager (selected apps to `manager-apps`), License Manager (license/access apps to `etc/apps`), Deployer (full bundle to `shcluster/apps`), Search Head (full bundle to `etc/apps`). Respects `target_download` for controller vs per-target download and cache.
-  - **Version check**: Reads `[launcher]` version from each app’s `app.conf` in the archive and on the target; only deploys when at least one app is missing or version differs. App list and expected versions come from the archive (app-conf cache or listing); no hardcoded fallback—playbook fails if the list cannot be obtained.
-  - **Removal**: Per-role removal (CM, LM, deployer, search head) with app list built from the archive; same target filters (`hosts_whitelist`, `shc_whitelist`, etc.) apply for search heads. Fails if archive is not available or not listable.
-  - **Task structure**: Splunkbase download and app-conf cache split into controller vs `target_download` task files to avoid skipped tasks; removal split into role-specific task files (e.g. `itsi_remove_deployer.yml`, `itsi_remove_search_head.yml`).
-  - **Docs**: [App_Deployment_Guide.md](docs/App_Deployment_Guide.md) (Premium packs: ITSI), [App_Deployment_Removing_Apps.md](docs/App_Deployment_Removing_Apps.md) (Premium apps (ITSI) removal).
+- **App Deployment** – New automated deployment of Splunk apps from Splunkbase or local filesystem, with per-host routing.
+  - **General**:
+    - **Config**: `splunk_app_deployment` in `splunk_config.yml` (credentials, `apps` list with `name`, `source` (splunkbase/local), `app_id` or `path`, `version`, `target_roles`, optional `state`, `deployment_target`, `serverclass`, etc.).
+    - **Playbooks**: `ansible/deploy_splunk_apps.yml` (deploy/update apps), `ansible/remove_splunk_apps.yml` (remove apps with `state: absent`).
+    - **Routing**: Apps are deployed to the correct location per host—Deployment Server (`etc/deployment-apps`), Cluster Manager (`etc/manager-apps`), Search Head Cluster Deployer (`etc/shcluster/apps`), or directly to the host (`etc/apps`). Routing respects cluster membership and optional `deployment_target: direct`.
+    - **Roles**: `apps_deployment_server`, `apps_cluster_manager`, `apps_deployer`, `apps_direct` (shared logic in `apps_common`). Handlers: Restart Splunk, Reload deploy-server, Push shcluster bundle, Apply indexer cluster bundle.
+    - **Sources**: Splunkbase (with env-based credentials) or local path; idempotent install/update with optional backup.
+    - **Download options**: `target_download` (default false)—when true, each target downloads Splunkbase apps itself (avoids slow upload from Ansible host for large apps); `cache_downloads` (default true)—when false, remove downloaded `.tgz` after extraction.
+    - **Verification**: `ansible/verification/verify_app_deployment.yml` and role-specific verification tasks to confirm deployed apps match config.
+    - **Docs**: [App_Deployment.md](docs/App_Deployment.md), [App_Deployment_Guide.md](docs/App_Deployment_Guide.md), [App_Deployment_Quick_Start.md](docs/App_Deployment_Quick_Start.md), [App_Deployment_FAQ.md](docs/App_Deployment_FAQ.md), [App_Deployment_Target_Logic.md](docs/App_Deployment_Target_Logic.md), [App_Deployment_Verification.md](docs/App_Deployment_Verification.md), [App_Deployment_Removing_Apps.md](docs/App_Deployment_Removing_Apps.md).
+  - **Target filters** – Per-app filters to restrict which hosts receive an app:
+    - **hosts_whitelist** / **hosts_blacklist**: Include or exclude specific search heads (standalone and SHC members in deployer context).
+    - **shc_whitelist** / **shc_blacklist**: Include or exclude by search head cluster name (must match `splunk_shclusters`).
+    - **idxc_whitelist** / **idxc_blacklist**: Include or exclude by indexer cluster name (must match `splunk_idxclusters`).
+    - **sc_whitelist** / **sc_blacklist**: (Deployment Server / Agent Management) Control serverclass whitelist/blacklist for which clients get the app.
+    - Filters are applied in a fixed order to compute the final target set; empty result means the app is not deployed (no error). Premium apps may use only **hosts_whitelist** OR **shc_whitelist** (not both) and may not use blacklists.
+    - **Documentation**: [App_Deployment_Target_Filters.md](docs/App_Deployment_Target_Filters.md).
+  - **Customizations** – Per-app, per-role options to modify deployed apps after install:
+    - **`remove`**: Delete files or directories from the app (paths relative to app root).
+    - **`local_configs`**: Create or update Splunk `.conf` files in the app’s `local/` folder (same structure as `splunk_conf` in `splunk_config.yml`).
+    - **`run_playbook`** / **`run_role`**: Run a custom Ansible task file or role for that app (path from project root; `app_path`, `app_name`, and optional `extra_vars` provided by the framework).
+    - **`run_playbook_after_restart`**: Register a task file to run **after** the deployment handler (e.g. Restart splunk) has run on the host. Use when the playbook must run once Splunk is back up (e.g. wait for port, then call REST or configure lookups). Supported for **direct deployment** only; requires `deployment_target: direct` (enforced by schema). The playbook runs in a follow-up play in `deploy_splunk_apps.yml` with `app_path`, `app_name`, and `extra_vars` passed in. Example: `ansible/apps_playbooks/Splunk_SIM_addon-configure.yml` for the Splunk Infrastructure Monitoring add-on.
+    - Same app can appear multiple times in `splunk_app_deployment.apps` with different `target_roles` and different `customizations`.
+    - Customizations run in order: deploy app → remove → local_configs → run_playbook/run_role. Setting `update_needed: true` in a custom task file triggers the correct deployment handler.
+    - **Example playbook** `ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml`: Enables Splunk_TA_nix script inputs (performance metrics); optional `extra_vars.ta_nix_script_index`. Equivalent behavior via `local_configs` is documented for universal_forwarder.
+    - **Documentation**: [App_Deployment_Customizations.md](docs/App_Deployment_Customizations.md) (user manual). App deployment doc names normalized to `App_Deployment_*`.
+  - **Premium apps (ITSI)** – Splunk IT Service Intelligence as a premium pack (single archive, multiple apps, role-specific extraction):
+    - **Config**: `premium_app: itsi` on the app entry; optional `version` (same as normal apps), `hosts_whitelist` / `shc_whitelist` (and other target filters), `itsi_notification_disable`. Source Splunkbase (app_id 1841) or local path.
+    - **Roles**: Cluster Manager (selected apps to `manager-apps`), License Manager (license/access apps to `etc/apps`), Deployer (full bundle to `shcluster/apps`), Search Head (full bundle to `etc/apps`). Respects `target_download` for controller vs per-target download and cache.
+    - **Version check**: Reads `[launcher]` version from each app’s `app.conf` in the archive and on the target; only deploys when at least one app is missing or version differs. App list and expected versions come from the archive (app-conf cache or listing); no hardcoded fallback—playbook fails if the list cannot be obtained.
+    - **Removal**: Per-role removal (CM, LM, deployer, search head) with app list built from the archive; same target filters (`hosts_whitelist`, `shc_whitelist`, etc.) apply for search heads. Fails if archive is not available or not listable.
+    - **Task structure**: Splunkbase download and app-conf cache split into controller vs `target_download` task files to avoid skipped tasks; removal split into role-specific task files (e.g. `itsi_remove_deployer.yml`, `itsi_remove_search_head.yml`).
+    - **Docs**: [App_Deployment_Guide.md](docs/App_Deployment_Guide.md) (Premium packs: ITSI), [App_Deployment_Removing_Apps.md](docs/App_Deployment_Removing_Apps.md) (Premium apps (ITSI) removal).
+  - **ITSI content pack install** – Deploy and remove ITSI content packs (Splunkbase or local) via the same app deployment flow as ITSI:
+    - **Config**: `itsi_content_pack: true` on the app entry; `content_pack_apps` list with per-pack `name`, `content_pack_install`, optional `customizations.run_playbook_after_restart`; optional `library_app`, `install_all_apps`. Target filters (`hosts_whitelist`, `shc_whitelist`, etc.) are inherited from the ITSI app so content pack and ITSI use the same scope.
+    - **Install**: Content pack role (`apps_itsi_content_pack`) installs the pack and nested apps to search heads (standalone and SHC); deployer pushes to `shcluster/apps`, direct deployment to `etc/apps`. Post-restart playbooks run after the Restart splunk handler when configured.
+    - **Removal**: Content packs are removed before ITSI (sorted order). On standalone search heads, when a content pack is in `direct_apps` but ITSI was not (e.g. eligibility excluded ITSI for that host), ITSI is added to `direct_apps` so both “Remove ITSI apps from etc/apps” and content pack removal run on the single SH.
+    - **Docs**: [App_Deployment_Guide.md](docs/App_Deployment_Guide.md), [App_Deployment_Removing_Apps.md](docs/App_Deployment_Removing_Apps.md).
 
-- Vault-encrypted values in `splunk_config.yml` are decrypted in place by the inventory plugin’s `secret_resolver.py` when the config is loaded (e.g. for Splunk admin password and other variables used by roles)
-- Custom lookup plugin `spa_vault_decrypt` for playbooks that load config via `include_vars` (e.g. Terraform AWS credentials in `provision_terraform_aws.yml` and `destroy_terraform_aws.yml`); lookup plugin path set in `ansible.cfg` via `lookup_plugins = ./ansible/plugins/lookup`
+- **Vault support for config values** – Encrypted values in config and playbooks:
+  - **Inventory decryption**: Vault-encrypted values in `splunk_config.yml` are decrypted in place by the inventory plugin’s `secret_resolver.py` when the config is loaded (e.g. for Splunk admin password and other variables used by roles).
+  - **Lookup plugin**: Custom lookup plugin `spa_vault_decrypt` for playbooks that load config via `include_vars` (e.g. Terraform AWS credentials in `provision_terraform_aws.yml` and `destroy_terraform_aws.yml`); lookup plugin path set in `ansible.cfg` via `lookup_plugins = ./ansible/plugins/lookup`.
+  - **Docs**: [Secrets_and_Vault.md](docs/Secrets_and_Vault.md), [Secrets_Vault_Concept.md](docs/Secrets_Vault_Concept.md).
 
 ### Fixed
 
