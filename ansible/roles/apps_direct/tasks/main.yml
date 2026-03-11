@@ -135,6 +135,27 @@
     - direct_apps | length > 0
     - _dir_sorted | length > 0
 
+# When a content pack is in direct_apps but ITSI is not (e.g. eligibility excluded ITSI for this host), add ITSI so removal runs on this host too (e.g. single SH with hosts_whitelist: ['sh']).
+- name: "Add ITSI to direct_apps for standalone SH when content pack present (so ITSI removal runs)"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    direct_apps: "{{ _dir_sorted_with_itsi }}"
+  when:
+    - direct_apps | length > 0
+    - (direct_apps | selectattr('itsi_content_pack', 'defined') | selectattr('itsi_content_pack') | list | length) > 0
+    - (direct_apps | selectattr('premium_app', 'defined') | selectattr('premium_app', 'equalto', 'itsi') | list | length) == 0
+    - inventory_hostname in (groups['role_search_head'] | default([]))
+    - (group_names | select('match', '^shcluster_') | list | length) == 0
+    - (_itsi_apps_list | default([]) | length) > 0
+  vars:
+    _dir_itsi_entry: "{{ (_itsi_apps_list | default([]) | first) }}"
+    _dir_rest: "{{ direct_apps | rejectattr('itsi_content_pack', 'equalto', true) | rejectattr('premium_app', 'equalto', 'itsi') | list }}"
+    _dir_cp: "{{ direct_apps | selectattr('itsi_content_pack', 'defined') | selectattr('itsi_content_pack') | list }}"
+    _dir_sorted_with_itsi: "{{ _dir_rest + _dir_cp + [_dir_itsi_entry] }}"
+
 # When debug_app_scope=true we only compute scope and collect results; no install/remove. Use: -e debug_app_scope=true
 - name: Initialize scope debug results (debug mode)
   tags:
