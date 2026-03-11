@@ -225,7 +225,7 @@
         - app_item.customizations is defined
 
     # Same mechanism as above: apply customizations for each content pack app (reuse apps_common apply_customizations.yml)
-    - name: "Apply customizations for content pack app {{ _cp_item.name }} (direct deployment)"
+    - name: "Apply customizations for content pack apps (direct deployment)"
       ansible.builtin.include_role:
         name: apps_common
         tasks_from: apply_customizations.yml
