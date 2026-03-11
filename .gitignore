@@ -10,6 +10,7 @@
 # Ansible
 .ansible
 *.retry
+ansible/verification/output/
 # Vault password (do not commit)
 .vault_pass.txt
 .vault_pass
