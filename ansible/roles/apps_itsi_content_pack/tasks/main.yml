@@ -359,7 +359,6 @@
       when:
         - run_cp_api_on_this_host
         - (apps_itsi_sh_apps_base | default('')) == 'etc/apps'
-        - (inventory_hostname == (_first_shc_member | default(''))) or ((_first_shc_member | default('')) | length == 0)
         - (cp_content_pack_apps_to_install | default([]) | length) > 0
 
     - name: "Register post-restart playbook for content pack app (direct deployment)"
@@ -371,8 +370,9 @@
         post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': item.customizations.run_playbook_after_restart, 'app_path': cp_splunk_home + '/' + cp_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': (item.customizations.extra_vars | default({}))}] }}"
       loop: "{{ cp_content_pack_apps }}"
       when:
+        # For etc/apps (direct), registration is done in apps_direct (process_direct_app) so we skip here
+        - (apps_itsi_sh_apps_base | default('')) != 'etc/apps'
         - run_cp_api_on_this_host
-        - (apps_itsi_sh_apps_base | default('')) == 'etc/apps'
         - (inventory_hostname == (_first_shc_member | default(''))) or ((_first_shc_member | default('')) | length == 0)
         - item.customizations is defined
         - item.customizations.run_playbook_after_restart is defined

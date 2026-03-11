@@ -224,6 +224,23 @@
         - app_state == 'installed'
         - app_item.customizations is defined
 
+    # Same mechanism as above: apply customizations for each content pack app (reuse apps_common apply_customizations.yml)
+    - name: "Apply customizations for content pack app {{ _cp_item.name }} (direct deployment)"
+      ansible.builtin.include_role:
+        name: apps_common
+        tasks_from: apply_customizations.yml
+      vars:
+        app_item: "{{ _cp_item }}"
+        app_path: "{{ (splunk_install_dir | default('/opt')) ~ '/' ~ (splunk_install_app | default('splunk')) ~ '/etc/apps/' ~ _cp_item.name }}"
+      loop: "{{ app_item.content_pack_apps | default([]) }}"
+      loop_control:
+        loop_var: _cp_item
+      when:
+        - _app_on_direct_scope | default(false)
+        - app_state == 'installed'
+        - (app_item | default({})).get('itsi_content_pack', false)
+        - _cp_item.customizations is defined
+
     # Register run_playbook_after_restart only for direct deployment so it runs on this host (the target) after the handler
     - name: "Register post-restart playbook for {{ app_item.name }} (direct deployment)"
       tags:
@@ -238,6 +255,27 @@
         - app_item.customizations is defined
         - app_item.customizations.run_playbook_after_restart is defined
         - app_item.customizations.run_playbook_after_restart | length > 0
+
+    # Same mechanism as above: register post-restart playbooks for each content pack app that has run_playbook_after_restart (no content-pack-specific path)
+    - name: "Register post-restart playbook for content pack apps (direct deployment)"
+      tags:
+        - splunk
+        - splunk_apps
+        - direct_deployment
+      ansible.builtin.set_fact:
+        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': _cp_item.customizations.run_playbook_after_restart, 'app_path': _cp_app_path, 'app_name': _cp_item.name, 'extra_vars': (_cp_item.customizations.extra_vars | default({}))}] }}"
+      loop: "{{ app_item.content_pack_apps | default([]) }}"
+      loop_control:
+        loop_var: _cp_item
+      vars:
+        _cp_app_path: "{{ (splunk_install_dir | default('/opt')) ~ '/' ~ (splunk_install_app | default('splunk')) ~ '/etc/apps/' ~ _cp_item.name }}"
+      when:
+        - _app_on_direct_scope | default(false)
+        - app_state == 'installed'
+        - (app_item | default({})).get('itsi_content_pack', false)
+        - _cp_item.customizations is defined
+        - _cp_item.customizations.run_playbook_after_restart is defined
+        - _cp_item.customizations.run_playbook_after_restart | length > 0
 
     - name: "Remove {{ app_item.name }} (ITSI content pack)"
       ansible.builtin.include_role:
