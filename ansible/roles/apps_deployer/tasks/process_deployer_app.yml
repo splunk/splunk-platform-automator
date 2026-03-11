@@ -6,8 +6,6 @@
   ansible.builtin.set_fact:
     app_item: "{{ _loop_app_item }}"
 
-# Reset loop-accumulated vars so each app iteration starts clean (content pack must not inherit ITSI iteration state).
-
 # Content pack: assign full ITSI filter vars (same as direct) so shared filter logic applies; same target as ITSI.
 - name: "Apply ITSI filter vars to content pack app (same target as ITSI)"
   tags:
