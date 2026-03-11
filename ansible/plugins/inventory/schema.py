@@ -1528,6 +1528,76 @@ class SplunkConfig(BaseModel):
                     )
         return self
 
+    @model_validator(mode='after')
+    def validate_itsi_search_heads_not_both_shc_and_standalone(self) -> 'SplunkConfig':
+        """ITSI must target either SHC search heads or standalone search heads, not both.
+        If the effective list of search heads to deploy to contains both SHC members and standalone SHs, fail."""
+        dep = self.splunk_app_deployment
+        if not dep or not dep.apps:
+            return self
+
+        def expand_host_names(host: 'SplunkHost') -> set:
+            names: set = set()
+            if host.name:
+                names.add(host.name)
+            elif host.list:
+                for h in host.list:
+                    names.add(h)
+            elif host.iter:
+                parts = host.iter.numbers.split('..')
+                start, end = int(parts[0]), int(parts[1])
+                width = len(parts[1])
+                prefix = host.iter.prefix or ""
+                postfix = host.iter.postfix or ""
+                for n in range(start, end + 1):
+                    names.add(prefix + str(n).zfill(width) + postfix)
+            return names
+
+        sh_names_all: set = set()
+        sh_names_shc: set = set()
+        sh_names_standalone: set = set()
+        shc_name_to_hosts: Dict[str, set] = {}
+        for host in self.splunk_hosts:
+            if AllowedRole.search_head not in host.roles:
+                continue
+            names = expand_host_names(host)
+            sh_names_all.update(names)
+            if host.shcluster and isinstance(host.shcluster, str) and host.shcluster.strip():
+                sc = host.shcluster.strip()
+                sh_names_shc.update(names)
+                shc_name_to_hosts.setdefault(sc, set()).update(names)
+            else:
+                sh_names_standalone.update(names)
+
+        if not sh_names_all:
+            return self
+
+        for i, app in enumerate(dep.apps):
+            if not (app.get("premium_app") and isinstance(app.get("premium_app"), str) and (app.get("premium_app") or "").strip().lower() == "itsi"):
+                continue
+            name = app.get("name", "?")
+            effective_sh: set = set()
+            shc_w = [v.strip() for v in (app.get("shc_whitelist") or []) if isinstance(v, str) and v.strip()]
+            hw = [v.strip() for v in (app.get("hosts_whitelist") or []) if isinstance(v, str) and v.strip()]
+            if shc_w:
+                for sc in shc_w:
+                    effective_sh.update(shc_name_to_hosts.get(sc, set()))
+            elif hw:
+                effective_sh = set(hw) & sh_names_all
+            else:
+                effective_sh = set(sh_names_all)
+            if not effective_sh:
+                continue
+            has_shc = bool(effective_sh & sh_names_shc)
+            has_standalone = bool(effective_sh & sh_names_standalone)
+            if has_shc and has_standalone:
+                raise ValueError(
+                    f"splunk_app_deployment.apps[{i}] (name={name!r}): ITSI must target either a Search Head Cluster (SHC) or standalone search heads, not both. "
+                    "The effective list of search heads to deploy to contains both SHC members and standalone search heads. "
+                    "Use shc_whitelist to target only SHC(s), or hosts_whitelist to target only standalone search head host(s)."
+                )
+        return self
+
 
 # =============================================================================
 # Validation helper function
