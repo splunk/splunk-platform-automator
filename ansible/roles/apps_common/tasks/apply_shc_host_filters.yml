@@ -1,5 +1,6 @@
 ---
-# Shared SHC/hosts filter logic for normal apps (and ITSI/content pack after they inherit filter vars).
+# Shared SHC/hosts filter logic for normal apps, ITSI, and content packs (no separate code paths).
+# Content pack callers merge ITSI filter vars into app_item before calling, so the same logic applies.
 # Caller must pass _filter_base (list of host names to filter) and _filter_app_item (app config dict with
 # hosts_whitelist, hosts_blacklist, shc_whitelist, shc_blacklist). Result is in _filter_result.
 # Filter order: hosts_whitelist (intersect) → shc_whitelist (intersect) → shc_blacklist (reject) → hosts_blacklist (reject).

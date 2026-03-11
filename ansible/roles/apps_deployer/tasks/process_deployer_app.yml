@@ -9,8 +9,7 @@
 
 # Reset loop-accumulated vars so each app iteration starts clean (content pack must not inherit ITSI iteration state).
 
-# Content pack: assign ITSI filter vars so the same calculation code deploys to the same target as ITSI.
-# On deployer we only merge shc_whitelist/shc_blacklist so _app_dep_filtered is not emptied by ITSI's hosts_whitelist (which may target only standalone SHs).
+# Content pack: assign full ITSI filter vars (same as direct) so shared filter logic applies; same target as ITSI.
 - name: "Apply ITSI filter vars to content pack app (same target as ITSI)"
   tags:
     - splunk
@@ -21,7 +20,7 @@
   when: (app_item | default({})).get('itsi_content_pack', false)
   vars:
     _itsi_cfg: "{{ (_itsi_apps_list | default([]) | first) | default({}) }}"
-    _cp_itsi_filters: "{{ {'shc_whitelist': (_itsi_cfg | default({})).get('shc_whitelist', []), 'shc_blacklist': (_itsi_cfg | default({})).get('shc_blacklist', [])} }}"
+    _cp_itsi_filters: "{{ {'hosts_whitelist': (_itsi_cfg | default({})).get('hosts_whitelist', []), 'shc_whitelist': (_itsi_cfg | default({})).get('shc_whitelist', []), 'hosts_blacklist': (_itsi_cfg | default({})).get('hosts_blacklist', []), 'shc_blacklist': (_itsi_cfg | default({})).get('shc_blacklist', []), 'idxc_whitelist': (_itsi_cfg | default({})).get('idxc_whitelist', []), 'idxc_blacklist': (_itsi_cfg | default({})).get('idxc_blacklist', [])} }}"
 
 # --- Deployer base set = all SHC members ---
 - name: "Compute deployer base set for {{ app_item.name }}"
@@ -51,6 +50,7 @@
   loop: "{{ group_names | select('match', '^shcluster_') | list }}"
   when: (group_names | select('match', '^shcluster_') | list | length) > 0
 
+# Deployer scope from shared filter result only (same logic for normal, ITSI, and content pack).
 - name: "Set deployer scope for {{ app_item.name }}"
   tags:
     - splunk
@@ -58,31 +58,6 @@
     - deployer
   ansible.builtin.set_fact:
     _app_on_deployer_scope: "{{ ((_app_dep_filtered | default(_app_dep_base)) | intersect(_deployer_serves | default([])) | length) > 0 }}"
-
-# ITSI with hosts_whitelist targeting only non-SHC hosts: do not run on deployer (no SHC members to push to).
-- name: "Force deployer scope false for ITSI when hosts_whitelist has no SHC members"
-  tags:
-    - splunk
-    - splunk_apps
-    - deployer
-  ansible.builtin.set_fact:
-    _app_on_deployer_scope: false
-  when:
-    - (app_item | default({})).get('premium_app', '') == 'itsi'
-    - ((app_item | default({})).get('hosts_whitelist', []) | default([]) | length) > 0
-    - ((app_item | default({})).get('hosts_whitelist', []) | default([]) | intersect(_deployer_shc_member_hosts | default([])) | length) == 0
-
-# Content pack on deployer: always in scope when this deployer serves any SHC (same targets as ITSI).
-- name: "Set deployer scope true for ITSI content pack when deployer serves SHC"
-  tags:
-    - splunk
-    - splunk_apps
-    - deployer
-  ansible.builtin.set_fact:
-    _app_on_deployer_scope: true
-  when:
-    - (app_item | default({})).get('itsi_content_pack', false)
-    - (_deployer_serves | default([]) | length) > 0
 
 - name: "Set defaults for {{ app_item.name }}"
   tags:
