@@ -32,7 +32,7 @@
   delegate_to: "{{ splunk_shc_deployer }}"
   register: shcluster_bundle_result
   until: shcluster_bundle_result.rc == 0
-  retries: 6
+  retries: 120
   delay: 15
 
 - name: Apply indexer cluster bundle
