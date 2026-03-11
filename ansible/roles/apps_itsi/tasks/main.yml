@@ -205,7 +205,9 @@
 
     - name: "Run ITSI deployment for deployer (shcluster/apps)"
       ansible.builtin.include_tasks: itsi_install_search_head.yml
-      when: inventory_hostname in (groups.role_deployer | default([]))
+      when: >-
+        inventory_hostname in (groups.role_deployer | default([]))
+        and not (apps_itsi_direct_install | default(false))
 
     - name: "Run ITSI deployment for search head (etc/apps, filtered set from hosts_whitelist/shc_whitelist etc.)"
       ansible.builtin.include_tasks: itsi_install_search_head.yml

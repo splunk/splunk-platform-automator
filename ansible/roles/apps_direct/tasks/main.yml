@@ -2,6 +2,7 @@
 # Direct Deployment Apps - Runs on all hosts except manager roles
 # Handles apps that should be installed directly to etc/apps
 # Note: apps_common dependency handles config merging
+# ITSI and content packs normalized: ITSI target_roles [search_head, indexer, license_manager], content packs target_roles [search_head]; both deployment_target auto. Same eligibility and scope (process_direct_app shared filter). DS path excluded in apps_deployment_server; license_manager gets ITSI via direct.
 
 - name: Get current host roles
   tags:
@@ -19,20 +20,8 @@
   ansible.builtin.set_fact:
     direct_apps: []
 
-- name: "Set ITSI direct scope for this host (for content pack eligibility)"
-  tags:
-    - splunk
-    - splunk_apps
-    - direct_deployment
-  ansible.builtin.set_fact:
-    itsi_direct_scope_this_host: >-
-      {{
-        (current_host_roles | intersect(['license_manager']) | length > 0 and current_host_roles | intersect(['search_head']) | length == 0)
-        or (current_host_roles | intersect(['search_head']) | length > 0 and (group_names | select('match', '^shcluster_') | list | length == 0))
-        or (current_host_roles | intersect(['indexer']) | length > 0 and (group_names | select('match', '^idxcluster_') | list | length) == 0 and current_host_roles | intersect(['search_head']) | length == 0)
-      }}
-
-- name: "Build list of ITSI app configs (for content pack eligibility)"
+# Content packs inherit filter vars from ITSI in process_direct_app; we need the ITSI app config(s) for that.
+- name: "Build list of ITSI app configs (for content pack same target as ITSI)"
   tags:
     - splunk
     - splunk_apps
@@ -44,6 +33,7 @@
   loop_control:
     label: "{{ (item | default({})).get('name', '?') }}"
 
+# ITSI/content pack normalized to target_roles and deployment_target auto; same add rule as normal apps. Scope decided in process_direct_app via shared filter.
 - name: Check each app for direct deployment eligibility
   tags:
     - splunk
@@ -52,53 +42,32 @@
   ansible.builtin.set_fact:
     direct_apps: "{{ direct_apps + [item] }}"
   loop: "{{ splunk_app_deployment.apps | default([]) }}"
-  # Content pack: only add when ITSI app would be direct for this host (ITSI has no shc_whitelist)
+  vars:
+    _itsi_cp_roles: ['search_head', 'indexer', 'license_manager']
+    _cp_roles: ['search_head']
+    _norm: "{{ (item | default({})).get('premium_app') == 'itsi' or (item | default({})).get('itsi_content_pack') | default(false) }}"
+    _roles: "{{ (item | default({})).get('itsi_content_pack') | default(false) | ternary(_cp_roles, _itsi_cp_roles) }}"
+    # Use 'direct' for ITSI/CP eligibility so they are added to direct_apps even when a deployment server exists (deployer does not push ITSI to these hosts).
+    _app_item: "{{ _norm | ternary((item | default({}) | combine({'target_roles': _roles, 'deployment_target': 'direct'})), item) }}"
   when:
-    # ITSI: same roles as before; for standalone SH do not add when ITSI has shc_whitelist (deployer-only)
+    - (_app_item | default({})).get('target_roles') is defined
+    - current_host_roles | intersect((_app_item | default({})).get('target_roles', [])) | length > 0
     - >-
-      ((item | default({})).get('premium_app', '') or '') == 'itsi' and (
-        (current_host_roles | intersect(['license_manager']) | length > 0 and current_host_roles | intersect(['search_head']) | length == 0)
-        or (
-          current_host_roles | intersect(['search_head']) | length > 0
-          and (group_names | select('match', '^shcluster_') | list | length == 0)
-          and ((item | default({})).get('shc_whitelist') or []) | length == 0
-        )
-        or (
-          current_host_roles | intersect(['indexer']) | length > 0
-          and (group_names | select('match', '^idxcluster_') | list | length == 0)
-          and current_host_roles | intersect(['search_head']) | length == 0
-        )
-      )
+      ((_app_item | default({})).get('deployment_target', 'auto') == 'direct')
       or (
-        'target_roles' in (item | default({}))
-        and current_host_roles | intersect((item | default({})).get('target_roles', [])) | length > 0
+        (_app_item | default({})).get('deployment_target', 'auto') != 'direct'
+        and (groups['role_deployment_server'] | default([]) | length == 0)
+        and current_host_roles | intersect(['deployment_server', 'cluster_manager', 'deployer']) | length == 0
+        and current_host_roles | intersect(['universal_forwarder', 'heavy_forwarder']) | length == 0
         and (
-          ((item | default({})).get('deployment_target', 'auto') == 'direct')
+          (current_host_roles | intersect(['indexer']) | length > 0 and group_names | select('match', '^idxcluster_') | list | length == 0)
           or
-          (
-            (item | default({})).get('deployment_target', 'auto') != 'direct'
-            and (groups['role_deployment_server'] | default([]) | length == 0)
-            and current_host_roles | intersect(['deployment_server', 'cluster_manager', 'deployer']) | length == 0
-            and current_host_roles | intersect(['universal_forwarder', 'heavy_forwarder']) | length == 0
-            and (
-              (current_host_roles | intersect(['indexer']) | length > 0 and group_names | select('match', '^idxcluster_') | list | length == 0)
-              or
-              (current_host_roles | intersect(['search_head']) | length > 0 and group_names | select('match', '^shcluster_') | list | length == 0)
-            )
-          )
-        )
-        and (
-          (current_host_roles | intersect(['search_head']) | length == 0)
-          or (group_names | select('match', '^shcluster_') | list | length == 0)
+          (current_host_roles | intersect(['search_head']) | length > 0 and group_names | select('match', '^shcluster_') | list | length == 0)
+          or
+          (_norm and current_host_roles | intersect(['license_manager']) | length > 0)
         )
       )
-      or (
-        (item | default({})).get('itsi_content_pack', false)
-        and itsi_direct_scope_this_host | default(false)
-        and (current_host_roles | intersect(['search_head']) | length > 0)
-        and (_itsi_apps_list | default([]) | length > 0)
-        and ((_itsi_apps_list | default([]) | first | default({})).get('shc_whitelist', []) | default([]) | length == 0)
-      )
+    - (current_host_roles | intersect(['search_head']) | length == 0) or (group_names | select('match', '^shcluster_') | list | length == 0)
 
 - name: Debug direct deployment apps
   tags:
@@ -146,9 +115,8 @@
   loop_control:
     label: "{{ (item | default({})).get('name', '?') }}"
 
-# Keep "other" items by rejecting itsi_content_pack == true (not rejectattr('itsi_content_pack'))
-# so apps without the key (e.g. Splunk_TA_nix) are kept and the sorted list is non-empty.
-- name: "Sort direct apps (install: ITSI then CP then rest; remove: CP then ITSI then rest)"
+# Install order: ITSI then content packs then rest; remove order: content packs then ITSI then rest. Rejectattr uses equalto so items without the key are kept.
+- name: "Sort direct apps (install/remove order)"
   tags:
     - splunk
     - splunk_apps
@@ -167,6 +135,16 @@
     - direct_apps | length > 0
     - _dir_sorted | length > 0
 
+# When debug_app_scope=true we only compute scope and collect results; no install/remove. Use: -e debug_app_scope=true
+- name: Initialize scope debug results (debug mode)
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    scope_debug_results: []
+  when: debug_app_scope | default(false) | bool
+
 - name: Process direct deployment apps
   tags:
     - splunk
@@ -180,6 +158,19 @@
         loop_var: _loop_app_item
         label: "{{ _loop_app_item.name }}"
   when: direct_apps | length > 0
+
+- name: Show scope debug summary for host (debug mode)
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.debug:
+    msg:
+      - "=== SCOPE DEBUG {{ inventory_hostname }} ==="
+      - "{{ scope_debug_results | default([]) }}"
+  when:
+    - debug_app_scope | default(false) | bool
+    - scope_debug_results is defined
 
 - name: Direct deployment apps complete
   tags:

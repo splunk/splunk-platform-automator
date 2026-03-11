@@ -11,25 +11,7 @@
   ansible.builtin.set_fact:
     deployer_apps: []
 
-- name: Set whether any ITSI app has shc_whitelist (for content pack deployer filter)
-  tags:
-    - splunk
-    - splunk_apps
-    - deployer
-  ansible.builtin.set_fact:
-    deployer_itsi_has_shc_whitelist: "{{ deployer_itsi_has_shc_whitelist | default(false) | bool or ((item | default({})).get('premium_app') == 'itsi' and ((item | default({})).get('shc_whitelist') or []) | length > 0) }}"
-  loop: "{{ splunk_app_deployment.apps | default([]) }}"
-  when: splunk_app_deployment.apps | default([]) | length > 0
-
-- name: Ensure deployer_itsi_has_shc_whitelist defined
-  tags:
-    - splunk
-    - splunk_apps
-    - deployer
-  ansible.builtin.set_fact:
-    deployer_itsi_has_shc_whitelist: false
-  when: deployer_itsi_has_shc_whitelist is not defined
-
+# Content packs inherit filter vars from ITSI in process_deployer_app; we need the ITSI app config(s) for that.
 - name: "Build list of ITSI app configs (for content pack same target as ITSI)"
   tags:
     - splunk
@@ -42,15 +24,8 @@
   loop_control:
     label: "{{ (item | default({})).get('name', '?') }}"
 
-- name: "Set SHC member hosts (for ITSI deployer filter when hosts_whitelist is set)"
-  tags:
-    - splunk
-    - splunk_apps
-    - deployer
-  ansible.builtin.set_fact:
-    # Only search heads that are in shcluster_* groups (excludes deployer and standalone SH like 'sh')
-    _deployer_shc_member_hosts: "{{ ((groups | dict2items | selectattr('key', 'match', '^shcluster_') | map(attribute='value') | flatten | unique) | list) | intersect(groups['role_search_head'] | default([])) | list }}"
-
+# ITSI and content packs normalized: ITSI target_roles [search_head, indexer, license_manager], content packs target_roles [search_head]; both deployment_target auto. Same add rule as normal apps. Scope is decided in process_deployer_app via shared filter (hosts_whitelist etc.).
+# Do not add ITSI/CP to deployer when app targets only standalone SH (e.g. hosts_whitelist: ['sh']) so install goes via direct to single sh, not to SHC.
 - name: Filter apps for deployer distribution
   tags:
     - splunk
@@ -60,57 +35,15 @@
     deployer_apps: "{{ deployer_apps + [item] }}"
   loop: "{{ splunk_app_deployment.apps | default([]) }}"
   vars:
-    _hw: "{{ (item | default({})).get('hosts_whitelist', []) | default([]) }}"
-    # ITSI with hosts_whitelist: only add when at least one SHC member is in the whitelist (else deployer has no target)
-    _itsi_allow_deployer: "{{ (_hw | length == 0) or ((_hw | intersect(_deployer_shc_member_hosts | default([])) | length) > 0) }}"
+    _itsi_cp: "{{ (item | default({})).get('premium_app') == 'itsi' or (item | default({})).get('itsi_content_pack') | default(false) }}"
+    _norm_roles: "{{ (item | default({})).get('itsi_content_pack') | default(false) | ternary(['search_head'], ['search_head', 'indexer', 'license_manager']) }}"
+    _app_item: "{{ _itsi_cp | ternary((item | default({}) | combine({'target_roles': _norm_roles, 'deployment_target': 'auto'})), item) }}"
+    _shc_member_hosts: "{{ (groups['role_search_head'] | default([])) | intersect((groups | dict2items | selectattr('key', 'match', '^shcluster_') | map(attribute='value') | flatten) | list) | list }}"
   when:
-    - (item | default({})).get('deployment_target', 'auto') != 'direct'
-    - >-
-      (((item | default({})).get('premium_app', '') or '') == 'itsi' and (
-        ((item | default({})).get('shc_whitelist') or []) | length > 0
-        or ('target_roles' in (item | default({})) and (item | default({})).get('target_roles', []) | intersect(['search_head']) | length > 0)
-        or ('target_roles' not in (item | default({})) and groups.role_search_head | default([]) | length > 0)
-      ) and _itsi_allow_deployer)
-      or (
-        (item | default({})).get('itsi_content_pack', false)
-        and deployer_itsi_has_shc_whitelist | default(false)
-      )
-      or (
-        ((item | default({})).get('premium_app', '') or '') != 'itsi'
-        and not (item | default({})).get('itsi_content_pack', false)
-        and 'target_roles' in (item | default({}))
-        and (item | default({})).get('target_roles', []) | intersect(['search_head']) | length > 0
-      )
-
-- name: "Reset ITSI deployer remove list (build from source config next)"
-  tags:
-    - splunk
-    - splunk_apps
-    - deployer
-  ansible.builtin.set_fact:
-    _itsi_deployer_remove_names: []
-
-- name: "Remove ITSI from deployer_apps when hosts_whitelist has no SHC members (standalone SH only)"
-  tags:
-    - splunk
-    - splunk_apps
-    - deployer
-  ansible.builtin.set_fact:
-    _itsi_deployer_remove_names: "{{ _itsi_deployer_remove_names | default([]) + [(item | default({})).get('name')] }}"
-  loop: "{{ splunk_app_deployment.apps | default([]) }}"
-  when:
-    - ((item | default({})).get('premium_app', '') or '') == 'itsi'
-    - ((item | default({})).get('hosts_whitelist', []) | default([]) | length) > 0
-    - ((item | default({})).get('hosts_whitelist', []) | default([]) | intersect(_deployer_shc_member_hosts | default([])) | length) == 0
-
-- name: "Apply ITSI hosts_whitelist filter to deployer_apps"
-  tags:
-    - splunk
-    - splunk_apps
-    - deployer
-  ansible.builtin.set_fact:
-    deployer_apps: "{{ deployer_apps | rejectattr('name', 'in', _itsi_deployer_remove_names | default([])) | list }}"
-  when: deployer_apps | default([]) | length > 0
+    - (_app_item | default({})).get('deployment_target', 'auto') != 'direct'
+    - (_app_item | default({})).get('target_roles', []) | intersect(['search_head']) | length > 0
+    # ITSI/CP: only add when app targets at least one SHC member (no hosts_whitelist, or whitelist includes an SHC member)
+    - (not _itsi_cp) or ((item | default({})).get('hosts_whitelist', []) | default([]) | length == 0) or (((item | default({})).get('hosts_whitelist', []) | default([])) | intersect(_shc_member_hosts) | length > 0)
 
 - name: Set first SHC member for post-restart playbooks (shared, from apps_common)
   ansible.builtin.include_role:

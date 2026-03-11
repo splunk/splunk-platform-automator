@@ -16,6 +16,6 @@
     - splunk_apps
     - itsi
   ansible.builtin.set_fact:
-    apps_itsi_sh_apps_base: "{{ 'etc/shcluster/apps' if (inventory_hostname in (groups['role_deployer'] | default([]))) else 'etc/apps' }}"
-    apps_itsi_sh_notify: "{{ 'Push shcluster bundle' if (inventory_hostname in (groups['role_deployer'] | default([]))) else 'Restart splunk' }}"
+    apps_itsi_sh_apps_base: "{{ 'etc/apps' if (apps_itsi_direct_install | default(false)) else ('etc/shcluster/apps' if (inventory_hostname in (groups['role_deployer'] | default([]))) else 'etc/apps') }}"
+    apps_itsi_sh_notify: "{{ 'Restart splunk' if (apps_itsi_direct_install | default(false)) else ('Push shcluster bundle' if (inventory_hostname in (groups['role_deployer'] | default([]))) else 'Restart splunk') }}"
     run_cp_api_on_this_host: "{{ (inventory_hostname not in (groups['role_deployer'] | default([]))) and (inventory_hostname in (groups['role_search_head'] | default([]))) and ((group_names | select('match', '^shcluster_') | list | length) == 0 or inventory_hostname == _first_shc_member) }}"

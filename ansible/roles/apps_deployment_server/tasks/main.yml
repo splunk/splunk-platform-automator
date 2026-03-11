@@ -22,7 +22,9 @@
   when:
     - item.target_roles is defined
     - item.deployment_target | default('auto') != 'direct'
+    # ITSI and content packs never go via deployment_server; they use direct/deployer (switch to direct when calculation would be DS).
     - (item.premium_app | default('')) != 'itsi'
+    - not (item.itsi_content_pack | default(false))
 
 - name: Debug deployment server apps
   tags:

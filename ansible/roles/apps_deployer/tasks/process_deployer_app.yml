@@ -1,7 +1,6 @@
 ---
 # Process a single deployer app
-# Deployer only manages SHC members. We apply hosts_whitelist first (so app is not pushed when only standalone SHs are targeted), then shc_whitelist/shc_blacklist.
-# Runs when the filtered set overlaps with SHCs this deployer serves (_app_on_deployer_scope).
+# Deployer only manages SHC members. ITSI and content packs normalized: ITSI target_roles [search_head, indexer, license_manager], content packs target_roles [search_head]; both deployment_target auto. Same filter calculation as normal apps.
 
 - name: "Set app_item from loop (avoid loop_var collision)"
   ansible.builtin.set_fact:
@@ -21,6 +20,18 @@
   vars:
     _itsi_cfg: "{{ (_itsi_apps_list | default([]) | first) | default({}) }}"
     _cp_itsi_filters: "{{ {'hosts_whitelist': (_itsi_cfg | default({})).get('hosts_whitelist', []), 'shc_whitelist': (_itsi_cfg | default({})).get('shc_whitelist', []), 'hosts_blacklist': (_itsi_cfg | default({})).get('hosts_blacklist', []), 'shc_blacklist': (_itsi_cfg | default({})).get('shc_blacklist', []), 'idxc_whitelist': (_itsi_cfg | default({})).get('idxc_whitelist', []), 'idxc_blacklist': (_itsi_cfg | default({})).get('idxc_blacklist', [])} }}"
+
+# ITSI/content pack: hardcode target_roles and deployment_target auto so the same filter calculation as normal apps is used. Content packs: search_head only; ITSI: search_head, indexer, license_manager.
+- name: "Normalize ITSI/content pack to target_roles and deployment_target auto for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+  ansible.builtin.set_fact:
+    app_item: "{{ (app_item | default({})) | combine({'target_roles': _cp_norm_roles, 'deployment_target': 'auto'}) }}"
+  vars:
+    _cp_norm_roles: "{{ (app_item | default({})).get('itsi_content_pack', false) | ternary(['search_head'], ['search_head', 'indexer', 'license_manager']) }}"
+  when: (app_item | default({})).get('premium_app', '') == 'itsi' or (app_item | default({})).get('itsi_content_pack', false)
 
 # --- Deployer base set = all SHC members ---
 - name: "Compute deployer base set for {{ app_item.name }}"
@@ -43,23 +54,7 @@
   ansible.builtin.set_fact:
     _app_dep_filtered: "{{ _filter_result | default(_app_dep_base) }}"
 
-# --- SHCs this deployer serves (groups this host is in that match shcluster_*) ---
-- name: "Build SHC hosts this deployer serves for {{ app_item.name }}"
-  ansible.builtin.set_fact:
-    _deployer_serves: "{{ _deployer_serves | default([]) + (groups[item] | default([])) }}"
-  loop: "{{ group_names | select('match', '^shcluster_') | list }}"
-  when: (group_names | select('match', '^shcluster_') | list | length) > 0
-
-# Deployer scope from shared filter result only (same logic for normal, ITSI, and content pack).
-- name: "Set deployer scope for {{ app_item.name }}"
-  tags:
-    - splunk
-    - splunk_apps
-    - deployer
-  ansible.builtin.set_fact:
-    _app_on_deployer_scope: "{{ ((_app_dep_filtered | default(_app_dep_base)) | intersect(_deployer_serves | default([])) | length) > 0 }}"
-
-- name: "Set defaults for {{ app_item.name }}"
+- name: "Set app state and version for {{ app_item.name }}"
   tags:
     - splunk
     - splunk_apps
@@ -67,6 +62,22 @@
   ansible.builtin.set_fact:
     app_state: "{{ (app_item | default({})).get('state', 'installed') }}"
     app_version: "{{ (app_item | default({})).get('version', 'latest') }}"
+
+# --- SHCs this deployer serves (groups this host is in that match shcluster_*) ---
+- name: "Build SHC hosts this deployer serves for {{ app_item.name }}"
+  ansible.builtin.set_fact:
+    _deployer_serves: "{{ _deployer_serves | default([]) + (groups[item] | default([])) }}"
+  loop: "{{ group_names | select('match', '^shcluster_') | list }}"
+  when: (group_names | select('match', '^shcluster_') | list | length) > 0
+
+# Deployer scope: run only when the filtered set includes at least one SHC member this deployer serves (so we do not remove from deployer when app targets only standalone SHs).
+- name: "Set deployer scope for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+  ansible.builtin.set_fact:
+    _app_on_deployer_scope: "{{ ((_app_dep_filtered | default(_app_dep_base)) | intersect(_deployer_serves | default([])) | length) > 0 }}"
 
 - name: "Debug {{ app_item.name }} deployment"
   tags:
