@@ -2,6 +2,8 @@
 
 This directory contains playbooks to verify the state of your Splunk deployment.
 
+**Inventory:** Playbooks use the inventory configured in the framework (`ansible.cfg`). Run from the project root; do not pass `-i` unless overriding the default inventory.
+
 ## Available Verification Playbooks
 
 ### 1. `verify_app_deployment.yml`
@@ -22,13 +24,10 @@ Verifies that Splunk apps are deployed correctly according to the configuration 
 
 ```bash
 # Report mode (default): Shows mismatches but doesn't fail
-ansible-playbook ansible/verification/verify_app_deployment.yml \
-  -i config/splunk_config.yml
+ansible-playbook ansible/verification/verify_app_deployment.yml
 
 # Strict mode: Fails if any mismatches found (for CI/CD)
-ansible-playbook ansible/verification/verify_app_deployment.yml \
-  -i config/splunk_config.yml \
-  -e fail_on_mismatch=true
+ansible-playbook ansible/verification/verify_app_deployment.yml -e fail_on_mismatch=true
 ```
 
 **Example Output:**
@@ -57,40 +56,92 @@ Issues found:
 =========================================
 ```
 
-### 2. `ping_hosts.yml`
+### 2. `debug_app_scope.yml` – Debug and test app/ITSI scope (no install/remove)
+
+Computes **direct deployment scope only** (no install or remove) and dumps per-host, per-app results so you can see why an app is or isn’t in scope. Use this to debug ITSI/content pack vs normal app behavior and to avoid breaking normal apps when changing ITSI logic.
+
+**What it does:**
+- Runs the same eligibility and filter logic as real deployment
+- For each host and each app, records: `app`, `state`, `in_base`, `in_filtered`, `on_scope`, `base_hosts`, `filtered_hosts`
+- Writes results to `ansible/verification/output/scope_debug.json` (or `scope_output_path` if set)
+- **Does not** install or remove anything
+
+**Usage:**
+
+```bash
+# Dump scope to default file (ansible/verification/output/scope_debug.json)
+ansible-playbook ansible/verification/debug_app_scope.yml
+
+# Custom output path
+ansible-playbook ansible/verification/debug_app_scope.yml \
+  -e scope_output_path=./my_scope.json
+
+# No SSH: run scope logic on the controller (hostnames like ds/sh/idx do not need to resolve)
+ansible-playbook ansible/verification/debug_app_scope.yml \
+  -e run_scope_locally=true
+
+# Same + assert scope invariants (state=absent apps must have on_scope true so removal runs)
+ansible-playbook ansible/verification/debug_app_scope.yml \
+  -e assert_scope_invariants=true
+```
+
+**Using debug mode in the main deploy playbook:**
+
+You can also run the full deploy with scope debugging (still no install/remove for the direct role when the flag is set):
+
+```bash
+ansible-playbook ansible/deploy_splunk_apps.yml -e debug_app_scope=true
+```
+
+This runs the direct role in “scope only” mode and prints a per-host summary of `scope_debug_results`; deployer and other steps still run as usual.
+
+**Regression testing after ITSI/content pack changes:**
+
+1. Run scope debug and assert invariants:
+   ```bash
+   ansible-playbook ansible/verification/debug_app_scope.yml \
+     -e assert_scope_invariants=true
+   ```
+2. Run full verification after a real deploy:
+   ```bash
+   ansible-playbook ansible/verification/verify_app_deployment.yml -e fail_on_mismatch=true
+   ```
+3. Inspect `ansible/verification/output/scope_debug.json` to confirm normal apps and ITSI/content pack apps have the expected `on_scope`, `base_hosts`, and `filtered_hosts` per host.
+
+### 3. `ping_hosts.yml`
 
 Verifies basic connectivity to all hosts.
 
 **Usage:**
 ```bash
-ansible-playbook ansible/verification/ping_hosts.yml -i config/splunk_config.yml
+ansible-playbook ansible/verification/ping_hosts.yml
 ```
 
-### 3. `verify_data_flow.yml`
+### 4. `verify_data_flow.yml`
 
 Verifies data is flowing into Splunk indexes.
 
 **Usage:**
 ```bash
-ansible-playbook ansible/verification/verify_data_flow.yml -i config/splunk_config.yml
+ansible-playbook ansible/verification/verify_data_flow.yml
 ```
 
-### 4. `check_idxc_health.yml`
+### 5. `check_idxc_health.yml`
 
 Checks Indexer Cluster health and replication status.
 
 **Usage:**
 ```bash
-ansible-playbook ansible/verification/check_idxc_health.yml -i config/splunk_config.yml
+ansible-playbook ansible/verification/check_idxc_health.yml
 ```
 
-### 5. `check_shc_health.yml`
+### 6. `check_shc_health.yml`
 
 Checks Search Head Cluster health and member status.
 
 **Usage:**
 ```bash
-ansible-playbook ansible/verification/check_shc_health.yml -i config/splunk_config.yml
+ansible-playbook ansible/verification/check_shc_health.yml
 ```
 
 ## Integration with Tests
@@ -134,6 +185,24 @@ Controls whether verification playbooks fail on mismatches.
 
 ## Troubleshooting
 
+### "The module interpreter '/usr/bin/python3.9' was not found"
+
+Remote hosts are expected to have a working Python 3; the exact path can differ (e.g. `/usr/bin/python3.11`). The project sets `ansible_python_interpreter: auto_silent` in `ansible/group_vars/all/ansible.yml` so Ansible discovers the interpreter on each host. If you still see a fixed path like `/usr/bin/python3.9`:
+
+- Clear the fact cache (e.g. `rm -rf /tmp/ansible_facts` or your `fact_caching_connection` path), then re-run.
+- Or override per host in `config/splunk_config.yml` under the host’s `os:` section, e.g. `ansible_python_interpreter: /usr/bin/python3`.
+
+### "Could not resolve hostname ds" (or sh, idx, etc.)
+
+`verify_app_deployment.yml` (and other verification playbooks that run tasks on remote hosts) need SSH. Inventory hostnames like `ds`, `sh`, `idx` must resolve and be reachable.
+
+- **From your machine:** Add those hostnames to `/etc/hosts` or your DNS so they point to the real hosts (Vagrant IPs, EC2 IPs, etc.), or run Ansible from an environment where they already resolve (e.g. bastion, Vagrant shell).
+- **Scope-only check without SSH:** To test app/ITSI scope logic without any SSH, use the scope debug playbook in local mode:
+  ```bash
+  ansible-playbook ansible/verification/debug_app_scope.yml -e run_scope_locally=true -e assert_scope_invariants=true
+  ```
+  This runs all scope computation on the controller and writes the report (and optionally asserts invariants); no hostname resolution or SSH is required.
+
 ### Verification shows "MISSING" apps
 
 **Possible causes:**
@@ -144,7 +213,7 @@ Controls whether verification playbooks fail on mismatches.
 **Solution:**
 ```bash
 # Re-run deployment
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml
+ansible-playbook ansible/deploy_splunk_apps.yml
 ```
 
 ### Verification shows "UNEXPECTED" apps
@@ -177,28 +246,23 @@ This is normal and expected behavior.
 
 1. **Run verification after every deployment:**
    ```bash
-   ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml
-   ansible-playbook ansible/verification/verify_app_deployment.yml -i config/splunk_config.yml
+   ansible-playbook ansible/deploy_splunk_apps.yml
+   ansible-playbook ansible/verification/verify_app_deployment.yml
    ```
 
 2. **Use strict mode in CI/CD pipelines:**
    ```bash
-   ansible-playbook ansible/verification/verify_app_deployment.yml \
-     -i config/splunk_config.yml \
-     -e fail_on_mismatch=true
+   ansible-playbook ansible/verification/verify_app_deployment.yml -e fail_on_mismatch=true
    ```
 
 3. **Run in report mode for manual checks:**
    ```bash
-   ansible-playbook ansible/verification/verify_app_deployment.yml \
-     -i config/splunk_config.yml
+   ansible-playbook ansible/verification/verify_app_deployment.yml
    ```
 
 4. **Check specific hosts:**
    ```bash
-   ansible-playbook ansible/verification/verify_app_deployment.yml \
-     -i config/splunk_config.yml \
-     --limit ds,cm
+   ansible-playbook ansible/verification/verify_app_deployment.yml --limit ds,cm
    ```
 
 ## Exit Codes

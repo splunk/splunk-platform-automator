@@ -1,0 +1,73 @@
+---
+# Debug App Scope – compute direct deployment scope only and dump to file
+# Use to see per-host, per-app: in_base, in_filtered, on_scope, base_hosts, filtered_hosts.
+# No install/remove is performed.
+# Inventory is provided by the framework (ansible.cfg); run from project root.
+#
+# Usage:
+#   ansible-playbook ansible/verification/debug_app_scope.yml
+#   ansible-playbook ansible/verification/debug_app_scope.yml -e scope_output_path=./scope_debug.json
+#   ansible-playbook ansible/verification/debug_app_scope.yml -e run_scope_locally=true
+#
+# Output: ansible/verification/output/scope_debug.json (or scope_output_path if set)
+
+- name: Compute direct deployment scope (debug only)
+  hosts: role_search_head,role_indexer,role_heavy_forwarder,role_license_manager,role_monitoring_console,role_universal_forwarder
+  gather_facts: false
+  become: false
+  connection: "{{ (run_scope_locally | default(false)) | ternary('local', 'smart') }}"
+
+  roles:
+    - role: apps_direct
+      vars:
+        debug_app_scope: true
+      when:
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+
+- name: Gather scope results and write to file
+  hosts: localhost
+  gather_facts: false
+  become: false
+
+  vars:
+    _scope_hosts: "{{ (groups['role_search_head'] | default([])) + (groups['role_indexer'] | default([])) + (groups['role_heavy_forwarder'] | default([])) + (groups['role_license_manager'] | default([])) + (groups['role_monitoring_console'] | default([])) + (groups['role_universal_forwarder'] | default([])) | unique | list }}"
+    _scope_output_path: "{{ scope_output_path | default(playbook_dir + '/output/scope_debug.json') }}"
+
+  tasks:
+    - name: Ensure output directory exists
+      ansible.builtin.file:
+        path: "{{ _scope_output_path | dirname }}"
+        state: directory
+        mode: "0755"
+
+    - name: Build scope report (host -> scope_debug_results)
+      ansible.builtin.set_fact:
+        scope_report: "{{ scope_report | default([]) + [{'host': item, 'scope_debug_results': hostvars[item].scope_debug_results | default([])}] }}"
+      loop: "{{ _scope_hosts }}"
+      when: _scope_hosts | length > 0
+
+    - name: Write scope debug to file
+      ansible.builtin.copy:
+        content: "{{ (scope_report | default([])) | to_nice_json }}"
+        dest: "{{ _scope_output_path }}"
+        mode: "0644"
+      when: _scope_hosts | length > 0
+
+    - name: Show path
+      ansible.builtin.debug:
+        msg: "Scope debug written to {{ _scope_output_path }}"
+      when: _scope_hosts | length > 0
+
+    # Optional: assert scope invariants (state=absent apps must have on_scope true). Run with: -e assert_scope_invariants=true
+    - name: Build list of (host, app) where state=absent but on_scope is false
+      ansible.builtin.set_fact:
+        _fail_absent: "{{ _fail_absent | default([]) + (item.scope_debug_results | default([]) | selectattr('state', 'equalto', 'absent') | rejectattr('on_scope') | map('combine', {'_host': item.host}) | list) }}"
+      loop: "{{ scope_report | default([]) }}"
+      when: assert_scope_invariants | default(false) | bool
+
+    - name: "Assert state=absent apps have on_scope true (so removal runs)"
+      ansible.builtin.assert:
+        that: "_fail_absent | default([]) | length == 0"
+        fail_msg: "Scope invariant failed: state=absent app(s) have on_scope false; removal would be skipped. Failing host/app: {{ _fail_absent | default([]) }}"
+      when: assert_scope_invariants | default(false) | bool

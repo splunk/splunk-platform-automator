@@ -1,9 +1,11 @@
 ---
 # Verify App Deployment
-# Checks if apps defined in splunk_config.yml are actually deployed correctly
+# Checks if apps defined in splunk_config.yml are actually deployed correctly.
+# Inventory is provided by the framework (ansible.cfg); run from project root.
+#
 # Usage:
-#   ansible-playbook ansible/verification/verify_app_deployment.yml -i config/splunk_config.yml
-#   ansible-playbook ansible/verification/verify_app_deployment.yml -i config/splunk_config.yml -e fail_on_mismatch=true
+#   ansible-playbook ansible/verification/verify_app_deployment.yml
+#   ansible-playbook ansible/verification/verify_app_deployment.yml -e fail_on_mismatch=true
 
 - name: Verify Deployment Server App Distribution
   hosts: role_deployment_server
