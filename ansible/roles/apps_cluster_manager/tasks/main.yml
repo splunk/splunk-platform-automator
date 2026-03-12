@@ -54,7 +54,9 @@
       loop_control:
         loop_var: app_item
         label: "{{ app_item.name }}"
-  when: cm_apps | length > 0
+  when:
+    - cm_apps | length > 0
+    - not (debug_app_scope | default(false) | bool)
 
 - name: Cluster manager apps complete
   tags:

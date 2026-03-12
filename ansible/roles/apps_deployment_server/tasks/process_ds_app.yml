@@ -223,6 +223,15 @@
     app_blacklist_hosts: []
   when: app_state == 'absent'
 
+- name: "Record DS app scope for debug (target_hosts per app)"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    ds_app_scope_debug: "{{ ds_app_scope_debug | default([]) + [{'app': app_item.name, 'state': app_state, 'target_hosts': app_whitelist_hosts | default([]), 'customizations': (app_item | default({})).get('customizations'), 'content_pack_apps': (app_item | default({})).get('content_pack_apps'), 'library_app': (app_item | default({})).get('library_app'), 'install_all_apps': (app_item | default({})).get('install_all_apps')}] }}"
+  when: debug_app_scope | default(false) | bool
+
 - name: "Debug {{ app_item.name }} deployment"
   tags:
     - splunk
@@ -242,6 +251,7 @@
 - name: "Install {{ app_item.name }}"
   ansible.builtin.include_tasks: "install_app.yml"
   when:
+    - not (debug_app_scope | default(false) | bool)
     - app_state == 'installed'
     - >-
       (app_whitelist_hosts | default([]) | length > 0)
@@ -255,6 +265,7 @@
   vars:
     app_path: "{{ app_item.target_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/deployment-apps/' ~ app_item.name) }}"
   when:
+    - not (debug_app_scope | default(false) | bool)
     - app_state == 'installed'
     - (app_whitelist_hosts | default([])) | length > 0
     - app_item.customizations is defined
@@ -267,7 +278,9 @@
   ansible.builtin.command: /bin/true
   notify: Reload deploy-server
   changed_when: update_needed | default(false)
-  when: update_needed | default(false)
+  when:
+    - not (debug_app_scope | default(false) | bool)
+    - update_needed | default(false)
 
 - name: "Set target path for removal of {{ app_item.name }}"
   tags:
@@ -277,11 +290,15 @@
   ansible.builtin.set_fact:
     app_name: "{{ app_item.name }}"
     app_target_path: "{{ app_item.target_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/deployment-apps/' ~ app_item.name) }}"
-  when: app_state == 'absent'
+  when:
+    - not (debug_app_scope | default(false) | bool)
+    - app_state == 'absent'
 
 - name: "Remove {{ app_item.name }}"
   ansible.builtin.include_tasks: "remove_app.yml"
-  when: app_state == 'absent'
+  when:
+    - not (debug_app_scope | default(false) | bool)
+    - app_state == 'absent'
 
 # When target_path is set, the app is under a different directory name; serverclass must reference that name.
 - name: "Set serverclass app name for {{ app_item.name }}"
@@ -294,6 +311,7 @@
   vars:
     _ds_deploy_path: "{{ app_item.target_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/deployment-apps/' ~ app_item.name) }}"
   when:
+    - not (debug_app_scope | default(false) | bool)
     - (app_whitelist_hosts | default([])) | length > 0 or app_state == 'absent'
 
 - name: "Configure serverclass for {{ app_item.name }}"
@@ -301,4 +319,5 @@
   vars:
     app_name: "{{ serverclass_app_name | default(app_item.name) }}"
   when:
+    - not (debug_app_scope | default(false) | bool)
     - (app_whitelist_hosts | default([])) | length > 0 or app_state == 'absent'

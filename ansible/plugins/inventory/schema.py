@@ -558,6 +558,26 @@ class SplunkAppDeploymentConfig(BaseModel):
                     "When any app has itsi_content_pack: true and state other than 'absent', at least one other app with premium_app: itsi and state: installed must be defined"
                 )
 
+        # Content pack state must match ITSI app state (they must always be the same).
+        itsi_apps = [a for a in (self.apps or []) if isinstance(a, dict) and (a.get("premium_app") or "").strip().lower() == "itsi"]
+        if itsi_apps:
+            def _norm_state(s: Any) -> str:
+                if s is None:
+                    return "installed"
+                t = s.strip().lower() if isinstance(s, str) else s
+                return t if t in ALLOWED_APP_STATES else "installed"
+            itsi_state = _norm_state(itsi_apps[0].get("state"))
+            for i, app in enumerate(self.apps):
+                if not isinstance(app, dict) or not app.get("itsi_content_pack"):
+                    continue
+                name = app.get("name") or "?"
+                cp_state = _norm_state(app.get("state"))
+                if cp_state != itsi_state:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): itsi_content_pack state must match the ITSI app state. "
+                        f"ITSI app has state {itsi_state!r}; content pack has state {cp_state!r}. They must always be the same (both 'installed' or both 'absent')."
+                    )
+
         # Roles that receive apps from the deployment server (DS). UF/HF are DS clients; indexer (when not
         # direct) can also be managed by DS and gets a serverclass. search_head-only goes via deployer.
         DS_CLIENT_ROLES = ("universal_forwarder", "heavy_forwarder", "universal_forwarder_windows")
@@ -1086,9 +1106,10 @@ class SplunkConfig(BaseModel):
 
         Apps must not use deployment_target: direct with target_roles including search_head when
         there are search heads in a Search Head Cluster; SHC members receive apps via the Deployer.
-        Exception: when the app has hosts_whitelist set, the target set can be restricted to
-        standalone search heads only by host name, so direct is allowed. Not when only
-        shc_whitelist or idxc_whitelist is set (SHC members must receive apps via the Deployer).
+        Exceptions: (1) when the app has hosts_whitelist set, the target set can be restricted to
+        standalone search heads only by host name; (2) when shc_whitelist or shc_blacklist is set
+        and the effective targeted SHC set is empty (no SHC targeted), only standalone SHs get the
+        app, so direct is allowed. Otherwise if an SHC member would receive the app direct, raise.
         """
         dep = self.splunk_app_deployment
         if not dep or not dep.apps:
@@ -1105,9 +1126,14 @@ class SplunkConfig(BaseModel):
         if not has_shc_member:
             return self
 
+        shc_names: set = set()
+        if self.splunk_shclusters:
+            for shc in self.splunk_shclusters:
+                shc_names.add(shc.shc_name)
+
         # Find apps with deployment_target: direct and search_head in target_roles
-        # Allow only when app has hosts_whitelist set: target set can be restricted to standalone SHs by host name.
-        # Do not allow when only shc_whitelist or idxc_whitelist is set (SHC members must get apps via Deployer).
+        # Allow when: hosts_whitelist set (restrict to standalone SHs by name), or
+        # shc_whitelist/shc_blacklist results in no SHC targeted (only standalone SHs get the app).
         apps_direct_to_shc: List[Dict[str, Any]] = []
         for app in dep.apps:
             target_roles = app.get("target_roles") or []
@@ -1117,10 +1143,17 @@ class SplunkConfig(BaseModel):
                 continue
             if "search_head" not in target_roles:
                 continue
-            # Allow only if app has hosts_whitelist (can restrict to standalone SHs); not shc_whitelist/idxc_whitelist
+            # Allow if app has hosts_whitelist (can restrict to standalone SHs by host name)
             hw = app.get("hosts_whitelist") or []
             if isinstance(hw, list) and any(isinstance(v, str) and v.strip() for v in hw):
                 continue
+            # Allow if shc_whitelist/shc_blacklist leaves no SHC targeted (app goes to standalone SH only)
+            shc_w = [v.strip() for v in (app.get("shc_whitelist") or []) if isinstance(v, str) and v.strip()]
+            shc_b = [v.strip() for v in (app.get("shc_blacklist") or []) if isinstance(v, str) and v.strip()]
+            if shc_w or shc_b:
+                effectively_targeted = set(shc_w) if shc_w else (shc_names - set(shc_b))
+                if not effectively_targeted:
+                    continue
             apps_direct_to_shc.append(app)
 
         if apps_direct_to_shc:
@@ -1270,11 +1303,9 @@ class SplunkConfig(BaseModel):
                 if not shc_names:
                     continue  # already validated in validate_target_filter_shc_idxc_names
                 effectively_targeted = set(shc_w) if shc_w else (shc_names - set(shc_b))
+                # Allow no SHC targeted: app can target standalone search heads only (e.g. hosts_whitelist or DS to single sh).
                 if not effectively_targeted:
-                    raise ValueError(
-                        f"splunk_app_deployment.apps[{i}] (name={name!r}): shc_blacklist excludes all defined SHCs; "
-                        "no search head cluster is targeted. Adjust shc_whitelist or shc_blacklist."
-                    )
+                    continue
                 overlap = effectively_targeted & shc_clusters_with_search_head
                 if not overlap:
                     raise ValueError(

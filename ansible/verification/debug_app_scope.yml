@@ -1,13 +1,16 @@
 ---
-# Debug App Scope – compute direct deployment scope only and dump to file
-# Use to see per-host, per-app: in_base, in_filtered, on_scope, base_hosts, filtered_hosts.
-# No install/remove is performed.
-# Inventory is provided by the framework (ansible.cfg); run from project root.
+# Debug App Scope – compute direct, deployment server, deployer, and cluster manager scope and dump to file
+# Works for both state=installed and state=absent. No install/remove is performed.
+# Direct: per-host, per-app in_base, in_filtered, on_scope (only apps installed *directly* on that host; often empty when DS exists).
+# Deployment server: per-app target_hosts (standalone SH, indexers, etc. that receive the app from DS).
+# Deployer: apps and target_hosts (SHC members that receive the app from the deployer).
+# Cluster manager: apps and target_hosts (indexer cluster members that receive manager-apps from the CM).
 #
 # Usage:
 #   ansible-playbook ansible/verification/debug_app_scope.yml
 #   ansible-playbook ansible/verification/debug_app_scope.yml -e scope_output_path=./scope_debug.json
 #   ansible-playbook ansible/verification/debug_app_scope.yml -e run_scope_locally=true
+#   Optional scope checks: -e assert_scope_invariants=true (fails if any app has in_base but on_scope false: absent → removal skipped; installed → install skipped)
 #
 # Output: ansible/verification/output/scope_debug.json (or scope_output_path if set)
 
@@ -16,9 +19,47 @@
   gather_facts: false
   become: false
   connection: "{{ (run_scope_locally | default(false)) | ternary('local', 'smart') }}"
-
   roles:
     - role: apps_direct
+      vars:
+        debug_app_scope: true
+      when:
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+
+- name: Compute deployment server apps (debug only, no install)
+  hosts: role_deployment_server
+  gather_facts: false
+  become: false
+  connection: "{{ (run_scope_locally | default(false)) | ternary('local', 'smart') }}"
+  roles:
+    - role: apps_deployment_server
+      vars:
+        debug_app_scope: true
+      when:
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+
+- name: Compute deployer apps (debug only, no install)
+  hosts: role_deployer
+  gather_facts: false
+  become: false
+  connection: "{{ (run_scope_locally | default(false)) | ternary('local', 'smart') }}"
+  roles:
+    - role: apps_deployer
+      vars:
+        debug_app_scope: true
+      when:
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+
+- name: Compute cluster manager apps (debug only, no install)
+  hosts: role_cluster_manager
+  gather_facts: false
+  become: false
+  connection: "{{ (run_scope_locally | default(false)) | ternary('local', 'smart') }}"
+  roles:
+    - role: apps_cluster_manager
       vars:
         debug_app_scope: true
       when:
@@ -33,6 +74,11 @@
   vars:
     _scope_hosts: "{{ (groups['role_search_head'] | default([])) + (groups['role_indexer'] | default([])) + (groups['role_heavy_forwarder'] | default([])) + (groups['role_license_manager'] | default([])) + (groups['role_monitoring_console'] | default([])) + (groups['role_universal_forwarder'] | default([])) | unique | list }}"
     _scope_output_path: "{{ scope_output_path | default(playbook_dir + '/output/scope_debug.json') }}"
+    _ds_host: "{{ (groups['role_deployment_server'] | default([])) | first }}"
+    _deployer_host: "{{ (groups['role_deployer'] | default([])) | first }}"
+    _cm_host: "{{ (groups['role_cluster_manager'] | default([])) | first }}"
+    _shc_members: "{{ (groups['role_search_head'] | default([])) | intersect((groups | dict2items | selectattr('key', 'match', '^shcluster_') | map(attribute='value') | flatten) | default([]) | list) | list }}"
+    _idxc_members: "{{ (groups['role_indexer'] | default([])) | intersect((groups | dict2items | selectattr('key', 'match', '^idxcluster_') | map(attribute='value') | flatten) | default([]) | list) | list }}"
 
   tasks:
     - name: Ensure output directory exists
@@ -47,9 +93,30 @@
       loop: "{{ _scope_hosts }}"
       when: _scope_hosts | length > 0
 
+    - name: Build deployer apps_with_config (name, state, customizations) for unit tests
+      ansible.builtin.set_fact:
+        _deployer_apps_config: "{{ _deployer_apps_config | default([]) + [{'name': item.name, 'state': item.state | default('installed'), 'customizations': item.customizations | default(none), 'content_pack_apps': item.content_pack_apps | default(none), 'library_app': item.library_app | default(none), 'install_all_apps': item.install_all_apps | default(none)}] }}"
+      loop: "{{ hostvars[_deployer_host].deployer_apps | default([]) }}"
+      when: _deployer_host is defined and (_deployer_host | length > 0)
+
+    - name: Build cluster manager apps_with_config (name, state, customizations) for unit tests
+      ansible.builtin.set_fact:
+        _cm_apps_config: "{{ _cm_apps_config | default([]) + [{'name': item.name, 'state': item.state | default('installed'), 'customizations': item.customizations | default(none), 'content_pack_apps': item.content_pack_apps | default(none), 'library_app': item.library_app | default(none), 'install_all_apps': item.install_all_apps | default(none)}] }}"
+      loop: "{{ hostvars[_cm_host].cm_apps | default([]) }}"
+      when: _cm_host is defined and (_cm_host | length > 0)
+
+    - name: Build combined report with direct, DS, deployer, and cluster_manager (includes customizations for unit tests)
+      ansible.builtin.set_fact:
+        scope_debug_combined: "{{ {
+          'direct_scope': scope_report | default([]),
+          'deployment_server': {'host': _ds_host, 'apps_with_targets': (hostvars[_ds_host].ds_app_scope_debug | default([]))} if (_ds_host | default('') | length > 0) else {'host': null, 'apps_with_targets': []},
+          'deployer': {'host': _deployer_host, 'apps': (hostvars[_deployer_host].deployer_apps | default([]) | map(attribute='name') | list), 'apps_with_config': (_deployer_apps_config | default([])), 'target_hosts': _shc_members} if (_deployer_host | default('') | length > 0) else {'host': null, 'apps': [], 'apps_with_config': [], 'target_hosts': []},
+          'cluster_manager': {'host': _cm_host, 'apps': (hostvars[_cm_host].cm_apps | default([]) | map(attribute='name') | list), 'apps_with_config': (_cm_apps_config | default([])), 'target_hosts': _idxc_members} if (_cm_host | default('') | length > 0) else {'host': null, 'apps': [], 'apps_with_config': [], 'target_hosts': []}
+        } }}"
+
     - name: Write scope debug to file
       ansible.builtin.copy:
-        content: "{{ (scope_report | default([])) | to_nice_json }}"
+        content: "{{ scope_debug_combined | to_nice_json }}"
         dest: "{{ _scope_output_path }}"
         mode: "0644"
       when: _scope_hosts | length > 0
@@ -59,15 +126,35 @@
         msg: "Scope debug written to {{ _scope_output_path }}"
       when: _scope_hosts | length > 0
 
-    # Optional: assert scope invariants (state=absent apps must have on_scope true). Run with: -e assert_scope_invariants=true
-    - name: Build list of (host, app) where state=absent but on_scope is false
+    # Optional: assert scope invariants (direct scope only). Run with: -e assert_scope_invariants=true
+    # Absent: state=absent, in_base, not on_scope → removal would be skipped on that host.
+    # Installed: only fail when host is IN filtered_hosts but on_scope is false (logic bug). When host is
+    # intentionally excluded (e.g. hosts_whitelist), host is not in filtered_hosts and on_scope false is correct.
+    - name: Build list of (host, app) where state=absent and on_scope is false (wrong for removal)
       ansible.builtin.set_fact:
-        _fail_absent: "{{ _fail_absent | default([]) + (item.scope_debug_results | default([]) | selectattr('state', 'equalto', 'absent') | rejectattr('on_scope') | map('combine', {'_host': item.host}) | list) }}"
+        _fail_absent: "{{ _fail_absent | default([]) + (item.scope_debug_results | default([]) | selectattr('state', 'equalto', 'absent') | selectattr('in_base') | rejectattr('on_scope') | map('combine', {'_host': item.host}) | list) }}"
       loop: "{{ scope_report | default([]) }}"
       when: assert_scope_invariants | default(false) | bool
 
-    - name: "Assert state=absent apps have on_scope true (so removal runs)"
+    - name: Build list of (host, app) where state=installed, host in filtered_hosts, but on_scope false (wrong for install)
+      ansible.builtin.set_fact:
+        _fail_installed: "{{ _fail_installed | default([]) + [item.1 | combine({'_host': item.0.host})] }}"
+      loop: "{{ scope_report | default([]) | subelements('scope_debug_results', {'skip_missing': True}) }}"
+      when:
+        - assert_scope_invariants | default(false) | bool
+        - (item.1.state | default('installed')) != 'absent'
+        - item.1.in_base | default(false) | bool
+        - not (item.1.on_scope | default(false) | bool)
+        - item.0.host in (item.1.filtered_hosts | default([]))
+
+    - name: "Assert state=absent apps have on_scope true (removal would run)"
       ansible.builtin.assert:
         that: "_fail_absent | default([]) | length == 0"
         fail_msg: "Scope invariant failed: state=absent app(s) have on_scope false; removal would be skipped. Failing host/app: {{ _fail_absent | default([]) }}"
+      when: assert_scope_invariants | default(false) | bool
+
+    - name: "Assert state=installed apps have on_scope true (install would run)"
+      ansible.builtin.assert:
+        that: "_fail_installed | default([]) | length == 0"
+        fail_msg: "Scope invariant failed: state=installed app(s) have on_scope false; install would be skipped. Failing host/app: {{ _fail_installed | default([]) }}"
       when: assert_scope_invariants | default(false) | bool

@@ -1,3 +1,4 @@
 ---
 dependencies:
   - role: splunk_common
+    when: not (debug_app_scope | default(false) | bool)

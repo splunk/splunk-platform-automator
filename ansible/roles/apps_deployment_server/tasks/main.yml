@@ -25,6 +25,8 @@
     # ITSI and content packs never go via deployment_server; they use direct/deployer (switch to direct when calculation would be DS).
     - (item.premium_app | default('')) != 'itsi'
     - not (item.itsi_content_pack | default(false))
+    # Apps that target only indexer and/or cluster_manager go via cluster manager (manager-apps), not DS.
+    - (item.target_roles | default([]) | difference(['indexer', 'cluster_manager']) | list | length) > 0
 
 - name: Debug deployment server apps
   tags:
@@ -40,6 +42,15 @@
       - "Apps: {{ ds_apps | map(attribute='name') | list | join(', ') if ds_apps | length > 0 else '(none)' }}"
       - "========================================="
     verbosity: 0
+
+- name: Initialize DS scope debug list (debug only)
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    ds_app_scope_debug: []
+  when: debug_app_scope | default(false) | bool
 
 - name: Process deployment server apps
   tags:

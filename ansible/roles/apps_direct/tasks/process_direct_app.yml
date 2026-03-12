@@ -137,6 +137,17 @@
   ansible.builtin.set_fact:
     _app_dir_filtered: "{{ (_app_dir_sh_filtered | default([])) + (_app_dir_filtered | default([])) | unique | list }}"
 
+# Apply hosts_whitelist/hosts_blacklist to the full direct set so non-SH roles (e.g. forwarders) are also restricted.
+- name: "Apply hosts_whitelist to full direct set for {{ app_item.name }}"
+  ansible.builtin.set_fact:
+    _app_dir_filtered: "{{ (_app_dir_filtered | default([])) | intersect((app_item | default({})).get('hosts_whitelist', []) | default([])) | list }}"
+  when: ((app_item | default({})).get('hosts_whitelist', []) | default([]) | length) > 0
+
+- name: "Apply hosts_blacklist to full direct set for {{ app_item.name }}"
+  ansible.builtin.set_fact:
+    _app_dir_filtered: "{{ (_app_dir_filtered | default([])) | reject('in', (app_item | default({})).get('hosts_blacklist', []) | default([])) | list }}"
+  when: ((app_item | default({})).get('hosts_blacklist', []) | default([]) | length) > 0
+
 # Scope: host in filtered set only (install and remove both respect hosts_whitelist/shc_whitelist; do not run remove on hosts outside filtered set).
 - name: "Set direct scope for {{ app_item.name }}"
   tags:
@@ -153,7 +164,7 @@
     - splunk_apps
     - direct_deployment
   ansible.builtin.set_fact:
-    scope_debug_results: "{{ scope_debug_results | default([]) + [{'app': app_item.name, 'state': (app_item | default({})).get('state', 'installed'), 'in_base': (inventory_hostname in (_app_dir_base | default([]))), 'in_filtered': (inventory_hostname in (_app_dir_filtered | default([]))), 'on_scope': _app_on_direct_scope, 'base_hosts': (_app_dir_base | default([])), 'filtered_hosts': (_app_dir_filtered | default([]))}] }}"
+    scope_debug_results: "{{ scope_debug_results | default([]) + [{'app': app_item.name, 'state': (app_item | default({})).get('state', 'installed'), 'in_base': (inventory_hostname in (_app_dir_base | default([]))), 'in_filtered': (inventory_hostname in (_app_dir_filtered | default([]))), 'on_scope': _app_on_direct_scope, 'base_hosts': (_app_dir_base | default([])), 'filtered_hosts': (_app_dir_filtered | default([])), 'customizations': (app_item | default({})).get('customizations'), 'content_pack_apps': (app_item | default({})).get('content_pack_apps'), 'library_app': (app_item | default({})).get('library_app'), 'install_all_apps': (app_item | default({})).get('install_all_apps')}] }}"
   when: debug_app_scope | default(false) | bool
 
 # When debug_app_scope=true we only collect scope above; skip install/remove below.

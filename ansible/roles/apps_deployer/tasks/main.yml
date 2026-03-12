@@ -38,12 +38,20 @@
     _itsi_cp: "{{ (item | default({})).get('premium_app') == 'itsi' or (item | default({})).get('itsi_content_pack') | default(false) }}"
     _norm_roles: "{{ (item | default({})).get('itsi_content_pack') | default(false) | ternary(['search_head'], ['search_head', 'indexer', 'license_manager']) }}"
     _app_item: "{{ _itsi_cp | ternary((item | default({}) | combine({'target_roles': _norm_roles, 'deployment_target': 'auto'})), item) }}"
+    # Content packs inherit hosts/shc filters from ITSI (same as direct role); use for deployer eligibility so CP follows ITSI targeting.
+    _effective_hosts_whitelist: "{{ (item | default({})).get('itsi_content_pack') and ((_itsi_apps_list | default([]) | first | default({})).get('hosts_whitelist', []) | default([])) or ((item | default({})).get('hosts_whitelist', []) | default([])) }}"
+    _effective_shc_w: "{{ (item | default({})).get('itsi_content_pack') and ((_itsi_apps_list | default([]) | first | default({})).get('shc_whitelist', []) | default([])) or ((item | default({})).get('shc_whitelist', []) | default([])) }}"
+    _effective_shc_b: "{{ (item | default({})).get('itsi_content_pack') and ((_itsi_apps_list | default([]) | first | default({})).get('shc_blacklist', []) | default([])) or ((item | default({})).get('shc_blacklist', []) | default([])) }}"
     _shc_member_hosts: "{{ (groups['role_search_head'] | default([])) | intersect((groups | dict2items | selectattr('key', 'match', '^shcluster_') | map(attribute='value') | flatten) | list) | list }}"
+    _shc_names: "{{ (groups | dict2items | selectattr('key', 'match', '^shcluster_') | map(attribute='key') | list) | map('regex_replace', '^shcluster_', '') | list }}"
+    _shc_effectively_targeted: "{{ _effective_shc_w if (_effective_shc_w | length > 0) else (_shc_names | reject('in', _effective_shc_b) | list) }}"
   when:
     - (_app_item | default({})).get('deployment_target', 'auto') != 'direct'
     - (_app_item | default({})).get('target_roles', []) | intersect(['search_head']) | length > 0
-    # ITSI/CP: only add when app targets at least one SHC member (no hosts_whitelist, or whitelist includes an SHC member)
-    - (not _itsi_cp) or ((item | default({})).get('hosts_whitelist', []) | default([]) | length == 0) or (((item | default({})).get('hosts_whitelist', []) | default([])) | intersect(_shc_member_hosts) | length > 0)
+    # When hosts_whitelist is set (or ITSI's for content pack): only add to deployer if at least one SHC member is in the whitelist (else app goes via direct to standalone SH only)
+    - (_effective_hosts_whitelist | default([]) | length == 0) or ((_effective_hosts_whitelist | default([])) | intersect(_shc_member_hosts) | length > 0)
+    # When shc_whitelist or shc_blacklist is set (or ITSI's for content pack): only add to deployer if at least one SHC is targeted (else app goes via direct to standalone SH only)
+    - (not ((_effective_shc_w | length > 0) or (_effective_shc_b | length > 0))) or (_shc_effectively_targeted | length > 0)
 
 - name: Set first SHC member for post-restart playbooks (shared, from apps_common)
   ansible.builtin.include_role:
@@ -145,7 +153,9 @@
       loop_control:
         loop_var: _loop_app_item
         label: "{{ _loop_app_item.name }}"
-  when: deployer_apps | length > 0
+  when:
+    - deployer_apps | length > 0
+    - not (debug_app_scope | default(false) | bool)
 
 - name: Deployer apps complete
   tags:
