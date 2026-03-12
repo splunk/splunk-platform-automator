@@ -27,26 +27,13 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
-# Colors for output
-RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 echo -e "${GREEN}=== Splunk Platform Automator - Verification Tests ===${NC}"
 
-# Create or activate test runner venv
-VENV_DIR="$SCRIPT_DIR/.venv"
-if [[ ! -d "$VENV_DIR" ]]; then
-    echo -e "${GREEN}Creating test runner virtual environment...${NC}"
-    python3 -m venv "$VENV_DIR"
-    source "$VENV_DIR/bin/activate"
-    pip install --upgrade pip
-    pip install -r "$SCRIPT_DIR/requirements.txt"
-else
-    source "$VENV_DIR/bin/activate"
-fi
+source "$SCRIPT_DIR/run_venv.sh"
 
 # Build pytest arguments
 # If -n is specified, add --dist=loadscope to keep tests grouped by config
@@ -67,11 +54,7 @@ if [[ "$HAS_PARALLEL" == true ]]; then
     echo -e "${YELLOW}Parallel mode: Each config runs on a separate worker${NC}"
 fi
 
-# Run verification tests
 echo -e "${GREEN}Running verification tests...${NC}"
-cd "$PROJECT_ROOT"
-
 pytest tests/test_verification.py "${PYTEST_ARGS[@]}"
 
 echo -e "${GREEN}=== Verification tests complete ===${NC}"
-

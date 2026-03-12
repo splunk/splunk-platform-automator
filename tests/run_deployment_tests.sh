@@ -21,12 +21,9 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
-# Colors for output
-RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 echo -e "${GREEN}=== Splunk Platform Automator - Deployment Tests ===${NC}"
 
@@ -36,17 +33,7 @@ if [[ -z "$AWS_ACCESS_KEY_ID" ]] || [[ -z "$AWS_SECRET_ACCESS_KEY" ]]; then
     echo "Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY before running tests."
 fi
 
-# Create or activate test runner venv
-VENV_DIR="$SCRIPT_DIR/.venv"
-if [[ ! -d "$VENV_DIR" ]]; then
-    echo -e "${GREEN}Creating test runner virtual environment...${NC}"
-    python3 -m venv "$VENV_DIR"
-    source "$VENV_DIR/bin/activate"
-    pip install --upgrade pip
-    pip install -r "$SCRIPT_DIR/requirements.txt"
-else
-    source "$VENV_DIR/bin/activate"
-fi
+source "$SCRIPT_DIR/run_venv.sh"
 
 # Build pytest arguments
 # If -n is specified, add --dist=loadscope to keep tests grouped by config
@@ -69,10 +56,7 @@ if [[ "$HAS_PARALLEL" == true ]]; then
     echo -e "${YELLOW}Parallel mode: Each config runs on a separate worker${NC}"
 fi
 
-# Run deployment tests
 echo -e "${GREEN}Running deployment tests...${NC}"
-cd "$PROJECT_ROOT"
-
 pytest tests/test_deployment.py "${PYTEST_ARGS[@]}"
 
 echo -e "${GREEN}=== Deployment tests complete ===${NC}"

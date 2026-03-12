@@ -26,26 +26,12 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
 GREEN='\033[0;32m'
 NC='\033[0m'
 
 echo -e "${GREEN}=== Splunk Platform Automator - App Deployment Tests ===${NC}"
 
-VENV_DIR="$SCRIPT_DIR/.venv"
-if [[ ! -d "$VENV_DIR" ]]; then
-    echo -e "${GREEN}Creating test runner virtual environment...${NC}"
-    python3 -m venv "$VENV_DIR"
-    source "$VENV_DIR/bin/activate"
-    pip install --upgrade pip
-    pip install -r "$SCRIPT_DIR/requirements.txt"
-    pip install -q 'pydantic>=2.0'
-else
-    source "$VENV_DIR/bin/activate"
-    pip install -q 'pydantic>=2.0'
-fi
-
-cd "$PROJECT_ROOT"
+source "$SCRIPT_DIR/run_venv.sh" 'pydantic>=2.0'
 
 # Run app deployment playbook tests, schema validation tests, and app deployment schema tests
 pytest tests/test_app_deployment.py tests/test_schema.py -k "TestAppDeploymentPreDeploymentChecks or TestAppDeploymentSchemaValidation or TestAppDeploymentConfig" "$@"

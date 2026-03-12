@@ -20,35 +20,14 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
-# Colors for output
-RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 echo -e "${GREEN}=== Splunk Platform Automator - Schema Validation Tests ===${NC}"
 
-# Create or activate test runner venv
-VENV_DIR="$SCRIPT_DIR/.venv"
-if [[ ! -d "$VENV_DIR" ]]; then
-    echo -e "${GREEN}Creating test runner virtual environment...${NC}"
-    python3 -m venv "$VENV_DIR"
-    source "$VENV_DIR/bin/activate"
-    pip install --upgrade pip
-    pip install -r "$SCRIPT_DIR/requirements.txt"
-    # Ensure pydantic is installed
-    pip install 'pydantic>=2.0'
-else
-    source "$VENV_DIR/bin/activate"
-    # Ensure pydantic is installed
-    pip install -q 'pydantic>=2.0'
-fi
+source "$SCRIPT_DIR/run_venv.sh" 'pydantic>=2.0'
 
-# Run schema validation tests
 echo -e "${GREEN}Running schema validation tests...${NC}"
-cd "$PROJECT_ROOT"
-
 pytest tests/test_schema.py "$@"
 
 echo -e "${GREEN}=== Schema validation tests complete ===${NC}"
