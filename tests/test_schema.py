@@ -846,6 +846,32 @@ class TestAppDeploymentConfig:
             validate_config(config)
         assert "name" in str(exc_info.value).lower()
 
+    def test_itsi_content_pack_state_must_match_itsi_app_state_raises(self):
+        """itsi_content_pack state must match the ITSI app state (both installed or both absent)."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["search_head"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
+                    {
+                        "name": "Splunk App for Content Packs",
+                        "itsi_content_pack": True,
+                        "state": "absent",
+                        "version": "2.4.0",
+                        "source": "local",
+                        "path": "content_packs.spl",
+                        "content_pack_apps": [{"name": "DA-ITSI-CP-foo"}],
+                    },
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "itsi_content_pack" in msg or "state" in msg
+        assert "match" in msg or "same" in msg
+
     # --- state ---
     def test_app_state_installed_absent_valid(self):
         """state: installed and state: absent are valid."""
@@ -923,12 +949,40 @@ class TestAppDeploymentConfig:
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
             "splunk_app_deployment": {
-                "apps": [{"name": "MyApp", "source": "splunkbase", "app_id": "not-a-number"}]
+                "apps": [{"name": "MyApp", "source": "splunkbase", "app_id": "not-a-number", "target_roles": ["indexer"]}]
             },
         }
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(config)
         assert "app_id" in str(exc_info.value).lower()
+
+    def test_app_target_roles_invalid_role_raises(self):
+        """target_roles must contain only allowed role values."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
+            "splunk_app_deployment": {
+                "apps": [{"name": "MyApp", "source": "local", "target_roles": ["search_head", "invalid_role"]}]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "target_roles" in msg and "invalid" in msg
+
+    def test_app_deployment_target_invalid_value_raises(self):
+        """deployment_target must be 'direct' or 'auto'."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["search_head"]}],
+            "splunk_app_deployment": {
+                "apps": [{"name": "MyApp", "source": "local", "deployment_target": "server", "target_roles": ["search_head"]}]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "deployment_target" in msg
 
     # --- customizations ---
     def test_customizations_valid_structure(self):
@@ -989,6 +1043,27 @@ class TestAppDeploymentConfig:
             validate_config(config)
         msg = str(exc_info.value).lower()
         assert "run_playbook" in msg and "run_role" in msg
+
+    def test_customizations_update_indexes_must_be_bool_raises(self):
+        """customizations.update_indexes must be true or false when set."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {
+                        "name": "MyApp",
+                        "source": "local",
+                        "target_roles": ["indexer"],
+                        "customizations": {"update_indexes": "yes"},
+                    }
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "update_indexes" in msg
 
     # --- splunk_app_deployment direct vars ---
     def test_splunk_app_deployment_direct_vars_valid(self):
@@ -1376,9 +1451,78 @@ class TestAppDeploymentConfig:
         assert "hosts_whitelist" in msg
         assert "shc_whitelist" in msg
 
+    def test_itsi_must_target_shc_or_standalone_not_both_raises(self):
+        """ITSI effective target set must not contain both SHC members and standalone search heads."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
+                {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+                {"name": "standalone_sh", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+            ],
+            "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {
+                        "name": "ITSI",
+                        "source": "splunkbase",
+                        "app_id": 1841,
+                        "premium_app": "itsi",
+                    }
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "itsi" in msg
+        assert "not both" in msg or "either" in msg or ("shc" in msg and "standalone" in msg)
+
 
 class TestTargetFilterOptions:
     """Tests for app deployment target filter options (hosts_whitelist, shc_whitelist, sc_whitelist, etc.)."""
+
+    def test_app_shc_whitelist_requires_target_roles_search_head_raises(self):
+        """Normal app with shc_whitelist must have search_head in target_roles."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "deployer1", "roles": ["deployer"], "shcluster": "shc1"},
+                {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+            ],
+            "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "MyApp", "source": "local", "target_roles": ["indexer"], "shc_whitelist": ["shc1"]}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "shc_whitelist" in msg and "search_head" in msg
+
+    def test_app_idxc_whitelist_requires_target_roles_indexer_raises(self):
+        """Normal app with idxc_whitelist must have indexer in target_roles."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+                {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"name": "idx2", "roles": ["indexer"], "idxcluster": "idxc1"},
+            ],
+            "splunk_idxclusters": [{"idxc_name": "idxc1", "idxc_password": "secret"}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "MyApp", "source": "local", "target_roles": ["search_head"], "idxc_whitelist": ["idxc1"]}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "idxc_whitelist" in msg and "indexer" in msg
 
     def test_app_with_hosts_whitelist_and_shc_whitelist_valid(self):
         """App with hosts_whitelist (non-cluster hosts) and shc_whitelist (valid SHC name) validates.
