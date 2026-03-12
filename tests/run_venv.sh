@@ -33,11 +33,14 @@ else
 fi
 
 # Optional: install extra packages (only when explicitly passed to source command).
-# When sourced, we inherit the caller's $@ (e.g. pytest -v); only run pip for
-# args that look like package specs (do not start with -).
+# When sourced, we inherit the caller's $@ (e.g. pytest -n 2 -v); only run pip for
+# args that look like package specs (contain a letter; exclude bare numbers like -n 2).
 _run_venv_pkgs=()
 for _arg in "$@"; do
-    [[ "$_arg" != -* ]] && _run_venv_pkgs+=("$_arg")
+    [[ "$_arg" == -* ]] && continue
+    # Exclude bare numbers (e.g. -n 2) and other non-package args
+    [[ "$_arg" =~ ^[0-9]+$ ]] && continue
+    [[ "$_arg" == *[a-zA-Z]* ]] && _run_venv_pkgs+=("$_arg")
 done
 if [[ ${#_run_venv_pkgs[@]} -gt 0 ]]; then
     pip install -q "${_run_venv_pkgs[@]}"
