@@ -854,7 +854,7 @@ class TestAppDeploymentConfig:
                 "plugin": "splunk-platform-automator",
                 "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
                 "splunk_app_deployment": {
-                    "apps": [{"name": "MyApp", "source": "local", "state": state}]
+                    "apps": [{"name": "MyApp", "source": "local", "state": state, "target_roles": ["indexer"]}]
                 },
             }
             result = validate_config(config)
@@ -866,7 +866,7 @@ class TestAppDeploymentConfig:
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
             "splunk_app_deployment": {
-                "apps": [{"name": "MyApp", "state": "remove"}]
+                "apps": [{"name": "MyApp", "source": "local", "state": "remove", "target_roles": ["indexer"]}]
             },
         }
         with pytest.raises(ConfigValidationError) as exc_info:
@@ -881,8 +881,8 @@ class TestAppDeploymentConfig:
             "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
             "splunk_app_deployment": {
                 "apps": [
-                    {"name": "A", "source": "splunkbase", "app_id": 1, "version": "latest"},
-                    {"name": "B", "source": "splunkbase", "app_id": 2, "version": "4.21.1"},
+                    {"name": "A", "source": "splunkbase", "app_id": 1, "version": "latest", "target_roles": ["indexer"]},
+                    {"name": "B", "source": "splunkbase", "app_id": 2, "version": "4.21.1", "target_roles": ["indexer"]},
                 ]
             },
         }
@@ -896,7 +896,7 @@ class TestAppDeploymentConfig:
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
             "splunk_app_deployment": {
-                "apps": [{"name": "MyApp", "source": "splunkbase", "app_id": 352, "version": "dev"}]
+                "apps": [{"name": "MyApp", "source": "splunkbase", "app_id": 352, "version": "dev", "target_roles": ["indexer"]}]
             },
         }
         with pytest.raises(ConfigValidationError) as exc_info:
@@ -962,7 +962,7 @@ class TestAppDeploymentConfig:
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
             "splunk_app_deployment": {
-                "apps": [{"name": "MyApp", "source": "local", "customizations": ["remove"]}]
+                "apps": [{"name": "MyApp", "source": "local", "target_roles": ["indexer"], "customizations": ["remove"]}]
             },
         }
         with pytest.raises(ConfigValidationError) as exc_info:
@@ -978,6 +978,8 @@ class TestAppDeploymentConfig:
                 "apps": [
                     {
                         "name": "MyApp",
+                        "source": "local",
+                        "target_roles": ["indexer"],
                         "customizations": {"run_playbook": "ansible/foo.yml", "run_role": "my.role"},
                     }
                 ]
@@ -1000,7 +1002,7 @@ class TestAppDeploymentConfig:
                 "temp_dir": "/tmp/splunk_apps",
                 "download_timeout": 120,
                 "retry_count": 3,
-                "apps": [{"name": "MyApp", "source": "local"}],
+                "apps": [{"name": "MyApp", "source": "local", "target_roles": ["indexer"]}],
             },
         }
         result = validate_config(config)
@@ -1013,7 +1015,7 @@ class TestAppDeploymentConfig:
             "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
             "splunk_app_deployment": {
                 "target_download": "yes",
-                "apps": [{"name": "MyApp", "source": "local"}],
+                "apps": [{"name": "MyApp", "source": "local", "target_roles": ["indexer"]}],
             },
         }
         with pytest.raises(ConfigValidationError) as exc_info:
@@ -1027,7 +1029,7 @@ class TestAppDeploymentConfig:
             "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
             "splunk_app_deployment": {
                 "temp_dir": "   ",
-                "apps": [{"name": "MyApp", "source": "local"}],
+                "apps": [{"name": "MyApp", "source": "local", "target_roles": ["indexer"]}],
             },
         }
         with pytest.raises(ConfigValidationError) as exc_info:
@@ -1041,7 +1043,7 @@ class TestAppDeploymentConfig:
             "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
             "splunk_app_deployment": {
                 "download_timeout": 0,
-                "apps": [{"name": "MyApp", "source": "local"}],
+                "apps": [{"name": "MyApp", "source": "local", "target_roles": ["indexer"]}],
             },
         }
         with pytest.raises(ConfigValidationError) as exc_info:
@@ -1379,7 +1381,8 @@ class TestTargetFilterOptions:
     """Tests for app deployment target filter options (hosts_whitelist, shc_whitelist, sc_whitelist, etc.)."""
 
     def test_app_with_hosts_whitelist_and_shc_whitelist_valid(self):
-        """App with hosts_whitelist (non-cluster hosts) and shc_whitelist (valid SHC name) validates."""
+        """App with hosts_whitelist (non-cluster hosts) and shc_whitelist (valid SHC name) validates.
+        target_roles must include all roles of hosts in hosts_whitelist (search_head + indexer)."""
         config = {
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [
@@ -1391,7 +1394,7 @@ class TestTargetFilterOptions:
             "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
             "splunk_app_deployment": {
                 "apps": [
-                    {"name": "MyApp", "source": "local", "target_roles": ["search_head"], "shc_whitelist": ["shc1"], "hosts_whitelist": ["standalone_sh", "idx1"]}
+                    {"name": "MyApp", "source": "local", "target_roles": ["search_head", "indexer"], "shc_whitelist": ["shc1"], "hosts_whitelist": ["standalone_sh", "idx1"]}
                 ]
             },
         }
