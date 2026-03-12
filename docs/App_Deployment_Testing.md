@@ -20,6 +20,13 @@ This runs:
 
 No real Splunk hosts or AWS are required. Playbook tests need `ansible-playbook` on PATH.
 
+**App scope scenario tests** (`tests/test_app_scope_scenarios.py`):
+
+- Run `debug_app_scope.yml` with `run_scope_locally=true` per scenario config (no SSH).
+- Scenario configs live under `tests/scenarios/app_scope/<name>/splunk_config.yml` (e.g. minimal_direct, ds_only, deployer_shc, ds_with_hosts_whitelist, itsi_content_pack, state_absent).
+- Each scenario uses a different topology and app/filter setup; the test asserts the produced `scope_debug.json` (direct_scope, deployer, cluster_manager, deployment_server).
+- Run from project root: `pytest tests/test_app_scope_scenarios.py -v`.
+
 ---
 
 ## 1. Pre-flight checks (no inventory needed)
@@ -131,3 +138,4 @@ This uses `config/splunk_config.yml` from the project root and does not create a
 - [ ] ITSI remove: all ITSI app dirs removed; with `cache_downloads: false`, archive and itsi_app_confs cleaned up.
 - [ ] Same app with different target_roles/customizations deploys to correct targets (DS vs CM vs direct).
 - [ ] `verify_app_deployment.yml` passes (report or strict) after a successful deploy.
+- [ ] App scope scenario tests pass: `pytest tests/test_app_scope_scenarios.py -v` (ensures filtering and deployer/direct/DS/CM scope logic behave as expected without real hosts).

@@ -11,6 +11,8 @@
 .ansible
 *.retry
 ansible/verification/output/
+tests/scenarios/app_scope/output/*.json
+tests/scenarios/app_scope/output/.ansible_tmp
 # Vault password (do not commit)
 .vault_pass.txt
 .vault_pass
@@ -19,9 +21,9 @@ ansible/verification/output/
 *.log
 # Config directory
 /config
+**/aws_ec2.yml
 # Dev docs directory
 /docs_dev
-**/splunk_config.yml
 # Auth directory
 /auth
 # Inventory directory

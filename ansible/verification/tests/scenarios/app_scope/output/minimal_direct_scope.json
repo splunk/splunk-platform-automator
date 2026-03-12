@@ -1,0 +1,42 @@
+{
+    "cluster_manager": {
+        "apps": [],
+        "apps_with_config": [],
+        "host": null,
+        "target_hosts": []
+    },
+    "deployer": {
+        "apps": [],
+        "apps_with_config": [],
+        "host": null,
+        "target_hosts": []
+    },
+    "deployment_server": {
+        "apps_with_targets": [],
+        "host": null
+    },
+    "direct_scope": [
+        {
+            "host": "sh",
+            "scope_debug_results": [
+                {
+                    "app": "org_some_local_app",
+                    "base_hosts": [
+                        "sh"
+                    ],
+                    "content_pack_apps": null,
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "sh"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "on_scope": true,
+                    "state": "installed"
+                }
+            ]
+        }
+    ]
+}

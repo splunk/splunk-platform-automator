@@ -109,9 +109,9 @@
       ansible.builtin.set_fact:
         scope_debug_combined: "{{ {
           'direct_scope': scope_report | default([]),
-          'deployment_server': {'host': _ds_host, 'apps_with_targets': (hostvars[_ds_host].ds_app_scope_debug | default([]))} if (_ds_host | default('') | length > 0) else {'host': null, 'apps_with_targets': []},
-          'deployer': {'host': _deployer_host, 'apps': (hostvars[_deployer_host].deployer_apps | default([]) | map(attribute='name') | list), 'apps_with_config': (_deployer_apps_config | default([])), 'target_hosts': _shc_members} if (_deployer_host | default('') | length > 0) else {'host': null, 'apps': [], 'apps_with_config': [], 'target_hosts': []},
-          'cluster_manager': {'host': _cm_host, 'apps': (hostvars[_cm_host].cm_apps | default([]) | map(attribute='name') | list), 'apps_with_config': (_cm_apps_config | default([])), 'target_hosts': _idxc_members} if (_cm_host | default('') | length > 0) else {'host': null, 'apps': [], 'apps_with_config': [], 'target_hosts': []}
+          'deployment_server': {'host': _ds_host, 'apps_with_targets': (hostvars[_ds_host].ds_app_scope_debug | default([]))} if (_ds_host | default('') | length > 0) else {'host': none, 'apps_with_targets': []},
+          'deployer': {'host': _deployer_host, 'apps': (hostvars[_deployer_host].deployer_apps | default([]) | map(attribute='name') | list), 'apps_with_config': (_deployer_apps_config | default([])), 'target_hosts': _shc_members} if (_deployer_host | default('') | length > 0) else {'host': none, 'apps': [], 'apps_with_config': [], 'target_hosts': []},
+          'cluster_manager': {'host': _cm_host, 'apps': (hostvars[_cm_host].cm_apps | default([]) | map(attribute='name') | list), 'apps_with_config': (_cm_apps_config | default([])), 'target_hosts': _idxc_members} if (_cm_host | default('') | length > 0) else {'host': none, 'apps': [], 'apps_with_config': [], 'target_hosts': []}
         } }}"
 
     - name: Write scope debug to file
