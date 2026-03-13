@@ -700,6 +700,138 @@ class TestClusterConfigurations:
         assert len(result.splunk_app_deployment.apps) == 1
         assert result.splunk_app_deployment.apps[0].get("premium_app") == "itsi"
 
+    def test_itsi_single_indexer_layer_raises_when_multiple_idxc(self):
+        """ITSI for install with two indexer clusters must raise."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "sh", "roles": ["search_head"]},
+                {"name": "idx", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+                {"name": "cm1", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+                {"name": "cm2", "roles": ["cluster_manager"], "idxcluster": "idxc2"},
+                {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"name": "idx2", "roles": ["indexer"], "idxcluster": "idxc2"},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
+            "splunk_idxclusters": [
+                {"idxc_name": "idxc1", "idxc_password": "x", "idxc_replication_port": 9887},
+                {"idxc_name": "idxc2", "idxc_password": "x", "idxc_replication_port": 9888},
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "Splunk IT Service Intelligence", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi"}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value)
+        assert "ITSI" in msg or "indexer" in msg
+        assert "one indexer layer" in msg or "cannot cope" in msg or "2 indexer cluster" in msg
+
+    def test_itsi_single_indexer_layer_raises_when_idxc_plus_standalone(self):
+        """ITSI for install with one IDXC and one standalone indexer must raise."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "sh", "roles": ["search_head"]},
+                {"name": "idx_standalone", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+                {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+                {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"name": "idx2", "roles": ["indexer"], "idxcluster": "idxc1"},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
+            "splunk_idxclusters": [
+                {"idxc_name": "idxc1", "idxc_password": "x", "idxc_replication_port": 9887},
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "Splunk IT Service Intelligence", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi"}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value)
+        assert "ITSI" in msg or "indexer" in msg
+        assert "1 indexer cluster" in msg or "1 standalone" in msg or "one indexer layer" in msg
+
+    def test_itsi_single_indexer_layer_passes_one_idxc(self):
+        """ITSI for install with exactly one indexer cluster and no standalone indexers passes."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "sh", "roles": ["search_head"]},
+                {"name": "lm", "roles": ["license_manager"]},
+                {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+                {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"name": "idx2", "roles": ["indexer"], "idxcluster": "idxc1"},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
+            "splunk_idxclusters": [
+                {"idxc_name": "idxc1", "idxc_password": "x", "idxc_replication_port": 9887},
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "Splunk IT Service Intelligence", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi"}
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert result.splunk_app_deployment is not None
+
+    def test_itsi_single_indexer_layer_passes_one_standalone(self):
+        """ITSI for install with no IDXC and exactly one standalone indexer passes."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "sh", "roles": ["search_head"]},
+                {"name": "idx", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "Splunk IT Service Intelligence", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi"}
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert result.splunk_app_deployment is not None
+
+    def test_itsi_single_indexer_layer_skipped_when_itsi_absent(self):
+        """When ITSI has state absent, single-indexer-layer check is skipped (removal scenario)."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "sh", "roles": ["search_head"]},
+                {"name": "idx_standalone", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+                {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+                {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
+            "splunk_idxclusters": [
+                {"idxc_name": "idxc1", "idxc_password": "x", "idxc_replication_port": 9887},
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    {
+                        "name": "Splunk IT Service Intelligence",
+                        "source": "splunkbase",
+                        "app_id": 1841,
+                        "premium_app": "itsi",
+                        "state": "absent",
+                    }
+                ]
+            },
+        }
+        # Should not raise (validator skips when ITSI is absent)
+        result = validate_config(config)
+        assert result.splunk_app_deployment is not None
+
     def test_license_manager_requires_license_file(self):
         """Test that license_manager role requires splunk_license_file."""
         config = {

@@ -1190,6 +1190,63 @@ class SplunkConfig(BaseModel):
         return self
 
     @model_validator(mode='after')
+    def validate_itsi_single_indexer_layer(self) -> 'SplunkConfig':
+        """When ITSI is enabled for install, allow only one indexer layer: either one IDXC or one standalone indexer.
+
+        The code cannot cope with two or more indexer clusters, or a mix of IDXC and standalone indexers.
+        """
+        dep = self.splunk_app_deployment
+        if not dep or not dep.apps:
+            return self
+
+        # ITSI must be present and installed (not removal-only)
+        has_itsi_for_install = any(
+            isinstance(a, dict)
+            and (a.get("premium_app") or "").strip().lower() == "itsi"
+            and (str(a.get("state", "installed")).strip().lower() != "absent")
+            for a in dep.apps
+        )
+        if not has_itsi_for_install:
+            return self
+
+        num_idxc = len(self.splunk_idxclusters) if self.splunk_idxclusters else 0
+
+        def _host_count(host: SplunkHost) -> int:
+            if host.name is not None:
+                return 1
+            if host.list is not None:
+                return len(host.list)
+            if host.iter is not None:
+                parts = host.iter.numbers.split("..")
+                start, end = int(parts[0]), int(parts[1])
+                return end - start + 1
+            return 0
+
+        standalone_indexer_count = 0
+        for host in self.splunk_hosts:
+            if AllowedRole.indexer not in host.roles:
+                continue
+            if host.idxcluster and isinstance(host.idxcluster, str) and host.idxcluster.strip():
+                continue
+            standalone_indexer_count += _host_count(host)
+
+        # Allowed: exactly one IDXC and no standalone indexers, OR no IDXC and exactly one standalone indexer
+        if num_idxc == 1 and standalone_indexer_count == 0:
+            return self
+        if num_idxc == 0 and standalone_indexer_count == 1:
+            return self
+
+        raise ValueError(
+            "When Splunk IT Service Intelligence (ITSI) is enabled for install, the environment must have "
+            "exactly one indexer layer: either one indexer cluster (splunk_idxclusters with one cluster and all "
+            "indexers in it) or one standalone indexer (no splunk_idxclusters, exactly one indexer host without "
+            "idxcluster). The code cannot cope with multiple indexer clusters or a mix of cluster and standalone "
+            "indexers. "
+            f"Current: {num_idxc} indexer cluster(s), {standalone_indexer_count} standalone indexer(s). "
+            "Use exactly one cluster with all indexers as members, or remove clusters and use a single standalone indexer."
+        )
+
+    @model_validator(mode='after')
     def validate_no_direct_deploy_to_shc_members(self) -> 'SplunkConfig':
         """Fail if any app is configured for direct deployment to search_head while SHC members exist.
 
