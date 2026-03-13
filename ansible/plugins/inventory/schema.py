@@ -996,6 +996,65 @@ class SplunkConfig(BaseModel):
         return self
 
     @model_validator(mode='after')
+    def validate_deployer_shcluster_must_match_defined_shc(self) -> 'SplunkConfig':
+        """Ensure every deployer has shcluster set to a defined shc_name from splunk_shclusters.
+
+        When multiple SHCs are defined, the deployer must explicitly specify which cluster
+        it serves via the shcluster field (same value as one of splunk_shclusters[].shc_name).
+        """
+        defined_shc_names: set = set()
+        if self.splunk_shclusters:
+            for shc in self.splunk_shclusters:
+                defined_shc_names.add(shc.shc_name)
+
+        for host in self.splunk_hosts:
+            if AllowedRole.deployer not in host.roles:
+                continue
+            # Host-level validator already requires deployer to have shcluster set
+            shc_val = (host.shcluster or "").strip() if isinstance(host.shcluster, str) else ""
+            if not shc_val:
+                raise ValueError(
+                    "Host with role 'deployer' must have 'shcluster' set to the SHC name it serves. "
+                    "When multiple SHCs are defined, the deployer must specify which cluster via 'shcluster'."
+                )
+            if defined_shc_names and shc_val not in defined_shc_names:
+                raise ValueError(
+                    f"Host with role 'deployer' has shcluster={host.shcluster!r}, which must be one of the "
+                    f"SHC names defined in splunk_shclusters. When multiple SHCs are defined, the deployer "
+                    f"must specify which cluster it serves. Defined SHC names: {sorted(defined_shc_names)!r}."
+                )
+        return self
+
+    @model_validator(mode='after')
+    def validate_each_shc_has_deployer_when_multiple_shcs(self) -> 'SplunkConfig':
+        """When multiple SHCs are defined, each SHC must have at least one deployer.
+
+        Every shc_name in splunk_shclusters must have a host with role 'deployer' and
+        shcluster set to that shc_name. A single deployer can only serve one SHC.
+        """
+        if not self.splunk_shclusters or len(self.splunk_shclusters) < 2:
+            return self
+
+        defined_shc_names = {shc.shc_name for shc in self.splunk_shclusters}
+        shc_names_with_deployer: set = set()
+        for host in self.splunk_hosts:
+            if AllowedRole.deployer not in host.roles:
+                continue
+            shc_val = (host.shcluster or "").strip() if isinstance(host.shcluster, str) else ""
+            if shc_val and shc_val in defined_shc_names:
+                shc_names_with_deployer.add(shc_val)
+
+        missing = defined_shc_names - shc_names_with_deployer
+        if missing:
+            raise ValueError(
+                f"When multiple Search Head Clusters are defined, each SHC must have a deployer. "
+                f"SHC(s) without a deployer: {sorted(missing)!r}. "
+                f"Add a host with role 'deployer' and shcluster set to each of these cluster names, "
+                f"or remove the SHC definition. SHCs with a deployer: {sorted(shc_names_with_deployer)!r}."
+            )
+        return self
+
+    @model_validator(mode='after')
     def validate_idxc_members_have_idxcluster(self) -> 'SplunkConfig':
         """Ensure at least 2 indexers have idxcluster flag when cluster_manager exists.
         
@@ -1098,6 +1157,36 @@ class SplunkConfig(BaseModel):
                     "in splunk_defaults."
                 )
         
+        return self
+
+    @model_validator(mode='after')
+    def validate_itsi_requires_search_head_indexer_license_manager(self) -> 'SplunkConfig':
+        """When ITSI (Splunk IT Service Intelligence) is in app deployment, the environment must have search_head, indexer, and license_manager roles."""
+        dep = self.splunk_app_deployment
+        if not dep or not dep.apps:
+            return self
+
+        has_itsi = any(
+            isinstance(a, dict)
+            and (a.get("premium_app") or "").strip().lower() == "itsi"
+            for a in dep.apps
+        )
+        if not has_itsi:
+            return self
+
+        roles_present: set = set()
+        for host in self.splunk_hosts:
+            roles_present.update(host.roles)
+
+        required = {AllowedRole.search_head, AllowedRole.indexer, AllowedRole.license_manager}
+        missing = required - roles_present
+        if missing:
+            missing_names = sorted(r.value for r in missing)
+            raise ValueError(
+                "When Splunk IT Service Intelligence (ITSI) is in splunk_app_deployment, the environment "
+                "must include hosts with roles: search_head, indexer, and license_manager. "
+                f"Missing role(s): {missing_names!r}. Add at least one host with each of these roles in splunk_hosts."
+            )
         return self
 
     @model_validator(mode='after')

@@ -593,6 +593,113 @@ class TestClusterConfigurations:
         msg = str(exc_info.value).lower()
         assert "splunk_shclusters" in msg and "shc_other" in str(exc_info.value)
 
+    def test_deployer_shcluster_must_match_defined_shc_when_multiple_shcs_raises(self):
+        """Deployer shcluster must be one of the shc_name values in splunk_shclusters; required when multiple SHCs exist."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "dep", "roles": ["deployer"], "shcluster": "shc_wrong"},
+                {"iter": {"numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+                {"iter": {"prefix": "sh", "numbers": "4..6"}, "roles": ["search_head"], "shcluster": "shc2"},
+            ],
+            "splunk_shclusters": [
+                {"shc_name": "shc1", "shc_password": "p1", "shc_replication_port": 9887},
+                {"shc_name": "shc2", "shc_password": "p2", "shc_replication_port": 9888},
+            ],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value)
+        # Either validator may fire: deployer-specific or generic shcluster-not-defined
+        assert "shcluster" in msg.lower()
+        assert "shc_wrong" in msg
+        assert "shc1" in msg and "shc2" in msg
+
+    def test_deployer_shcluster_matches_defined_shc_passes(self):
+        """Deployer with shcluster set to a defined shc_name validates when multiple SHCs are defined."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "ds", "roles": ["deployment_server", "deployer"], "shcluster": "shc1"},
+                {"name": "ds2", "roles": ["deployer"], "shcluster": "shc2"},
+                {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+                {"iter": {"prefix": "sh", "numbers": "4..6"}, "roles": ["search_head"], "shcluster": "shc2"},
+            ],
+            "splunk_shclusters": [
+                {"shc_name": "shc1", "shc_password": "p1", "shc_replication_port": 9887},
+                {"shc_name": "shc2", "shc_password": "p2", "shc_replication_port": 9888},
+            ],
+        }
+        result = validate_config(config)
+        assert result.splunk_shclusters is not None
+        assert len(result.splunk_shclusters) == 2
+        deployer_hosts = [h for h in result.splunk_hosts if getattr(h, "roles") and "deployer" in [r.value for r in h.roles]]
+        assert len(deployer_hosts) == 2
+        shclusters = {h.shcluster for h in deployer_hosts}
+        assert shclusters == {"shc1", "shc2"}
+
+    def test_each_shc_requires_deployer_when_multiple_shcs_raises(self):
+        """When multiple SHCs are defined, each must have a deployer; config with only one deployer fails."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "ds", "roles": ["deployment_server", "deployer"], "shcluster": "shc1"},
+                {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+                {"iter": {"prefix": "sh", "numbers": "4..6"}, "roles": ["search_head"], "shcluster": "shc2"},
+            ],
+            "splunk_shclusters": [
+                {"shc_name": "shc1", "shc_password": "p1", "shc_replication_port": 9887},
+                {"shc_name": "shc2", "shc_password": "p2", "shc_replication_port": 9888},
+            ],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value)
+        assert "shc2" in msg or "without a deployer" in msg.lower()
+        assert "deployer" in msg.lower()
+
+    def test_itsi_requires_search_head_indexer_license_manager_raises(self):
+        """When ITSI is in app deployment, environment must have search_head, indexer, and license_manager."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "sh", "roles": ["search_head"]},
+                {"name": "idx", "roles": ["indexer"]},
+                # no license_manager
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "Splunk IT Service Intelligence", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi"}
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "itsi" in msg or "license_manager" in msg
+        assert "license_manager" in msg or "missing" in msg
+
+    def test_itsi_requires_search_head_indexer_license_manager_passes(self):
+        """ITSI in app deployment with search_head, indexer, and license_manager present validates."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "sh", "roles": ["search_head"]},
+                {"name": "idx", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "Splunk IT Service Intelligence", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi"}
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert result.splunk_app_deployment is not None
+        assert len(result.splunk_app_deployment.apps) == 1
+        assert result.splunk_app_deployment.apps[0].get("premium_app") == "itsi"
+
     def test_license_manager_requires_license_file(self):
         """Test that license_manager role requires splunk_license_file."""
         config = {
