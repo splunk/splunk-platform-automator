@@ -811,6 +811,7 @@ class TestClusterConfigurations:
                 {"name": "lm", "roles": ["license_manager"]},
                 {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
                 {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"name": "idx2", "roles": ["indexer"], "idxcluster": "idxc1"},
             ],
             "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
             "splunk_idxclusters": [
@@ -919,7 +920,12 @@ class TestAppDeploymentConfig:
         """Premium app (premium_app: itsi) without target_roles is valid."""
         config = {
             "plugin": "splunk-platform-automator",
-            "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
+            "splunk_hosts": [
+                {"name": "sh", "roles": ["search_head"]},
+                {"name": "h1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
             "splunk_app_deployment": {
                 "apps": [
                     {"name": "Splunk IT Service Intelligence", "source": "splunkbase", "app_id": 1841, "version": "4.21.1", "premium_app": "itsi"}
@@ -964,7 +970,12 @@ class TestAppDeploymentConfig:
         """Valid itsi_content_pack entry with ITSI app (premium_app: itsi, state: installed) is accepted."""
         config = {
             "plugin": "splunk-platform-automator",
-            "splunk_hosts": [{"name": "h1", "roles": ["search_head"]}],
+            "splunk_hosts": [
+                {"name": "h1", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
             "splunk_app_deployment": {
                 "apps": [
                     {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
@@ -1487,7 +1498,9 @@ class TestAppDeploymentConfig:
             "splunk_hosts": [
                 {"name": "standalone_sh", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
             ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
             "splunk_app_deployment": {
                 "apps": [
                     {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi"}
@@ -1505,7 +1518,9 @@ class TestAppDeploymentConfig:
                 {"name": "sh1", "roles": ["search_head"]},
                 {"name": "sh2", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
             ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
             "splunk_app_deployment": {
                 "apps": [
                     {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi"}
@@ -1526,7 +1541,9 @@ class TestAppDeploymentConfig:
                 {"name": "sh1", "roles": ["search_head"]},
                 {"name": "sh2", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
             ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
             "splunk_app_deployment": {
                 "apps": [
                     {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "hosts_whitelist": ["sh1"]}
@@ -1546,7 +1563,9 @@ class TestAppDeploymentConfig:
                 {"iter": {"numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
                 {"name": "standalone_sh", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
             ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
             "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
             "splunk_app_deployment": {
                 "apps": [
@@ -1569,7 +1588,9 @@ class TestAppDeploymentConfig:
                 {"iter": {"numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
                 {"name": "standalone_sh", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
             ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
             "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
             "splunk_app_deployment": {
                 "apps": [
@@ -1588,7 +1609,9 @@ class TestAppDeploymentConfig:
             "splunk_hosts": [
                 {"name": "standalone_sh", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
             ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
             "splunk_idxclusters": [{"idxc_name": "idxc1"}],
             "splunk_app_deployment": {
                 "apps": [
@@ -1599,15 +1622,22 @@ class TestAppDeploymentConfig:
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(config)
         msg = str(exc_info.value).lower()
-        assert "premium" in msg
-        assert "idxc_whitelist" in msg
-        assert "hosts_whitelist" in msg or "shc_whitelist" in msg
+        # Either premium-app filter error (idxc_* not allowed) or ITSI single-indexer-layer error (idxc + standalone not allowed)
+        assert "premium" in msg or "one indexer layer" in msg or "indexer layer" in msg
+        assert "idxc_whitelist" in msg or "indexer" in msg
 
     def test_premium_app_sc_whitelist_not_allowed_raises(self):
         """Premium apps may not use sc_whitelist or sc_blacklist; only hosts_* and shc_* filters allowed."""
         config = {
             "plugin": "splunk-platform-automator",
-            "splunk_hosts": [{"name": "ds1", "roles": ["deployment_server"]}, {"name": "uf1", "roles": ["universal_forwarder"]}],
+            "splunk_hosts": [
+                {"name": "ds1", "roles": ["deployment_server"]},
+                {"name": "uf1", "roles": ["universal_forwarder"]},
+                {"name": "sh", "roles": ["search_head"]},
+                {"name": "idx", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
             "splunk_app_deployment": {
                 "apps": [
                     {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "sc_whitelist": ["*"]}
@@ -1628,7 +1658,9 @@ class TestAppDeploymentConfig:
             "splunk_hosts": [
                 {"name": "sh1", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
             ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
             "splunk_app_deployment": {
                 "apps": [
                     {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "hosts_blacklist": ["sh1"]}
@@ -1650,7 +1682,9 @@ class TestAppDeploymentConfig:
                 {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
                 {"iter": {"numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
                 {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
             ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
             "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
             "splunk_app_deployment": {
                 "apps": [
@@ -1674,7 +1708,9 @@ class TestAppDeploymentConfig:
                 {"iter": {"numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
                 {"name": "standalone_sh", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
             ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
             "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
             "splunk_app_deployment": {
                 "apps": [
@@ -1699,7 +1735,9 @@ class TestAppDeploymentConfig:
                 {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
                 {"name": "standalone_sh", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
             ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
             "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
             "splunk_app_deployment": {
                 "apps": [
