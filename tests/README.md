@@ -31,6 +31,12 @@ tests/
 │   │   ├── duplicate_apps.yml # Invalid: duplicate app (same name + same deployment_target + target_roles); tests schema duplicate detection
 │   │   ├── valid_no_splunkbase.yml
 │   │   └── splunkbase_no_creds.yml
+│   ├── app_scope/             # App scope scenario configs (no SSH)
+│   │   ├── <scenario_name>/
+│   │   │   ├── splunk_config.yml
+│   │   │   └── expected_scope.json
+│   │   ├── minimal_direct/, ds_only/, ...
+│   │   └── output/            # Generated scope JSON per scenario
 │   └── ...
 ├── conftest.py                # Pytest fixtures (workspace isolation)
 ├── pytest.ini                 # Pytest configuration
@@ -41,8 +47,12 @@ tests/
 ├── test_verification.py       # Phase 2: Health verification tests
 ├── run_deployment_tests.sh    # Helper script for deployment tests
 ├── run_app_deployment_tests.sh # Helper script for app deployment tests
+├── run_app_scope_scenarios_tests.sh # App scope scenario tests (debug_app_scope per scenario)
 ├── run_schema_tests.sh        # Helper script for schema validation tests
-└── run_verification_tests.sh  # Helper script for verification tests
+├── run_verification_tests.sh  # Helper script for verification tests
+├── run_venv.sh                # Common venv setup (sourced by run_*.sh scripts)
+├── scope_assertions.py        # Helpers for app scope scenario assertions
+└── test_app_scope_scenarios.py # Scenario-based app scope tests
 ```
 
 ## Test Phases
@@ -125,6 +135,19 @@ Fixtures (extra-vars) live in `tests/configs/app_deployment/*.yml`. Schema tests
 ```
 
 Requires `ansible-playbook` on PATH for playbook tests.
+
+### App scope scenario tests (`test_app_scope_scenarios.py`)
+
+Scenario-based tests for app scope (no SSH or real hosts). Each scenario under `tests/configs/app_scope/<name>/splunk_config.yml` runs `debug_app_scope.yml` with `run_scope_locally=true` and asserts on the produced scope JSON (direct_scope, deployer, cluster_manager, deployment_server). Scenarios: minimal_direct, ds_only, deployer_shc, ds_with_hosts_whitelist, itsi_content_pack, state_absent.
+
+**Run app scope scenario tests:**
+```bash
+./tests/run_app_scope_scenarios_tests.sh
+./tests/run_app_scope_scenarios_tests.sh -v
+./tests/run_app_scope_scenarios_tests.sh -k "minimal_direct"
+```
+
+Requires `ansible-playbook`, `ansible-core`, `jmespath`, and `lxml` in the test venv (installed by the run script). Output: `tests/configs/app_scope/output/<scenario>_scope.json`.
 
 ## Running Tests
 

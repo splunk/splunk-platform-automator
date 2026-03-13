@@ -1,0 +1,33 @@
+---
+# Scenario: cm_idxc
+# CM + IDXC (idx1, idx2). App with target_roles: [indexer].
+# Verifies: cluster_manager.apps and target_hosts = indexers.
+plugin: splunk-platform-automator
+
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: splunkidx
+    idxc_replication_port: 9887
+
+splunk_hosts:
+  - name: cm
+    roles:
+      - cluster_manager
+    idxcluster: idxc1
+
+  - name: idx1
+    roles:
+      - indexer
+    idxcluster: idxc1
+
+  - name: idx2
+    roles:
+      - indexer
+    idxcluster: idxc1
+
+splunk_app_deployment:
+  apps:
+    - name: IndexerApp
+      source: local
+      target_roles:
+        - indexer

@@ -1,0 +1,51 @@
+---
+# Scenario: idx_filters
+# CM + IDXC (idxc1: idx1, idx2) + standalone indexer (idx). Two apps: SingleIndexerApp (hosts_whitelist: [idx]) and IndexerClusterApp (idxc_whitelist: [idxc1]).
+# Verifies: SingleIndexerApp only direct to idx, NOT on CM; IndexerClusterApp on CM targeting idx1, idx2.
+plugin: splunk-platform-automator
+
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: splunkidxc
+    idxc_replication_port: 9887
+    idxc_site_rf: origin:2, total:2
+    idxc_site_sf: origin:2, total:2
+
+splunk_hosts:
+  # Cluster Manager
+  - name: cm
+    roles:
+      - cluster_manager
+      - monitoring_console
+    idxcluster: idxc1
+    site: site0
+
+  - name: sh
+    roles:
+      - search_head
+
+  - iter:
+      prefix: idx
+      numbers: 1..2
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site1
+
+  - name: idx
+    roles:
+      - indexer
+
+splunk_app_deployment:
+  apps:
+    - name: SingleIndexerApp
+      source: local
+      target_roles:
+        - indexer
+      hosts_whitelist: [idx]
+
+    - name: IndexerClusterApp
+      source: local
+      target_roles:
+        - indexer
+      idxc_whitelist: [idxc1]

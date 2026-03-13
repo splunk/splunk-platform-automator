@@ -1,0 +1,44 @@
+{
+    "cluster_manager": [],
+    "deployer": [],
+    "deployment_server": [
+        {
+            "apps_with_targets": [
+                {
+                    "app": "Splunk_TA_nix",
+                    "blacklist": [],
+                    "content_pack_apps": null,
+                    "customizations": {
+                        "run_playbook": "ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml"
+                    },
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "sc_blacklist": null,
+                    "sc_whitelist": null,
+                    "serverclass": "app_Splunk_TA_nix",
+                    "state": "installed",
+                    "target_hosts": [
+                        "sh",
+                        "uf"
+                    ],
+                    "target_path": null
+                }
+            ],
+            "host": "ds"
+        }
+    ],
+    "direct_scope": [
+        {
+            "host": "idx",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh",
+            "scope_debug_results": []
+        },
+        {
+            "host": "uf",
+            "scope_debug_results": []
+        }
+    ]
+}

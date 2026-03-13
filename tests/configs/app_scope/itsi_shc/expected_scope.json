@@ -1,0 +1,107 @@
+{
+    "cluster_manager": [],
+    "deployer": [
+        {
+            "apps": [
+                "Splunk IT Service Intelligence"
+            ],
+            "apps_with_config": [
+                {
+                    "app_id": 1841,
+                    "itsi_content_pack": false,
+                    "name": "Splunk IT Service Intelligence",
+                    "premium_app": "itsi",
+                    "shc_whitelist": [
+                        "shc1"
+                    ],
+                    "source": "splunkbase",
+                    "state": "installed"
+                }
+            ],
+            "host": "ds",
+            "target_hosts": [
+                "sh1",
+                "sh2",
+                "sh3"
+            ]
+        }
+    ],
+    "deployment_server": [
+        {
+            "apps_with_targets": [],
+            "host": "ds"
+        }
+    ],
+    "direct_scope": [
+        {
+            "host": "ds",
+            "scope_debug_results": [
+                {
+                    "app": "Splunk IT Service Intelligence",
+                    "base_hosts": [
+                        "ds",
+                        "idx",
+                        "sh"
+                    ],
+                    "content_pack_apps": null,
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "ds",
+                        "idx"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "on_scope": true,
+                    "state": "installed"
+                }
+            ]
+        },
+        {
+            "host": "idx",
+            "scope_debug_results": [
+                {
+                    "app": "Splunk IT Service Intelligence",
+                    "base_hosts": [
+                        "ds",
+                        "idx",
+                        "sh"
+                    ],
+                    "content_pack_apps": null,
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "ds",
+                        "idx"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "on_scope": true,
+                    "state": "installed"
+                }
+            ]
+        },
+        {
+            "host": "sh",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh1",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh2",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh3",
+            "scope_debug_results": []
+        },
+        {
+            "host": "uf",
+            "scope_debug_results": []
+        }
+    ]
+}

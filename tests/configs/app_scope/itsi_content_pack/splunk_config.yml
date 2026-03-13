@@ -1,0 +1,99 @@
+---
+# Scenario: itsi_content_pack
+# Deployer + SHC; ITSI + "Splunk App for Content Packs" with content_pack_apps.
+# Verifies: deployer.apps_with_config has content pack with content_pack_apps list and library_app.
+plugin: splunk-platform-automator
+
+splunk_defaults:
+  splunk_license_file: [Splunk_Enterprise.lic]
+
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: splunkidxc
+    idxc_replication_port: 9887
+    idxc_site_rf: origin:2, total:2
+    idxc_site_sf: origin:2, total:2
+
+splunk_shclusters:
+  - shc_name: shc1
+    shc_site: site0
+    shc_password: splunkshc
+    shc_replication_port: 9887
+
+splunk_hosts:
+  - name: lm
+    roles:
+      - license_manager
+
+  - name: ds
+    roles:
+      - deployment_server
+
+  - name: dp
+    roles:
+      - deployer
+    shcluster: shc1
+
+  - iter:
+      prefix: sh
+      numbers: 1..3
+    roles:
+      - search_head
+    shcluster: shc1
+
+  - name: cm
+    roles:
+      - cluster_manager
+    idxcluster: idxc1
+
+  - iter:
+      prefix: idx
+      numbers: 1..2
+    roles:
+      - indexer
+    idxcluster: idxc1
+
+  - name: uf
+    roles:
+      - universal_forwarder
+
+splunk_app_deployment:
+  apps:
+    - name: "Splunk IT Service Intelligence"
+      source: splunkbase
+      app_id: 1841
+      premium_app: itsi
+
+    - name: "Splunk App for Content Packs"
+      source: splunkbase
+      app_id: 5391
+      itsi_content_pack: true
+      library_app: DA-ITSI-ContentLibrary
+      content_pack_apps:
+        - name: DA-ITSI-CP-monitoring-alerting
+          content_pack_install: true
+          customizations:
+            run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml"
+
+    - name: "Splunk_SA_Scientific_Python_linux_x86_64"
+      source: splunkbase
+      app_id: 2882
+      state: 'absent'
+      target_roles:
+        - search_head
+  
+    - name: "Splunk_ML_Toolkit"
+      source: splunkbase
+      app_id: 2890
+      target_roles:
+        - search_head
+      customizations:
+        run_playbook: "ansible/apps_playbooks/Splunk_ML_Toolkit-configure.yml"
+
+    - name: "Splunk_TA_nix"
+      source: splunkbase
+      app_id: 833
+      target_roles:
+        - universal_forwarder
+      customizations:
+        run_playbook: "ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml"

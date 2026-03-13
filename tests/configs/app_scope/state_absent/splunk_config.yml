@@ -1,0 +1,18 @@
+---
+# Scenario: state_absent
+# One app state: absent; verifies direct_scope shows in_base/on_scope so removal would run.
+plugin: splunk-platform-automator
+
+splunk_hosts:
+  - name: sh
+    roles:
+      - search_head
+
+splunk_app_deployment:
+  apps:
+    - name: org_old_app
+      source: local
+      state: absent
+      deployment_target: direct
+      target_roles:
+        - search_head

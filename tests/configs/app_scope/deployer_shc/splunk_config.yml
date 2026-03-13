@@ -1,0 +1,38 @@
+---
+# Scenario: deployer_shc
+# Deployer + SHC (sh1, sh2, sh3 in shc1). App with target_roles search_head, no filters.
+# Verifies: deployer.apps and target_hosts = SHC members; no direct deploy for SHC members.
+plugin: splunk-platform-automator
+
+splunk_shclusters:
+  - shc_name: shc1
+    shc_site: site0
+    shc_password: splunkshc
+    shc_replication_port: 9887
+
+splunk_hosts:
+  - name: ds
+    roles:
+      - deployment_server
+      - deployer
+    shcluster: shc1
+
+  - iter:
+      prefix: sh
+      numbers: 1..3
+    roles:
+      - search_head
+    shcluster: shc1
+
+  - name: uf
+    roles:
+      - universal_forwarder
+
+splunk_app_deployment:
+  apps:
+    - name: Splunk_TA_nix
+      source: local
+      target_roles:
+        - search_head
+      customizations:
+        run_playbook: "ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml"

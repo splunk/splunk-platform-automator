@@ -1,0 +1,128 @@
+{
+    "cluster_manager": [
+        {
+            "apps": [
+                "AppOnIndexers"
+            ],
+            "apps_with_config": [
+                {
+                    "idxc_whitelist": [
+                        "idxc1"
+                    ],
+                    "name": "AppOnIndexers",
+                    "source": "local",
+                    "state": "installed",
+                    "target_roles": [
+                        "indexer"
+                    ]
+                }
+            ],
+            "host": "cm",
+            "target_hosts": [
+                "idx2",
+                "idx1"
+            ]
+        }
+    ],
+    "deployer": [
+        {
+            "apps": [
+                "AppOnShc1Only"
+            ],
+            "apps_with_config": [
+                {
+                    "itsi_content_pack": false,
+                    "name": "AppOnShc1Only",
+                    "premium_app": "",
+                    "shc_blacklist": [
+                        "shc2"
+                    ],
+                    "source": "local",
+                    "state": "installed",
+                    "target_roles": [
+                        "search_head"
+                    ]
+                }
+            ],
+            "host": "ds1",
+            "target_hosts": [
+                "sh1",
+                "sh3",
+                "sh2"
+            ]
+        },
+        {
+            "apps": [],
+            "apps_with_config": [],
+            "host": "ds2",
+            "target_hosts": [
+                "sh4",
+                "sh6",
+                "sh5"
+            ]
+        }
+    ],
+    "deployment_server": [
+        {
+            "apps_with_targets": [
+                {
+                    "app": "AppViaDS",
+                    "blacklist": [],
+                    "content_pack_apps": null,
+                    "customizations": null,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "sc_blacklist": null,
+                    "sc_whitelist": [
+                        "uf1"
+                    ],
+                    "serverclass": "app_AppViaDS",
+                    "state": "installed",
+                    "target_hosts": [
+                        "uf1"
+                    ],
+                    "target_path": null
+                }
+            ],
+            "host": "ds1"
+        }
+    ],
+    "direct_scope": [
+        {
+            "host": "sh1",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh2",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh3",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh4",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh5",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh6",
+            "scope_debug_results": []
+        },
+        {
+            "host": "idx1",
+            "scope_debug_results": []
+        },
+        {
+            "host": "idx2",
+            "scope_debug_results": []
+        },
+        {
+            "host": "uf",
+            "scope_debug_results": []
+        }
+    ]
+}

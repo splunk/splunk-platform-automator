@@ -1,0 +1,64 @@
+{
+    "cluster_manager": [],
+    "deployer": [],
+    "deployment_server": [
+        {
+            "apps_with_targets": [
+                {
+                    "app": "Splunk_TA_nix",
+                    "blacklist": [],
+                    "content_pack_apps": null,
+                    "customizations": {
+                        "run_playbook": "ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml"
+                    },
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "sc_blacklist": null,
+                    "sc_whitelist": null,
+                    "serverclass": "app_Splunk_TA_nix",
+                    "state": "installed",
+                    "target_hosts": [
+                        "sh"
+                    ],
+                    "target_path": null
+                },
+                {
+                    "app": "Splunk_TA_nix",
+                    "blacklist": [],
+                    "content_pack_apps": null,
+                    "customizations": {
+                        "local_configs": {
+                            "inputs.conf": {
+                                "script://./bin/vmstat_metric.sh": {
+                                    "disabled": 0,
+                                    "index": "itsi_im_metrics"
+                                }
+                            }
+                        }
+                    },
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "sc_blacklist": null,
+                    "sc_whitelist": null,
+                    "serverclass": "app_Splunk_TA_nix_uf",
+                    "state": "installed",
+                    "target_hosts": [
+                        "uf"
+                    ],
+                    "target_path": "/opt/splunk/etc/deployment-apps/Splunk_TA_nix_uf"
+                }
+            ],
+            "host": "ds"
+        }
+    ],
+    "direct_scope": [
+        {
+            "host": "sh",
+            "scope_debug_results": []
+        },
+        {
+            "host": "uf",
+            "scope_debug_results": []
+        }
+    ]
+}

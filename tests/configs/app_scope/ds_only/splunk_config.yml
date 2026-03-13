@@ -1,0 +1,32 @@
+---
+# Scenario: ds_only
+# DS + clients (sh, idx, uf). Normal app with target_roles [search_head, universal_forwarder], no filters.
+# Verifies: deployment_server.apps_with_targets has correct target_hosts.
+plugin: splunk-platform-automator
+
+splunk_hosts:
+  - name: ds
+    roles:
+      - deployment_server
+
+  - name: sh
+    roles:
+      - search_head
+
+  - name: idx
+    roles:
+      - indexer
+
+  - name: uf
+    roles:
+      - universal_forwarder
+
+splunk_app_deployment:
+  apps:
+    - name: Splunk_TA_nix
+      source: local
+      target_roles:
+        - search_head
+        - universal_forwarder
+      customizations:
+        run_playbook: "ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml"

@@ -1,0 +1,36 @@
+{
+    "cluster_manager": [
+        {
+            "apps": [
+                "IndexerApp"
+            ],
+            "apps_with_config": [
+                {
+                    "name": "IndexerApp",
+                    "source": "local",
+                    "state": "installed",
+                    "target_roles": [
+                        "indexer"
+                    ]
+                }
+            ],
+            "host": "cm",
+            "target_hosts": [
+                "idx1",
+                "idx2"
+            ]
+        }
+    ],
+    "deployer": [],
+    "deployment_server": [],
+    "direct_scope": [
+        {
+            "host": "idx1",
+            "scope_debug_results": []
+        },
+        {
+            "host": "idx2",
+            "scope_debug_results": []
+        }
+    ]
+}

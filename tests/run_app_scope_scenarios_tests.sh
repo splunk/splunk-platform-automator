@@ -4,7 +4,7 @@
 # ==============================================================================
 # Runs scenario-based tests for app scope (debug_app_scope.yml).
 #
-# For each scenario under tests/scenarios/app_scope/<name>/splunk_config.yml,
+# For each scenario under tests/configs/app_scope/<name>/splunk_config.yml,
 # runs debug_app_scope.yml with run_scope_locally=true and asserts on the
 # produced scope_debug.json. No SSH or real Splunk hosts required.
 #

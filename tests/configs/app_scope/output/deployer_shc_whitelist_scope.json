@@ -1,0 +1,93 @@
+{
+    "cluster_manager": [],
+    "deployer": [
+        {
+            "apps": [
+                "MyApp"
+            ],
+            "apps_with_config": [
+                {
+                    "itsi_content_pack": false,
+                    "name": "MyApp",
+                    "premium_app": "",
+                    "shc_whitelist": [
+                        "shc1"
+                    ],
+                    "source": "local",
+                    "state": "installed",
+                    "target_roles": [
+                        "search_head"
+                    ]
+                }
+            ],
+            "host": "ds",
+            "target_hosts": [
+                "sh1",
+                "sh3",
+                "sh2"
+            ]
+        },
+        {
+            "apps": [
+                "MyOtherApp"
+            ],
+            "apps_with_config": [
+                {
+                    "itsi_content_pack": false,
+                    "name": "MyOtherApp",
+                    "premium_app": "",
+                    "shc_whitelist": [
+                        "shc2"
+                    ],
+                    "source": "local",
+                    "state": "installed",
+                    "target_roles": [
+                        "search_head"
+                    ]
+                }
+            ],
+            "host": "ds2",
+            "target_hosts": [
+                "sh4",
+                "sh6",
+                "sh5"
+            ]
+        }
+    ],
+    "deployment_server": [
+        {
+            "apps_with_targets": [],
+            "host": "ds"
+        }
+    ],
+    "direct_scope": [
+        {
+            "host": "sh1",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh2",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh3",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh4",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh5",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh6",
+            "scope_debug_results": []
+        },
+        {
+            "host": "uf",
+            "scope_debug_results": []
+        }
+    ]
+}

@@ -1,0 +1,49 @@
+---
+# Scenario: itsi_shc
+# Deployer + SHC (sh1, sh2, sh3) + standalone sh. ITSI with premium_app: itsi, shc_whitelist: [shc1].
+# Verifies: ITSI on deployer; target_hosts = SHC members (sh1, sh2, sh3).
+plugin: splunk-platform-automator
+
+splunk_defaults:
+  splunk_license_file: [Splunk_Enterprise.lic]
+
+splunk_shclusters:
+  - shc_name: shc1
+    shc_site: site0
+    shc_password: splunkshc
+    shc_replication_port: 9887
+
+splunk_hosts:
+  - name: ds
+    roles:
+      - deployment_server
+      - deployer
+      - license_manager
+    shcluster: shc1
+
+  - iter:
+      prefix: sh
+      numbers: 1..3
+    roles:
+      - search_head
+    shcluster: shc1
+
+  - name: sh
+    roles:
+      - search_head
+
+  - name: idx
+    roles:
+      - indexer
+
+  - name: uf
+    roles:
+      - universal_forwarder
+
+splunk_app_deployment:
+  apps:
+    - name: "Splunk IT Service Intelligence"
+      source: splunkbase
+      app_id: 1841
+      premium_app: itsi
+      shc_whitelist: [shc1]

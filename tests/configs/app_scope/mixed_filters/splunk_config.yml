@@ -1,0 +1,84 @@
+---
+# Scenario: mixed_filters
+# DS + SHC + IDXC. Multiple apps: sc_whitelist, idxc_whitelist, shc_blacklist.
+# Verifies: deployment_server, deployer, cluster_manager each get correct subset; direct_scope consistent.
+plugin: splunk-platform-automator
+
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: splunkidx
+    idxc_replication_port: 9887
+
+splunk_shclusters:
+  - shc_name: shc1
+    shc_password: splunkshc
+    shc_replication_port: 9887
+
+  - shc_name: shc2
+    shc_password: splunkshc
+    shc_replication_port: 9888
+
+splunk_hosts:
+  - name: ds1
+    roles:
+      - deployment_server
+      - deployer
+    shcluster: shc1
+
+  - name: ds2
+    roles:
+      - deployer
+    shcluster: shc2
+
+  - iter:
+      prefix: sh
+      numbers: 1..3
+    roles:
+      - search_head
+    shcluster: shc1
+
+  - iter:
+      prefix: sh
+      numbers: 4..6
+    roles:
+      - search_head
+    shcluster: shc2
+
+  - name: cm
+    roles:
+      - cluster_manager
+    idxcluster: idxc1
+
+  - name: idx1
+    roles:
+      - indexer
+    idxcluster: idxc1
+
+  - name: idx2
+    roles:
+      - indexer
+    idxcluster: idxc1
+
+  - name: uf
+    roles:
+      - universal_forwarder
+
+splunk_app_deployment:
+  apps:
+    - name: AppViaDS
+      source: local
+      target_roles:
+        - universal_forwarder
+      sc_whitelist: [uf1]
+
+    - name: AppOnIndexers
+      source: local
+      target_roles:
+        - indexer
+      idxc_whitelist: [idxc1]
+
+    - name: AppOnShc1Only
+      source: local
+      target_roles:
+        - search_head
+      shc_blacklist: [shc2]

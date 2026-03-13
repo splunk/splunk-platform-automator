@@ -1,20 +1,7 @@
 {
-    "cluster_manager": {
-        "apps": [],
-        "apps_with_config": [],
-        "host": null,
-        "target_hosts": []
-    },
-    "deployer": {
-        "apps": [],
-        "apps_with_config": [],
-        "host": null,
-        "target_hosts": []
-    },
-    "deployment_server": {
-        "apps_with_targets": [],
-        "host": null
-    },
+    "cluster_manager": [],
+    "deployer": [],
+    "deployment_server": [],
     "direct_scope": [
         {
             "host": "sh",

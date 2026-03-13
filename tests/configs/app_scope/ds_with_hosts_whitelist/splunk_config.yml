@@ -1,0 +1,30 @@
+---
+# Scenario: ds_with_hosts_whitelist
+# DS + multiple SHs; app with hosts_whitelist: [sh1] so DS target_hosts restricted.
+plugin: splunk-platform-automator
+
+splunk_hosts:
+  - name: ds
+    roles:
+      - deployment_server
+
+  - name: sh1
+    roles:
+      - search_head
+
+  - name: sh2
+    roles:
+      - search_head
+
+  - name: idx
+    roles:
+      - indexer
+
+splunk_app_deployment:
+  apps:
+    - name: Splunk_TA_nix
+      source: local
+      target_roles:
+        - search_head
+      hosts_whitelist:
+        - sh1

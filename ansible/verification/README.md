@@ -110,11 +110,11 @@ This runs the direct role in “scope only” mode and prints a per-host summary
 
 **Scenario-based scope tests (no SSH):**
 
-Multiple scenario configs under `tests/scenarios/app_scope/<name>/splunk_config.yml` exercise different topologies and app/filter combinations. Each scenario is run with `debug_app_scope.yml -i <scenario_config> -e run_scope_locally=true` and the output is asserted in pytest.
+Multiple scenario configs under `tests/configs/app_scope/<name>/splunk_config.yml` exercise different topologies and app/filter combinations. Each scenario is run with `debug_app_scope.yml -i <scenario_config> -e run_scope_locally=true` and the output is asserted in pytest.
 
 - **Run all scope scenarios:** From project root, `pytest tests/test_app_scope_scenarios.py -v` (requires `ansible-playbook` on PATH and project defaults for inventory).
-- **Add a scenario:** Create `tests/scenarios/app_scope/<scenario_name>/splunk_config.yml` with a full splunk_config (plugin, splunk_hosts, splunk_app_deployment, and optionally splunk_shclusters/splunk_idxclusters). Add scenario-specific assertions in `tests/test_app_scope_scenarios.py` in `test_scenario_scope_assertions`.
-- **Output:** Scope JSON per scenario is written to `tests/scenarios/app_scope/output/<scenario_name>_scope.json` when tests run.
+- **Add a scenario:** Create `tests/configs/app_scope/<scenario_name>/splunk_config.yml` with a full splunk_config (plugin, splunk_hosts, splunk_app_deployment, and optionally splunk_shclusters/splunk_idxclusters). Add scenario-specific assertions in `tests/test_app_scope_scenarios.py` in `test_scenario_scope_assertions`.
+- **Output:** Scope JSON per scenario is written to `tests/configs/app_scope/output/<scenario_name>_scope.json` when tests run.
 
 ### 3. `ping_hosts.yml`
 

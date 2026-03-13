@@ -1,10 +1,12 @@
 ---
 # Debug App Scope – compute direct, deployment server, deployer, and cluster manager scope and dump to file
 # Works for both state=installed and state=absent. No install/remove is performed.
+# Output format: direct_scope (list); deployer, cluster_manager, deployment_server are each a list of entries
+# (one per host) so multiple deployers/CMs/DSs are supported.
 # Direct: per-host, per-app in_base, in_filtered, on_scope (only apps installed *directly* on that host; often empty when DS exists).
-# Deployment server: per-app target_hosts (standalone SH, indexers, etc. that receive the app from DS).
-# Deployer: apps and target_hosts (SHC members that receive the app from the deployer).
-# Cluster manager: apps and target_hosts (indexer cluster members that receive manager-apps from the CM).
+# deployment_server: list of { host, apps_with_targets } per DS host.
+# deployer: list of { host, apps, apps_with_config, target_hosts } per deployer host (SHC members that receive the app from that deployer).
+# cluster_manager: list of { host, apps, apps_with_config, target_hosts } per CM host (indexer cluster members that receive manager-apps from that CM).
 #
 # Usage:
 #   ansible-playbook ansible/verification/debug_app_scope.yml
@@ -74,11 +76,6 @@
   vars:
     _scope_hosts: "{{ (groups['role_search_head'] | default([])) + (groups['role_indexer'] | default([])) + (groups['role_heavy_forwarder'] | default([])) + (groups['role_license_manager'] | default([])) + (groups['role_monitoring_console'] | default([])) + (groups['role_universal_forwarder'] | default([])) | unique | list }}"
     _scope_output_path: "{{ scope_output_path | default(playbook_dir + '/output/scope_debug.json') }}"
-    _ds_host: "{{ (groups['role_deployment_server'] | default([])) | first }}"
-    _deployer_host: "{{ (groups['role_deployer'] | default([])) | first }}"
-    _cm_host: "{{ (groups['role_cluster_manager'] | default([])) | first }}"
-    _shc_members: "{{ (groups['role_search_head'] | default([])) | intersect((groups | dict2items | selectattr('key', 'match', '^shcluster_') | map(attribute='value') | flatten) | default([]) | list) | list }}"
-    _idxc_members: "{{ (groups['role_indexer'] | default([])) | intersect((groups | dict2items | selectattr('key', 'match', '^idxcluster_') | map(attribute='value') | flatten) | default([]) | list) | list }}"
 
   tasks:
     - name: Ensure output directory exists
@@ -93,25 +90,48 @@
       loop: "{{ _scope_hosts }}"
       when: _scope_hosts | length > 0
 
-    - name: Build deployer apps_with_config (name, state, customizations) for unit tests
+    # For output: only include apps that are on_scope (will be installed/removed); exclude "considered but filtered out" entries.
+    - name: Build direct_scope for output (on_scope apps only per host)
       ansible.builtin.set_fact:
-        _deployer_apps_config: "{{ _deployer_apps_config | default([]) + [{'name': item.name, 'state': item.state | default('installed'), 'customizations': item.customizations | default(none), 'content_pack_apps': item.content_pack_apps | default(none), 'library_app': item.library_app | default(none), 'install_all_apps': item.install_all_apps | default(none)}] }}"
-      loop: "{{ hostvars[_deployer_host].deployer_apps | default([]) }}"
-      when: _deployer_host is defined and (_deployer_host | length > 0)
+        _direct_scope_for_output: "{{ _direct_scope_for_output | default([]) + [{'host': item.host, 'scope_debug_results': (item.scope_debug_results | default([]) | selectattr('on_scope') | list)}] }}"
+      loop: "{{ scope_report | default([]) }}"
+      when: scope_report is defined
 
-    - name: Build cluster manager apps_with_config (name, state, customizations) for unit tests
+    # deployer: list of { host, apps, apps_with_config, target_hosts } (one per deployer host)
+    - name: Append one deployer entry to deployer list
       ansible.builtin.set_fact:
-        _cm_apps_config: "{{ _cm_apps_config | default([]) + [{'name': item.name, 'state': item.state | default('installed'), 'customizations': item.customizations | default(none), 'content_pack_apps': item.content_pack_apps | default(none), 'library_app': item.library_app | default(none), 'install_all_apps': item.install_all_apps | default(none)}] }}"
-      loop: "{{ hostvars[_cm_host].cm_apps | default([]) }}"
-      when: _cm_host is defined and (_cm_host | length > 0)
+        _deployer_list: "{{ _deployer_list | default([]) + [{'host': _dh, 'apps': (hostvars[_dh].deployer_apps | default([]) | map(attribute='name') | list), 'apps_with_config': (hostvars[_dh].deployer_apps | default([]) | map('combine', {'state': 'installed'}) | list), 'target_hosts': _this_shc_members}] }}"
+      loop: "{{ groups['role_deployer'] | default([]) }}"
+      loop_control:
+        loop_var: _dh
+      vars:
+        _this_shc_members: "{{ (groups['role_search_head'] | default([])) | intersect((groups | dict2items | selectattr('key', 'match', '^shcluster_') | selectattr('value', 'contains', _dh) | map(attribute='value') | flatten | unique | list) | default([])) | list }}"
 
-    - name: Build combined report with direct, DS, deployer, and cluster_manager (includes customizations for unit tests)
+    # cluster_manager: list of { host, apps, apps_with_config, target_hosts } (one per CM host)
+    - name: Append one cluster manager entry to cluster_manager list
+      ansible.builtin.set_fact:
+        _cluster_manager_list: "{{ _cluster_manager_list | default([]) + [{'host': _cmh, 'apps': (hostvars[_cmh].cm_apps | default([]) | map(attribute='name') | list), 'apps_with_config': (hostvars[_cmh].cm_apps | default([]) | map('combine', {'state': 'installed'}) | list), 'target_hosts': _this_cm_idxc_members}] }}"
+      loop: "{{ groups['role_cluster_manager'] | default([]) }}"
+      loop_control:
+        loop_var: _cmh
+      vars:
+        _this_cm_idxc_members: "{{ (groups['role_indexer'] | default([])) | intersect((groups | dict2items | selectattr('key', 'match', '^idxcluster_') | selectattr('value', 'contains', _cmh) | map(attribute='value') | flatten | unique | list) | default([])) | list }}"
+
+    # deployment_server: list of { host, apps_with_targets } (one per DS host)
+    - name: Append one deployment server entry to deployment_server list
+      ansible.builtin.set_fact:
+        _deployment_server_list: "{{ _deployment_server_list | default([]) + [{'host': _dsh, 'apps_with_targets': (hostvars[_dsh].ds_app_scope_debug | default([]))}] }}"
+      loop: "{{ groups['role_deployment_server'] | default([]) }}"
+      loop_control:
+        loop_var: _dsh
+
+    - name: Build combined report (direct_scope, deployer, cluster_manager, deployment_server as lists)
       ansible.builtin.set_fact:
         scope_debug_combined: "{{ {
-          'direct_scope': scope_report | default([]),
-          'deployment_server': {'host': _ds_host, 'apps_with_targets': (hostvars[_ds_host].ds_app_scope_debug | default([]))} if (_ds_host | default('') | length > 0) else {'host': none, 'apps_with_targets': []},
-          'deployer': {'host': _deployer_host, 'apps': (hostvars[_deployer_host].deployer_apps | default([]) | map(attribute='name') | list), 'apps_with_config': (_deployer_apps_config | default([])), 'target_hosts': _shc_members} if (_deployer_host | default('') | length > 0) else {'host': none, 'apps': [], 'apps_with_config': [], 'target_hosts': []},
-          'cluster_manager': {'host': _cm_host, 'apps': (hostvars[_cm_host].cm_apps | default([]) | map(attribute='name') | list), 'apps_with_config': (_cm_apps_config | default([])), 'target_hosts': _idxc_members} if (_cm_host | default('') | length > 0) else {'host': none, 'apps': [], 'apps_with_config': [], 'target_hosts': []}
+          'direct_scope': _direct_scope_for_output | default([]),
+          'deployer': _deployer_list | default([]),
+          'cluster_manager': _cluster_manager_list | default([]),
+          'deployment_server': _deployment_server_list | default([])
         } }}"
 
     - name: Write scope debug to file

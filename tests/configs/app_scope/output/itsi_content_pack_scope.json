@@ -1,0 +1,165 @@
+{
+    "cluster_manager": [
+        {
+            "apps": [
+                "Splunk IT Service Intelligence"
+            ],
+            "apps_with_config": [
+                {
+                    "app_id": 1841,
+                    "name": "Splunk IT Service Intelligence",
+                    "premium_app": "itsi",
+                    "source": "splunkbase",
+                    "state": "installed"
+                }
+            ],
+            "host": "cm",
+            "target_hosts": [
+                "idx2",
+                "idx1"
+            ]
+        }
+    ],
+    "deployer": [
+        {
+            "apps": [
+                "Splunk IT Service Intelligence",
+                "Splunk App for Content Packs",
+                "Splunk_ML_Toolkit",
+                "Splunk_SA_Scientific_Python_linux_x86_64"
+            ],
+            "apps_with_config": [
+                {
+                    "app_id": 1841,
+                    "itsi_content_pack": false,
+                    "name": "Splunk IT Service Intelligence",
+                    "premium_app": "itsi",
+                    "source": "splunkbase",
+                    "state": "installed"
+                },
+                {
+                    "app_id": 5391,
+                    "content_pack_apps": [
+                        {
+                            "content_pack_install": true,
+                            "customizations": {
+                                "run_playbook_after_restart": "ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml"
+                            },
+                            "name": "DA-ITSI-CP-monitoring-alerting"
+                        }
+                    ],
+                    "itsi_content_pack": true,
+                    "library_app": "DA-ITSI-ContentLibrary",
+                    "name": "Splunk App for Content Packs",
+                    "premium_app": "",
+                    "source": "splunkbase",
+                    "state": "installed"
+                },
+                {
+                    "app_id": 2890,
+                    "customizations": {
+                        "run_playbook": "ansible/apps_playbooks/Splunk_ML_Toolkit-configure.yml"
+                    },
+                    "itsi_content_pack": false,
+                    "name": "Splunk_ML_Toolkit",
+                    "premium_app": "",
+                    "source": "splunkbase",
+                    "state": "installed",
+                    "target_roles": [
+                        "search_head"
+                    ]
+                },
+                {
+                    "app_id": 2882,
+                    "itsi_content_pack": false,
+                    "name": "Splunk_SA_Scientific_Python_linux_x86_64",
+                    "premium_app": "",
+                    "source": "splunkbase",
+                    "state": "installed",
+                    "target_roles": [
+                        "search_head"
+                    ]
+                }
+            ],
+            "host": "dp",
+            "target_hosts": [
+                "sh2",
+                "sh3",
+                "sh1"
+            ]
+        }
+    ],
+    "deployment_server": [
+        {
+            "apps_with_targets": [
+                {
+                    "app": "Splunk_TA_nix",
+                    "blacklist": [],
+                    "content_pack_apps": null,
+                    "customizations": {
+                        "run_playbook": "ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml"
+                    },
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "sc_blacklist": null,
+                    "sc_whitelist": null,
+                    "serverclass": "app_Splunk_TA_nix",
+                    "state": "installed",
+                    "target_hosts": [
+                        "uf"
+                    ],
+                    "target_path": null
+                }
+            ],
+            "host": "ds"
+        }
+    ],
+    "direct_scope": [
+        {
+            "host": "sh1",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh2",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh3",
+            "scope_debug_results": []
+        },
+        {
+            "host": "idx1",
+            "scope_debug_results": []
+        },
+        {
+            "host": "idx2",
+            "scope_debug_results": []
+        },
+        {
+            "host": "lm",
+            "scope_debug_results": [
+                {
+                    "app": "Splunk IT Service Intelligence",
+                    "base_hosts": [
+                        "lm"
+                    ],
+                    "content_pack_apps": null,
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "lm"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "on_scope": true,
+                    "state": "installed"
+                }
+            ]
+        },
+        {
+            "host": "uf",
+            "scope_debug_results": []
+        }
+    ]
+}

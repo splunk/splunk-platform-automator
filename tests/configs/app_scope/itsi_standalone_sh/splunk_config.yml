@@ -1,0 +1,35 @@
+---
+# Scenario: itsi_standalone_sh
+# Single host (itsi) with search_head, indexer, license_manager. No SHC. ITSI + content pack.
+# Verifies: ITSI and content pack via direct on itsi only; not on deployer.
+plugin: splunk-platform-automator
+
+splunk_defaults:
+  splunk_license_file: [Splunk_Enterprise.lic]
+
+splunk_hosts:
+  - name: itsi
+    roles:
+      - search_head
+      - indexer
+      - license_manager
+
+splunk_app_deployment:
+  apps:
+    - name: "Splunk IT Service Intelligence"
+      source: splunkbase
+      app_id: 1841
+      premium_app: itsi
+
+    - name: "Splunk App for Content Packs"
+      source: splunkbase
+      app_id: 5391
+      itsi_content_pack: true
+      library_app: DA-ITSI-ContentLibrary
+      content_pack_apps:
+        - name: DA-ITSI-CP-foo
+          content_pack_install: true
+        - name: DA-ITSI-CP-bar
+          content_pack_install: true
+        - name: DA-ITSI-CP-baz
+          content_pack_install: false

@@ -1,0 +1,118 @@
+{
+    "cluster_manager": [],
+    "deployer": [
+        {
+            "apps": [
+                "MySHC1App"
+            ],
+            "apps_with_config": [
+                {
+                    "itsi_content_pack": false,
+                    "name": "MySHC1App",
+                    "premium_app": "",
+                    "shc_whitelist": [
+                        "shc1"
+                    ],
+                    "source": "local",
+                    "state": "installed",
+                    "target_roles": [
+                        "search_head"
+                    ]
+                }
+            ],
+            "host": "ds",
+            "target_hosts": [
+                "sh11",
+                "sh12",
+                "sh13"
+            ]
+        },
+        {
+            "apps": [
+                "MySHC2App"
+            ],
+            "apps_with_config": [
+                {
+                    "itsi_content_pack": false,
+                    "name": "MySHC2App",
+                    "premium_app": "",
+                    "shc_whitelist": [
+                        "shc2"
+                    ],
+                    "source": "local",
+                    "state": "installed",
+                    "target_roles": [
+                        "search_head"
+                    ]
+                }
+            ],
+            "host": "ds2",
+            "target_hosts": [
+                "sh21",
+                "sh22",
+                "sh23"
+            ]
+        }
+    ],
+    "deployment_server": [
+        {
+            "apps_with_targets": [
+                {
+                    "app": "MySingleSHApp",
+                    "blacklist": [],
+                    "content_pack_apps": null,
+                    "customizations": null,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "sc_blacklist": null,
+                    "sc_whitelist": null,
+                    "serverclass": "app_MySingleSHApp",
+                    "state": "installed",
+                    "target_hosts": [
+                        "sh"
+                    ],
+                    "target_path": null
+                }
+            ],
+            "host": "ds"
+        }
+    ],
+    "direct_scope": [
+        {
+            "host": "idx",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh11",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh12",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh13",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh21",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh22",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh23",
+            "scope_debug_results": []
+        },
+        {
+            "host": "uf",
+            "scope_debug_results": []
+        }
+    ]
+}

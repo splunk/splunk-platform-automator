@@ -1,0 +1,163 @@
+{
+    "cluster_manager": [],
+    "deployer": [],
+    "deployment_server": [],
+    "direct_scope": [
+        {
+            "host": "itsi",
+            "scope_debug_results": [
+                {
+                    "app": "Splunk IT Service Intelligence",
+                    "base_hosts": [
+                        "itsi"
+                    ],
+                    "content_pack_apps": null,
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "itsi"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "on_scope": true,
+                    "state": "installed"
+                },
+                {
+                    "app": "Splunk App for Content Packs",
+                    "base_hosts": [
+                        "itsi"
+                    ],
+                    "content_pack_apps": [
+                        {
+                            "content_pack_install": true,
+                            "name": "DA-ITSI-CP-foo"
+                        },
+                        {
+                            "content_pack_install": true,
+                            "name": "DA-ITSI-CP-bar"
+                        },
+                        {
+                            "content_pack_install": false,
+                            "name": "DA-ITSI-CP-baz"
+                        }
+                    ],
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "itsi"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": "DA-ITSI-ContentLibrary",
+                    "on_scope": true,
+                    "state": "installed"
+                }
+            ]
+        },
+        {
+            "host": "itsi",
+            "scope_debug_results": [
+                {
+                    "app": "Splunk IT Service Intelligence",
+                    "base_hosts": [
+                        "itsi"
+                    ],
+                    "content_pack_apps": null,
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "itsi"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "on_scope": true,
+                    "state": "installed"
+                },
+                {
+                    "app": "Splunk App for Content Packs",
+                    "base_hosts": [
+                        "itsi"
+                    ],
+                    "content_pack_apps": [
+                        {
+                            "content_pack_install": true,
+                            "name": "DA-ITSI-CP-foo"
+                        },
+                        {
+                            "content_pack_install": true,
+                            "name": "DA-ITSI-CP-bar"
+                        },
+                        {
+                            "content_pack_install": false,
+                            "name": "DA-ITSI-CP-baz"
+                        }
+                    ],
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "itsi"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": "DA-ITSI-ContentLibrary",
+                    "on_scope": true,
+                    "state": "installed"
+                }
+            ]
+        },
+        {
+            "host": "itsi",
+            "scope_debug_results": [
+                {
+                    "app": "Splunk IT Service Intelligence",
+                    "base_hosts": [
+                        "itsi"
+                    ],
+                    "content_pack_apps": null,
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "itsi"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "on_scope": true,
+                    "state": "installed"
+                },
+                {
+                    "app": "Splunk App for Content Packs",
+                    "base_hosts": [
+                        "itsi"
+                    ],
+                    "content_pack_apps": [
+                        {
+                            "content_pack_install": true,
+                            "name": "DA-ITSI-CP-foo"
+                        },
+                        {
+                            "content_pack_install": true,
+                            "name": "DA-ITSI-CP-bar"
+                        },
+                        {
+                            "content_pack_install": false,
+                            "name": "DA-ITSI-CP-baz"
+                        }
+                    ],
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "itsi"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": "DA-ITSI-ContentLibrary",
+                    "on_scope": true,
+                    "state": "installed"
+                }
+            ]
+        }
+    ]
+}

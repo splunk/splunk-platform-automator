@@ -1,0 +1,55 @@
+{
+    "cluster_manager": [],
+    "deployer": [
+        {
+            "apps": [
+                "Splunk_TA_nix"
+            ],
+            "apps_with_config": [
+                {
+                    "customizations": {
+                        "run_playbook": "ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml"
+                    },
+                    "itsi_content_pack": false,
+                    "name": "Splunk_TA_nix",
+                    "premium_app": "",
+                    "source": "local",
+                    "state": "installed",
+                    "target_roles": [
+                        "search_head"
+                    ]
+                }
+            ],
+            "host": "ds",
+            "target_hosts": [
+                "sh1",
+                "sh2",
+                "sh3"
+            ]
+        }
+    ],
+    "deployment_server": [
+        {
+            "apps_with_targets": [],
+            "host": "ds"
+        }
+    ],
+    "direct_scope": [
+        {
+            "host": "sh1",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh2",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh3",
+            "scope_debug_results": []
+        },
+        {
+            "host": "uf",
+            "scope_debug_results": []
+        }
+    ]
+}

@@ -1,0 +1,18 @@
+---
+# Scenario: minimal_direct
+# Single standalone search head; one app with deployment_target: direct.
+# Verifies: direct_scope only; app on_scope on that host; no deployer/CM/DS.
+plugin: splunk-platform-automator
+
+splunk_hosts:
+  - name: sh
+    roles:
+      - search_head
+
+splunk_app_deployment:
+  apps:
+    - name: org_some_local_app
+      source: local
+      deployment_target: direct
+      target_roles:
+        - search_head

@@ -1,0 +1,45 @@
+---
+# Scenario: ds_same_app_twice
+# Same app (Splunk_TA_nix) defined twice for deployment server with different serverclass/target_path.
+# One entry for search_head (default serverclass), one for universal_forwarder (custom serverclass + target_path).
+# Verifies: deployment_server.apps_with_targets has two entries for the same app with different target_hosts.
+plugin: splunk-platform-automator
+
+splunk_hosts:
+  - name: ds
+    roles:
+      - deployment_server
+
+  - name: sh
+    roles:
+      - search_head
+
+  - name: uf
+    roles:
+      - universal_forwarder
+
+splunk_app_deployment:
+  apps:
+    # First deployment: default serverclass, targets search_head only
+    - name: Splunk_TA_nix
+      source: splunkbase
+      app_id: 833
+      target_roles:
+        - search_head
+      customizations:
+        run_playbook: "ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml"
+
+    # Second deployment: same app name, different serverclass and target_path for UF
+    - name: Splunk_TA_nix
+      source: splunkbase
+      app_id: 833
+      target_roles:
+        - universal_forwarder
+      serverclass: "app_Splunk_TA_nix_uf"
+      target_path: "/opt/splunk/etc/deployment-apps/Splunk_TA_nix_uf"
+      customizations:
+        local_configs:
+          inputs.conf:
+            "script://./bin/vmstat_metric.sh":
+              disabled: 0
+              index: itsi_im_metrics

@@ -33,9 +33,15 @@ def assert_direct_on_scope(scope: dict, host: str, app_name: str, expected: bool
     )
 
 
+def _first_deployer(scope: dict) -> dict:
+    """Return first deployer entry from scope['deployer'] list, or empty dict."""
+    deployer_list = scope.get("deployer") or []
+    return deployer_list[0] if deployer_list else {}
+
+
 def assert_deployer_apps(scope: dict, expected_app_names: list[str]) -> None:
-    """Assert deployer.apps (list of names) equals expected (order-independent)."""
-    deployer = scope.get("deployer") or {}
+    """Assert first deployer's apps (list of names) equals expected (order-independent)."""
+    deployer = _first_deployer(scope)
     actual = sorted((deployer.get("apps") or []))
     expected_sorted = sorted(expected_app_names)
     assert actual == expected_sorted, (
@@ -50,8 +56,8 @@ def assert_deployer_has_app_with_config(
     state: str | None = None,
     has_content_pack_apps: bool | None = None,
 ) -> None:
-    """Assert deployer.apps_with_config has an entry for app_name with optional state/content_pack_apps checks."""
-    deployer = scope.get("deployer") or {}
+    """Assert first deployer's apps_with_config has an entry for app_name with optional state/content_pack_apps checks."""
+    deployer = _first_deployer(scope)
     configs = deployer.get("apps_with_config") or []
     entry = next((c for c in configs if c.get("name") == app_name), None)
     assert entry is not None, (
@@ -74,8 +80,8 @@ def assert_deployer_has_app_with_config(
 
 
 def assert_deployer_target_hosts(scope: dict, expected_hosts: list[str]) -> None:
-    """Assert deployer.target_hosts equals expected (order-independent)."""
-    deployer = scope.get("deployer") or {}
+    """Assert first deployer's target_hosts equals expected (order-independent)."""
+    deployer = _first_deployer(scope)
     actual = sorted((deployer.get("target_hosts") or []))
     expected_sorted = sorted(expected_hosts)
     assert actual == expected_sorted, (
@@ -83,9 +89,46 @@ def assert_deployer_target_hosts(scope: dict, expected_hosts: list[str]) -> None
     )
 
 
+def get_deployer_by_host(scope: dict, host: str) -> dict | None:
+    """Return the deployer entry for host from scope['deployer'] list, or None."""
+    deployer_list = scope.get("deployer") or []
+    for d in deployer_list:
+        if d.get("host") == host:
+            return d
+    return None
+
+
+def assert_deployers_entry(
+    scope: dict,
+    host: str,
+    expected_apps: list[str],
+    expected_target_hosts: list[str],
+) -> None:
+    """Assert scope['deployer'] list has an entry for host with given apps and target_hosts."""
+    entry = get_deployer_by_host(scope, host)
+    deployer_list = scope.get("deployer") or []
+    assert entry is not None, f"deployer: expected entry for host={host!r}, got {[d.get('host') for d in deployer_list]}"
+    actual_apps = sorted(entry.get("apps") or [])
+    expected_apps_sorted = sorted(expected_apps)
+    assert actual_apps == expected_apps_sorted, (
+        f"deployer[{host!r}].apps: expected {expected_apps_sorted}, got {actual_apps}"
+    )
+    actual_targets = sorted(entry.get("target_hosts") or [])
+    expected_targets_sorted = sorted(expected_target_hosts)
+    assert actual_targets == expected_targets_sorted, (
+        f"deployer[{host!r}].target_hosts: expected {expected_targets_sorted}, got {actual_targets}"
+    )
+
+
+def _first_cluster_manager(scope: dict) -> dict:
+    """Return first cluster_manager entry from scope['cluster_manager'] list, or empty dict."""
+    cm_list = scope.get("cluster_manager") or []
+    return cm_list[0] if cm_list else {}
+
+
 def assert_cluster_manager_apps(scope: dict, expected_app_names: list[str]) -> None:
-    """Assert cluster_manager.apps (list of names) equals expected (order-independent)."""
-    cm = scope.get("cluster_manager") or {}
+    """Assert first cluster_manager's apps (list of names) equals expected (order-independent)."""
+    cm = _first_cluster_manager(scope)
     actual = sorted((cm.get("apps") or []))
     expected_sorted = sorted(expected_app_names)
     assert actual == expected_sorted, (
@@ -94,8 +137,8 @@ def assert_cluster_manager_apps(scope: dict, expected_app_names: list[str]) -> N
 
 
 def assert_cluster_manager_target_hosts(scope: dict, expected_hosts: list[str]) -> None:
-    """Assert cluster_manager.target_hosts equals expected (order-independent)."""
-    cm = scope.get("cluster_manager") or {}
+    """Assert first cluster_manager's target_hosts equals expected (order-independent)."""
+    cm = _first_cluster_manager(scope)
     actual = sorted((cm.get("target_hosts") or []))
     expected_sorted = sorted(expected_hosts)
     assert actual == expected_sorted, (
@@ -103,13 +146,19 @@ def assert_cluster_manager_target_hosts(scope: dict, expected_hosts: list[str]) 
     )
 
 
+def _first_deployment_server(scope: dict) -> dict:
+    """Return first deployment_server entry from scope['deployment_server'] list, or empty dict."""
+    ds_list = scope.get("deployment_server") or []
+    return ds_list[0] if ds_list else {}
+
+
 def assert_ds_app_target_hosts(
     scope: dict,
     app_name: str,
     expected_hosts: list[str],
 ) -> None:
-    """Assert deployment_server.apps_with_targets has app with target_hosts equal to expected."""
-    ds = scope.get("deployment_server") or {}
+    """Assert first deployment_server's apps_with_targets has app with target_hosts equal to expected."""
+    ds = _first_deployment_server(scope)
     targets = ds.get("apps_with_targets") or []
     entry = next((t for t in targets if t.get("app") == app_name), None)
     assert entry is not None, (
@@ -123,9 +172,35 @@ def assert_ds_app_target_hosts(
 
 
 def assert_ds_app_count(scope: dict, expected_count: int) -> None:
-    """Assert deployment_server.apps_with_targets has expected number of apps."""
-    ds = scope.get("deployment_server") or {}
+    """Assert first deployment_server's apps_with_targets has expected number of apps."""
+    ds = _first_deployment_server(scope)
     targets = ds.get("apps_with_targets") or []
     assert len(targets) == expected_count, (
         f"deployment_server.apps_with_targets: expected {expected_count} app(s), got {len(targets)}"
     )
+
+
+def get_ds_entries_for_app(scope: dict, app_name: str) -> list[dict]:
+    """Return all apps_with_targets entries for the given app from the first deployment_server (same app, multiple serverclasses)."""
+    ds = _first_deployment_server(scope)
+    targets = ds.get("apps_with_targets") or []
+    return [t for t in targets if t.get("app") == app_name]
+
+
+def assert_ds_same_app_twice(
+    scope: dict,
+    app_name: str,
+    expected_target_hosts_per_entry: list[list[str]],
+) -> None:
+    """Assert deployment_server has multiple entries for the same app with given target_hosts (order-independent)."""
+    entries = get_ds_entries_for_app(scope, app_name)
+    assert len(entries) == len(expected_target_hosts_per_entry), (
+        f"deployment_server.apps_with_targets: expected {len(expected_target_hosts_per_entry)} entry/entries for app={app_name!r}, got {len(entries)}"
+    )
+    actual_sets = [sorted(e.get("target_hosts") or []) for e in entries]
+    expected_sorted = [sorted(h) for h in expected_target_hosts_per_entry]
+    # Match each expected set to an actual (order of entries may vary)
+    for exp in expected_sorted:
+        assert exp in actual_sets, (
+            f"deployment_server.apps_with_targets[{app_name!r}]: expected an entry with target_hosts={exp}, got {actual_sets}"
+        )
