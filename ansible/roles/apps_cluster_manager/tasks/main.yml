@@ -11,6 +11,7 @@
   ansible.builtin.set_fact:
     cm_apps: []
 
+# When idxc_whitelist or idxc_blacklist is set, only add app to this CM if it targets an IDXC this CM serves (same pattern as deployer + shc_*).
 - name: Filter apps for cluster manager distribution
   tags:
     - splunk
@@ -19,6 +20,17 @@
   ansible.builtin.set_fact:
     cm_apps: "{{ cm_apps + [item] }}"
   loop: "{{ splunk_app_deployment.apps | default([]) }}"
+  vars:
+    _effective_idxc_w: "{{ (item | default({})).get('idxc_whitelist', []) | default([]) }}"
+    _effective_idxc_b: "{{ (item | default({})).get('idxc_blacklist', []) | default([]) }}"
+    _effective_hosts_whitelist: "{{ (item | default({})).get('hosts_whitelist', []) | default([]) }}"
+    _idxc_names: "{{ (groups | dict2items | selectattr('key', 'match', '^idxcluster_') | map(attribute='key') | list) | map('regex_replace', '^idxcluster_', '') | list }}"
+    _idxc_effectively_targeted: "{{ _effective_idxc_w if (_effective_idxc_w | length > 0) else (_idxc_names | reject('in', _effective_idxc_b) | list) }}"
+    # IDXC(s) this cluster manager host serves (from group membership idxcluster_*)
+    _this_cm_idxc_names: "{{ (group_names | select('match', '^idxcluster_') | list) | map('regex_replace', '^idxcluster_', '') | list }}"
+    # Indexer hosts in the cluster(s) this CM serves (so we can skip apps that only target standalone indexers via hosts_whitelist)
+    _cm_group_keys: "{{ (_this_cm_idxc_names | map('regex_replace', '^', 'idxcluster_') | list) }}"
+    _this_cm_cluster_members: "{{ (groups | dict2items | selectattr('key', 'in', _cm_group_keys) | map(attribute='value') | flatten | list) }}"
   when:
     - item.deployment_target | default('auto') != 'direct'
     - >-
@@ -26,6 +38,12 @@
       or (item.target_roles is defined and (
         (item.target_roles | intersect(['indexer']) | length > 0) or (item.target_roles | intersect(['cluster_manager']) | length > 0)
       ))
+    # When hosts_whitelist is set: only add to CM if at least one cluster member is in the whitelist (else app goes direct to those hosts only, e.g. standalone indexers)
+    - (_effective_hosts_whitelist | length == 0) or ((_effective_hosts_whitelist | intersect(_this_cm_cluster_members) | length > 0))
+    # When idxc_whitelist or idxc_blacklist is set: only add to CM if at least one IDXC is targeted
+    - (not ((_effective_idxc_w | length > 0) or (_effective_idxc_b | length > 0))) or (_idxc_effectively_targeted | length > 0)
+    # Only add app to this CM if it targets an IDXC this CM serves (when multiple CMs exist, each gets only apps for its cluster)
+    - (_idxc_effectively_targeted | intersect(_this_cm_idxc_names) | length > 0)
 
 - name: Debug cluster manager apps
   tags:

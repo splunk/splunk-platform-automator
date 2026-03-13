@@ -40,8 +40,9 @@
     - splunk_apps
     - direct_deployment
   ansible.builtin.set_fact:
-    _app_dir_base: "{{ ((app_item | default({})).get('target_roles', []) | map('regex_replace', '^(.*)$', 'role_\\1') | map('extract', groups) | flatten | reject('in', _dir_idxc_all) | reject('in', _dir_shc_members) | unique) | list }}"
+    _app_dir_base: "{{ ((groups | default({}) | dict2items | selectattr('key', 'in', _role_keys) | map(attribute='value') | flatten) | reject('in', _dir_idxc_all) | reject('in', _dir_shc_members) | unique) | list }}"
   vars:
+    _role_keys: "{{ ((app_item | default({})).get('target_roles', []) | map('regex_replace', '^(.*)$', 'role_\\1') | list) | intersect((groups | default({}) | dict2items | map(attribute='key') | list)) }}"
     _dir_idxc_all: "{{ (groups | dict2items | selectattr('key', 'match', '^idxcluster_') | map(attribute='value') | flatten) | list }}"
     _dir_shc_members: "{{ (groups['role_search_head'] | default([])) | intersect((groups | dict2items | selectattr('key', 'match', '^shcluster_') | map(attribute='value') | flatten) | list) | list }}"
   when:
@@ -56,8 +57,9 @@
     - splunk_apps
     - direct_deployment
   ansible.builtin.set_fact:
-    _app_dir_base: "{{ ((app_item | default({})).get('target_roles', []) | map('regex_replace', '^(.*)$', 'role_\\1') | map('extract', groups) | flatten | reject('in', _dir_idxc_all) | reject('in', _dir_shc_members) | unique) | list }}"
+    _app_dir_base: "{{ ((groups | default({}) | dict2items | selectattr('key', 'in', _role_keys) | map(attribute='value') | flatten) | reject('in', _dir_idxc_all) | reject('in', _dir_shc_members) | unique) | list }}"
   vars:
+    _role_keys: "{{ ((app_item | default({})).get('target_roles', []) | map('regex_replace', '^(.*)$', 'role_\\1') | list) | intersect((groups | default({}) | dict2items | map(attribute='key') | list)) }}"
     _dir_idxc_all: "{{ (groups | dict2items | selectattr('key', 'match', '^idxcluster_') | map(attribute='value') | flatten) | list }}"
     _dir_shc_members: "{{ (groups['role_search_head'] | default([])) | intersect((groups | dict2items | selectattr('key', 'match', '^shcluster_') | map(attribute='value') | flatten) | list) | list }}"
   when:
@@ -76,7 +78,7 @@
 # --- Split by role: hosts filters apply only to search heads; idxc only to non-SH ---
 - name: "Set standalone search head list for {{ app_item.name }}"
   ansible.builtin.set_fact:
-    _standalone_sh_list: "{{ groups['role_search_head'] | default([]) | reject('in', (groups | select('match', '^shcluster_') | list | map('extract', groups) | flatten) | list) | list }}"
+    _standalone_sh_list: "{{ groups['role_search_head'] | default([]) | reject('in', (groups | default({}) | dict2items | selectattr('key', 'match', '^shcluster_') | map(attribute='value') | flatten) | list) | list }}"
 
 - name: "Set direct search-head subset for {{ app_item.name }} (hosts/shc filters apply only to this)"
   ansible.builtin.set_fact:

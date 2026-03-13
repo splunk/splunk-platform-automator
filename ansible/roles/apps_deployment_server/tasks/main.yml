@@ -11,6 +11,14 @@
   ansible.builtin.set_fact:
     ds_apps: []
 
+- name: Set fact for standalone search heads (not in any SHC)
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    _ds_standalone_sh_list: "{{ (groups['role_search_head'] | default([])) | reject('in', (groups | default({}) | dict2items | selectattr('key', 'match', '^shcluster_') | map(attribute='value') | flatten) | default([]) | list) | list }}"
+
 - name: Filter apps for deployment server distribution
   tags:
     - splunk
@@ -27,6 +35,10 @@
     - not (item.itsi_content_pack | default(false))
     # Apps that target only indexer and/or cluster_manager go via cluster manager (manager-apps), not DS.
     - (item.target_roles | default([]) | difference(['indexer', 'cluster_manager']) | list | length) > 0
+    # Apps that target only search_head must not go via DS when all search heads are in an SHC (they go via deployer only).
+    - (item.target_roles | default([]) | difference(['search_head']) | list | length > 0) or (_ds_standalone_sh_list | default([]) | length > 0)
+    # Apps with shc_whitelist or shc_blacklist target SHC members only and go via deployer; do not add them to DS.
+    - (item.target_roles | default([]) | intersect(['search_head']) | length == 0) or ((item.shc_whitelist | default([]) | length == 0) and (item.shc_blacklist | default([]) | length == 0))
 
 - name: Debug deployment server apps
   tags:

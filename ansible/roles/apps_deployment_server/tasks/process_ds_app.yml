@@ -223,14 +223,31 @@
     app_blacklist_hosts: []
   when: app_state == 'absent'
 
-- name: "Record DS app scope for debug (target_hosts per app)"
+# Debug scope entry: serverclass and target_path distinguish same app with different serverclasses;
+# sc_whitelist/sc_blacklist document serverclass config; blacklist is the effective serverclass blacklist.
+- name: "Record DS app scope for debug (target_hosts, serverclass, target_path, sc_* per app)"
   tags:
     - splunk
     - splunk_apps
     - deployment_server
   ansible.builtin.set_fact:
-    ds_app_scope_debug: "{{ ds_app_scope_debug | default([]) + [{'app': app_item.name, 'state': app_state, 'target_hosts': app_whitelist_hosts | default([]), 'customizations': (app_item | default({})).get('customizations'), 'content_pack_apps': (app_item | default({})).get('content_pack_apps'), 'library_app': (app_item | default({})).get('library_app'), 'install_all_apps': (app_item | default({})).get('install_all_apps')}] }}"
+    ds_app_scope_debug: "{{ ds_app_scope_debug | default([]) + [{
+      'app': app_item.name,
+      'state': app_state,
+      'target_hosts': app_whitelist_hosts | default([]),
+      'blacklist': app_blacklist_hosts | default([]),
+      'serverclass': serverclass_name | default('app_' + app_item.name),
+      'target_path': app_item.target_path if (app_item.target_path is defined and (app_item.target_path | default('') | trim | length > 0)) else _scope_nil,
+      'sc_whitelist': app_item.sc_whitelist if (app_item.sc_whitelist is defined) else _scope_nil,
+      'sc_blacklist': app_item.sc_blacklist if (app_item.sc_blacklist is defined) else _scope_nil,
+      'customizations': (app_item | default({})).get('customizations'),
+      'content_pack_apps': (app_item | default({})).get('content_pack_apps'),
+      'library_app': (app_item | default({})).get('library_app'),
+      'install_all_apps': (app_item | default({})).get('install_all_apps')
+    }] }}"
   when: debug_app_scope | default(false) | bool
+  vars:
+    _scope_nil: ~
 
 - name: "Debug {{ app_item.name }} deployment"
   tags:
