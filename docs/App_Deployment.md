@@ -19,12 +19,16 @@ Automatically deploys Splunk apps to the correct location based on your environm
 ansible-galaxy collection install ansible.posix
 ```
 
-### 2. Set Credentials
+### 2. Set Credentials (for Splunkbase apps)
+
+By default, Splunkbase credentials are read from environment variables. Set them before running the playbook:
 
 ```bash
 export SPLUNKBASE_USERNAME='your_email@example.com'
 export SPLUNKBASE_PASSWORD='your_password'
 ```
+
+*Optional:* To store credentials in the config file instead of using environment variables, add `splunkbase_username` and `splunkbase_password` under `splunk_app_deployment`. Prefer [Ansible Vault](Secrets_and_Vault.md) so secrets stay encrypted and out of version control.
 
 ### 3. Configure
 
@@ -32,9 +36,6 @@ Add to `config/splunk_config.yml`:
 
 ```yaml
 splunk_app_deployment:
-  splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
-  splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
-  
   apps:
     - name: "Splunk_TA_nix"   # For Splunkbase: must match the app folder name inside the archive
       source: splunkbase

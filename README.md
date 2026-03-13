@@ -69,6 +69,8 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
 - Configuration done according best practices with configuration apps
 - Splunk environment definition stored in one simple [yaml](http://docs.ansible.com/ansible/latest/YAMLSyntax.html) file
 - [Example configuration files](examples) for different setups included
+- **App Deployment**: Deploy and manage Splunk apps (Splunkbase, local, or URL) to search heads, indexers, and forwarders via `splunk_app_deployment` in the config. See the [App Deployment Guide](docs/App_Deployment.md).
+- **Secrets and Vault**: Store passwords and other secrets in `splunk_config.yml` securely using [Ansible Vault](docs/Secrets_and_Vault.md) (encrypted values, no plain-text credentials in version control).
 - Deployment and configuration done with [Ansible](https://www.ansible.com)
 - **AWS Infrastructure provisioning via [Terraform](https://www.terraform.io)** (recommended for AWS deployments)
   - Ansible-driven Terraform workflow with single config file
