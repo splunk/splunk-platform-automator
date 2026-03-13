@@ -52,10 +52,10 @@ For Splunkbase apps, **`name`** must match the top-level folder name in the app 
 
 ```bash
 # Test first
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml --check
+ansible-playbook ansible/deploy_splunk_apps.yml --check
 
 # Deploy
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml
+ansible-playbook ansible/deploy_splunk_apps.yml
 ```
 
 ## 📚 Documentation
@@ -95,17 +95,21 @@ See `examples/` directory:
 
 ## 🔧 Roles
 
-App deployment uses four roles (run by `deploy_splunk_apps.yml` in sequence):
+App deployment uses the following roles (run by `deploy_splunk_apps.yml` in sequence):
 
-- `ansible/roles/apps_deployment_server/` – Deployment Server distribution
-- `ansible/roles/apps_cluster_manager/` – Cluster Manager distribution
-- `ansible/roles/apps_deployer/` – Search Head Cluster Deployer distribution
-- `ansible/roles/apps_direct/` – Direct deployment to hosts
+- `ansible/roles/apps_deployment_server/` – Deployment Server distribution (forwarders, non-clustered targets)
+- `ansible/roles/apps_cluster_manager/` – Cluster Manager distribution (indexer cluster apps)
+- `ansible/roles/apps_deployer/` – Search Head Cluster Deployer distribution (SHC apps)
+- `ansible/roles/apps_direct/` – Direct deployment to hosts (standalone and premium apps)
+- `ansible/roles/apps_itsi/` – Splunk IT Service Intelligence (ITSI) install, config, and removal (deployer, cluster manager, and direct paths)
+- `ansible/roles/apps_itsi_content_pack/` – ITSI content pack deployment (same targets as ITSI)
+
+See the [App Deployment Guide](App_Deployment_Guide.md) for [ITSI (premium packs)](App_Deployment_Guide.md#premium-packs-splunk-it-service-intelligence-itsi) and [ITSI Content Packs](App_Deployment_Guide.md#itsi-content-packs).
 
 ## 🎭 Playbooks
 
-- `ansible/deploy_splunk_apps.yml` - Deploy apps
-- `ansible/remove_splunk_apps.yml` - Remove apps
+- `ansible/deploy_splunk_apps.yml` – Deploy apps (and remove apps when `state: absent` in config)
+- `ansible/remove_splunk_apps.yml` - Remove apps only (when `state: absent`)
 
 ## 📊 Status
 
@@ -116,7 +120,7 @@ App deployment uses four roles (run by `deploy_splunk_apps.yml` in sequence):
 ## 🚀 Next Steps
 
 1. Start with a dev environment
-2. Run verification: `ansible-playbook ansible/verification/verify_app_deployment.yml -i config/splunk_config.yml`
+2. Run verification: `ansible-playbook ansible/verification/verify_app_deployment.yml`
 3. Deploy to production after testing
 
 ## 💡 Need Help?

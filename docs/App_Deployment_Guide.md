@@ -500,14 +500,14 @@ targetUri = ds:8089
 
 ```bash
 # Deploy the environment (includes deployment client config)
-ansible-playbook ansible/site.yml -i config/splunk_config.yml
+ansible-playbook ansible/site.yml
 ```
 
 **Step 4: Then deploy apps**
 
 ```bash
 # Now app deployment will use DS
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml
+ansible-playbook ansible/deploy_splunk_apps.yml
 ```
 
 ### Option 2: Force Direct Deployment
@@ -633,7 +633,7 @@ ls -la /opt/splunk/etc/apps/
 Run with verbose output to see deployment decisions:
 
 ```bash
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml -v
+ansible-playbook ansible/deploy_splunk_apps.yml -v
 ```
 
 **Key debug messages:**
@@ -653,7 +653,7 @@ ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml -v
 **Check:**
 ```bash
 # Verify Ansible inventory groups
-ansible-inventory -i config/splunk_config.yml --graph
+ansible-inventory --graph
 
 # Should show cluster groups like:
 #   |--@idxcluster_idxc1:
@@ -744,7 +744,7 @@ cat /opt/splunk/etc/system/local/serverclass.conf
 
 **Check inventory:**
 ```bash
-ansible-inventory -i config/splunk_config.yml --list
+ansible-inventory --list
 ```
 
 ### Expected Behavior Summary
@@ -1183,31 +1183,30 @@ ssh cm
 
 ```bash
 # Deploy all apps
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml
-
+ansible-playbook ansible/deploy_splunk_apps.yml
 # Deploy specific app (use tags if implemented)
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml --limit <target_host>
+ansible-playbook ansible/deploy_splunk_apps.yml --limit <target_host>
 
 # Verbose output for troubleshooting
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml -v
+ansible-playbook ansible/deploy_splunk_apps.yml -v
 
 # Check inventory structure
-ansible-inventory -i config/splunk_config.yml --graph
+ansible-inventory --graph
 
 # List all hosts in a role
-ansible-inventory -i config/splunk_config.yml --list | grep -A5 role_indexer
+ansible-inventory --list | grep -A5 role_indexer
 
 # Verify app on target
-ansible <host> -i config/splunk_config.yml -m shell -a "ls -la /opt/splunk/etc/apps/"
+ansible <host> -m shell -a "ls -la /opt/splunk/etc/apps/"
 
 # Check serverclass
-ansible ds -i config/splunk_config.yml -m shell -a "cat /opt/splunk/etc/system/local/serverclass.conf"
+ansible ds -m shell -a "cat /opt/splunk/etc/system/local/serverclass.conf"
 
 # Check cluster bundle
-ansible cm -i config/splunk_config.yml -m shell -a "/opt/splunk/bin/splunk show cluster-bundle-status -auth admin:password"
+ansible cm -m shell -a "/opt/splunk/bin/splunk show cluster-bundle-status -auth admin:password"
 
 # Check SHC bundle
-ansible deployer -i config/splunk_config.yml -m shell -a "/opt/splunk/bin/splunk show shcluster-status -auth admin:password"
+ansible deployer -m shell -a "/opt/splunk/bin/splunk show shcluster-status -auth admin:password"
 ```
 
 ## Advanced Topics

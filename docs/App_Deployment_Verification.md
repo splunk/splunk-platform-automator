@@ -54,8 +54,7 @@ Warns about apps present on disk but not defined in configuration.
 Shows mismatches but **does not fail** the playbook:
 
 ```bash
-ansible-playbook ansible/verification/verify_app_deployment.yml \
-  -i config/splunk_config.yml
+ansible-playbook ansible/verification/verify_app_deployment.yml
 ```
 
 **Use case:** Manual verification, troubleshooting
@@ -65,9 +64,7 @@ ansible-playbook ansible/verification/verify_app_deployment.yml \
 **Fails** the playbook if any mismatches are found:
 
 ```bash
-ansible-playbook ansible/verification/verify_app_deployment.yml \
-  -i config/splunk_config.yml \
-  -e fail_on_mismatch=true
+ansible-playbook ansible/verification/verify_app_deployment.yml -e fail_on_mismatch=true
 ```
 
 **Use case:** CI/CD pipelines, automated testing
@@ -257,8 +254,8 @@ tests/
 
 **1. Re-run deployment:**
 ```bash
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml
-ansible-playbook ansible/verification/verify_app_deployment.yml -i config/splunk_config.yml
+ansible-playbook ansible/deploy_splunk_apps.yml
+ansible-playbook ansible/verification/verify_app_deployment.yml
 ```
 
 **2. Check deployment logs:**
@@ -284,8 +281,8 @@ If verification is skipped for a host, it means no apps are expected there based
 
 1. **Always verify after deployment:**
    ```bash
-   ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml && \
-   ansible-playbook ansible/verification/verify_app_deployment.yml -i config/splunk_config.yml
+   ansible-playbook ansible/deploy_splunk_apps.yml && \
+   ansible-playbook ansible/verification/verify_app_deployment.yml
    ```
 
 2. **Use strict mode in CI/CD:**

@@ -62,7 +62,7 @@ splunk_app_deployment:
 #    export SPLUNKBASE_PASSWORD='your_password'
 #
 # 2. Deploy apps:
-#    ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml
+#    ansible-playbook ansible/deploy_splunk_apps.yml
 #
 # 3. Remove apps (those with state: absent):
-#    ansible-playbook ansible/remove_splunk_apps.yml -i config/splunk_config.yml
+#    ansible-playbook ansible/remove_splunk_apps.yml

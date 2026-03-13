@@ -32,7 +32,7 @@ export SPLUNKBASE_PASSWORD='your_password'
 ### Step 3: Run the Playbook
 
 ```bash
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml
+ansible-playbook ansible/deploy_splunk_apps.yml
 ```
 
 ---
@@ -189,7 +189,6 @@ splunk_app_deployment:
 **Note**: After deployment, you'll need to push the bundle:
 ```bash
 ansible-playbook ansible/run_splunk_command.yml \
-  -i config/splunk_config.yml \
   --limit role_deployer \
   -e "splunk_command='apply shcluster-bundle'"
 ```
@@ -468,7 +467,7 @@ splunk_app_deployment:
 
 Use `--limit` to target specific hosts:
 ```bash
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml --limit sh1
+ansible-playbook ansible/deploy_splunk_apps.yml --limit sh1
 ```
 
 Or define apps with `target_roles` so they only apply to hosts in those roles; use `deployment_target: "direct"` and `target_path: "etc/apps"` for direct deployment.
@@ -501,8 +500,7 @@ jobs:
         env:
           SPLUNKBASE_PASSWORD: ${{ secrets.SPLUNKBASE_PASSWORD }}
         run: |
-          ansible-playbook ansible/deploy_splunk_apps.yml \
-            -i config/splunk_config.yml
+          ansible-playbook ansible/deploy_splunk_apps.yml
 ```
 
 ---
@@ -511,30 +509,29 @@ jobs:
 
 ```bash
 # Deploy all apps to all targets
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml
-
+ansible-playbook ansible/deploy_splunk_apps.yml
 # Deploy only to search heads
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml \
+ansible-playbook ansible/deploy_splunk_apps.yml \
   --limit role_search_head
 
 # Deploy only to specific host
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml \
+ansible-playbook ansible/deploy_splunk_apps.yml \
   --limit sh1
 
 # Dry run (check what would be deployed)
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml \
+ansible-playbook ansible/deploy_splunk_apps.yml \
   --check
 
 # Deploy with extra verbosity (for debugging)
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml \
+ansible-playbook ansible/deploy_splunk_apps.yml \
   -vvv
 
 # Deploy only Splunkbase apps (using tags)
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml \
+ansible-playbook ansible/deploy_splunk_apps.yml \
   --tags splunkbase
 
 # Deploy only local apps (using tags)
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml \
+ansible-playbook ansible/deploy_splunk_apps.yml \
   --tags local_apps
 ```
 

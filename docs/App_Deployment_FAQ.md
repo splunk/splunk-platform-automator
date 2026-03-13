@@ -204,16 +204,14 @@ chown -R splunk:splunk /opt/splunk/etc/apps/MY_APP
 
 Yes!
 ```bash
-ansible-playbook ansible/deploy_splunk_apps.yml \
-  -i config/splunk_config.yml --limit sh1
+ansible-playbook ansible/deploy_splunk_apps.yml --limit sh1
 ```
 
 ### How do I test without actually deploying?
 
 Use dry-run mode:
 ```bash
-ansible-playbook ansible/deploy_splunk_apps.yml \
-  -i config/splunk_config.yml --check -vv
+ansible-playbook ansible/deploy_splunk_apps.yml --check -vv
 ```
 
 ### Can I deploy apps that depend on other apps?
@@ -243,8 +241,7 @@ Example GitHub Actions workflow:
     SPLUNKBASE_USERNAME: ${{ secrets.SPLUNKBASE_USERNAME }}
     SPLUNKBASE_PASSWORD: ${{ secrets.SPLUNKBASE_PASSWORD }}
   run: |
-    ansible-playbook ansible/deploy_splunk_apps.yml \
-      -i config/splunk_config.yml
+    ansible-playbook ansible/deploy_splunk_apps.yml
 ```
 
 ### Can I use this for Universal Forwarders?

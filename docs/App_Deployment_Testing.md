@@ -54,7 +54,7 @@ Use your current `config/splunk_config.yml` and inventory. No AWS required if yo
 ### Deploy apps
 
 ```bash
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml -v
+ansible-playbook ansible/deploy_splunk_apps.yml -v
 ```
 
 Watch for:
@@ -67,13 +67,13 @@ Watch for:
 Run the verification playbook after deploy. Report-only (default):
 
 ```bash
-ansible-playbook ansible/verification/verify_app_deployment.yml -i config/splunk_config.yml
+ansible-playbook ansible/verification/verify_app_deployment.yml
 ```
 
 Strict (fail on mismatch, e.g. for CI):
 
 ```bash
-ansible-playbook ansible/verification/verify_app_deployment.yml -i config/splunk_config.yml -e fail_on_mismatch=true
+ansible-playbook ansible/verification/verify_app_deployment.yml -e fail_on_mismatch=true
 ```
 
 ---

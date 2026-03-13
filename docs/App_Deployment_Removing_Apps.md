@@ -33,8 +33,7 @@ splunk_app_deployment:
 2. **Run the removal playbook**:
 
 ```bash
-ansible-playbook ansible/remove_splunk_apps.yml \
-  -i config/splunk_config.yml
+ansible-playbook ansible/remove_splunk_apps.yml
 ```
 
 The playbook will:
@@ -61,8 +60,7 @@ splunk_app_deployment:
 
 **Run removal**:
 ```bash
-$ ansible-playbook ansible/remove_splunk_apps.yml -i config/splunk_config.yml
-
+$ ansible-playbook ansible/remove_splunk_apps.yml
 PLAY [Remove Splunk Apps from Environment] ***********************
 
 TASK [Filter apps with state=absent] ****************************
@@ -114,7 +112,7 @@ splunk_app_deployment:
 
 **Run removal**:
 ```bash
-ansible-playbook ansible/remove_splunk_apps.yml -i config/splunk_config.yml
+ansible-playbook ansible/remove_splunk_apps.yml
 ```
 
 All three apps will be removed in a single run.
@@ -260,7 +258,7 @@ After removing app from Deployer (`etc/shcluster/apps`), you must deploy to SHC:
   -auth admin:password
 
 # Or use Deployer playbook
-ansible-playbook ansible/shcluster_deployer.yml -i config/splunk_config.yml
+ansible-playbook ansible/shcluster_deployer.yml
 ```
 
 **Deployment Server**:
@@ -457,7 +455,7 @@ You can also use the main deployment playbook for removals:
 ```bash
 # Mark apps with state: absent in config
 # Then run the deployment playbook
-ansible-playbook ansible/deploy_splunk_apps.yml -i config/splunk_config.yml
+ansible-playbook ansible/deploy_splunk_apps.yml
 ```
 
 **When to use each playbook**:
