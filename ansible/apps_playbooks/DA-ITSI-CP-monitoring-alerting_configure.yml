@@ -13,7 +13,7 @@
 
 - name: "Enable and Schedule Lookup Generator Reports"
   ansible.builtin.uri:
-    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/DA-ITSI-CP-monitoring-alerting/saved/searches/{{ item | urlencode }}"
+    url: "https://localhost:8089/servicesNS/nobody/DA-ITSI-CP-monitoring-alerting/saved/searches/{{ item | urlencode }}"
     user: admin
     password: "{{ splunk_admin_password }}"
     method: POST
@@ -33,7 +33,7 @@
 
 - name: "Update Lookup tables"
   ansible.builtin.uri:
-    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/DA-ITSI-CP-monitoring-alerting/saved/searches/{{ item | urlencode }}/dispatch"
+    url: "https://localhost:8089/servicesNS/nobody/DA-ITSI-CP-monitoring-alerting/saved/searches/{{ item | urlencode }}/dispatch"
     user: admin
     password: "{{ splunk_admin_password }}"
     method: POST
@@ -52,7 +52,7 @@
 
 - name: "Get NEAP Content (episodes-by-itsi-service)"
   ansible.builtin.uri:
-    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/itsi/event_management_interface/notable_event_aggregation_policy/{{ item | urlencode }}"
+    url: "https://localhost:8089/servicesNS/nobody/itsi/event_management_interface/notable_event_aggregation_policy/{{ item | urlencode }}"
     user: admin
     password: "{{ splunk_admin_password }}"
     method: GET
@@ -66,7 +66,7 @@
 
 - name: "Enable NEAP Searches"
   ansible.builtin.uri:
-    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/itsi/event_management_interface/notable_event_aggregation_policy/da-itsi-cp-monitoring-alerting-episodes-by-itsi-service"
+    url: "https://localhost:8089/servicesNS/nobody/itsi/event_management_interface/notable_event_aggregation_policy/da-itsi-cp-monitoring-alerting-episodes-by-itsi-service"
     user: admin
     password: "{{ splunk_admin_password }}"
     method: POST
@@ -86,7 +86,7 @@
 # Set macro via REST API so it works on SHC (no filesystem write) and avoids restart.
 - name: "Set macro get_itsi_universal_index via API"
   ansible.builtin.uri:
-    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/DA-ITSI-CP-monitoring-alerting/admin/macros/get_itsi_universal_index"
+    url: "https://localhost:8089/servicesNS/nobody/DA-ITSI-CP-monitoring-alerting/admin/macros/get_itsi_universal_index"
     user: admin
     password: "{{ splunk_admin_password }}"
     method: POST
@@ -101,7 +101,7 @@
 
 - name: "Enable Correlation Searches"
   ansible.builtin.uri:
-    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/itsi/saved/searches/{{ item | urlencode }}"
+    url: "https://localhost:8089/servicesNS/nobody/itsi/saved/searches/{{ item | urlencode }}"
     user: admin
     password: "{{ splunk_admin_password }}"
     method: POST
@@ -122,7 +122,7 @@
 
 - name: "Disable Correlation Searches"
   ansible.builtin.uri:
-    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/itsi/saved/searches/{{ item | urlencode }}"
+    url: "https://localhost:8089/servicesNS/nobody/itsi/saved/searches/{{ item | urlencode }}"
     user: admin
     password: "{{ splunk_admin_password }}"
     method: POST
@@ -138,7 +138,7 @@
 
 - name: "Get Service Content"
   ansible.builtin.uri:
-    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/SA-ITOA/itoa_interface/service/{{ item | urlencode }}"
+    url: "https://localhost:8089/servicesNS/nobody/SA-ITOA/itoa_interface/service/{{ item | urlencode }}"
     user: admin
     password: "{{ splunk_admin_password }}"
     method: GET
@@ -154,7 +154,7 @@
 
 - name: "Enable Services"
   ansible.builtin.uri:
-    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/SA-ITOA/itoa_interface/service/{{ item.json._key | urlencode }}"
+    url: "https://localhost:8089/servicesNS/nobody/SA-ITOA/itoa_interface/service/{{ item.json._key | urlencode }}"
     user: admin
     password: "{{ splunk_admin_password }}"
     method: POST
