@@ -1,16 +1,16 @@
 ---
 # Shared: compute first SHC member for post-restart playbooks when apps are deployed to an SHC via the deployer.
 # Used by ITSI/content pack (itsi_set_sh_apps_base.yml) and by normal apps with run_playbook_after_restart deployed to SHC.
-# Sets: _shc_group_names_with_deployer (list of shcluster_* group names that contain a deployer),
+# Sets: _shc_group_names_with_deployer (list of shcluster_* group names that contain THIS host so each deployer gets its own SHC),
 #       _first_shc_member (first search head in those groups, excluding deployer).
 # Override: splunk_shc_post_restart_playbook_host or itsi_content_pack_api_host (for backward compatibility).
 
-- name: "Collect SHC group names that contain a deployer (SHCs a deployer serves)"
+- name: "Collect SHC group names that contain this host (SHC(s) this deployer serves)"
   tags:
     - splunk
     - splunk_apps
   ansible.builtin.set_fact:
-    _shc_group_names_with_deployer: "{{ (_shc_group_names_with_deployer | default([])) + ([item] if ((groups[item] | default([]) | intersect(groups['role_deployer'] | default([])) | length) > 0) else []) }}"
+    _shc_group_names_with_deployer: "{{ (_shc_group_names_with_deployer | default([])) + ([item] if (inventory_hostname in (groups[item] | default([]))) else []) }}"
   loop: "{{ (groups | dict2items | selectattr('key', 'match', '^shcluster_') | map(attribute='key') | list) }}"
   when: (groups | dict2items | selectattr('key', 'match', '^shcluster_') | list | length) > 0
 

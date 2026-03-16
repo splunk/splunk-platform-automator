@@ -220,9 +220,11 @@ splunk_app_deployment:
           content_pack_install: true
           content_pack_api:
             install_all: true
+            enabled: true   # set true to enable; default false
             saved_search_action: "disable"
             backfill: false
             resolution: "overwrite"
+            # prefix: ""    # optional; default ""
           customizations:
             run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml"
             extra_vars:
@@ -231,9 +233,11 @@ splunk_app_deployment:
           content_pack_install: true
           content_pack_api:
             install_all: true
+            enabled: true   # set true to enable; default false
             saved_search_action: "disable"
             backfill: false
             resolution: "overwrite"
+            # prefix: ""    # optional; default ""
           customizations:
             run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-splunk-observability_configure.yml"
             extra_vars: {}

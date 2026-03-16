@@ -212,12 +212,12 @@ ITSI content packs are deployed as **one app entry per content pack .spl file**.
 **Config rules:**
 
 - **Per-app structure only:** Do **not** set top-level `content_pack_install`, `content_pack_api`, or `customizations` on the content pack entry. All of these options live **only** inside **`content_pack_apps`**, as a list of objects.
-- **`content_pack_apps`:** Required when `install_all_apps` is false. Each item must have **`name`** (required; the app dir name of the content pack, e.g. `DA-ITSI-CP-monitoring-alerting`). Optional per item: **`content_pack_install`** (bool), **`content_pack_api`** (dict: `install_all`, `saved_search_action`, `backfill`, `resolution`), **`customizations`** (dict: `run_playbook_after_restart`, `extra_vars`).
+- **`content_pack_apps`:** Required when `install_all_apps` is false. Each item must have **`name`** (required; the app dir name of the content pack, e.g. `DA-ITSI-CP-monitoring-alerting`). Optional per item: **`content_pack_install`** (bool), **`content_pack_api`** (dict: `install_all`, `saved_search_action`, `backfill`, `resolution`, `enabled`, `prefix`; `enabled` defaults to false, `prefix` defaults to empty string), **`customizations`** (dict: `run_playbook_after_restart`, `extra_vars`).
 - **`library_app`:** Optional. When set (e.g. `DA-ITSI-ContentLibrary`), this app is always installed from the same .spl in addition to the apps listed in `content_pack_apps`. It is **not** listed inside `content_pack_apps`.
 - **`install_all_apps`:** Optional, default false. When true, the full archive is extracted; when false, only `library_app` (if set) and the **`name`** of each `content_pack_apps` item are extracted.
 - **Naming convention:** Use **`run_playbook_after_restart`** = `ancustom/<app_name>_configure.yml` (e.g. `ancustom/DA-ITSI-CP-monitoring-alerting_configure.yml`).
 
-**SHC behavior:** When the target is a Search Head Cluster, the playbook waits for the SHC to be fully ready (`service_ready_flag=1` and `rolling_restart_flag=0`) before running the ITSI content pack API install and any **`run_playbook_after_restart`** playbooks. The API and config playbooks run only on the **first SHC member** (or on the single search head when standalone). When the ITSI app has **`shc_rolling_restart: true`**, the "Initiate SHC rolling restart" handler is notified after the bundle push so that this wait runs in the correct order.
+**SHC behavior:** When the target is a Search Head Cluster, the playbook waits for the SHC to be fully ready (`service_ready_flag=1` and `rolling_restart_flag=0`) before running the ITSI content pack API install and any **`run_playbook_after_restart`** playbooks. The API and config playbooks run only on the **first SHC member** (or on the single search head when standalone). When the ITSI app has **`shc_rolling_restart: true`**, the "Initiate SHC rolling restart" handler is notified after the bundle push so that this wait runs in the correct order. **Multiple content packs:** Each content pack with **`content_pack_install: true`** is installed via the ITSI API in sequence; the playbook runs once per pack. If the "already installed" GET check or the install POST returns 404 (e.g. pack already installed or endpoint differs by ITSI/SA-ITOA version), the task logs a warning and continues with the next pack instead of failing the run.
 
 **Removal:** With **`state: absent`**, content pack app directories are removed from the system (and Splunk is restarted or the deployer bundle is pushed). There is no ITSI API uninstall; removal is the same as for the ITSI premium app (remove app dirs and restart).
 
@@ -248,6 +248,7 @@ ITSI content packs are deployed as **one app entry per content pack .spl file**.
         saved_search_action: "disable"
         backfill: false
         resolution: "overwrite"
+        # enabled: true  # optional; default false
       customizations:
         run_playbook_after_restart: "ancustom/DA-ITSI-CP-monitoring-alerting_configure.yml"
         extra_vars:

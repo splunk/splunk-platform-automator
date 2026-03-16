@@ -94,18 +94,19 @@
   gather_facts: yes
 
   tasks:
-    # Deployer+SHC only: load deployer-accumulated playbooks onto first SHC member (content pack / standard apps with run_playbook_after_restart).
+    # Deployer+SHC only: load each deployer's playbooks onto THAT deployer's first SHC member (so ITSI on shc1 runs on shc1, not shc2).
     - name: "Load post-restart playbooks for first SHC member (from deployer)"
       tags:
         - splunk
         - splunk_apps
       ansible.builtin.set_fact:
-        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + (hostvars[_deployer_host]._pending_post_restart_first_shc | default([])) }}"
+        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + (hostvars[item]._pending_post_restart_first_shc | default([])) }}"
+      loop: "{{ groups['role_deployer'] | default([]) }}"
       when:
         - (groups['role_deployer'] | default([]) | length) > 0
-        - inventory_hostname == (hostvars[_deployer_host]._first_shc_member | default(''))
-      vars:
-        _deployer_host: "{{ groups['role_deployer'] | first }}"
+        - inventory_hostname == (hostvars[item]._first_shc_member | default(''))
+      loop_control:
+        label: "{{ item }}"
 
     - name: "Run post-restart playbook for app"
       tags:

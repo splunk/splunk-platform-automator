@@ -1,7 +1,7 @@
 ---
 # Post-restart task: install content pack via ITSI API.
 # Included from deploy_splunk_apps.yml Step 5 when content_pack_install is true.
-# Expects: app_name, customization_extra_vars (version, install_all, saved_search_action, backfill, resolution).
+# Expects: app_name, customization_extra_vars (version, install_all, saved_search_action, backfill, resolution, enabled, prefix).
 # Only runs POST install when the content pack is not already installed (GET check).
 # When running on an SHC member, wait for SHC to be in good shape (service_ready_flag=1 and rolling_restart_flag=0) before calling the API.
 
@@ -10,7 +10,7 @@
   block:
     - name: "Poll SHC status until service_ready_flag=1 and rolling_restart_flag=0 (post-restart)"
       ansible.builtin.uri:
-        url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/services/shcluster/status?output_mode=json"
+        url: "https://localhost:8089/services/shcluster/status?output_mode=json"
         user: admin
         password: "{{ splunk_admin_password }}"
         method: GET
@@ -34,7 +34,7 @@
 
 - name: "Check if content pack already installed"
   ansible.builtin.uri:
-    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/SA-ITOA/itoa_interface/content_pack/{{ app_name }}/{{ customization_extra_vars.version | default('1.0') }}"
+    url: "https://localhost:8089/servicesNS/nobody/SA-ITOA/itoa_interface/content_pack/{{ app_name }}/{{ customization_extra_vars.version | default('1.0') }}"
     user: admin
     password: "{{ splunk_admin_password }}"
     method: GET
@@ -42,11 +42,10 @@
     validate_certs: false
   register: cp_status
   failed_when: false
-  changed_when: false
 
 - name: "Install content pack via ITSI API (POST) (post-restart)"
   ansible.builtin.uri:
-    url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/servicesNS/nobody/SA-ITOA/itoa_interface/content_pack/{{ app_name }}/{{ customization_extra_vars.version | default('1.0') }}/install"
+    url: "https://localhost:8089/servicesNS/nobody/SA-ITOA/itoa_interface/content_pack/{{ app_name }}/{{ customization_extra_vars.version | default('1.0') }}/install"
     user: admin
     password: "{{ splunk_admin_password }}"
     method: POST
@@ -58,9 +57,11 @@
     body:
       content: {}
       install_all: "{{ customization_extra_vars.install_all | default(true) }}"
+      enabled: "{{ (customization_extra_vars.enabled | default(cp_api_enabled)) | bool | ternary('1', '0') }}"
       saved_search_action: "{{ customization_extra_vars.saved_search_action | default('disable') }}"
       backfill: "{{ customization_extra_vars.backfill | default(false) }}"
       resolution: "{{ customization_extra_vars.resolution | default('overwrite') }}"
+      prefix: "{{ customization_extra_vars.prefix | default(cp_api_prefix) | default('') }}"
   when: >-
     cp_status is failed or
     ((cp_status.json | default({})).installed_versions | default([]) | first | default('')) != (customization_extra_vars.version | default('1.0'))
