@@ -139,12 +139,10 @@
         content: "{{ scope_debug_combined | to_nice_json }}"
         dest: "{{ _scope_output_path }}"
         mode: "0644"
-      when: _scope_hosts | length > 0
 
     - name: Show path
       ansible.builtin.debug:
         msg: "Scope debug written to {{ _scope_output_path }}"
-      when: _scope_hosts | length > 0
 
     # Optional: assert scope invariants (direct scope only). Run with: -e assert_scope_invariants=true
     # Absent: state=absent, in_base, not on_scope → removal would be skipped on that host.

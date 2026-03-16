@@ -35,6 +35,19 @@
   retries: 120
   delay: 15
 
+- name: Initiate SHC rolling restart
+  tags:
+    - splunk
+    - splunk_common
+    - search_head
+    - shcluster
+    - deployer
+  ansible.builtin.command: "{{ splunk_home }}/bin/splunk rolling-restart shcluster-members -searchable false -auth admin:{{ splunk_admin_password }}"
+  become: true
+  become_user: "{{ splunk_user }}"
+  delegate_to: "{{ splunk_shc_host_list | first }}"
+  when: splunk_shc_host_list is defined and (splunk_shc_host_list | length) > 0
+
 - name: Apply indexer cluster bundle
   tags:
     - splunk

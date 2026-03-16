@@ -195,6 +195,7 @@ If neither is set, the premium app is deployed to all search heads (and all SHC 
 | `hosts_whitelist` | Deploy only to these hosts (e.g. a single standalone search head). See [target filters](App_Deployment_Target_Filters.md). |
 | `shc_whitelist` | Deploy only to search heads in these SHCs (e.g. `["shc1"]`; must match `splunk_shclusters`). |
 | `itsi_notification_disable` | List of notable event action names to disable (e.g. `["remedy", "victorops"]`). |
+| `shc_rolling_restart` | Optional boolean (default: false). This option exists as a workaround: Splunk sometimes fails to start or complete the rolling restart after a deployer bundle push (this may be a Splunk Enterprise bug). When **true** and deploying via the deployer to an SHC, the playbook notifies the "Initiate SHC rolling restart" handler after the bundle push; the handler runs `splunk rolling-restart shcluster-members` on the first SHC member so the restart is explicitly started. Content pack steps (and any post-restart logic) then wait for the SHC to be fully ready (`service_ready_flag=1` and `rolling_restart_flag=0`) before running. Enable when the content pack API or post-restart playbooks need to run only after the SHC rolling restart has completed, or when the automatic post-bundle rolling restart does not occur. |
 
 **Version check:** Before deploying, the role reads the `[launcher]` version from each app’s `app.conf` in the archive and on the target. It only deploys (or updates) when at least one app is missing or has a different version. The list of apps to check is taken from the archive (no hardcoded fallback).
 
@@ -216,7 +217,7 @@ ITSI content packs are deployed as **one app entry per content pack .spl file**.
 - **`install_all_apps`:** Optional, default false. When true, the full archive is extracted; when false, only `library_app` (if set) and the **`name`** of each `content_pack_apps` item are extracted.
 - **Naming convention:** Use **`run_playbook_after_restart`** = `ancustom/<app_name>_configure.yml` (e.g. `ancustom/DA-ITSI-CP-monitoring-alerting_configure.yml`).
 
-**SHC behavior:** When the target is a Search Head Cluster, the playbook waits for the SHC rolling restart to complete (e.g. using `check_shc_health.yml` logic: `service_ready_flag` true) before running the ITSI content pack API install and any **`run_playbook_after_restart`** playbooks. The API and config playbooks run only on the **first SHC member** (or on the single search head when standalone).
+**SHC behavior:** When the target is a Search Head Cluster, the playbook waits for the SHC to be fully ready (`service_ready_flag=1` and `rolling_restart_flag=0`) before running the ITSI content pack API install and any **`run_playbook_after_restart`** playbooks. The API and config playbooks run only on the **first SHC member** (or on the single search head when standalone). When the ITSI app has **`shc_rolling_restart: true`**, the "Initiate SHC rolling restart" handler is notified after the bundle push so that this wait runs in the correct order.
 
 **Removal:** With **`state: absent`**, content pack app directories are removed from the system (and Splunk is restarted or the deployer bundle is pushed). There is no ITSI API uninstall; removal is the same as for the ITSI premium app (remove app dirs and restart).
 

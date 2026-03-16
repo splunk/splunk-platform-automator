@@ -121,3 +121,14 @@
       loop: "{{ apps_itsi_notification_disable | default([]) }}"
       notify: "{{ apps_itsi_sh_notify }}"
       when: apps_itsi_notification_disable is defined and apps_itsi_notification_disable | length > 0
+
+    - name: "Notify Initiate SHC rolling restart when requested (workaround for post-bundle restart)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.set_fact:
+        _itsi_rolling_restart_notified: true
+      notify: "Initiate SHC rolling restart"
+      when: apps_itsi_sh_notify_rolling_restart | default(false) | bool
+      changed_when: true

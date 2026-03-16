@@ -18,4 +18,9 @@
   ansible.builtin.set_fact:
     apps_itsi_sh_apps_base: "{{ 'etc/apps' if (apps_itsi_direct_install | default(false)) else ('etc/shcluster/apps' if (inventory_hostname in (groups['role_deployer'] | default([]))) else 'etc/apps') }}"
     apps_itsi_sh_notify: "{{ 'Restart splunk' if (apps_itsi_direct_install | default(false)) else ('Push shcluster bundle' if (inventory_hostname in (groups['role_deployer'] | default([]))) else 'Restart splunk') }}"
+    # Prefer app_item.shc_rolling_restart; fallback to ITSI app from splunk_app_deployment.apps by name (covers merged/override configs where app_item may lack the key).
+    apps_itsi_sh_notify_rolling_restart: "{{ (inventory_hostname in (groups['role_deployer'] | default([]))) and (_shc_rolling_restart_value | bool) }}"
     run_cp_api_on_this_host: "{{ (inventory_hostname not in (groups['role_deployer'] | default([]))) and (inventory_hostname in (groups['role_search_head'] | default([]))) and ((group_names | select('match', '^shcluster_') | list | length) == 0 or inventory_hostname == _first_shc_member) }}"
+  vars:
+    _itsi_app_from_config: "{{ (splunk_app_deployment.apps | default([]) | selectattr('name', 'equalto', (app_item | default({})).get('name')) | list | first) | default({}) }}"
+    _shc_rolling_restart_value: "{{ (app_item | default({})).get('shc_rolling_restart') | default((_itsi_app_from_config).get('shc_rolling_restart', false)) }}"
