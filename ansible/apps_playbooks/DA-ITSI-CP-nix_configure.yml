@@ -1,0 +1,41 @@
+---
+# Configure DA-ITSI-CP-nix content pack after app is deployed and content pack API install has run.
+#
+# Use from app customizations: run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml"
+#
+# Framework vars: app_path, app_name (from post-restart context)
+# Prerequisites: Splunk_TA_nix
+
+
+- name: "Get Service Content"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/servicesNS/nobody/SA-ITOA/itoa_interface/service/{{ item | urlencode }}"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: GET
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  loop:
+    - da-itsi-cp-nix-sample-unix-and-linux-server-health
+  register: services_objects
+  when: app_path is defined
+
+- name: "Enable Services"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/servicesNS/nobody/SA-ITOA/itoa_interface/service/{{ item.json._key | urlencode }}"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    headers:
+      Content-Type: application/json
+    body: "{{ item.json | combine({'enabled': 1}) }}"
+    body_format: json
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  loop: "{{ services_objects.results | default([]) }}"
+  when:
+    - app_path is defined
+    - services_objects is defined
+    - item.json is defined
