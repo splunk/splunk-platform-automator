@@ -11,8 +11,8 @@
 .ansible
 *.retry
 ansible/verification/output/
-tests/scenarios/app_scope/output/*.json
-tests/scenarios/app_scope/output/.ansible_tmp
+tests/configs/app_scope/output/*.json
+tests/configs/app_scope/output/.ansible_tmp
 # Vault password (do not commit)
 .vault_pass.txt
 .vault_pass
