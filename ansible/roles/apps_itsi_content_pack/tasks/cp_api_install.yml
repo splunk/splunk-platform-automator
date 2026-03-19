@@ -3,36 +3,12 @@
 # Included from deploy_splunk_apps.yml Step 5 when content_pack_install is true.
 # Expects: app_name, customization_extra_vars (version, install_all, saved_search_action, backfill, resolution, enabled, prefix).
 # Only runs POST install when the content pack is not already installed (GET check).
-# When running on an SHC member, wait for SHC to be in good shape (service_ready_flag=1 and rolling_restart_flag=0) before calling the API.
+# SHC wait (service_ready_flag, rolling_restart_flag) is done once in deploy_splunk_apps.yml Step 5 before the playbook loop.
+# customization_extra_vars is set when building post_restart_playbooks_to_run / _pending_post_restart_first_shc in
+# apps_itsi_content_pack/tasks/main.yml, where each key is resolved from item.content_pack_api with role defaults
+# (cp_api_* from defaults/main.yml). Here we only fallback to the same hardcoded values if a key is missing (e.g. older playbook data).
 
-- name: "Wait for SHC service_ready_flag and rolling_restart_flag before content pack API (post-restart on SHC member)"
-  when: group_names | select('match', '^shcluster_') | list | length > 0
-  block:
-    - name: "Poll SHC status until service_ready_flag=1 and rolling_restart_flag=0 (post-restart)"
-      ansible.builtin.uri:
-        url: "https://localhost:8089/services/shcluster/status?output_mode=json"
-        user: admin
-        password: "{{ splunk_admin_password }}"
-        method: GET
-        force_basic_auth: true
-        validate_certs: false
-        status_code: [200]
-      register: cp_api_shc_status
-      until: >-
-        ((cp_api_shc_status.json | default({}) | json_query('entry[0].content.captain.service_ready_flag') | default(false)) | bool)
-        and ((cp_api_shc_status.json | default({}) | json_query('entry[0].content.captain.rolling_restart_flag') | default(1)) == 0)
-      retries: 30
-      delay: 10
-      ignore_errors: true
-
-    - name: "Fail if SHC not ready before content pack API (post-restart)"
-      ansible.builtin.fail:
-        msg: "Search Head Cluster did not become ready (service_ready_flag=1 and rolling_restart_flag=0) before content pack API."
-      when: >-
-        not (((cp_api_shc_status.json | default({}) | json_query('entry[0].content.captain.service_ready_flag') | default(false)) | bool)
-        and ((cp_api_shc_status.json | default({}) | json_query('entry[0].content.captain.rolling_restart_flag') | default(1)) == 0))
-
-- name: "Check if content pack already installed"
+- name: "Check if content pack ({{ app_name }}) is already installed"
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/SA-ITOA/itoa_interface/content_pack/{{ app_name }}/{{ customization_extra_vars.version | default('1.0') }}"
     user: admin
@@ -40,12 +16,16 @@
     method: GET
     force_basic_auth: true
     validate_certs: false
+    status_code: [200, 404]
   register: cp_status
+  retries: 5
+  delay: 10
+  until: cp_status.status is defined and cp_status.status in [200, 404]
   failed_when: false
 
-- name: "Install content pack via ITSI API (POST) (post-restart)"
+- name: "Install content pack ({{ app_name }}) via ITSI API (POST) (post-restart)"
   ansible.builtin.uri:
-    url: "https://localhost:8089/servicesNS/nobody/SA-ITOA/itoa_interface/content_pack/{{ app_name }}/{{ customization_extra_vars.version | default('1.0') }}/install"
+    url: "https://localhost:8089/servicesNS/nobody/SA-ITOA/itoa_interface/content_pack/{{ app_name }}/{{ _cp_version }}/install"
     user: admin
     password: "{{ splunk_admin_password }}"
     method: POST
@@ -56,13 +36,22 @@
     body_format: json
     body:
       content: {}
-      install_all: "{{ customization_extra_vars.install_all | default(true) }}"
-      enabled: "{{ (customization_extra_vars.enabled | default(cp_api_enabled)) | bool | ternary('1', '0') }}"
-      saved_search_action: "{{ customization_extra_vars.saved_search_action | default('disable') }}"
-      backfill: "{{ customization_extra_vars.backfill | default(false) }}"
-      resolution: "{{ customization_extra_vars.resolution | default('overwrite') }}"
-      prefix: "{{ customization_extra_vars.prefix | default(cp_api_prefix) | default('') }}"
+      install_all: "{{ _cp_install_all }}"
+      enabled: "{{ _cp_enabled | ternary(1, 0) }}"
+      saved_search_action: "{{ _cp_saved_search_action }}"
+      backfill: "{{ _cp_backfill }}"
+      resolution: "{{ _cp_resolution }}"
+      prefix: "{{ _cp_prefix }}"
+  vars:
+    # Fallback only if key missing (values are set in main.yml when building extra_vars).
+    _cp_version: "{{ customization_extra_vars.version | default('1.0') }}"
+    _cp_install_all: "{{ customization_extra_vars.install_all | default(true) }}"
+    _cp_enabled: "{{ (customization_extra_vars.enabled | default(false)) | bool }}"
+    _cp_saved_search_action: "{{ customization_extra_vars.saved_search_action | default('disable') }}"
+    _cp_backfill: "{{ customization_extra_vars.backfill | default(false) }}"
+    _cp_resolution: "{{ customization_extra_vars.resolution | default('overwrite') }}"
+    _cp_prefix: "{{ customization_extra_vars.prefix | default('') }}"
   when: >-
     cp_status is failed or
-    ((cp_status.json | default({})).installed_versions | default([]) | first | default('')) != (customization_extra_vars.version | default('1.0'))
+    ((cp_status.json | default({})).installed_versions | default([]) | first | default('')) != _cp_version
   changed_when: true
