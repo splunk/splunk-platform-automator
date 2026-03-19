@@ -108,6 +108,58 @@
       loop_control:
         label: "{{ item }}"
 
+    # Wait for splunkd once per host before any post-restart playbook (e.g. cp_api_install) runs.
+    - name: "Wait for splunkd before post-restart playbooks (once per host)"
+      tags:
+        - splunk
+        - splunk_apps
+      block:
+        - name: "Wait for splunkd port"
+          ansible.builtin.include_role:
+            name: splunk_common
+            tasks_from: wait_for_splunkd_port
+        - name: "Wait for splunkd full service"
+          ansible.builtin.include_role:
+            name: splunk_common
+            tasks_from: wait_for_splunkd_full
+      when:
+        - (post_restart_playbooks_to_run | default([])) | length > 0
+        - inventory_hostname not in (groups['role_deployer'] | default([]))
+
+    # On SHC members, wait for cluster ready once before any post-restart playbook (e.g. cp_api_install) runs.
+    - name: "Wait for SHC service_ready_flag and rolling_restart_flag before post-restart playbooks (once per host)"
+      tags:
+        - splunk
+        - splunk_apps
+      block:
+        - name: "Poll SHC status until service_ready_flag=1 and rolling_restart_flag=0 (post-restart)"
+          ansible.builtin.uri:
+            url: "https://localhost:8089/services/shcluster/status?output_mode=json"
+            user: admin
+            password: "{{ splunk_admin_password }}"
+            method: GET
+            force_basic_auth: true
+            validate_certs: false
+            status_code: [200]
+          register: _cp_shc_status
+          until: >-
+            ((_cp_shc_status.json | default({}) | json_query('entry[0].content.captain.service_ready_flag') | default(false)) | bool)
+            and ((_cp_shc_status.json | default({}) | json_query('entry[0].content.captain.rolling_restart_flag') | default(1)) == 0)
+          retries: 30
+          delay: 10
+          ignore_errors: true
+
+        - name: "Fail if SHC not ready before post-restart playbooks"
+          ansible.builtin.fail:
+            msg: "Search Head Cluster did not become ready (service_ready_flag=1 and rolling_restart_flag=0) before post-restart playbooks."
+          when: >-
+            not (((_cp_shc_status.json | default({}) | json_query('entry[0].content.captain.service_ready_flag') | default(false)) | bool)
+            and ((_cp_shc_status.json | default({}) | json_query('entry[0].content.captain.rolling_restart_flag') | default(1)) == 0))
+      when:
+        - (post_restart_playbooks_to_run | default([])) | length > 0
+        - inventory_hostname not in (groups['role_deployer'] | default([]))
+        - (group_names | select('match', '^shcluster_') | list | length) > 0
+
     - name: "Run post-restart playbook for app"
       tags:
         - splunk
