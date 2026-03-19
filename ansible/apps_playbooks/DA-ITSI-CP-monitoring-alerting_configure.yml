@@ -118,6 +118,8 @@
     - Service Monitoring - Entity Degraded
     - Service Monitoring - KPI Degraded
     - Service Monitoring - Service Health Degraded
+    - Service Monitoring - Sustained KPI Degradation (Recommended)
+    - Service Monitoring - Sustained Service Health Degradation (Recommended)
   when: app_path is defined
 
 - name: "Disable Correlation Searches"
@@ -134,6 +136,7 @@
     status_code: [200]
   loop:
     - Splunk App for Infrastructure Alerts
+    - Universal Correlation Search
   when: app_path is defined
 
 - name: "Get Service Content"
