@@ -1,5 +1,6 @@
 ---
 # This playbook deploys a full splunk site
+# yaml-language-server: $schema=playbook-schema.json
 
 - name: Setup common settings
   tags:
