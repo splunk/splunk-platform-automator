@@ -1430,6 +1430,14 @@ class SplunkConfig(BaseModel):
 
         for i, app in enumerate(dep.apps):
             name = app.get("name", "?")
+            # serverclass requires at least one host with role deployment_server
+            sc = app.get("serverclass")
+            if isinstance(sc, str) and sc.strip():
+                if not has_deployment_server:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): 'serverclass' is set but there is no host with role deployment_server in splunk_hosts. "
+                        "Add a host with role deployment_server, or remove serverclass if this app is not deployed via the deployment server."
+                    )
             if app.get("premium_app") and isinstance(app.get("premium_app"), str) and (app.get("premium_app") or "").strip():
                 continue
             if app.get("itsi_content_pack") is True:
