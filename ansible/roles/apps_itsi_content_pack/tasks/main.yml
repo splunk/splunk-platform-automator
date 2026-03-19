@@ -367,7 +367,7 @@
         - splunk_apps
         - itsi_content_pack
       ansible.builtin.set_fact:
-        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': item.customizations.run_playbook_after_restart, 'app_path': cp_splunk_home + '/' + cp_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': (item.customizations.extra_vars | default({}))}] }}"
+        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': item.customizations.run_playbook_after_restart, 'app_path': cp_splunk_home + '/' + cp_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': (item.customizations.extra_vars | default({})) | combine({'force_run_playbook_after_restart': (item.customizations.force_run_playbook_after_restart | default(false))})}] }}"
       loop: "{{ cp_content_pack_apps }}"
       when:
         # For etc/apps (direct), registration is done in apps_direct (process_direct_app) so we skip here
@@ -413,7 +413,7 @@
         - splunk_apps
         - itsi_content_pack
       ansible.builtin.set_fact:
-        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': item.customizations.run_playbook_after_restart, 'app_path': _shc_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': (item.customizations.extra_vars | default({}))}] }}"
+        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': item.customizations.run_playbook_after_restart, 'app_path': _shc_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': (item.customizations.extra_vars | default({})) | combine({'force_run_playbook_after_restart': (item.customizations.force_run_playbook_after_restart | default(false))})}] }}"
       loop: "{{ cp_content_pack_apps }}"
       loop_control:
         loop_var: item

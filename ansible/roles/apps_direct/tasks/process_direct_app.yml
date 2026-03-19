@@ -276,7 +276,7 @@
         - splunk_apps
         - direct_deployment
       ansible.builtin.set_fact:
-        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': _cp_item.customizations.run_playbook_after_restart, 'app_path': _cp_app_path, 'app_name': _cp_item.name, 'extra_vars': (_cp_item.customizations.extra_vars | default({}))}] }}"
+        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': _cp_item.customizations.run_playbook_after_restart, 'app_path': _cp_app_path, 'app_name': _cp_item.name, 'extra_vars': (_cp_item.customizations.extra_vars | default({})) | combine({'force_run_playbook_after_restart': (_cp_item.customizations.force_run_playbook_after_restart | default(false))})}] }}"
       loop: "{{ app_item.content_pack_apps | default([]) }}"
       loop_control:
         loop_var: _cp_item

@@ -131,7 +131,7 @@
     _cp_customizations: "{{ (cp_app | default({})).get('customizations', {}) | default({}) }}"
     _cp_playbook: "{{ _cp_customizations.get('run_playbook_after_restart', '') }}"
     _cp_app_name: "{{ (cp_app | default({})).get('name', '') }}"
-    _cp_extra_vars: "{{ _cp_customizations.get('extra_vars', {}) | default({}) }}"
+    _cp_extra_vars: "{{ (_cp_customizations.get('extra_vars', {}) | default({})) | combine({'force_run_playbook_after_restart': _cp_customizations.get('force_run_playbook_after_restart', false)}) }}"
 
 - name: "Install {{ app_item.name }} (standard)"
   ansible.builtin.include_tasks: "install_app.yml"

@@ -160,22 +160,43 @@
         - inventory_hostname not in (groups['role_deployer'] | default([]))
         - (group_names | select('match', '^shcluster_') | list | length) > 0
 
-    - name: "Run post-restart playbook for app"
+    # Run all cp_api_install playbooks first so content_pack_already_installed is set before we decide which configure playbooks to run.
+    - name: "Run cp_api_install (content pack API install) for each app"
       tags:
         - splunk
         - splunk_apps
-      ansible.builtin.include_tasks: "{{ (playbook_dir | dirname) }}/{{ post_restart_item.playbook }}"
+      ansible.builtin.include_tasks: "{{ (playbook_dir | dirname) }}/{{ _cp_item.playbook }}"
       vars:
-        app_path: "{{ post_restart_item.app_path }}"
-        app_name: "{{ post_restart_item.app_name }}"
-        customization_extra_vars: "{{ (post_restart_item.extra_vars | default({})) | combine({'app_path': post_restart_item.app_path, 'app_name': post_restart_item.app_name}) }}"
-      loop: "{{ post_restart_playbooks_to_run | default([]) }}"
+        app_path: "{{ _cp_item.app_path }}"
+        app_name: "{{ _cp_item.app_name }}"
+        customization_extra_vars: "{{ (_cp_item.extra_vars | default({})) | combine({'app_path': _cp_item.app_path, 'app_name': _cp_item.app_name}) }}"
+      loop: "{{ post_restart_playbooks_to_run | default([]) | selectattr('playbook', 'search', 'cp_api_install') | list }}"
       loop_control:
-        label: "{{ post_restart_item.app_name }} ({{ post_restart_item.playbook | basename }})"
-        loop_var: post_restart_item
+        label: "{{ _cp_item.app_name }} (cp_api_install)"
+        loop_var: _cp_item
       when:
         - (post_restart_playbooks_to_run | default([])) | length > 0
         - inventory_hostname not in (groups['role_deployer'] | default([]))
+
+    # Run run_playbook_after_restart (configure) playbooks only when pack was not already installed OR force_run_playbook_after_restart is true (content_pack_already_installed was set by cp_api_install task above).
+    - name: "Run run_playbook_after_restart (configure) for app"
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.include_tasks: "{{ (playbook_dir | dirname) }}/{{ _cfg_item.playbook }}"
+      vars:
+        app_path: "{{ _cfg_item.app_path }}"
+        app_name: "{{ _cfg_item.app_name }}"
+        customization_extra_vars: "{{ (_cfg_item.extra_vars | default({})) | combine({'app_path': _cfg_item.app_path, 'app_name': _cfg_item.app_name}) }}"
+      loop: "{{ post_restart_playbooks_to_run | default([]) | rejectattr('playbook', 'search', 'cp_api_install') | list }}"
+      loop_control:
+        label: "{{ _cfg_item.app_name }} ({{ _cfg_item.playbook | basename }})"
+        loop_var: _cfg_item
+      when:
+        - (post_restart_playbooks_to_run | default([])) | length > 0
+        - inventory_hostname not in (groups['role_deployer'] | default([]))
+        # Run when pack was not already installed OR force_run_playbook_after_restart is true
+        - (not ((content_pack_already_installed | default({})).get(_cfg_item.app_name, false) | bool)) or ((_cfg_item.extra_vars | default({})).get('force_run_playbook_after_restart', false) | bool)
 
 # Final summary
 - name: Deployment summary
