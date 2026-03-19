@@ -41,6 +41,8 @@
       ansible.builtin.set_fact:
         cp_content_pack_apps_to_install: "{{ cp_content_pack_apps_to_install | default([]) + [item] }}"
       loop: "{{ cp_content_pack_apps }}"
+      loop_control:
+        label: "{{ item.name }} content_pack_install={{ item.content_pack_install | default(false) | bool }}"
       when: item.content_pack_install | default(false) | bool
 
     - name: "Ensure cp_content_pack_apps_to_install defined"
@@ -322,6 +324,8 @@
           [ -n "$v" ] || v=$(grep -E '^\s*version\s*=' "$f" 2>/dev/null | head -1 | sed -E 's/^[^=]*=\s*//')
           printf '%s' "$v"
       loop: "{{ cp_content_pack_apps_to_install | default([]) }}"
+      loop_control:
+        label: "{{ item.name }}"
       register: cp_version_results
       changed_when: false
       failed_when: false
@@ -339,6 +343,8 @@
       ansible.builtin.set_fact:
         cp_version_map: "{{ cp_version_map | default({}) | combine({ item.item.name: (item.stdout | default('') | trim) }) }}"
       loop: "{{ cp_version_results.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.name }}: {{ item.stdout | default('') | trim }}"
       when:
         - (run_cp_api_on_this_host or (apps_itsi_sh_apps_base == 'etc/shcluster/apps' and (_first_shc_member | default('') | length > 0)))
         - cp_version_results is defined
@@ -356,6 +362,8 @@
       ansible.builtin.set_fact:
         post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': 'ansible/roles/apps_itsi_content_pack/tasks/cp_api_install.yml', 'app_path': cp_splunk_home + '/' + cp_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': {'version': (cp_expected_versions | default({})).get(item.name, (cp_version_map | default({})).get(item.name, '') | trim) | default('1.0'), 'install_all': (item.content_pack_api | default({})).install_all | default(cp_api_install_all), 'saved_search_action': (item.content_pack_api | default({})).saved_search_action | default(cp_api_saved_search_action), 'backfill': (item.content_pack_api | default({})).backfill | default(cp_api_backfill), 'resolution': (item.content_pack_api | default({})).resolution | default(cp_api_resolution), 'enabled': (item.content_pack_api | default({})).enabled | default(cp_api_enabled), 'prefix': (item.content_pack_api | default({})).prefix | default(cp_api_prefix)}}] }}"
       loop: "{{ cp_content_pack_apps_to_install | default([]) }}"
+      loop_control:
+        label: "{{ item.name }}"
       when:
         - run_cp_api_on_this_host
         - (apps_itsi_sh_apps_base | default('')) == 'etc/apps'
@@ -369,6 +377,8 @@
       ansible.builtin.set_fact:
         post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': item.customizations.run_playbook_after_restart, 'app_path': cp_splunk_home + '/' + cp_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': (item.customizations.extra_vars | default({})) | combine({'force_run_playbook_after_restart': (item.customizations.force_run_playbook_after_restart | default(false))})}] }}"
       loop: "{{ cp_content_pack_apps }}"
+      loop_control:
+        label: "{{ item.name }}: {{ (item.customizations | default({})).run_playbook_after_restart | default('(none)') }} force={{ (item.customizations | default({})).force_run_playbook_after_restart | default(false) }}"
       when:
         # For etc/apps (direct), registration is done in apps_direct (process_direct_app) so we skip here
         - (apps_itsi_sh_apps_base | default('')) != 'etc/apps'
@@ -399,6 +409,8 @@
       ansible.builtin.set_fact:
         _pending_post_restart_first_shc: "{{ (_pending_post_restart_first_shc | default([])) + [{'playbook': 'ansible/roles/apps_itsi_content_pack/tasks/cp_api_install.yml', 'app_path': _shc_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': {'version': (cp_expected_versions | default({})).get(item.name, (cp_version_map | default({})).get(item.name, '') | trim) | default('1.0'), 'install_all': (item.content_pack_api | default({})).install_all | default(cp_api_install_all), 'saved_search_action': (item.content_pack_api | default({})).saved_search_action | default(cp_api_saved_search_action), 'backfill': (item.content_pack_api | default({})).backfill | default(cp_api_backfill), 'resolution': (item.content_pack_api | default({})).resolution | default(cp_api_resolution), 'enabled': (item.content_pack_api | default({})).enabled | default(cp_api_enabled), 'prefix': (item.content_pack_api | default({})).prefix | default(cp_api_prefix)}}] }}"
       loop: "{{ cp_content_pack_apps_to_install | default([]) }}"
+      loop_control:
+        label: "{{ item.name }}"
       when:
         - apps_itsi_sh_apps_base == 'etc/shcluster/apps'
         - (group_names | select('match', '^shcluster_') | list | length) > 0
@@ -417,6 +429,7 @@
       loop: "{{ cp_content_pack_apps }}"
       loop_control:
         loop_var: item
+        label: "{{ item.name }}: {{ (item.customizations | default({})).run_playbook_after_restart | default('(none)') }} force={{ (item.customizations | default({})).force_run_playbook_after_restart | default(false) }}"
       when:
         - apps_itsi_sh_apps_base == 'etc/shcluster/apps'
         - (group_names | select('match', '^shcluster_') | list | length) > 0

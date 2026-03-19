@@ -280,6 +280,7 @@
       loop: "{{ app_item.content_pack_apps | default([]) }}"
       loop_control:
         loop_var: _cp_item
+        label: "{{ _cp_item.name }}: {{ (_cp_item.customizations | default({})).run_playbook_after_restart | default('(none)') }} force={{ (_cp_item.customizations | default({})).force_run_playbook_after_restart | default(false) }}"
       vars:
         _cp_app_path: "{{ (splunk_install_dir | default('/opt')) ~ '/' ~ (splunk_install_app | default('splunk')) ~ '/etc/apps/' ~ _cp_item.name }}"
       when:

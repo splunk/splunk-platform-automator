@@ -43,6 +43,8 @@
   ansible.builtin.set_fact:
     apps_itsi_current_versions: "{{ apps_itsi_current_versions | default({}) | combine({ item.item: (item.stdout | default('') | trim) }) }}"
   loop: "{{ itsi_version_check_versions.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}: {{ item.stdout | default('') | trim }}"
   when:
     - not (item.failed | default(false))
     - item.stdout is defined
@@ -73,15 +75,22 @@
     _exp_list: "{{ _apps | map('extract', _exp) | map('default', '') | list }}"
     _current_ne_expected: "{{ _cur_list != _exp_list }}"
 
-- name: "Debug ITSI version status"
+- name: "Build ITSI version status lines"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    _itsi_status_lines: "{{ (_itsi_status_lines | default(['Apps:'])) + ['- ' ~ item ~ \", Current: '\" ~ (apps_itsi_current_versions | default({})).get(item, '') ~ \"', Expected: '\" ~ (apps_itsi_expected_versions_filtered | default({})).get(item, '') ~ \"'.\"] }}"
+  loop: "{{ apps_itsi_version_check_apps | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  when: (apps_itsi_version_check_apps | default([]) | length) > 0
+
+- name: "ITSI version status"
   tags:
     - splunk
     - splunk_apps
     - itsi
   ansible.builtin.debug:
-    msg:
-      - "ITSI version check base: {{ apps_itsi_version_check_base }}"
-      - "Apps: {{ apps_itsi_version_check_apps }}"
-      - "Current versions: {{ dict(apps_itsi_version_check_apps | zip(apps_itsi_version_check_apps | map('extract', apps_itsi_current_versions | default({})) | map('default', '') | list)) }}"
-      - "Expected versions: {{ apps_itsi_expected_versions_filtered | default({}) }}"
-      - "Update needed: {{ apps_itsi_update_needed }}"
+    msg: "{{ (_itsi_status_lines | default(['Apps:'])) + ['Update needed: ' ~ (apps_itsi_update_needed | string)] }}"

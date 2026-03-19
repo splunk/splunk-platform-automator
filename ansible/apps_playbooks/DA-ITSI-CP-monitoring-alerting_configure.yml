@@ -169,6 +169,8 @@
     validate_certs: false
     status_code: [200]
   loop: "{{ services_objects.results | default([]) }}"
+  loop_control:
+    label: "{{ item.json._key | default(item.json.title | default('service')) }}"
   when:
     - app_path is defined
     - services_objects is defined

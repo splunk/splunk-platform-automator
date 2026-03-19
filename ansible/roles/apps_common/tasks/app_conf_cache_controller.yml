@@ -91,6 +91,8 @@
   ansible.builtin.set_fact:
     app_conf_expected_versions: "{{ app_conf_expected_versions | default({}) | combine({ item.item: (item.stdout | default('') | trim) }) }}"
   loop: "{{ app_conf_cached_versions.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}: {{ item.stdout | default('') | trim }}"
   delegate_to: localhost
   run_once: true
   become: false
