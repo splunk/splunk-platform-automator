@@ -34,3 +34,9 @@
   tags:
     - other_roles
   import_playbook: setup_other_roles.yml
+
+- name: Deploy Splunk Apps
+  tags:
+    - splunk
+    - splunk_apps
+  import_playbook: deploy_splunk_apps.yml
