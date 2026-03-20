@@ -1,6 +1,7 @@
 ---
 # Unified version status line for all Splunk app deployment paths (DS, CM, deployer, direct).
-# Required vars: dvs_app_name, dvs_current, dvs_expected, dvs_update_needed, dvs_force (bool), dvs_location
+# Required vars: dvs_app_name, dvs_current (installed), dvs_expected, dvs_update_needed, dvs_force (bool), dvs_location
+# Output lines: App, Installed Version, Expected Version, Update needed, Force update, Location; optional dvs_extra_lines.
 # Optional: dvs_task_label — short prefix for the task name (e.g. "Deployment server")
 # Optional: dvs_extra_lines — list of extra strings appended to msg (e.g. clarify undef expected vs “up to date”)
 
@@ -13,5 +14,5 @@
     verbosity: 0
   vars:
     _q: "'"
-    _dvs_core: "{{ ['App: ' ~ dvs_app_name ~ ', Current: ' ~ _q ~ (dvs_current | default('') | string) ~ _q ~ ', Expected: ' ~ _q ~ (dvs_expected | default('') | string) ~ _q, 'Update needed: ' ~ (dvs_update_needed | default(false) | bool | string), 'Force update: ' ~ (dvs_force | default(false) | bool | string), 'Location: ' ~ (dvs_location | default('etc/apps/'))] }}"
+    _dvs_core: "{{ ['App: ' ~ dvs_app_name, 'Installed Version: ' ~ _q ~ (dvs_current | default('') | string) ~ _q, 'Expected Version: ' ~ _q ~ (dvs_expected | default('') | string) ~ _q, 'Update needed: ' ~ (dvs_update_needed | default(false) | bool | string), 'Force update: ' ~ (dvs_force | default(false) | bool | string), 'Location: ' ~ (dvs_location | default('etc/apps/'))] }}"
     _dvs_lines: "{{ _dvs_core + (dvs_extra_lines | default([])) }}"
