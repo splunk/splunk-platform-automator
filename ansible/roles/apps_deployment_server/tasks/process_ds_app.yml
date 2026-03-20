@@ -249,19 +249,7 @@
   vars:
     _scope_nil: ~
 
-- name: "Debug {{ app_item.name }} deployment"
-  tags:
-    - splunk
-    - splunk_apps
-    - deployment_server
-  ansible.builtin.debug:
-    msg:
-      - "App: {{ app_item.name }}"
-      - "State: {{ app_state }}"
-      - "Version: {{ app_version }}"
-      - "Serverclass: {{ serverclass_name }}"
-      - "Whitelist: {{ app_whitelist_hosts | join(', ') if app_whitelist_hosts | length > 0 else '(empty)' }}"
-    verbosity: 0
+# Version status lines: apps_common install_from_* (unified App/Current/Expected/Update/Force/Location).
 
 # Install app so the deployment-apps directory exists for this serverclass. Run when we have clients (whitelist)
 # or when this entry uses a distinct serverclass/target_path (same app name, different deployment folder).

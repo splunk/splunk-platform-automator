@@ -1,13 +1,11 @@
 ---
-# Install app from local repository to target directory
-# Required vars (same as splunkbase - set by calling role's install_app.yml):
-#   - app_name: Name of the app
-#   - app_item: App configuration object
-#   - target_path: Full path where app should be installed (e.g. splunk_home/etc/deployment-apps/AppName)
+# Install app from local repository to target directory.
+# Version tokens (ITSI-style):
+#   - Target Current ''  = no default/app.conf (treat as not installed).
+#   - 'undef'            = app.conf exists but no parseable version=/build= (literal string, compares to undef).
+#   - undef == undef     → no sync (folder must exist; we ensure target_path when app.conf is present).
+# Required vars: app_name, app_item, target_path (from caller install_app.yml).
 
-# Calculate local source path the same way as splunk_app_deployment:
-# - If app_item.local_path is set: use it (absolute path)
-# - Else: use local_app_repo_path / (app_item.path or app_item.name)
 - name: "Set local source path for {{ app_name }}"
   tags:
     - splunk
@@ -15,6 +13,14 @@
     - local
   ansible.builtin.set_fact:
     local_source_path: "{{ app_item.local_path | default(splunk_app_deployment.local_app_repo_path | default(splunk_app_deployment_defaults.local_app_repo_path) + '/' + (app_item.path | default(app_item.name))) }}"
+
+- name: "Set force_update flag for {{ app_name }} (local)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.set_fact:
+    _app_force_update: "{{ app_item.force_update | default(false) | bool }}"
 
 - name: "Check if local app source exists for {{ app_name }}"
   tags:
@@ -36,6 +42,132 @@
     msg: "Local app source not found: {{ local_source_path }}"
   when: not local_app_source.stat.exists
 
+# include_tasks does not support delegate_to; use a block. Register lands on the *inventory* host
+# (not localhost) — do not use set_fact+delegate_facts to copy stdout (stale across apps).
+- name: "Read source app.conf version on controller (ITSI-compatible parse)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  block:
+    - name: Include app.conf version reader
+      ansible.builtin.include_tasks: read_app_conf_version_launcher_id.yml
+      vars:
+        read_app_conf_file: "{{ local_source_path }}/default/app.conf"
+  delegate_to: localhost
+  connection: local
+  become: false
+
+- name: "Capture source package version"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.set_fact:
+    local_source_app_version: "{{ (_read_app_conf_launcher_id_cmd.stdout | default('') | trim) | default('undef', true) }}"
+
+- name: "Check if target app.conf exists for {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.stat:
+    path: "{{ target_path }}/default/app.conf"
+  register: local_target_app_conf_stat
+
+- name: "Read target app.conf version ([launcher]/[id])"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.include_tasks: read_app_conf_version_launcher_id.yml
+  vars:
+    read_app_conf_file: "{{ target_path }}/default/app.conf"
+  when: local_target_app_conf_stat.stat.exists
+
+- name: "Capture target installed version"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.set_fact:
+    local_target_app_version: "{{ _read_app_conf_launcher_id_cmd.stdout | default('') | trim }}"
+  when: local_target_app_conf_stat.stat.exists
+
+- name: "Set target version empty when not installed"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.set_fact:
+    local_target_app_version: ""
+  when: not local_target_app_conf_stat.stat.exists
+
+- name: "Set resolved_version / current_version for parity with Splunkbase install"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.set_fact:
+    resolved_version: "{{ local_source_app_version }}"
+    current_version: "{{ local_target_app_version }}"
+
+- name: "Determine if update needed for {{ app_name }} (local)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.set_fact:
+    update_needed: >-
+      {{
+        (_app_force_update | bool)
+        or (not local_target_app_conf_stat.stat.exists)
+        or ((local_source_app_version | default('undef') | string) != (local_target_app_version | default('') | string))
+      }}
+
+- name: "Ensure target app directory exists when default/app.conf is already present"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.file:
+    path: "{{ target_path }}"
+    state: directory
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: "0755"
+  become: true
+  when: local_target_app_conf_stat.stat.exists
+
+- name: "Debug update status for {{ app_name }} (local)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.include_tasks: deployment_version_status_debug.yml
+  vars:
+    dvs_task_label: "{{ deployment_version_task_label | default('Splunk app') }}"
+    dvs_app_name: "{{ app_name }}"
+    dvs_current: "{{ current_version | default('') }}"
+    dvs_expected: "{{ resolved_version | default('') }}"
+    dvs_update_needed: "{{ update_needed }}"
+    dvs_force: "{{ app_item.force_update | default(false) }}"
+    dvs_location: "{{ deployment_version_location | default('etc/apps/') }}"
+    # undef = no parseable version in that default/app.conf; '' = no default/app.conf (ITSI-style not installed).
+    dvs_extra_lines: "{{ ['Note: Current empty = no target default/app.conf (not installed). undef = app.conf present but no parseable version; two undef values match (no rsync). Use force_update to resync anyway.'] if ((resolved_version | default('')) == 'undef' or (current_version | default('')) == 'undef') else [] }}"
+
+- name: "Ensure target app directory exists before rsync"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.file:
+    path: "{{ target_path }}"
+    state: directory
+    mode: "0755"
+  become: true
+  when: update_needed | bool
+
 - name: "Sync {{ app_name }} to target"
   tags:
     - splunk
@@ -54,8 +186,9 @@
       - "--no-owner"
       - "--no-group"
   register: local_app_synced
+  when: update_needed | bool
 
-- name: "Set correct permissions on {{ app_name }}"
+- name: "Set permissions on {{ app_name }}"
   tags:
     - splunk
     - splunk_apps
@@ -67,11 +200,4 @@
     group: "{{ splunk_group | default('splunk') }}"
     recurse: yes
   become: true
-
-- name: "Set update status for {{ app_name }}"
-  tags:
-    - splunk
-    - splunk_apps
-    - local
-  ansible.builtin.set_fact:
-    update_needed: "{{ local_app_synced.changed }}"
+  when: update_needed | bool

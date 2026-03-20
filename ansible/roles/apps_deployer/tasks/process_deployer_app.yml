@@ -77,19 +77,7 @@
   ansible.builtin.set_fact:
     _app_on_deployer_scope: "{{ ((_app_dep_filtered | default(_app_dep_base)) | intersect(_deployer_serves | default([])) | length) > 0 }}"
 
-- name: "Debug {{ app_item.name }} deployment"
-  tags:
-    - splunk
-    - splunk_apps
-    - deployer
-  ansible.builtin.debug:
-    msg:
-      - "App: {{ app_item.name }}"
-      - "State: {{ app_state }}"
-      - "Version: {{ app_version }}"
-      - "Location: shcluster/apps/"
-    verbosity: 0
-  when: _app_on_deployer_scope | default(false)
+# Version status: apps_common install_from_* for standard apps.
 
 - name: "Install {{ app_item.name }} (premium app ITSI)"
   ansible.builtin.include_role:

@@ -19,3 +19,5 @@
     tasks_from: "install_from_{{ app_item.source }}.yml"
   vars:
     target_path: "{{ app_target_path }}"
+    deployment_version_location: "etc/manager-apps/"
+    deployment_version_task_label: "Cluster manager"

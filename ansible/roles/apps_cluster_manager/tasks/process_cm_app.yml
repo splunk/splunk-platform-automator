@@ -10,18 +10,7 @@
     app_state: "{{ app_item.state | default('installed') }}"
     app_version: "{{ app_item.version | default('latest') }}"
 
-- name: "Debug {{ app_item.name }} deployment"
-  tags:
-    - splunk
-    - splunk_apps
-    - cluster_manager
-  ansible.builtin.debug:
-    msg:
-      - "App: {{ app_item.name }}"
-      - "State: {{ app_state }}"
-      - "Version: {{ app_version }}"
-      - "Location: manager-apps/"
-    verbosity: 0
+# Version status: apps_common install_from_* when installing standard apps.
 
 - name: "Install {{ app_item.name }} (premium pack ITSI)"
   ansible.builtin.include_role:

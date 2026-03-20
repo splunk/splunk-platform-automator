@@ -30,6 +30,14 @@
   ansible.builtin.set_fact:
     resolved_version: "{{ splunkbase_resolved_version if (splunk_app_deployment.target_download | default(false)) else (((_splunkbase_resolve_result | default({})).ansible_facts | default({}))._splunkbase_resolved_version | default(splunkbase_resolved_version)) }}"
 
+- name: "Set force_update flag for {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - splunkbase
+  ansible.builtin.set_fact:
+    _app_force_update: "{{ app_item.force_update | default(false) | bool }}"
+
 - name: "Check if {{ app_name }} already exists"
   tags:
     - splunk
@@ -39,32 +47,32 @@
     path: "{{ target_path }}/default/app.conf"
   register: existing_app
 
-- name: "Get current version of {{ app_name }}"
+- name: "Read target app.conf version ([launcher]/[id]) for {{ app_name }}"
   tags:
     - splunk
     - splunk_apps
     - splunkbase
-  ansible.builtin.slurp:
-    src: "{{ target_path }}/default/app.conf"
-  register: current_app_conf
+  ansible.builtin.include_tasks: read_app_conf_version_launcher_id.yml
+  vars:
+    read_app_conf_file: "{{ target_path }}/default/app.conf"
   when: existing_app.stat.exists
 
-- name: "Parse current version"
+- name: "Set current_version from parsed target app.conf"
   tags:
     - splunk
     - splunk_apps
     - splunkbase
   ansible.builtin.set_fact:
-    current_version: "{{ (current_app_conf.content | b64decode | regex_search('version\\s*=\\s*(.+)', '\\1') | first | trim) if current_app_conf is defined and current_app_conf.content is defined else 'unknown' }}"
+    current_version: "{{ _read_app_conf_launcher_id_cmd.stdout | default('') | trim }}"
   when: existing_app.stat.exists
 
-- name: "Set current version when app not installed"
+- name: "Set current_version when app not installed (empty, same as ITSI display)"
   tags:
     - splunk
     - splunk_apps
     - splunkbase
   ansible.builtin.set_fact:
-    current_version: "not installed"
+    current_version: ""
   when: not existing_app.stat.exists
 
 - name: "Determine if update needed for {{ app_name }}"
@@ -73,21 +81,22 @@
     - splunk_apps
     - splunkbase
   ansible.builtin.set_fact:
-    update_needed: "{{ not existing_app.stat.exists or (current_version | default('unknown')) != resolved_version }}"
+    update_needed: "{{ (_app_force_update | bool) or (not existing_app.stat.exists) or ((current_version | default('')) != (resolved_version | default(''))) }}"
 
 - name: "Debug update status for {{ app_name }}"
   tags:
     - splunk
     - splunk_apps
     - splunkbase
-  ansible.builtin.debug:
-    msg:
-      - "App: {{ app_name }}"
-      - "Target: {{ target_path }}"
-      - "Current version: {{ current_version | default('not installed') }}"
-      - "Target version: {{ resolved_version }}"
-      - "Update needed: {{ update_needed }}"
-    verbosity: 0
+  ansible.builtin.include_tasks: deployment_version_status_debug.yml
+  vars:
+    dvs_task_label: "{{ deployment_version_task_label | default('Splunk app') }}"
+    dvs_app_name: "{{ app_name }}"
+    dvs_current: "{{ current_version | default('') }}"
+    dvs_expected: "{{ (resolved_version ~ ' (latest)') if ((app_version | default('latest') | string | lower | trim) == 'latest') else resolved_version }}"
+    dvs_update_needed: "{{ update_needed }}"
+    dvs_force: "{{ app_item.force_update | default(false) }}"
+    dvs_location: "{{ deployment_version_location | default('etc/apps/') }}"
 
 - name: "Download {{ app_name }} from Splunkbase when update needed"
   tags:

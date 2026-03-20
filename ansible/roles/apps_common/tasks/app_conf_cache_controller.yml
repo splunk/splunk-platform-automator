@@ -68,13 +68,32 @@
   ansible.builtin.shell:
     cmd: |
       f="{{ app_conf_cache_dir }}/{{ app_conf_cache_subdir }}/{{ app_conf_resolved_version }}/{{ item }}/default/app.conf"
-      v=$(sed -n '/\[launcher\]/,/^\[/p' "$f" | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//')
+      _bom=$(LC_ALL=C head -c 3 "$f" 2>/dev/null | od -An -tx1 2>/dev/null | tr -d ' \n')
+      if [ "$_bom" = "efbbbf" ]; then
+        _tmp=$(mktemp 2>/dev/null || echo "/tmp/app_conf_nobom.$$")
+        tail -c +4 "$f" > "$_tmp"
+        f="$_tmp"
+      fi
+      _sect_ver() {
+        sed -n "$1" "$f" | grep -iE '^[[:space:]]*version[[:space:]]*=' | head -1 | sed -E 's/^[^=]*=[[:space:]]*//'
+      }
+      v=$(_sect_ver '/^\[launcher\]/,/^\[/p')
       if [ -z "$v" ]; then
-        v=$(sed -n '/\[id\]/,/^\[/p' "$f" | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//')
+        v=$(_sect_ver '/^\[id\]/,/^\[/p')
       fi
       if [ -z "$v" ]; then
-        v=$(grep -E '^\s*version\s*=' "$f" | head -1 | sed -E 's/^[^=]*=\s*//')
+        v=$(_sect_ver '/^\[package\]/,/^\[/p')
       fi
+      if [ -z "$v" ]; then
+        v=$(_sect_ver '/^\[install\]/,/^\[/p')
+      fi
+      if [ -z "$v" ]; then
+        v=$(sed -n '/^\[install\]/,/^\[/p' "$f" | grep -iE '^[[:space:]]*build[[:space:]]*=' | head -1 | sed -E 's/^[^=]*=[[:space:]]*//')
+      fi
+      if [ -z "$v" ]; then
+        v=$(grep -iE '^[[:space:]]*version[[:space:]]*=' "$f" | head -1 | sed -E 's/^[^=]*=[[:space:]]*//')
+      fi
+      v=$(printf '%s' "$v" | tr -d '\r')
       printf '%s' "$v"
   loop: "{{ app_conf_app_names | default([]) }}"
   register: app_conf_cached_versions

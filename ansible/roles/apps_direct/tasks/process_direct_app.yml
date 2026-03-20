@@ -186,20 +186,6 @@
         app_state: "{{ app_item.state | default('installed') }}"
         app_version: "{{ app_item.version | default('latest') }}"
 
-    - name: "Debug {{ app_item.name }} deployment"
-      tags:
-        - splunk
-        - splunk_apps
-        - direct_deployment
-      ansible.builtin.debug:
-        msg:
-          - "App: {{ app_item.name }}"
-          - "State: {{ app_state }}"
-          - "Version: {{ app_version }}"
-          - "Location: etc/apps/"
-        verbosity: 0
-      when: _app_on_direct_scope | default(false)
-
     - name: "Install {{ app_item.name }} (premium pack ITSI)"
       ansible.builtin.include_role:
         name: apps_itsi
@@ -225,6 +211,8 @@
         - app_state == 'installed'
         - ((app_item | default({})).get('premium_app', '') | length) == 0
         - not ((app_item | default({})).get('itsi_content_pack', false))
+
+    # Version status (App / Current / Expected / Update / Force / Location) is emitted by apps_common install_from_* (same for all deployment mechanisms).
 
     - name: "Apply customizations for {{ app_item.name }}"
       ansible.builtin.include_role:
