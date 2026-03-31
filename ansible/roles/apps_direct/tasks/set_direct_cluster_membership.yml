@@ -1,0 +1,12 @@
+---
+# SHC/IDXC membership from inventory — always; needed for direct-app eligibility even when no deployment_server exists.
+
+- name: Mark cluster membership from inventory (for direct-app eligibility)
+  ansible.builtin.set_fact:
+    _direct_host_idxc_member: "{{ ((group_names | default([])) | select('match', '^idxcluster_') | list | length) > 0 }}"
+    _direct_host_shc_member: "{{ ((group_names | default([])) | select('match', '^shcluster_') | list | length) > 0 }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify

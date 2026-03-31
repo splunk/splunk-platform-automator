@@ -5,17 +5,34 @@ Runs debug_app_scope.yml with run_scope_locally=true per scenario config,
 then asserts on the produced scope_debug.json. No SSH or real hosts required.
 
 Scenarios live under tests/configs/app_scope/<name>/splunk_config.yml.
+
+Requires: ansible-playbook on PATH (or ANSIBLE_PLAYBOOK), Python deps from tests/requirements.txt (pytest, PyYAML).
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+
+def _ansible_playbook_executable() -> str:
+    """Path to ansible-playbook (ANSIBLE_PLAYBOOK env overrides PATH lookup)."""
+    override = (os.environ.get("ANSIBLE_PLAYBOOK") or "").strip()
+    if override:
+        return override
+    found = shutil.which("ansible-playbook")
+    if not found:
+        pytest.fail(
+            "ansible-playbook not found on PATH. Install Ansible on the controller, or set ANSIBLE_PLAYBOOK "
+            "to the full path. App scope tests shell out to debug_app_scope.yml."
+        )
+    return found
 
 # Allow importing scope_assertions when running pytest from project root
 _tests_dir = Path(__file__).resolve().parent
@@ -73,7 +90,7 @@ def _run_scope_playbook(scenario_name: str, scope_output_path: Path) -> subproce
     remote_tmp = ansible_tmp / "remote"
     remote_tmp.mkdir(parents=True, exist_ok=True)
     cmd = [
-        "ansible-playbook",
+        _ansible_playbook_executable(),
         str(playbook),
         "-i", str(config_path),
         "-e", "run_scope_locally=true",

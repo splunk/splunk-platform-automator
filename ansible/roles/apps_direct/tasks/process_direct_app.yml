@@ -133,11 +133,11 @@
 
 - name: "Set direct non-SH filtered set for {{ app_item.name }} (filtered indexers + license_manager etc.)"
   ansible.builtin.set_fact:
-    _app_dir_filtered: "{{ (_app_dir_filtered_indexers | default(_app_dir_direct_indexers)) + (_app_dir_direct_non_indexer | default([])) | unique | list }}"
+    _app_dir_filtered: "{{ ((_app_dir_filtered_indexers | default(_app_dir_direct_indexers)) + (_app_dir_direct_non_indexer | default([]))) | unique | list }}"
 
 - name: "Combine direct SH and non-SH filtered sets for {{ app_item.name }}"
   ansible.builtin.set_fact:
-    _app_dir_filtered: "{{ (_app_dir_sh_filtered | default([])) + (_app_dir_filtered | default([])) | unique | list }}"
+    _app_dir_filtered: "{{ ((_app_dir_sh_filtered | default([])) + (_app_dir_filtered | default([]))) | unique | list }}"
 
 # Apply hosts_whitelist/hosts_blacklist to the full direct set so non-SH roles (e.g. forwarders) are also restricted.
 - name: "Apply hosts_whitelist to full direct set for {{ app_item.name }}"

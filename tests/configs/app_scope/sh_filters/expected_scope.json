@@ -79,6 +79,14 @@
     ],
     "direct_scope": [
         {
+            "host": "ds",
+            "scope_debug_results": []
+        },
+        {
+            "host": "ds2",
+            "scope_debug_results": []
+        },
+        {
             "host": "idx",
             "scope_debug_results": []
         },

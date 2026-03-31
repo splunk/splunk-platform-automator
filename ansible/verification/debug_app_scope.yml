@@ -17,7 +17,7 @@
 # Output: ansible/verification/output/scope_debug.json (or scope_output_path if set)
 
 - name: Compute direct deployment scope (debug only)
-  hosts: role_search_head,role_indexer,role_heavy_forwarder,role_license_manager,role_monitoring_console,role_universal_forwarder
+  hosts: role_cluster_manager,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_manager,role_monitoring_console,role_search_head,role_universal_forwarder,role_universal_forwarder_windows
   gather_facts: false
   become: false
   connection: "{{ (run_scope_locally | default(false)) | ternary('local', 'smart') }}"
@@ -74,7 +74,8 @@
   become: false
 
   vars:
-    _scope_hosts: "{{ (groups['role_search_head'] | default([])) + (groups['role_indexer'] | default([])) + (groups['role_heavy_forwarder'] | default([])) + (groups['role_license_manager'] | default([])) + (groups['role_monitoring_console'] | default([])) + (groups['role_universal_forwarder'] | default([])) | unique | list }}"
+    # Same role union as direct deploy (deploy_splunk_apps.yml); parenthesize before | unique (Jinja binds | to last term only).
+    _scope_hosts: "{{ ((groups['role_cluster_manager'] | default([])) + (groups['role_deployer'] | default([])) + (groups['role_deployment_server'] | default([])) + (groups['role_heavy_forwarder'] | default([])) + (groups['role_indexer'] | default([])) + (groups['role_license_manager'] | default([])) + (groups['role_monitoring_console'] | default([])) + (groups['role_search_head'] | default([])) + (groups['role_universal_forwarder'] | default([])) + (groups['role_universal_forwarder_windows'] | default([]))) | unique | list }}"
     _scope_output_path: "{{ scope_output_path | default(playbook_dir + '/output/scope_debug.json') }}"
 
   tasks:
@@ -157,7 +158,7 @@
     - name: Build list of (host, app) where state=installed, host in filtered_hosts, but on_scope false (wrong for install)
       ansible.builtin.set_fact:
         _fail_installed: "{{ _fail_installed | default([]) + [item.1 | combine({'_host': item.0.host})] }}"
-      loop: "{{ scope_report | default([]) | subelements('scope_debug_results', {'skip_missing': True}) }}"
+      loop: "{{ scope_report | default([]) | subelements('scope_debug_results', skip_missing=True) }}"
       when:
         - assert_scope_invariants | default(false) | bool
         - (item.1.state | default('installed')) != 'absent'

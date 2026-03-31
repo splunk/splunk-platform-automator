@@ -25,6 +25,10 @@
     "deployment_server": [],
     "direct_scope": [
         {
+            "host": "cm",
+            "scope_debug_results": []
+        },
+        {
             "host": "idx1",
             "scope_debug_results": []
         },

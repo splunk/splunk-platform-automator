@@ -1,0 +1,107 @@
+---
+# Only included when inventory has role_deployment_server (see main.yml / verify.yml).
+# Btool on the managed host, or local heuristic when btool cannot run (run_scope_locally / connection local).
+
+- name: Decide whether deploymentclient btool can run on this connection
+  ansible.builtin.set_fact:
+    _apps_direct_skip_deploymentclient_btool: "{{ (run_scope_locally | default(false) | bool) or ((ansible_connection | default('smart')) in ['local', 'ansible.builtin.local']) }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+
+- name: Set Splunk home for btool
+  ansible.builtin.set_fact:
+    _apps_direct_splunk_home: "{{ splunk_home | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk'), true) }}"
+  when: not (_apps_direct_skip_deploymentclient_btool | default(false) | bool)
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+
+- name: Query merged deploymentclient.conf (splunk btool, Unix)
+  ansible.builtin.command:
+    argv:
+      - "{{ _apps_direct_splunk_home }}/bin/splunk"
+      - btool
+      - deploymentclient
+      - list
+  register: _apps_direct_dc_btool_unix
+  changed_when: false
+  failed_when: false
+  when:
+    - not (_apps_direct_skip_deploymentclient_btool | default(false) | bool)
+    - ansible_os_family | default('') != 'Windows'
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+
+# Use ansible.builtin.raw (not win_shell) so ansible.windows collection is not required on the controller.
+- name: Query merged deploymentclient.conf (splunk btool, Windows)
+  ansible.builtin.raw: '& "{{ _apps_direct_splunk_home }}/bin/splunk.exe" btool deploymentclient list'
+  register: _apps_direct_dc_btool_win
+  changed_when: false
+  failed_when: false
+  when:
+    - not (_apps_direct_skip_deploymentclient_btool | default(false) | bool)
+    - ansible_os_family | default('') == 'Windows'
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+
+- name: Normalize btool result for this host
+  ansible.builtin.set_fact:
+    _apps_direct_dc_btool:
+      rc: "{{ (_apps_direct_dc_btool_win.rc | default(-1)) if (ansible_os_family | default('') == 'Windows') else (_apps_direct_dc_btool_unix.rc | default(-1)) }}"
+      stdout: "{{ (_apps_direct_dc_btool_win.stdout | default('')) if (ansible_os_family | default('') == 'Windows') else (_apps_direct_dc_btool_unix.stdout | default('')) }}"
+  when: not (_apps_direct_skip_deploymentclient_btool | default(false) | bool)
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+
+- name: Derive whether host is an enabled deployment client (targetUri set, not disabled, via btool)
+  ansible.builtin.set_fact:
+    _splunk_is_deployment_client: >-
+      {{
+        (
+          ((_apps_direct_dc_btool | default({'rc': -1, 'stdout': ''})).rc | int) == 0
+          and (
+            ((_apps_direct_dc_btool | default({'stdout': ''})).stdout | default('') | regex_search('(?im)^\s*targetUri\s*=\s*\S+')) is not none
+            or ((_apps_direct_dc_btool | default({'stdout': ''})).stdout | default('') | regex_search('(?im)^\s*target_uri\s*=\s*\S+')) is not none
+          )
+          and (
+            ((_apps_direct_dc_btool | default({'stdout': ''})).stdout | default('') | regex_search('(?im)^\s*disabled\s*=\s*(1|true|yes)\s*$')) is none
+          )
+        ) | bool
+      }}
+  when: not (_apps_direct_skip_deploymentclient_btool | default(false) | bool)
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+
+- name: Assume deployment client when btool unavailable (inventory heuristic for local/debug runs)
+  ansible.builtin.set_fact:
+    _splunk_is_deployment_client: >-
+      {{
+        (
+          (inventory_hostname not in (groups['role_deployment_server'] | default([])))
+          and not (_direct_host_shc_member | default(false) | bool)
+          and not (_direct_host_idxc_member | default(false) | bool)
+        ) | bool
+      }}
+  when: _apps_direct_skip_deploymentclient_btool | default(false) | bool
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify

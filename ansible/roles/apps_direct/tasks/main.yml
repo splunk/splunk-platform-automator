@@ -20,6 +20,21 @@
   ansible.builtin.set_fact:
     direct_apps: []
 
+- name: Set direct host cluster membership (SHC/IDXC from inventory)
+  ansible.builtin.include_tasks: set_direct_cluster_membership.yml
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+
+- name: Detect deployment client (btool or local heuristic when inventory has deployment_server)
+  ansible.builtin.include_tasks: detect_deployment_client.yml
+  when: (groups['role_deployment_server'] | default([]) | length) > 0
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+
 # Content packs inherit filter vars from ITSI in process_direct_app; we need the ITSI app config(s) for that.
 - name: "Build list of ITSI app configs (for content pack same target as ITSI)"
   tags:
@@ -54,23 +69,29 @@
   when:
     - (_app_item | default({})).get('target_roles') is defined
     - current_host_roles | intersect((_app_item | default({})).get('target_roles', [])) | length > 0
+    # deployment_target auto: direct only if not served by CM/deployer/DS. ITSI/CP force deployment_target direct via _app_item.
+    # - IDXC peer + app targets indexer → manager-apps
+    # - SHC member + app targets search_head → deployer bundle
+    # - merged deploymentclient.conf (btool) shows enabled client with targetUri → any role may be a DS client; no auto direct
     - >-
       (((_app_item | default({})).get('deployment_target', 'auto') == 'direct')
       or (
         (_app_item | default({})).get('deployment_target', 'auto') != 'direct'
-        and (groups['role_deployment_server'] | default([]) | length == 0)
         and current_host_roles | intersect(['deployment_server', 'cluster_manager', 'deployer']) | length == 0
-        and current_host_roles | intersect(['universal_forwarder', 'heavy_forwarder']) | length == 0
-        and (
-          (current_host_roles | intersect(['indexer']) | length > 0 and (group_names | default([])) | select('match', '^idxcluster_') | list | length == 0)
-          or
-          (current_host_roles | intersect(['search_head']) | length > 0 and (group_names | default([])) | select('match', '^shcluster_') | list | length == 0)
-          or
-          (_norm and current_host_roles | intersect(['license_manager']) | length > 0)
+        and not (
+          (
+            (_direct_host_idxc_member | default(false) | bool)
+            and (['indexer'] | intersect((_app_item | default({})).get('target_roles', []) | default([])) | length > 0)
+            and (current_host_roles | intersect(['indexer']) | length > 0)
+          )
+          or (
+            (_direct_host_shc_member | default(false) | bool)
+            and (['search_head'] | intersect((_app_item | default({})).get('target_roles', []) | default([])) | length > 0)
+            and (current_host_roles | intersect(['search_head']) | length > 0)
+          )
+          or (_splunk_is_deployment_client | default(false) | bool)
         )
       )) | default(false) | bool
-    # SHC members get ITSI via deployer, not direct.
-    - (current_host_roles | intersect(['search_head']) | length == 0) or ((group_names | default([])) | select('match', '^shcluster_') | list | length == 0)
     # ITSI/content pack with shc_whitelist: standalone SH is not targeted (only SHC is), so do not add to direct_apps for standalone SH.
     - (not _norm) or (_effective_shc_whitelist | default([]) | length == 0) or (current_host_roles | intersect(['search_head']) | length == 0) or ((group_names | default([])) | select('match', '^shcluster_') | list | length > 0)
     # ITSI/content pack: indexer cluster members get app via CM (manager-apps), not direct; exclude from direct_apps so they do not appear in direct scope.

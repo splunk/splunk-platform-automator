@@ -28,15 +28,7 @@
     "deployment_server": [],
     "direct_scope": [
         {
-            "host": "sh",
-            "scope_debug_results": []
-        },
-        {
-            "host": "idx1",
-            "scope_debug_results": []
-        },
-        {
-            "host": "idx2",
+            "host": "cm",
             "scope_debug_results": []
         },
         {
@@ -62,7 +54,15 @@
             ]
         },
         {
-            "host": "cm",
+            "host": "idx1",
+            "scope_debug_results": []
+        },
+        {
+            "host": "idx2",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh",
             "scope_debug_results": []
         }
     ]

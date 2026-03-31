@@ -36,6 +36,10 @@
     ],
     "direct_scope": [
         {
+            "host": "ds",
+            "scope_debug_results": []
+        },
+        {
             "host": "sh1",
             "scope_debug_results": []
         },

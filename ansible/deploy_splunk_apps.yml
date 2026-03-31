@@ -70,9 +70,9 @@
         - splunk_app_deployment is defined
         - splunk_app_deployment.apps is defined
 
-# Step 4: Deploy apps directly to remaining hosts
+# Step 4: Deploy apps directly to hosts (all AllowedRole from schema.py plugins/inventory/schema.py)
 - name: Deploy apps directly to hosts
-  hosts: role_search_head,role_indexer,role_heavy_forwarder,role_license_manager,role_monitoring_console,role_universal_forwarder
+  hosts: role_cluster_manager,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_manager,role_monitoring_console,role_search_head,role_universal_forwarder,role_universal_forwarder_windows
   become: true
   become_user: root
   gather_facts: yes
@@ -88,7 +88,7 @@
 # Deployer+SHC only: apps deployed via deployer have no etc/apps on ds; we accumulate playbooks on ds and load them
 # onto the first SHC member here so they run once there. Post-restart runbooks never run on the deployer.
 - name: Run post-restart playbooks (direct deployment)
-  hosts: role_search_head,role_indexer,role_heavy_forwarder,role_license_manager,role_monitoring_console,role_universal_forwarder
+  hosts: role_cluster_manager,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_manager,role_monitoring_console,role_search_head,role_universal_forwarder,role_universal_forwarder_windows
   become: true
   become_user: root
   gather_facts: yes
