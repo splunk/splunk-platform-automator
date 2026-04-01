@@ -9,7 +9,7 @@
     - direct_deployment
     - verify
   ansible.builtin.set_fact:
-    current_host_roles: "{{ group_names | select('match', '^role_.*') | map('regex_replace', '^role_', '') | list }}"
+    current_host_roles: "{{ (group_names | default([])) | select('match', '^role_.*') | map('regex_replace', '^role_', '') | list }}"
 
 - name: Set direct host cluster membership (SHC/IDXC from inventory)
   ansible.builtin.include_tasks: set_direct_cluster_membership.yml
@@ -28,6 +28,20 @@
     - direct_deployment
     - verify
 
+# Content packs inherit SHC filter from ITSI; align with main.yml eligibility loop.
+- name: "Build list of ITSI app configs (for content pack same target as ITSI)"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.set_fact:
+    _itsi_apps_list: "{{ _itsi_apps_list | default([]) + [item] }}"
+  loop: "{{ splunk_app_deployment.apps | default([]) }}"
+  when: (item | default({})).get('premium_app', '') == 'itsi'
+  loop_control:
+    label: "{{ (item | default({})).get('name', '?') }}"
+
 - name: Initialize verification results
   tags:
     - splunk
@@ -40,6 +54,7 @@
     direct_apps_found: []
     direct_mismatches: []
 
+# ITSI/content pack normalized same as main.yml; expected list uses catalog item, eligibility uses _app_item.
 - name: Filter apps for direct deployment on this host
   tags:
     - splunk
@@ -49,45 +64,37 @@
   ansible.builtin.set_fact:
     direct_apps_expected: "{{ direct_apps_expected + [item] }}"
   loop: "{{ splunk_app_deployment.apps | default([]) }}"
+  vars:
+    _itsi_cp_roles: ['search_head', 'indexer', 'license_manager']
+    _cp_roles: ['search_head']
+    _norm: "{{ (item | default({})).get('premium_app') == 'itsi' or (item | default({})).get('itsi_content_pack') | default(false) }}"
+    _roles: "{{ (item | default({})).get('itsi_content_pack') | default(false) | ternary(_cp_roles, _itsi_cp_roles) }}"
+    _effective_shc_whitelist: "{{ (item | default({})).get('itsi_content_pack') and ((_itsi_apps_list | default([]) | first | default({})).get('shc_whitelist', []) | default([])) or ((item | default({})).get('shc_whitelist', []) | default([])) }}"
+    _app_item: "{{ _norm | ternary((item | default({}) | combine({'target_roles': _roles, 'deployment_target': 'direct'})), item) }}"
   when:
+    - (_app_item | default({})).get('target_roles') is defined
+    - current_host_roles | intersect((_app_item | default({})).get('target_roles', [])) | length > 0
     - >-
-      (item.premium_app | default('')) == 'itsi' and (
-        (current_host_roles | intersect(['license_manager']) | length > 0 and current_host_roles | intersect(['search_head']) | length == 0)
-        or (
-          current_host_roles | intersect(['search_head']) | length > 0
-          and (group_names | select('match', '^shcluster_') | list | length == 0)
-        )
-        or (
-          current_host_roles | intersect(['indexer']) | length > 0
-          and (group_names | select('match', '^idxcluster_') | list | length == 0)
-          and current_host_roles | intersect(['search_head']) | length == 0
-        )
-      )
+      (((_app_item | default({})).get('deployment_target', 'auto') == 'direct')
       or (
-        item.target_roles is defined
-        and current_host_roles | intersect(item.target_roles) | length > 0
-        and (
-          (item.deployment_target | default('auto') == 'direct')
-          or
+        (_app_item | default({})).get('deployment_target', 'auto') != 'direct'
+        and current_host_roles | intersect(['cluster_manager', 'deployer']) | length == 0
+        and not (
           (
-            item.deployment_target | default('auto') != 'direct' and
-            current_host_roles | intersect(['deployment_server', 'cluster_manager', 'deployer']) | length == 0 and
-            not (
-              (
-                (_direct_host_idxc_member | default(false) | bool)
-                and (['indexer'] | intersect(item.target_roles | default([])) | length > 0)
-                and (current_host_roles | intersect(['indexer']) | length > 0)
-              )
-              or (
-                (_direct_host_shc_member | default(false) | bool)
-                and (['search_head'] | intersect(item.target_roles | default([])) | length > 0)
-                and (current_host_roles | intersect(['search_head']) | length > 0)
-              )
-              or (_splunk_is_deployment_client | default(false) | bool)
-            )
+            (_direct_host_idxc_member | default(false) | bool)
+            and (['indexer'] | intersect((_app_item | default({})).get('target_roles', []) | default([])) | length > 0)
+            and (current_host_roles | intersect(['indexer']) | length > 0)
           )
+          or (
+            (_direct_host_shc_member | default(false) | bool)
+            and (['search_head'] | intersect((_app_item | default({})).get('target_roles', []) | default([])) | length > 0)
+            and (current_host_roles | intersect(['search_head']) | length > 0)
+          )
+          or (_splunk_is_deployment_client | default(false) | bool)
         )
-      )
+      )) | default(false) | bool
+    - (not _norm) or (_effective_shc_whitelist | default([]) | length == 0) or (current_host_roles | intersect(['search_head']) | length == 0) or ((group_names | default([])) | select('match', '^shcluster_') | list | length > 0)
+    - (not _norm) or (current_host_roles | intersect(['indexer']) | length == 0) or ((group_names | default([])) | select('match', '^idxcluster_') | list | length == 0)
 
 - name: Check apps directory exists
   tags:

@@ -223,6 +223,16 @@
     app_blacklist_hosts: []
   when: app_state == 'absent'
 
+# Co-located DS + SH/idx/LM: those apps install direct on the DS node, not via phone-home serverclass to self.
+- name: "Strip deployment server hosts from serverclass whitelist for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    app_whitelist_hosts: "{{ app_whitelist_hosts | default([]) | reject('in', (groups['role_deployment_server'] | default([]))) | list }}"
+  when: app_state == 'installed'
+
 # Debug scope entry: serverclass and target_path distinguish same app with different serverclasses;
 # sc_whitelist/sc_blacklist document serverclass config; blacklist is the effective serverclass blacklist.
 - name: "Record DS app scope for debug (target_hosts, serverclass, target_path, sc_* per app)"

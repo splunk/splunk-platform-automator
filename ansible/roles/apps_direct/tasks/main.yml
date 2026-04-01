@@ -69,15 +69,16 @@
   when:
     - (_app_item | default({})).get('target_roles') is defined
     - current_host_roles | intersect((_app_item | default({})).get('target_roles', [])) | length > 0
-    # deployment_target auto: direct only if not served by CM/deployer/DS. ITSI/CP force deployment_target direct via _app_item.
+    # deployment_target auto: direct when not served by CM/deployer bundle or as a DS *client*. ITSI/CP force direct via _app_item.
     # - IDXC peer + app targets indexer → manager-apps
     # - SHC member + app targets search_head → deployer bundle
-    # - merged deploymentclient.conf (btool) shows enabled client with targetUri → any role may be a DS client; no auto direct
+    # - deployment_server on this host does not block direct (apps on DS node install locally; not via serverclass to self)
+    # - merged deploymentclient.conf / heuristic: DS client → no auto direct
     - >-
       (((_app_item | default({})).get('deployment_target', 'auto') == 'direct')
       or (
         (_app_item | default({})).get('deployment_target', 'auto') != 'direct'
-        and current_host_roles | intersect(['deployment_server', 'cluster_manager', 'deployer']) | length == 0
+        and current_host_roles | intersect(['cluster_manager', 'deployer']) | length == 0
         and not (
           (
             (_direct_host_idxc_member | default(false) | bool)

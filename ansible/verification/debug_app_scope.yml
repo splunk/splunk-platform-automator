@@ -118,13 +118,18 @@
       vars:
         _this_cm_idxc_members: "{{ (groups['role_indexer'] | default([])) | intersect((groups | dict2items | selectattr('key', 'match', '^idxcluster_') | selectattr('value', 'contains', _cmh) | map(attribute='value') | flatten | unique | list) | default([])) | list }}"
 
-    # deployment_server: list of { host, apps_with_targets } (one per DS host)
+    # deployment_server: one entry per inventory deployment_server host. apps_with_targets lists only apps
+    # with at least one DS client (non-empty target_hosts); may be [] when all apps are direct/other paths.
+    # Top-level deployment_server is [] only when there is no role_deployment_server in inventory.
     - name: Append one deployment server entry to deployment_server list
       ansible.builtin.set_fact:
-        _deployment_server_list: "{{ _deployment_server_list | default([]) + [{'host': _dsh, 'apps_with_targets': (hostvars[_dsh].ds_app_scope_debug | default([]))}] }}"
+        _deployment_server_list: "{{ _deployment_server_list | default([]) + [{'host': _dsh, 'apps_with_targets': _ds_apps_filtered}] }}"
       loop: "{{ groups['role_deployment_server'] | default([]) }}"
       loop_control:
         loop_var: _dsh
+      vars:
+        _ds_apps_raw: "{{ hostvars[_dsh].ds_app_scope_debug | default([]) }}"
+        _ds_apps_filtered: "{{ _ds_apps_raw | json_query('[?target_hosts && length(target_hosts) > `0`]') | default([]) }}"
 
     - name: Build combined report (direct_scope, deployer, cluster_manager, deployment_server as lists)
       ansible.builtin.set_fact:
