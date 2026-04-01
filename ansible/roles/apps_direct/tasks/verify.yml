@@ -150,7 +150,15 @@
     label: "{{ verify_app_item.name }}"
   vars:
     verify_base_path: "{{ splunk_home }}/etc/apps"
-    verify_app_full_path: "{{ verify_app_item.target_path | default(verify_base_path ~ '/' ~ verify_app_item.name) }}"
+    # ITSI ships as folder "itsi" (matches apps_itsi splunkbase_dest_slug); content pack meta-app installs library under library_app (e.g. DA-ITSI-ContentLibrary). Catalog name is display-only.
+    verify_app_fs_dir: >-
+      {{ 'itsi' if (verify_app_item.premium_app | default('')) == 'itsi'
+      else (
+        (verify_app_item.library_app | default(''))
+        if ((verify_app_item.itsi_content_pack | default(false) | bool) and ((verify_app_item.library_app | default('')) | length > 0))
+        else verify_app_item.name
+      ) }}
+    verify_app_full_path: "{{ verify_app_item.target_path | default(verify_base_path ~ '/' ~ verify_app_fs_dir) }}"
   when: direct_apps_expected | length > 0
 
 - name: Build issues list for display
