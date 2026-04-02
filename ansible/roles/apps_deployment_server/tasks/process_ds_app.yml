@@ -233,6 +233,49 @@
     app_whitelist_hosts: "{{ app_whitelist_hosts | default([]) | reject('in', (groups['role_deployment_server'] | default([]))) | list }}"
   when: app_state == 'installed'
 
+# When splunk_app_deployment.deploymentclient_check is true: intersect whitelist with hosts where btool
+# (Step 0b / detect_deployment_client.yml) set _splunk_is_deployment_client. Skip when run_scope_locally.
+# When deploymentclient_check is false, this block is skipped (inventory heuristic only; no btool filter).
+- name: "Initialize btool-filtered whitelist accumulator for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    _app_whitelist_dc_only: []
+  when:
+    - app_state == 'installed'
+    - (splunk_app_deployment.deploymentclient_check | default(true)) | bool
+    - not (run_scope_locally | default(false) | bool)
+
+- name: "Keep whitelist hosts that are deployment clients on this DS (btool fact) for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    _app_whitelist_dc_only: "{{ (_app_whitelist_dc_only | default([])) + [item] }}"
+  loop: "{{ app_whitelist_hosts | default([]) }}"
+  when:
+    - app_state == 'installed'
+    - (splunk_app_deployment.deploymentclient_check | default(true)) | bool
+    - not (run_scope_locally | default(false) | bool)
+    - item in hostvars
+    # If pre-play did not run, fact is missing — keep host (inventory-only). If fact is false, drop host.
+    - ('_splunk_is_deployment_client' not in hostvars[item]) or (hostvars[item]._splunk_is_deployment_client | default(false) | bool)
+
+- name: "Apply deployment-client btool filter to serverclass whitelist for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployment_server
+  ansible.builtin.set_fact:
+    app_whitelist_hosts: "{{ _app_whitelist_dc_only | default([]) }}"
+  when:
+    - app_state == 'installed'
+    - (splunk_app_deployment.deploymentclient_check | default(true)) | bool
+    - not (run_scope_locally | default(false) | bool)
+
 # Debug scope entry: serverclass and target_path distinguish same app with different serverclasses;
 # sc_whitelist/sc_blacklist document serverclass config; blacklist is the effective serverclass blacklist.
 - name: "Record DS app scope for debug (target_hosts, serverclass, target_path, sc_* per app)"

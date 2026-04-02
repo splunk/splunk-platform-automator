@@ -40,6 +40,13 @@ Cluster names in **shc_whitelist** / **shc_blacklist** must exist in **splunk_sh
 - **Premium apps** may use only **hosts_whitelist** OR **shc_whitelist** (not both) and may not use blacklists or idxc_*/sc_* filters.
 - **hosts_whitelist** and **hosts_blacklist** cannot contain cluster members (SHC or IDXC); use **shc_whitelist** / **shc_blacklist** or **idxc_whitelist** / **idxc_blacklist** for cluster-level targeting.
 
+### `splunk_app_deployment.deploymentclient_check` (boolean, default `true`)
+
+When your inventory includes a **deployment server** and apps are staged via serverclass, the playbooks normally run **`splunk btool deploymentclient`** on candidate hosts (see `deploy_splunk_apps.yml` Step 0b and `apps_direct/tasks/detect_deployment_client.yml`) to set **`_splunk_is_deployment_client`** and to **narrow serverclass whitelists** to hosts that are actually phone-home deployment clients.
+
+- **`deploymentclient_check: true` (default):** Use btool (subject to the same skip rules as today: e.g. local connection, deployment-server host, SHC/IDXC peers without CM/deployer—see task file comments).
+- **`deploymentclient_check: false`:** Skip btool entirely. Hosts are classified with an **inventory-only heuristic**: treat as a deployment client any host that is **not** a deployment server and **not** an SHC or IDXC member (membership from `idxcluster_*` / `shcluster_*` inventory groups). Use this for bootstrap or lab cases where btool is undesirable; serverclass targets may then include hosts that are not yet real clients.
+
 ---
 
 ## How filters are applied

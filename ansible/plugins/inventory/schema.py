@@ -211,6 +211,14 @@ class SplunkAppDeploymentConfig(BaseModel):
     splunkbase_username: Optional[str] = None
     splunkbase_password: Optional[str] = None
     local_app_repo_path: Optional[str] = None
+    deploymentclient_check: bool = Field(
+        default=True,
+        description=(
+            "When true (default), app deployment runs splunk btool deploymentclient on hosts (with a deployment server "
+            "in inventory) to set _splunk_is_deployment_client and to filter deployment-server serverclass whitelists. "
+            "When false, skip btool and assume non–deployment-server, non–SHC/IDXC-member hosts are deployment clients."
+        ),
+    )
     apps: Optional[List[Dict[str, Any]]] = None
     host_specific_apps: Optional[List[Dict[str, Any]]] = None
 
@@ -682,7 +690,13 @@ class SplunkAppDeploymentConfig(BaseModel):
     def validate_splunk_app_deployment_direct_vars(self) -> 'SplunkAppDeploymentConfig':
         """Validate top-level splunk_app_deployment keys (target_download, cache_downloads, etc.) when present."""
         # Booleans
-        for key in ("target_download", "cache_downloads", "backup_apps_before_update", "restart_after_deployment"):
+        for key in (
+            "target_download",
+            "cache_downloads",
+            "backup_apps_before_update",
+            "restart_after_deployment",
+            "deploymentclient_check",
+        ):
             val = getattr(self, key, None)
             if val is not None and not isinstance(val, bool):
                 raise ValueError(

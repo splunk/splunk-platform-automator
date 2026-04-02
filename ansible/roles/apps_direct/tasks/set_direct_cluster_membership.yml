@@ -5,6 +5,8 @@
   ansible.builtin.set_fact:
     _direct_host_idxc_member: "{{ ((group_names | default([])) | select('match', '^idxcluster_') | list | length) > 0 }}"
     _direct_host_shc_member: "{{ ((group_names | default([])) | select('match', '^shcluster_') | list | length) > 0 }}"
+    # CM / SHC deployer often sit in idxcluster_/shcluster_* groups for inventory convenience — still run deploymentclient btool on them for DS client discovery.
+    _direct_host_cm_or_deployer: "{{ ((group_names | default([])) | intersect(['role_cluster_manager', 'role_deployer']) | length) > 0 }}"
   tags:
     - splunk
     - splunk_apps

@@ -1324,6 +1324,7 @@ class TestAppDeploymentConfig:
             "splunk_app_deployment": {
                 "target_download": False,
                 "cache_downloads": True,
+                "deploymentclient_check": False,
                 "temp_dir": "/tmp/splunk_apps",
                 "download_timeout": 120,
                 "retry_count": 3,
@@ -1332,6 +1333,21 @@ class TestAppDeploymentConfig:
         }
         result = validate_config(config)
         assert result.splunk_app_deployment is not None
+        assert result.splunk_app_deployment.deploymentclient_check is False
+
+    def test_splunk_app_deployment_deploymentclient_check_not_bool_raises(self):
+        """deploymentclient_check must be boolean when present."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
+            "splunk_app_deployment": {
+                "deploymentclient_check": "maybe",
+                "apps": [{"name": "MyApp", "source": "local", "target_roles": ["indexer"]}],
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "deploymentclient_check" in str(exc_info.value).lower()
 
     def test_splunk_app_deployment_target_download_not_bool_raises(self):
         """target_download must be boolean when present."""

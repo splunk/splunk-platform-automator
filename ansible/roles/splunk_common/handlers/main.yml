@@ -60,6 +60,7 @@
   become_user: "{{ splunk_user }}"
   delegate_to: "{{ splunk_idxc_cm }}"
 
+# Deploy-server REST reload can time out when splunkd is busy (CLI rc 22); retry with delay like shcluster-bundle.
 - name: Reload deploy-server
   tags:
     - splunk
@@ -69,6 +70,10 @@
   become: true
   become_user: "{{ splunk_user }}"
   delegate_to: "{{ splunk_deployment_server | first }}"
+  register: splunk_reload_deploy_server_result
+  until: splunk_reload_deploy_server_result.rc == 0
+  retries: "{{ splunk_reload_deploy_server_retries | default(8) | int }}"
+  delay: "{{ splunk_reload_deploy_server_delay | default(20) | int }}"
 
 - name: Restart splunk
   tags:

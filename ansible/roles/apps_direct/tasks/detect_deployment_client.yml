@@ -1,19 +1,86 @@
 ---
-# Only included when inventory has role_deployment_server (see main.yml / verify.yml).
-# Btool on the managed host, or local heuristic when btool cannot run (run_scope_locally / connection local).
+# Only included when inventory has role_deployment_server and splunk_app_deployment.deploymentclient_check
+# is true (default); see assume_deployment_client_heuristic.yml when the flag is false.
+# Btool on the managed host, or local heuristic when btool cannot run:
+# - run_scope_locally / local connection
+# - this host is role_deployment_server (not a “client” for DS staging whitelist; heuristic forces _splunk_is_deployment_client false)
+# - SHC/IDXC peer — except cluster manager & deployer (those run btool unless they are also deployment servers — covered above)
 
-- name: Decide whether deploymentclient btool can run on this connection
-  ansible.builtin.set_fact:
-    _apps_direct_skip_deploymentclient_btool: "{{ (run_scope_locally | default(false) | bool) or ((ansible_connection | default('smart')) in ['local', 'ansible.builtin.local']) }}"
+- name: Ensure SHC/IDXC membership facts exist (required when only this tasks file is included, e.g. deploy Step 0b)
+  ansible.builtin.include_tasks: set_direct_cluster_membership.yml
   tags:
     - splunk
     - splunk_apps
     - direct_deployment
     - verify
 
+# SHC/IDXC peers: skip btool (heuristic) unless CM/deployer. Deployment-server nodes always skip (including CM+DS or deployer+DS co-located).
+- name: Decide whether deploymentclient btool can run on this connection
+  ansible.builtin.set_fact:
+    _apps_direct_skip_deploymentclient_btool: >-
+      {{
+        (
+          (run_scope_locally | default(false) | bool)
+          or ((ansible_connection | default('smart')) in ['local', 'ansible.builtin.local'])
+          or (inventory_hostname in (groups['role_deployment_server'] | default([])))
+          or (
+            (
+              (_direct_host_shc_member | default(false) | bool)
+              or (_direct_host_idxc_member | default(false) | bool)
+            )
+            and not (_direct_host_cm_or_deployer | default(false) | bool)
+          )
+        ) | bool
+      }}
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+
+# Linux UF: same resolution chain as enterprise, but default splunk_install_app is splunkforwarder when unset (app-only plays). Respects splunk_home / splunk_install_dir / splunk_install_app from inventory.
 - name: Set Splunk home for btool
   ansible.builtin.set_fact:
-    _apps_direct_splunk_home: "{{ splunk_home | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk'), true) }}"
+    _apps_direct_splunk_home: >-
+      {{
+        ('role_universal_forwarder_windows' in (group_names | default([])))
+        | ternary(
+            splunk_home | default((splunk_install_dir | default('C:\\Program Files')) ~ '\\SplunkUniversalForwarder', true),
+            ('role_universal_forwarder' in (group_names | default([])))
+            | ternary(
+                splunk_home | default((splunk_install_dir | default('/opt')) ~ '/' ~ (splunk_install_app | default('splunkforwarder')), true),
+                splunk_home | default((splunk_install_dir | default('/opt')) ~ '/' ~ (splunk_install_app | default('splunk')), true)
+              )
+          )
+      }}
+  when: not (_apps_direct_skip_deploymentclient_btool | default(false) | bool)
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+
+- name: Debug inventory Splunk vars vs path used for deploymentclient btool
+  ansible.builtin.debug:
+    msg:
+      - "deploymentclient btool path facts ({{ inventory_hostname }}) — task status ok means vars printed; skipped hosts do not run btool here"
+      - "splunk_home / splunk_install_app may be << not set >> (splunk_common leaves install_app to install roles). _apps_direct_splunk_home uses splunk_home if set, else splunk_install_dir / (splunk_install_app | default splunk or splunkforwarder for role_universal_forwarder)."
+      - "splunk_home={{ splunk_home | default('<< not set >>', true) }}"
+      - "splunk_install_dir={{ splunk_install_dir | default('<< not set >>', true) }}"
+      - "splunk_install_app={{ splunk_install_app | default('<< not set >>', true) }}"
+      - "splunk_user={{ splunk_user | default('<< not set >>', true) }}"
+      - "_apps_direct_splunk_home (effective path used for btool)={{ _apps_direct_splunk_home }}"
+      - "role_universal_forwarder={{ 'role_universal_forwarder' in (group_names | default([])) }}, role_universal_forwarder_windows={{ 'role_universal_forwarder_windows' in (group_names | default([])) }}"
+  when: not (_apps_direct_skip_deploymentclient_btool | default(false) | bool)
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+
+- name: Cache os_family from ansible_facts (not deprecated ansible_os_family var)
+  ansible.builtin.set_fact:
+    _apps_direct_os_family: "{{ (ansible_facts | default({})).get('os_family', '') | string }}"
   when: not (_apps_direct_skip_deploymentclient_btool | default(false) | bool)
   tags:
     - splunk
@@ -29,11 +96,13 @@
       - deploymentclient
       - list
   register: _apps_direct_dc_btool_unix
+  become: true
+  become_user: "{{ splunk_user | default('splunk') }}"
   changed_when: false
   failed_when: false
   when:
     - not (_apps_direct_skip_deploymentclient_btool | default(false) | bool)
-    - ansible_os_family | default('') != 'Windows'
+    - (_apps_direct_os_family | default('') | string) != 'Windows'
   tags:
     - splunk
     - splunk_apps
@@ -48,32 +117,48 @@
   failed_when: false
   when:
     - not (_apps_direct_skip_deploymentclient_btool | default(false) | bool)
-    - ansible_os_family | default('') == 'Windows'
+    - (_apps_direct_os_family | default('') | string) == 'Windows'
   tags:
     - splunk
     - splunk_apps
     - direct_deployment
     - verify
 
-- name: Normalize btool result for this host
+- name: Normalize btool result for this host (Unix)
   ansible.builtin.set_fact:
     _apps_direct_dc_btool:
-      rc: "{{ (_apps_direct_dc_btool_win.rc | default(-1)) if (ansible_os_family | default('') == 'Windows') else (_apps_direct_dc_btool_unix.rc | default(-1)) }}"
-      stdout: "{{ (_apps_direct_dc_btool_win.stdout | default('')) if (ansible_os_family | default('') == 'Windows') else (_apps_direct_dc_btool_unix.stdout | default('')) }}"
-  when: not (_apps_direct_skip_deploymentclient_btool | default(false) | bool)
+      rc: "{{ _apps_direct_dc_btool_unix.rc | default(-1) }}"
+      stdout: "{{ _apps_direct_dc_btool_unix.stdout | default('') }}"
+  when:
+    - not (_apps_direct_skip_deploymentclient_btool | default(false) | bool)
+    - (_apps_direct_os_family | default('') | string) != 'Windows'
   tags:
     - splunk
     - splunk_apps
     - direct_deployment
     - verify
 
+- name: Normalize btool result for this host (Windows)
+  ansible.builtin.set_fact:
+    _apps_direct_dc_btool:
+      rc: "{{ _apps_direct_dc_btool_win.rc | default(-1) }}"
+      stdout: "{{ _apps_direct_dc_btool_win.stdout | default('') }}"
+  when:
+    - not (_apps_direct_skip_deploymentclient_btool | default(false) | bool)
+    - (_apps_direct_os_family | default('') | string) == 'Windows'
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+
+# Do not require rc==0: Splunk sometimes prints ownership warnings and exits non-zero even when stdout has merged config.
 - name: Derive whether host is an enabled deployment client (targetUri set, not disabled, via btool)
   ansible.builtin.set_fact:
     _splunk_is_deployment_client: >-
       {{
         (
-          ((_apps_direct_dc_btool | default({'rc': -1, 'stdout': ''})).rc | int) == 0
-          and (
+          (
             ((_apps_direct_dc_btool | default({'stdout': ''})).stdout | default('') | regex_search('(?im)^\s*targetUri\s*=\s*\S+')) is not none
             or ((_apps_direct_dc_btool | default({'stdout': ''})).stdout | default('') | regex_search('(?im)^\s*target_uri\s*=\s*\S+')) is not none
           )

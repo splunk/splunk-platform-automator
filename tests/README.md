@@ -113,7 +113,7 @@ Unit tests for YAML configuration schema validation using Pydantic. These tests 
 - Valid roles: `cluster_manager`, `deployer`, `deployment_server`, `heavy_forwarder`, `indexer`, `license_manager`, `monitoring_console`, `search_head`, `universal_forwarder`, `universal_forwarder_windows`
 - `cluster_manager` requires `idxcluster`
 - `site` only allowed for `indexer`, `search_head`, `cluster_manager`
-- `TestAppDeploymentConfig`: valid/optional/empty `splunk_app_deployment`
+- `TestAppDeploymentConfig`: valid/optional/empty `splunk_app_deployment`; top-level booleans such as `deploymentclient_check` (default `true`) validated when present
 
 ### App deployment tests (`test_app_deployment.py`)
 

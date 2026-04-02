@@ -38,8 +38,8 @@
       or (item.target_roles is defined and (
         (item.target_roles | intersect(['indexer']) | length > 0) or (item.target_roles | intersect(['cluster_manager']) | length > 0)
       ))
-    # When hosts_whitelist is set: only add to CM if at least one cluster member is in the whitelist (else app goes direct to those hosts only, e.g. standalone indexers)
-    - (_effective_hosts_whitelist | length == 0) or ((_effective_hosts_whitelist | intersect(_this_cm_cluster_members) | length > 0))
+    # When hosts_whitelist is set: only add to CM if at least one cluster member is whitelisted—except ITSI, where whitelist limits search-head/LM direct targets, not IDXC manager-apps.
+    - (_effective_hosts_whitelist | length == 0) or ((_effective_hosts_whitelist | intersect(_this_cm_cluster_members) | length > 0)) or ((item.premium_app | default('')) == 'itsi')
     # When idxc_whitelist or idxc_blacklist is set: only add to CM if at least one IDXC is targeted
     - (not ((_effective_idxc_w | length > 0) or (_effective_idxc_b | length > 0))) or (_idxc_effectively_targeted | length > 0)
     # Only add app to this CM if it targets an IDXC this CM serves (when multiple CMs exist, each gets only apps for its cluster)

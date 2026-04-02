@@ -140,10 +140,31 @@
     _app_dir_filtered: "{{ ((_app_dir_sh_filtered | default([])) + (_app_dir_filtered | default([]))) | unique | list }}"
 
 # Apply hosts_whitelist/hosts_blacklist to the full direct set so non-SH roles (e.g. forwarders) are also restricted.
+# ITSI: hosts_whitelist limits which *search heads* get the direct bundle; license_manager (and other non-SH roles) stay in scope if in base.
+- name: "Apply hosts_whitelist to direct set for {{ app_item.name }} (ITSI: filter search heads only)"
+  ansible.builtin.set_fact:
+    _app_dir_filtered: >-
+      {{
+        (
+          (_app_dir_filtered | default([])) | reject('in', (groups['role_search_head'] | default([]))) | list
+          | union(
+            (_app_dir_filtered | default([]))
+            | intersect((groups['role_search_head'] | default([])))
+            | intersect((app_item | default({})).get('hosts_whitelist', []) | default([]))
+            | list
+          )
+        ) | unique | list
+      }}
+  when:
+    - ((app_item | default({})).get('hosts_whitelist', []) | default([]) | length) > 0
+    - (app_item | default({})).get('premium_app', '') == 'itsi'
+
 - name: "Apply hosts_whitelist to full direct set for {{ app_item.name }}"
   ansible.builtin.set_fact:
     _app_dir_filtered: "{{ (_app_dir_filtered | default([])) | intersect((app_item | default({})).get('hosts_whitelist', []) | default([])) | list }}"
-  when: ((app_item | default({})).get('hosts_whitelist', []) | default([]) | length) > 0
+  when:
+    - ((app_item | default({})).get('hosts_whitelist', []) | default([]) | length) > 0
+    - (app_item | default({})).get('premium_app', '') != 'itsi'
 
 - name: "Apply hosts_blacklist to full direct set for {{ app_item.name }}"
   ansible.builtin.set_fact:

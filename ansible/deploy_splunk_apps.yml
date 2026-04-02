@@ -31,6 +31,33 @@
         (_splunkbase_credentials_check | default(false) | bool)
         or (splunk_app_deployment is defined and (splunk_app_deployment.apps | default([]) | selectattr('source', 'equalto', 'splunkbase') | list | length) > 0)
 
+# Step 0b: Set _splunk_is_deployment_client on clients (btool when deploymentclient_check, else inventory heuristic).
+- name: Detect deployment clients for DS staging whitelist
+  hosts: role_cluster_manager,role_deployer,role_heavy_forwarder,role_indexer,role_license_manager,role_monitoring_console,role_search_head,role_universal_forwarder,role_universal_forwarder_windows
+  become: true
+  become_user: root
+  gather_facts: true
+  tasks:
+    - name: Run deployment client detection (btool; sets _splunk_is_deployment_client on each host)
+      ansible.builtin.include_role:
+        name: apps_direct
+        tasks_from: detect_deployment_client.yml
+      when:
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+        - (groups['role_deployment_server'] | default([]) | length) > 0
+        - (splunk_app_deployment.deploymentclient_check | default(true)) | bool
+
+    - name: Assume deployment clients without btool (deploymentclient_check false)
+      ansible.builtin.include_role:
+        name: apps_direct
+        tasks_from: assume_deployment_client_heuristic.yml
+      when:
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+        - (groups['role_deployment_server'] | default([]) | length) > 0
+        - not ((splunk_app_deployment.deploymentclient_check | default(true)) | bool)
+
 # Step 1: Deploy apps to Deployment Server
 - name: Deploy apps to Deployment Server
   hosts: role_deployment_server

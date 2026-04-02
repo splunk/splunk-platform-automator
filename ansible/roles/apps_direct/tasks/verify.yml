@@ -19,9 +19,23 @@
     - direct_deployment
     - verify
 
-- name: Detect deployment client (btool or local heuristic when inventory has deployment_server)
+- name: Detect deployment client (btool when deploymentclient_check)
   ansible.builtin.include_tasks: detect_deployment_client.yml
-  when: (groups['role_deployment_server'] | default([]) | length) > 0
+  when:
+    - (groups['role_deployment_server'] | default([]) | length) > 0
+    - splunk_app_deployment is not defined or ((splunk_app_deployment.deploymentclient_check | default(true)) | bool)
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+
+- name: Assume deployment client without btool (deploymentclient_check false)
+  ansible.builtin.include_tasks: assume_deployment_client_heuristic.yml
+  when:
+    - (groups['role_deployment_server'] | default([]) | length) > 0
+    - splunk_app_deployment is defined
+    - not ((splunk_app_deployment.deploymentclient_check | default(true)) | bool)
   tags:
     - splunk
     - splunk_apps
@@ -70,6 +84,8 @@
     _norm: "{{ (item | default({})).get('premium_app') == 'itsi' or (item | default({})).get('itsi_content_pack') | default(false) }}"
     _roles: "{{ (item | default({})).get('itsi_content_pack') | default(false) | ternary(_cp_roles, _itsi_cp_roles) }}"
     _effective_shc_whitelist: "{{ (item | default({})).get('itsi_content_pack') and ((_itsi_apps_list | default([]) | first | default({})).get('shc_whitelist', []) | default([])) or ((item | default({})).get('shc_whitelist', []) | default([])) }}"
+    # Same as process_direct_app: ITSI hosts_whitelist limits search heads only; CP inherits ITSI list.
+    _effective_hosts_whitelist_cp_it: "{{ ((item | default({})).get('itsi_content_pack') | default(false)) | ternary(((_itsi_apps_list | default([]) | first | default({})).get('hosts_whitelist', []) | default([])), ((item | default({})).get('hosts_whitelist', []) | default([]))) }}"
     _app_item: "{{ _norm | ternary((item | default({}) | combine({'target_roles': _roles, 'deployment_target': 'direct'})), item) }}"
   when:
     - (_app_item | default({})).get('target_roles') is defined
@@ -93,8 +109,35 @@
           or (_splunk_is_deployment_client | default(false) | bool)
         )
       )) | default(false) | bool
+    - not (
+        (_direct_host_shc_member | default(false) | bool)
+        and (current_host_roles | intersect(['search_head']) | length > 0)
+        and (['search_head'] | intersect((_app_item | default({})).get('target_roles', []) | default([])) | length > 0)
+      )
+    - not (
+        (_direct_host_idxc_member | default(false) | bool)
+        and (current_host_roles | intersect(['indexer']) | length > 0)
+        and (['indexer'] | intersect((_app_item | default({})).get('target_roles', []) | default([])) | length > 0)
+      )
     - (not _norm) or (_effective_shc_whitelist | default([]) | length == 0) or (current_host_roles | intersect(['search_head']) | length == 0) or ((group_names | default([])) | select('match', '^shcluster_') | list | length > 0)
     - (not _norm) or (current_host_roles | intersect(['indexer']) | length == 0) or ((group_names | default([])) | select('match', '^idxcluster_') | list | length == 0)
+    # hosts_whitelist: same rules as main.yml / process_direct_app (non-ITSI: full intersect; ITSI/CP: search heads only).
+    - >-
+      (
+        (not (_norm | bool))
+        and (
+          ((_app_item | default({})).get('hosts_whitelist', []) | default([]) | length == 0)
+          or (inventory_hostname in ((_app_item | default({})).get('hosts_whitelist', []) | default([])))
+        )
+      )
+      or (
+        (_norm | bool)
+        and (
+          (_effective_hosts_whitelist_cp_it | default([]) | length == 0)
+          or (current_host_roles | intersect(['search_head']) | length == 0)
+          or (inventory_hostname in (_effective_hosts_whitelist_cp_it | default([])))
+        )
+      )
 
 - name: Check apps directory exists
   tags:

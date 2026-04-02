@@ -1,0 +1,4 @@
+---
+# Serverclass whitelist filtering against real deployment clients uses splunk btool when
+# splunk_app_deployment.deploymentclient_check is true (default). Set deploymentclient_check: false
+# in splunk_config.yml to skip btool and use inventory-only heuristics (see assume_deployment_client_heuristic.yml).

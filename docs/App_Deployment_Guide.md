@@ -587,6 +587,8 @@ stateOnClient = enabled
 **Smart Updates:**
 The system compares the current serverclass whitelist with the desired state and only updates if different, preventing unnecessary DS reloads.
 
+**Deployment client discovery (`splunk_app_deployment.deploymentclient_check`, default `true`):** By default, before staging apps on the deployment server, the playbook runs **`splunk btool deploymentclient`** on candidate hosts to set which ones are real phone-home clients and to filter serverclass whitelists accordingly. Set **`deploymentclient_check: false`** under **`splunk_app_deployment`** in `splunk_config.yml` to skip btool and use inventory-only rules instead (non–deployment-server hosts that are not SHC/IDXC members are treated as clients). See the section **`splunk_app_deployment.deploymentclient_check`** in [App_Deployment_Target_Filters.md](App_Deployment_Target_Filters.md).
+
 ### Verification
 
 ### Check Deployment Server

@@ -1,0 +1,29 @@
+---
+# Used when splunk_app_deployment.deploymentclient_check is false (no btool).
+# Caller must ensure at least one role_deployment_server exists in inventory.
+# Sets _splunk_is_deployment_client: true for hosts that are not the deployment server and not
+# SHC/IDXC members (same rule set as “Assume deployment client when btool unavailable” in detect_deployment_client.yml).
+
+- name: Ensure SHC/IDXC membership facts exist (parity with detect_deployment_client / Step 0b)
+  ansible.builtin.include_tasks: set_direct_cluster_membership.yml
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+
+- name: Assume deployment client from inventory (deploymentclient_check disabled, no btool)
+  ansible.builtin.set_fact:
+    _splunk_is_deployment_client: >-
+      {{
+        (
+          (inventory_hostname not in (groups['role_deployment_server'] | default([])))
+          and not (_direct_host_shc_member | default(false) | bool)
+          and not (_direct_host_idxc_member | default(false) | bool)
+        ) | bool
+      }}
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
