@@ -47,15 +47,25 @@
     _shc_effectively_targeted: "{{ _effective_shc_w if (_effective_shc_w | length > 0) else (_shc_names | reject('in', _effective_shc_b) | list) }}"
     # SHC(s) this deployer host serves (from group membership shcluster_*)
     _this_deployer_shc_names: "{{ (group_names | select('match', '^shcluster_') | list) | map('regex_replace', '^shcluster_', '') | list }}"
-  when:
-    - (_app_item | default({})).get('deployment_target', 'auto') != 'direct'
-    - (_app_item | default({})).get('target_roles', []) | intersect(['search_head']) | length > 0
-    # When hosts_whitelist is set (or ITSI's for content pack): only add to deployer if at least one SHC member is in the whitelist (else app goes via direct to standalone SH only)
-    - (_effective_hosts_whitelist | default([]) | length == 0) or ((_effective_hosts_whitelist | default([])) | intersect(_shc_member_hosts) | length > 0)
-    # When shc_whitelist or shc_blacklist is set (or ITSI's for content pack): only add to deployer if at least one SHC is targeted (else app goes via direct to standalone SH only)
-    - (not ((_effective_shc_w | length > 0) or (_effective_shc_b | length > 0))) or (_shc_effectively_targeted | length > 0)
-    # Only add app to this deployer if it targets an SHC this deployer serves (when multiple deployers exist, each gets only apps for its SHC)
-    - (_shc_effectively_targeted | intersect(_this_deployer_shc_names) | length > 0)
+    _eligible_for_deployer: >-
+      {{
+        (
+          (_app_item | default({})).get('deployment_target', 'auto') != 'direct'
+          and ((_app_item | default({})).get('target_roles', []) | intersect(['search_head']) | length > 0)
+          and (
+            (_effective_hosts_whitelist | default([]) | length == 0)
+            or ((_effective_hosts_whitelist | default([])) | intersect(_shc_member_hosts) | length > 0)
+          )
+          and (
+            not ((_effective_shc_w | length > 0) or (_effective_shc_b | length > 0))
+            or (_shc_effectively_targeted | length > 0)
+          )
+          and ((_shc_effectively_targeted | intersect(_this_deployer_shc_names) | length) > 0)
+        ) | bool
+      }}
+  when: _eligible_for_deployer | bool
+  loop_control:
+    label: "{{ (item | default({})).get('name', '?') }} — {{ 'eligible' if (_eligible_for_deployer | bool) else 'not eligible' }}"
 
 - name: Set first SHC member for post-restart playbooks (shared, from apps_common)
   ansible.builtin.include_role:

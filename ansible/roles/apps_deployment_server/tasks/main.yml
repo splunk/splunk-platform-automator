@@ -27,18 +27,28 @@
   ansible.builtin.set_fact:
     ds_apps: "{{ ds_apps + [item] }}"
   loop: "{{ splunk_app_deployment.apps | default([]) }}"
-  when:
-    - item.target_roles is defined
-    - item.deployment_target | default('auto') != 'direct'
-    # ITSI and content packs never go via deployment_server; they use direct/deployer (switch to direct when calculation would be DS).
-    - (item.premium_app | default('')) != 'itsi'
-    - not (item.itsi_content_pack | default(false))
-    # Apps that target only indexer and/or cluster_manager go via cluster manager (manager-apps), not DS.
-    - (item.target_roles | default([]) | difference(['indexer', 'cluster_manager']) | list | length) > 0
-    # Apps that target only search_head must not go via DS when all search heads are in an SHC (they go via deployer only).
-    - (item.target_roles | default([]) | difference(['search_head']) | list | length > 0) or (_ds_standalone_sh_list | default([]) | length > 0)
-    # Apps with shc_whitelist or shc_blacklist target SHC members only and go via deployer; do not add them to DS.
-    - (item.target_roles | default([]) | intersect(['search_head']) | length == 0) or ((item.shc_whitelist | default([]) | length == 0) and (item.shc_blacklist | default([]) | length == 0))
+  vars:
+    _eligible_for_ds: >-
+      {{
+        (
+          item.target_roles is defined
+          and item.deployment_target | default('auto') != 'direct'
+          and (item.premium_app | default('')) != 'itsi'
+          and not (item.itsi_content_pack | default(false))
+          and (item.target_roles | default([]) | difference(['indexer', 'cluster_manager']) | list | length) > 0
+          and (
+            (item.target_roles | default([]) | difference(['search_head']) | list | length > 0)
+            or (_ds_standalone_sh_list | default([]) | length > 0)
+          )
+          and (
+            (item.target_roles | default([]) | intersect(['search_head']) | length == 0)
+            or ((item.shc_whitelist | default([]) | length == 0) and (item.shc_blacklist | default([]) | length == 0))
+          )
+        ) | bool
+      }}
+  when: _eligible_for_ds | bool
+  loop_control:
+    label: "{{ item.name | default('?') }} — {{ 'eligible' if (_eligible_for_ds | bool) else 'not eligible' }}"
 
 - name: Debug deployment server apps
   tags:

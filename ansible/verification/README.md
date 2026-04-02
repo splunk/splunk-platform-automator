@@ -93,7 +93,7 @@ You can also run the full deploy with scope debugging (still no install/remove f
 ansible-playbook ansible/deploy_splunk_apps.yml -e debug_app_scope=true
 ```
 
-This runs the direct role in “scope only” mode and prints a per-host summary of `scope_debug_results`; deployer and other steps still run as usual.
+This runs the direct role in “scope only” mode (`scope_debug_results` is set per host; no role debug dump—use `debug_app_scope.yml` or the JSON output file to inspect scope); deployer and other steps still run as usual.
 
 **Regression testing after ITSI/content pack changes:**
 

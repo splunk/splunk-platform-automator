@@ -23,13 +23,26 @@
   ansible.builtin.set_fact:
     cm_apps_expected: "{{ cm_apps_expected + [item] }}"
   loop: "{{ splunk_app_deployment.apps | default([]) }}"
-  when:
-    - item.deployment_target | default('auto') != 'direct'
-    - >-
-      (item.premium_app | default('')) == 'itsi'
-      or (item.target_roles is defined and (
-        (item.target_roles | intersect(['indexer']) | length > 0) or (item.target_roles | intersect(['cluster_manager']) | length > 0)
-      ))
+  vars:
+    _eligible_for_cm_verify: >-
+      {{
+        (
+          item.deployment_target | default('auto') != 'direct'
+          and (
+            ((item.premium_app | default('')) == 'itsi')
+            or (
+              item.target_roles is defined
+              and (
+                (item.target_roles | intersect(['indexer']) | length > 0)
+                or (item.target_roles | intersect(['cluster_manager']) | length > 0)
+              )
+            )
+          )
+        ) | bool
+      }}
+  when: _eligible_for_cm_verify | bool
+  loop_control:
+    label: "{{ item.name | default('?') }} — {{ 'eligible' if (_eligible_for_cm_verify | bool) else 'not eligible' }}"
 
 - name: Check manager-apps directory exists
   tags:

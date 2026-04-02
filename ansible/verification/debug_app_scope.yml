@@ -96,6 +96,8 @@
       ansible.builtin.set_fact:
         _direct_scope_for_output: "{{ _direct_scope_for_output | default([]) + [{'host': item.host, 'scope_debug_results': (item.scope_debug_results | default([]) | selectattr('on_scope') | list)}] }}"
       loop: "{{ scope_report | default([]) }}"
+      loop_control:
+        label: "{{ item.host }}"
       when: scope_report is defined
 
     # deployer: list of { host, apps, apps_with_config, target_hosts } (one per deployer host)
@@ -158,12 +160,16 @@
       ansible.builtin.set_fact:
         _fail_absent: "{{ _fail_absent | default([]) + (item.scope_debug_results | default([]) | selectattr('state', 'equalto', 'absent') | selectattr('in_base') | rejectattr('on_scope') | map('combine', {'_host': item.host}) | list) }}"
       loop: "{{ scope_report | default([]) }}"
+      loop_control:
+        label: "{{ item.host }}"
       when: assert_scope_invariants | default(false) | bool
 
     - name: Build list of (host, app) where state=installed, host in filtered_hosts, but on_scope false (wrong for install)
       ansible.builtin.set_fact:
         _fail_installed: "{{ _fail_installed | default([]) + [item.1 | combine({'_host': item.0.host})] }}"
       loop: "{{ scope_report | default([]) | subelements('scope_debug_results', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.host }} — {{ item.1.app | default('?') }}"
       when:
         - assert_scope_invariants | default(false) | bool
         - (item.1.state | default('installed')) != 'absent'
