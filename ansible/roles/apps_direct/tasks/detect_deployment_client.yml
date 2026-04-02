@@ -60,24 +60,6 @@
     - direct_deployment
     - verify
 
-- name: Debug inventory Splunk vars vs path used for deploymentclient btool
-  ansible.builtin.debug:
-    msg:
-      - "deploymentclient btool path facts ({{ inventory_hostname }}) — task status ok means vars printed; skipped hosts do not run btool here"
-      - "splunk_home / splunk_install_app may be << not set >> (splunk_common leaves install_app to install roles). _apps_direct_splunk_home uses splunk_home if set, else splunk_install_dir / (splunk_install_app | default splunk or splunkforwarder for role_universal_forwarder)."
-      - "splunk_home={{ splunk_home | default('<< not set >>', true) }}"
-      - "splunk_install_dir={{ splunk_install_dir | default('<< not set >>', true) }}"
-      - "splunk_install_app={{ splunk_install_app | default('<< not set >>', true) }}"
-      - "splunk_user={{ splunk_user | default('<< not set >>', true) }}"
-      - "_apps_direct_splunk_home (effective path used for btool)={{ _apps_direct_splunk_home }}"
-      - "role_universal_forwarder={{ 'role_universal_forwarder' in (group_names | default([])) }}, role_universal_forwarder_windows={{ 'role_universal_forwarder_windows' in (group_names | default([])) }}"
-  when: not (_apps_direct_skip_deploymentclient_btool | default(false) | bool)
-  tags:
-    - splunk
-    - splunk_apps
-    - direct_deployment
-    - verify
-
 - name: Cache os_family from ansible_facts (not deprecated ansible_os_family var)
   ansible.builtin.set_fact:
     _apps_direct_os_family: "{{ (ansible_facts | default({})).get('os_family', '') | string }}"
