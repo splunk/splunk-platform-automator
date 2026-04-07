@@ -1,0 +1,232 @@
+---
+# Configure Splunk Infrastructure Monitoring (SIM) Add-on (splunk_ta_sim) via REST API.
+# API-only approach -- no filesystem writes, no restart required. SHC-compatible.
+#
+# Use from app customizations: run_playbook_after_restart: "ansible/apps_playbooks/splunk_ta_sim-configure.yml"
+# App deployment installs the app and triggers Restart splunk; this task file runs in a follow-up play after the handler.
+#
+# Can also be tested standalone via run_apps_playbook.yml:
+#   ansible-playbook ansible/run_apps_playbook.yml \
+#     -e "apps_playbook=apps_playbooks/splunk_ta_sim-configure.yml" \
+#     -e "app_name=splunk_ta_sim" \
+#     -e 'playbook_extra_vars={"o11y_realm":"us1","o11y_org_id":"ABC123","o11y_api_token":"your-api-token"}' \
+#     -l sh
+#
+# Framework vars: app_path, app_name (from post-restart context)
+# extra_vars (from customizations.extra_vars): o11y_realm, o11y_org_id, o11y_api_token
+
+- name: "Resolve SIM extra_vars (avoids template recursion)"
+  ansible.builtin.set_fact:
+    _sim_o11y_org_id: "{{ _extras.o11y_org_id | default('') }}"
+    _sim_o11y_realm: "{{ _extras.o11y_realm | default('') }}"
+    _sim_o11y_api_token: "{{ _extras.o11y_api_token | default('') }}"
+  vars:
+    _extras: "{{ customization_extra_vars if (customization_extra_vars is defined and customization_extra_vars is mapping) else ((customization_extra_vars | default('{}')) | from_json) }}"
+
+- name: "Validate required SIM extra_vars"
+  ansible.builtin.assert:
+    that:
+      - _sim_o11y_org_id | length > 0
+      - _sim_o11y_realm | length > 0
+      - _sim_o11y_api_token | length > 0
+    fail_msg: "Required extra_vars missing: o11y_org_id, o11y_realm, and o11y_api_token must all be set in customization_extra_vars (or playbook_extra_vars when using run_apps_playbook.yml)"
+
+# --- Connection lookup (search job, already API-based) ---
+
+- name: "Create connection (SIM API config lookup)"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/services/search/jobs"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      search: "| makeresults | eval org_id=\"{{ _sim_o11y_org_id }}\", realm=\"{{ _sim_o11y_realm }}\", default=1, enable=1| fields - _time | inputlookup sim_api_config_lookup append=true| dedup org_id, realm | eval default=if(org_id==\"{{ _sim_o11y_org_id }}\",1,0) | outputlookup sim_api_config_lookup"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: 201
+
+# --- Credential management via storage/passwords REST API ---
+
+- name: "Check if SIM credential exists"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/storage/passwords/splunk_ta_sim%3A{{ _sim_o11y_org_id }}%3A"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: GET
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200, 404]
+  register: _sim_cred_check
+
+- name: "Create SIM credential via API"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/storage/passwords"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      realm: "splunk_ta_sim"
+      name: "{{ _sim_o11y_org_id }}"
+      password: "{{ _sim_o11y_api_token }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200, 201]
+  when: _sim_cred_check.status == 404
+
+- name: "Update SIM credential via API"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/storage/passwords/splunk_ta_sim%3A{{ _sim_o11y_org_id }}%3A"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      password: "{{ _sim_o11y_api_token }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  when: _sim_cred_check.status == 200
+
+# --- Modular inputs: skip on SHC (inputs must run on a single SH or heavy forwarder only) ---
+
+- name: "Check if this instance is an SHC member"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/services/shcluster/member/info?output_mode=json"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: GET
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200, 404, 500, 503]
+  register: _sim_shc_check
+
+- name: "Set SHC member flag"
+  ansible.builtin.set_fact:
+    _sim_is_shc_member: "{{ _sim_shc_check.status == 200 }}"
+
+- name: "Skip modular inputs on SHC"
+  ansible.builtin.debug:
+    msg: "SHC member detected -- skipping modular input enablement and custom input creation (inputs must run on a single SH or heavy forwarder)"
+  when: _sim_is_shc_member | bool
+
+# --- Modular inputs: list and enable existing (standalone SH / HF only) ---
+
+- name: "Get all Modular Inputs from API"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/data/inputs/sim_modular_input?output_mode=json"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: GET
+    return_content: true
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  register: _sim_inputs_response
+  when: not _sim_is_shc_member | bool
+
+- name: "Create sim_modular_inputs list"
+  ansible.builtin.set_fact:
+    sim_modular_inputs_list: "{{ (_sim_inputs_response.content | from_json) | json_query('entry[*].name') }}"
+  when: not _sim_is_shc_member | bool
+
+- name: "Enable all SIM modular inputs via properties API"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/properties/inputs/{{ ('sim_modular_input://' + item) | urlencode | regex_replace('/', '%2F') }}"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      disabled: "0"
+    return_content: true
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  loop: "{{ sim_modular_inputs_list | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  when: not _sim_is_shc_member | bool
+
+# --- Custom modular inputs: create-or-update (standalone SH / HF only) ---
+
+- name: "Define custom SIM modular inputs"
+  when: not _sim_is_shc_member | bool
+  ansible.builtin.set_fact:
+    _sim_custom_inputs:
+      - name: "Splunk Application Performance Monitoring (APM) Errors"
+        params:
+          additional_meta_data_flag: "1"
+          index: "sim_metrics"
+          interval: "300"
+          metric_resolution: "-1"
+          sim_max_delay: "-1"
+          sim_modinput_restart_interval_seconds: "3600"
+          disabled: "0"
+          signal_flow_programs: "\"error_durations_p99 = data('service.request' + '.duration.ns.' + 'p99', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'true'), rollup='max').mean(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='error_durations_p99') ; non_error_durations_p99 = data('service.request' + '.duration.ns.' + 'p99', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'false'), rollup='max').mean(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='non_error_durations_p99') ; error_durations = data('service.request' + '.duration.ns.' + 'median', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'true'), rollup='max').mean(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='error_durations') ; non_error_durations = data('service.request' + '.duration.ns.' + 'median', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'false'), rollup='max').mean(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='non_error_durations') ; error_counts = data('service.request' + '.count', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'true'), rollup='sum').sum(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='error_counts') ; non_error_counts = data('service.request' + '.count', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'false'), rollup='sum').sum(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='non_error_counts')\""
+      - name: "Splunk Application Performance Monitoring (APM) Rate (Throughput)"
+        params:
+          additional_meta_data_flag: "1"
+          index: "sim_metrics"
+          interval: "300"
+          metric_resolution: "-1"
+          sim_max_delay: "-1"
+          sim_modinput_restart_interval_seconds: "3600"
+          disabled: "0"
+          signal_flow_programs: "\"thruput_avg_rate = data('service.request.count', filter=filter('sf_environment', '*') and filter('sf_service', '*') and (not filter('sf_dimensionalized', '*')), rollup='rate').sum(by=['sf_service', 'sf_environment']).publish(label='thruput_avg_rate')\""
+      - name: "Splunk Real User Monitoring (RUM) Inputs"
+        params:
+          additional_meta_data_flag: "1"
+          index: "sim_metrics"
+          interval: "300"
+          metric_resolution: "-1"
+          sim_max_delay: "-1"
+          sim_modinput_restart_interval_seconds: "3600"
+          disabled: "0"
+          signal_flow_programs: "\"data('rum.page_view.count').publish(label='rum_page_view'); data('rum.client_error.count').publish(label='rum_client_error'); data('rum.page_view.time.ns.p75').scale(0.000001).publish(label='rum_page_view_time'); data('rum.resource_request.count').publish(label='rum_resource_request'); data('rum.resource_request.time.ns.p75').scale(0.000001).publish(label='rum_resource_request_time'); data('rum.crash.count').publish(label='rum_crash_count'); data('rum.app_error.count').publish(label='rum_app_error_count'); data('rum.cold_start.time.ns.p75').scale(0.000001).publish(label='rum_cold_start_time'); data('rum.cold_start.count').publish(label='rum_cold_start_count'); data('rum.webvitals_lcp.time.ns.p75').scale(0.000001).publish(label='rum_webvitals_lcp'); data('rum.webvitals_cls.score.p75').publish(label='rum_webvitals_cls'); data('rum.webvitals_fid.time.ns.p75').scale(0.000001).publish(label='rum_webvitals_fid')\""
+      - name: "Splunk Synthetics Input for Observability Cloud"
+        params:
+          additional_meta_data_flag: "1"
+          index: "sim_metrics"
+          interval: "300"
+          metric_resolution: "-1"
+          sim_max_delay: "-1"
+          sim_modinput_restart_interval_seconds: "3600"
+          disabled: "0"
+          signal_flow_programs: "\"data('*', filter=filter('sf_product', 'synthetics') and filter('test_type', '*')).publish()\""
+
+- name: "Create custom SIM modular input stanzas via configs API (skip existing)"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/configs/conf-inputs"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    body_format: form-urlencoded
+    body: "{{ {'name': 'sim_modular_input://' + item.name} | combine(item.params) }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200, 201, 409]
+  loop: "{{ _sim_custom_inputs }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _sim_custom_create
+  when: not _sim_is_shc_member | bool
+
+- name: "Update existing custom SIM modular inputs via configs API"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/configs/conf-inputs/{{ ('sim_modular_input://' + item.item.name) | urlencode | regex_replace('/', '%2F') }}"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    body_format: form-urlencoded
+    body: "{{ item.item.params }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  loop: "{{ _sim_custom_create.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when:
+    - not _sim_is_shc_member | bool
+    - item.status == 409
