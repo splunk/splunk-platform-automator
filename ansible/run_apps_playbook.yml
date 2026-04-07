@@ -12,19 +12,6 @@
 #   app_path_override: override app_path (default: {{ splunk_home }}/etc/apps/{{ app_name }})
 #   playbook_extra_vars: dict for the playbook (default: {}), e.g. '{"generic_alerts_index":"generic_alerts"}'
 #     (use this name to avoid template recursion; it is passed to the playbook as customization_extra_vars)
-#
-# Example (from repo root, with inventory and config):
-#   ansible-playbook -i ansible/inventory ansible/run_apps_playbook.yml \
-#     -e "apps_playbook=apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml" \
-#     -e "app_name=DA-ITSI-CP-monitoring-alerting" \
-#     -l sh
-#
-# Example with extra_vars for the configure playbook:
-#   ansible-playbook -i ansible/inventory ansible/run_apps_playbook.yml \
-#     -e "apps_playbook=apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml" \
-#     -e "app_name=DA-ITSI-CP-monitoring-alerting" \
-#     -e 'playbook_extra_vars={"generic_alerts_index":"generic_alerts"}' \
-#     -l sh
 
 - name: Run apps playbook (standalone)
   hosts: "{{ target_group | default('role_search_head') }}"

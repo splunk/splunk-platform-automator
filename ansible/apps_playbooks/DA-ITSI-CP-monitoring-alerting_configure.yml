@@ -5,6 +5,19 @@
 #
 # Framework vars: app_path, app_name (from post-restart context)
 # Optional extra_vars: generic_alerts_index (default: generic_alerts)
+#
+# Can also be tested standalone via run_apps_playbook.yml:
+#   ansible-playbook ansible/run_apps_playbook.yml \
+#     -e "apps_playbook=apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml" \
+#     -e "app_name=DA-ITSI-CP-monitoring-alerting" \
+#     -l sh
+#
+#   With extra_vars:
+#   ansible-playbook ansible/run_apps_playbook.yml \
+#     -e "apps_playbook=apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml" \
+#     -e "app_name=DA-ITSI-CP-monitoring-alerting" \
+#     -e 'playbook_extra_vars={"generic_alerts_index":"generic_alerts"}' \
+#     -l sh
 
 - name: "Resolve DA-ITSI-CP-monitoring-alerting extra_vars"
   ansible.builtin.set_fact:
