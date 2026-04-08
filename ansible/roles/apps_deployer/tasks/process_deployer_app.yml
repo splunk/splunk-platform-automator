@@ -103,7 +103,7 @@
     - splunk_apps
     - deployer
   ansible.builtin.set_fact:
-    _pending_post_restart_first_shc: "{{ (_pending_post_restart_first_shc | default([])) + [{'playbook': _cp_playbook, 'app_path': _dep_shc_apps_base + '/' + _cp_app_name, 'app_name': _cp_app_name, 'extra_vars': _cp_extra_vars}] }}"
+    _pending_post_restart_first_shc: "{{ (_pending_post_restart_first_shc | default([])) + [{'playbook': _cp_playbook, 'app_path': _dep_shc_apps_base + '/' + _cp_app_name, 'app_name': _cp_app_name, 'extra_vars': _cp_extra_vars, 'app_updated_this_run': (update_needed | default(false) | bool)}] }}"
   loop: "{{ (app_item | default({})).get('content_pack_apps', []) }}"
   loop_control:
     loop_var: cp_app
@@ -129,6 +129,14 @@
     - (app_item | default({})).get('premium_app', '') != 'itsi'
     - not (app_item | default({})).get('itsi_content_pack', false)
 
+- name: "Capture install-level update_needed for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+  ansible.builtin.set_fact:
+    _app_install_update_needed: "{{ update_needed | default(false) | bool }}"
+
 - name: "Apply customizations for {{ app_item.name }}"
   ansible.builtin.include_role:
     name: apps_common
@@ -146,7 +154,7 @@
     - splunk_apps
     - deployer
   ansible.builtin.set_fact:
-    post_restart_playbooks_to_run: "{{ (hostvars[_first_shc_member].post_restart_playbooks_to_run | default([])) + [{'playbook': app_item.customizations.run_playbook_after_restart, 'app_path': _dep_shc_apps_base + '/' + app_item.name, 'app_name': app_item.name, 'extra_vars': (app_item.customizations.extra_vars | default({}))}] }}"
+    post_restart_playbooks_to_run: "{{ (hostvars[_first_shc_member].post_restart_playbooks_to_run | default([])) + [{'playbook': app_item.customizations.run_playbook_after_restart, 'app_path': _dep_shc_apps_base + '/' + app_item.name, 'app_name': app_item.name, 'extra_vars': (app_item.customizations.extra_vars | default({})) | combine({'force_run_playbook_after_restart': (app_item.customizations.force_run_playbook_after_restart | default(false))}), 'app_updated_this_run': (_app_install_update_needed | default(false) | bool)}] }}"
   delegate_to: "{{ _first_shc_member }}"
   when:
     - _app_on_deployer_scope | default(false)
@@ -167,7 +175,7 @@
     - splunk_apps
     - deployer
   ansible.builtin.set_fact:
-    _pending_post_restart_first_shc: "{{ (_pending_post_restart_first_shc | default([])) + [{'playbook': app_item.customizations.run_playbook_after_restart, 'app_path': _dep_shc_apps_base_std + '/' + app_item.name, 'app_name': app_item.name, 'extra_vars': (app_item.customizations.extra_vars | default({}))}] }}"
+    _pending_post_restart_first_shc: "{{ (_pending_post_restart_first_shc | default([])) + [{'playbook': app_item.customizations.run_playbook_after_restart, 'app_path': _dep_shc_apps_base_std + '/' + app_item.name, 'app_name': app_item.name, 'extra_vars': (app_item.customizations.extra_vars | default({})) | combine({'force_run_playbook_after_restart': (app_item.customizations.force_run_playbook_after_restart | default(false))}), 'app_updated_this_run': (_app_install_update_needed | default(false) | bool)}] }}"
   when:
     - _app_on_deployer_scope | default(false)
     - app_state == 'installed'

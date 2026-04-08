@@ -360,7 +360,7 @@
         - splunk_apps
         - itsi_content_pack
       ansible.builtin.set_fact:
-        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': 'ansible/roles/apps_itsi_content_pack/tasks/cp_api_install.yml', 'app_path': cp_splunk_home + '/' + cp_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': {'version': (cp_expected_versions | default({})).get(item.name, (cp_version_map | default({})).get(item.name, '') | trim) | default('1.0'), 'install_all': (item.content_pack_api | default({})).install_all | default(cp_api_install_all), 'saved_search_action': (item.content_pack_api | default({})).saved_search_action | default(cp_api_saved_search_action), 'backfill': (item.content_pack_api | default({})).backfill | default(cp_api_backfill), 'resolution': (item.content_pack_api | default({})).resolution | default(cp_api_resolution), 'enabled': (item.content_pack_api | default({})).enabled | default(cp_api_enabled), 'prefix': (item.content_pack_api | default({})).prefix | default(cp_api_prefix)}}] }}"
+        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': 'ansible/roles/apps_itsi_content_pack/tasks/cp_api_install.yml', 'app_path': cp_splunk_home + '/' + cp_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': {'version': (cp_expected_versions | default({})).get(item.name, (cp_version_map | default({})).get(item.name, '') | trim) | default('1.0'), 'install_all': (item.content_pack_api | default({})).install_all | default(cp_api_install_all), 'saved_search_action': (item.content_pack_api | default({})).saved_search_action | default(cp_api_saved_search_action), 'backfill': (item.content_pack_api | default({})).backfill | default(cp_api_backfill), 'resolution': (item.content_pack_api | default({})).resolution | default(cp_api_resolution), 'enabled': (item.content_pack_api | default({})).enabled | default(cp_api_enabled), 'prefix': (item.content_pack_api | default({})).prefix | default(cp_api_prefix)}, 'app_updated_this_run': (cp_update_needed | default(true) | bool)}] }}"
       loop: "{{ cp_content_pack_apps_to_install | default([]) }}"
       loop_control:
         label: "{{ item.name }}"
@@ -375,7 +375,7 @@
         - splunk_apps
         - itsi_content_pack
       ansible.builtin.set_fact:
-        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': item.customizations.run_playbook_after_restart, 'app_path': cp_splunk_home + '/' + cp_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': (item.customizations.extra_vars | default({})) | combine({'force_run_playbook_after_restart': (item.customizations.force_run_playbook_after_restart | default(false))})}] }}"
+        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': item.customizations.run_playbook_after_restart, 'app_path': cp_splunk_home + '/' + cp_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': (item.customizations.extra_vars | default({})) | combine({'force_run_playbook_after_restart': (item.customizations.force_run_playbook_after_restart | default(false))}), 'app_updated_this_run': (cp_update_needed | default(true) | bool)}] }}"
       loop: "{{ cp_content_pack_apps }}"
       loop_control:
         label: "{{ item.name }}: {{ (item.customizations | default({})).run_playbook_after_restart | default('(none)') }} force={{ (item.customizations | default({})).force_run_playbook_after_restart | default(false) }}"
@@ -407,7 +407,7 @@
         - splunk_apps
         - itsi_content_pack
       ansible.builtin.set_fact:
-        _pending_post_restart_first_shc: "{{ (_pending_post_restart_first_shc | default([])) + [{'playbook': 'ansible/roles/apps_itsi_content_pack/tasks/cp_api_install.yml', 'app_path': _shc_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': {'version': (cp_expected_versions | default({})).get(item.name, (cp_version_map | default({})).get(item.name, '') | trim) | default('1.0'), 'install_all': (item.content_pack_api | default({})).install_all | default(cp_api_install_all), 'saved_search_action': (item.content_pack_api | default({})).saved_search_action | default(cp_api_saved_search_action), 'backfill': (item.content_pack_api | default({})).backfill | default(cp_api_backfill), 'resolution': (item.content_pack_api | default({})).resolution | default(cp_api_resolution), 'enabled': (item.content_pack_api | default({})).enabled | default(cp_api_enabled), 'prefix': (item.content_pack_api | default({})).prefix | default(cp_api_prefix)}}] }}"
+        _pending_post_restart_first_shc: "{{ (_pending_post_restart_first_shc | default([])) + [{'playbook': 'ansible/roles/apps_itsi_content_pack/tasks/cp_api_install.yml', 'app_path': _shc_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': {'version': (cp_expected_versions | default({})).get(item.name, (cp_version_map | default({})).get(item.name, '') | trim) | default('1.0'), 'install_all': (item.content_pack_api | default({})).install_all | default(cp_api_install_all), 'saved_search_action': (item.content_pack_api | default({})).saved_search_action | default(cp_api_saved_search_action), 'backfill': (item.content_pack_api | default({})).backfill | default(cp_api_backfill), 'resolution': (item.content_pack_api | default({})).resolution | default(cp_api_resolution), 'enabled': (item.content_pack_api | default({})).enabled | default(cp_api_enabled), 'prefix': (item.content_pack_api | default({})).prefix | default(cp_api_prefix)}, 'app_updated_this_run': (cp_update_needed | default(true) | bool)}] }}"
       loop: "{{ cp_content_pack_apps_to_install | default([]) }}"
       loop_control:
         label: "{{ item.name }}"
@@ -425,7 +425,7 @@
         - splunk_apps
         - itsi_content_pack
       ansible.builtin.set_fact:
-        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': item.customizations.run_playbook_after_restart, 'app_path': _shc_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': (item.customizations.extra_vars | default({})) | combine({'force_run_playbook_after_restart': (item.customizations.force_run_playbook_after_restart | default(false))})}] }}"
+        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': item.customizations.run_playbook_after_restart, 'app_path': _shc_apps_base + '/' + item.name, 'app_name': item.name, 'extra_vars': (item.customizations.extra_vars | default({})) | combine({'force_run_playbook_after_restart': (item.customizations.force_run_playbook_after_restart | default(false))}), 'app_updated_this_run': (cp_update_needed | default(true) | bool)}] }}"
       loop: "{{ cp_content_pack_apps }}"
       loop_control:
         loop_var: item

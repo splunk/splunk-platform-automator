@@ -235,6 +235,14 @@
 
     # Version status (App / Current / Expected / Update / Force / Location) is emitted by apps_common install_from_* (same for all deployment mechanisms).
 
+    - name: "Capture install-level update_needed for {{ app_item.name }}"
+      tags:
+        - splunk
+        - splunk_apps
+        - direct_deployment
+      ansible.builtin.set_fact:
+        _app_install_update_needed: "{{ update_needed | default(false) | bool }}"
+
     - name: "Apply customizations for {{ app_item.name }}"
       ansible.builtin.include_role:
         name: apps_common
@@ -270,7 +278,7 @@
         - splunk_apps
         - direct_deployment
       ansible.builtin.set_fact:
-        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': app_item.customizations.run_playbook_after_restart, 'app_path': customization_app_path, 'app_name': app_item.name, 'extra_vars': (app_item.customizations.extra_vars | default({}))}] }}"
+        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': app_item.customizations.run_playbook_after_restart, 'app_path': customization_app_path, 'app_name': app_item.name, 'extra_vars': (app_item.customizations.extra_vars | default({})) | combine({'force_run_playbook_after_restart': (app_item.customizations.force_run_playbook_after_restart | default(false))}), 'app_updated_this_run': (_app_install_update_needed | default(false) | bool)}] }}"
       when:
         - _app_on_direct_scope | default(false)
         - app_state == 'installed'
@@ -285,7 +293,7 @@
         - splunk_apps
         - direct_deployment
       ansible.builtin.set_fact:
-        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': _cp_item.customizations.run_playbook_after_restart, 'app_path': _cp_app_path, 'app_name': _cp_item.name, 'extra_vars': (_cp_item.customizations.extra_vars | default({})) | combine({'force_run_playbook_after_restart': (_cp_item.customizations.force_run_playbook_after_restart | default(false))})}] }}"
+        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': _cp_item.customizations.run_playbook_after_restart, 'app_path': _cp_app_path, 'app_name': _cp_item.name, 'extra_vars': (_cp_item.customizations.extra_vars | default({})) | combine({'force_run_playbook_after_restart': (_cp_item.customizations.force_run_playbook_after_restart | default(false))}), 'app_updated_this_run': (_app_install_update_needed | default(false) | bool)}] }}"
       loop: "{{ app_item.content_pack_apps | default([]) }}"
       loop_control:
         loop_var: _cp_item

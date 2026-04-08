@@ -135,6 +135,15 @@
       loop_control:
         label: "{{ item }}"
 
+    # Pre-compute whether any post-restart playbook will actually execute
+    # (entries only actionable when app_updated_this_run or force_run_playbook_after_restart).
+    - name: "Check if any post-restart playbooks will actually execute"
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.set_fact:
+        _has_actionable_post_restart: "{% set ns = namespace(found=false) %}{% for item in (post_restart_playbooks_to_run | default([])) %}{% if (item.app_updated_this_run | default(true) | bool) or ((item.extra_vars | default({})).get('force_run_playbook_after_restart', false) | bool) %}{% set ns.found = true %}{% endif %}{% endfor %}{{ ns.found }}"
+
     # Wait for splunkd once per host before any post-restart playbook (e.g. cp_api_install) runs.
     - name: "Wait for splunkd before post-restart playbooks (once per host)"
       tags:
@@ -150,7 +159,7 @@
             name: splunk_common
             tasks_from: wait_for_splunkd_full
       when:
-        - (post_restart_playbooks_to_run | default([])) | length > 0
+        - _has_actionable_post_restart | default(false) | bool
         - inventory_hostname not in (groups['role_deployer'] | default([]))
 
     # On SHC members, wait for cluster ready once before any post-restart playbook (e.g. cp_api_install) runs.
@@ -183,7 +192,7 @@
             not (((_cp_shc_status.json | default({}) | json_query('entry[0].content.captain.service_ready_flag') | default(false)) | bool)
             and ((_cp_shc_status.json | default({}) | json_query('entry[0].content.captain.rolling_restart_flag') | default(1)) == 0))
       when:
-        - (post_restart_playbooks_to_run | default([])) | length > 0
+        - _has_actionable_post_restart | default(false) | bool
         - inventory_hostname not in (groups['role_deployer'] | default([]))
         - (group_names | select('match', '^shcluster_') | list | length) > 0
 
@@ -204,8 +213,11 @@
       when:
         - (post_restart_playbooks_to_run | default([])) | length > 0
         - inventory_hostname not in (groups['role_deployer'] | default([]))
+        - (_cp_item.app_updated_this_run | default(true) | bool) or ((_cp_item.extra_vars | default({})).get('force_run_playbook_after_restart', false) | bool)
 
-    # Run run_playbook_after_restart (configure) playbooks only when pack was not already installed OR force_run_playbook_after_restart is true (content_pack_already_installed was set by cp_api_install task above).
+    # Run run_playbook_after_restart (configure) playbooks:
+    # - Normal apps: only when app was updated this run (app_updated_this_run) OR force_run_playbook_after_restart is true
+    # - Content packs: only when pack was not already installed (content_pack_already_installed) OR force_run_playbook_after_restart is true
     - name: "Run run_playbook_after_restart (configure) for app"
       tags:
         - splunk
@@ -222,8 +234,10 @@
       when:
         - (post_restart_playbooks_to_run | default([])) | length > 0
         - inventory_hostname not in (groups['role_deployer'] | default([]))
-        # Run when pack was not already installed OR force_run_playbook_after_restart is true
-        - (not ((content_pack_already_installed | default({})).get(_cfg_item.app_name, false) | bool)) or ((_cfg_item.extra_vars | default({})).get('force_run_playbook_after_restart', false) | bool)
+        # Normal apps: app_updated_this_run gates (defaults true for content pack entries that don't set it)
+        # Content packs: content_pack_already_installed gates (defaults false for normal app entries)
+        # Either type: force_run_playbook_after_restart overrides both gates
+        - ((_cfg_item.app_updated_this_run | default(true) | bool) or ((_cfg_item.extra_vars | default({})).get('force_run_playbook_after_restart', false) | bool)) and ((not ((content_pack_already_installed | default({})).get(_cfg_item.app_name, false) | bool)) or ((_cfg_item.extra_vars | default({})).get('force_run_playbook_after_restart', false) | bool))
 
 # Final summary
 - name: Deployment summary

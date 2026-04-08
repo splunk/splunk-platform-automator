@@ -11,6 +11,30 @@ This document describes how to run **apps playbooks** (e.g. `*_configure.yml` un
 
 Both types of playbooks receive the same variables when invoked by the framework: `app_path`, `app_name`, and optionally `customization_extra_vars` (from `extra_vars` in app customizations).
 
+### Conditional execution: `force_run_playbook` / `force_run_playbook_after_restart`
+
+By default, `run_playbook` and `run_playbook_after_restart` only execute when the app is being installed or updated during this run (`update_needed` is true). If the app is already installed at the expected version and nothing changed, the playbooks are skipped.
+
+To force execution regardless of install status, set the corresponding force flag in `customizations`:
+
+| Flag | Applies to | Default | Effect |
+|------|-----------|---------|--------|
+| **`force_run_playbook`** | `run_playbook` | `false` | When `true`, the playbook runs even if the app was already installed at the expected version. |
+| **`force_run_playbook_after_restart`** | `run_playbook_after_restart` | `false` | When `true`, the post-restart playbook runs even if the app was already installed. Also applies to ITSI content pack apps. |
+
+Example configuration:
+
+```yaml
+- name: "my_app"
+  source: splunkbase
+  app_id: 1234
+  customizations:
+    run_playbook: "ansible/apps_playbooks/my_app-configure.yml"
+    force_run_playbook: true
+    run_playbook_after_restart: "ansible/apps_playbooks/my_app-post-configure.yml"
+    force_run_playbook_after_restart: false
+```
+
 ## Wrapper: `run_apps_playbook.yml`
 
 **`ansible/run_apps_playbook.yml`** runs a single apps playbook in isolation (no full app deployment). Use it to:

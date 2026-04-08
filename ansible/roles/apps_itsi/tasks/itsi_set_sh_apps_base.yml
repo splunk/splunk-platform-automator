@@ -23,4 +23,4 @@
     run_cp_api_on_this_host: "{{ (inventory_hostname not in (groups['role_deployer'] | default([]))) and (inventory_hostname in (groups['role_search_head'] | default([]))) and ((group_names | select('match', '^shcluster_') | list | length) == 0 or inventory_hostname == _first_shc_member) }}"
   vars:
     _itsi_app_from_config: "{{ (splunk_app_deployment.apps | default([]) | selectattr('name', 'equalto', (app_item | default({})).get('name')) | list | first) | default({}) }}"
-    _shc_rolling_restart_value: "{{ (app_item | default({})).get('shc_rolling_restart') | default((_itsi_app_from_config).get('shc_rolling_restart', false)) }}"
+    _shc_rolling_restart_value: "{{ (app_item | default({})).get('shc_rolling_restart', (_itsi_app_from_config).get('shc_rolling_restart', false)) }}"

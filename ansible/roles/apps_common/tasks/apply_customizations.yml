@@ -4,12 +4,18 @@
 # Called from apps_direct, apps_deployer, apps_cluster_manager, apps_deployment_server
 # after the app is installed. Include only when app_item.customizations is defined.
 
-- name: "Set app path for customizations"
+- name: "Reset customization state for {{ app_item.name }}"
   tags:
     - splunk
     - splunk_apps
   ansible.builtin.set_fact:
+    _install_update_needed: "{{ update_needed | default(false) | bool }}"
     customization_app_path: "{{ app_path | default(app_target_path) }}"
+    app_local_config_flat: []
+    customization_remove_result: {}
+    customization_local_dir_result: {}
+    customization_local_config_result: {}
+    customization_update_indexes_changed: false
 
 # --- 1) Remove files/directories from the app ---
 - name: "Remove paths from app {{ app_item.name }} (customizations)"
@@ -112,6 +118,7 @@
   when:
     - app_item.customizations.run_playbook is defined
     - app_item.customizations.run_playbook | length > 0
+    - (_install_update_needed | default(true) | bool) or (app_item.customizations.force_run_playbook | default(false) | bool)
 
 # run_playbook_after_restart is registered only from apps_direct (process_direct_app.yml)
 # so it runs on the target host after the handler. DS/Deployer/CM do not register it.
