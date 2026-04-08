@@ -127,6 +127,8 @@
   ansible.builtin.set_fact:
     _dep_inst_n: "{{ _dep_inst_n | default([]) + [{'premium_app': '', 'itsi_content_pack': false} | combine(item)] }}"
   loop: "{{ _dep_inst | default([]) }}"
+  loop_control:
+    label: "{{ (item | default({})).get('name', '?') }}"
   when: deployer_apps | length > 0
 
 - name: "Normalize deployer absent list for sort"
@@ -137,6 +139,8 @@
   ansible.builtin.set_fact:
     _dep_abs_n: "{{ _dep_abs_n | default([]) + [{'premium_app': '', 'itsi_content_pack': false} | combine(item)] }}"
   loop: "{{ _dep_abs | default([]) }}"
+  loop_control:
+    label: "{{ (item | default({})).get('name', '?') }}"
   when: deployer_apps | length > 0
 
 # Inline sort using normalized lists so _dep_inst_n/_dep_abs_n have default keys and selectattr does not fail.
