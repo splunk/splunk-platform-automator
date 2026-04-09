@@ -11,14 +11,15 @@ This document describes how to run **apps playbooks** (e.g. `*_configure.yml` un
 
 Both types of playbooks receive the same variables when invoked by the framework: `app_path`, `app_name`, and optionally `customization_extra_vars` (from `extra_vars` in app customizations).
 
-### Conditional execution: `force_run_playbook` / `force_run_playbook_after_restart`
+### Conditional execution: force flags
 
-By default, `run_playbook` and `run_playbook_after_restart` only execute when the app is being installed or updated during this run (`update_needed` is true). If the app is already installed at the expected version and nothing changed, the playbooks are skipped.
+By default, `local_configs`, `run_playbook`, and `run_playbook_after_restart` only execute when the app is being installed or updated during this run (`update_needed` is true). If the app is already installed at the expected version and nothing changed, these customizations are skipped.
 
 To force execution regardless of install status, set the corresponding force flag in `customizations`:
 
 | Flag | Applies to | Default | Effect |
 |------|-----------|---------|--------|
+| **`force_local_configs`** | `local_configs` | `false` | When `true`, local config files are written even if the app was already installed at the expected version. |
 | **`force_run_playbook`** | `run_playbook` | `false` | When `true`, the playbook runs even if the app was already installed at the expected version. |
 | **`force_run_playbook_after_restart`** | `run_playbook_after_restart` | `false` | When `true`, the post-restart playbook runs even if the app was already installed. Also applies to ITSI content pack apps. |
 
@@ -29,6 +30,11 @@ Example configuration:
   source: splunkbase
   app_id: 1234
   customizations:
+    local_configs:
+      inputs.conf:
+        default:
+          disabled: "false"
+    force_local_configs: true
     run_playbook: "ansible/apps_playbooks/my_app-configure.yml"
     force_run_playbook: true
     run_playbook_after_restart: "ansible/apps_playbooks/my_app-post-configure.yml"

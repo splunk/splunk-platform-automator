@@ -32,42 +32,44 @@
     - app_item.customizations.remove | length > 0
 
 # --- 2) Local configs: create config files in app's local/ folder ---
-- name: "Ensure local directory exists for app {{ app_item.name }}"
-  tags:
-    - splunk
-    - splunk_apps
-  ansible.builtin.file:
-    path: "{{ customization_app_path }}/local"
-    state: directory
-    mode: '0755'
-    owner: "{{ splunk_user | default('splunk') }}"
-    group: "{{ splunk_group | default('splunk') }}"
-  register: customization_local_dir_result
-  when: app_item.customizations.local_configs is defined
+- block:
+    - name: "Ensure local directory exists for app {{ app_item.name }}"
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.file:
+        path: "{{ customization_app_path }}/local"
+        state: directory
+        mode: '0755'
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+      register: customization_local_dir_result
 
-- name: "Build flattened list of local_configs (path, section, option, value)"
-  tags:
-    - splunk
-    - splunk_apps
-  ansible.builtin.set_fact:
-    app_local_config_flat: "{% set ns = namespace(list=[]) %}{% for filename, sections in app_item.customizations.local_configs.items() %}{% for section_name, opts in sections.items() %}{% for k, v in opts.items() %}{% set _ = ns.list.append({'path': customization_app_path + '/local/' + filename, 'section': section_name, 'option': k, 'value': v | string}) %}{% endfor %}{% endfor %}{% endfor %}{{ ns.list }}"
-  when: app_item.customizations.local_configs is defined
+    - name: "Build flattened list of local_configs (path, section, option, value)"
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.set_fact:
+        app_local_config_flat: "{% set ns = namespace(list=[]) %}{% for filename, sections in app_item.customizations.local_configs.items() %}{% for section_name, opts in sections.items() %}{% for k, v in opts.items() %}{% set _ = ns.list.append({'path': customization_app_path + '/local/' + filename, 'section': section_name, 'option': k, 'value': v | string}) %}{% endfor %}{% endfor %}{% endfor %}{{ ns.list }}"
 
-- name: "Set local config option in app {{ app_item.name }}"
-  tags:
-    - splunk
-    - splunk_apps
-  community.general.ini_file:
-    path: "{{ item.path }}"
-    section: "{{ item.section }}"
-    option: "{{ item.option }}"
-    value: "{{ item.value }}"
-    mode: '0600'
-    owner: "{{ splunk_user | default('splunk') }}"
-    group: "{{ splunk_group | default('splunk') }}"
-  loop: "{{ app_local_config_flat | default([]) }}"
-  register: customization_local_config_result
-  when: app_local_config_flat is defined and app_local_config_flat | length > 0
+    - name: "Set local config option in app {{ app_item.name }}"
+      tags:
+        - splunk
+        - splunk_apps
+      community.general.ini_file:
+        path: "{{ item.path }}"
+        section: "{{ item.section }}"
+        option: "{{ item.option }}"
+        value: "{{ item.value }}"
+        mode: '0600'
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+      loop: "{{ app_local_config_flat | default([]) }}"
+      register: customization_local_config_result
+      when: app_local_config_flat is defined and app_local_config_flat | length > 0
+  when:
+    - app_item.customizations.local_configs is defined
+    - (_install_update_needed | default(true) | bool) or (app_item.customizations.force_local_configs | default(false) | bool)
 
 # --- 4) update_indexes: copy default/indexes.conf to local/ and set homePath/coldPath (normal apps only) ---
 - name: "Update indexes.conf for app {{ app_item.name }} (customizations.update_indexes)"
