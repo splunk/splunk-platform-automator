@@ -60,6 +60,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
   - **Lookup plugin**: Custom lookup plugin `spa_vault_decrypt` for playbooks that load config via `include_vars` (e.g. Terraform AWS credentials in `provision_terraform_aws.yml` and `destroy_terraform_aws.yml`); lookup plugin path set in `ansible.cfg` via `lookup_plugins = ./ansible/plugins/lookup`.
   - **Docs**: [Secrets_and_Vault.md](docs/Secrets_and_Vault.md), [Secrets_Vault_Concept.md](docs/Secrets_Vault_Concept.md).
 
+- **Terraform AWS** – Optional `subnet_id` for VPC subnet placement:
+  - New `terraform.aws.subnet_id` option in `splunk_config.yml` (global and per-host)
+  - Instances are placed in the specified subnet when set; otherwise AWS uses the default subnet
+  - Documented in [Ansible_Terraform_AWS_Integration.md](docs/Ansible_Terraform_AWS_Integration.md) and [terraform/aws/README.md](terraform/aws/README.md)
+
 ### Fixed
 
 - Fixed missing outputs.conf configuration for Splunk 9.2+ on Deployment Servers not acting as indexers

@@ -17,6 +17,11 @@ ssh_username = "{{ terraform.aws.ssh_username | default(default_config.terraform
 # Security Groups
 security_group_names = {{ terraform.aws.security_group_names | default(default_config.terraform.aws.security_group_names) | to_json }}
 
+{% if terraform.aws.subnet_id is defined %}
+# Subnet ID
+subnet_id = "{{ terraform.aws.subnet_id }}"
+
+{% endif %}
 # Global Tags
 tags = {{ terraform.aws.tags | default(default_config.terraform.aws.tags | default({})) | to_json }}
 
@@ -73,6 +78,9 @@ host_configs = {
 {% endif %}
 {% if host_aws.ssh_private_key_file is defined or global_aws.ssh_private_key_file is defined or default_aws.ssh_private_key_file is defined %}
     ssh_private_key_file  = "{{ host_aws.ssh_private_key_file | default(global_aws.ssh_private_key_file | default(default_aws.ssh_private_key_file)) }}"
+{% endif %}
+{% if host_aws.subnet_id is defined %}
+    subnet_id             = "{{ host_aws.subnet_id }}"
 {% endif %}
     root_volume_size      = {{ host_aws.root_volume_size | default(global_aws.root_volume_size | default(default_aws.root_volume_size | default(50))) }}
     root_volume_type      = "{{ host_aws.root_volume_type | default(global_aws.root_volume_type | default(default_aws.root_volume_type | default('gp3'))) }}"

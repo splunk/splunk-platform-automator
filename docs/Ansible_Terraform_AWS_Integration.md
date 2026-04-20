@@ -17,6 +17,7 @@ terraform:
     ssh_private_key_file: "~/.ssh/aws_key.pem"
     ssh_username: "ec2-user"
     security_group_names: ["Splunk_Basic"]
+    # subnet_id: "subnet-0123456789abcdef0"  # Optional: specific VPC subnet
     instance_type: "t2.micro"  # Default for all hosts
     root_volume_size: 50       # Default root volume size in GB
 
@@ -106,6 +107,9 @@ terraform:
     # Security
     security_group_names: ["Splunk_Basic"]
     
+    # Optional: VPC Subnet
+    # subnet_id: "subnet-0123456789abcdef0"
+    
     # Optional: AWS Credentials Override
     # access_key_id: "YOUR_ACCESS_KEY"
     # secret_access_key: "YOUR_SECRET_KEY"
@@ -149,6 +153,8 @@ splunk_hosts:
         root_volume_size: 100
         root_volume_type: "gp3"
         root_volume_encrypted: true
+        
+        subnet_id: "subnet-0123456789abcdef0"  # Optional: override global subnet
         
         additional_volumes:
           - device_name: "/dev/xvdb"
@@ -453,6 +459,7 @@ The old Vagrant AWS plugin used these variables which now map to:
 | `aws.keypair_name` | `terraform.aws.key_name` |
 | `aws.ssh_username` | `terraform.aws.ssh_username` |
 | `aws.security_groups` | `terraform.aws.security_group_names` |
+| *(not available)* | `terraform.aws.subnet_id` |
 
 ### From block_device_mapping
 

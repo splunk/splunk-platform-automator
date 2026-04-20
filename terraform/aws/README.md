@@ -41,7 +41,8 @@ Declares all input variables with types and defaults:
 - `ssh_username` - SSH user for connections (default: ec2-user)
 - `ssh_private_key_file` - Path to private key
 - `security_group_names` - Security groups (converted to IDs)
-- `host_configs` - Per-host configuration (instance type, volumes, etc.)
+- `subnet_id` - Optional VPC subnet ID (omit for default subnet)
+- `host_configs` - Per-host configuration (instance type, volumes, subnet, etc.)
 - `tags` - Common tags for all resources
 
 #### `terraform.tfvars` - Generated Configuration
@@ -78,6 +79,7 @@ terraform:
     ssh_private_key_file: "~/.ssh/aws_key.pem"
     ssh_username: "ec2-user"
     security_group_names: ["Splunk_Basic"]
+    # subnet_id: "subnet-0123456789abcdef0"  # Optional: specific VPC subnet
     instance_type: "t2.micro"  # Default for all hosts
     
 splunk_hosts:
@@ -152,6 +154,7 @@ splunk_hosts:
             volume_size: 200
             volume_type: "gp3"
             encrypted: true
+        subnet_id: "subnet-0123456789abcdef0"  # Optional: override global subnet
         additional_tags:
           Role: "Indexer"
 ```

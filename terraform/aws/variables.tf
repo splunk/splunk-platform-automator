@@ -35,6 +35,12 @@ variable "security_group_names" {
   default = ["Splunk_Basic"]
 }
 
+variable "subnet_id" {
+  type        = string
+  description = "AWS VPC subnet ID for instances"
+  default     = ""
+}
+
 variable "host_configs" {
   type = map(object({
     instance_type         = optional(string, "t2.micro")
@@ -42,6 +48,7 @@ variable "host_configs" {
     key_name              = optional(string)
     ssh_username          = optional(string)
     ssh_private_key_file  = optional(string)
+    subnet_id             = optional(string, "")
     root_volume_size      = optional(number, 50)
     root_volume_type      = optional(string, "gp3")
     root_volume_encrypted = optional(bool, true)

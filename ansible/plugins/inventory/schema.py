@@ -80,6 +80,7 @@ class AwsTerraformConfig(BaseModel):
     instance_type: Optional[str] = Field(None, description="EC2 instance type")
     root_volume_size: Optional[int] = Field(None, ge=8, description="Root volume size in GB")
     tags: Optional[Dict[str, str]] = Field(None, description="AWS resource tags")
+    subnet_id: Optional[str] = Field(None, description="AWS VPC subnet ID")
 
 
 class TerraformConfig(BaseModel):

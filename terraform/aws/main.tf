@@ -31,6 +31,7 @@ resource "aws_instance" "splunk" {
   instance_type          = each.value.instance_type
   key_name               = coalesce(each.value.key_name, var.key_name)
   vpc_security_group_ids = data.aws_security_groups.selected.ids
+  subnet_id              = each.value.subnet_id != "" ? each.value.subnet_id : (var.subnet_id != "" ? var.subnet_id : null)
 
   # Enable detailed monitoring for better visibility
   monitoring = true
