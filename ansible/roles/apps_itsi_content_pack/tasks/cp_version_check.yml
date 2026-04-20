@@ -92,3 +92,19 @@
     - itsi_content_pack
   ansible.builtin.debug:
     msg: "{{ (_cp_status_lines | default(['Apps:'])) + ['Update needed: ' ~ (cp_update_needed | string)] }}"
+
+- name: "Fail if any content pack app name not found in archive"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.fail:
+    msg: >-
+      Content pack app(s) not found in archive (wrong name in content_pack_apps config):
+      {{ _cp_unknown_apps | join(', ') }}.
+      Available apps in archive: {{ (cp_expected_versions | default({})).keys() | sort | join(', ') }}
+  vars:
+    _cp_unknown_apps: "{{ cp_version_check_apps | default([]) | reject('in', (cp_expected_versions | default({})).keys()) | list }}"
+  when:
+    - (cp_expected_versions | default({})) | length > 0
+    - (_cp_unknown_apps | length) > 0
