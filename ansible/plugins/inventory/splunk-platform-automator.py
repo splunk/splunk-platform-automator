@@ -541,6 +541,9 @@ class InventoryModule(BaseInventoryPlugin):
                     # Extract section variables to add them directly (validation handled by schema.py)
                     if key in ['os','custom']:
                         for section_key, section_val in splunkhost.get(key).items():
+                            all_group_val = self.groups['all'].get(section_key)
+                            if isinstance(all_group_val, list) and isinstance(section_val, list):
+                                section_val = list(dict.fromkeys(all_group_val + section_val))
                             self.inventory.set_variable(hostname, section_key, section_val)
                     else:
                         self.inventory.set_variable(hostname, key, val)
