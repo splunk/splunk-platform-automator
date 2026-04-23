@@ -1,0 +1,180 @@
+---
+# Scenario: itsi_multi_shc
+# Full topology: two SHCs (shc1, shc2), IDXC, standalone SH, UF, HF, two deployers.
+# Derived from the main config/splunk_config.yml to exercise complex multi-path deployment:
+#   - ITSI premium app + content pack scoped to shc1 via shc_whitelist
+#   - Multi-role app (search_head + indexer + heavy_forwarder) with shc_whitelist
+#   - Indexer-only app with idxc_whitelist and local_configs (HEC input)
+#   - Heavy forwarder direct deploy via deployment_target + hosts_whitelist
+#   - Same app (Splunk_TA_nix) twice: SH via deployer (shc1) and UF via DS with local_configs
+# Verifies: deployer filters by shc_whitelist, CM gets ITSI + multi-role + idxc apps,
+#   DS routes UF apps, direct scope handles HF, shc2 deployer gets nothing.
+plugin: splunk-platform-automator
+
+splunk_defaults:
+  splunk_license_file:
+    - Splunk_Enterprise.lic
+    - Splunk_ITSI.lic
+
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: splunkidxc
+    idxc_replication_port: 9887
+    idxc_site_rf: origin:2, total:2
+    idxc_site_sf: origin:2, total:2
+
+splunk_shclusters:
+  - shc_name: shc1
+    shc_site: site0
+    shc_password: splunkshc
+    shc_replication_port: 9887
+  - shc_name: shc2
+    shc_site: site0
+    shc_password: splunkshc
+    shc_replication_port: 9887
+
+splunk_hosts:
+  - name: ds
+    roles:
+      - license_manager
+      - deployment_server
+      - deployer
+    shcluster: shc1
+
+  - name: ds2
+    roles:
+      - deployer
+    shcluster: shc2
+
+  - name: cm
+    roles:
+      - cluster_manager
+      - monitoring_console
+    idxcluster: idxc1
+    site: site0
+
+  - iter:
+      prefix: idx
+      numbers: 1..2
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site1
+
+  - iter:
+      prefix: sh
+      numbers: 1..3
+    roles:
+      - search_head
+    shcluster: shc1
+
+  - iter:
+      prefix: sh
+      numbers: 4..6
+    roles:
+      - search_head
+    shcluster: shc2
+
+  - name: sh
+    roles:
+      - search_head
+
+  - name: uf
+    roles:
+      - universal_forwarder
+
+  - name: hf
+    roles:
+      - heavy_forwarder
+
+splunk_app_deployment:
+  apps:
+    # ITSI premium app, scoped to shc1 only
+    - name: "Splunk IT Service Intelligence"
+      source: splunkbase
+      app_id: 1841
+      premium_app: itsi
+      shc_whitelist: ['shc1']
+
+    # Content pack with sub-apps, follows ITSI to shc1
+    - name: "Splunk App for Content Packs"
+      source: splunkbase
+      app_id: 5391
+      itsi_content_pack: true
+      library_app: DA-ITSI-ContentLibrary
+      content_pack_apps:
+        - name: DA-ITSI-CP-monitoring-alerting
+          content_pack_install: true
+          content_pack_api:
+            install_all: true
+          customizations:
+            run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml"
+
+    # SH-only app with customizations, shc1 only
+    - name: "Splunk_ML_Toolkit"
+      source: splunkbase
+      app_id: 2890
+      target_roles:
+        - search_head
+      customizations:
+        run_playbook: "ansible/apps_playbooks/Splunk_ML_Toolkit-configure.yml"
+      shc_whitelist: ['shc1']
+
+    # Multi-role app targeting SH + IDX + HF, SHC-filtered to shc1
+    - name: "Splunk_TA_cisco_meraki"
+      source: splunkbase
+      app_id: 5580
+      target_roles:
+        - search_head
+        - indexer
+        - heavy_forwarder
+      shc_whitelist: ['shc1']
+
+    # Indexer-only app via idxc_whitelist with local_configs
+    - name: "org_all_hec_inputs"
+      source: local
+      target_roles:
+        - indexer
+      customizations:
+        local_configs:
+          inputs.conf:
+            "http://hec_input":
+              token: test-hec-token-placeholder
+              index: o11y_alerts
+              indexes: o11y_alerts
+      idxc_whitelist: ['idxc1']
+
+    # Direct deploy to heavy forwarder only
+    - name: "splunk_ta_sim"
+      source: splunkbase
+      app_id: 5247
+      deployment_target: "direct"
+      target_roles:
+        - heavy_forwarder
+      customizations:
+        run_playbook_after_restart: "ansible/apps_playbooks/splunk_ta_sim-configure.yml"
+      hosts_whitelist: ['hf']
+
+    # Splunk_TA_nix for search_head, via deployer to shc1
+    - name: "Splunk_TA_nix"
+      source: splunkbase
+      app_id: 833
+      target_roles:
+        - search_head
+      shc_whitelist: ['shc1']
+
+    # Same app for UF, via DS with local_configs
+    - name: "Splunk_TA_nix"
+      source: splunkbase
+      app_id: 833
+      target_roles:
+        - universal_forwarder
+      customizations:
+        local_configs:
+          inputs.conf:
+            "script://./bin/vmstat_metric.sh":
+              disabled: 0
+              index: itsi_im_metrics
+            "script://./bin/cpu_metric.sh":
+              disabled: 0
+              index: itsi_im_metrics

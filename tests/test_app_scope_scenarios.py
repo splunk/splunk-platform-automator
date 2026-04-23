@@ -291,6 +291,31 @@ def test_scenario_scope_assertions(scenario_name: str):
         actual = set((deployer.get("target_hosts") or []))
         for h in ["sh1", "sh2", "sh3"]:
             assert h in actual, f"deployer.target_hosts should include shc1 member {h!r}, got {sorted(actual)}"
+    elif scenario_name == "itsi_multi_shc":
+        # Deployer (ds→shc1): ITSI, Content Packs, ML_Toolkit, cisco_meraki, Splunk_TA_nix (SH)
+        assert_deployers_entry(
+            scope, "ds",
+            ["Splunk IT Service Intelligence", "Splunk App for Content Packs",
+             "Splunk_ML_Toolkit", "Splunk_TA_cisco_meraki", "Splunk_TA_nix"],
+            ["sh1", "sh2", "sh3"],
+        )
+        assert_deployer_has_app_with_config(
+            scope, "Splunk App for Content Packs", state="installed", has_content_pack_apps=True
+        )
+        # Deployer (ds2→shc2): no apps (all shc_whitelist filter to shc1)
+        assert_deployers_entry(scope, "ds2", [], ["sh4", "sh5", "sh6"])
+        # CM gets ITSI + multi-role indexer portion + idxc_whitelist app
+        assert_cluster_manager_apps(
+            scope, ["Splunk IT Service Intelligence", "Splunk_TA_cisco_meraki", "org_all_hec_inputs"]
+        )
+        assert_cluster_manager_target_hosts(scope, ["idx1", "idx2"])
+        # DS routes Splunk_TA_nix (UF) only
+        assert_ds_app_count(scope, 1)
+        assert_ds_app_target_hosts(scope, "Splunk_TA_nix", ["uf"])
+        # Direct: splunk_ta_sim on hf via deployment_target + hosts_whitelist
+        assert_direct_on_scope(scope, "hf", "splunk_ta_sim", True)
+        # Direct: ITSI on ds (license_manager gets ITSI direct)
+        assert_direct_on_scope(scope, "ds", "Splunk IT Service Intelligence", True)
     else:
         # Generic: at least structure present (all three are lists)
         assert "direct_scope" in scope

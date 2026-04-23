@@ -1,0 +1,305 @@
+{
+    "cluster_manager": [
+        {
+            "apps": [
+                "Splunk IT Service Intelligence",
+                "Splunk_TA_cisco_meraki",
+                "org_all_hec_inputs"
+            ],
+            "apps_with_config": [
+                {
+                    "app_id": 1841,
+                    "name": "Splunk IT Service Intelligence",
+                    "premium_app": "itsi",
+                    "shc_whitelist": [
+                        "shc1"
+                    ],
+                    "source": "splunkbase",
+                    "state": "installed"
+                },
+                {
+                    "app_id": 5580,
+                    "name": "Splunk_TA_cisco_meraki",
+                    "shc_whitelist": [
+                        "shc1"
+                    ],
+                    "source": "splunkbase",
+                    "state": "installed",
+                    "target_roles": [
+                        "heavy_forwarder",
+                        "indexer",
+                        "search_head"
+                    ]
+                },
+                {
+                    "customizations": {
+                        "local_configs": {
+                            "inputs.conf": {
+                                "http://hec_input": {
+                                    "index": "o11y_alerts",
+                                    "indexes": "o11y_alerts",
+                                    "token": "test-hec-token-placeholder"
+                                }
+                            }
+                        }
+                    },
+                    "idxc_whitelist": [
+                        "idxc1"
+                    ],
+                    "name": "org_all_hec_inputs",
+                    "source": "local",
+                    "state": "installed",
+                    "target_roles": [
+                        "indexer"
+                    ]
+                }
+            ],
+            "host": "cm",
+            "target_hosts": [
+                "idx1",
+                "idx2"
+            ]
+        }
+    ],
+    "deployer": [
+        {
+            "apps": [
+                "Splunk IT Service Intelligence",
+                "Splunk App for Content Packs",
+                "Splunk_ML_Toolkit",
+                "Splunk_TA_cisco_meraki",
+                "Splunk_TA_nix"
+            ],
+            "apps_with_config": [
+                {
+                    "app_id": 1841,
+                    "itsi_content_pack": false,
+                    "name": "Splunk IT Service Intelligence",
+                    "premium_app": "itsi",
+                    "shc_whitelist": [
+                        "shc1"
+                    ],
+                    "source": "splunkbase",
+                    "state": "installed"
+                },
+                {
+                    "app_id": 5391,
+                    "content_pack_apps": [
+                        {
+                            "content_pack_api": {
+                                "install_all": true
+                            },
+                            "content_pack_install": true,
+                            "customizations": {
+                                "run_playbook_after_restart": "ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml"
+                            },
+                            "name": "DA-ITSI-CP-monitoring-alerting"
+                        }
+                    ],
+                    "itsi_content_pack": true,
+                    "library_app": "DA-ITSI-ContentLibrary",
+                    "name": "Splunk App for Content Packs",
+                    "premium_app": "",
+                    "source": "splunkbase",
+                    "state": "installed"
+                },
+                {
+                    "app_id": 2890,
+                    "customizations": {
+                        "run_playbook": "ansible/apps_playbooks/Splunk_ML_Toolkit-configure.yml"
+                    },
+                    "itsi_content_pack": false,
+                    "name": "Splunk_ML_Toolkit",
+                    "premium_app": "",
+                    "shc_whitelist": [
+                        "shc1"
+                    ],
+                    "source": "splunkbase",
+                    "state": "installed",
+                    "target_roles": [
+                        "search_head"
+                    ]
+                },
+                {
+                    "app_id": 5580,
+                    "itsi_content_pack": false,
+                    "name": "Splunk_TA_cisco_meraki",
+                    "premium_app": "",
+                    "shc_whitelist": [
+                        "shc1"
+                    ],
+                    "source": "splunkbase",
+                    "state": "installed",
+                    "target_roles": [
+                        "search_head",
+                        "indexer",
+                        "heavy_forwarder"
+                    ]
+                },
+                {
+                    "app_id": 833,
+                    "itsi_content_pack": false,
+                    "name": "Splunk_TA_nix",
+                    "premium_app": "",
+                    "shc_whitelist": [
+                        "shc1"
+                    ],
+                    "source": "splunkbase",
+                    "state": "installed",
+                    "target_roles": [
+                        "search_head"
+                    ]
+                }
+            ],
+            "host": "ds",
+            "target_hosts": [
+                "sh1",
+                "sh2",
+                "sh3"
+            ]
+        },
+        {
+            "apps": [],
+            "apps_with_config": [],
+            "host": "ds2",
+            "target_hosts": [
+                "sh4",
+                "sh5",
+                "sh6"
+            ]
+        }
+    ],
+    "deployment_server": [
+        {
+            "apps_with_targets": [
+                {
+                    "app": "Splunk_TA_nix",
+                    "blacklist": [],
+                    "content_pack_apps": null,
+                    "customizations": {
+                        "local_configs": {
+                            "inputs.conf": {
+                                "script://./bin/cpu_metric.sh": {
+                                    "disabled": 0,
+                                    "index": "itsi_im_metrics"
+                                },
+                                "script://./bin/vmstat_metric.sh": {
+                                    "disabled": 0,
+                                    "index": "itsi_im_metrics"
+                                }
+                            }
+                        }
+                    },
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "sc_blacklist": null,
+                    "sc_whitelist": null,
+                    "serverclass": "app_Splunk_TA_nix",
+                    "state": "installed",
+                    "target_hosts": [
+                        "uf"
+                    ],
+                    "target_path": null
+                }
+            ],
+            "host": "ds"
+        }
+    ],
+    "direct_scope": [
+        {
+            "host": "cm",
+            "scope_debug_results": []
+        },
+        {
+            "host": "ds",
+            "scope_debug_results": [
+                {
+                    "app": "Splunk IT Service Intelligence",
+                    "base_hosts": [
+                        "ds",
+                        "sh"
+                    ],
+                    "content_pack_apps": null,
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "ds"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "on_scope": true,
+                    "state": "installed"
+                }
+            ]
+        },
+        {
+            "host": "ds2",
+            "scope_debug_results": []
+        },
+        {
+            "host": "hf",
+            "scope_debug_results": [
+                {
+                    "app": "splunk_ta_sim",
+                    "base_hosts": [
+                        "hf"
+                    ],
+                    "content_pack_apps": null,
+                    "customizations": {
+                        "run_playbook_after_restart": "ansible/apps_playbooks/splunk_ta_sim-configure.yml"
+                    },
+                    "filtered_hosts": [
+                        "hf"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "on_scope": true,
+                    "state": "installed"
+                }
+            ]
+        },
+        {
+            "host": "idx1",
+            "scope_debug_results": []
+        },
+        {
+            "host": "idx2",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh1",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh2",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh3",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh4",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh5",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh6",
+            "scope_debug_results": []
+        },
+        {
+            "host": "uf",
+            "scope_debug_results": []
+        }
+    ]
+}
