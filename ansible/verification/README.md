@@ -193,13 +193,6 @@ Controls whether verification playbooks fail on mismatches.
 
 ## Troubleshooting
 
-### "The module interpreter '/usr/bin/python3.9' was not found"
-
-Remote hosts are expected to have a working Python 3; the exact path can differ (e.g. `/usr/bin/python3.11`). The project sets `ansible_python_interpreter: auto_silent` in `ansible/group_vars/all/ansible.yml` so Ansible discovers the interpreter on each host. If you still see a fixed path like `/usr/bin/python3.9`:
-
-- Clear the fact cache (e.g. `rm -rf /tmp/ansible_facts` or your `fact_caching_connection` path), then re-run.
-- Or override per host in `config/splunk_config.yml` under the host’s `os:` section, e.g. `ansible_python_interpreter: /usr/bin/python3`.
-
 ### "Could not resolve hostname ds" (or sh, idx, etc.)
 
 `verify_app_deployment.yml` (and other verification playbooks that run tasks on remote hosts) need SSH. Inventory hostnames like `ds`, `sh`, `idx` must resolve and be reachable.
