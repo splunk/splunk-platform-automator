@@ -221,7 +221,7 @@
       ansible.builtin.unarchive:
         src: "{{ cp_spl_path }}"
         dest: "{{ cp_splunk_home }}/{{ cp_apps_base }}"
-        remote_src: "{{ splunk_app_deployment.target_download | default(false) }}"
+        remote_src: "{{ (splunk_app_deployment.target_download | default(false)) and (app_item.source | default('local')) == 'splunkbase' }}"
         owner: "{{ splunk_user | default('splunk') }}"
         group: "{{ splunk_group | default('splunk') }}"
         extra_opts: "{{ ['--add-file'] + cp_effective_app_list | default([]) }}"
@@ -240,7 +240,7 @@
       ansible.builtin.unarchive:
         src: "{{ cp_spl_path }}"
         dest: "{{ cp_splunk_home }}/{{ cp_apps_base }}"
-        remote_src: "{{ splunk_app_deployment.target_download | default(false) }}"
+        remote_src: "{{ (splunk_app_deployment.target_download | default(false)) and (app_item.source | default('local')) == 'splunkbase' }}"
         owner: "{{ splunk_user | default('splunk') }}"
         group: "{{ splunk_group | default('splunk') }}"
       notify: "{{ cp_notify }}"

@@ -31,7 +31,7 @@
   ansible.builtin.unarchive:
     src: "{{ apps_itsi_spl_path }}"
     dest: "{{ apps_itsi_splunk_home }}/etc/apps"
-    remote_src: "{{ splunk_app_deployment.target_download | default(false) }}"
+    remote_src: "{{ (splunk_app_deployment.target_download | default(false)) and (app_item.source | default('local')) == 'splunkbase' }}"
     owner: "{{ splunk_user | default('splunk') }}"
     group: "{{ splunk_group | default('splunk') }}"
     extra_opts: "{{ itsi_lm_extra_opts }}"

@@ -3,11 +3,19 @@
 # Caller must set: app_conf_archive_path, app_conf_cache_dir, app_conf_cache_subdir (e.g. 'itsi_app_confs'),
 #   app_conf_resolved_version. Optional for target: app_conf_app_names_needed (list of app names to restrict to).
 # After include: app_conf_expected_versions (dict), app_conf_app_names (list). Controller propagates to all hosts.
+#
+# Routing: target tasks run only when target_download AND source is splunkbase (archive lives on the remote host).
+# For source: local the archive always lives on the controller, so controller tasks are used regardless of
+# target_download — consistent with how install_from_local.yml always delegates version reads to localhost.
 
 - name: "Ensure app conf cache and expected versions (controller)"
   ansible.builtin.include_tasks: app_conf_cache_controller.yml
-  when: not (splunk_app_deployment.target_download | default(false))
+  when: >-
+    not (splunk_app_deployment.target_download | default(false))
+    or (app_item.source | default('local')) != 'splunkbase'
 
 - name: "Ensure app conf cache and expected versions (target)"
   ansible.builtin.include_tasks: app_conf_cache_target.yml
-  when: splunk_app_deployment.target_download | default(false)
+  when: >-
+    (splunk_app_deployment.target_download | default(false))
+    and (app_item.source | default('local')) == 'splunkbase'
