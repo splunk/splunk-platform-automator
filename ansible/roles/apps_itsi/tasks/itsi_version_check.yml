@@ -75,6 +75,15 @@
     _exp_list: "{{ _apps | map('extract', _exp) | map('default', '') | list }}"
     _current_ne_expected: "{{ _cur_list != _exp_list }}"
 
+- name: "Force ITSI update needed (force_install: true)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    apps_itsi_update_needed: true
+  when: app_item.force_install | default(false) | bool
+
 - name: "Build ITSI version status lines"
   tags:
     - splunk

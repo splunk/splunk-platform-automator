@@ -41,6 +41,39 @@ Example configuration:
     force_run_playbook_after_restart: false
 ```
 
+### Force reinstall for ITSI and ITSI content packs
+
+The `force_install` flag is a top-level app property (not under `customizations`) that forces a full reinstall of ITSI or an ITSI content pack even when the installed version already matches the expected version. This is the ITSI equivalent of force-reinstall: the archive is re-extracted, all post-install configuration is re-applied, and Splunk is restarted.
+
+| Flag | Applies to | Default | Effect |
+|------|-----------|---------|--------|
+| **`force_install`** | ITSI premium app (`premium_app: itsi`) and ITSI content packs (`itsi_content_pack: true`) | `false` | When `true`, skips the version check and always re-extracts and re-configures the app, regardless of the currently installed version. |
+
+Example — force reinstall ITSI:
+
+```yaml
+- name: "Splunk_IT_Service_Intelligence"
+  source: splunkbase
+  app_id: 1841
+  version: "latest"
+  premium_app: itsi
+  force_install: true
+```
+
+Example — force reinstall an ITSI content pack:
+
+```yaml
+- name: "DA-ITSI-CP-monitoring-alerting"
+  source: local
+  itsi_content_pack: true
+  force_install: true
+  content_pack_apps:
+    - name: "DA-ITSI-CP-monitoring-alerting"
+      content_pack_install: true
+```
+
+> **Note:** Remember to remove `force_install: true` after the run, or it will re-extract and restart Splunk on every subsequent execution.
+
 ## Wrapper: `run_apps_playbook.yml`
 
 **`ansible/run_apps_playbook.yml`** runs a single apps playbook in isolation (no full app deployment). Use it to:
