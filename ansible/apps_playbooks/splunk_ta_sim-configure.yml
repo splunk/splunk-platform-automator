@@ -32,20 +32,73 @@
       - _sim_o11y_api_token | length > 0
     fail_msg: "Required extra_vars missing: o11y_org_id, o11y_realm, and o11y_api_token must all be set in customization_extra_vars (or playbook_extra_vars when using run_apps_playbook.yml)"
 
-# --- Connection lookup (search job, already API-based) ---
+# --- Connection: retrieve org_name from Splunk Observability API ---
 
-- name: "Create connection (SIM API config lookup)"
+- name: "Retrieve org_name from Splunk Observability API"
   ansible.builtin.uri:
-    url: "https://localhost:8089/services/search/jobs"
+    url: "https://api.{{ _sim_o11y_realm }}.signalfx.com/v2/organization"
+    method: GET
+    headers:
+      X-SF-TOKEN: "{{ _sim_o11y_api_token }}"
+      Content-Type: "application/json"
+    validate_certs: true
+    status_code: [200]
+    return_content: true
+  register: _sim_org_response
+
+- name: "Set org_name fact"
+  ansible.builtin.set_fact:
+    _sim_o11y_org_name: "{{ (_sim_org_response.content | from_json).organizationName | default('') }}"
+
+# --- Connection: create or update KV store record (matches GUI behavior) ---
+
+- name: "Check for existing KV store connection record"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/storage/collections/data/sim_api_config?query=%7B%22org_id%22%3A%22{{ _sim_o11y_org_id }}%22%7D&output_mode=json"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: GET
+    force_basic_auth: true
+    validate_certs: false
+    return_content: true
+    status_code: [200]
+  register: _sim_kv_check
+
+- name: "Create connection in KV store (new record)"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/storage/collections/data/sim_api_config"
     user: admin
     password: "{{ splunk_admin_password }}"
     method: POST
-    body_format: form-urlencoded
+    body_format: json
     body:
-      search: "| makeresults | eval org_id=\"{{ _sim_o11y_org_id }}\", realm=\"{{ _sim_o11y_realm }}\", default=1, enable=1| fields - _time | inputlookup sim_api_config_lookup append=true| dedup org_id, realm | eval default=if(org_id==\"{{ _sim_o11y_org_id }}\",1,0) | outputlookup sim_api_config_lookup"
+      realm: "{{ _sim_o11y_realm }}"
+      org_id: "{{ _sim_o11y_org_id }}"
+      org_name: "{{ _sim_o11y_org_name }}"
+      default: true
+      enable: true
     force_basic_auth: true
     validate_certs: false
-    status_code: 201
+    status_code: [200, 201]
+  when: (_sim_kv_check.content | from_json) | length == 0
+
+- name: "Update connection in KV store (existing record)"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/storage/collections/data/sim_api_config/{{ ((_sim_kv_check.content | from_json)[0])._key }}"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    body_format: json
+    body:
+      realm: "{{ _sim_o11y_realm }}"
+      org_id: "{{ _sim_o11y_org_id }}"
+      org_name: "{{ _sim_o11y_org_name }}"
+      default: true
+      enable: true
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  when: (_sim_kv_check.content | from_json) | length > 0
 
 # --- Credential management via storage/passwords REST API ---
 
