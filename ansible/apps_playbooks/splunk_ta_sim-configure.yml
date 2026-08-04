@@ -9,12 +9,14 @@
 #   ansible-playbook ansible/run_apps_playbook.yml \
 #     -e "apps_playbook=apps_playbooks/splunk_ta_sim-configure.yml" \
 #     -e "app_name=splunk_ta_sim" \
-#     -e 'playbook_extra_vars={"o11y_realm":"us1","o11y_org_id":"ABC123","o11y_api_token":"your-api-token"}' \
+#     -e 'playbook_extra_vars={"o11y_realm":"us1","o11y_api_token":"your-api-token"}' \
 #     -l sh
 #
 # Framework vars: app_path, app_name (from post-restart context)
-# extra_vars (from customizations.extra_vars): o11y_realm, o11y_org_id, o11y_api_token
-# o11y_org_id is applied to the API config lookup, credentials, and all modular inputs (built-in and custom).
+# extra_vars (from customizations.extra_vars):
+#   o11y_realm     (required) - Splunk Observability Cloud realm (e.g. us1, eu0)
+#   o11y_api_token (required) - Splunk Observability Cloud API token
+#   o11y_org_id    (optional) - Organization ID; derived from API if not provided
 
 - name: "Resolve SIM extra_vars (avoids template recursion)"
   ansible.builtin.set_fact:
@@ -27,14 +29,13 @@
 - name: "Validate required SIM extra_vars"
   ansible.builtin.assert:
     that:
-      - _sim_o11y_org_id | length > 0
       - _sim_o11y_realm | length > 0
       - _sim_o11y_api_token | length > 0
-    fail_msg: "Required extra_vars missing: o11y_org_id, o11y_realm, and o11y_api_token must all be set in customization_extra_vars (or playbook_extra_vars when using run_apps_playbook.yml)"
+    fail_msg: "Required extra_vars missing: o11y_realm and o11y_api_token must be set in customization_extra_vars (or playbook_extra_vars when using run_apps_playbook.yml)"
 
-# --- Connection: retrieve org_name from Splunk Observability API ---
+# --- Connection: retrieve org_id and org_name from Splunk Observability API ---
 
-- name: "Retrieve org_name from Splunk Observability API"
+- name: "Retrieve organization details from Splunk Observability API"
   ansible.builtin.uri:
     url: "https://api.{{ _sim_o11y_realm }}.signalfx.com/v2/organization"
     method: GET
@@ -46,8 +47,9 @@
     return_content: true
   register: _sim_org_response
 
-- name: "Set org_name fact"
+- name: "Set org_id and org_name from API response"
   ansible.builtin.set_fact:
+    _sim_o11y_org_id: "{{ _sim_o11y_org_id if (_sim_o11y_org_id | length > 0) else (_sim_org_response.content | from_json).id }}"
     _sim_o11y_org_name: "{{ (_sim_org_response.content | from_json).organizationName | default('') }}"
 
 # --- Connection: create or update KV store record (matches GUI behavior) ---
