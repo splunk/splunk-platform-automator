@@ -58,6 +58,14 @@ os:
     - sysstat
     - lsof
     - net-tools
+  # Install SSH public keys for the ansible login user.
+  # Each entry is a path to a public key file on the Ansible controller.
+  # Keys are added to ~/.ssh/authorized_keys (existing keys are preserved).
+  # Can also be set per host in splunk_hosts[].os.ssh_keys.
+  # Deploy independently with: ansible-playbook ansible/install_ssh_keys.yml
+  ssh_keys:
+    - ~/.ssh/id_ed25519.pub
+    - ~/.ssh/colleague_key.pub
   # Set hostname to ansible_inventory name
   set_hostname: true
   # Disable SELinux

@@ -1,0 +1,17 @@
+---
+# This playbook installs SSH public keys on all managed hosts.
+# Keys are read from the os.ssh_keys list in config/splunk_config.yml
+# and added to the ansible login user's authorized_keys.
+#
+# Usage: ansible-playbook ansible/install_ssh_keys.yml
+
+- name: Install SSH public keys
+  hosts: all:!role_universal_forwarder_windows
+  become: true
+  become_user: root
+  tasks:
+    - name: Install SSH public keys
+      ansible.builtin.include_tasks: roles/common/tasks/ssh_keys.yml
+      when:
+        - ssh_keys|default([],true)|length > 0
+        - ansible_facts['os_family']|lower != 'windows'

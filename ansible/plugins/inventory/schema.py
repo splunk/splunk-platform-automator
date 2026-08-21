@@ -98,6 +98,7 @@ class OsConfig(BaseModel):
     time_zone: Optional[str] = None
     enable_time_sync_cron: Optional[bool] = None
     packages: Optional[List[str]] = None
+    ssh_keys: Optional[List[str]] = None
     set_hostname: Optional[bool] = None
     disable_selinux: Optional[bool] = None
     disable_apparmor: Optional[bool] = None

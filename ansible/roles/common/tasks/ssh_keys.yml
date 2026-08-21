@@ -1,0 +1,12 @@
+---
+# This playbook installs SSH public keys for the ansible login user
+
+- name: Install SSH public keys for ansible user
+  tags:
+    - common
+    - ssh_keys
+  ansible.builtin.authorized_key:
+    user: "{{ ansible_user }}"
+    state: present
+    key: "{{ lookup('file', item) }}"
+  loop: "{{ ssh_keys }}"

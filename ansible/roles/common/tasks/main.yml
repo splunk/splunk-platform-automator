@@ -19,6 +19,12 @@
   ansible.builtin.include_tasks: users.yml
   when: ansible_facts['os_family']|lower != 'windows'
 
+- name: Call Install SSH keys
+  ansible.builtin.include_tasks: ssh_keys.yml
+  when:
+    - ssh_keys|default([],true)|length > 0
+    - ansible_facts['os_family']|lower != 'windows'
+
 - name: Call Configure time
   ansible.builtin.include_tasks: time.yml
   when: ansible_facts['os_family']|lower != 'windows'

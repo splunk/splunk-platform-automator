@@ -57,8 +57,15 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 - **Vault support for config values** – Encrypted values in config and playbooks:
   - **Inventory decryption**: Vault-encrypted values in `splunk_config.yml` are decrypted in place by the inventory plugin’s `secret_resolver.py` when the config is loaded (e.g. for Splunk admin password and other variables used by roles).
+  - **Environment variable lookups**: `{{ lookup('env', 'VAR_NAME') }}` expressions in `splunk_config.yml` are resolved at config load time by the inventory plugin (e.g. for Splunkbase credentials).
   - **Lookup plugin**: Custom lookup plugin `spa_vault_decrypt` for playbooks that load config via `include_vars` (e.g. Terraform AWS credentials in `provision_terraform_aws.yml` and `destroy_terraform_aws.yml`); lookup plugin path set in `ansible.cfg` via `lookup_plugins = ./ansible/plugins/lookup`.
   - **Docs**: [Secrets_and_Vault.md](docs/Secrets_and_Vault.md), [Secrets_Vault_Concept.md](docs/Secrets_Vault_Concept.md).
+
+- **SSH public keys** – Install additional SSH public keys on managed hosts:
+  - New `os.ssh_keys` config option: list of local public key file paths to install into the Ansible login user's `authorized_keys`.
+  - Can be set globally in the `os:` section or per host in `splunk_hosts[].os.ssh_keys`.
+  - Standalone playbook `ansible/install_ssh_keys.yml` to deploy keys without a full site deployment.
+  - Documented in [configuration_description.yml](examples/configuration_description.yml) and [README.md](README.md).
 
 - **Terraform AWS** – Optional `subnet_id` for VPC subnet placement:
   - New `terraform.aws.subnet_id` option in `splunk_config.yml` (global and per-host)

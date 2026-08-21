@@ -389,6 +389,23 @@ Vagrant deployes an ssh key for the vagrant user to login without a password.
 vagrant ssh <hostname>
 ```
 
+#### Install additional SSH public keys
+
+You can install additional SSH public keys on all managed hosts by adding them to the `os` section in `config/splunk_config.yml`. The keys are added to the Ansible login user's `authorized_keys` file.
+
+```yaml
+os:
+  ssh_keys:
+    - ~/.ssh/id_ed25519.pub
+    - ~/.ssh/colleague_key.pub
+```
+
+To deploy keys without running a full site deployment, use the standalone playbook:
+
+```bash
+ansible-playbook ansible/install_ssh_keys.yml
+```
+
 ### Environment Users
 
 #### User vagrant
