@@ -1,16 +1,16 @@
 """
 Secret resolution for splunk_config.yml.
 
-Resolves Ansible Vault (!vault) secret references to plain strings. No
-credentials are stored in this module; resolution uses the Ansible vault
-password from config or environment. For environment variables, use Ansible's
-built-in lookup('env', 'VAR_NAME') in playbooks or set env vars and omit
-secrets from config (e.g. AWS_ACCESS_KEY_ID for Terraform).
+Resolves Ansible Vault (!vault) secret references and Jinja2 env-var lookups
+({{ lookup('env', 'VAR') }}) to plain strings. No credentials are stored in
+this module; resolution uses the Ansible vault password from config or
+environment, and os.environ for env-var lookups.
 """
 
 from __future__ import (absolute_import, division, print_function)
 
 import os
+import re
 import yaml
 from collections import abc
 
@@ -135,16 +135,48 @@ def _normalize_vault_ciphertext(ciphertext_str):
     return s
 
 
+_ENV_LOOKUP_RE = re.compile(
+    r"""\{\{\s*lookup\(\s*['"]env['"]\s*,\s*['"]([^'"]+)['"]\s*\)\s*\}\}"""
+)
+
+
+def _resolve_env_lookups(value):
+    """
+    Resolve Jinja2 ``{{ lookup('env', 'VAR') }}`` expressions in *value* by
+    substituting each match with the corresponding ``os.environ`` value (empty
+    string when the variable is unset, matching Ansible behaviour).
+
+    If the entire string is a single lookup, return the resolved value directly.
+    If the string contains lookups mixed with other text, substitute inline.
+    Returns the original string unchanged when no lookups are found.
+    """
+    if not isinstance(value, str):
+        return value
+    m = _ENV_LOOKUP_RE.fullmatch(value.strip())
+    if m:
+        return os.environ.get(m.group(1), '')
+    resolved = _ENV_LOOKUP_RE.sub(lambda m: os.environ.get(m.group(1), ''), value)
+    return resolved
+
+
 def _resolve_plain_string_secret(value, vault_decrypt_fn):
     """
-    If value is a string that looks like a quoted !vault reference, resolve it
-    and return the decrypted string; otherwise return value unchanged.
+    Resolve secret references in a plain string value:
+      - Jinja2 env-var lookups: {{ lookup('env', 'VAR') }}
+      - Quoted Ansible Vault: strings containing $ANSIBLE_VAULT
 
-    Quoted vault allows the file to remain valid standard YAML so Ansible can
-    parse the inventory before delegating to our plugin.
+    Returns the resolved string, or the original value unchanged.
     """
     if not isinstance(value, str) or not value:
         return value
+
+    # Jinja2 env-var lookups (evaluated before vault so a lookup result is never
+    # mistakenly treated as vault ciphertext).
+    if 'lookup(' in value:
+        resolved = _resolve_env_lookups(value)
+        if resolved != value:
+            return resolved
+
     s = value.strip()
     # Quoted vault: string containing $ANSIBLE_VAULT (optionally after "!vault |\n")
     if "$ANSIBLE_VAULT" in s and vault_decrypt_fn is not None:
@@ -165,7 +197,8 @@ def _resolve_plain_string_secret(value, vault_decrypt_fn):
 def _resolve_plain_string_secrets_recursive(config, vault_decrypt_fn):
     """
     Recursively walk config and resolve any string value that looks like
-    a quoted !vault reference. Returns a new structure.
+    a quoted !vault reference or a Jinja2 env-var lookup. Returns a new
+    structure.
     """
     if config is None:
         return None
@@ -209,13 +242,13 @@ def get_yaml_loader(with_vault=True):
 
 def load_config_with_secrets(path, resolve_secrets=True):
     """
-    Load YAML from path, optionally resolving quoted !vault secret references.
+    Load YAML from path, optionally resolving secret references.
 
     Uses yaml.safe_load so the file must be valid standard YAML (no custom tags).
-    Secret references must be quoted strings: '!vault |\\n...' so that Ansible
-    can parse the inventory file before delegating to our plugin.
-    If resolve_secrets=True, quoted !vault strings are decrypted and replaced
-    with the actual secret values. If resolve_secrets=False, return as-is.
+    When resolve_secrets=True the following are resolved:
+      - Jinja2 env-var lookups: ``{{ lookup('env', 'VAR') }}`` -> os.environ value
+      - Quoted vault strings containing ``$ANSIBLE_VAULT`` -> decrypted value
+    If resolve_secrets=False, return the raw parsed YAML as-is.
     """
     with open(path, "r") as f:
         config = yaml.safe_load(f) or {}
