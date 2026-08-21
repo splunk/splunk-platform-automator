@@ -187,17 +187,29 @@
     sim_modular_inputs_list: "{{ (_sim_inputs_response.content | from_json) | json_query('entry[*].name') }}"
   when: not _sim_is_shc_member | bool
 
-- name: "Enable SIM modular inputs and set org_id via properties API"
+- name: "Set org_id on SIM modular inputs"
   ansible.builtin.uri:
-    url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/properties/inputs/{{ ('sim_modular_input://' + item) | urlencode | regex_replace('/', '%2F') }}"
+    url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/data/inputs/sim_modular_input/{{ item | urlencode | regex_replace('/', '%2F') }}"
     user: admin
     password: "{{ splunk_admin_password }}"
     method: POST
     body_format: form-urlencoded
     body:
-      disabled: "0"
       org_id: "{{ _sim_o11y_org_id }}"
-    return_content: true
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  loop: "{{ sim_modular_inputs_list | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  when: not _sim_is_shc_member | bool
+
+- name: "Enable SIM modular inputs"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/data/inputs/sim_modular_input/{{ item | urlencode | regex_replace('/', '%2F') }}/enable"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
     force_basic_auth: true
     validate_certs: false
     status_code: [200]
@@ -221,7 +233,6 @@
           metric_resolution: "-1"
           sim_max_delay: "-1"
           sim_modinput_restart_interval_seconds: "3600"
-          disabled: "0"
           signal_flow_programs: "\"error_durations_p99 = data('service.request' + '.duration.ns.' + 'p99', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'true'), rollup='max').mean(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='error_durations_p99') ; non_error_durations_p99 = data('service.request' + '.duration.ns.' + 'p99', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'false'), rollup='max').mean(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='non_error_durations_p99') ; error_durations = data('service.request' + '.duration.ns.' + 'median', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'true'), rollup='max').mean(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='error_durations') ; non_error_durations = data('service.request' + '.duration.ns.' + 'median', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'false'), rollup='max').mean(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='non_error_durations') ; error_counts = data('service.request' + '.count', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'true'), rollup='sum').sum(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='error_counts') ; non_error_counts = data('service.request' + '.count', filter=filter('sf_environment', '*') and filter('sf_service', '*') and filter('sf_error','*') and not filter('sf_dimensionalized', '*') and filter('sf_error', 'false'), rollup='sum').sum(by=['sf_service', 'sf_environment', 'sf_error'], allow_missing=['sf_httpMethod']).publish(label='non_error_counts')\""
       - name: "Splunk Application Performance Monitoring (APM) Rate (Throughput)"
         params:
@@ -232,7 +243,6 @@
           metric_resolution: "-1"
           sim_max_delay: "-1"
           sim_modinput_restart_interval_seconds: "3600"
-          disabled: "0"
           signal_flow_programs: "\"thruput_avg_rate = data('service.request.count', filter=filter('sf_environment', '*') and filter('sf_service', '*') and (not filter('sf_dimensionalized', '*')), rollup='rate').sum(by=['sf_service', 'sf_environment']).publish(label='thruput_avg_rate')\""
       - name: "Splunk Real User Monitoring (RUM) Inputs"
         params:
@@ -243,7 +253,6 @@
           metric_resolution: "-1"
           sim_max_delay: "-1"
           sim_modinput_restart_interval_seconds: "3600"
-          disabled: "0"
           signal_flow_programs: "\"data('rum.page_view.count').publish(label='rum_page_view'); data('rum.client_error.count').publish(label='rum_client_error'); data('rum.page_view.time.ns.p75').scale(0.000001).publish(label='rum_page_view_time'); data('rum.resource_request.count').publish(label='rum_resource_request'); data('rum.resource_request.time.ns.p75').scale(0.000001).publish(label='rum_resource_request_time'); data('rum.crash.count').publish(label='rum_crash_count'); data('rum.app_error.count').publish(label='rum_app_error_count'); data('rum.cold_start.time.ns.p75').scale(0.000001).publish(label='rum_cold_start_time'); data('rum.cold_start.count').publish(label='rum_cold_start_count'); data('rum.webvitals_lcp.time.ns.p75').scale(0.000001).publish(label='rum_webvitals_lcp'); data('rum.webvitals_cls.score.p75').publish(label='rum_webvitals_cls'); data('rum.webvitals_fid.time.ns.p75').scale(0.000001).publish(label='rum_webvitals_fid')\""
       - name: "Splunk Synthetics Input for Observability Cloud"
         params:
@@ -254,10 +263,9 @@
           metric_resolution: "-1"
           sim_max_delay: "-1"
           sim_modinput_restart_interval_seconds: "3600"
-          disabled: "0"
           signal_flow_programs: "\"data('*', filter=filter('sf_product', 'synthetics') and filter('test_type', '*')).publish()\""
 
-- name: "Create custom SIM modular input stanzas via configs API (skip existing)"
+- name: "Create custom SIM modular input stanzas (skip existing)"
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/configs/conf-inputs"
     user: admin
@@ -274,7 +282,7 @@
   register: _sim_custom_create
   when: not _sim_is_shc_member | bool
 
-- name: "Update existing custom SIM modular inputs via configs API"
+- name: "Update existing custom SIM modular input stanzas"
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/configs/conf-inputs/{{ ('sim_modular_input://' + item.item.name) | urlencode | regex_replace('/', '%2F') }}"
     user: admin
@@ -291,3 +299,17 @@
   when:
     - not _sim_is_shc_member | bool
     - item.status == 409
+
+- name: "Enable custom SIM modular inputs"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/data/inputs/sim_modular_input/{{ item.name | urlencode | regex_replace('/', '%2F') }}/enable"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  loop: "{{ _sim_custom_inputs }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: not _sim_is_shc_member | bool
