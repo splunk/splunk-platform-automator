@@ -1391,6 +1391,64 @@ class TestAppDeploymentConfig:
             validate_config(config)
         assert "download_timeout" in str(exc_info.value).lower()
 
+    # --- update_mode (global and per-app) ---
+    def test_splunk_app_deployment_update_mode_valid(self):
+        """Global update_mode accepts 'clean' and 'merge'."""
+        for mode in ("clean", "merge"):
+            config = {
+                "plugin": "splunk-platform-automator",
+                "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
+                "splunk_app_deployment": {
+                    "update_mode": mode,
+                    "apps": [{"name": "MyApp", "source": "local", "target_roles": ["indexer"]}],
+                },
+            }
+            result = validate_config(config)
+            assert result.splunk_app_deployment.update_mode == mode
+
+    def test_splunk_app_deployment_update_mode_invalid_raises(self):
+        """Global update_mode rejects invalid values."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
+            "splunk_app_deployment": {
+                "update_mode": "overwrite",
+                "apps": [{"name": "MyApp", "source": "local", "target_roles": ["indexer"]}],
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "update_mode" in str(exc_info.value).lower()
+
+    def test_app_update_mode_valid(self):
+        """Per-app update_mode accepts 'clean' and 'merge'."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "A", "source": "local", "update_mode": "clean", "target_roles": ["indexer"]},
+                    {"name": "B", "source": "local", "update_mode": "merge", "target_roles": ["indexer"]},
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert result.splunk_app_deployment.apps[0]["update_mode"] == "clean"
+        assert result.splunk_app_deployment.apps[1]["update_mode"] == "merge"
+
+    def test_app_update_mode_invalid_raises(self):
+        """Per-app update_mode rejects invalid values."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
+            "splunk_app_deployment": {
+                "apps": [{"name": "MyApp", "source": "local", "update_mode": "replace", "target_roles": ["indexer"]}]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "update_mode" in str(exc_info.value).lower()
+
     # --- Duplicate app (same name + same deployment target key) ---
     def test_duplicate_app_same_name_same_target_roles_raises(self):
         """Two apps with same name and same target_roles must raise (duplicate deployment target)."""

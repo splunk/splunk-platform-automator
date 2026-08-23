@@ -38,6 +38,14 @@
   ansible.builtin.set_fact:
     _app_force_update: "{{ app_item.force_update | default(false) | bool }}"
 
+- name: "Set update_mode for {{ app_name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - splunkbase
+  ansible.builtin.set_fact:
+    _app_update_mode: "{{ app_item.update_mode | default(splunk_app_deployment.update_mode | default(splunk_app_deployment_defaults.update_mode | default('merge'))) }}"
+
 - name: "Check if {{ app_name }} already exists"
   tags:
     - splunk
@@ -149,7 +157,7 @@
         - existing_app.stat.exists
         - splunk_app_deployment.backup_apps_before_update | default(false)
 
-    - name: "Remove old {{ app_name }}"
+    - name: "Remove old {{ app_name }} (clean mode)"
       tags:
         - splunk
         - splunk_apps
@@ -157,9 +165,12 @@
       ansible.builtin.file:
         path: "{{ target_path }}"
         state: absent
-      when: existing_app.stat.exists
+      when:
+        - existing_app.stat.exists
+        - _app_update_mode == 'clean'
 
-    - name: "Extract {{ app_name }} to target"
+    # --- Clean mode: extract directly to target ---
+    - name: "Extract {{ app_name }} to target (clean)"
       tags:
         - splunk
         - splunk_apps
@@ -172,6 +183,32 @@
         owner: "{{ splunk_user | default('splunk') }}"
         group: "{{ splunk_group | default('splunk') }}"
       register: extract_result
+      when: _app_update_mode == 'clean'
+
+    # --- Merge mode: extract to temp, rsync overlay into target ---
+    - name: "Create temp extraction directory for {{ app_name }} (merge)"
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: "splunk_app_merge_"
+      register: _merge_tmp_dir
+      when: _app_update_mode == 'merge'
+
+    - name: "Extract {{ app_name }} to temp directory (merge)"
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.builtin.unarchive:
+        src: "{{ app_download_archive_path }}"
+        dest: "{{ _merge_tmp_dir.path }}"
+        remote_src: "{{ splunk_app_deployment.target_download | default(false) }}"
+        list_files: true
+      register: extract_result
+      when: _app_update_mode == 'merge'
 
     - name: "Fail when app archive top-level folder does not match app name (wrong app_id?)"
       tags:
@@ -194,10 +231,52 @@
         - splunkbase
       ansible.builtin.command: "mv '{{ (target_path | dirname) ~ '/' ~ (extract_result.files[0] | split('/') | first) }}' '{{ target_path }}'"
       when:
+        - _app_update_mode == 'clean'
         - extract_result.files is defined
         - extract_result.files | length > 0
         - (extract_result.files[0] | split('/') | first) == (app_name | trim)
         - (extract_result.files[0] | split('/') | first) != (target_path | basename)
+
+    - name: "Ensure target directory exists before merge"
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.builtin.file:
+        path: "{{ target_path }}"
+        state: directory
+        mode: "0755"
+      when: _app_update_mode == 'merge'
+
+    - name: "Overlay extracted files into {{ app_name }} (merge)"
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.posix.synchronize:
+        src: "{{ _merge_tmp_dir.path }}/{{ extract_result.files[0] | split('/') | first }}/"
+        dest: "{{ target_path }}/"
+        delete: false
+        recursive: true
+        archive: false
+        checksum: true
+        rsync_opts:
+          - "--no-owner"
+          - "--no-group"
+      delegate_to: "{{ inventory_hostname }}"
+      when: _app_update_mode == 'merge'
+
+    - name: "Clean up temp extraction directory (merge)"
+      tags:
+        - splunk
+        - splunk_apps
+        - splunkbase
+      ansible.builtin.file:
+        path: "{{ _merge_tmp_dir.path }}"
+        state: absent
+      when:
+        - _app_update_mode == 'merge'
+        - _merge_tmp_dir.path is defined
 
     - name: "Set permissions on {{ app_name }}"
       tags:

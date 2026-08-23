@@ -201,6 +201,7 @@ class SplunkAppsConfig(BaseModel):
 ALLOWED_APP_SOURCES = ("local", "splunkbase")
 ALLOWED_DEPLOYMENT_TARGETS = ("direct", "auto")
 ALLOWED_APP_STATES = ("installed", "absent")
+ALLOWED_UPDATE_MODES = ("clean", "merge")
 ALLOWED_PREMIUM_APPS = ("itsi",)  # Premium apps: target_roles not required; deployment is role-based
 # Version: "latest" or dotted numeric (e.g. 1.0, 4.21.1, 10.1.0)
 VERSION_NUMBER_PATTERN = re.compile(r"^\d+(\.\d+)*$")
@@ -213,6 +214,7 @@ class SplunkAppDeploymentConfig(BaseModel):
     splunkbase_username: Optional[str] = None
     splunkbase_password: Optional[str] = None
     local_app_repo_path: Optional[str] = None
+    update_mode: Optional[str] = None
     deploymentclient_check: bool = Field(
         default=True,
         description=(
@@ -381,6 +383,12 @@ class SplunkAppDeploymentConfig(BaseModel):
                 if version_norm != "latest" and not VERSION_NUMBER_PATTERN.match(version.strip()):
                     raise ValueError(
                         f"splunk_app_deployment.apps[{i}] (name={name!r}): 'version' must be 'latest' or a version number (e.g. 1.0, 4.21.1), got {version!r}"
+                    )
+            app_update_mode = app.get("update_mode")
+            if app_update_mode is not None:
+                if not isinstance(app_update_mode, str) or app_update_mode.strip().lower() not in ALLOWED_UPDATE_MODES:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): 'update_mode' must be one of {ALLOWED_UPDATE_MODES}, got {app_update_mode!r}"
                     )
             # ITSI content pack: reject top-level content_pack_install, content_pack_api, customizations; validate content_pack_apps
             if is_itsi_content_pack:
@@ -726,6 +734,13 @@ class SplunkAppDeploymentConfig(BaseModel):
             if not isinstance(retry, int) or isinstance(retry, bool) or retry < 0:
                 raise ValueError(
                     f"splunk_app_deployment.retry_count must be a non-negative integer, got {retry!r}"
+                )
+        # update_mode: must be one of ALLOWED_UPDATE_MODES
+        um = getattr(self, "update_mode", None)
+        if um is not None:
+            if not isinstance(um, str) or um.strip().lower() not in ALLOWED_UPDATE_MODES:
+                raise ValueError(
+                    f"splunk_app_deployment.update_mode must be one of {ALLOWED_UPDATE_MODES}, got {um!r}"
                 )
         return self
 

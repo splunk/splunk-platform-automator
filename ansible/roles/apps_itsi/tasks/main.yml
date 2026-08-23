@@ -44,6 +44,14 @@
         apps_itsi_repo_path: "{{ splunk_app_deployment.local_app_repo_path | default(splunk_app_deployment_defaults.local_app_repo_path) }}"
         apps_itsi_default_filename: "splunk-it-service-intelligence_{{ (app_item.version | default('latest')) | string | replace('.', '') }}.spl"
 
+    - name: "Set update_mode for ITSI"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.set_fact:
+        _app_update_mode: "{{ app_item.update_mode | default(splunk_app_deployment.update_mode | default(splunk_app_deployment_defaults.update_mode | default('merge'))) }}"
+
     - name: "Set ITSI archive path for local source"
       tags:
         - splunk

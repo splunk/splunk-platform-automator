@@ -39,6 +39,8 @@ splunk_app_deployment:
   # restart_after_deployment: true
   # target_download: false                    # When true, each target downloads from Splunkbase
   # cache_downloads: true                     # When false, remove downloaded archive after extraction
+  # update_mode: "merge"                      # "merge" (default) = overlay new files, keep existing extras (e.g. local/)
+  #                                           # "clean" = remove old app then install fresh
   # download_timeout: 120
   # retry_count: 3
   # splunkbase_api_url: "https://splunkbase.splunk.com/api/v1"
@@ -46,6 +48,7 @@ splunk_app_deployment:
   # Example overrides:
   # temp_dir: "/data/splunk_app_cache"
   # backup_location: "/backup/splunk/apps"
+  # update_mode: "merge"                      # Global: preserve local/ customizations across updates
   # download_timeout: 300
   
   # ===========================================
@@ -117,6 +120,7 @@ splunk_app_deployment:
       target_roles:
         - search_head
       target_path: "etc/apps"
+      update_mode: "merge"          # Keep local/ customizations across updates
       restart_required: true
     
     # -------------------------------------------

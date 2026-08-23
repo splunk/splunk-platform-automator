@@ -22,6 +22,14 @@
   ansible.builtin.set_fact:
     _app_force_update: "{{ app_item.force_update | default(false) | bool }}"
 
+- name: "Set update_mode for {{ app_name }} (local)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.set_fact:
+    _app_update_mode: "{{ app_item.update_mode | default(splunk_app_deployment.update_mode | default(splunk_app_deployment_defaults.update_mode | default('merge'))) }}"
+
 - name: "Check if local app source exists for {{ app_name }}"
   tags:
     - splunk
@@ -156,6 +164,20 @@
     # undef = no parseable version in that default/app.conf; '' = no default/app.conf (ITSI-style not installed).
     dvs_extra_lines: "{{ ['Note: Current empty = no target default/app.conf (not installed). undef = app.conf present but no parseable version; two undef values match (no rsync). Use force_update to resync anyway.'] if ((resolved_version | default('')) == 'undef' or (current_version | default('')) == 'undef') else [] }}"
 
+- name: "Remove old {{ app_name }} (clean mode)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+  ansible.builtin.file:
+    path: "{{ target_path }}"
+    state: absent
+  become: true
+  when:
+    - update_needed | bool
+    - _app_update_mode == 'clean'
+    - local_target_app_conf_stat.stat.exists
+
 - name: "Ensure target app directory exists before rsync"
   tags:
     - splunk
@@ -176,10 +198,10 @@
   ansible.posix.synchronize:
     src: "{{ local_source_path }}/"
     dest: "{{ target_path }}/"
-    delete: no
-    recursive: yes
-    archive: no
-    checksum: yes
+    delete: false
+    recursive: true
+    archive: false
+    checksum: true
     rsync_opts:
       - "--exclude=.git"
       - "--exclude=.gitignore"

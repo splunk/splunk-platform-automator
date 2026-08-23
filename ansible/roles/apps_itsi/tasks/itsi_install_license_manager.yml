@@ -14,6 +14,20 @@
 - name: "Check existing ITSI version on license manager (all apps)"
   ansible.builtin.include_tasks: itsi_version_check.yml
 
+- name: "Remove old ITSI license app directories before install (clean mode)"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.file:
+    path: "{{ apps_itsi_splunk_home }}/etc/apps/{{ item }}"
+    state: absent
+  loop: "{{ itsi_lm_apps }}"
+  become: true
+  when:
+    - apps_itsi_update_needed | default(true)
+    - _app_update_mode | default('merge') == 'clean'
+
 - name: "Build extra_opts for ITSI license apps unarchive"
   tags:
     - splunk

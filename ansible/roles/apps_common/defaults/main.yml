@@ -30,6 +30,9 @@ splunk_app_deployment_defaults:
   # Local app repository settings
   local_app_repo_path: "{{ playbook_dir }}/../apps"
   
+  # Update mode: 'merge' overlays new files on existing (keeps local/ customizations); 'clean' removes old app before installing
+  update_mode: "merge"
+
   # Cache settings: when true, keep downloaded .tgz in temp_dir after extraction; when false, remove after extraction
   cache_downloads: true
   

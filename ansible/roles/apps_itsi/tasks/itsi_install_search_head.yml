@@ -29,6 +29,18 @@
 - name: "Deploy and configure ITSI"
   when: apps_itsi_update_needed | default(true)
   block:
+    - name: "Remove old ITSI app directories before install (clean mode)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi
+      ansible.builtin.file:
+        path: "{{ apps_itsi_splunk_home }}/{{ apps_itsi_sh_apps_base }}/{{ item }}"
+        state: absent
+      loop: "{{ apps_itsi_version_check_apps }}"
+      become: true
+      when: _app_update_mode | default('merge') == 'clean'
+
     - name: "Transfer and unarchive full ITSI to {{ apps_itsi_sh_apps_base }}"
       tags:
         - splunk
