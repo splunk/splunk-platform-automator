@@ -33,6 +33,14 @@
         cp_library_app: "{{ app_item.library_app | default('') }}"
         cp_install_all_apps: "{{ app_item.install_all_apps | default(false) }}"
 
+    - name: "Set update_mode for content pack"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        _app_update_mode: "{{ app_item.update_mode | default(splunk_app_deployment.update_mode | default(splunk_app_deployment_defaults.update_mode | default('merge'))) }}"
+
     - name: "Set list of content pack apps with content_pack_install true"
       tags:
         - splunk
@@ -213,6 +221,23 @@
         cp_update_needed: true
       when: (cp_version_check_apps | default([]) | length) == 0
 
+    - name: "Remove old content pack app directories before install (clean mode, selected apps)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.file:
+        path: "{{ cp_splunk_home }}/{{ cp_apps_base }}/{{ item }}"
+        state: absent
+      loop: "{{ cp_effective_app_list | default([]) }}"
+      become: true
+      when:
+        - cp_unarchive_here
+        - cp_update_needed | default(true)
+        - not cp_install_all_apps
+        - (cp_effective_app_list | default([]) | length) > 0
+        - _app_update_mode | default('merge') == 'clean'
+
     - name: "Unarchive content pack (selected apps) to {{ cp_apps_base }}"
       tags:
         - splunk
@@ -231,6 +256,23 @@
         - cp_update_needed | default(true)
         - not cp_install_all_apps
         - (cp_effective_app_list | default([]) | length) > 0
+
+    - name: "Remove old content pack app directories before install (clean mode, full archive)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.file:
+        path: "{{ cp_splunk_home }}/{{ cp_apps_base }}/{{ item }}"
+        state: absent
+      loop: "{{ cp_archive_app_list | default([]) }}"
+      become: true
+      when:
+        - cp_unarchive_here
+        - cp_update_needed | default(true)
+        - cp_install_all_apps
+        - (cp_archive_app_list | default([]) | length) > 0
+        - _app_update_mode | default('merge') == 'clean'
 
     - name: "Unarchive content pack (full archive) to {{ cp_apps_base }}"
       tags:
