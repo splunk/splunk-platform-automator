@@ -8,7 +8,7 @@ This directory contains playbooks to verify the state of your Splunk deployment.
 
 ### 1. `verify_app_deployment.yml`
 
-Verifies that Splunk apps are deployed correctly according to the configuration in `config/splunk_config.yml`.
+Verifies that Splunk apps are deployed correctly according to the configuration in `config/splunk_config.yml`. Performs the same version checks as `deploy_splunk_apps.yml`.
 
 **What it checks:**
 - ✅ Apps that should be installed are present
@@ -18,7 +18,12 @@ Verifies that Splunk apps are deployed correctly according to the configuration 
   - `etc/manager-apps/` (Cluster Manager)
   - `etc/shcluster/apps/` (Deployer)
   - `etc/apps/` (Direct deployment)
+- ✅ Version drift detection (Splunkbase API and local source comparison)
 - ⚠️ Warns about unexpected apps (present but not in config)
+
+**Prerequisites for version checks:**
+- Splunkbase apps require credentials (`SPLUNKBASE_USERNAME` / `SPLUNKBASE_PASSWORD` env vars or configured in `splunk_config.yml`). If not set, version checks for Splunkbase apps are skipped with a warning.
+- Local apps require the source directory to be available on the controller.
 
 **Usage:**
 
@@ -30,30 +35,44 @@ ansible-playbook ansible/verification/verify_app_deployment.yml
 ansible-playbook ansible/verification/verify_app_deployment.yml -e fail_on_mismatch=true
 ```
 
-**Example Output:**
+**Example Combined Summary Output:**
 
 ```
-DEPLOYMENT SERVER VERIFICATION: ds
-=========================================
-Expected apps: Splunk_TA_nix, Splunk_TA_windows
-Found apps: Splunk_TA_nix, Splunk_TA_windows
-Mismatches: 0
-  ✓ All apps deployed correctly
-=========================================
+==================================================
+  APP DEPLOYMENT VERIFICATION SUMMARY
+==================================================
+
+Total issues: 2
+  Presence errors (MISSING/UNEXPECTED): 0
+  Version drift:                        2
+  Other warnings:                       0
+
+--- VERSION DRIFT (update would be applied by deploy) ---
+  [Direct/itsi]  ITSI: VERSION DRIFT: installed='5.0.0', expected='5.0.1 (latest)'
+  [Direct/uf]  Splunk_TA_nix: VERSION DRIFT: installed='10.3.2', expected='10.3.3'
+
+==================================================
+Run with -e fail_on_mismatch=true to fail on issues
+==================================================
 ```
 
-**With Mismatches:**
+**All clear:**
 
 ```
-CLUSTER MANAGER VERIFICATION: cm
-=========================================
-Expected apps: Splunk_TA_nix
-Found apps: Splunk_TA_windows
-Mismatches: 2
-Issues found:
-  - Splunk_TA_nix: MISSING: App should be installed but not found
-  - Splunk_TA_windows: UNEXPECTED: App should be absent but is installed
-=========================================
+==================================================
+  APP DEPLOYMENT VERIFICATION SUMMARY
+==================================================
+
+Total issues: 0
+  Presence errors (MISSING/UNEXPECTED): 0
+  Version drift:                        0
+  Other warnings:                       0
+
+All apps deployed correctly and versions match.
+
+==================================================
+Run with -e fail_on_mismatch=true to fail on issues
+==================================================
 ```
 
 ### 2. `debug_app_scope.yml` – Debug and test app/ITSI scope (no install/remove)
@@ -158,7 +177,7 @@ The verification playbooks are integrated into the pytest suite in `tests/test_d
 
 ```python
 # Runs after app deployment
-def test_15_verify_app_deployment(self, config_file):
+def test_17_verify_app_deployment(self, config_file):
     result = self._run_playbook(
         "ansible/verification/verify_app_deployment.yml",
         ["-e", "fail_on_mismatch=true"]  # Strict mode for CI/CD
@@ -214,6 +233,16 @@ Controls whether verification playbooks fail on mismatches.
 **Solution:**
 ```bash
 # Re-run deployment
+ansible-playbook ansible/deploy_splunk_apps.yml
+```
+
+### Verification shows "VERSION DRIFT"
+
+**Meaning:** The app is installed but the version differs from what the source (Splunkbase or local repo) provides.
+
+**Solution:**
+```bash
+# Re-run deployment to update apps
 ansible-playbook ansible/deploy_splunk_apps.yml
 ```
 

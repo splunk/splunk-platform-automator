@@ -1,0 +1,17 @@
+---
+# Read-only version check router.
+# Delegates to check_version_splunkbase.yml or check_version_local.yml based on app_item.source.
+# Required vars: app_name, app_item, app_version, target_path.
+# Also expected: verify_target_path, verify_version_location, verify_version_task_label (from caller).
+# Sets: resolved_version, current_version, update_needed.
+
+- name: "Check version for {{ app_name }} ({{ app_item.source }})"
+  tags:
+    - splunk
+    - splunk_apps
+    - verify
+  ansible.builtin.include_tasks: "check_version_{{ app_item.source }}.yml"
+  vars:
+    target_path: "{{ verify_target_path }}"
+    deployment_version_location: "{{ verify_version_location | default('etc/apps/') }}"
+    deployment_version_task_label: "{{ verify_version_task_label | default('Verification') }}"

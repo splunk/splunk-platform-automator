@@ -1,0 +1,160 @@
+---
+# Read-only version check for local apps.
+# Reads source version from controller and target version from deployed app, then compares.
+# No rsync, no directory creation, no write operations.
+# Version tokens (ITSI-style):
+#   - Target Current ''  = no default/app.conf (treat as not installed).
+#   - 'undef'            = app.conf exists but no parseable version=/build= (literal string, compares to undef).
+#   - undef == undef     → versions match (no drift).
+# Required vars: app_name, app_item, target_path.
+# Sets: resolved_version, current_version, update_needed.
+
+- name: "Set local source path for {{ app_name }} (verify)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+    - verify
+  ansible.builtin.set_fact:
+    local_source_path: "{{ app_item.local_path | default((_verify_local_app_repo_path | default(splunk_app_deployment.local_app_repo_path | default(splunk_app_deployment_defaults.local_app_repo_path))) + '/' + (app_item.path | default(app_item.name))) }}"
+
+- name: "Check if local app source exists for {{ app_name }} (verify)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+    - verify
+  ansible.builtin.stat:
+    path: "{{ local_source_path }}"
+  register: local_app_source
+  delegate_to: localhost
+  become: false
+
+- name: "Warn if local app source not found for {{ app_name }} (verify)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+    - verify
+  ansible.builtin.debug:
+    msg: "WARNING: Local app source not found: {{ local_source_path }} — skipping version check"
+  when: not local_app_source.stat.exists
+
+- name: "Read source app.conf version on controller (verify)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+    - verify
+  block:
+    - name: Include app.conf version reader
+      ansible.builtin.include_tasks: read_app_conf_version_launcher_id.yml
+      vars:
+        read_app_conf_file: "{{ local_source_path }}/default/app.conf"
+  delegate_to: localhost
+  connection: local
+  become: false
+  when: local_app_source.stat.exists
+
+- name: "Capture source package version (verify)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+    - verify
+  ansible.builtin.set_fact:
+    local_source_app_version: "{{ (_read_app_conf_launcher_id_cmd.stdout | default('') | trim) | default('undef', true) }}"
+  when: local_app_source.stat.exists
+
+- name: "Read installed version for {{ app_name }} (verify, local)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+    - verify
+  become: true
+  block:
+    - name: "Check if target app.conf exists for {{ app_name }} (verify)"
+      ansible.builtin.stat:
+        path: "{{ target_path }}/default/app.conf"
+      register: local_target_app_conf_stat
+
+    - name: "Read target app.conf version ([launcher]/[id]) (verify)"
+      ansible.builtin.include_tasks: read_app_conf_version_launcher_id.yml
+      vars:
+        read_app_conf_file: "{{ target_path }}/default/app.conf"
+      when: local_target_app_conf_stat.stat.exists
+
+- name: "Capture target installed version (verify)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+    - verify
+  ansible.builtin.set_fact:
+    local_target_app_version: "{{ _read_app_conf_launcher_id_cmd.stdout | default('') | trim }}"
+  when: local_target_app_conf_stat.stat.exists
+
+- name: "Set target version empty when not installed (verify)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+    - verify
+  ansible.builtin.set_fact:
+    local_target_app_version: ""
+  when: not local_target_app_conf_stat.stat.exists
+
+- name: "Set resolved_version / current_version for version check (verify)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+    - verify
+  ansible.builtin.set_fact:
+    resolved_version: "{{ local_source_app_version | default('undef') }}"
+    current_version: "{{ local_target_app_version | default('') }}"
+  when: local_app_source.stat.exists
+
+- name: "Determine if update needed for {{ app_name }} (verify, local)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+    - verify
+  ansible.builtin.set_fact:
+    update_needed: >-
+      {{
+        (not local_target_app_conf_stat.stat.exists)
+        or ((local_source_app_version | default('undef') | string) != (local_target_app_version | default('') | string))
+      }}
+  when: local_app_source.stat.exists
+
+- name: "Set update_needed to skipped when source not found (verify)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+    - verify
+  ansible.builtin.set_fact:
+    update_needed: false
+    resolved_version: "SOURCE NOT FOUND"
+    current_version: ""
+  when: not local_app_source.stat.exists
+
+- name: "Debug version status for {{ app_name }} (verify, local)"
+  tags:
+    - splunk
+    - splunk_apps
+    - local
+    - verify
+  ansible.builtin.include_tasks: deployment_version_status_debug.yml
+  vars:
+    dvs_task_label: "{{ deployment_version_task_label | default('Verification') }}"
+    dvs_app_name: "{{ app_name }}"
+    dvs_current: "{{ current_version | default('') }}"
+    dvs_expected: "{{ resolved_version | default('') }}"
+    dvs_update_needed: "{{ update_needed }}"
+    dvs_force: false
+    dvs_location: "{{ deployment_version_location | default('etc/apps/') }}"
+    dvs_extra_lines: "{{ ['Note: Current empty = no target default/app.conf (not installed). undef = app.conf present but no parseable version; two undef values match (no drift).'] if ((resolved_version | default('')) == 'undef' or (current_version | default('')) == 'undef') else [] }}"

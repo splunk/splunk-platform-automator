@@ -32,3 +32,45 @@
       expected_state: "{{ app_state }}"
       actual_state: "{{ 'installed' if actually_exists else 'absent' }}"
   when: should_exist != actually_exists
+
+# --- Version drift check: compare installed version against expected (Splunkbase API / local source) ---
+- name: "Check version for {{ verify_app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - verify
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: check_version.yml
+  vars:
+    app_name: "{{ verify_app_item.name }}"
+    app_item: "{{ verify_app_item }}"
+    app_version: "{{ verify_app_item.version | default('latest') }}"
+    app_cache_dir: "{{ splunk_app_deployment.temp_dir | default('/tmp/splunk_apps') }}/{{ verify_app_item.name }}"
+    splunk_home: "{{ splunk_install_dir | default('/opt') }}/{{ splunk_install_app | default('splunk') }}"
+    verify_target_path: "{{ verify_app_full_path }}"
+    verify_version_location: "etc/apps/"
+    verify_version_task_label: "Direct deployment verification"
+  when:
+    - app_check.stat.exists
+    - verify_app_item.state | default('installed') != 'absent'
+    - _splunkbase_credentials_available | default(true) | bool or verify_app_item.source | default('') != 'splunkbase'
+
+- name: "Record version drift for {{ verify_app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - verify
+  ansible.builtin.set_fact:
+    direct_mismatches: "{{ direct_mismatches + [version_mismatch_entry] }}"
+  vars:
+    version_mismatch_entry:
+      app: "{{ verify_app_item.name }}"
+      issue: "VERSION DRIFT: installed='{{ current_version | default('?') }}', expected='{{ resolved_version | default('?') }}'"
+      severity: "warning"
+      expected_state: "installed"
+      actual_state: "installed"
+  when:
+    - app_check.stat.exists
+    - verify_app_item.state | default('installed') != 'absent'
+    - update_needed | default(false) | bool

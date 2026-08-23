@@ -43,6 +43,15 @@ Apps are verified in the correct directory based on:
 - **Standalone Indexers/Search Heads:** `apps/` on the host itself
 - **Explicit `deployment_target: "direct"`:** `apps/` on target hosts
 
+### ✅ Version Drift Detection
+
+For each installed app, the verification compares the installed version against the expected version:
+
+- **Splunkbase apps:** Resolves the expected version via the Splunkbase API (supports `version: "latest"` and pinned versions). Requires Splunkbase credentials — if not configured, version checks for Splunkbase apps are skipped with a warning.
+- **Local apps:** Reads the source `app.conf` version from the controller and compares it to the deployed `app.conf` version on the target host.
+
+Version drift is reported as a **warning** (not an error), since the app is present but may need updating.
+
 ### ⚠️ Unexpected Apps
 
 Warns about apps present on disk but not defined in configuration.
@@ -71,61 +80,97 @@ ansible-playbook ansible/verification/verify_app_deployment.yml -e fail_on_misma
 
 ## Example Output
 
-### ✅ All Apps Correct
+### Per-Role Output
+
+Each role (DS, CM, Deployer, Direct) reports its own findings during execution:
 
 ```
-TASK [Display verification results]
-ok: [ds] => {
+TASK [apps_direct : Display verification results]
+ok: [itsi] => {
     "msg": [
         "=========================================",
-        "DEPLOYMENT SERVER VERIFICATION: ds",
+        "DIRECT DEPLOYMENT VERIFICATION: itsi",
         "=========================================",
-        "Expected apps: Splunk_TA_nix, Splunk_TA_windows",
-        "Found apps: Splunk_TA_nix, Splunk_TA_windows",
-        "Mismatches: 0",
-        "  ✓ All apps deployed correctly",
-        "========================================="
-    ]
-}
-```
-
-### ❌ Mismatches Found
-
-```
-TASK [Display verification results]
-ok: [cm] => {
-    "msg": [
-        "=========================================",
-        "CLUSTER MANAGER VERIFICATION: cm",
-        "=========================================",
-        "Expected apps: Splunk_TA_nix",
-        "Found apps: Splunk_TA_windows",
-        "Mismatches: 2",
+        "Host roles: search_head",
+        "Expected apps: Splunk_TA_nix, ITSI",
+        "Found apps (partial): SplunkUniversalForwarder, search, splunk_internal_metrics...",
+        "Mismatches: 1",
         "Issues found:",
-        "  - Splunk_TA_nix: MISSING: App should be installed but not found",
-        "  - Splunk_TA_windows: UNEXPECTED: App should be absent but is installed",
+        "  - Splunk_TA_nix: VERSION DRIFT: installed='10.3.2', expected='10.3.3'",
         "========================================="
     ]
 }
+```
 
-TASK [Fail if mismatches found and fail_on_mismatch is true]
-fatal: [cm]: FAILED! => {
-    "msg": "Cluster manager app verification failed: 2 mismatch(es) found"
+### ✅ Combined Summary — All Apps Correct
+
+At the end, a combined summary report is displayed:
+
+```
+TASK [Display combined verification summary]
+ok: [localhost] => {
+    "msg": [
+        "==================================================",
+        "  APP DEPLOYMENT VERIFICATION SUMMARY",
+        "==================================================",
+        "",
+        "Total issues: 0",
+        "  Presence errors (MISSING/UNEXPECTED): 0",
+        "  Version drift:                        0",
+        "  Other warnings:                       0",
+        "",
+        "All apps deployed correctly and versions match.",
+        "",
+        "==================================================",
+        "Run with -e fail_on_mismatch=true to fail on issues",
+        "=================================================="
+    ]
 }
 ```
+
+### ❌ Combined Summary — Issues Found
+
+```
+TASK [Display combined verification summary]
+ok: [localhost] => {
+    "msg": [
+        "==================================================",
+        "  APP DEPLOYMENT VERIFICATION SUMMARY",
+        "==================================================",
+        "",
+        "Total issues: 3",
+        "  Presence errors (MISSING/UNEXPECTED): 1",
+        "  Version drift:                        2",
+        "  Other warnings:                       0",
+        "",
+        "--- PRESENCE ERRORS ---",
+        "  [CM/cm]  Splunk_TA_nix: MISSING: App should be installed but not found",
+        "",
+        "--- VERSION DRIFT (update would be applied by deploy) ---",
+        "  [Direct/itsi]  ITSI: VERSION DRIFT: installed='5.0.0', expected='5.0.1 (latest)'",
+        "  [Direct/uf]  Splunk_TA_nix: VERSION DRIFT: installed='10.3.2', expected='10.3.3'",
+        "",
+        "==================================================",
+        "Run with -e fail_on_mismatch=true to fail on issues",
+        "=================================================="
+    ]
+}
+```
+
+Each issue line shows `[Source/Host]` where Source is one of `DS`, `CM`, `Deployer`, or `Direct`.
 
 ## Integration with PyTest
 
 The verification is integrated into `tests/test_deployment.py`:
 
 ```python
-def test_14_deploy_splunk_apps(self, config_file):
+def test_11_deploy_splunk_apps(self, config_file):
     """Deploy Splunk apps according to configuration."""
     result = self._run_playbook("ansible/deploy_splunk_apps.yml")
     assert result.returncode == 0
     self.manager.is_apps_deployed = True
 
-def test_15_verify_app_deployment(self, config_file):
+def test_17_verify_app_deployment(self, config_file):
     """Verify apps are deployed correctly with strict mode."""
     result = self._run_playbook(
         "ansible/verification/verify_app_deployment.yml",
@@ -141,8 +186,8 @@ def test_15_verify_app_deployment(self, config_file):
 pytest tests/test_deployment.py --config tests/configs/test_config.yml
 
 # Run only app deployment tests
-pytest tests/test_deployment.py::TestSplunkDeployment::test_14_deploy_splunk_apps
-pytest tests/test_deployment.py::TestSplunkDeployment::test_15_verify_app_deployment
+pytest tests/test_deployment.py::TestSplunkDeployment::test_11_deploy_splunk_apps
+pytest tests/test_deployment.py::TestSplunkDeployment::test_17_verify_app_deployment
 ```
 
 ## Configuration Example
@@ -231,18 +276,22 @@ ansible/
 │   ├── verify_app_deployment.yml          # Main verification playbook
 │   └── README.md                          # Verification documentation
 └── roles/
+    ├── apps_common/tasks/
+    │   ├── check_version.yml              # Version check router (splunkbase/local)
+    │   ├── check_version_splunkbase.yml   # Read-only Splunkbase version check
+    │   └── check_version_local.yml        # Read-only local app version check
     ├── apps_deployment_server/tasks/
     │   ├── verify.yml                     # DS verification logic
-    │   └── verify_single_app.yml          # Check single app
+    │   └── verify_single_app.yml          # Check single app + version drift
     ├── apps_cluster_manager/tasks/
     │   ├── verify.yml                     # CM verification logic
-    │   └── verify_single_app.yml          # Check single app
+    │   └── verify_single_app.yml          # Check single app + version drift
     ├── apps_deployer/tasks/
     │   ├── verify.yml                     # Deployer verification logic
-    │   └── verify_single_app.yml          # Check single app
+    │   └── verify_single_app.yml          # Check single app + version drift
     └── apps_direct/tasks/
         ├── verify.yml                     # Direct deployment verification
-        └── verify_single_app.yml          # Check single app
+        └── verify_single_app.yml          # Check single app + version drift
 
 tests/
 └── test_deployment.py                     # PyTest integration
@@ -273,6 +322,30 @@ Apps present on disk but not in configuration will show as warnings.
 - Manually remove them if they're obsolete
 - Set `state: absent` in config and redeploy
 
+### Version Drift Detected
+
+Version drift means the installed version differs from the expected version. This is a warning, not an error.
+
+**Solution:**
+```bash
+# Re-run deployment to apply the update
+ansible-playbook ansible/deploy_splunk_apps.yml
+```
+
+### Splunkbase Version Checks Skipped
+
+If you see `WARNING: Splunkbase credentials not configured`, version drift checks for Splunkbase apps are skipped.
+
+**Solution:**
+```bash
+# Set credentials via environment variables
+export SPLUNKBASE_USERNAME="your_username"
+export SPLUNKBASE_PASSWORD="your_password"
+ansible-playbook ansible/verification/verify_app_deployment.yml
+```
+
+Or configure them in `config/splunk_config.yml` under `splunk_app_deployment`.
+
 ### Verification Skipped
 
 If verification is skipped for a host, it means no apps are expected there based on the routing logic. This is normal.
@@ -302,10 +375,10 @@ If verification is skipped for a host, it means no apps are expected there based
 
 | Mode | Condition | Exit Code | Behavior |
 |------|-----------|-----------|----------|
-| Report | No mismatches | 0 | ✅ Pass |
-| Report | Mismatches found | 0 | ⚠️ Pass with warnings |
-| Strict | No mismatches | 0 | ✅ Pass |
-| Strict | Mismatches found | Non-zero | ❌ Fail |
+| Report | No issues | 0 | ✅ Pass |
+| Report | Presence errors or version drift | 0 | ⚠️ Pass with summary |
+| Strict | No issues | 0 | ✅ Pass |
+| Strict | Any issues (presence or drift) | Non-zero | ❌ Fail with breakdown |
 
 ## See Also
 

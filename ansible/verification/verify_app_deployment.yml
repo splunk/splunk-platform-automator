@@ -1,11 +1,45 @@
 ---
 # Verify App Deployment
 # Checks if apps defined in splunk_config.yml are actually deployed correctly.
+# Verifies both presence/absence AND version drift (same checks as deploy_splunk_apps.yml).
 # Inventory is provided by the framework (ansible.cfg); run from project root.
 #
 # Usage:
 #   ansible-playbook ansible/verification/verify_app_deployment.yml
 #   ansible-playbook ansible/verification/verify_app_deployment.yml -e fail_on_mismatch=true
+
+- name: Pre-verification checks
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Check Splunkbase credentials availability (for version checks)
+      ansible.builtin.set_fact:
+        _splunkbase_credentials_available: >-
+          {{
+            (
+              ((lookup('env', 'SPLUNKBASE_USERNAME') | default('', true) | trim | length) > 0
+               or (splunk_app_deployment.splunkbase_username | default('', true) | trim | length) > 0)
+              and
+              ((lookup('env', 'SPLUNKBASE_PASSWORD') | default('', true) | trim | length) > 0
+               or (splunk_app_deployment.splunkbase_password | default('', true) | trim | length) > 0)
+            ) | bool
+          }}
+      run_once: true
+
+    - name: Warn if Splunkbase credentials not available
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: Splunkbase credentials not configured. Version checks for Splunkbase apps will be skipped.
+          Set SPLUNKBASE_USERNAME and SPLUNKBASE_PASSWORD environment variables or configure in splunk_config.yml
+          to enable full version drift detection.
+      when: not (_splunkbase_credentials_available | default(false) | bool)
+      run_once: true
+
+    - name: Normalize local app repo path for verification playbook
+      ansible.builtin.set_fact:
+        _verify_local_app_repo_path: >-
+          {{ splunk_app_deployment.local_app_repo_path
+             | default(playbook_dir + '/../../apps') }}
 
 - name: Verify Deployment Server App Distribution
   hosts: role_deployment_server
@@ -47,34 +81,121 @@
   hosts: localhost
   gather_facts: false
   tasks:
-    - name: Initialize combined verification summary
+    - name: Initialize summary collections
       ansible.builtin.set_fact:
-        combined_verification_summary: []
+        _all_mismatches: []
+        _presence_errors: []
+        _version_drift: []
+        _other_warnings: []
 
-    - name: Collect Deployment Server findings
+    # --- Collect all mismatches from all hosts into a flat list with source context ---
+    - name: Collect Deployment Server mismatches
       ansible.builtin.set_fact:
-        combined_verification_summary: "{{ combined_verification_summary + ['=== DEPLOYMENT SERVER: ' + item + ' ==='] + (hostvars[item].ds_issues_display | default([])) }}"
+        _all_mismatches: >-
+          {{ _all_mismatches + (hostvars[item].ds_mismatches | default([])
+             | map('combine', {'_source': 'DS', '_host': item}) | list) }}
       loop: "{{ groups['role_deployment_server'] | default([]) }}"
       when: hostvars[item].ds_mismatches | default([]) | length > 0
 
-    - name: Collect Cluster Manager findings
+    - name: Collect Cluster Manager mismatches
       ansible.builtin.set_fact:
-        combined_verification_summary: "{{ combined_verification_summary + ['=== CLUSTER MANAGER: ' + item + ' ==='] + (hostvars[item].cm_issues_display | default([])) }}"
+        _all_mismatches: >-
+          {{ _all_mismatches + (hostvars[item].cm_mismatches | default([])
+             | map('combine', {'_source': 'CM', '_host': item}) | list) }}
       loop: "{{ groups['role_cluster_manager'] | default([]) }}"
       when: hostvars[item].cm_mismatches | default([]) | length > 0
 
-    - name: Collect Deployer findings
+    - name: Collect Deployer mismatches
       ansible.builtin.set_fact:
-        combined_verification_summary: "{{ combined_verification_summary + ['=== DEPLOYER: ' + item + ' ==='] + (hostvars[item].deployer_issues_display | default([])) }}"
+        _all_mismatches: >-
+          {{ _all_mismatches + (hostvars[item].deployer_mismatches | default([])
+             | map('combine', {'_source': 'Deployer', '_host': item}) | list) }}
       loop: "{{ groups['role_deployer'] | default([]) }}"
       when: hostvars[item].deployer_mismatches | default([]) | length > 0
 
-    - name: Collect Direct Deployment findings
+    - name: Collect Direct Deployment mismatches
       ansible.builtin.set_fact:
-        combined_verification_summary: "{{ combined_verification_summary + ['=== DIRECT: ' + item + ' ==='] + (hostvars[item].direct_issues_display | default([])) }}"
+        _all_mismatches: >-
+          {{ _all_mismatches + (hostvars[item].direct_mismatches | default([])
+             | map('combine', {'_source': 'Direct', '_host': item}) | list) }}
       loop: "{{ groups['all'] | default([]) }}"
       when: hostvars[item].direct_mismatches | default([]) | length > 0
 
+    # --- Classify mismatches into categories ---
+    - name: Classify presence errors (MISSING / UNEXPECTED)
+      ansible.builtin.set_fact:
+        _presence_errors: "{{ _all_mismatches | selectattr('issue', 'match', '^(MISSING|UNEXPECTED)') | list }}"
+        _version_drift: "{{ _all_mismatches | selectattr('issue', 'match', '^VERSION DRIFT') | list }}"
+        _other_warnings: "{{ _all_mismatches | rejectattr('issue', 'match', '^(MISSING|UNEXPECTED|VERSION DRIFT)') | list }}"
+
+    # --- Compute totals ---
+    - name: Compute summary counts
+      ansible.builtin.set_fact:
+        _total_issues: "{{ _all_mismatches | length }}"
+        _total_presence: "{{ _presence_errors | length }}"
+        _total_drift: "{{ _version_drift | length }}"
+        _total_other: "{{ _other_warnings | length }}"
+
+    # --- Build display lines ---
+    - name: Build presence error display
+      ansible.builtin.set_fact:
+        _presence_display: "{{ _presence_display | default([]) + ['  [' + item._source + '/' + item._host + ']  ' + item.app + ': ' + item.issue] }}"
+      loop: "{{ _presence_errors }}"
+      when: _presence_errors | length > 0
+
+    - name: Build version drift display
+      ansible.builtin.set_fact:
+        _drift_display: "{{ _drift_display | default([]) + ['  [' + item._source + '/' + item._host + ']  ' + item.app + ': ' + item.issue] }}"
+      loop: "{{ _version_drift }}"
+      when: _version_drift | length > 0
+
+    - name: Build other warnings display
+      ansible.builtin.set_fact:
+        _other_display: "{{ _other_display | default([]) + ['  [' + item._source + '/' + item._host + ']  ' + item.app + ': ' + item.issue] }}"
+      loop: "{{ _other_warnings }}"
+      when: _other_warnings | length > 0
+
+    # --- Final summary output ---
     - name: Display combined verification summary
       ansible.builtin.debug:
-        msg: "{{ ['==============================================', 'APP DEPLOYMENT VERIFICATION – COMBINED SUMMARY', '=============================================='] + (combined_verification_summary | length > 0 and (['Issues found:'] + combined_verification_summary) or ['  ✓ No issues – all apps deployed correctly']) + ['==============================================', 'Run with -e fail_on_mismatch=true to fail on discrepancies', '=============================================='] }}"
+        msg: "{{ _report }}"
+      vars:
+        _header:
+          - "=================================================="
+          - "  APP DEPLOYMENT VERIFICATION SUMMARY"
+          - "=================================================="
+          - ""
+        _counts:
+          - "Total issues: {{ _total_issues }}"
+          - "  Presence errors (MISSING/UNEXPECTED): {{ _total_presence }}"
+          - "  Version drift:                        {{ _total_drift }}"
+          - "  Other warnings:                       {{ _total_other }}"
+          - ""
+        _presence_section: >-
+          {{ (_total_presence | int > 0) | ternary(
+             ['--- PRESENCE ERRORS ---'] + (_presence_display | default([])) + [''],
+             []) }}
+        _drift_section: >-
+          {{ (_total_drift | int > 0) | ternary(
+             ['--- VERSION DRIFT (update would be applied by deploy) ---'] + (_drift_display | default([])) + [''],
+             []) }}
+        _other_section: >-
+          {{ (_total_other | int > 0) | ternary(
+             ['--- OTHER WARNINGS ---'] + (_other_display | default([])) + [''],
+             []) }}
+        _ok_section: >-
+          {{ (_total_issues | int == 0) | ternary(
+             ['All apps deployed correctly and versions match.', ''],
+             []) }}
+        _footer:
+          - "=================================================="
+          - "Run with -e fail_on_mismatch=true to fail on issues"
+          - "=================================================="
+        _report: "{{ _header + _counts + _ok_section + _presence_section + _drift_section + _other_section + _footer }}"
+
+    - name: Fail if mismatches found and fail_on_mismatch is true
+      ansible.builtin.fail:
+        msg: "App deployment verification failed: {{ _total_issues }} issue(s) found ({{ _total_presence }} presence, {{ _total_drift }} version drift, {{ _total_other }} other)"
+      when:
+        - fail_on_mismatch | default(false) | bool
+        - _total_issues | int > 0
