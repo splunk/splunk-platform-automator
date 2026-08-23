@@ -24,6 +24,19 @@
   until: cp_status.status is defined and cp_status.status in [200, 404]
   failed_when: false
 
+- name: "Refresh content pack registry ({{ app_name }})"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/servicesNS/nobody/itsi/itoa_interface/content_pack/refresh"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: POST
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  when: >-
+    cp_status is failed or
+    ((cp_status.json | default({})).installed_versions | default([]) | first | default('')) != (customization_extra_vars.version | default('1.0'))
+
 - name: "Install content pack ({{ app_name }}) via ITSI API (POST) (post-restart)"
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/SA-ITOA/itoa_interface/content_pack/{{ app_name }}/{{ _cp_version }}/install"
@@ -64,4 +77,15 @@
   when: >-
     cp_status is not failed
     and ((cp_status.json | default({})).installed_versions | default([]) | first | default('')) == (customization_extra_vars.version | default('1.0'))
+  changed_when: false
+
+# Record when content pack was updated (had a previous version installed) so configure playbooks are skipped unless force_run_playbook_after_restart is true.
+- name: "Record content pack ({{ app_name }}) was updated (skip run_playbook_after_restart unless forced)"
+  ansible.builtin.set_fact:
+    content_pack_already_installed: "{{ (content_pack_already_installed | default({})) | combine({app_name: true}) }}"
+  when: >-
+    cp_status is not failed
+    and cp_status.status | default(0) == 200
+    and ((cp_status.json | default({})).installed_versions | default([]) | length) > 0
+    and ((cp_status.json | default({})).installed_versions | default([]) | first | default('')) != (customization_extra_vars.version | default('1.0'))
   changed_when: false
