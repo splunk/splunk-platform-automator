@@ -21,11 +21,10 @@ splunk_app_deployment:
       app_id: 1841
       premium_app: itsi
 
-    - name: "Splunk App for Content Packs"
+    - name: DA-ITSI-ContentLibrary
       source: splunkbase
       app_id: 5391
       itsi_content_pack: true
-      library_app: DA-ITSI-ContentLibrary
       content_pack_apps:
         - name: DA-ITSI-CP-foo
           content_pack_install: true

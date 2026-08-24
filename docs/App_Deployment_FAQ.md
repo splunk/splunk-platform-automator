@@ -147,7 +147,9 @@ apps:
 
 ### Playbook fails: "App archive top-level folder does not match app name"
 
-**Cause**: For Splunkbase apps, the **`name`** in your config must match the **top-level folder name** inside the app archive. If they differ, the playbook removes the wrongly extracted directory and fails.
+**Cause**: For Splunkbase **folder-backed** apps (standard apps and ITSI content packs without `install_all_apps`), the **`name`** in your config must match the **top-level folder name** inside the app archive. If they differ, the playbook removes the wrongly extracted directory and fails.
+
+**Does not apply to**: **`premium_app: itsi`** (ITSI uses a multi-app archive; `name` is a config label) or content packs with **`install_all_apps: true`**. See [App Deployment Guide – App `name`: folder-backed vs bundle-backed](App_Deployment_Guide.md#app-name-folder-backed-vs-bundle-backed-entries).
 
 **Common reason**: The wrong **`app_id`** was specified (e.g. a different Splunkbase app), so the downloaded archive has a different folder name than your `name`.
 

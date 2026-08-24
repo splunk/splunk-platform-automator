@@ -1,6 +1,7 @@
 ---
 # ITSI content pack deployment: resolve .spl, unarchive, restart, SHC wait, API install, register run_playbook_after_restart.
-# Expects app_item (itsi_content_pack, content_pack_apps, library_app, install_all_apps, source, version, path/app_id).
+# Expects app_item (itsi_content_pack, content_pack_apps, install_all_apps, source, version, path/app_id).
+# Top-level name is always the on-disk app folder (pack folder for single-app CP, library folder for multi-app CP).
 # Runs on hosts in ITSI direct set (deployer or standalone SH does unarchive; first SHC member or standalone SH runs API).
 # Shared ITSI task sets apps_itsi_sh_apps_base, apps_itsi_sh_notify, _first_shc_member, run_cp_api_on_this_host (always defined when role runs; avoids handler inheriting undefined when).
 
@@ -29,9 +30,9 @@
         cp_apps_base: "{{ apps_itsi_sh_apps_base }}"
         cp_notify: "{{ apps_itsi_sh_notify }}"
         cp_unarchive_here: "{{ (apps_itsi_sh_apps_base == 'etc/shcluster/apps') or (inventory_hostname in (groups['role_search_head'] | default([])) and ((group_names | select('match', '^shcluster_') | list | length) == 0)) }}"
+        cp_single_app_mode: "{{ not (app_item.install_all_apps | default(false) | bool) and ((app_item.content_pack_apps | default([]) | length) == 0) }}"
         cp_content_pack_apps: "{{ app_item.content_pack_apps | default([]) }}"
-        cp_library_app: "{{ app_item.library_app | default('') }}"
-        cp_install_all_apps: "{{ app_item.install_all_apps | default(false) }}"
+        cp_install_all_apps: "{{ app_item.install_all_apps | default(false) | bool }}"
 
     - name: "Set update_mode for content pack"
       tags:
@@ -41,7 +42,24 @@
       ansible.builtin.set_fact:
         _app_update_mode: "{{ app_item.update_mode | default(splunk_app_deployment.update_mode | default(splunk_app_deployment_defaults.update_mode | default('merge'))) }}"
 
-    - name: "Set list of content pack apps with content_pack_install true"
+    - name: "Synthesize single-app content pack from top-level name and options"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        cp_content_pack_apps:
+          - "{{ _cp_single_app_item }}"
+      vars:
+        _cp_single_app_item: >-
+          {{
+            {'name': app_item.name, 'content_pack_install': (app_item.content_pack_install | default(true) | bool)}
+            | combine((app_item.content_pack_api is defined) | ternary({'content_pack_api': app_item.content_pack_api}, {}))
+            | combine((app_item.customizations is defined) | ternary({'customizations': app_item.customizations}, {}))
+          }}
+      when: cp_single_app_mode | default(false)
+
+    - name: "Set list of content pack apps with content_pack_install true (default true when omitted)"
       tags:
         - splunk
         - splunk_apps
@@ -50,8 +68,8 @@
         cp_content_pack_apps_to_install: "{{ cp_content_pack_apps_to_install | default([]) + [item] }}"
       loop: "{{ cp_content_pack_apps }}"
       loop_control:
-        label: "{{ item.name }} content_pack_install={{ item.content_pack_install | default(false) | bool }}"
-      when: item.content_pack_install | default(false) | bool
+        label: "{{ item.name }} content_pack_install={{ item.content_pack_install | default(cp_content_pack_install_default) | bool }}"
+      when: item.content_pack_install | default(cp_content_pack_install_default) | bool
 
     - name: "Ensure cp_content_pack_apps_to_install defined"
       tags:
@@ -60,15 +78,6 @@
         - itsi_content_pack
       ansible.builtin.set_fact:
         cp_content_pack_apps_to_install: "{{ cp_content_pack_apps_to_install | default([]) }}"
-
-    - name: "Build effective app list for content pack (names to extract or remove)"
-      tags:
-        - splunk
-        - splunk_apps
-        - itsi_content_pack
-      ansible.builtin.set_fact:
-        cp_effective_app_list: "{{ ([cp_library_app] if cp_library_app else []) + (cp_content_pack_apps | map(attribute='name') | list) }}"
-      when: not cp_install_all_apps
 
     - name: "Set content pack archive path (local)"
       tags:
@@ -179,6 +188,35 @@
         cp_archive_app_list: "{{ app_conf_app_names if (splunk_app_deployment.target_download | default(false)) else (((_cp_app_conf_result | default({})).ansible_facts | default({})).cp_archive_app_list | default([])) }}"
         cp_expected_versions: "{{ app_conf_expected_versions if (splunk_app_deployment.target_download | default(false)) else (((_cp_app_conf_result | default({})).ansible_facts | default({})).cp_expected_versions | default({})) }}"
 
+    - name: "Build effective app list for content pack (selected apps)"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        cp_effective_app_list: "{{ _cp_effective_names | unique | list }}"
+      vars:
+        _cp_effective_names: "{{ [app_item.name] if cp_single_app_mode else ([app_item.name] + (cp_content_pack_apps | map(attribute='name') | list)) }}"
+      when: not cp_install_all_apps
+
+    - name: "Fail when configured content pack folders are not in archive"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.fail:
+        msg: >-
+          Content pack folder(s) {{ _cp_missing_folders | join(', ') }} are not in the archive for app_id {{ app_item.app_id | default('n/a') }}.
+          Top-level name must be the on-disk app folder inside the .spl/.tgz (same rule as Splunkbase apps).
+          Configured extract list: {{ cp_effective_app_list | join(', ') }}.
+          Archive contains: {{ cp_archive_app_list | join(', ') }}.
+      vars:
+        _cp_missing_folders: "{{ cp_effective_app_list | default([]) | difference(cp_archive_app_list | default([])) | list }}"
+      when:
+        - not cp_install_all_apps
+        - (cp_archive_app_list | default([]) | length) > 0
+        - (_cp_missing_folders | length) > 0
+
     - name: "Build effective app list for content pack from archive (install_all_apps)"
       tags:
         - splunk
@@ -249,7 +287,7 @@
         remote_src: "{{ (splunk_app_deployment.target_download | default(false)) and (app_item.source | default('local')) == 'splunkbase' }}"
         owner: "{{ splunk_user | default('splunk') }}"
         group: "{{ splunk_group | default('splunk') }}"
-        extra_opts: "{{ ['--add-file'] + cp_effective_app_list | default([]) }}"
+        extra_opts: "{{ ['--dereference'] + (cp_effective_app_list | default([])) }}"
       notify: "{{ cp_notify }}"
       when:
         - cp_unarchive_here

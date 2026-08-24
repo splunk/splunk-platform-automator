@@ -12,7 +12,7 @@
 
 # Version status: apps_common install_from_* when installing standard apps.
 
-- name: "Install {{ app_item.name }} (premium pack ITSI)"
+- name: "Install {{ app_item.name }} (premium app ITSI)"
   ansible.builtin.include_role:
     name: apps_itsi
   when:

@@ -7,24 +7,11 @@
             "host": "itsi",
             "scope_debug_results": [
                 {
-                    "app": "DA-ITSI-ContentLibrary",
+                    "app": "DA-ITSI-CP-CUST-ATLAS-AWS-EBS",
                     "base_hosts": [
                         "itsi"
                     ],
-                    "content_pack_apps": [
-                        {
-                            "content_pack_install": true,
-                            "name": "DA-ITSI-CP-bar"
-                        },
-                        {
-                            "content_pack_install": false,
-                            "name": "DA-ITSI-CP-baz"
-                        },
-                        {
-                            "content_pack_install": true,
-                            "name": "DA-ITSI-CP-foo"
-                        }
-                    ],
+                    "content_pack_apps": null,
                     "customizations": null,
                     "filtered_hosts": [
                         "itsi"

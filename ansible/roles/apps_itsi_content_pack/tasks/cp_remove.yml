@@ -1,8 +1,7 @@
 ---
 # Remove ITSI content pack: remove app dirs from etc/apps or etc/shcluster/apps, notify restart/push.
-# Same pattern as ITSI search head remove: resolve archive, build app list from archive (apps_common app_conf_cache), then remove.
+# Top-level name is the on-disk library folder (multi-app) or pack folder (single-app).
 # Expects app_item, app_state == 'absent'.
-# Uses shared ITSI vars set at start of content pack main.yml (apps_itsi_sh_apps_base, apps_itsi_sh_notify).
 
 - name: "Set ITSI content pack removal vars from app_item"
   tags:
@@ -15,20 +14,20 @@
     cp_notify: "{{ apps_itsi_sh_notify }}"
     cp_unarchive_here: "{{ (apps_itsi_sh_apps_base == 'etc/shcluster/apps') or (inventory_hostname in (groups['role_search_head'] | default([])) and ((group_names | select('match', '^shcluster_') | list | length) == 0)) }}"
     cp_content_pack_apps: "{{ app_item.content_pack_apps | default([]) }}"
-    cp_library_app: "{{ app_item.library_app | default('') }}"
-    cp_install_all_apps: "{{ app_item.install_all_apps | default(false) }}"
+    cp_install_all_apps: "{{ app_item.install_all_apps | default(false) | bool }}"
+    cp_single_app_mode: "{{ not (app_item.install_all_apps | default(false) | bool) and ((app_item.content_pack_apps | default([]) | length) == 0) }}"
 
-# When not install_all_apps: remove only library_app + content_pack_apps names.
-- name: "Build content pack remove list (library_app + content_pack_apps names)"
+- name: "Build content pack remove list (name + content_pack_apps names)"
   tags:
     - splunk
     - splunk_apps
     - itsi_content_pack
   ansible.builtin.set_fact:
-    cp_remove_list: "{{ ([cp_library_app] if cp_library_app else []) + (cp_content_pack_apps | map(attribute='name') | list) }}"
+    cp_remove_list: "{{ _cp_remove_names | unique | list }}"
+  vars:
+    _cp_remove_names: "{{ [app_item.name] if cp_single_app_mode else ([app_item.name] + (cp_content_pack_apps | map(attribute='name') | list)) }}"
   when: not cp_install_all_apps
 
-# When install_all_apps: resolve archive, download if Splunkbase, build app list from archive (like ITSI), then remove.
 - name: "Resolve archive and build content pack app list for removal"
   ansible.builtin.include_tasks: cp_remove_common.yml
   when: cp_install_all_apps

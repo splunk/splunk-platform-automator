@@ -2,6 +2,15 @@
 # Compare content pack app versions on target to expected versions from app conf cache.
 # Expects: cp_version_check_apps (list), cp_version_check_base (path), cp_expected_versions (dict from cache).
 
+- name: "Reset content pack version check accumulators"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+  ansible.builtin.set_fact:
+    _cp_status_lines: ['Apps:']
+    cp_current_versions: {}
+
 - name: "Filter expected versions to apps needed for content pack"
   tags:
     - splunk
@@ -88,7 +97,7 @@
     - splunk_apps
     - itsi_content_pack
   ansible.builtin.set_fact:
-    _cp_status_lines: "{{ (_cp_status_lines | default(['Apps:'])) + ['- ' ~ item ~ \", Current: '\" ~ (cp_current_versions | default({})).get(item, '') ~ \"', Expected: '\" ~ (cp_expected_versions_filtered | default({})).get(item, '') ~ \"'.\"] }}"
+    _cp_status_lines: "{{ _cp_status_lines + ['- ' ~ item ~ \", Current: '\" ~ (cp_current_versions | default({})).get(item, '') ~ \"', Expected: '\" ~ (cp_expected_versions_filtered | default({})).get(item, '') ~ \"'.\"] }}"
   loop: "{{ cp_version_check_apps | default([]) }}"
   loop_control:
     label: "{{ item }}"
@@ -100,7 +109,7 @@
     - splunk_apps
     - itsi_content_pack
   ansible.builtin.debug:
-    msg: "{{ (_cp_status_lines | default(['Apps:'])) + ['Update needed: ' ~ (cp_update_needed | string)] }}"
+    msg: "{{ _cp_status_lines + ['Update needed: ' ~ (cp_update_needed | string)] }}"
 
 - name: "Fail if any content pack app name not found in archive"
   tags:

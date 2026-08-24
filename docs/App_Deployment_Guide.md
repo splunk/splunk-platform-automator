@@ -16,7 +16,7 @@ This guide covers the complete Splunk app deployment system, including:
 
 1. [Deployment Methods](#deployment-methods)
 2. [App Configuration](#app-configuration)
-3. [Premium packs (ITSI)](#premium-packs-splunk-it-service-intelligence-itsi)
+3. [Premium apps (ITSI)](#premium-apps-splunk-it-service-intelligence-itsi)
 4. [State Management](#state-management)
 5. [Clustered Environments](#clustered-environments)
 6. [Deployment Server Setup](#deployment-server-setup)
@@ -112,7 +112,7 @@ splunk_app_deployment:
 ### Configuration Options
 
 ```yaml
-- name: "app_name"                    # Required: App name (must match app folder name)
+- name: "app_name"                    # Required: see "App name: folder-backed vs bundle-backed" below
   source: splunkbase|local            # Required: App source
   
   # For Splunkbase apps:
@@ -141,9 +141,24 @@ splunk_app_deployment:
   serverclass: "custom_class"         # Optional: Custom serverclass name (default: app_<appname>)
 ```
 
-### Premium packs: Splunk IT Service Intelligence (ITSI)
+### App `name`: folder-backed vs bundle-backed entries
 
-Premium packs are delivered as a **single archive (`.spl` or `.tgz`) that contains multiple apps**. They require role-specific extraction and configuration, so they use a dedicated path instead of the standard install.
+Not every app entry uses **`name`** the same way. There are two models:
+
+| Model | When | What `name` means | On-disk folders |
+|-------|------|-------------------|-----------------|
+| **Folder-backed** | Standard apps (`target_roles`); ITSI content packs without `install_all_apps` | The app directory under `etc/apps`, `deployment-apps`, etc. | Exactly `name` (and for multi-app CPs, also each `content_pack_apps[].name`) |
+| **Bundle-backed** | `premium_app: itsi`; ITSI content packs with `install_all_apps: true` | Config entry identity (logs, duplicate detection, scope output) — **not** a single install folder | Derived from the archive at deploy/removal time (many folders for ITSI; full archive for `install_all_apps`) |
+
+**Folder-backed entries** follow the Splunkbase rule below: for `source: splunkbase`, `name` must match the archive’s top-level folder. Use YAML comments for human-readable catalog titles (e.g. `# Splunk App for Content Packs` above `name: DA-ITSI-ContentLibrary`).
+
+**Bundle-backed entries** do **not** use `name` as an extract target. For ITSI, the playbook lists apps from the archive (`SA-ITOA`, license apps, etc.) and extracts role-specific subsets. A catalog-style `name` such as `"Splunk IT Service Intelligence"` is valid and common. Identify the entry with **`premium_app: itsi`** (and `app_id` / `path` for the archive), not by folder name.
+
+### Premium apps: Splunk IT Service Intelligence (ITSI)
+
+ITSI is delivered as a **single archive (`.spl` or `.tgz`) that contains multiple apps**. It requires role-specific extraction and configuration, so it uses a dedicated path instead of the standard install.
+
+**`name` (bundle-backed):** Top-level **`name`** is a logical label for this config entry, not an on-disk app folder. Deployment, version check, and removal use the **archive contents**, not `name`. See [App `name`: folder-backed vs bundle-backed entries](#app-name-folder-backed-vs-bundle-backed-entries).
 
 **Source:** Use either **Splunkbase** or **local**:
 
@@ -217,19 +232,28 @@ No `auto_config` flag is required: with **`premium_app: itsi`**, the role both e
 
 ITSI content packs are deployed as **one app entry per content pack .spl file**. They run on the **same hosts as ITSI** (the ITSI direct set: license manager, search heads, standalone indexers). You must have at least one app entry with **`premium_app: itsi`** and **`state: installed`** for content pack entries to be valid.
 
+**Unified `name` rule (folder-backed):** For `itsi_content_pack` entries that are not `install_all_apps` bundles, top-level **`name`** is the on-disk app folder (same rule as standard Splunkbase apps). Use YAML comments for human-readable catalog titles. Entries with **`install_all_apps: true`** are bundle-backed — see [App `name`: folder-backed vs bundle-backed entries](#app-name-folder-backed-vs-bundle-backed-entries).
+
+| Shape | Top-level `name` | `content_pack_apps` |
+|-------|------------------|---------------------|
+| **Single-app CP** | The pack folder (e.g. `DA-ITSI-CP-CUST-ATLAS-AWS-EBS`) | omitted |
+| **Multi-app CP** | The library folder (e.g. `DA-ITSI-ContentLibrary`) | additional pack folders only |
+| **`install_all_apps: true`** | Label for logs/identity (bundle-backed) | optional partial list; archive used at deploy/removal |
+
 **Config rules:**
 
-- **Per-app structure only:** Do **not** set top-level `content_pack_install`, `content_pack_api`, or `customizations` on the content pack entry. All of these options live **only** inside **`content_pack_apps`**, as a list of objects.
-- **`content_pack_apps`:** Required when `install_all_apps` is false. Each item must have **`name`** (required; the app dir name of the content pack, e.g. `DA-ITSI-CP-monitoring-alerting`). Optional per item: **`content_pack_install`** (bool), **`content_pack_api`** (dict: `install_all`, `saved_search_action`, `backfill`, `resolution`, `enabled`, `prefix`; `enabled` defaults to false, `prefix` defaults to empty string), **`customizations`** (dict: `run_playbook_after_restart`, `extra_vars`).
-- **`library_app`:** Optional. When set (e.g. `DA-ITSI-ContentLibrary`), this app is always installed from the same .spl in addition to the apps listed in `content_pack_apps`. It is **not** listed inside `content_pack_apps`.
-- **`install_all_apps`:** Optional, default false. When true, the full archive is extracted; when false, only `library_app` (if set) and the **`name`** of each `content_pack_apps` item are extracted.
+- **Single-app CP** (no `content_pack_apps`, not `install_all_apps`): optional top-level **`content_pack_api`** and **`customizations`**. Do not set top-level `content_pack_install`, `content_pack_apps`, or `install_all_apps`.
+- **Multi-app CP**: **`content_pack_apps`** is required when `install_all_apps` is false. Each item must have **`name`** (required; the app dir name of the content pack, e.g. `DA-ITSI-CP-monitoring-alerting`). Optional per item: **`content_pack_install`** (bool; default **true** — listed packs are registered via the ITSI API unless set to **false** for file extraction only), **`content_pack_api`** (dict: `install_all`, `saved_search_action`, `backfill`, `resolution`, `enabled`, `prefix`; `enabled` defaults to false, `prefix` defaults to empty string), **`customizations`** (dict: `run_playbook_after_restart`, `extra_vars`). Do not set top-level `content_pack_install`, `content_pack_api`, or `customizations` on multi-app entries. The library folder is top-level `name`; do **not** list it inside `content_pack_apps`.
+- **`install_all_apps`:** Optional, default false. When true, the full archive is extracted at deploy/removal; when false, only top-level `name` and each `content_pack_apps[].name` are extracted.
 - **Naming convention:** Use **`run_playbook_after_restart`** = `ancustom/<app_name>_configure.yml` (e.g. `ancustom/DA-ITSI-CP-monitoring-alerting_configure.yml`).
 
-**SHC behavior:** When the target is a Search Head Cluster, the playbook waits for the SHC to be fully ready (`service_ready_flag=1` and `rolling_restart_flag=0`) before running the ITSI content pack API install and any **`run_playbook_after_restart`** playbooks. The API and config playbooks run only on the **first SHC member** (or on the single search head when standalone). When the ITSI app has **`shc_rolling_restart: true`**, the "Initiate SHC rolling restart" handler is notified after the bundle push so that this wait runs in the correct order. **Multiple content packs:** Each content pack with **`content_pack_install: true`** is installed via the ITSI API in sequence; the playbook runs once per pack. If the "already installed" GET check or the install POST returns 404 (e.g. pack already installed or endpoint differs by ITSI/SA-ITOA version), the task logs a warning and continues with the next pack instead of failing the run.
+**Verification:** Single-app CP uses standard per-app verify on top-level `name`. Multi-app CP verifies presence of top-level `name` plus each `content_pack_apps[].name`. `install_all_apps` bundles skip per-directory verify unless you list folders explicitly in `content_pack_apps`.
+
+**SHC behavior:** When the target is a Search Head Cluster, the playbook waits for the SHC to be fully ready (`service_ready_flag=1` and `rolling_restart_flag=0`) before running the ITSI content pack API install and any **`run_playbook_after_restart`** playbooks. The API and config playbooks run only on the **first SHC member** (or on the single search head when standalone). When the ITSI app has **`shc_rolling_restart: true`**, the "Initiate SHC rolling restart" handler is notified after the bundle push so that this wait runs in the correct order. **Multiple content packs:** Each content pack listed in **`content_pack_apps`** is installed via the ITSI API in sequence (unless **`content_pack_install: false`**); the playbook runs once per pack. If the "already installed" GET check or the install POST returns 404 (e.g. pack already installed or endpoint differs by ITSI/SA-ITOA version), the task logs a warning and continues with the next pack instead of failing the run.
 
 **Removal:** With **`state: absent`**, content pack app directories are removed from the system (and Splunk is restarted or the deployer bundle is pushed). There is no ITSI API uninstall; removal is the same as for the ITSI premium app (remove app dirs and restart).
 
-**Minimal content pack example:**
+**Multi-app content pack example:**
 
 ```yaml
 # ITSI (required for content packs)
@@ -240,14 +264,13 @@ ITSI content packs are deployed as **one app entry per content pack .spl file**.
   source: splunkbase
   app_id: 1841
 
-# Content pack: one entry per .spl
-- name: "Splunk App for Content Packs"
+# Multi-app content pack: library folder is top-level name
+- name: DA-ITSI-ContentLibrary
   itsi_content_pack: true
   state: installed
   version: "2.4.0"
   source: local
   path: "splunk-app-for-content-packs_240.spl"
-  library_app: DA-ITSI-ContentLibrary
   content_pack_apps:
     - name: DA-ITSI-CP-monitoring-alerting
       content_pack_install: true
@@ -256,16 +279,30 @@ ITSI content packs are deployed as **one app entry per content pack .spl file**.
         saved_search_action: "disable"
         backfill: false
         resolution: "overwrite"
-        # enabled: true  # optional; default false
       customizations:
         run_playbook_after_restart: "ancustom/DA-ITSI-CP-monitoring-alerting_configure.yml"
         extra_vars:
           generic_alerts_index: generic_alerts
 ```
 
-### Splunkbase apps: name must match archive folder
+**Single-app content pack example:**
 
-For apps from **Splunkbase** (`source: splunkbase`), the **`name`** in your config must be exactly the same as the **top-level folder name** inside the app archive downloaded from Splunkbase.
+```yaml
+- name: DA-ITSI-CP-CUST-ATLAS-AWS-EBS
+  itsi_content_pack: true
+  state: installed
+  source: splunkbase
+  app_id: 7294
+  content_pack_api:
+    install_all: true
+    enabled: true
+```
+
+### Splunkbase apps: `name` must match archive folder (folder-backed entries)
+
+For **folder-backed** apps from **Splunkbase** (`source: splunkbase` — standard apps and ITSI content packs that are not `install_all_apps` bundles), the **`name`** in your config must be exactly the same as the **top-level folder name** inside the app archive downloaded from Splunkbase.
+
+This rule does **not** apply to **`premium_app: itsi`** (bundle-backed) or to content packs with **`install_all_apps: true`**. See [App `name`: folder-backed vs bundle-backed entries](#app-name-folder-backed-vs-bundle-backed-entries).
 
 - The playbook downloads the app by `app_id` and checks that the archive’s top-level folder matches `name`.
 - If they differ (for example you used the wrong `app_id` for another app), the playbook **removes the extracted directory** and **fails** with a clear message asking you to check `app_id`.

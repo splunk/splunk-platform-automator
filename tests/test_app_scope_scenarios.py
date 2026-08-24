@@ -221,13 +221,13 @@ def test_scenario_scope_assertions(scenario_name: str):
             scope,
             [
                 "Splunk IT Service Intelligence",
-                "Splunk App for Content Packs",
+                "DA-ITSI-ContentLibrary",
                 "Splunk_ML_Toolkit",
                 "Splunk_SA_Scientific_Python_linux_x86_64",
             ],
         )
         assert_deployer_has_app_with_config(
-            scope, "Splunk App for Content Packs", state="installed", has_content_pack_apps=True
+            scope, "DA-ITSI-ContentLibrary", state="installed", has_content_pack_apps=True
         )
         assert_deployer_target_hosts(scope, ["sh1", "sh2", "sh3"])
         # Search_head-only apps must not be on deployment_server; they are deployed from deployer only.
@@ -261,10 +261,19 @@ def test_scenario_scope_assertions(scenario_name: str):
     elif scenario_name == "itsi_shc":
         assert_deployer_apps(scope, ["Splunk IT Service Intelligence"])
         assert_deployer_target_hosts(scope, ["sh1", "sh2", "sh3"])
+    elif scenario_name == "itsi_content_pack_single_app":
+        # Single-app CP (no content_pack_apps); routes via direct on standalone SH with ITSI.
+        assert_direct_on_scope(scope, "itsi", "Splunk IT Service Intelligence", True)
+        assert_direct_on_scope(scope, "itsi", "DA-ITSI-CP-CUST-ATLAS-AWS-EBS", True)
+        cp_entry = get_app_on_direct_for_host(scope, "itsi", "DA-ITSI-CP-CUST-ATLAS-AWS-EBS")
+        assert cp_entry is not None
+        assert cp_entry.get("content_pack_apps") in (None, [])
+        deployer_apps = _first_deployer(scope).get("apps") or []
+        assert "DA-ITSI-CP-CUST-ATLAS-AWS-EBS" not in deployer_apps
     elif scenario_name == "itsi_standalone_sh":
         # Single host is named "itsi" (search_head + indexer + license_manager), no SHC; ITSI and content pack via direct.
         assert_direct_on_scope(scope, "itsi", "Splunk IT Service Intelligence", True)
-        assert_direct_on_scope(scope, "itsi", "Splunk App for Content Packs", True)
+        assert_direct_on_scope(scope, "itsi", "DA-ITSI-ContentLibrary", True)
         deployer_apps = _first_deployer(scope).get("apps") or []
         assert "Splunk IT Service Intelligence" not in deployer_apps, (
             "ITSI should be direct-only when no SHC; deployer.apps should not list ITSI"
@@ -295,12 +304,12 @@ def test_scenario_scope_assertions(scenario_name: str):
         # Deployer (ds→shc1): ITSI, Content Packs, ML_Toolkit, cisco_meraki, Splunk_TA_nix (SH)
         assert_deployers_entry(
             scope, "ds",
-            ["Splunk IT Service Intelligence", "Splunk App for Content Packs",
+            ["Splunk IT Service Intelligence", "DA-ITSI-ContentLibrary",
              "Splunk_ML_Toolkit", "Splunk_TA_cisco_meraki", "Splunk_TA_nix"],
             ["sh1", "sh2", "sh3"],
         )
         assert_deployer_has_app_with_config(
-            scope, "Splunk App for Content Packs", state="installed", has_content_pack_apps=True
+            scope, "DA-ITSI-ContentLibrary", state="installed", has_content_pack_apps=True
         )
         # Deployer (ds2→shc2): no apps (all shc_whitelist filter to shc1)
         assert_deployers_entry(scope, "ds2", [], ["sh4", "sh5", "sh6"])

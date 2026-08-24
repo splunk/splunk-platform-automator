@@ -1,5 +1,5 @@
 ---
-# ITSI premium pack: deploy one .spl/.tgz to cluster manager, license manager, and search heads
+# ITSI premium app: deploy one .spl/.tgz to cluster manager, license manager, and search heads
 # Supports source: splunkbase (app_id 1841) or local. Index paths default to splunk_volume_defaults.
 # Depends on splunk_common for splunk_home, splunk_user, splunk_service_name and "Restart splunk" handler.
 # Optional: app_item.version (same as normal apps), itsi_index_home_path, itsi_index_cold_path, itsi_notification_disable,

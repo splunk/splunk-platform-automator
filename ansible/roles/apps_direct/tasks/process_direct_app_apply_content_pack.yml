@@ -1,0 +1,84 @@
+---
+# Direct deployment install/remove for itsi_content_pack entries only.
+
+- name: "Install {{ app_item.name }} (ITSI content pack)"
+  ansible.builtin.include_role:
+    name: apps_itsi
+  when:
+    - _app_on_direct_scope | default(false)
+    - app_state == 'installed'
+
+- name: "Capture install-level update_needed for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    _app_install_update_needed: "{{ update_needed | default(false) | bool }}"
+
+- name: "Apply customizations for {{ app_item.name }}"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: apply_customizations.yml
+  vars:
+    app_path: "{{ app_item.target_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/apps/' ~ app_item.name) }}"
+  when:
+    - _app_on_direct_scope | default(false)
+    - app_state == 'installed'
+    - app_item.customizations is defined
+
+- name: "Register post-restart playbook for {{ app_item.name }} (direct deployment)"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': app_item.customizations.run_playbook_after_restart, 'app_path': customization_app_path, 'app_name': app_item.name, 'extra_vars': (app_item.customizations.extra_vars | default({})) | combine({'force_run_playbook_after_restart': (app_item.customizations.force_run_playbook_after_restart | default(false))}), 'app_updated_this_run': (_app_install_update_needed | default(false) | bool)}] }}"
+  when:
+    - _app_on_direct_scope | default(false)
+    - app_state == 'installed'
+    - app_item.customizations is defined
+    - app_item.customizations.run_playbook_after_restart is defined
+    - app_item.customizations.run_playbook_after_restart | length > 0
+
+- name: "Apply customizations for content pack apps (direct deployment)"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: apply_customizations.yml
+  vars:
+    app_item: "{{ _cp_item }}"
+    app_path: "{{ (splunk_install_dir | default('/opt')) ~ '/' ~ (splunk_install_app | default('splunk')) ~ '/etc/apps/' ~ _cp_item.name }}"
+  loop: "{{ app_item.content_pack_apps | default([]) }}"
+  loop_control:
+    loop_var: _cp_item
+  when:
+    - _app_on_direct_scope | default(false)
+    - app_state == 'installed'
+    - _cp_item.customizations is defined
+
+- name: "Register post-restart playbook for content pack apps (direct deployment)"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': _cp_item.customizations.run_playbook_after_restart, 'app_path': _cp_app_path, 'app_name': _cp_item.name, 'extra_vars': (_cp_item.customizations.extra_vars | default({})) | combine({'force_run_playbook_after_restart': (_cp_item.customizations.force_run_playbook_after_restart | default(false))}), 'app_updated_this_run': (_app_install_update_needed | default(false) | bool)}] }}"
+  loop: "{{ app_item.content_pack_apps | default([]) }}"
+  loop_control:
+    loop_var: _cp_item
+    label: "{{ _cp_item.name }}: {{ (_cp_item.customizations | default({})).run_playbook_after_restart | default('(none)') }} force={{ (_cp_item.customizations | default({})).force_run_playbook_after_restart | default(false) }}"
+  vars:
+    _cp_app_path: "{{ (splunk_install_dir | default('/opt')) ~ '/' ~ (splunk_install_app | default('splunk')) ~ '/etc/apps/' ~ _cp_item.name }}"
+  when:
+    - _app_on_direct_scope | default(false)
+    - app_state == 'installed'
+    - _cp_item.customizations is defined
+    - _cp_item.customizations.run_playbook_after_restart is defined
+    - _cp_item.customizations.run_playbook_after_restart | length > 0
+
+- name: "Remove {{ app_item.name }} (ITSI content pack)"
+  ansible.builtin.include_role:
+    name: apps_itsi
+  when:
+    - _app_on_direct_scope | default(false)
+    - app_state == 'absent'

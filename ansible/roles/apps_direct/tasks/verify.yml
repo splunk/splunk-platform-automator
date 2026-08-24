@@ -162,6 +162,41 @@
   loop_control:
     label: "{{ (item | default({})).get('name', '?') }} — {{ 'eligible' if (_eligible_for_direct | bool) else 'not eligible' }}"
 
+- name: Normalize direct_apps_expected for verify filters (optional keys)
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.set_fact:
+    _direct_apps_expected_norm: "{{ _direct_apps_expected_norm | default([]) + [_norm_entry | combine({'_is_single_app_cp': _is_single_app_cp})] }}"
+  loop: "{{ direct_apps_expected }}"
+  loop_control:
+    label: "{{ item.name | default('?') }}"
+  vars:
+    _verify_app_defaults:
+      itsi_content_pack: false
+      premium_app: ""
+      install_all_apps: false
+    _norm_entry: "{{ _verify_app_defaults | combine(item) }}"
+    _is_single_app_cp: >-
+      {{
+        (_norm_entry.itsi_content_pack | default(false) | bool)
+        and not (_norm_entry.install_all_apps | default(false) | bool)
+        and ((_norm_entry.content_pack_apps | default([]) | length) == 0)
+      }}
+  when: direct_apps_expected | length > 0
+
+- name: Apply normalized direct_apps_expected for verify
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.set_fact:
+    direct_apps_expected: "{{ _direct_apps_expected_norm | default([]) }}"
+  when: direct_apps_expected | length > 0
+
 - name: Check apps directory exists
   tags:
     - splunk
@@ -203,28 +238,42 @@
     - apps_dir.stat.exists
     - actual_apps.files is defined
 
-- name: Verify each expected app
+- name: Verify each expected standard, ITSI premium, or single-app content pack
   tags:
     - splunk
     - splunk_apps
     - direct_deployment
     - verify
   ansible.builtin.include_tasks: verify_single_app.yml
-  loop: "{{ direct_apps_expected }}"
+  loop: >-
+    {{
+      (direct_apps_expected | rejectattr('itsi_content_pack', 'equalto', true) | list)
+      + (direct_apps_expected | selectattr('_is_single_app_cp', 'defined') | selectattr('_is_single_app_cp') | list)
+    }}
   loop_control:
     loop_var: verify_app_item
     label: "{{ verify_app_item.name }}"
   vars:
     verify_base_path: "{{ splunk_home }}/etc/apps"
-    # ITSI ships as folder "itsi" (matches apps_itsi splunkbase_dest_slug); content pack meta-app installs library under library_app (e.g. DA-ITSI-ContentLibrary). Catalog name is display-only.
     verify_app_fs_dir: >-
       {{ 'itsi' if (verify_app_item.premium_app | default('')) == 'itsi'
-      else (
-        (verify_app_item.library_app | default(''))
-        if ((verify_app_item.itsi_content_pack | default(false) | bool) and ((verify_app_item.library_app | default('')) | length > 0))
-        else verify_app_item.name
-      ) }}
+      else verify_app_item.name }}
     verify_app_full_path: "{{ verify_app_item.target_path | default(verify_base_path ~ '/' ~ verify_app_fs_dir) }}"
+  when: direct_apps_expected | length > 0
+
+- name: Verify each expected multi-app ITSI content pack
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.include_tasks: verify_content_pack_app_dirs.yml
+  loop: "{{ direct_apps_expected | selectattr('itsi_content_pack', 'defined') | selectattr('itsi_content_pack') | rejectattr('_is_single_app_cp', 'equalto', true) | list }}"
+  loop_control:
+    loop_var: verify_app_item
+    label: "{{ verify_app_item.name }}"
+  vars:
+    verify_base_path: "{{ splunk_home }}/etc/apps"
   when: direct_apps_expected | length > 0
 
 - name: Build issues list for display

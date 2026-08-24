@@ -1,5 +1,7 @@
 ---
 # Defaults for ITSI content pack deployment (called with app_item from splunk_app_deployment.apps).
+# content_pack_install defaults to true for content_pack_apps items (set false to extract files only, skip ITSI API).
+cp_content_pack_install_default: true
 # content_pack_api defaults when content_pack_install is true (per content_pack_apps item)
 cp_api_install_all: true
 cp_api_enabled: false

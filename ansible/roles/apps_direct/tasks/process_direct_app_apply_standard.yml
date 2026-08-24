@@ -1,0 +1,86 @@
+---
+# Direct deployment install/remove for standard (non-ITSI, non-content-pack) apps.
+
+- name: "Install {{ app_item.name }} (standard)"
+  ansible.builtin.include_tasks: "install_app.yml"
+  when:
+    - _app_on_direct_scope | default(false)
+    - app_state == 'installed'
+
+- name: "Capture install-level update_needed for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    _app_install_update_needed: "{{ update_needed | default(false) | bool }}"
+
+- name: "Apply customizations for {{ app_item.name }}"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: apply_customizations.yml
+  vars:
+    app_path: "{{ app_item.target_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/apps/' ~ app_item.name) }}"
+  when:
+    - _app_on_direct_scope | default(false)
+    - app_state == 'installed'
+    - app_item.customizations is defined
+
+- name: "Register post-restart playbook for {{ app_item.name }} (direct deployment)"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + [{'playbook': app_item.customizations.run_playbook_after_restart, 'app_path': customization_app_path, 'app_name': app_item.name, 'extra_vars': (app_item.customizations.extra_vars | default({})) | combine({'force_run_playbook_after_restart': (app_item.customizations.force_run_playbook_after_restart | default(false))}), 'app_updated_this_run': (_app_install_update_needed | default(false) | bool)}] }}"
+  when:
+    - _app_on_direct_scope | default(false)
+    - app_state == 'installed'
+    - app_item.customizations is defined
+    - app_item.customizations.run_playbook_after_restart is defined
+    - app_item.customizations.run_playbook_after_restart | length > 0
+
+- name: "Set target path for removal of {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    app_name: "{{ app_item.name }}"
+    app_target_path: "{{ app_item.target_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/apps/' ~ app_item.name) }}"
+  when:
+    - _app_on_direct_scope | default(false)
+    - app_state == 'absent'
+
+- name: "Remove {{ app_item.name }} (standard)"
+  ansible.builtin.include_tasks: "remove_app.yml"
+  when:
+    - _app_on_direct_scope | default(false)
+    - app_state == 'absent'
+
+- name: "Set app_path, splunk_home and restart flag for Restart splunk handler (direct etc/apps)"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.set_fact:
+    splunk_home: "{{ splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') }}"
+    app_path: "{{ splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/apps' }}"
+    restart_splunk_direct_etc_apps: true
+  when:
+    - _app_on_direct_scope | default(false)
+    - update_needed | default(false)
+    - app_item.restart_required | default(true)
+
+- name: "Notify Splunk restart for {{ app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+  ansible.builtin.command: /bin/true
+  notify: Restart splunk
+  changed_when: update_needed | default(false)
+  when:
+    - _app_on_direct_scope | default(false)
+    - update_needed | default(false)
+    - app_item.restart_required | default(true)

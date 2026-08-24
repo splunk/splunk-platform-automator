@@ -25,6 +25,8 @@
             ) | bool
           }}
       run_once: true
+      delegate_to: localhost
+      delegate_facts: true
 
     - name: Warn if Splunkbase credentials not available
       ansible.builtin.debug:
@@ -34,12 +36,17 @@
           to enable full version drift detection.
       when: not (_splunkbase_credentials_available | default(false) | bool)
       run_once: true
+      delegate_to: localhost
+      delegate_facts: true
 
     - name: Normalize local app repo path for verification playbook
       ansible.builtin.set_fact:
         _verify_local_app_repo_path: >-
           {{ splunk_app_deployment.local_app_repo_path
              | default(playbook_dir + '/../../apps') }}
+      run_once: true
+      delegate_to: localhost
+      delegate_facts: true
 
 - name: Verify Deployment Server App Distribution
   hosts: role_deployment_server

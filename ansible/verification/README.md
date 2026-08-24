@@ -19,6 +19,7 @@ Verifies that Splunk apps are deployed correctly according to the configuration 
   - `etc/shcluster/apps/` (Deployer)
   - `etc/apps/` (Direct deployment)
 - ✅ Version drift detection (Splunkbase API and local source comparison)
+- ✅ ITSI content packs: single-app CP verified like standard apps; multi-app CP verifies top-level `name` plus each `content_pack_apps[].name`; `install_all_apps` skips per-directory checks
 - ⚠️ Warns about unexpected apps (present but not in config)
 
 **Prerequisites for version checks:**

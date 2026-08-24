@@ -390,58 +390,97 @@ class SplunkAppDeploymentConfig(BaseModel):
                     raise ValueError(
                         f"splunk_app_deployment.apps[{i}] (name={name!r}): 'update_mode' must be one of {ALLOWED_UPDATE_MODES}, got {app_update_mode!r}"
                     )
-            # ITSI content pack: reject top-level content_pack_install, content_pack_api, customizations; validate content_pack_apps
+            # ITSI content pack: top-level name is always the on-disk app folder (library for multi-app, pack for single-app).
             if is_itsi_content_pack:
-                for bad_key in ("content_pack_install", "content_pack_api", "customizations"):
-                    if app.get(bad_key) is not None:
-                        raise ValueError(
-                            f"splunk_app_deployment.apps[{i}] (name={name!r}): top-level '{bad_key}' is not allowed for itsi_content_pack; "
-                            "set these only inside content_pack_apps items"
-                        )
+                if app.get("library_app") is not None:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): 'library_app' is not allowed for itsi_content_pack; "
+                        "set top-level 'name' to the library app folder (e.g. DA-ITSI-ContentLibrary) and list additional packs in content_pack_apps."
+                    )
+                cp_apps = app.get("content_pack_apps")
                 install_all_apps = app.get("install_all_apps")
-                if not install_all_apps:
-                    cp_apps = app.get("content_pack_apps")
-                    if cp_apps is None:
-                        raise ValueError(
-                            f"splunk_app_deployment.apps[{i}] (name={name!r}): 'content_pack_apps' is required when itsi_content_pack is true and install_all_apps is not true"
-                        )
-                    if not isinstance(cp_apps, list):
-                        raise ValueError(
-                            f"splunk_app_deployment.apps[{i}] (name={name!r}): 'content_pack_apps' must be a list of objects"
-                        )
-                    for j, cp_item in enumerate(cp_apps):
-                        if not isinstance(cp_item, dict):
+                is_cp_single_app = (
+                    not install_all_apps
+                    and (cp_apps is None or (isinstance(cp_apps, list) and len(cp_apps) == 0))
+                )
+                if is_cp_single_app:
+                    for bad_key in ("content_pack_install", "content_pack_apps", "install_all_apps"):
+                        if app.get(bad_key) is not None:
                             raise ValueError(
-                                f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}] must be an object (dict)"
+                                f"splunk_app_deployment.apps[{i}] (name={name!r}): '{bad_key}' is not allowed for single-app itsi_content_pack; "
+                                "single-app content packs omit content_pack_apps and install_all_apps; top-level 'name' must be the on-disk app folder. "
+                                "Optional top-level content_pack_api and customizations are allowed."
                             )
-                        cp_name = cp_item.get("name")
-                        if cp_name is None or not isinstance(cp_name, str) or not cp_name.strip():
+                    api_opts = app.get("content_pack_api")
+                    if api_opts is not None and not isinstance(api_opts, dict):
+                        raise ValueError(
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): 'content_pack_api' must be a dictionary"
+                        )
+                    cust = app.get("customizations")
+                    if cust is not None:
+                        if not isinstance(cust, dict):
                             raise ValueError(
-                                f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}] must have a non-empty 'name' string"
+                                f"splunk_app_deployment.apps[{i}] (name={name!r}): 'customizations' must be a dictionary"
                             )
-                        if cp_item.get("content_pack_install"):
-                            api_opts = cp_item.get("content_pack_api")
-                            if api_opts is not None and not isinstance(api_opts, dict):
+                        rpar = cust.get("run_playbook_after_restart")
+                        if rpar is not None and (not isinstance(rpar, str) or not rpar.strip()):
+                            raise ValueError(
+                                f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.run_playbook_after_restart must be a non-empty string"
+                            )
+                        ev = cust.get("extra_vars")
+                        if ev is not None and not isinstance(ev, dict):
+                            raise ValueError(
+                                f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.extra_vars must be a dictionary"
+                            )
+                else:
+                    for bad_key in ("content_pack_install", "content_pack_api", "customizations"):
+                        if app.get(bad_key) is not None:
+                            raise ValueError(
+                                f"splunk_app_deployment.apps[{i}] (name={name!r}): top-level '{bad_key}' is not allowed for itsi_content_pack; "
+                                "set these only inside content_pack_apps items"
+                            )
+                    if not install_all_apps:
+                        if cp_apps is None:
+                            raise ValueError(
+                                f"splunk_app_deployment.apps[{i}] (name={name!r}): 'content_pack_apps' is required when itsi_content_pack is true and install_all_apps is not true"
+                            )
+                        if not isinstance(cp_apps, list):
+                            raise ValueError(
+                                f"splunk_app_deployment.apps[{i}] (name={name!r}): 'content_pack_apps' must be a list of objects"
+                            )
+                        for j, cp_item in enumerate(cp_apps):
+                            if not isinstance(cp_item, dict):
                                 raise ValueError(
-                                    f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].content_pack_api must be a dictionary"
+                                    f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}] must be an object (dict)"
                                 )
-                        cust = cp_item.get("customizations")
-                        if cust is not None:
-                            if not isinstance(cust, dict):
+                            cp_name = cp_item.get("name")
+                            if cp_name is None or not isinstance(cp_name, str) or not cp_name.strip():
                                 raise ValueError(
-                                    f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations must be a dictionary"
+                                    f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}] must have a non-empty 'name' string"
                                 )
-                            rpar = cust.get("run_playbook_after_restart")
-                            if rpar is not None and (not isinstance(rpar, str) or not rpar.strip()):
-                                raise ValueError(
-                                    f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations.run_playbook_after_restart must be a non-empty string"
-                                )
-                            ev = cust.get("extra_vars")
-                            if ev is not None and not isinstance(ev, dict):
-                                raise ValueError(
-                                    f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations.extra_vars must be a dictionary"
-                                )
-            # Validate customizations structure if present (skip for itsi_content_pack; top-level customizations rejected above)
+                            if cp_item.get("content_pack_install"):
+                                api_opts = cp_item.get("content_pack_api")
+                                if api_opts is not None and not isinstance(api_opts, dict):
+                                    raise ValueError(
+                                        f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].content_pack_api must be a dictionary"
+                                    )
+                            cust = cp_item.get("customizations")
+                            if cust is not None:
+                                if not isinstance(cust, dict):
+                                    raise ValueError(
+                                        f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations must be a dictionary"
+                                    )
+                                rpar = cust.get("run_playbook_after_restart")
+                                if rpar is not None and (not isinstance(rpar, str) or not rpar.strip()):
+                                    raise ValueError(
+                                        f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations.run_playbook_after_restart must be a non-empty string"
+                                    )
+                                ev = cust.get("extra_vars")
+                                if ev is not None and not isinstance(ev, dict):
+                                    raise ValueError(
+                                        f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations.extra_vars must be a dictionary"
+                                    )
+            # Validate customizations structure if present (skip for itsi_content_pack; validated above)
             customizations = app.get("customizations")
             if customizations is not None and not is_itsi_content_pack:
                 if not isinstance(customizations, dict):

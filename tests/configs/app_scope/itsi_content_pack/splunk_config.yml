@@ -1,7 +1,7 @@
 ---
 # Scenario: itsi_content_pack
-# Deployer + SHC; ITSI + "Splunk App for Content Packs" with content_pack_apps.
-# Verifies: deployer.apps_with_config has content pack with content_pack_apps list and library_app.
+# Deployer + SHC; ITSI + DA-ITSI-ContentLibrary with content_pack_apps.
+# Verifies: deployer.apps_with_config has content pack with content_pack_apps list.
 plugin: splunk-platform-automator
 
 splunk_defaults:
@@ -64,11 +64,10 @@ splunk_app_deployment:
       app_id: 1841
       premium_app: itsi
 
-    - name: "Splunk App for Content Packs"
+    - name: DA-ITSI-ContentLibrary
       source: splunkbase
       app_id: 5391
       itsi_content_pack: true
-      library_app: DA-ITSI-ContentLibrary
       content_pack_apps:
         - name: DA-ITSI-CP-monitoring-alerting
           content_pack_install: true

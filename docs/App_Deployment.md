@@ -46,7 +46,7 @@ splunk_app_deployment:
         - search_head
 ```
 
-For Splunkbase apps, **`name`** must match the top-level folder name in the app archive; otherwise the playbook fails (see [App Deployment Guide](docs/App_Deployment_Guide.md#splunkbase-apps-name-must-match-archive-folder)).
+For Splunkbase **folder-backed** apps, **`name`** must match the top-level folder name in the app archive. **Premium apps** (`premium_app: itsi`) and **`install_all_apps`** content packs are bundle-backed — `name` is a config label only (see [App Deployment Guide](docs/App_Deployment_Guide.md#app-name-folder-backed-vs-bundle-backed-entries)).
 
 ### 4. Deploy
 
@@ -104,7 +104,7 @@ App deployment uses the following roles (run by `deploy_splunk_apps.yml` in sequ
 - `ansible/roles/apps_itsi/` – Splunk IT Service Intelligence (ITSI) install, config, and removal (deployer, cluster manager, and direct paths)
 - `ansible/roles/apps_itsi_content_pack/` – ITSI content pack deployment (same targets as ITSI)
 
-See the [App Deployment Guide](App_Deployment_Guide.md) for [ITSI (premium packs)](App_Deployment_Guide.md#premium-packs-splunk-it-service-intelligence-itsi) and [ITSI Content Packs](App_Deployment_Guide.md#itsi-content-packs).
+See the [App Deployment Guide](App_Deployment_Guide.md) for [ITSI (premium apps)](App_Deployment_Guide.md#premium-apps-splunk-it-service-intelligence-itsi) and [ITSI Content Packs](App_Deployment_Guide.md#itsi-content-packs).
 
 ## 🎭 Playbooks
 

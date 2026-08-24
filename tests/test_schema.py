@@ -980,13 +980,12 @@ class TestAppDeploymentConfig:
                 "apps": [
                     {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
                     {
-                        "name": "Splunk App for Content Packs",
+                        "name": "DA-ITSI-ContentLibrary",
                         "itsi_content_pack": True,
                         "state": "installed",
                         "version": "2.4.0",
                         "source": "local",
                         "path": "content_packs.spl",
-                        "library_app": "DA-ITSI-ContentLibrary",
                         "content_pack_apps": [
                             {"name": "DA-ITSI-CP-monitoring-alerting", "content_pack_install": True, "content_pack_api": {"install_all": True}},
                             {"name": "DA-ITSI-CP-splunk-observability"},
@@ -1009,7 +1008,7 @@ class TestAppDeploymentConfig:
             "splunk_app_deployment": {
                 "apps": [
                     {
-                        "name": "Splunk App for Content Packs",
+                        "name": "DA-ITSI-ContentLibrary",
                         "itsi_content_pack": True,
                         "state": "installed",
                         "version": "2.4.0",
@@ -1025,7 +1024,7 @@ class TestAppDeploymentConfig:
         assert "itsi_content_pack" in str(exc_info.value).lower() or "itsi" in str(exc_info.value).lower()
 
     def test_itsi_content_pack_top_level_content_pack_install_raises(self):
-        """itsi_content_pack with top-level content_pack_install must raise."""
+        """itsi_content_pack with top-level content_pack_install must raise (multi-app and single-app)."""
         config = {
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [{"name": "h1", "roles": ["search_head"]}],
@@ -1033,7 +1032,7 @@ class TestAppDeploymentConfig:
                 "apps": [
                     {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
                     {
-                        "name": "Splunk App for Content Packs",
+                        "name": "DA-ITSI-ContentLibrary",
                         "itsi_content_pack": True,
                         "state": "installed",
                         "version": "2.4.0",
@@ -1049,8 +1048,38 @@ class TestAppDeploymentConfig:
             validate_config(config)
         assert "content_pack_install" in str(exc_info.value).lower()
 
-    def test_itsi_content_pack_missing_content_pack_apps_raises(self):
-        """itsi_content_pack without content_pack_apps when install_all_apps is not true must raise."""
+    def test_itsi_content_pack_single_app_valid_with_itsi_installed(self):
+        """Single-app itsi_content_pack (no content_pack_apps) with top-level content_pack_api is accepted."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "h1", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
+                    {
+                        "name": "DA-ITSI-CP-CUST-ATLAS-AWS-EBS",
+                        "itsi_content_pack": True,
+                        "state": "installed",
+                        "source": "splunkbase",
+                        "app_id": 7294,
+                        "content_pack_api": {"install_all": True, "enabled": True},
+                    },
+                ]
+            },
+        }
+        result = validate_config(config)
+        cp = result.splunk_app_deployment.apps[1]
+        assert cp.get("itsi_content_pack") is True
+        assert cp.get("content_pack_api", {}).get("enabled") is True
+        assert "content_pack_apps" not in cp or cp.get("content_pack_apps") is None
+
+    def test_itsi_content_pack_single_app_top_level_content_pack_install_raises(self):
+        """Single-app itsi_content_pack with top-level content_pack_install must raise."""
         config = {
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [{"name": "h1", "roles": ["search_head"]}],
@@ -1058,7 +1087,63 @@ class TestAppDeploymentConfig:
                 "apps": [
                     {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
                     {
-                        "name": "Splunk App for Content Packs",
+                        "name": "DA-ITSI-CP-CUST-ATLAS-AWS-EBS",
+                        "itsi_content_pack": True,
+                        "state": "installed",
+                        "source": "splunkbase",
+                        "app_id": 7294,
+                        "content_pack_install": True,
+                    },
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "content_pack_install" in str(exc_info.value).lower()
+
+    def test_itsi_content_pack_library_app_raises(self):
+        """library_app is not allowed; use top-level name for the library folder."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "h1", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
+                    {
+                        "name": "DA-ITSI-CP-CUST-ATLAS-AWS-EBS",
+                        "itsi_content_pack": True,
+                        "state": "installed",
+                        "source": "splunkbase",
+                        "app_id": 7294,
+                        "library_app": "DA-ITSI-ContentLibrary",
+                    },
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "library_app" in str(exc_info.value).lower()
+
+    def test_itsi_content_pack_library_name_without_content_pack_apps_is_single_app(self):
+        """Top-level name without content_pack_apps is single-app mode (even if name is a library folder)."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "h1", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
+                    {
+                        "name": "DA-ITSI-ContentLibrary",
                         "itsi_content_pack": True,
                         "state": "installed",
                         "version": "2.4.0",
@@ -1068,9 +1153,43 @@ class TestAppDeploymentConfig:
                 ]
             },
         }
-        with pytest.raises(ConfigValidationError) as exc_info:
-            validate_config(config)
-        assert "content_pack_apps" in str(exc_info.value).lower()
+        result = validate_config(config)
+        cp = result.splunk_app_deployment.apps[1]
+        assert cp.get("itsi_content_pack") is True
+        assert cp.get("content_pack_apps") in (None, [])
+
+    def test_itsi_content_pack_content_pack_apps_name_only_valid(self):
+        """content_pack_apps item with only name (content_pack_install omitted) is accepted."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "h1", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
+                    {
+                        "name": "DA-ITSI-ContentLibrary",
+                        "itsi_content_pack": True,
+                        "state": "installed",
+                        "source": "local",
+                        "path": "content_packs.spl",
+                        "content_pack_apps": [
+                            {"name": "DA-ITSI-CP-monitoring-alerting"},
+                            {"name": "DA-ITSI-CP-nix", "content_pack_install": False},
+                        ],
+                    },
+                ]
+            },
+        }
+        result = validate_config(config)
+        cp_apps = result.splunk_app_deployment.apps[1]["content_pack_apps"]
+        assert cp_apps[0]["name"] == "DA-ITSI-CP-monitoring-alerting"
+        assert "content_pack_install" not in cp_apps[0]
+        assert cp_apps[1]["content_pack_install"] is False
 
     def test_itsi_content_pack_item_missing_name_raises(self):
         """content_pack_apps item without name must raise."""
@@ -1081,7 +1200,7 @@ class TestAppDeploymentConfig:
                 "apps": [
                     {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
                     {
-                        "name": "Splunk App for Content Packs",
+                        "name": "DA-ITSI-ContentLibrary",
                         "itsi_content_pack": True,
                         "state": "installed",
                         "version": "2.4.0",
@@ -1105,7 +1224,7 @@ class TestAppDeploymentConfig:
                 "apps": [
                     {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
                     {
-                        "name": "Splunk App for Content Packs",
+                        "name": "DA-ITSI-ContentLibrary",
                         "itsi_content_pack": True,
                         "state": "absent",
                         "version": "2.4.0",

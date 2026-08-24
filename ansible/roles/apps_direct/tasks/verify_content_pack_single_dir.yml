@@ -1,0 +1,84 @@
+---
+# Verify one on-disk directory for an ITSI content pack (direct deployment).
+# Expects: verify_app_item, verify_base_path, _cpv_fs_dir, _cpv_expected_versions
+
+- name: "Check if {{ verify_app_item.name }} / {{ _cpv_fs_dir }} exists"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.stat:
+    path: "{{ verify_base_path }}/{{ _cpv_fs_dir }}"
+  register: _cpv_dir_check
+  become: true
+
+- name: "Verify {{ verify_app_item.name }} / {{ _cpv_fs_dir }} presence/absence"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.set_fact:
+    direct_mismatches: "{{ direct_mismatches + [_cpv_mismatch_entry] }}"
+  vars:
+    app_state: "{{ verify_app_item.state | default('installed') }}"
+    should_exist: "{{ app_state != 'absent' }}"
+    actually_exists: "{{ _cpv_dir_check.stat.exists }}"
+    _cpv_mismatch_entry:
+      app: "{{ verify_app_item.name }} ({{ _cpv_fs_dir }})"
+      issue: "{{ 'MISSING: App should be installed but not found' if (should_exist and not actually_exists) else 'UNEXPECTED: App should be absent but is installed' }}"
+      severity: "error"
+      expected_state: "{{ app_state }}"
+      actual_state: "{{ 'installed' if actually_exists else 'absent' }}"
+  when: should_exist != actually_exists
+
+- name: "Read installed version for {{ verify_app_item.name }} / {{ _cpv_fs_dir }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.shell:
+    cmd: |
+      f="{{ verify_base_path }}/{{ _cpv_fs_dir }}/default/app.conf"
+      v=$(sed -n '/\[launcher\]/,/^\[/p' "$f" 2>/dev/null | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//')
+      if [ -z "$v" ]; then
+        v=$(sed -n '/\[id\]/,/^\[/p' "$f" 2>/dev/null | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//')
+      fi
+      if [ -z "$v" ]; then
+        v=$(grep -E '^\s*version\s*=' "$f" 2>/dev/null | head -1 | sed -E 's/^[^=]*=\s*//')
+      fi
+      printf '%s' "$v"
+  register: _cpv_installed_version
+  changed_when: false
+  failed_when: false
+  become: true
+  become_user: "{{ splunk_user | default('splunk') }}"
+  when:
+    - _cpv_dir_check.stat.exists
+    - verify_app_item.state | default('installed') != 'absent'
+    - (_cpv_expected_versions | default({})).get(_cpv_fs_dir, '') | length > 0
+
+- name: "Record content pack version drift for {{ verify_app_item.name }} / {{ _cpv_fs_dir }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.set_fact:
+    direct_mismatches: "{{ direct_mismatches + [_cpv_drift_entry] }}"
+  vars:
+    _cpv_expected: "{{ (_cpv_expected_versions | default({})).get(_cpv_fs_dir, '') | trim }}"
+    _cpv_current: "{{ (_cpv_installed_version.stdout | default('') | trim) }}"
+    _cpv_drift_entry:
+      app: "{{ verify_app_item.name }} ({{ _cpv_fs_dir }})"
+      issue: "VERSION DRIFT: installed='{{ _cpv_current | default('?') }}', expected='{{ _cpv_expected | default('?') }}'"
+      severity: "warning"
+      expected_state: "installed"
+      actual_state: "installed"
+  when:
+    - _cpv_dir_check.stat.exists
+    - verify_app_item.state | default('installed') != 'absent'
+    - (_cpv_expected_versions | default({})).get(_cpv_fs_dir, '') | length > 0
+    - (_cpv_installed_version.stdout | default('') | trim) != (_cpv_expected_versions | default({})).get(_cpv_fs_dir, '') | trim

@@ -137,13 +137,12 @@ splunk_app_deployment:
       # shc_rolling_restart: true
       # hosts_whitelist: ['sh']
 
-    - name: "Splunk App for Content Packs"
+    - name: DA-ITSI-ContentLibrary
       source: splunkbase
       app_id: 5391
       itsi_content_pack: true
-      # version: "latest"
+      # version: "2.5.0"
       # state: 'absent'
-      library_app: DA-ITSI-ContentLibrary
       # install_all_apps: true
       content_pack_apps:
         - name: DA-ITSI-CP-monitoring-alerting
@@ -186,6 +185,27 @@ splunk_app_deployment:
             install_all: true
             enabled: true
             saved_search_action: "enable"
+
+    # Single-app ITSI content pack (no content_pack_apps).
+    # Top-level name must be the on-disk app folder inside the .spl/.tgz (not a display label).
+    # state: installed (default) installs via ITSI API; state: absent removes the app.
+    # - name: DA-ITSI-CP-CUST-ATLAS-AWS-EBS
+    #   source: splunkbase
+    #   app_id: 7294
+    #   itsi_content_pack: true
+    #   # state: 'absent'
+    #   # content_pack_api:
+    #   #   install_all: true
+    #   #   enabled: true
+    #
+    # - name: "My Custom ITSI Content Pack"
+    #   source: local
+    #   path: "my-custom-cp.spl"
+    #   itsi_content_pack: true
+    #   content_pack_api:
+    #     install_all: true
+    #     enabled: true
+    #     resolution: "overwrite"
 
 
 ########################## Working Apps Start #########################

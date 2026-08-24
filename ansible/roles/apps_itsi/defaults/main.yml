@@ -1,5 +1,5 @@
 ---
-# Defaults for Splunk IT Service Intelligence (ITSI) premium pack deployment
+# Defaults for Splunk IT Service Intelligence (ITSI) premium app deployment
 # Override in splunk_config.yml under the app's entry.
 # Index paths default to splunk_volume_defaults (framework) when not set.
 

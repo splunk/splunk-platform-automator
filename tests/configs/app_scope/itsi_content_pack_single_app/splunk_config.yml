@@ -1,0 +1,31 @@
+---
+# Scenario: itsi_content_pack_single_app
+# Single host (itsi) with search_head, indexer, license_manager. No SHC.
+# ITSI + single-app content pack (no content_pack_apps).
+# Verifies: single-app CP routes via direct like ITSI; scope shows itsi_content_pack without content_pack_apps.
+plugin: splunk-platform-automator
+
+splunk_defaults:
+  splunk_license_file: [Splunk_Enterprise.lic]
+
+splunk_hosts:
+  - name: itsi
+    roles:
+      - search_head
+      - indexer
+      - license_manager
+
+splunk_app_deployment:
+  apps:
+    - name: "Splunk IT Service Intelligence"
+      source: splunkbase
+      app_id: 1841
+      premium_app: itsi
+
+    - name: DA-ITSI-CP-CUST-ATLAS-AWS-EBS
+      source: splunkbase
+      app_id: 7294
+      itsi_content_pack: true
+      content_pack_api:
+        install_all: true
+        enabled: true

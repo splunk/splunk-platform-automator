@@ -48,6 +48,7 @@ tests/
 ├── run_deployment_tests.sh    # Helper script for deployment tests
 ├── run_app_deployment_tests.sh # Helper script for app deployment tests
 ├── run_app_scope_scenarios_tests.sh # App scope scenario tests (debug_app_scope per scenario)
+├── run_itsi_content_pack_tests.sh # ITSI content pack tests (role wiring, schema, scope)
 ├── run_schema_tests.sh        # Helper script for schema validation tests
 ├── run_verification_tests.sh  # Helper script for verification tests
 ├── run_venv.sh                # Common venv setup (sourced by run_*.sh scripts)
@@ -136,9 +137,26 @@ Fixtures (extra-vars) live in `tests/configs/app_deployment/*.yml`. Schema tests
 
 Requires `ansible-playbook` on PATH for playbook tests.
 
+### ITSI content pack tests (`test_itsi_content_pack.py`)
+
+Static checks on `apps_itsi_content_pack` role tasks and defaults (single-app synthesis, `content_pack_install` default). Config validation: `test_schema.py` (`TestAppDeploymentConfig`, `-k itsi_content_pack`). Scope/routing: `test_app_scope_scenarios.py` (`itsi_content_pack`, `itsi_content_pack_single_app`, `itsi_standalone_sh`, `itsi_multi_shc`).
+
+**Run:**
+```bash
+./tests/run_itsi_content_pack_tests.sh
+./tests/run_itsi_content_pack_tests.sh -v
+```
+
+Or run suites individually:
+```bash
+pytest tests/test_itsi_content_pack.py -v
+pytest tests/test_schema.py -k itsi_content_pack -v
+pytest tests/test_app_scope_scenarios.py -k "itsi_content_pack or itsi_standalone_sh or itsi_multi_shc" -v
+```
+
 ### App scope scenario tests (`test_app_scope_scenarios.py`)
 
-Scenario-based tests for app scope (no SSH or real hosts). Each scenario under `tests/configs/app_scope/<name>/splunk_config.yml` runs `debug_app_scope.yml` with `run_scope_locally=true` and asserts on the produced scope JSON (direct_scope, deployer, cluster_manager, deployment_server). Scenarios: minimal_direct, ds_only, deployer_shc, ds_with_hosts_whitelist, itsi_content_pack, state_absent.
+Scenario-based tests for app scope (no SSH or real hosts). Each scenario under `tests/configs/app_scope/<name>/splunk_config.yml` runs `debug_app_scope.yml` with `run_scope_locally=true` and asserts on the produced scope JSON (direct_scope, deployer, cluster_manager, deployment_server). Scenarios: minimal_direct, ds_only, deployer_shc, ds_with_hosts_whitelist, itsi_content_pack, itsi_content_pack_single_app, state_absent.
 
 **Run app scope scenario tests:**
 ```bash

@@ -7,7 +7,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ## 2.4.0-dev - ongoing
 
+### Changed
+
+- **ITSI content pack config (breaking)** – Unified top-level `name` rule: always the on-disk app folder (single-app CP = pack folder, multi-app CP = library folder). Removed `library_app` and standalone/archive-discovery deploy mode. Verification no longer resolves CP directories from archives on the controller; single-app CP uses standard verify, multi-app CP checks `name` + `content_pack_apps[].name`.
+
 ### Added
+
+- **Single-app ITSI content packs** – Deploy a one-pack archive (Splunkbase or local) without `content_pack_apps` or `library_app`. Set top-level **`name`** to the on-disk pack folder (e.g. `DA-ITSI-CP-CUST-ATLAS-AWS-EBS` for Splunkbase app_id 7294); optional top-level **`content_pack_api`** and **`customizations`** drive ITSI API registration and post-restart playbooks. Deploy and verify like a standard folder-backed app. See [App_Deployment_Guide.md](docs/App_Deployment_Guide.md) (ITSI Content Packs — single-app example).
 
 - **App Deployment** – New automated deployment of Splunk apps from Splunkbase or local filesystem, with per-host routing.
   - **General**:
@@ -42,16 +48,19 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
       - **`force_run_playbook_after_restart`** (default `false`): run the `run_playbook_after_restart` task file even if the app was already installed. Also applies to ITSI content pack apps.
     - **Example playbook** `ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml`: Enables Splunk_TA_nix script inputs (performance metrics); optional `extra_vars.ta_nix_script_index`. Equivalent behavior via `local_configs` is documented for universal_forwarder.
     - **Documentation**: [App_Deployment_Customizations.md](docs/App_Deployment_Customizations.md) (user manual), [App_Deployment_Apps_Playbooks.md](docs/App_Deployment_Apps_Playbooks.md) (standalone wrapper and force flags). App deployment doc names normalized to `App_Deployment_*`.
-  - **Premium apps (ITSI)** – Splunk IT Service Intelligence as a premium pack (single archive, multiple apps, role-specific extraction):
+  - **Premium apps (ITSI)** – Splunk IT Service Intelligence as a premium app (single archive, multiple apps, role-specific extraction):
     - **Config**: `premium_app: itsi` on the app entry; optional `version` (same as normal apps), `hosts_whitelist` / `shc_whitelist` (and other target filters), `itsi_notification_disable`. Source Splunkbase (app_id 1841) or local path.
     - **Roles**: Cluster Manager (selected apps to `manager-apps`), License Manager (license/access apps to `etc/apps`), Deployer (full bundle to `shcluster/apps`), Search Head (full bundle to `etc/apps`). Respects `target_download` for controller vs per-target download and cache.
     - **Version check**: Reads `[launcher]` version from each app’s `app.conf` in the archive and on the target; only deploys when at least one app is missing or version differs. App list and expected versions come from the archive (app-conf cache or listing); no hardcoded fallback—playbook fails if the list cannot be obtained.
     - **`shc_rolling_restart`** (default `false`): When `true` on the ITSI app entry, the deployer uses a rolling restart instead of a standard bundle push after installing ITSI. Workaround for environments where ITSI requires all SHC members to restart sequentially.
     - **Removal**: Per-role removal (CM, LM, deployer, search head) with app list built from the archive; same target filters (`hosts_whitelist`, `shc_whitelist`, etc.) apply for search heads. Fails if archive is not available or not listable.
     - **Task structure**: Splunkbase download and app-conf cache split into controller vs `target_download` task files to avoid skipped tasks; removal split into role-specific task files (e.g. `itsi_remove_deployer.yml`, `itsi_remove_search_head.yml`).
-    - **Docs**: [App_Deployment_Guide.md](docs/App_Deployment_Guide.md) (Premium packs: ITSI), [App_Deployment_Removing_Apps.md](docs/App_Deployment_Removing_Apps.md) (Premium apps (ITSI) removal).
+    - **Docs**: [App_Deployment_Guide.md](docs/App_Deployment_Guide.md) (Premium apps: ITSI), [App_Deployment_Removing_Apps.md](docs/App_Deployment_Removing_Apps.md) (Premium apps (ITSI) removal).
   - **ITSI content pack install** – Deploy and remove ITSI content packs (Splunkbase or local) via the same app deployment flow as ITSI:
-    - **Config**: `itsi_content_pack: true` on the app entry; `content_pack_apps` list with per-pack `name`, `content_pack_install`, optional `customizations.run_playbook_after_restart`; optional `library_app`, `install_all_apps`. Target filters (`hosts_whitelist`, `shc_whitelist`, etc.) are inherited from the ITSI app so content pack and ITSI use the same scope.
+    - **Single-app packs**: `itsi_content_pack: true` with no `content_pack_apps` (and not `install_all_apps`); top-level `name` is the pack folder; optional top-level `content_pack_api` / `customizations`.
+    - **Multi-app packs**: Top-level `name` is the library folder (e.g. `DA-ITSI-ContentLibrary`); `content_pack_apps` lists additional pack folders only, with per-pack `content_pack_install`, optional `customizations.run_playbook_after_restart`.
+    - **Full bundle**: Optional `install_all_apps: true` extracts the entire archive at deploy/removal.
+    - Target filters (`hosts_whitelist`, `shc_whitelist`, etc.) are inherited from the ITSI app so content pack and ITSI use the same scope.
     - **Install**: Content pack role (`apps_itsi_content_pack`) installs the pack and nested apps to search heads (standalone and SHC); deployer pushes to `shcluster/apps`, direct deployment to `etc/apps`. Post-restart playbooks run after the Restart splunk handler when configured.
     - **Removal**: Content packs are removed before ITSI (sorted order). On standalone search heads, when a content pack is in `direct_apps` but ITSI was not (e.g. eligibility excluded ITSI for that host), ITSI is added to `direct_apps` so both “Remove ITSI apps from etc/apps” and content pack removal run on the single SH.
     - **Docs**: [App_Deployment_Guide.md](docs/App_Deployment_Guide.md), [App_Deployment_Removing_Apps.md](docs/App_Deployment_Removing_Apps.md).

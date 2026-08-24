@@ -64,24 +64,13 @@
     "deployer": [
         {
             "apps": [
+                "DA-ITSI-ContentLibrary",
                 "Splunk IT Service Intelligence",
-                "Splunk App for Content Packs",
                 "Splunk_ML_Toolkit",
                 "Splunk_TA_cisco_meraki",
                 "Splunk_TA_nix"
             ],
             "apps_with_config": [
-                {
-                    "app_id": 1841,
-                    "itsi_content_pack": false,
-                    "name": "Splunk IT Service Intelligence",
-                    "premium_app": "itsi",
-                    "shc_whitelist": [
-                        "shc1"
-                    ],
-                    "source": "splunkbase",
-                    "state": "installed"
-                },
                 {
                     "app_id": 5391,
                     "content_pack_apps": [
@@ -97,9 +86,19 @@
                         }
                     ],
                     "itsi_content_pack": true,
-                    "library_app": "DA-ITSI-ContentLibrary",
-                    "name": "Splunk App for Content Packs",
+                    "name": "DA-ITSI-ContentLibrary",
                     "premium_app": "",
+                    "source": "splunkbase",
+                    "state": "installed"
+                },
+                {
+                    "app_id": 1841,
+                    "itsi_content_pack": false,
+                    "name": "Splunk IT Service Intelligence",
+                    "premium_app": "itsi",
+                    "shc_whitelist": [
+                        "shc1"
+                    ],
                     "source": "splunkbase",
                     "state": "installed"
                 },
@@ -131,9 +130,9 @@
                     "source": "splunkbase",
                     "state": "installed",
                     "target_roles": [
-                        "search_head",
+                        "heavy_forwarder",
                         "indexer",
-                        "heavy_forwarder"
+                        "search_head"
                     ]
                 },
                 {

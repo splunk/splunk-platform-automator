@@ -210,14 +210,14 @@ splunk_app_deployment:
     # Deploys to the same search heads (and ITSI targets) as the ITSI app. Requires an ITSI app
     # entry with state: installed. No target_roles or premium_app on the content pack entry.
     # Options (content_pack_install, content_pack_api, customizations) are only per content_pack_apps item.
-    # library_app is installed in addition; run_playbook_after_restart convention: ancustom/<app_name>_configure.yml
-    - name: "Splunk App for Content Packs"
+    # Top-level name is the library folder; list additional pack folders in content_pack_apps only.
+    # run_playbook_after_restart convention: ancustom/<app_name>_configure.yml
+    - name: DA-ITSI-ContentLibrary
       itsi_content_pack: true
       state: installed
       version: "2.4.0"
       source: local
       path: "splunk-app-for-content-packs_240.spl"
-      library_app: DA-ITSI-ContentLibrary
       install_all_apps: false
       content_pack_apps:
         - name: DA-ITSI-CP-monitoring-alerting

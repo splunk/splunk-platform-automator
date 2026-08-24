@@ -23,7 +23,7 @@
     "deployer": [
         {
             "apps": [
-                "Splunk App for Content Packs",
+                "DA-ITSI-ContentLibrary",
                 "Splunk IT Service Intelligence",
                 "Splunk_ML_Toolkit",
                 "Splunk_SA_Scientific_Python_linux_x86_64"
@@ -41,8 +41,7 @@
                         }
                     ],
                     "itsi_content_pack": true,
-                    "library_app": "DA-ITSI-ContentLibrary",
-                    "name": "Splunk App for Content Packs",
+                    "name": "DA-ITSI-ContentLibrary",
                     "premium_app": "",
                     "source": "splunkbase",
                     "state": "installed"
