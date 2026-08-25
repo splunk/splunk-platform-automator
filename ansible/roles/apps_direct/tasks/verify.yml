@@ -238,7 +238,7 @@
     - apps_dir.stat.exists
     - actual_apps.files is defined
 
-- name: Verify each expected standard, ITSI premium, or single-app content pack
+- name: Verify each expected standard app or single-app content pack
   tags:
     - splunk
     - splunk_apps
@@ -247,7 +247,10 @@
   ansible.builtin.include_tasks: verify_single_app.yml
   loop: >-
     {{
-      (direct_apps_expected | rejectattr('itsi_content_pack', 'equalto', true) | list)
+      (direct_apps_expected
+        | rejectattr('itsi_content_pack', 'equalto', true)
+        | rejectattr('premium_app', 'equalto', 'itsi')
+        | list)
       + (direct_apps_expected | selectattr('_is_single_app_cp', 'defined') | selectattr('_is_single_app_cp') | list)
     }}
   loop_control:
@@ -255,10 +258,25 @@
     label: "{{ verify_app_item.name }}"
   vars:
     verify_base_path: "{{ splunk_home }}/etc/apps"
-    verify_app_fs_dir: >-
-      {{ 'itsi' if (verify_app_item.premium_app | default('')) == 'itsi'
-      else verify_app_item.name }}
-    verify_app_full_path: "{{ verify_app_item.target_path | default(verify_base_path ~ '/' ~ verify_app_fs_dir) }}"
+    verify_app_full_path: "{{ verify_app_item.target_path | default(verify_base_path ~ '/' ~ verify_app_item.name) }}"
+  when: direct_apps_expected | length > 0
+
+- name: Verify each expected ITSI premium app
+  tags:
+    - splunk
+    - splunk_apps
+    - direct_deployment
+    - verify
+  ansible.builtin.include_role:
+    name: apps_itsi
+    tasks_from: verify_premium_app.yml
+  loop: "{{ direct_apps_expected | selectattr('premium_app', 'equalto', 'itsi') | list }}"
+  loop_control:
+    loop_var: verify_app_item
+    label: "{{ verify_app_item.name }}"
+  vars:
+    verify_base_path: "{{ splunk_home }}/etc/apps"
+    verify_mismatches_var: direct_mismatches
   when: direct_apps_expected | length > 0
 
 - name: Verify each expected multi-app ITSI content pack

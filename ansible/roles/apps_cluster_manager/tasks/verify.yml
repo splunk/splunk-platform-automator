@@ -13,6 +13,8 @@
     cm_apps_expected: []
     cm_apps_found: []
     cm_mismatches: []
+    _verify_allowed_fs_names: []
+    _itsi_verify_allowed_fs_names: []
 
 - name: Filter apps for cluster manager distribution
   tags:
@@ -43,6 +45,29 @@
   when: _eligible_for_cm_verify | bool
   loop_control:
     label: "{{ item.name | default('?') }} — {{ 'eligible' if (_eligible_for_cm_verify | bool) else 'not eligible' }}"
+
+- name: Normalize cm_apps_expected for verify filters (optional keys)
+  tags:
+    - splunk
+    - splunk_apps
+    - cluster_manager
+    - verify
+  ansible.builtin.set_fact:
+    cm_apps_expected_norm: "{{ cm_apps_expected_norm | default([]) + [{'premium_app': '', 'itsi_content_pack': false} | combine(item)] }}"
+  loop: "{{ cm_apps_expected }}"
+  loop_control:
+    label: "{{ item.name | default('?') }}"
+  when: cm_apps_expected | length > 0
+
+- name: Apply normalized cm_apps_expected for verify
+  tags:
+    - splunk
+    - splunk_apps
+    - cluster_manager
+    - verify
+  ansible.builtin.set_fact:
+    cm_apps_expected: "{{ cm_apps_expected_norm | default([]) }}"
+  when: cm_apps_expected | length > 0
 
 - name: Check manager-apps directory exists
   tags:
@@ -79,20 +104,61 @@
     cm_apps_found: "{{ actual_apps.files | map(attribute='path') | map('basename') | list }}"
   when: manager_apps_dir.stat.exists and actual_apps.files is defined
 
-- name: Verify each expected app
+- name: Verify each expected standard app
   tags:
     - splunk
     - splunk_apps
     - cluster_manager
     - verify
   ansible.builtin.include_tasks: verify_single_app.yml
-  loop: "{{ cm_apps_expected }}"
+  loop: "{{ cm_apps_expected | rejectattr('premium_app', 'equalto', 'itsi') | list }}"
   loop_control:
     loop_var: verify_app_item
     label: "{{ verify_app_item.name }}"
   vars:
     verify_base_path: "{{ splunk_home }}/etc/manager-apps"
     verify_app_full_path: "{{ verify_app_item.target_path | default(verify_base_path ~ '/' ~ verify_app_item.name) }}"
+
+- name: Verify each expected ITSI premium app
+  tags:
+    - splunk
+    - splunk_apps
+    - cluster_manager
+    - verify
+  ansible.builtin.include_role:
+    name: apps_itsi
+    tasks_from: verify_premium_app.yml
+  loop: "{{ cm_apps_expected | selectattr('premium_app', 'equalto', 'itsi') | list }}"
+  loop_control:
+    loop_var: verify_app_item
+    label: "{{ verify_app_item.name }}"
+  vars:
+    verify_base_path: "{{ splunk_home }}/etc/manager-apps"
+    verify_mismatches_var: cm_mismatches
+
+- name: Add standard cluster manager app names to allowed verify list
+  tags:
+    - splunk
+    - splunk_apps
+    - cluster_manager
+    - verify
+  ansible.builtin.set_fact:
+    _verify_allowed_fs_names: >-
+      {{ (_verify_allowed_fs_names | default([]) + (cm_apps_expected
+         | rejectattr('premium_app', 'equalto', 'itsi')
+         | map(attribute='name') | list)) | unique | list }}
+
+- name: Add ITSI cluster manager on-disk dirs to allowed verify list
+  tags:
+    - splunk
+    - splunk_apps
+    - cluster_manager
+    - verify
+  ansible.builtin.set_fact:
+    _verify_allowed_fs_names: >-
+      {{ (_verify_allowed_fs_names | default([]) + (_itsi_verify_allowed_fs_names | default([]))) | unique | list }}
+  when:
+    - (cm_apps_expected | selectattr('premium_app', 'equalto', 'itsi') | list | length) > 0
 
 - name: Check for unexpected apps
   tags:
@@ -105,8 +171,7 @@
   loop: "{{ cm_apps_found }}"
   when:
     - cm_apps_found | length > 0
-    - item not in (cm_apps_expected | map(attribute='name') | list)
-    # Exclude framework/shipped apps (prefix _) and env-prefixed apps (splunk_app_prefix_); still verify if explicitly in splunk_app_deployment.apps
+    - item not in (_verify_allowed_fs_names | default([]))
     - not (item is match('^_.*'))
     - not (item is match('^' + splunk_app_prefix + '_.*'))
 

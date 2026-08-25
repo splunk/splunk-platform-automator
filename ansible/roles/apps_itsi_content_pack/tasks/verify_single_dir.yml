@@ -1,12 +1,13 @@
 ---
-# Verify one on-disk directory for an ITSI content pack (direct deployment).
+# Verify one on-disk directory for an ITSI content pack.
 # Expects: verify_app_item, verify_base_path, _cpv_fs_dir, _cpv_expected_versions
+# Optional: verify_mismatches_var (defaults to direct_mismatches)
 
 - name: "Check if {{ verify_app_item.name }} / {{ _cpv_fs_dir }} exists"
   tags:
     - splunk
     - splunk_apps
-    - direct_deployment
+    - itsi_content_pack
     - verify
   ansible.builtin.stat:
     path: "{{ verify_base_path }}/{{ _cpv_fs_dir }}"
@@ -17,10 +18,10 @@
   tags:
     - splunk
     - splunk_apps
-    - direct_deployment
+    - itsi_content_pack
     - verify
   ansible.builtin.set_fact:
-    direct_mismatches: "{{ direct_mismatches + [_cpv_mismatch_entry] }}"
+    "{{ verify_mismatches_var | default('direct_mismatches') }}": "{{ lookup('vars', verify_mismatches_var | default('direct_mismatches')) + [_cpv_mismatch_entry] }}"
   vars:
     app_state: "{{ verify_app_item.state | default('installed') }}"
     should_exist: "{{ app_state != 'absent' }}"
@@ -37,7 +38,7 @@
   tags:
     - splunk
     - splunk_apps
-    - direct_deployment
+    - itsi_content_pack
     - verify
   ansible.builtin.shell:
     cmd: |
@@ -64,10 +65,10 @@
   tags:
     - splunk
     - splunk_apps
-    - direct_deployment
+    - itsi_content_pack
     - verify
   ansible.builtin.set_fact:
-    direct_mismatches: "{{ direct_mismatches + [_cpv_drift_entry] }}"
+    "{{ verify_mismatches_var | default('direct_mismatches') }}": "{{ lookup('vars', verify_mismatches_var | default('direct_mismatches')) + [_cpv_drift_entry] }}"
   vars:
     _cpv_expected: "{{ (_cpv_expected_versions | default({})).get(_cpv_fs_dir, '') | trim }}"
     _cpv_current: "{{ (_cpv_installed_version.stdout | default('') | trim) }}"

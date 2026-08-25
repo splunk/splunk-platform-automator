@@ -1,0 +1,110 @@
+---
+# Verify ITSI premium app on-disk layout (role-specific app subsets, not config display name).
+# Expects: verify_app_item, verify_base_path, verify_mismatches_var
+# Optional: verify_host_roles (defaults to current host role_* groups without prefix)
+
+- name: "Set verify host roles for ITSI premium app"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+    - verify
+  ansible.builtin.set_fact:
+    _itsi_verify_host_roles: >-
+      {{ verify_host_roles
+         | default((group_names | default([])) | select('match', '^role_.*') | map('regex_replace', '^role_', '') | list) }}
+
+- name: "Resolve ITSI on-disk dirs for cluster manager verify"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+    - verify
+  ansible.builtin.set_fact:
+    _verify_fs_dirs: "{{ itsi_cm_apps }}"
+  when: verify_mismatches_var == 'cm_mismatches'
+
+- name: "Resolve ITSI on-disk dirs for license manager verify"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+    - verify
+  ansible.builtin.set_fact:
+    _verify_fs_dirs: "{{ itsi_lm_apps }}"
+  when:
+    - verify_mismatches_var == 'direct_mismatches'
+    - ('license_manager' in _itsi_verify_host_roles)
+    - ('search_head' not in _itsi_verify_host_roles)
+
+- name: "Resolve ITSI on-disk dirs for standalone indexer verify"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+    - verify
+  ansible.builtin.set_fact:
+    _verify_fs_dirs: "{{ itsi_cm_apps }}"
+  when:
+    - verify_mismatches_var == 'direct_mismatches'
+    - ('indexer' in _itsi_verify_host_roles)
+    - (group_names | default([]) | select('match', '^idxcluster_') | list | length) == 0
+    - ('search_head' not in _itsi_verify_host_roles)
+
+- name: "Resolve ITSI archive app list for search head / deployer verify"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+    - verify
+  ansible.builtin.include_tasks: verify_resolve_itsi_archive_names.yml
+  when: >-
+    verify_mismatches_var in ['deployer_mismatches', 'direct_mismatches']
+    and (
+      verify_mismatches_var == 'deployer_mismatches'
+      or (
+        verify_mismatches_var == 'direct_mismatches'
+        and ('search_head' in _itsi_verify_host_roles)
+      )
+    )
+
+- name: "Set ITSI search head / deployer verify dirs from archive"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+    - verify
+  ansible.builtin.set_fact:
+    _verify_fs_dirs: "{{ _itsi_archive_app_names | default([]) }}"
+  when: >-
+    verify_mismatches_var in ['deployer_mismatches', 'direct_mismatches']
+    and (
+      verify_mismatches_var == 'deployer_mismatches'
+      or (
+        verify_mismatches_var == 'direct_mismatches'
+        and ('search_head' in _itsi_verify_host_roles)
+      )
+    )
+
+- name: "Verify ITSI premium app directories"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+    - verify
+  ansible.builtin.include_tasks: verify_fs_dirs.yml
+  loop: "{{ _verify_fs_dirs | default([]) }}"
+  loop_control:
+    loop_var: _verify_fs_dir
+    label: "{{ verify_app_item.name }} / {{ _verify_fs_dir }}"
+  when: (_verify_fs_dirs | default([]) | length) > 0
+
+- name: "Expose ITSI verify dirs for allowed-name checks"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+    - verify
+  ansible.builtin.set_fact:
+    _itsi_verify_allowed_fs_names: "{{ (_itsi_verify_allowed_fs_names | default([]) + (_verify_fs_dirs | default([]))) | unique | list }}"
+  when: (_verify_fs_dirs | default([]) | length) > 0

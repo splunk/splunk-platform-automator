@@ -1,0 +1,35 @@
+---
+# Verify presence/absence for a list of on-disk app directories.
+# Expects: verify_app_item, verify_base_path, _verify_fs_dirs, verify_mismatches_var (fact name)
+# Optional: verify_app_label (defaults to verify_app_item.name)
+
+- name: "Check if {{ verify_app_label | default(verify_app_item.name) }} / {{ _verify_fs_dir }} exists"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+    - verify
+  ansible.builtin.stat:
+    path: "{{ verify_base_path }}/{{ _verify_fs_dir }}"
+  register: _verify_fs_dir_check
+  become: true
+
+- name: "Verify {{ verify_app_label | default(verify_app_item.name) }} / {{ _verify_fs_dir }} presence/absence"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+    - verify
+  ansible.builtin.set_fact:
+    "{{ verify_mismatches_var }}": "{{ lookup('vars', verify_mismatches_var) + [_verify_fs_mismatch_entry] }}"
+  vars:
+    app_state: "{{ verify_app_item.state | default('installed') }}"
+    should_exist: "{{ app_state != 'absent' }}"
+    actually_exists: "{{ _verify_fs_dir_check.stat.exists }}"
+    _verify_fs_mismatch_entry:
+      app: "{{ verify_app_label | default(verify_app_item.name) }} ({{ _verify_fs_dir }})"
+      issue: "{{ 'MISSING: App should be installed but not found' if (should_exist and not actually_exists) else 'UNEXPECTED: App should be absent but is installed' }}"
+      severity: "error"
+      expected_state: "{{ app_state }}"
+      actual_state: "{{ 'installed' if actually_exists else 'absent' }}"
+  when: should_exist != actually_exists

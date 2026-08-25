@@ -1,43 +1,9 @@
 ---
 # Verify all on-disk app dirs for one multi-app ITSI content pack entry on direct deployment.
 # Expects: verify_app_item, verify_base_path
-# Top-level name is the library folder; content_pack_apps lists additional pack folders.
+# Optional: verify_mismatches_var (defaults to direct_mismatches)
 
-- name: "Resolve content pack verify dirs for {{ verify_app_item.name }}"
-  tags:
-    - splunk
-    - splunk_apps
-    - direct_deployment
-    - verify
-  ansible.builtin.set_fact:
-    _cpv_fs_dirs: >-
-      {{ [verify_app_item.name]
-         + (verify_app_item.content_pack_apps | default([]) | map(attribute='name') | list) }}
-    _cpv_expected_versions: {}
-
-- name: "Skip per-app verify for install_all_apps content pack {{ verify_app_item.name }}"
-  tags:
-    - splunk
-    - splunk_apps
-    - direct_deployment
-    - verify
-  ansible.builtin.debug:
-    msg: >-
-      Skipping per-app directory checks for {{ verify_app_item.name }} (install_all_apps: true).
-      Deploy/removal uses archive app list; list content_pack_apps explicitly to verify individual packs.
-  when: verify_app_item.install_all_apps | default(false) | bool
-
-- name: "Verify content pack app directories for {{ verify_app_item.name }}"
-  tags:
-    - splunk
-    - splunk_apps
-    - direct_deployment
-    - verify
-  ansible.builtin.include_tasks: verify_content_pack_single_dir.yml
-  loop: "{{ _cpv_fs_dirs | default([]) }}"
-  loop_control:
-    loop_var: _cpv_fs_dir
-    label: "{{ verify_app_item.name }} / {{ _cpv_fs_dir }}"
-  when:
-    - not (verify_app_item.install_all_apps | default(false) | bool)
-    - (_cpv_fs_dirs | default([]) | length) > 0
+- name: "Verify ITSI content pack directories for {{ verify_app_item.name }}"
+  ansible.builtin.include_role:
+    name: apps_itsi_content_pack
+    tasks_from: verify_app_dirs.yml

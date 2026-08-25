@@ -18,7 +18,9 @@ APPLY_ITSI = REPO_ROOT / "ansible/roles/apps_direct/tasks/process_direct_app_app
 APPLY_CP = REPO_ROOT / "ansible/roles/apps_direct/tasks/process_direct_app_apply_content_pack.yml"
 APPLY_STANDARD = REPO_ROOT / "ansible/roles/apps_direct/tasks/process_direct_app_apply_standard.yml"
 VERIFY_YML = REPO_ROOT / "ansible/roles/apps_direct/tasks/verify.yml"
-VERIFY_CP_DIRS = REPO_ROOT / "ansible/roles/apps_direct/tasks/verify_content_pack_app_dirs.yml"
+VERIFY_CP_WRAPPER = REPO_ROOT / "ansible/roles/apps_direct/tasks/verify_content_pack_app_dirs.yml"
+VERIFY_CP_DIRS = REPO_ROOT / "ansible/roles/apps_itsi_content_pack/tasks/verify_app_dirs.yml"
+VERIFY_CP_SINGLE = REPO_ROOT / "ansible/roles/apps_itsi_content_pack/tasks/verify_single_dir.yml"
 
 
 def _load_tasks(path: Path) -> list:
@@ -105,12 +107,16 @@ class TestItsiContentPackRoleWiring:
         verify_playbook = REPO_ROOT / "ansible/verification/verify_app_deployment.yml"
         verify_text = verify_playbook.read_text(encoding="utf-8")
         direct_verify = VERIFY_YML.read_text(encoding="utf-8")
+        cp_wrapper = VERIFY_CP_WRAPPER.read_text(encoding="utf-8")
         cp_dirs = VERIFY_CP_DIRS.read_text(encoding="utf-8")
         assert "build_content_pack_verify_index.yml" not in verify_text
         assert "verify_content_pack_app_dirs.yml" in direct_verify
+        assert "verify_app_dirs.yml" in cp_wrapper
         assert "_is_single_app_cp" in direct_verify
         assert "verify_single_app.yml" in direct_verify
+        assert "verify_premium_app.yml" in direct_verify
         assert "_cpv_fs_dirs" in cp_dirs
+        assert VERIFY_CP_SINGLE.is_file()
         assert "_cp_verify_index" not in cp_dirs
         assert not (REPO_ROOT / "ansible/roles/apps_common/tasks/build_content_pack_verify_index.yml").exists()
         assert not (REPO_ROOT / "ansible/roles/apps_common/tasks/resolve_content_pack_verify_fs_dirs.yml").exists()

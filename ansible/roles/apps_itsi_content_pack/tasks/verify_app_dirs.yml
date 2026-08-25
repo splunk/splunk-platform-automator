@@ -1,0 +1,46 @@
+---
+# Verify all on-disk app dirs for one ITSI content pack entry.
+# Expects: verify_app_item, verify_base_path
+# Optional: verify_mismatches_var (defaults to direct_mismatches)
+
+- name: "Resolve content pack verify dirs for {{ verify_app_item.name }}"
+  ansible.builtin.include_tasks: verify_resolve_fs_dirs.yml
+
+- name: "Skip per-app verify for install_all_apps content pack {{ verify_app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+    - verify
+  ansible.builtin.debug:
+    msg: >-
+      Skipping per-app directory checks for {{ verify_app_item.name }} (install_all_apps: true).
+      Deploy/removal uses archive app list; list content_pack_apps explicitly to verify individual packs.
+  when: verify_app_item.install_all_apps | default(false) | bool
+
+- name: "Verify content pack app directories for {{ verify_app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+    - verify
+  ansible.builtin.include_tasks: verify_single_dir.yml
+  loop: "{{ _cpv_fs_dirs | default([]) }}"
+  loop_control:
+    loop_var: _cpv_fs_dir
+    label: "{{ verify_app_item.name }} / {{ _cpv_fs_dir }}"
+  when:
+    - not (verify_app_item.install_all_apps | default(false) | bool)
+    - (_cpv_fs_dirs | default([]) | length) > 0
+
+- name: "Expose content pack verify dirs for allowed-name checks"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+    - verify
+  ansible.builtin.set_fact:
+    _cp_verify_allowed_fs_names: "{{ (_cp_verify_allowed_fs_names | default([]) + (_cpv_fs_dirs | default([]))) | unique | list }}"
+  when:
+    - not (verify_app_item.install_all_apps | default(false) | bool)
+    - (_cpv_fs_dirs | default([]) | length) > 0

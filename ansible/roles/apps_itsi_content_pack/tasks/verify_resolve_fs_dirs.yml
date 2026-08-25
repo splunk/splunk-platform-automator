@@ -1,0 +1,26 @@
+---
+# Resolve on-disk directories for one ITSI content pack verify entry.
+# Expects: verify_app_item
+# Sets: _cpv_fs_dirs
+
+- name: "Resolve content pack verify dirs for {{ verify_app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+    - verify
+  ansible.builtin.set_fact:
+    _cpv_fs_dirs: >-
+      {{ [verify_app_item.name]
+         + (verify_app_item.content_pack_apps | default([]) | map(attribute='name') | list) }}
+  when: not (verify_app_item.install_all_apps | default(false) | bool)
+
+- name: "Skip per-app verify dir resolution for install_all_apps {{ verify_app_item.name }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi_content_pack
+    - verify
+  ansible.builtin.set_fact:
+    _cpv_fs_dirs: []
+  when: verify_app_item.install_all_apps | default(false) | bool
