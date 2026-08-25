@@ -33,6 +33,9 @@ echo -e "${GREEN}=== Splunk Platform Automator - App Deployment Tests ===${NC}"
 
 source "$SCRIPT_DIR/run_venv.sh" 'pydantic>=2.0'
 
+mkdir -p "${SCRIPT_DIR}/.ansible_tmp"
+export ANSIBLE_LOCAL_TMP="${SCRIPT_DIR}/.ansible_tmp"
+
 # Run app deployment playbook tests, schema validation tests, and app deployment schema tests
 pytest tests/test_app_deployment.py tests/test_schema.py -k "TestAppDeploymentPreDeploymentChecks or TestAppDeploymentSchemaValidation or TestAppDeploymentConfig" "$@"
 

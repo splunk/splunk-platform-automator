@@ -41,7 +41,10 @@ def _run_deploy_playbook(extra_vars_path: str, env: dict | None = None, ansible_
     ] + extra_args
     # When caller passes env, use it as the subprocess env base so omitted vars (e.g. SPLUNKBASE_*) are actually unset.
     ansible_env = (env.copy() if env is not None else os.environ.copy())
-    ansible_env["ANSIBLE_CONFIG"] = ansible_config or os.path.join(root, "ansible.cfg")
+    ansible_env["ANSIBLE_CONFIG"] = ansible_config or _test_ansible_config_path()
+    tests_dir = os.path.join(root, "tests")
+    ansible_env.setdefault("ANSIBLE_LOCAL_TMP", os.path.join(tests_dir, ".ansible_tmp"))
+    os.makedirs(ansible_env["ANSIBLE_LOCAL_TMP"], exist_ok=True)
     result = subprocess.run(
         cmd,
         cwd=root,
@@ -72,15 +75,40 @@ def _get_validate_config():
     return validate_config, ConfigValidationError
 
 
-def _validate_config_with_app_deployment(splunk_app_deployment: dict) -> None:
+def _validate_config_with_app_deployment(
+    splunk_app_deployment: dict,
+    splunk_hosts: list | None = None,
+    splunk_defaults: dict | None = None,
+) -> None:
     """Build minimal config and run schema validate_config; raises on failure."""
     validate_config, _ = _get_validate_config()
     config = {
         "plugin": "splunk-platform-automator",
-        "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
+        "splunk_hosts": splunk_hosts or [{"name": "h1", "roles": ["indexer"]}],
         "splunk_app_deployment": splunk_app_deployment,
     }
+    if splunk_defaults is not None:
+        config["splunk_defaults"] = splunk_defaults
     validate_config(config)
+
+
+def _normal_app(**overrides) -> dict:
+    """Minimal valid normal app for schema tests (field under test can override)."""
+    app = {"name": "MyApp", "source": "local", "target_roles": ["search_head"]}
+    app.update(overrides)
+    return app
+
+
+def _itsi_splunk_hosts() -> list:
+    return [{"name": "h1", "roles": ["search_head", "indexer", "license_manager"]}]
+
+
+def _itsi_splunk_defaults() -> dict:
+    return {"splunk_license_file": ["Splunk_Enterprise.lic"]}
+
+
+def _test_ansible_config_path() -> str:
+    return os.path.join(_project_root(), "tests", "configs", "app_deployment", "ansible_app_deployment.cfg")
 
 
 class TestAppDeploymentSchemaValidation:
@@ -120,7 +148,7 @@ class TestAppDeploymentSchemaValidation:
         _, ConfigValidationError = _get_validate_config()
         with pytest.raises(ConfigValidationError) as exc_info:
             _validate_config_with_app_deployment({
-                "apps": [{"name": "MyApp", "source": "invalid"}]
+                "apps": [_normal_app(source="invalid")]
             })
         assert "source" in str(exc_info.value).lower()
 
@@ -149,7 +177,7 @@ class TestAppDeploymentSchemaValidation:
         _, ConfigValidationError = _get_validate_config()
         with pytest.raises(ConfigValidationError) as exc_info:
             _validate_config_with_app_deployment({
-                "apps": [{"name": "MyApp", "deployment_target": "invalid"}]
+                "apps": [_normal_app(deployment_target="invalid")]
             })
         assert "deployment_target" in str(exc_info.value).lower()
 
@@ -158,7 +186,7 @@ class TestAppDeploymentSchemaValidation:
         _, ConfigValidationError = _get_validate_config()
         with pytest.raises(ConfigValidationError) as exc_info:
             _validate_config_with_app_deployment({
-                "apps": [{"name": "MyApp", "state": "remove"}]
+                "apps": [_normal_app(state="remove")]
             })
         err_msg = str(exc_info.value).lower()
         assert "state" in err_msg and ("installed" in err_msg or "absent" in err_msg)
@@ -166,19 +194,19 @@ class TestAppDeploymentSchemaValidation:
     def test_app_version_latest_valid(self):
         """Version 'latest' (any case) is valid."""
         _validate_config_with_app_deployment({
-            "apps": [{"name": "MyApp", "source": "splunkbase", "app_id": 352, "version": "latest"}]
+            "apps": [_normal_app(source="splunkbase", app_id=352, version="latest")]
         })
         _validate_config_with_app_deployment({
-            "apps": [{"name": "MyApp", "source": "splunkbase", "app_id": 352, "version": "Latest"}]
+            "apps": [_normal_app(source="splunkbase", app_id=352, version="Latest")]
         })
 
     def test_app_version_number_valid(self):
         """Version as dotted number (e.g. 4.21.1, 10.1.0) is valid."""
         _validate_config_with_app_deployment({
-            "apps": [{"name": "MyApp", "source": "splunkbase", "app_id": 352, "version": "4.21.1"}]
+            "apps": [_normal_app(source="splunkbase", app_id=352, version="4.21.1")]
         })
         _validate_config_with_app_deployment({
-            "apps": [{"name": "MyApp", "source": "splunkbase", "app_id": 352, "version": "10.1.0"}]
+            "apps": [_normal_app(source="splunkbase", app_id=352, version="10.1.0")]
         })
 
     def test_app_version_invalid_raises(self):
@@ -186,7 +214,7 @@ class TestAppDeploymentSchemaValidation:
         _, ConfigValidationError = _get_validate_config()
         with pytest.raises(ConfigValidationError) as exc_info:
             _validate_config_with_app_deployment({
-                "apps": [{"name": "MyApp", "source": "splunkbase", "app_id": 352, "version": "dev"}]
+                "apps": [_normal_app(source="splunkbase", app_id=352, version="dev")]
             })
         err_msg = str(exc_info.value).lower()
         assert "version" in err_msg
@@ -202,7 +230,7 @@ class TestAppDeploymentSchemaValidation:
             "download_timeout": 120,
             "retry_count": 3,
             "restart_timeout": 300,
-            "apps": [{"name": "MyApp", "source": "local"}],
+            "apps": [_normal_app()],
         })
 
     def test_splunk_app_deployment_target_download_not_bool_raises(self):
@@ -211,7 +239,7 @@ class TestAppDeploymentSchemaValidation:
         with pytest.raises(ConfigValidationError) as exc_info:
             _validate_config_with_app_deployment({
                 "target_download": "yes",
-                "apps": [{"name": "MyApp", "source": "local"}],
+                "apps": [_normal_app()],
             })
         assert "target_download" in str(exc_info.value).lower()
 
@@ -221,7 +249,7 @@ class TestAppDeploymentSchemaValidation:
         with pytest.raises(ConfigValidationError) as exc_info:
             _validate_config_with_app_deployment({
                 "temp_dir": "   ",
-                "apps": [{"name": "MyApp", "source": "local"}],
+                "apps": [_normal_app()],
             })
         assert "temp_dir" in str(exc_info.value).lower()
 
@@ -231,7 +259,7 @@ class TestAppDeploymentSchemaValidation:
         with pytest.raises(ConfigValidationError) as exc_info:
             _validate_config_with_app_deployment({
                 "download_timeout": 0,
-                "apps": [{"name": "MyApp", "source": "local"}],
+                "apps": [_normal_app()],
             })
         assert "download_timeout" in str(exc_info.value).lower()
 
@@ -245,7 +273,7 @@ class TestAppDeploymentSchemaValidation:
                 "version": "4.21.1",
                 "premium_app": "itsi",
             }]
-        })
+        }, splunk_hosts=_itsi_splunk_hosts(), splunk_defaults=_itsi_splunk_defaults())
 
     def test_premium_app_invalid_raises(self):
         """Schema validation must raise when premium_app is not an allowed value (e.g. not itsi)."""
@@ -307,7 +335,7 @@ class TestAppDeploymentSchemaValidation:
         _, ConfigValidationError = _get_validate_config()
         with pytest.raises(ConfigValidationError) as exc_info:
             _validate_config_with_app_deployment({
-                "apps": [{"name": "MyApp", "source": "local", "customizations": ["remove", "local_configs"]}]
+                "apps": [_normal_app(customizations=["remove", "local_configs"])]
             })
         assert "customizations" in str(exc_info.value).lower()
 
@@ -316,7 +344,7 @@ class TestAppDeploymentSchemaValidation:
         _, ConfigValidationError = _get_validate_config()
         with pytest.raises(ConfigValidationError) as exc_info:
             _validate_config_with_app_deployment({
-                "apps": [{"name": "MyApp", "customizations": {"remove": "default/inputs.conf"}}]
+                "apps": [_normal_app(customizations={"remove": "default/inputs.conf"})]
             })
         err_msg = str(exc_info.value).lower()
         assert "customizations" in err_msg and "remove" in err_msg
@@ -326,7 +354,7 @@ class TestAppDeploymentSchemaValidation:
         _, ConfigValidationError = _get_validate_config()
         with pytest.raises(ConfigValidationError) as exc_info:
             _validate_config_with_app_deployment({
-                "apps": [{"name": "MyApp", "customizations": {"local_configs": {"inputs.conf": "not-a-dict"}}}]
+                "apps": [_normal_app(customizations={"local_configs": {"inputs.conf": "not-a-dict"}})]
             })
         err_msg = str(exc_info.value).lower()
         assert "local_configs" in err_msg
@@ -336,13 +364,10 @@ class TestAppDeploymentSchemaValidation:
         _, ConfigValidationError = _get_validate_config()
         with pytest.raises(ConfigValidationError) as exc_info:
             _validate_config_with_app_deployment({
-                "apps": [{
-                    "name": "MyApp",
-                    "customizations": {
-                        "run_playbook": "ansible/foo.yml",
-                        "run_role": "my.role",
-                    },
-                }]
+                "apps": [_normal_app(customizations={
+                    "run_playbook": "ansible/foo.yml",
+                    "run_role": "my.role",
+                })]
             })
         err_msg = str(exc_info.value).lower()
         assert "run_playbook" in err_msg and "run_role" in err_msg
@@ -352,7 +377,10 @@ class TestAppDeploymentSchemaValidation:
         _, ConfigValidationError = _get_validate_config()
         with pytest.raises(ConfigValidationError) as exc_info:
             _validate_config_with_app_deployment({
-                "apps": [{"name": "MyApp", "customizations": {"run_playbook": "ansible/foo.yml", "extra_vars": ["a"]}}]
+                "apps": [_normal_app(customizations={
+                    "run_playbook": "ansible/foo.yml",
+                    "extra_vars": ["a"],
+                })]
             })
         assert "extra_vars" in str(exc_info.value).lower()
 
