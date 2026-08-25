@@ -1,0 +1,530 @@
+---
+# Test Configuration: ITSI + full app deployment on 2-site IDXC topology
+#
+# Topology:
+#   - MC + LM (mc)
+#   - DS + Deployer (ds) for SHC shc1
+#   - CM (cm) + 2-site 4-node IDXC (idx1-2 @ site1, idx3-4 @ site2)
+#   - 3-node SHC for ITSI (sh1-sh3 @ shc1)
+#   - Standalone SH (sh)
+#   - UF (uf), HF (hf)
+#
+# Run: ./tests/run_deployment_tests.sh -k "2site-idxc_shc_mc_ds_sh_hf_uf_itsi_apps"
+# Requires: SPLUNKBASE_USERNAME, SPLUNKBASE_PASSWORD, Splunk_Enterprise.lic, Splunk_ITSI.lic
+
+plugin: splunk-platform-automator
+
+# General settings
+general:
+  url_locale: en-US
+
+os:
+  #time_zone: "America/Chicago"
+  set_hostname: true
+  packages:
+    - acl # Redhat 10
+
+# Terraform configuration for AWS infrastructure
+terraform:
+  aws:
+    region: "eu-central-1"
+    ami_id: "ami-0f5fb818aeff8f5fb" # Redhat 10 (eu-central-1)
+    key_name: "aws_key"
+    ssh_private_key_file: "~/.ssh/aws_key.pem"
+    security_group_names: ["Splunk_Basic"]
+    instance_type: "t3.2xlarge"
+    root_volume_size: 50
+    root_volume_type: "gp3"
+    tags:
+      Env: "SPA Testing (ITSI + apps, 2 site IDXC, ITSI SHC, MC/LM, DS/DPL, CM, SH, HF, UF)"
+      TestConfig: "2site-idxc_shc_mc_ds_sh_hf_uf_itsi_apps"
+      SPADirName: "{{ playbook_dir | dirname | basename }}"
+      splunkit_data_classification: "public"
+      splunkit_environment_type: "non-prd"
+
+# Splunk default settings
+splunk_defaults:
+  splunk_env_name: splk
+  # splunk_version: "10.2.0"
+  # splunk_architecture: x86_64
+  # splunk_admin_password: "splunklab"
+  splunk_download:
+    splunk: true
+    splunkforwarder: true
+  splunk_license_file:
+    - Splunk_Enterprise.lic
+    - Splunk_ITSI.lic
+
+  splunk_set_servername: true
+  splunk_set_default_hostname: true
+  splunk_loginpage_print_userpw: false
+  # splunk_loginpage_print_roles: false
+
+  splunk_indexes:
+    test1:
+    test2:
+    windows:
+    perfmon:
+    wineventlog:
+    snow_incidents:
+    o11y_alerts:
+    generic_alerts:
+
+  # Enable ssl by default to secure internet facing connections.
+  splunk_ssl:
+    web:
+      enable: true
+    inputs:
+      enable: true
+    outputs:
+      enable: true
+
+  splunk_conf:
+    system/local/server.conf:
+      diskUsage:
+        minFreeSpace: 500
+    system/local/alert_actions.conf:
+      email:
+        allowedDomainList: allow_all
+    system/local/authorize.conf:
+      tokens_auth:
+        disabled: false
+        expiration: +999d
+
+  splunk_volume_defaults:
+    VolumeDataSize_Free_MB: 15000
+
+# Indexer Cluster settings
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: splunkidxc
+    idxc_replication_port: 9887
+    idxc_site_rf: "origin:2, total:3"
+    idxc_site_sf: "origin:1, total:2"
+
+# Search Head Cluster settings
+splunk_shclusters:
+  - shc_name: shc1
+    shc_site: site0
+    shc_password: splunkshc
+    shc_replication_port: 9887
+
+# Splunk hosts with its settings
+splunk_hosts:
+  # Monitoring Console + License Manager
+  - name: mc
+    roles:
+      - monitoring_console
+      - license_manager
+
+  # Deployment Server + Deployer (SHC app bundle)
+  - name: ds
+    roles:
+      - deployment_server
+      - deployer
+    shcluster: shc1
+
+  # Cluster Manager
+  - name: cm
+    roles:
+      - cluster_manager
+    idxcluster: idxc1
+    site: site0
+
+  # Cluster Indexers (site1)
+  - iter:
+      prefix: idx
+      numbers: 1..2
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site1
+    terraform:
+      aws:
+        instance_type: "c5.4xlarge"
+        root_volume_size: 100
+        root_volume_type: "gp3"
+
+  # Cluster Indexers (site2)
+  - iter:
+      prefix: idx
+      numbers: 3..4
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site2
+    terraform:
+      aws:
+        instance_type: "c5.4xlarge"
+        root_volume_size: 100
+        root_volume_type: "gp3"
+
+  # Search Head Cluster (ITSI)
+  - iter:
+      prefix: sh
+      numbers: 1..3
+    roles:
+      - search_head
+    shcluster: shc1
+    terraform:
+      aws:
+        instance_type: "c5.4xlarge"
+        root_volume_size: 100
+        root_volume_type: "gp3"
+    os:
+      packages:
+        - java-25-openjdk # Redhat 10
+
+  # Standalone Search Head
+  - name: sh
+    roles:
+      - search_head
+    terraform:
+      aws:
+        instance_type: "c5.4xlarge"
+        root_volume_size: 100
+        root_volume_type: "gp3"
+    os:
+      packages:
+        - java-25-openjdk # Redhat 10
+
+  # Universal Forwarder
+  - name: uf
+    roles:
+      - universal_forwarder
+    os:
+      packages:
+        - sysstat
+        - lsof
+        - net-tools
+
+  # Heavy Forwarder
+  - name: hf
+    roles:
+      - heavy_forwarder
+
+######################### App Deployment #########################
+splunk_app_deployment:
+  # Recommended: Use environment variables SPLUNKBASE_USERNAME and SPLUNKBASE_PASSWORD
+  splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
+  splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
+  # backup_apps_before_update: true
+  target_download: true
+  cache_downloads: true
+  # When true (default), run splunk btool deploymentclient on hosts before DS staging to limit serverclass targets
+  # to real phone-home clients. When false, skip btool and treat non–deployment-server, non–cluster-member hosts as clients.
+  deploymentclient_check: true
+
+  apps:
+    - name: "Splunk IT Service Intelligence"
+      source: splunkbase
+      app_id: 1841
+      # version: 'latest'
+      # state: 'absent'
+      premium_app: itsi
+      shc_whitelist: [shc1]
+      # shc_rolling_restart: true
+
+    - name: DA-ITSI-ContentLibrary
+      source: splunkbase
+      app_id: 5391
+      itsi_content_pack: true
+      shc_whitelist: [shc1]
+      # version: "2.5.0"
+      # state: 'absent'
+      # install_all_apps: true
+      content_pack_apps:
+        - name: DA-ITSI-CP-monitoring-alerting
+          content_pack_install: true
+          content_pack_api:
+            install_all: true
+            # enabled: false
+            # saved_search_action: "disable"
+            # backfill: false
+            # resolution: "overwrite"
+            # prefix: ""
+          customizations:
+            run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml"
+            force_run_playbook_after_restart: false
+        - name: DA-ITSI-CP-nix
+          content_pack_install: true
+          content_pack_api:
+            enabled: true
+          customizations:
+            run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml"
+            force_run_playbook_after_restart: false
+        - name: DA-ITSI-CP-windows
+          content_pack_install: true
+          content_pack_api:
+            enabled: true
+          customizations:
+            run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-windows_configure.yml"
+            force_run_playbook_after_restart: false
+        - name: DA-ITSI-CP-enterprise-networking
+          content_pack_install: true
+          content_pack_api:
+            enabled: true
+        - name: DA-ITSI-CP-cisco-data-center
+          content_pack_install: true
+          content_pack_api:
+            enabled: true
+        - name: DA-ITSI-CP-splunk-observability
+          content_pack_install: true
+          content_pack_api:
+            install_all: true
+            enabled: true
+            saved_search_action: "enable"
+
+    # Single-app ITSI content pack (no content_pack_apps).
+    # state: installed (default) installs via ITSI API; state: absent removes the app.
+    - name: DA-ITSI-CP-CUST-ATLAS-AWS-EBS
+      source: splunkbase
+      app_id: 7294
+      itsi_content_pack: true
+      shc_whitelist: [shc1]
+      # state: 'absent'
+      # content_pack_api:
+      #   install_all: true
+      #   enabled: true
+    #
+    # - name: "My Custom ITSI Content Pack"
+    #   source: local
+    #   path: "my-custom-cp.spl"
+    #   itsi_content_pack: true
+    #   content_pack_api:
+    #     install_all: true
+    #     enabled: true
+    #     resolution: "overwrite"
+
+
+########################## Working Apps Start #########################
+
+    # Splunk AI Assistant for SPL (Same for Cloud and On-Prem)
+    # Submit the Tenant Code here:
+    # https://www.splunk.com/en_us/form/tenantcodesubmit.html?locale=en_us
+    - name: "Splunk_AI_Assistant_Cloud"
+      source: splunkbase
+      app_id: 7245
+      version: "latest"
+      # state: 'absent'
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "Splunk_MCP_Server"
+      source: splunkbase
+      app_id: 7931
+      version: "latest"
+      # state: 'absent'
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    # Start # Prerequisites for ITSI
+    - name: "Splunk_SA_Scientific_Python_linux_x86_64"
+      source: splunkbase
+      app_id: 2882
+      version: "latest"
+      # state: 'absent'
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "Splunk_ML_Toolkit"
+      source: splunkbase
+      app_id: 2890
+      version: "latest"
+      # state: 'absent'
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+      customizations:
+        run_playbook: "ansible/apps_playbooks/Splunk_ML_Toolkit-configure.yml"
+
+    - name: "Splunk_SA_CIM"
+      source: splunkbase
+      app_id: 1621
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+    # End # Prerequisites for ITSI
+
+    # Start # Prerequisites for ITSI Content Pack monitoring-alerting
+    - name: "lookup_editor"
+      source: splunkbase
+      app_id: 1724
+      version: "latest"
+      # state: 'absent'
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "punchcard_app"
+      source: splunkbase
+      app_id: 3129
+      # state: 'absent'
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "circlepack_viz"
+      source: splunkbase
+      app_id: 4574
+      version: "latest"
+      # state: 'absent'
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "treemap-viz"
+      source: splunkbase
+      app_id: 7890
+      version: "latest"
+      # state: 'absent'
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    # - name: "wordcloud_app"
+    #   source: local
+    #   # state: 'absent'
+    #   target_roles:
+    #     - search_head
+    #   shc_whitelist: [shc1]
+    # End # Prerequisites for ITSI Content Pack monitoring-alerting
+
+    # Start # Prerequisites for Content Pack for Observability
+    - name: "splunk_ta_sim"
+      source: splunkbase
+      app_id: 5247
+      version: "latest"
+      # deployment_target: "direct"
+      # state: 'absent'
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+      # customizations:  # requires Splunk Observability Cloud credentials
+      #   run_playbook_after_restart: "ansible/apps_playbooks/splunk_ta_sim-configure.yml"
+      #   # force_run_playbook_after_restart: true
+      #   extra_vars:
+      #     o11y_realm: "<o11y_realm>"
+      #     o11y_api_token: "<o11y_api_token>"
+      #     # o11y_org_id: "<o11y_org_id>"  # optional; derived from API if omitted
+    # End # Prerequisites for Content Pack for Observability
+
+    # Start # Prerequisites for Content Pack for Cisco Enterprise Networks
+    - name: "Splunk_TA_cisco_meraki"
+      source: splunkbase
+      app_id: 5580
+      version: "latest"
+      # deployment_target: "direct"
+      # state: 'absent'
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "TA_cisco_catalyst"
+      source: splunkbase
+      app_id: 7538
+      version: "latest"
+      # deployment_target: "direct"
+      # state: 'absent'
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+    # End # Prerequisites for Content Pack for Cisco Enterprise Networks
+
+    # Start # Prerequisites for Content Pack for Cisco Data Center
+    - name: "cisco_dc_networking_app_for_splunk"
+      source: splunkbase
+      app_id: 7777
+      version: "latest"
+      # deployment_target: "direct"
+      # state: 'absent'
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+    # End # Prerequisites for Content Pack for Cisco Data Center
+
+    # Requires CIM (Splunk_SA_CIM) app to be installed.
+    - name: "Splunk_TA_snow"
+      source: splunkbase
+      app_id: 1928
+      version: "latest"
+      # state: 'absent'
+      # deployment_target: "direct"
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+      # customizations:  # requires ServiceNow credentials and Splunk DNS name
+      #   run_playbook: "ansible/apps_playbooks/Splunk_TA_snow-configure.yml"
+      #   extra_vars:
+      #     snow_connection: "<snow_connection>"
+      #     snow_url: "<snow_url>"
+      #     snow_user: "<snow_user>"
+      #     snow_password: "<snow_password>"
+      #     snow_index: "<snow_index>"
+      #     dns_name: "<dns_name>"
+
+    - name: "Splunk_TA_nix"
+      source: splunkbase
+      app_id: 833
+      version: "10.3.2"
+      # deployment_target: "direct"
+      # state: 'absent'
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "Splunk_TA_windows"
+      source: splunkbase
+      app_id: 742
+      # version: "9.0.1"
+      # state: 'absent'
+      #deployment_target: "direct"
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "splunk-cisco-app-navigator"
+      source: splunkbase
+      app_id: 8566
+      # state: 'absent'
+      #deployment_target: "direct"
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    # --- Universal Forwarder: enable performance monitoring ---
+    - name: "Splunk_TA_nix"
+      source: splunkbase
+      app_id: 833
+      version: "latest"
+      # state: 'absent'
+      target_roles:
+        - universal_forwarder
+      # serverclass: "app_Splunk_TA_nix_uf"
+      # target_path: "/opt/splunk/etc/deployment-apps/Splunk_TA_nix_uf"
+      customizations:
+        local_configs:
+          inputs.conf:
+            "script://./bin/vmstat_metric.sh":
+              disabled: 0
+              index: itsi_im_metrics
+            "script://./bin/iostat_metric.sh":
+              disabled: 0
+              index: itsi_im_metrics
+            "script://./bin/ps_metric.sh":
+              disabled: 0
+              index: itsi_im_metrics
+            "script://./bin/df_metric.sh":
+              disabled: 0
+              index: itsi_im_metrics
+            "script://./bin/interfaces_metric.sh":
+              disabled: 0
+              index: itsi_im_metrics
+            "script://./bin/cpu_metric.sh":
+              disabled: 0
+              index: itsi_im_metrics
+
+########################## Working Apps End #########################
