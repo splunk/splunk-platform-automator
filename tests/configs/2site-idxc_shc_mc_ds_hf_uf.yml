@@ -11,18 +11,21 @@ general:
 os:
   # Set hostname to ansible_inventory name
   set_hostname: true
+  packages:
+    - acl # Redhat 10
 
 # Terraform configuration for AWS infrastructure
 terraform:
   aws:
     # Credentials default to ENV vars: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
     region: "eu-central-1"
-    ami_id: "ami-03cbad7144aeda3eb" # Redhat 9 (eu-central-1)
+    ami_id: "ami-0f5fb818aeff8f5fb" # Redhat 10 (eu-central-1)
     key_name: "aws_key"
     ssh_private_key_file: "~/.ssh/aws_key.pem"
     security_group_names: ["Splunk_Basic"]
     instance_type: "t3.2xlarge"
     root_volume_size: 50
+    root_volume_type: "gp3"
     tags:
       Env: "SPA Testing (2 site IDXC, SHC, MC, DS, HF, UF)"
       TestConfig: "2site-idxc_shc_mc_ds_hf_uf"
