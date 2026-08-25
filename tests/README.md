@@ -129,6 +129,8 @@ Automated tests for the app deployment playbook **without real Splunk hosts or A
 
 Fixtures (extra-vars) live in `tests/configs/app_deployment/*.yml`. Schema tests for `splunk_app_deployment` are in `test_schema.py` (`TestAppDeploymentConfig`).
 
+Pre-deployment playbook tests use an isolated subprocess environment (no `SPLUNKBASE_*` inheritance), so they are safe to run in CI even when deployment secrets are exported globally. Splunkbase is not contacted — only the credential assert in the first play is exercised.
+
 **Run app deployment tests:**
 ```bash
 ./tests/run_app_deployment_tests.sh

@@ -1,6 +1,8 @@
 # Extra vars for deploy_splunk_apps.yml: Splunkbase app, no credentials.
 # Playbook should fail with Splunkbase credentials message when env vars are unset.
 splunk_app_deployment:
+  splunkbase_username: ""
+  splunkbase_password: ""
   apps:
     - name: Splunk_TA_nix
       source: splunkbase

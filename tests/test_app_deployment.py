@@ -28,12 +28,46 @@ def _app_deployment_config_path(name: str) -> str:
     )
 
 
+def _test_ansible_config_path() -> str:
+    return os.path.abspath(
+        os.path.join(_project_root(), "tests", "configs", "app_deployment", "ansible_app_deployment.cfg")
+    )
+
+
+def _minimal_playbook_env(*, ansible_config: str, extra: dict | None = None) -> dict:
+    """Subprocess env for deploy_splunk_apps.yml tests — excludes CI secrets (e.g. SPLUNKBASE_*)."""
+    keep = (
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TMPDIR",
+        "TEMP",
+        "TMP",
+        "VIRTUAL_ENV",
+        "PYENV_ROOT",
+        "PYENV_VERSION",
+    )
+    env = {k: os.environ[k] for k in keep if k in os.environ and os.environ[k]}
+    tests_dir = os.path.join(_project_root(), "tests")
+    ansible_tmp = os.path.join(tests_dir, ".ansible_tmp")
+    os.makedirs(ansible_tmp, exist_ok=True)
+    env["ANSIBLE_CONFIG"] = os.path.abspath(ansible_config)
+    env["ANSIBLE_LOCAL_TMP"] = ansible_tmp
+    if extra:
+        env.update(extra)
+    return env
+
+
 def _run_deploy_playbook(
     extra_vars_path: str,
-    env: dict | None = None,
     ansible_config: str | None = None,
     extra_vars_dict: dict | None = None,
     *,
+    env_overrides: dict | None = None,
     expect_failure: bool = False,
 ) -> subprocess.CompletedProcess:
     """Run ansible/deploy_splunk_apps.yml with -i localhost,. Extra vars from extra_vars_path (-e @file) unless extra_vars_dict is set (then -e json.dumps(extra_vars_dict))."""
@@ -48,13 +82,8 @@ def _run_deploy_playbook(
         playbook,
         "-i", "localhost,",
     ] + extra_args
-    # When caller passes env, use it as the subprocess env base so omitted vars (e.g. SPLUNKBASE_*) are actually unset.
-    ansible_env = (env.copy() if env is not None else os.environ.copy())
     cfg_path = os.path.abspath(ansible_config or _test_ansible_config_path())
-    ansible_env["ANSIBLE_CONFIG"] = cfg_path
-    tests_dir = os.path.join(root, "tests")
-    ansible_env.setdefault("ANSIBLE_LOCAL_TMP", os.path.join(tests_dir, ".ansible_tmp"))
-    os.makedirs(ansible_env["ANSIBLE_LOCAL_TMP"], exist_ok=True)
+    ansible_env = _minimal_playbook_env(ansible_config=cfg_path, extra=env_overrides)
     result = subprocess.run(
         cmd,
         cwd=root,
@@ -115,12 +144,6 @@ def _itsi_splunk_hosts() -> list:
 
 def _itsi_splunk_defaults() -> dict:
     return {"splunk_license_file": ["Splunk_Enterprise.lic"]}
-
-
-def _test_ansible_config_path() -> str:
-    return os.path.abspath(
-        os.path.join(_project_root(), "tests", "configs", "app_deployment", "ansible_app_deployment.cfg")
-    )
 
 
 class TestAppDeploymentSchemaValidation:
@@ -403,7 +426,11 @@ class TestAppDeploymentSchemaValidation:
 
 
 class TestAppDeploymentPreDeploymentChecks:
-    """Test pre-deployment check behaviour of deploy_splunk_apps.yml."""
+    """Test pre-deployment check behaviour of deploy_splunk_apps.yml.
+
+    Playbook subprocess uses _minimal_playbook_env (no SPLUNKBASE_* inheritance) so
+    tests pass in CI even when deployment secrets are exported globally.
+    """
 
     def test_valid_config_no_splunkbase_passes_pre_deployment(self):
         """Pre-deployment play passes when config is valid and no Splunkbase apps need creds."""
@@ -427,13 +454,9 @@ class TestAppDeploymentPreDeploymentChecks:
         extra_vars = {**(extra_vars or {}), "_splunkbase_credentials_check": True}
         config_path = _test_ansible_config_path()
         assert os.path.isfile(config_path), f"Config missing: {config_path}"
-        # Pass extra vars as JSON so Ansible definitely receives splunk_app_deployment (avoids -e @file quirks)
-        env = os.environ.copy()
-        env.pop("SPLUNKBASE_USERNAME", None)
-        env.pop("SPLUNKBASE_PASSWORD", None)
+        # Isolated subprocess env (_minimal_playbook_env) omits SPLUNKBASE_* even when CI exports secrets.
         result = _run_deploy_playbook(
             path,
-            env=env,
             ansible_config=config_path,
             extra_vars_dict=extra_vars,
             expect_failure=True,
