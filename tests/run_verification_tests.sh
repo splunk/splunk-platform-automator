@@ -55,6 +55,6 @@ if [[ "$HAS_PARALLEL" == true ]]; then
 fi
 
 echo -e "${GREEN}Running verification tests...${NC}"
-pytest tests/test_verification.py "${PYTEST_ARGS[@]}"
+pytest -m aws tests/test_verification.py "${PYTEST_ARGS[@]}"
 
 echo -e "${GREEN}=== Verification tests complete ===${NC}"

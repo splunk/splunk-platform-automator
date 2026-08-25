@@ -9,6 +9,19 @@ import sys
 import tempfile
 import pytest
 
+pytestmark = pytest.mark.local
+
+
+@pytest.fixture(autouse=True)
+def _ansible_test_config(monkeypatch):
+    """Isolate from project ansible.cfg (config/splunk_config.yml inventory)."""
+    tests_dir = os.path.dirname(os.path.abspath(__file__))
+    monkeypatch.setenv("ANSIBLE_CONFIG", os.path.join(tests_dir, "ansible_test.cfg"))
+    ansible_tmp = os.path.join(tests_dir, ".ansible_tmp")
+    os.makedirs(ansible_tmp, exist_ok=True)
+    monkeypatch.setenv("ANSIBLE_LOCAL_TMP", ansible_tmp)
+
+
 # Add the inventory plugin directory so we can import secret_resolver and schema
 plugin_dir = os.path.join(os.path.dirname(__file__), '..', 'ansible', 'plugins', 'inventory')
 sys.path.insert(0, os.path.abspath(plugin_dir))

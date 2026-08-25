@@ -49,6 +49,7 @@ tests/
 ├── run_app_deployment_tests.sh # Helper script for app deployment tests
 ├── run_app_scope_scenarios_tests.sh # App scope scenario tests (debug_app_scope per scenario)
 ├── run_itsi_content_pack_tests.sh # ITSI content pack tests (role wiring, schema, scope)
+├── run_local_tests.sh         # Run all local suites above (no AWS)
 ├── run_schema_tests.sh        # Helper script for schema validation tests
 ├── run_verification_tests.sh  # Helper script for verification tests
 ├── run_venv.sh                # Common venv setup (sourced by run_*.sh scripts)
@@ -168,6 +169,25 @@ Scenario-based tests for app scope (no SSH or real hosts). Each scenario under `
 Requires `ansible-playbook`, `ansible-core`, `jmespath`, and `lxml` in the test venv (installed by the run script). Output: `tests/configs/app_scope/output/<scenario>_scope.json`.
 
 ## Running Tests
+
+### Run All Local Tests (no AWS)
+
+```bash
+./tests/run_local_tests.sh
+./tests/run_local_tests.sh -v          # verbose test names
+./tests/run_local_tests.sh -s          # show print/log output (no capture)
+./tests/run_local_tests.sh -sv -k "deployer_shc_whitelist"
+```
+
+Runs all tests marked `@pytest.mark.local` in a single pytest invocation (schema, secret resolver, app deployment, app scope scenarios, ITSI content pack). Does **not** run `@pytest.mark.aws` tests (deployment, verification).
+
+Or run directly (from project root):
+
+```bash
+pytest -m local tests/
+pytest -m "local and itsi" tests/
+pytest -m aws tests/          # deployment / verification only
+```
 
 ### Run All Deployment Tests
 ```bash

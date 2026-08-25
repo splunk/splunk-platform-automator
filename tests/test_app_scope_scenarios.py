@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.local
+
 
 def _ansible_playbook_executable() -> str:
     """Path to ansible-playbook (ANSIBLE_PLAYBOOK env overrides PATH lookup)."""

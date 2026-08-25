@@ -6,7 +6,10 @@ Scope/routing scenarios live in test_app_scope_scenarios.py (itsi_content_pack*,
 
 from pathlib import Path
 
+import pytest
 import yaml
+
+pytestmark = [pytest.mark.local, pytest.mark.itsi]
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

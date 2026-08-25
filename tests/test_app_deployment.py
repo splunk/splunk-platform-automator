@@ -15,6 +15,8 @@ import subprocess
 import yaml
 import pytest
 
+pytestmark = pytest.mark.local
+
 
 def _project_root():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -26,7 +28,14 @@ def _app_deployment_config_path(name: str) -> str:
     )
 
 
-def _run_deploy_playbook(extra_vars_path: str, env: dict | None = None, ansible_config: str | None = None, extra_vars_dict: dict | None = None) -> subprocess.CompletedProcess:
+def _run_deploy_playbook(
+    extra_vars_path: str,
+    env: dict | None = None,
+    ansible_config: str | None = None,
+    extra_vars_dict: dict | None = None,
+    *,
+    expect_failure: bool = False,
+) -> subprocess.CompletedProcess:
     """Run ansible/deploy_splunk_apps.yml with -i localhost,. Extra vars from extra_vars_path (-e @file) unless extra_vars_dict is set (then -e json.dumps(extra_vars_dict))."""
     root = _project_root()
     playbook = os.path.join(root, "ansible", "deploy_splunk_apps.yml")
@@ -41,7 +50,8 @@ def _run_deploy_playbook(extra_vars_path: str, env: dict | None = None, ansible_
     ] + extra_args
     # When caller passes env, use it as the subprocess env base so omitted vars (e.g. SPLUNKBASE_*) are actually unset.
     ansible_env = (env.copy() if env is not None else os.environ.copy())
-    ansible_env["ANSIBLE_CONFIG"] = ansible_config or _test_ansible_config_path()
+    cfg_path = os.path.abspath(ansible_config or _test_ansible_config_path())
+    ansible_env["ANSIBLE_CONFIG"] = cfg_path
     tests_dir = os.path.join(root, "tests")
     ansible_env.setdefault("ANSIBLE_LOCAL_TMP", os.path.join(tests_dir, ".ansible_tmp"))
     os.makedirs(ansible_env["ANSIBLE_LOCAL_TMP"], exist_ok=True)
@@ -53,7 +63,7 @@ def _run_deploy_playbook(extra_vars_path: str, env: dict | None = None, ansible_
         env=ansible_env,
         timeout=60,
     )
-    if result.returncode != 0:
+    if result.returncode != 0 and not expect_failure:
         print("\n--- deploy_splunk_apps.yml output ---")
         print("STDOUT:", result.stdout[-3000:] if len(result.stdout) > 3000 else result.stdout)
         print("STDERR:", result.stderr[-1500:] if len(result.stderr) > 1500 else result.stderr)
@@ -108,7 +118,9 @@ def _itsi_splunk_defaults() -> dict:
 
 
 def _test_ansible_config_path() -> str:
-    return os.path.join(_project_root(), "tests", "configs", "app_deployment", "ansible_app_deployment.cfg")
+    return os.path.abspath(
+        os.path.join(_project_root(), "tests", "configs", "app_deployment", "ansible_app_deployment.cfg")
+    )
 
 
 class TestAppDeploymentSchemaValidation:
@@ -397,7 +409,9 @@ class TestAppDeploymentPreDeploymentChecks:
         """Pre-deployment play passes when config is valid and no Splunkbase apps need creds."""
         path = _app_deployment_config_path("valid_no_splunkbase")
         assert os.path.isfile(path), f"Fixture missing: {path}"
-        result = _run_deploy_playbook(path)
+        config_path = _test_ansible_config_path()
+        assert os.path.isfile(config_path), f"Config missing: {config_path}"
+        result = _run_deploy_playbook(path, ansible_config=config_path)
         assert result.returncode == 0, (
             "Pre-deployment should pass; later plays are skipped (no role_* hosts). "
             f"stdout: {result.stdout[-1500:]!r}"
@@ -411,14 +425,19 @@ class TestAppDeploymentPreDeploymentChecks:
             extra_vars = yaml.safe_load(f)
         # Force the playbook to run the Splunkbase credential check (avoids when-condition visibility issues with -e)
         extra_vars = {**(extra_vars or {}), "_splunkbase_credentials_check": True}
-        # Use minimal config so no inventory file is loaded
-        config_path = os.path.abspath(os.path.join(os.path.dirname(path), "ansible_app_deployment.cfg"))
+        config_path = _test_ansible_config_path()
         assert os.path.isfile(config_path), f"Config missing: {config_path}"
         # Pass extra vars as JSON so Ansible definitely receives splunk_app_deployment (avoids -e @file quirks)
         env = os.environ.copy()
         env.pop("SPLUNKBASE_USERNAME", None)
         env.pop("SPLUNKBASE_PASSWORD", None)
-        result = _run_deploy_playbook(path, env=env, ansible_config=config_path, extra_vars_dict=extra_vars)
+        result = _run_deploy_playbook(
+            path,
+            env=env,
+            ansible_config=config_path,
+            extra_vars_dict=extra_vars,
+            expect_failure=True,
+        )
         assert result.returncode != 0, "Playbook should fail when Splunkbase app has no credentials"
         combined = (result.stdout or "") + (result.stderr or "")
         assert "Splunkbase" in combined and ("credentials" in combined or "SPLUNKBASE" in combined)

@@ -24,10 +24,23 @@ try:
 except Exception:
     pass
 
-pytestmark = pytest.mark.skipif(
-    lookup_module is None,
-    reason="Could not import spa_vault_decrypt (Ansible may need writable ~/.ansible/tmp; run without sandbox or use full permissions)",
-)
+pytestmark = [
+    pytest.mark.local,
+    pytest.mark.skipif(
+        lookup_module is None,
+        reason="Could not import spa_vault_decrypt (Ansible may need writable ~/.ansible/tmp; run without sandbox or use full permissions)",
+    ),
+]
+
+
+@pytest.fixture(autouse=True)
+def _ansible_test_config(monkeypatch):
+    """Isolate from project ansible.cfg (config/splunk_config.yml inventory)."""
+    tests_dir = os.path.dirname(os.path.abspath(__file__))
+    monkeypatch.setenv("ANSIBLE_CONFIG", os.path.join(tests_dir, "ansible_test.cfg"))
+    ansible_tmp = os.path.join(tests_dir, ".ansible_tmp")
+    os.makedirs(ansible_tmp, exist_ok=True)
+    monkeypatch.setenv("ANSIBLE_LOCAL_TMP", ansible_tmp)
 
 
 class TestSpaVaultDecryptLookup:

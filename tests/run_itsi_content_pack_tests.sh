@@ -36,7 +36,7 @@ source "$SCRIPT_DIR/run_venv.sh" 'pydantic>=2.0' 'ansible-core' 'jmespath' 'lxml
 PYTEST_EXTRA=("$@")
 
 echo -e "${GREEN}Running ITSI content pack role wiring tests...${NC}"
-pytest tests/test_itsi_content_pack.py "${PYTEST_EXTRA[@]}"
+pytest -m itsi tests/test_itsi_content_pack.py "${PYTEST_EXTRA[@]}"
 
 echo -e "${GREEN}Running ITSI content pack schema validation tests...${NC}"
 pytest tests/test_schema.py -k "itsi_content_pack" "${PYTEST_EXTRA[@]}"

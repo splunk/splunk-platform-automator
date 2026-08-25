@@ -13,8 +13,9 @@ import pytest
 import os
 import subprocess
 
+pytestmark = [pytest.mark.aws, pytest.mark.incremental]
 
-@pytest.mark.incremental
+
 class TestSplunkDeployment:
     """
     Sequential test suite for Splunk deployment.

@@ -13,8 +13,9 @@ import os
 import subprocess
 import yaml
 
+pytestmark = [pytest.mark.aws, pytest.mark.incremental]
 
-@pytest.mark.incremental
+
 class TestSplunkVerification:
     """
     Verification test suite for deployed Splunk environments.

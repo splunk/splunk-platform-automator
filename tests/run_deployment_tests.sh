@@ -57,6 +57,6 @@ if [[ "$HAS_PARALLEL" == true ]]; then
 fi
 
 echo -e "${GREEN}Running deployment tests...${NC}"
-pytest tests/test_deployment.py "${PYTEST_ARGS[@]}"
+pytest -m aws tests/test_deployment.py "${PYTEST_ARGS[@]}"
 
 echo -e "${GREEN}=== Deployment tests complete ===${NC}"

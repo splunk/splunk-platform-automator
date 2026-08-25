@@ -335,6 +335,21 @@ def pytest_addoption(parser):
     )
 
 
+def _ensure_local_test_env() -> None:
+    """Writable ansible tmp for @pytest.mark.local runs."""
+    tests_dir = os.path.dirname(os.path.abspath(__file__))
+    ansible_tmp = os.path.join(tests_dir, ".ansible_tmp")
+    os.makedirs(ansible_tmp, exist_ok=True)
+    os.environ.setdefault("ANSIBLE_LOCAL_TMP", ansible_tmp)
+
+
+def pytest_configure(config):
+    """Prepare environment when tests are selected via -m local."""
+    markexpr = (config.option.markexpr or "").strip()
+    if markexpr and "local" in markexpr:
+        _ensure_local_test_env()
+
+
 # Global workspace storage for class-scoped fixture
 _workspaces = {}
 

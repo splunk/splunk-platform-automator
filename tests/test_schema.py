@@ -8,6 +8,8 @@ import pytest
 import sys
 import os
 
+pytestmark = pytest.mark.local
+
 # Add the inventory plugin directory to the path so we can import the schema
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'ansible', 'plugins', 'inventory'))
 
