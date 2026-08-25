@@ -167,6 +167,8 @@ Run from project root:
 
 ```bash
 ./tests/run_app_scope_scenarios_tests.sh -k "<scenario_name>" -v
+# or all local tests (includes app scope scenarios):
+./tests/run_local_tests.sh -k "<scenario_name>" -v
 ```
 
 The run script creates/activates `tests/.venv` and installs `ansible-core`,
