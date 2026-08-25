@@ -5,15 +5,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
-## 2.4.0-dev - ongoing
-
-### Changed
-
-- **ITSI content pack config (breaking)** – Unified top-level `name` rule: always the on-disk app folder (single-app CP = pack folder, multi-app CP = library folder). Removed `library_app` and standalone/archive-discovery deploy mode. Verification no longer resolves CP directories from archives on the controller; single-app CP uses standard verify, multi-app CP checks `name` + `content_pack_apps[].name`.
+## [2.4.0](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.4.0) - 2026-08-25
 
 ### Added
 
-- **Single-app ITSI content packs** – Deploy a one-pack archive (Splunkbase or local) without `content_pack_apps` or `library_app`. Set top-level **`name`** to the on-disk pack folder (e.g. `DA-ITSI-CP-CUST-ATLAS-AWS-EBS` for Splunkbase app_id 7294); optional top-level **`content_pack_api`** and **`customizations`** drive ITSI API registration and post-restart playbooks. Deploy and verify like a standard folder-backed app. See [App_Deployment_Guide.md](docs/App_Deployment_Guide.md) (ITSI Content Packs — single-app example).
+- **Single-app ITSI content packs** – Deploy a one-pack archive (Splunkbase or local) without `content_pack_apps`. Set top-level **`name`** to the on-disk pack folder (e.g. `DA-ITSI-CP-CUST-ATLAS-AWS-EBS` for Splunkbase app_id 7294); optional top-level **`content_pack_api`** and **`customizations`** drive ITSI API registration and post-restart playbooks. Deploy and verify like a standard folder-backed app. See [App_Deployment_Guide.md](docs/App_Deployment_Guide.md) (ITSI Content Packs — single-app example).
 
 - **App Deployment** – New automated deployment of Splunk apps from Splunkbase or local filesystem, with per-host routing.
   - **General**:
