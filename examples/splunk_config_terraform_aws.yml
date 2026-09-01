@@ -13,6 +13,7 @@ os:
   set_hostname: true
   packages:
     - acl
+    - polkit
   disable_selinux: true
 
 # Terraform configuration for AWS infrastructure
@@ -21,8 +22,8 @@ terraform:
     #access_key_id: '' # defaults to ENV['AWS_ACCESS_KEY_ID']
     #secret_access_key: '' # ENV['AWS_SECRET_ACCESS_KEY']
     region: "eu-central-1"
-    ami_id: "ami-0badcc5b522737046" # RHEL 8 (eu-central-1)
-    ssh_username: "ec2-user"  # use "ubuntu" for Ubuntu AMIs
+    ami_id: "ami-0f5fb818aeff8f5fb" # RHEL 10 (eu-central-1) — or AL2023 / Ubuntu 24.04
+    ssh_username: "ec2-user"  # ec2-user for Amazon Linux / RHEL; ubuntu for Ubuntu
     key_name: "aws_key"
     ssh_private_key_file: "~/.ssh/aws_key.pem"
     security_group_names: ["Splunk_Basic"]

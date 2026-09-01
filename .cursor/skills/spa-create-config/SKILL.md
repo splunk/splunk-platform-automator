@@ -1,10 +1,11 @@
 ---
-name: create-splunk-config
+name: spa-create-config
 description: >-
   Guides interactive design and creation of config/splunk_config.yml for Splunk
   Platform Automator on AWS Linux. Covers deployment intent, Lantern/SF
   requirements, SVA topology, role placement, scale-out guidance, OS/SSH,
-  splunk_config_aws.py discovery, basic apps, and pre-deploy validation. Use
+  splunk_config_aws.py discovery, license files in ../Software, basic apps, and
+  pre-deploy validation. Invoke in Cursor with /spa-create-config. Use
   when creating or updating splunk_config.yml, designing Splunk Enterprise lab
   topology, multisite IDXC, SHC layout, or AWS Terraform block for SPA.
 paths:
@@ -13,7 +14,7 @@ paths:
   - "examples/configuration_description.yml"
 ---
 
-# Create splunk_config.yml (AWS Linux)
+# spa-create-config — splunk_config.yml (AWS Linux)
 
 Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 
@@ -26,7 +27,7 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 
 ## When NOT to Use
 
-- App-scope test distillation → [add-test-scenario](.cursor/skills/add-test-scenario/SKILL.md)
+- App-scope test distillation → [spa-add-test-scenario](.cursor/skills/spa-add-test-scenario/SKILL.md)
 - Flat deployment test configs under `tests/configs/*.yml` only
 - Splunkbase catalog search (user supplies `app_id` manually)
 - Production sizing / PS engagement (guidance only; no auto-sizing)
@@ -44,6 +45,7 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 | AWS defaults | [references/aws-baseline.md](references/aws-baseline.md) |
 | OS / SSH / Java | [references/aws-os-matrix.md](references/aws-os-matrix.md) |
 | Apps | [references/apps-questionnaire.md](references/apps-questionnaire.md) |
+| Licenses | [references/licenses.md](references/licenses.md) |
 | Validate / deploy | [references/validation.md](references/validation.md) |
 | Header template | [assets/config-header-template.md](assets/config-header-template.md) |
 
@@ -60,8 +62,9 @@ Repo keys: [examples/configuration_description.yml](examples/configuration_descr
 3. If file exists: **merge vs overwrite** — AskQuestion before destructive write.
 4. Check AWS creds: `AWS_ACCESS_KEY_ID` / profile / instance role; optional `python3 bin/splunk_config_aws.py --list-regions --json`.
 5. Read existing config if merging.
+6. Optional inventory: `python3 bin/splunk_config_licenses.py --json` — note what exists in `../Software`.
 
-**Exit:** Target path known; merge policy clear; creds status noted.
+**Exit:** Target path known; merge policy clear; creds status noted; Software licenses noted if scanned.
 
 ## Phase 0a — Deployment intent
 
@@ -111,7 +114,9 @@ Ask scale-out vs scale-up; default **scale out** for Splunk.
 
 Pick OS → [aws-os-matrix.md](references/aws-os-matrix.md).
 
-Set global `os:` block and expected `ssh_username`.
+**Recommended:** Amazon Linux 2023, RHEL 10, or Ubuntu 24.04 LTS (latest AMI in region).
+
+Set global `os:` block, expected `ssh_username`, and **polkit** (`polkit` on AL/RHEL; `policykit-1` on Ubuntu — required for forwarders and all hosts unless `splunk_use_policykit: false`).
 
 **Exit:** OS family chosen; `os:` template ready.
 
@@ -120,7 +125,7 @@ Set global `os:` block and expected `ssh_username`.
 **With creds:** Run `bin/splunk_config_aws.py` — see [aws-baseline.md](references/aws-baseline.md).
 
 1. Region (`--list-regions` or confirm)
-2. AMI (`--list-amis` with OS filter from Phase 3)
+2. AMI — if unknown, `--latest-ami --os <rhel|ubuntu|amazon_linux|debian>` or `--survey` → user picks from `recommended_amis` (preference: RHEL first)
 3. `ssh_username` (`--describe-ami`)
 4. Instance type (`--list-instance-types --family t3`; suggest `t3.medium` for config tests)
 5. Key pair (`--list-key-pairs`)
@@ -163,13 +168,31 @@ Summarize hosts before YAML write.
 
 **Exit:** App block ready or explicitly skipped.
 
+## Phase 6b — Licenses
+
+[licenses.md](references/licenses.md). Run **after Phase 6** so ITSI detection is accurate.
+
+```bash
+python3 bin/splunk_config_licenses.py --config config/splunk_config.yml --json
+```
+
+1. Scan `../Software` for `*.lic` / `*.License` (SPA `splunk_software_dir`).
+2. If `proposed_splunk_license_file` is non-empty, AskQuestion: add to `splunk_defaults`? (especially for lab / app lab intent).
+3. **ITSI in config** → propose `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` when files exist; ensure `license_manager` role (Phase 5b).
+4. **License manager role** → `splunk_license_file` is required (schema).
+5. No files in Software → warn (trial only or add licenses before deploy).
+
+Use `yaml_snippet` from JSON under `splunk_defaults` in Phase 7.
+
+**Exit:** License list decided or explicitly skipped; LM + ITSI warnings addressed.
+
 ## Phase 7 — Write config
 
 1. `plugin: splunk-platform-automator`
 2. Header from [assets/config-header-template.md](assets/config-header-template.md)
 3. Global `terraform.aws` with **`ssh_username`** and AMI comment
 4. Matching global `os:` block
-5. `splunk_defaults`, clusters, `splunk_hosts` from closest example
+5. `splunk_defaults` (include `splunk_license_file` from Phase 6b when chosen), clusters, `splunk_hosts` from closest example
 6. Cross-check [configuration_description.yml](examples/configuration_description.yml)
 
 **Exit:** File written at target path.
@@ -203,7 +226,7 @@ ap ansible/deploy_site.yml
 
 Destroy: `ap ansible/destroy_terraform_aws.yml -e auto_approve=true`
 
-Optional: distill app-scope tests via [add-test-scenario](.cursor/skills/add-test-scenario/SKILL.md).
+Optional: distill app-scope tests via [spa-add-test-scenario](.cursor/skills/spa-add-test-scenario/SKILL.md).
 
 ## Terminology
 
@@ -211,7 +234,7 @@ Use consistently: `cluster_manager`, `terraform.aws`, `splunk_hosts`, `plugin: s
 
 ## Skill quality checklist
 
-- [ ] `name` matches folder `create-splunk-config`
+- [ ] `name` matches folder `spa-create-config`
 - [ ] Description third person with trigger terms
 - [ ] SKILL.md under 500 lines; details in `references/`
 - [ ] When to Use / When NOT to Use present

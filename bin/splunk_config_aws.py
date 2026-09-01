@@ -6,7 +6,9 @@ Requires boto3 and AWS credentials (env, profile, or instance role).
 
 Examples:
   python3 bin/splunk_config_aws.py --list-regions --json
-  python3 bin/splunk_config_aws.py --region eu-central-1 --list-amis --name-filter "RHEL*10*" --json
+  python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os amazon_linux --json
+  python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os all --json
+  python3 bin/splunk_config_aws.py --region eu-central-1 --list-amis --name-filter "custom*" --json
   python3 bin/splunk_config_aws.py --region eu-central-1 --validate \\
     --ami-id ami-xxx --key-name aws_key --security-groups Splunk_Basic \\
     --instance-type t3.medium --json
@@ -30,6 +32,49 @@ except ImportError:
 
 LAB_INSTANCE_TYPES = ("t3.small", "t3.medium", "t3.large", "t3.xlarge")
 DEFAULT_AMI_OWNERS = ("amazon", "aws-marketplace", "self")
+RHEL_OFFICIAL_OWNER = "309956199498"  # AWS alias: amazon (official RHEL AMIs)
+
+RHEL_OFFICIAL_OWNER = "309956199498"  # AWS alias: amazon (official RHEL AMIs)
+DEBIAN_OFFICIAL_OWNER = "136693071363"  # Debian Cloud Team
+
+# Preference order for labs (RHEL best tested; Debian least tested with SPA).
+RECOMMENDED_OS_ORDER = ("rhel", "ubuntu", "amazon_linux", "debian")
+
+# Version-agnostic OS keys — latest AMI resolved at runtime (SSM or EC2 describe).
+RECOMMENDED_OS: Dict[str, Dict[str, Any]] = {
+    "rhel": {
+        "label": "RHEL",
+        "resolver": "rhel",
+        "default_ssh_username": "ec2-user",
+    },
+    "ubuntu": {
+        "label": "Ubuntu LTS",
+        "resolver": "ubuntu",
+        "default_ssh_username": "ubuntu",
+    },
+    "amazon_linux": {
+        "label": "Amazon Linux",
+        "resolver": "amazon_linux",
+        "default_ssh_username": "ec2-user",
+    },
+    "debian": {
+        "label": "Debian",
+        "resolver": "debian",
+        "default_ssh_username": "admin",
+        "framework_note": "Less tested with Splunk Platform Automator; prefer RHEL or Ubuntu.",
+    },
+}
+
+# Backward-compatible aliases for older scripts and docs.
+OS_ALIASES: Dict[str, str] = {
+    "al2023": "amazon_linux",
+    "ubuntu2404": "ubuntu",
+    "rhel10": "rhel",
+}
+
+AMAZON_LINUX_SSM_PREFIX = "/aws/service/ami-amazon-linux-latest/"
+UBUNTU_SSM_PREFIX = "/aws/service/canonical/ubuntu/server/"
+_SSM_PARAMETER_CACHE: Dict[tuple[str, str], List[str]] = {}
 
 
 def _err(message: str) -> None:
@@ -58,7 +103,239 @@ def suggest_ssh_username(ami_name: str, description: str = "") -> str:
     text = f"{ami_name} {description}".lower()
     if "ubuntu" in text:
         return "ubuntu"
+    if "debian" in text:
+        return "admin"
     return "ec2-user"
+
+
+def normalize_os_key(os_key: str) -> str:
+    return OS_ALIASES.get(os_key, os_key)
+
+
+def valid_os_keys() -> List[str]:
+    return list(RECOMMENDED_OS_ORDER)
+
+
+def os_preference_rank(os_key: str) -> Optional[int]:
+    normalized = normalize_os_key(os_key)
+    try:
+        return RECOMMENDED_OS_ORDER.index(normalized) + 1
+    except ValueError:
+        return None
+
+
+def _list_ssm_parameter_names(session: Any, region: str, path: str) -> List[str]:
+    cache_key = (region, path)
+    if cache_key in _SSM_PARAMETER_CACHE:
+        return _SSM_PARAMETER_CACHE[cache_key]
+
+    ssm = session.client("ssm", region_name=region)
+    paginator = ssm.get_paginator("get_parameters_by_path")
+    names: List[str] = []
+    try:
+        for page in paginator.paginate(Path=path, Recursive=True, WithDecryption=False):
+            for param in page.get("Parameters", []):
+                names.append(param["Name"])
+    except (ClientError, BotoCoreError):
+        return []
+
+    _SSM_PARAMETER_CACHE[cache_key] = names
+    return names
+
+
+def discover_amazon_linux_ssm_path(parameter_names: List[str]) -> Optional[str]:
+    """Pick highest al{YYYY} generation with kernel-default x86_64 SSM pointer."""
+    best: Optional[tuple[int, str]] = None
+    pattern = re.compile(rf"^{re.escape(AMAZON_LINUX_SSM_PREFIX)}al(\d{{4}})-ami-kernel-default-x86_64$")
+    for name in parameter_names:
+        match = pattern.match(name)
+        if not match:
+            continue
+        year = int(match.group(1))
+        if best is None or year > best[0]:
+            best = (year, name)
+    return best[1] if best else None
+
+
+def discover_ubuntu_ssm_path(parameter_names: List[str]) -> Optional[str]:
+    """Pick highest Ubuntu LTS (.04) release with stable/current amd64 gp3 (fallback gp2) AMI pointer."""
+    candidates: List[tuple[tuple[int, ...], bool, str]] = []
+    for storage in ("ebs-gp3", "ebs-gp2"):
+        pattern = re.compile(
+            rf"^{re.escape(UBUNTU_SSM_PREFIX)}(\d+\.04)/stable/current/amd64/hvm/{storage}/ami-id$"
+        )
+        for name in parameter_names:
+            match = pattern.match(name)
+            if not match:
+                continue
+            version = tuple(int(part) for part in match.group(1).split("."))
+            candidates.append((version, storage == "ebs-gp3", name))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return candidates[0][2]
+
+
+def discover_latest_rhel_major_version(session: Any, region: str) -> Optional[int]:
+    ec2 = session.client("ec2", region_name=region)
+    try:
+        resp = ec2.describe_images(
+            Owners=[RHEL_OFFICIAL_OWNER],
+            Filters=[
+                {"Name": "state", "Values": ["available"]},
+                {"Name": "name", "Values": ["RHEL-*"]},
+                {"Name": "architecture", "Values": ["x86_64"]},
+            ],
+        )
+    except (ClientError, BotoCoreError):
+        return None
+
+    majors: set[int] = set()
+    for image in resp.get("Images", []):
+        match = re.match(r"RHEL-(\d+)", image.get("Name", ""))
+        if match:
+            majors.add(int(match.group(1)))
+    return max(majors) if majors else None
+
+
+def discover_latest_debian_major_version(session: Any, region: str) -> Optional[int]:
+    ec2 = session.client("ec2", region_name=region)
+    try:
+        resp = ec2.describe_images(
+            Owners=[DEBIAN_OFFICIAL_OWNER],
+            Filters=[
+                {"Name": "state", "Values": ["available"]},
+                {"Name": "name", "Values": ["debian-*-amd64-*"]},
+                {"Name": "architecture", "Values": ["x86_64"]},
+            ],
+        )
+    except (ClientError, BotoCoreError):
+        return None
+
+    majors: set[int] = set()
+    for image in resp.get("Images", []):
+        match = re.match(r"debian-(\d+)-amd64-", image.get("Name", ""))
+        if match:
+            majors.add(int(match.group(1)))
+    return max(majors) if majors else None
+
+
+def get_latest_debian_ami(
+    session: Any,
+    region: str,
+    major_version: int,
+    max_results: int = 1,
+) -> Dict[str, Any]:
+    """Latest official Debian AMI by major version (Debian Cloud Team owner)."""
+    ec2 = session.client("ec2", region_name=region)
+    name_prefix = f"debian-{major_version}-amd64-"
+    try:
+        resp = ec2.describe_images(
+            Owners=[DEBIAN_OFFICIAL_OWNER],
+            Filters=[
+                {"Name": "state", "Values": ["available"]},
+                {"Name": "name", "Values": [f"{name_prefix}*"]},
+                {"Name": "architecture", "Values": ["x86_64"]},
+            ],
+        )
+        images = sorted(
+            resp.get("Images", []),
+            key=lambda i: i.get("CreationDate", ""),
+            reverse=True,
+        )[:max_results]
+        items = [_ami_item_from_image(img) for img in images]
+        if not items:
+            return {
+                "ok": False,
+                "error": f"No available Debian {major_version} x86_64 AMI in {region}",
+                "source": "ec2-describe-images",
+                "debian_major_version": major_version,
+                "owner_id": DEBIAN_OFFICIAL_OWNER,
+                "items": [],
+            }
+        return {
+            "ok": True,
+            "source": "ec2-describe-images",
+            "debian_major_version": major_version,
+            "owner_id": DEBIAN_OFFICIAL_OWNER,
+            "items": items,
+        }
+    except (ClientError, BotoCoreError) as exc:
+        return {
+            "ok": False,
+            "error": str(exc),
+            "source": "ec2-describe-images",
+            "debian_major_version": major_version,
+            "items": [],
+        }
+
+
+def resolve_debian_ami(session: Any, region: str, max_results: int = 1) -> Dict[str, Any]:
+    major = discover_latest_debian_major_version(session, region)
+    if major is None:
+        return {
+            "ok": False,
+            "error": f"No available official Debian AMI found in {region}",
+            "source": "ec2-describe-images",
+            "items": [],
+        }
+
+    result = get_latest_debian_ami(session, region, major_version=major, max_results=max_results)
+    result["resolved_version"] = str(major)
+    result["debian_major_version"] = major
+    return result
+
+
+def resolve_amazon_linux_ami(session: Any, region: str, max_results: int = 1) -> Dict[str, Any]:
+    names = _list_ssm_parameter_names(session, region, AMAZON_LINUX_SSM_PREFIX)
+    ssm_path = discover_amazon_linux_ssm_path(names)
+    if not ssm_path:
+        return {
+            "ok": False,
+            "error": f"No Amazon Linux SSM pointer found under {AMAZON_LINUX_SSM_PREFIX}",
+            "source": "ssm-discovery",
+            "items": [],
+        }
+
+    result = get_ami_id_from_ssm(session, region, ssm_path)
+    match = re.search(r"al(\d{4})-ami-kernel-default-x86_64$", ssm_path)
+    result["resolved_version"] = match.group(1) if match else None
+    result["ssm_path"] = ssm_path
+    return result
+
+
+def resolve_ubuntu_ami(session: Any, region: str, max_results: int = 1) -> Dict[str, Any]:
+    names = _list_ssm_parameter_names(session, region, UBUNTU_SSM_PREFIX)
+    ssm_path = discover_ubuntu_ssm_path(names)
+    if not ssm_path:
+        return {
+            "ok": False,
+            "error": f"No Ubuntu LTS SSM pointer found under {UBUNTU_SSM_PREFIX}",
+            "source": "ssm-discovery",
+            "items": [],
+        }
+
+    result = get_ami_id_from_ssm(session, region, ssm_path)
+    match = re.search(r"/server/(\d+\.\d+)/stable/current/", ssm_path)
+    result["resolved_version"] = match.group(1) if match else None
+    result["ssm_path"] = ssm_path
+    return result
+
+
+def resolve_rhel_ami(session: Any, region: str, max_results: int = 1) -> Dict[str, Any]:
+    major = discover_latest_rhel_major_version(session, region)
+    if major is None:
+        return {
+            "ok": False,
+            "error": f"No available official RHEL AMI found in {region}",
+            "source": "ec2-describe-images",
+            "items": [],
+        }
+
+    result = get_latest_rhel_ami(session, region, major_version=major, max_results=max_results)
+    result["resolved_version"] = str(major)
+    result["rhel_major_version"] = major
+    return result
 
 
 def check_auth(session: Any) -> Dict[str, Any]:
@@ -87,6 +364,168 @@ def list_regions(session: Any) -> Dict[str, Any]:
         return {"ok": False, "error": str(exc), "items": []}
 
 
+def _ami_item_from_image(img: Dict[str, Any]) -> Dict[str, Any]:
+    name = img.get("Name", "")
+    desc = img.get("Description", "") or ""
+    return {
+        "ami_id": img.get("ImageId"),
+        "name": name,
+        "creation_date": img.get("CreationDate"),
+        "architecture": img.get("Architecture"),
+        "suggested_ssh_username": suggest_ssh_username(name, desc),
+        "public_ssm_parameter": img.get("PublicSsmParameterName"),
+    }
+
+
+def get_ami_id_from_ssm(session: Any, region: str, parameter_path: str) -> Dict[str, Any]:
+    ssm = session.client("ssm", region_name=region)
+    try:
+        resp = ssm.get_parameter(Name=parameter_path)
+        ami_id = (resp.get("Parameter") or {}).get("Value")
+        if not ami_id:
+            return {"ok": False, "error": "SSM parameter empty", "ssm_path": parameter_path}
+        described = describe_ami(session, region, ami_id)
+        if not described.get("ok"):
+            return {
+                "ok": False,
+                "error": described.get("error", "describe_ami failed"),
+                "ssm_path": parameter_path,
+                "ami_id": ami_id,
+            }
+        return {
+            "ok": True,
+            "source": "ssm",
+            "ssm_path": parameter_path,
+            "item": {
+                "ami_id": described["ami_id"],
+                "name": described.get("name"),
+                "creation_date": described.get("creation_date"),
+                "architecture": described.get("architecture"),
+                "suggested_ssh_username": described.get("suggested_ssh_username"),
+                "public_ssm_parameter": parameter_path,
+            },
+        }
+    except (ClientError, BotoCoreError) as exc:
+        return {"ok": False, "error": str(exc), "ssm_path": parameter_path}
+
+
+def get_latest_rhel_ami(
+    session: Any,
+    region: str,
+    major_version: int = 10,
+    max_results: int = 1,
+) -> Dict[str, Any]:
+    """Latest official RHEL AMI by major version (no SSM public parameter for RHEL)."""
+    ec2 = session.client("ec2", region_name=region)
+    name_prefix = f"RHEL-{major_version}"
+    try:
+        resp = ec2.describe_images(
+            Owners=[RHEL_OFFICIAL_OWNER],
+            Filters=[
+                {"Name": "state", "Values": ["available"]},
+                {"Name": "name", "Values": [f"{name_prefix}*"]},
+                {"Name": "architecture", "Values": ["x86_64"]},
+            ],
+        )
+        images = sorted(
+            resp.get("Images", []),
+            key=lambda i: i.get("CreationDate", ""),
+            reverse=True,
+        )[:max_results]
+        items = [_ami_item_from_image(img) for img in images]
+        if not items:
+            return {
+                "ok": False,
+                "error": f"No available RHEL {major_version} x86_64 AMI in {region}",
+                "source": "ec2-describe-images",
+                "rhel_major_version": major_version,
+                "owner_id": RHEL_OFFICIAL_OWNER,
+                "items": [],
+            }
+        return {
+            "ok": True,
+            "source": "ec2-describe-images",
+            "rhel_major_version": major_version,
+            "owner_id": RHEL_OFFICIAL_OWNER,
+            "items": items,
+        }
+    except (ClientError, BotoCoreError) as exc:
+        return {
+            "ok": False,
+            "error": str(exc),
+            "source": "ec2-describe-images",
+            "rhel_major_version": major_version,
+            "items": [],
+        }
+
+
+def resolve_recommended_os_ami(
+    session: Any,
+    region: str,
+    os_key: str,
+    max_results: int = 1,
+) -> Dict[str, Any]:
+    normalized = normalize_os_key(os_key)
+    spec = RECOMMENDED_OS.get(normalized)
+    if not spec:
+        return {
+            "ok": False,
+            "error": f"Unknown os key: {os_key}",
+            "valid_os_keys": valid_os_keys(),
+            "aliases": OS_ALIASES,
+        }
+
+    label = spec["label"]
+    default_user = spec["default_ssh_username"]
+    resolver = spec["resolver"]
+
+    if resolver == "amazon_linux":
+        result = resolve_amazon_linux_ami(session, region, max_results=max_results)
+    elif resolver == "ubuntu":
+        result = resolve_ubuntu_ami(session, region, max_results=max_results)
+    elif resolver == "rhel":
+        result = resolve_rhel_ami(session, region, max_results=max_results)
+    elif resolver == "debian":
+        result = resolve_debian_ami(session, region, max_results=max_results)
+    else:
+        return {"ok": False, "error": f"Unsupported resolver: {resolver}"}
+
+    result["os"] = normalized
+    if normalized != os_key:
+        result["os_alias"] = os_key
+    result["label"] = label
+    rank = os_preference_rank(normalized)
+    if rank is not None:
+        result["preference_rank"] = rank
+    framework_note = spec.get("framework_note")
+    if framework_note:
+        result["framework_note"] = framework_note
+
+    if result.get("item"):
+        if not result["item"].get("suggested_ssh_username"):
+            result["item"]["suggested_ssh_username"] = default_user
+    for item in result.get("items", []):
+        if not item.get("suggested_ssh_username"):
+            item["suggested_ssh_username"] = default_user
+    return result
+
+
+def recommended_os_amis(session: Any, region: str) -> Dict[str, Any]:
+    entries = {}
+    all_ok = True
+    for os_key in RECOMMENDED_OS_ORDER:
+        entry = resolve_recommended_os_ami(session, region, os_key, max_results=1)
+        entries[os_key] = entry
+        if not entry.get("ok"):
+            all_ok = False
+    return {
+        "ok": all_ok,
+        "region": region,
+        "preference_order": list(RECOMMENDED_OS_ORDER),
+        "recommended_amis": entries,
+    }
+
+
 def list_amis(
     session: Any,
     region: str,
@@ -109,17 +548,7 @@ def list_amis(
         )[:max_results]
         items = []
         for img in images:
-            name = img.get("Name", "")
-            desc = img.get("Description", "") or ""
-            items.append(
-                {
-                    "ami_id": img.get("ImageId"),
-                    "name": name,
-                    "creation_date": img.get("CreationDate"),
-                    "architecture": img.get("Architecture"),
-                    "suggested_ssh_username": suggest_ssh_username(name, desc),
-                }
-            )
+            items.append(_ami_item_from_image(img))
         return {"ok": True, "region": region, "items": items}
     except (ClientError, BotoCoreError) as exc:
         return {"ok": False, "error": str(exc), "items": []}
@@ -274,8 +703,10 @@ def survey(session: Any, region: str) -> Dict[str, Any]:
     result["key_pairs"] = list_key_pairs(session, region)
     result["security_groups"] = list_security_groups(session, region)
     result["instance_types_t3"] = list_instance_types(session, region, family="t3", curated=True)
-    result["amis_rhel10"] = list_amis(session, region, name_filter="RHEL*10*", max_results=10)
-    result["amis_ubuntu"] = list_amis(session, region, name_filter="ubuntu/images/hvm-ssd/ubuntu-*22.04*", max_results=10)
+    ami_info = recommended_os_amis(session, region)
+    result["recommended_amis"] = ami_info.get("recommended_amis", {})
+    if not ami_info.get("ok"):
+        result["ok"] = False
     return result
 
 
@@ -291,8 +722,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--region", help="AWS region")
 
     p.add_argument("--list-regions", action="store_true", help="List enabled regions")
-    p.add_argument("--list-amis", action="store_true", help="List AMIs in region")
-    p.add_argument("--name-filter", help="AMI name wildcard filter for --list-amis")
+    p.add_argument("--list-amis", action="store_true", help="List AMIs in region (use --name-filter or --os)")
+    p.add_argument("--latest-ami", action="store_true", help="Resolve latest AMI for recommended OS (--os)")
+    p.add_argument(
+        "--os",
+        help="Recommended OS: rhel, ubuntu, amazon_linux, debian (or all). Aliases: al2023, rhel10, ubuntu2404",
+    )
+    p.add_argument("--name-filter", help="AMI name wildcard for custom --list-amis (not used for recommended OS)")
     p.add_argument(
         "--owners",
         help="Comma-separated AMI owners (default: amazon,aws-marketplace,self)",
@@ -334,8 +770,52 @@ def main() -> int:
         return 0 if result.get("ok") else 1
 
     if args.list_amis:
+        if args.os:
+            if args.os == "all":
+                os_keys = valid_os_keys()
+            else:
+                normalized = normalize_os_key(args.os)
+                if normalized not in RECOMMENDED_OS:
+                    _err(
+                        f"Unknown --os {args.os}. Valid: {', '.join(valid_os_keys())}, all "
+                        f"(aliases: {', '.join(OS_ALIASES)})"
+                    )
+                    return 1
+                os_keys = [normalized]
+            combined: Dict[str, Any] = {"ok": True, "region": args.region, "items": []}
+            for key in os_keys:
+                entry = resolve_recommended_os_ami(
+                    session, args.region, key, max_results=args.max_results
+                )
+                if not entry.get("ok"):
+                    combined["ok"] = False
+                if entry.get("item"):
+                    combined["items"].append({**entry["item"], "os": key, "label": entry.get("label")})
+                else:
+                    for item in entry.get("items", []):
+                        combined["items"].append({**item, "os": key, "label": entry.get("label")})
+            _output(combined, as_json)
+            return 0 if combined.get("ok") else 1
         owners = args.owners.split(",") if args.owners else None
         result = list_amis(session, args.region, args.name_filter, owners, args.max_results)
+        _output(result, as_json)
+        return 0 if result.get("ok") else 1
+
+    if args.latest_ami:
+        if not args.os:
+            _err("--os is required for --latest-ami (rhel, ubuntu, amazon_linux, debian, or all)")
+            return 1
+        if args.os == "all":
+            result = recommended_os_amis(session, args.region)
+        else:
+            normalized = normalize_os_key(args.os)
+            if normalized not in RECOMMENDED_OS:
+                _err(
+                    f"Unknown --os {args.os}. Valid: {', '.join(valid_os_keys())}, all "
+                    f"(aliases: {', '.join(OS_ALIASES)})"
+                )
+                return 1
+            result = resolve_recommended_os_ami(session, args.region, normalized, max_results=1)
         _output(result, as_json)
         return 0 if result.get("ok") else 1
 
@@ -375,7 +855,7 @@ def main() -> int:
         _output(result, as_json)
         return 0 if result.get("ok") else 1
 
-    _err("No operation specified. Use --list-regions, --list-amis, --validate, or --survey.")
+    _err("No operation specified. Use --list-regions, --latest-ami, --list-amis, --validate, or --survey.")
     return 1
 
 

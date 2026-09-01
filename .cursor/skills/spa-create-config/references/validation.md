@@ -16,6 +16,20 @@ Default path: `config/splunk_config.yml`.
 2. **Inventory plugin** — `ansible-inventory --list` with config as inventory source
 3. **Playbook syntax** — `ansible-playbook --syntax-check` on provision and deploy playbooks
 
+### Optional license file check
+
+Verifies `splunk_license_file` basenames exist in `../Software` and reports ITSI / license-manager gaps:
+
+```bash
+./bin/validate_splunk_config.sh --check-licenses config/splunk_config.yml
+```
+
+Or directly:
+
+```bash
+python3 bin/splunk_config_licenses.py --config config/splunk_config.yml --json
+```
+
 ### Optional AWS validation
 
 When credentials are available:
@@ -70,3 +84,4 @@ ap ansible/destroy_terraform_aws.yml -e auto_approve=true
 | Deployer without `shcluster:` | Add `shcluster` on deployer host |
 | Multisite without `site:` | Add `site` on CM and indexers |
 | Missing `ssh_username` | Set in `terraform.aws` per [aws-os-matrix.md](aws-os-matrix.md) |
+| Policykit not installed (Ubuntu UF) | Add `policykit-1` to global `os.packages` or set `splunk_use_policykit: false` |

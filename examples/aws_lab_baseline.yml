@@ -1,23 +1,26 @@
 ---
 # AWS lab baseline — splunk_config.yml skeleton (no topology hosts/apps)
 # Copy terraform.aws + os + splunk_defaults; add splunk_hosts from an SVA example.
+# Recommended OS (SPA preference): RHEL, Ubuntu LTS, Amazon Linux, Debian — latest AMI in region.
 # Guided setup: docs/Splunk_Config_Guided_Setup.md
-# Skill: .cursor/skills/create-splunk-config/
+# Skill: .cursor/skills/spa-create-config/
 plugin: splunk-platform-automator
 
 general:
   url_locale: en-US
 
+# RHEL 10 default — swap os/terraform blocks per aws-os-matrix for Ubuntu, Amazon Linux, or Debian
 os:
   set_hostname: true
   packages:
     - acl
+    - polkit
   disable_selinux: true
 
 terraform:
   aws:
     region: "eu-central-1"
-    ami_id: "ami-0f5fb818aeff8f5fb"  # RHEL 10 (eu-central-1) — verify in AWS console or splunk_config_aws.py
+    ami_id: "ami-0443f7d10da53831f"  # RHEL 10 (eu-central-1) — verify via splunk_config_aws.py --latest-ami --os rhel
     ssh_username: "ec2-user"
     key_name: "aws_key"
     ssh_private_key_file: "~/.ssh/aws_key.pem"

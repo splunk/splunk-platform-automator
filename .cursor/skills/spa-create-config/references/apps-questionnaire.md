@@ -31,7 +31,7 @@ See [docs/App_Deployment.md](docs/App_Deployment.md). Optional vault in config.
 If yes:
 
 - Main app: `name`, `source: splunkbase`, `app_id: 1841`, `premium_app: itsi`
-- Licenses: `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` in `splunk_defaults.splunk_license_file`
+- Licenses: run `bin/splunk_config_licenses.py --config …` after adding ITSI — proposes `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` from `../Software`; see [licenses.md](licenses.md)
 - **Java 21 max** on SH/SHC via `os.packages` — see [aws-os-matrix.md](aws-os-matrix.md)
 - Reference: `examples/single_node_itsi.yml` (after Java 21 correction)
 

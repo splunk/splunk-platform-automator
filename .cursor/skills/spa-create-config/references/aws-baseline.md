@@ -26,12 +26,14 @@ Global `terraform.aws` block applies to all hosts unless overridden per host in 
 
 ## Example global block
 
+Recommended OS: **Amazon Linux 2023**, **RHEL 10**, or **Ubuntu 24.04** (latest AMI in region). Pair with matching `os:` block in [aws-os-matrix.md](aws-os-matrix.md) — include `polkit` / `policykit-1`.
+
 ```yaml
 terraform:
   aws:
     region: "eu-central-1"
-    ami_id: "ami-xxxxxxxx"  # RHEL 10 (eu-central-1) — verify in console or API
-    ssh_username: "ec2-user"
+    ami_id: "ami-xxxxxxxx"  # AL2023 | RHEL 10 | Ubuntu 24.04 — verify in console or API
+    ssh_username: "ec2-user"  # "ubuntu" for Ubuntu AMIs
     key_name: "aws_key"
     ssh_private_key_file: "~/.ssh/aws_key.pem"
     security_group_names: ["Splunk_Basic"]
@@ -50,7 +52,7 @@ From repo root (requires `boto3` and AWS credentials):
 
 ```bash
 python3 bin/splunk_config_aws.py --list-regions --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --list-amis --name-filter "RHEL*10*" --json
+python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os all --json
 python3 bin/splunk_config_aws.py --region eu-central-1 --list-instance-types --family t3 --json
 python3 bin/splunk_config_aws.py --region eu-central-1 --list-key-pairs --json
 python3 bin/splunk_config_aws.py --region eu-central-1 --list-security-groups --json

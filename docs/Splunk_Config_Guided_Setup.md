@@ -2,14 +2,14 @@
 
 Human-readable guide for building `config/splunk_config.yml` on **AWS Linux** with Splunk Platform Automator (SPA).
 
-For interactive agent assistance in Cursor, use the project skill: `.cursor/skills/create-splunk-config/`.
+For interactive agent assistance in Cursor, use the project skill: `.cursor/skills/spa-create-config/` (invoke with `/spa-create-config`).
 
 ## Quick path
 
 1. Copy [examples/aws_lab_baseline.yml](examples/aws_lab_baseline.yml) or start from [examples/splunk_config_terraform_aws.yml](examples/splunk_config_terraform_aws.yml).
 2. Add topology from an SVA-aligned example (e.g. [examples/4idxc2site_sh.yml](examples/4idxc2site_sh.yml) for multisite IDXC + SH).
-3. Set **`terraform.aws.ssh_username`** to match your AMI (`ec2-user` for RHEL; `ubuntu` for Ubuntu).
-4. Set global **`os:`** block per OS — see [OS and SSH matrix](#os-and-ssh-matrix) below.
+3. Set **`terraform.aws.ssh_username`** to match your AMI (`ec2-user` for Amazon Linux / RHEL; `ubuntu` for Ubuntu).
+4. Set global **`os:`** block per OS — include **polkit** (`policykit-1` on Ubuntu). See [OS and SSH matrix](#os-and-ssh-matrix) below.
 5. Validate before provision:
 
 ```bash
@@ -42,17 +42,24 @@ ap ansible/deploy_site.yml
 
 Always set `terraform.aws.ssh_username` explicitly.
 
-| OS | `ssh_username` | Global `os:` |
-|----|----------------|--------------|
-| RHEL 8/9/10 | `ec2-user` | `set_hostname: true`; `packages: [acl]`; `disable_selinux: true` |
-| Ubuntu | `ubuntu` | `set_hostname: true`; `disable_apparmor: true`; `packages: [acl]` |
+**Recommended (latest in region):** Amazon Linux 2023, RHEL 10, or Ubuntu 24.04 LTS. Discover AMIs with `splunk_config_aws.py` — example IDs expire.
 
-**ITSI:** use `java-21-openjdk` (RHEL) or `openjdk-21-jdk` (Ubuntu) on search hosts — not Java 22+.
+| OS | `ssh_username` | Global `os.packages` (required) |
+|----|----------------|-------------------------------|
+| Amazon Linux 2023 | `ec2-user` | `acl`, `polkit`; `disable_selinux: true` |
+| RHEL 10 | `ec2-user` | `acl`, `polkit`; `disable_selinux: true` |
+| Ubuntu 24.04 | `ubuntu` | `acl`, **`policykit-1`**; `disable_apparmor: true` |
 
-Discover AMI and SSH hints with AWS credentials:
+SPA checks for policykit (`pkaction`) by default. **Ubuntu images often lack it** — without `policykit-1`, deploy fails on forwarders and other hosts with:
+
+`Policykit (polkit) is not installed. Install the policykit package or set splunk_use_policykit to false.`
+
+**ITSI:** `java-21-openjdk` (AL/RHEL) or `openjdk-21-jdk` (Ubuntu) on search hosts — not Java 22+.
+
+Discover AMI and SSH hints:
 
 ```bash
-python3 bin/splunk_config_aws.py --region eu-central-1 --list-amis --name-filter "RHEL*10*" --json
+python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os all --json
 python3 bin/splunk_config_aws.py --region eu-central-1 --describe-ami --ami-id ami-xxx --json
 ```
 
@@ -68,6 +75,33 @@ SVAs favor separated management tiers. Lab configs often co-locate roles on fewe
 
 Hard rules: `cluster_manager` needs `idxcluster:`; `deployer` needs `shcluster:`; `license_manager` needs `splunk_license_file`.
 
+## License files
+
+Place license files on the Ansible controller in `../Software` (SPA `splunk_software_dir`). Reference **basename only** in config:
+
+```yaml
+splunk_defaults:
+  splunk_license_file: Splunk_Enterprise.lic
+```
+
+For ITSI, use both enterprise and ITSI licenses when available:
+
+```yaml
+splunk_defaults:
+  splunk_license_file:
+    - Splunk_Enterprise.lic
+    - Splunk_ITSI.lic
+```
+
+Discover and propose licenses from Software:
+
+```bash
+python3 bin/splunk_config_licenses.py --json
+python3 bin/splunk_config_licenses.py --config config/splunk_config.yml --json
+```
+
+Lab configs: add licenses when files exist (avoids trial limits). ITSI in `splunk_app_deployment` requires `license_manager` role and `Splunk_ITSI.lic` when deploying ITSI.
+
 ## Basic apps
 
 See [App Deployment](App_Deployment.md). Use env vars `SPLUNKBASE_USERNAME` and `SPLUNKBASE_PASSWORD`.
@@ -79,6 +113,7 @@ ITSI example: [examples/single_node_itsi.yml](examples/single_node_itsi.yml).
 | Check | Command |
 |-------|---------|
 | Schema + inventory + playbooks | `./bin/validate_splunk_config.sh config/splunk_config.yml` |
+| + Software license scan (optional) | `./bin/validate_splunk_config.sh --check-licenses config/splunk_config.yml` |
 | + AWS API (optional) | `./bin/validate_splunk_config.sh --splunk-config-aws config/splunk_config.yml` |
 | Schema unit tests | `./tests/run_schema_tests.sh -q` |
 
@@ -93,7 +128,7 @@ ansible-galaxy collection install ansible.windows
 
 - [Ansible-Terraform AWS Integration](Ansible_Terraform_AWS_Integration.md)
 - [App Deployment Guide](App_Deployment_Guide.md)
-- Cursor skill: `.cursor/skills/create-splunk-config/SKILL.md`
+- Cursor skill: `.cursor/skills/spa-create-config/SKILL.md` (`/spa-create-config`)
 
 ## Destroy
 

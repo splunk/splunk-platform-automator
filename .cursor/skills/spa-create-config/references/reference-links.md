@@ -1,6 +1,6 @@
 # Reference links — architecture and config design
 
-Curated links for the `create-splunk-config` workflow. Use for user handoff and header comments; do not paste full articles into configs.
+Curated links for the `spa-create-config` workflow. Use for user handoff and header comments; do not paste full articles into configs.
 
 ## Splunk Validated Architectures (SVA)
 

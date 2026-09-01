@@ -84,9 +84,8 @@ terraform:
   aws:
     # access_key_id / secret_access_key default from AWS env vars
     region: "eu-central-1"
-    ami_id: "ami-03cbad7144aeda3eb"  # RHEL 9 (eu-central-1) — verify per region/OS
-  # SSH user for Ansible/terraform remote commands — must match AMI (ec2-user for RHEL/AL; ubuntu for Ubuntu)
-    ssh_username: "ec2-user"
+    ami_id: "ami-0443f7d10da53831f"  # RHEL 10 (eu-central-1) — verify via splunk_config_aws.py --latest-ami --os rhel
+    ssh_username: "ec2-user"  # ec2-user for RHEL / Amazon Linux; ubuntu for Ubuntu; admin for Debian
     key_name: "aws_key"
     ssh_private_key_file: "~/.ssh/aws_key.pem"
     security_group_names: ["Splunk_Basic"]
@@ -98,19 +97,39 @@ terraform:
       Env: "Splunk Lab"
     # Per-host overrides in splunk_hosts[].terraform.aws
 
-# Pair global os block with AMI OS — RHEL example:
+# Recommended OS (SPA preference, latest AMI in region): RHEL → Ubuntu LTS → Amazon Linux → Debian
+# Pair global os block with AMI — include polkit (policykit-1 on Ubuntu/Debian) for SPA playbooks
+# RHEL (default):
 # os:
 #   set_hostname: true
-#   packages: [acl]
+#   packages: [acl, polkit]
 #   disable_selinux: true
-# Ubuntu: disable_apparmor: true; ssh_username: ubuntu
+# ssh_username: ec2-user
+# Ubuntu LTS:
+# os:
+#   set_hostname: true
+#   disable_apparmor: true
+#   packages: [acl, policykit-1]
+# ssh_username: ubuntu
+# Amazon Linux:
+# os:
+#   set_hostname: true
+#   packages: [acl, polkit]
+#   disable_selinux: true
+# ssh_username: ec2-user
+# Debian (less tested with SPA):
+# os:
+#   set_hostname: true
+#   disable_apparmor: true
+#   packages: [acl, policykit-1]
+# ssh_username: admin
 
 splunk_defaults:
   # Defines the environment name and org name for the base_config apps
   splunk_env_name: splunk1
   
   # Specify a Splunk version. Will use the latest found when not set or set to 'latest'. Can also be set on the host level
-  splunk_version: '8.2.4'
+  splunk_version: '10.4.0'
 
   # Specify a Splunk architecture. This is the os architecture portion in the splunk archive name. Will use 'amd64' if not set. Can also be set on the host level
   splunk_architecture: amd64

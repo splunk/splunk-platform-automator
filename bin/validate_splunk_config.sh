@@ -4,6 +4,7 @@
 # ==============================================================================
 # Usage:
 #   ./bin/validate_splunk_config.sh [path/to/splunk_config.yml]
+#   ./bin/validate_splunk_config.sh --check-licenses config/splunk_config.yml
 #   ./bin/validate_splunk_config.sh --splunk-config-aws config/splunk_config.yml
 #
 # Default config path: config/splunk_config.yml
@@ -15,18 +16,23 @@ BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$BIN_DIR/.." && pwd)"
 CONFIG_PATH="${PROJECT_ROOT}/config/splunk_config.yml"
 RUN_AWS_VALIDATE=false
+RUN_LICENSE_CHECK=false
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
 usage() {
-    echo "Usage: $0 [--splunk-config-aws] [path/to/splunk_config.yml]"
+    echo "Usage: $0 [--check-licenses] [--splunk-config-aws] [path/to/splunk_config.yml]"
     exit 1
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --check-licenses)
+            RUN_LICENSE_CHECK=true
+            shift
+            ;;
         --splunk-config-aws)
             RUN_AWS_VALIDATE=true
             shift
@@ -87,6 +93,49 @@ export ANSIBLE_CONFIG="${PROJECT_ROOT}/ansible.cfg"
 ansible-playbook ansible/provision_terraform_aws.yml --syntax-check
 ansible-playbook ansible/deploy_site.yml --syntax-check
 echo "Playbook syntax OK"
+
+# Optional Software directory license check
+if [[ "$RUN_LICENSE_CHECK" == true ]]; then
+    echo -e "${GREEN}[optional] Software license file check...${NC}"
+    LICENSE_JSON="$(python3 "${PROJECT_ROOT}/bin/splunk_config_licenses.py" --config "$CONFIG_PATH" --json)"
+    echo "$LICENSE_JSON"
+    python3 - "$LICENSE_JSON" <<'PY'
+import json
+import sys
+
+data = json.loads(sys.argv[1])
+warnings = data.get("warnings") or []
+configured = data.get("configured_splunk_license_file")
+proposed = data.get("proposed_splunk_license_file") or []
+discovered = {d["basename"] for d in data.get("discovered_files") or []}
+
+if configured:
+    missing = [name for name in configured if name not in discovered]
+    if missing:
+        print(f"Configured license file(s) not found in Software: {', '.join(missing)}", file=sys.stderr)
+        sys.exit(1)
+
+if data.get("itsi_in_config") and not data.get("license_manager_in_config"):
+    print("ITSI in config but no license_manager role on any host", file=sys.stderr)
+    sys.exit(1)
+
+if data.get("itsi_in_config") and data.get("itsi_license") is None:
+    print("ITSI in config but Splunk_ITSI.lic not found in Software", file=sys.stderr)
+    sys.exit(1)
+
+if warnings:
+    for w in warnings:
+        print(f"License note: {w}", file=sys.stderr)
+
+if not configured and proposed:
+    print(
+        "Tip: licenses available in Software — consider adding splunk_license_file "
+        f"(proposed: {', '.join(proposed)})",
+        file=sys.stderr,
+    )
+PY
+    echo "License check OK"
+fi
 
 # Optional AWS API validation
 if [[ "$RUN_AWS_VALIDATE" == true ]]; then

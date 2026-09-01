@@ -1,14 +1,15 @@
 ---
-name: add-test-scenario
+name: spa-add-test-scenario
 description: >-
   Create app scope scenario tests from a splunk_config.yml. Distills a source
   config into tests/configs/app_scope/<name>/, generates expected_scope.json,
-  and adds optional assertions. Use when adding app scope/routing test coverage
+  and adds optional assertions. Invoke in Cursor with /spa-add-test-scenario. Use
+  when adding app scope/routing test coverage
   (deployer, CM, DS, direct). NOT for flat deployment test configs under
   tests/configs/*.yml — see "Deployment test configs" below.
 ---
 
-# Add App Scope Test Scenario
+# spa-add-test-scenario — App scope test scenarios
 
 ## Two config types — pick the right one
 
@@ -197,3 +198,4 @@ UPDATE_SCOPE_SNAPSHOTS=1 ./tests/run_app_scope_scenarios_tests.sh -k "snapshot a
 - [ ] `expected_scope.json` saved (via `UPDATE_SCOPE_SNAPSHOTS=1` or manual copy)
 - [ ] Custom assertions added in `test_app_scope_scenarios.py` (if needed beyond snapshot)
 - [ ] `./tests/run_app_scope_scenarios_tests.sh -k "<scenario_name>" -v` passes
+- [ ] `name` in SKILL.md frontmatter matches folder `spa-add-test-scenario`

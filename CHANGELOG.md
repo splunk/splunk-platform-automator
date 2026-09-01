@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Added
+
+- **Guided `splunk_config.yml` setup (Cursor skill)** – Interactive workflow for designing AWS Linux deployments without hand-editing every field:
+  - **Skill**: `.cursor/skills/spa-create-config/` (`/spa-create-config` in Cursor) — phased flow (deployment intent, SVA topology, sizing, OS/SSH, role placement, apps, licenses, write, validate, handoff). SPA project skills use the `spa-*` prefix for `/` command discovery.
+  - **References**: architecture requirements, SVA questionnaire/map, AWS baseline, OS matrix (Amazon Linux 2023, RHEL 10, Ubuntu 24.04), role placement, apps questionnaire, license questionnaire, validation checklist.
+  - **Docs**: [Splunk_Config_Guided_Setup.md](docs/Splunk_Config_Guided_Setup.md); README link to guided setup.
+
+- **`bin/splunk_config_aws.py`** – AWS discovery and validation for `terraform.aws`:
+  - List regions, key pairs, security groups, instance types.
+  - **Dynamic AMI resolution** for Amazon Linux 2023, RHEL 10, and Ubuntu 24.04 (SSM public parameters and `describe-images` where needed).
+  - `--latest-ami`, `--survey` (recommended AMIs + defaults), `--describe-ami`, `--validate` with `--json` output.
+
+- **`bin/splunk_config_licenses.py`** – Scan `../Software` (`splunk_software_dir`) for license files and propose `splunk_defaults.splunk_license_file`:
+  - ITSI-aware proposals when `splunk_app_deployment` includes ITSI (`premium_app: itsi`, `app_id: 1841`, or content packs).
+  - `--config` to read current config; text fallback when PyYAML is not installed; `yaml_snippet` for paste into config.
+
+- **`bin/validate_splunk_config.sh`** – Pre-provision quality gate:
+  - Pydantic schema validation, inventory plugin load, provision/deploy playbook syntax-check.
+  - Optional `--splunk-config-aws` (live AWS API checks) and `--check-licenses` (Software dir + ITSI/license-manager rules).
+
+- **Example**: [examples/aws_lab_baseline.yml](examples/aws_lab_baseline.yml) — minimal lab starting point with recommended OS packages (including polkit).
+
+### Changed
+
+- **Cursor skill naming** — Project skills renamed to `spa-*` for `/` command discovery: `spa-create-config` (was `create-splunk-config`), `spa-add-test-scenario` (was `add-test-scenario`).
+
+- [examples/splunk_config_terraform_aws.yml](examples/splunk_config_terraform_aws.yml) — default AMI guidance aligned with RHEL 10 / latest-OS discovery.
+- [examples/single_node_itsi.yml](examples/single_node_itsi.yml) — ITSI search tier uses Java 21 (`java-21-openjdk` / `openjdk-21-jdk`).
+- [examples/configuration_description.yml](examples/configuration_description.yml) — expanded `terraform.aws` / `ssh_username` documentation.
+- OS guidance: **polkit** required on Amazon Linux and RHEL (`polkit`); **policykit-1** on Ubuntu (SPA policykit check fails on UF without it).
+
 ## [2.4.0](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.4.0) - 2026-08-25
 
 ### Added
