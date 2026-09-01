@@ -1,0 +1,80 @@
+---
+# Preflight checks before deploy_site.yml.
+# Detects stale Ansible fact cache (e.g. after reprovisioning with a different OS/AMI
+# while reusing the same inventory hostnames) and flushes invalid cache entries.
+
+- name: Preflight deployment readiness
+  hosts: all:!role_universal_forwarder_windows
+  gather_facts: false
+  tags:
+    - always
+    - preflight
+  tasks:
+    - name: Probe remote Python interpreter
+      ansible.builtin.raw: command -v python3
+      register: spa_remote_python_probe
+      changed_when: false
+      failed_when: spa_remote_python_probe.rc != 0
+
+    - name: Find Ansible fact cache files for host
+      ansible.builtin.find:
+        paths: "{{ spa_ansible_fact_cache_dir }}"
+        patterns: "*{{ inventory_hostname }}"
+        file_type: file
+      register: spa_host_fact_cache_files
+      delegate_to: localhost
+
+    - name: Load cached Python interpreter from fact cache
+      ansible.builtin.set_fact:
+        spa_cached_python_interpreter: "{{ _cache_payload.discovered_interpreter_python | default('') }}"
+        spa_fact_cache_paths: "{{ spa_host_fact_cache_files.files | map(attribute='path') | list }}"
+      vars:
+        _cache_payload: "{{ (lookup('ansible.builtin.file', spa_host_fact_cache_files.files[0].path) | from_json).__payload__ | from_json }}"
+      when: spa_host_fact_cache_files.matched > 0
+
+    - name: Default empty cached interpreter when no fact cache file exists
+      ansible.builtin.set_fact:
+        spa_cached_python_interpreter: ""
+        spa_fact_cache_paths: []
+      when: spa_host_fact_cache_files.matched == 0
+
+    - name: Check whether cached Python interpreter exists on host
+      ansible.builtin.raw: "test -x {{ spa_cached_python_interpreter }}"
+      register: spa_cached_python_probe
+      changed_when: false
+      failed_when: false
+      when: spa_cached_python_interpreter | length > 0
+
+    - name: Flush stale Ansible fact cache when cached interpreter is missing on host
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ spa_fact_cache_paths }}"
+      loop_control:
+        label: "{{ inventory_hostname }} -> {{ item }}"
+      delegate_to: localhost
+      when:
+        - spa_cached_python_interpreter | length > 0
+        - spa_cached_python_probe.rc != 0
+
+    - name: Report flushed stale Ansible fact cache
+      ansible.builtin.debug:
+        msg: >-
+          Flushed stale Ansible fact cache for {{ inventory_hostname }}:
+          cached interpreter {{ spa_cached_python_interpreter }} is not valid on this host
+          (remote has {{ spa_remote_python_probe.stdout | trim }}).
+          This commonly happens after reprovisioning with a different OS/AMI.
+      when:
+        - spa_cached_python_interpreter | length > 0
+        - spa_cached_python_probe.rc != 0
+
+    - name: Verify Ansible module execution with remote Python
+      ansible.builtin.ping:
+      vars:
+        ansible_python_interpreter: "{{ spa_remote_python_probe.stdout | trim }}"
+
+    - name: Clear in-memory facts after stale cache flush
+      ansible.builtin.meta: clear_facts
+      when:
+        - spa_cached_python_interpreter | length > 0
+        - spa_cached_python_probe.rc != 0

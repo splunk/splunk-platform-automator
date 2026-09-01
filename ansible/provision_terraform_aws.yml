@@ -138,6 +138,19 @@
         - apply
         - outputs
 
+    - name: Flush Ansible fact cache for provisioned hosts
+      ansible.builtin.include_tasks: roles/common/tasks/flush_fact_cache_for_host.yml
+      loop: "{{ (terraform_outputs.outputs.ansible_inventory.value | from_json).keys() | list }}"
+      loop_control:
+        loop_var: target_host
+      when:
+        - terraform_outputs.outputs.ansible_inventory is defined
+        - spa_flush_fact_cache_on_provision | default(true) | bool
+        - inventory_result is changed or (terraform_apply is defined and terraform_apply is changed)
+      tags:
+        - apply
+        - outputs
+
     - name: Build provisioned hosts message
       ansible.builtin.set_fact:
         provisioned_hosts_msg: |

@@ -290,6 +290,19 @@ def scan_licenses(
             "ITSI requires license_manager role on a host (schema validation)."
         ]
 
+    if configured and not has_lm:
+        result["warnings"] = result.get("warnings", []) + [
+            "splunk_license_file is set but no license_manager role on any host — "
+            "add license_manager to a host (for example co-locate on cm or mc) or remove "
+            "splunk_license_file for trial-only labs (schema validation)."
+        ]
+
+    if has_lm and not configured:
+        result["warnings"] = result.get("warnings", []) + [
+            "license_manager role is set but splunk_license_file is missing from splunk_defaults "
+            "(schema validation)."
+        ]
+
     if itsi_in_config and proposal.get("itsi_license") is None:
         result["warnings"] = result.get("warnings", []) + [
             "ITSI in config but Splunk_ITSI.lic not found in Software directory."

@@ -60,7 +60,7 @@ cd "$PROJECT_ROOT"
 echo -e "${GREEN}=== Validating ${CONFIG_PATH} ===${NC}"
 
 # Schema validation via Pydantic
-echo -e "${GREEN}[1/3] Schema validation (Pydantic)...${NC}"
+echo -e "${GREEN}[1/4] Schema validation (Pydantic)...${NC}"
 source "${PROJECT_ROOT}/tests/run_venv.sh" 'pydantic>=2.0' 'PyYAML>=6.0' 'ansible-core>=2.10' 'jmespath' 'lxml'
 
 PYTHONPATH="${PROJECT_ROOT}/ansible/plugins/inventory" python3 - "$CONFIG_PATH" <<'PY'
@@ -80,15 +80,44 @@ except Exception as e:
 PY
 
 # Inventory plugin
-echo -e "${GREEN}[2/3] Inventory plugin (ansible-inventory)...${NC}"
+echo -e "${GREEN}[2/4] Inventory plugin (ansible-inventory)...${NC}"
 export ANSIBLE_CONFIG="${PROJECT_ROOT}/ansible.cfg"
 export ANSIBLE_INVENTORY="${CONFIG_PATH}"
 export ANSIBLE_INVENTORY_PLUGINS="${PROJECT_ROOT}/ansible/plugins/inventory"
 ansible-inventory --list >/dev/null
 echo "Inventory OK"
 
+# License / role pairing (splunk_license_file <-> license_manager)
+echo -e "${GREEN}[3/4] License and license_manager role check...${NC}"
+LICENSE_JSON="$(python3 "${PROJECT_ROOT}/bin/splunk_config_licenses.py" --config "$CONFIG_PATH" --json)"
+python3 - "$LICENSE_JSON" <<'PY'
+import json
+import sys
+
+data = json.loads(sys.argv[1])
+configured = data.get("configured_splunk_license_file")
+has_lm = data.get("license_manager_in_config")
+
+if configured and not has_lm:
+    print(
+        "splunk_license_file is set but no license_manager role on any host — "
+        "add license_manager to a host or remove splunk_license_file for trial-only labs",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+if has_lm and not configured:
+    print("license_manager role is set but splunk_license_file is missing", file=sys.stderr)
+    sys.exit(1)
+
+if data.get("itsi_in_config") and not has_lm:
+    print("ITSI in config but no license_manager role on any host", file=sys.stderr)
+    sys.exit(1)
+PY
+echo "License role pairing OK"
+
 # Playbook syntax-check
-echo -e "${GREEN}[3/3] Playbook syntax-check...${NC}"
+echo -e "${GREEN}[4/4] Playbook syntax-check...${NC}"
 export ANSIBLE_CONFIG="${PROJECT_ROOT}/ansible.cfg"
 ansible-playbook ansible/provision_terraform_aws.yml --syntax-check
 ansible-playbook ansible/deploy_site.yml --syntax-check
@@ -117,6 +146,18 @@ if configured:
 
 if data.get("itsi_in_config") and not data.get("license_manager_in_config"):
     print("ITSI in config but no license_manager role on any host", file=sys.stderr)
+    sys.exit(1)
+
+if configured and not data.get("license_manager_in_config"):
+    print(
+        "splunk_license_file is set but no license_manager role on any host — "
+        "add license_manager to a host or remove splunk_license_file for trial-only labs",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+if data.get("license_manager_in_config") and not configured:
+    print("license_manager role is set but splunk_license_file is missing", file=sys.stderr)
     sys.exit(1)
 
 if data.get("itsi_in_config") and data.get("itsi_license") is None:

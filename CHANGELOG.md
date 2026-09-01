@@ -9,6 +9,15 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Deploy preflight checks for stale Ansible fact cache** – `ansible/preflight_deploy.yml` runs at the start of `deploy_site.yml` and `wait_for_terraform_aws_hosts.yml`:
+  - Probes each host for `python3` with `raw` (bypasses cached interpreter).
+  - Flushes jsonfile fact cache entries when the cached `discovered_interpreter_python` differs from the live host (common after OS/AMI changes with the same hostnames).
+  - Verifies Ansible `ping` with the probed interpreter before the main deploy.
+  - `provision_terraform_aws.yml` flushes cache for provisioned hosts when Terraform inventory is regenerated (`spa_flush_fact_cache_on_provision`, default `true` in `ansible/group_vars/all/ansible.yml`).
+  - `spa_preflight_deploy` (default `true`) controls whether preflight runs at deploy start.
+
+- **Bidirectional license / license_manager schema validation** – `splunk_license_file` now requires a `license_manager` host (and vice versa), including overrides on hosts and `splunk_environments`. Enforced in Pydantic (`schema.py`) and in `validate_splunk_config.sh` (default step 3/4). Optional `--check-licenses` also verifies files in `../Software` and ITSI license presence. `splunk_config_licenses.py` reports the same gaps in `warnings`. Unit tests in `tests/test_schema.py`.
+
 - **Guided `splunk_config.yml` setup (Cursor skill)** – Interactive workflow for designing AWS Linux deployments without hand-editing every field:
   - **Skill**: `.cursor/skills/spa-create-config/` (`/spa-create-config` in Cursor) — phased flow (deployment intent, SVA topology, sizing, OS/SSH, role placement, apps, licenses, write, validate, handoff). SPA project skills use the `spa-*` prefix for `/` command discovery.
   - **References**: architecture requirements, SVA questionnaire/map, AWS baseline, OS matrix (Amazon Linux 2023, RHEL 10, Ubuntu 24.04), role placement, apps questionnaire, license questionnaire, validation checklist.
@@ -24,8 +33,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
   - `--config` to read current config; text fallback when PyYAML is not installed; `yaml_snippet` for paste into config.
 
 - **`bin/validate_splunk_config.sh`** – Pre-provision quality gate:
-  - Pydantic schema validation, inventory plugin load, provision/deploy playbook syntax-check.
-  - Optional `--splunk-config-aws` (live AWS API checks) and `--check-licenses` (Software dir + ITSI/license-manager rules).
+  - Pydantic schema validation, inventory plugin load, license/role pairing, provision/deploy playbook syntax-check.
+  - Optional `--check-licenses` (Software dir file presence + ITSI license file) and `--splunk-config-aws` (live AWS API checks).
 
 - **Example**: [examples/aws_lab_baseline.yml](examples/aws_lab_baseline.yml) — minimal lab starting point with recommended OS packages (including polkit).
 
@@ -33,9 +42,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 - **Cursor skill naming** — Project skills renamed to `spa-*` for `/` command discovery: `spa-create-config` (was `create-splunk-config`), `spa-add-test-scenario` (was `add-test-scenario`).
 
+- **Default AWS tag `SPADirName`** — Lab examples and [configuration_description.yml](examples/configuration_description.yml) include `SPADirName: "{{ playbook_dir | dirname | basename }}"` under `terraform.aws.tags` (SPA repo folder name on the controller).
+
 - [examples/splunk_config_terraform_aws.yml](examples/splunk_config_terraform_aws.yml) — default AMI guidance aligned with RHEL 10 / latest-OS discovery.
 - [examples/single_node_itsi.yml](examples/single_node_itsi.yml) — ITSI search tier uses Java 21 (`java-21-openjdk` / `openjdk-21-jdk`).
-- [examples/configuration_description.yml](examples/configuration_description.yml) — expanded `terraform.aws` / `ssh_username` documentation.
+- [examples/configuration_description.yml](examples/configuration_description.yml) — expanded `terraform.aws` / `ssh_username` documentation; example `splunk_version` 10.4.0.
+- [tests/configs/2site-idxc_shc_mc_ds_sh_hf_uf_itsi_apps.yml](tests/configs/2site-idxc_shc_mc_ds_sh_hf_uf_itsi_apps.yml) — ITSI search hosts use `java-21-openjdk` on RHEL 10 (ITSI max Java 21).
+- [README.md](README.md) — example `splunk_version` 10.4.0; badge formatting cleanup.
 - OS guidance: **polkit** required on Amazon Linux and RHEL (`polkit`); **policykit-1** on Ubuntu (SPA policykit check fails on UF without it).
 
 ## [2.4.0](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.4.0) - 2026-08-25

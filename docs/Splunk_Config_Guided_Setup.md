@@ -23,6 +23,10 @@ ap ansible/provision_terraform_aws.yml -e auto_approve=true
 ap ansible/deploy_site.yml
 ```
 
+`deploy_site.yml` runs `preflight_deploy.yml` first. It probes each host for `python3`, flushes stale Ansible fact cache when the cached interpreter no longer matches (for example after switching OS/AMI while reusing hostnames like `cm` and `idx1`), and verifies Ansible connectivity before the main deploy. Terraform provisioning also flushes cache for affected hosts when inventory is regenerated.
+
+To skip preflight: `ap ansible/deploy_site.yml --skip-tags preflight`. To disable cache flush on provision: `-e spa_flush_fact_cache_on_provision=false`.
+
 ## Architecture design references
 
 - [About Splunk Validated Architectures](https://help.splunk.com/en/splunk-cloud-platform/splunk-validated-architectures/introduction-to-splunk-validated-architectures/about-splunk-validated-architectures)

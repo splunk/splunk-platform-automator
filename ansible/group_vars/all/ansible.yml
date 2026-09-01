@@ -1,0 +1,11 @@
+---
+# Ansible runtime settings used by SPA playbooks (see also ansible.cfg).
+
+# jsonfile fact cache path — keep in sync with ansible.cfg [defaults] fact_caching_connection
+spa_ansible_fact_cache_dir: "/tmp/ansible_facts"
+
+# Flush cached facts for provisioned hosts after Terraform apply / inventory regeneration
+spa_flush_fact_cache_on_provision: true
+
+# Run preflight_deploy.yml at the start of deploy_site.yml
+spa_preflight_deploy: true

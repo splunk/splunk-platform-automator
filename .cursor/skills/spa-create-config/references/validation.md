@@ -14,9 +14,10 @@ Default path: `config/splunk_config.yml`.
 
 1. **Pydantic schema** — `ansible/plugins/inventory/schema.py` `validate_config_file`
 2. **Inventory plugin** — `ansible-inventory --list` with config as inventory source
-3. **Playbook syntax** — `ansible-playbook --syntax-check` on provision and deploy playbooks
+3. **License / role pairing** — `splunk_license_file` requires `license_manager` role (and vice versa); ITSI requires LM
+4. **Playbook syntax** — `ansible-playbook --syntax-check` on provision and deploy playbooks
 
-### Optional license file check
+### Optional license file on disk check
 
 Verifies `splunk_license_file` basenames exist in `../Software` and reports ITSI / license-manager gaps:
 
@@ -80,6 +81,7 @@ ap ansible/destroy_terraform_aws.yml -e auto_approve=true
 | Error | Fix |
 |-------|-----|
 | `license_manager` without `splunk_license_file` | Add license file or remove LM role |
+| `splunk_license_file` without `license_manager` | Add `license_manager` to a host (e.g. on `cm`) or remove license file for trial labs |
 | CM without `idxcluster:` | Add `idxcluster` on CM host |
 | Deployer without `shcluster:` | Add `shcluster` on deployer host |
 | Multisite without `site:` | Add `site` on CM and indexers |

@@ -361,7 +361,7 @@ class InventoryModule(BaseInventoryPlugin):
             roles[role] = []
 
         #TODO: Check splunk_defaults and other sections for syntax errors
-        #TODO: Check if license_manager role defined, when license file is given
+        # License file <-> license_manager pairing is enforced in schema.py validators
         #TODO: Check volume definitions, if they are matching both sections
 
         # Going through the hosts and parse the settings

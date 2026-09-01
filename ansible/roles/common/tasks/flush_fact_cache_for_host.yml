@@ -1,0 +1,19 @@
+---
+# Flush jsonfile fact cache entries for one inventory hostname.
+# Required var: target_host
+
+- name: Find Ansible fact cache files for {{ target_host }}
+  ansible.builtin.find:
+    paths: "{{ spa_ansible_fact_cache_dir }}"
+    patterns: "*{{ target_host }}"
+    file_type: file
+  register: spa_fact_cache_matches
+
+- name: Remove Ansible fact cache files for {{ target_host }}
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ spa_fact_cache_matches.files | map(attribute='path') | list }}"
+  loop_control:
+    label: "{{ target_host }} -> {{ item }}"
+  when: spa_fact_cache_matches.matched > 0

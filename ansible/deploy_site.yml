@@ -2,6 +2,12 @@
 # This playbook deploys a full splunk site
 # yaml-language-server: $schema=playbook-schema.json
 
+- name: Preflight deployment readiness
+  tags:
+    - always
+    - preflight
+  import_playbook: preflight_deploy.yml
+
 - name: Setup common settings
   tags:
     - common

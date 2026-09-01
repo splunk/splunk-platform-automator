@@ -848,6 +848,37 @@ class TestClusterConfigurations:
             validate_config(config)
         assert "splunk_license_file" in str(exc_info.value)
 
+    def test_license_file_requires_license_manager(self):
+        """Test that splunk_license_file requires license_manager role."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_defaults": {"splunk_license_file": "Splunk_Enterprise.lic"},
+            "splunk_hosts": [
+                {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+                {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"name": "idx2", "roles": ["indexer"], "idxcluster": "idxc1"},
+            ],
+            "splunk_idxclusters": [{"idxc_name": "idxc1"}],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "license_manager" in str(exc_info.value)
+
+    def test_license_file_and_license_manager_passes(self):
+        """splunk_license_file with license_manager role validates."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_defaults": {"splunk_license_file": "Splunk_Enterprise.lic"},
+            "splunk_hosts": [
+                {"name": "cm", "roles": ["cluster_manager", "license_manager"], "idxcluster": "idxc1"},
+                {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"name": "idx2", "roles": ["indexer"], "idxcluster": "idxc1"},
+            ],
+            "splunk_idxclusters": [{"idxc_name": "idxc1"}],
+        }
+        result = validate_config(config)
+        assert result.splunk_defaults.splunk_license_file == "Splunk_Enterprise.lic"
+
 
 class TestMultiRoleHosts:
     """Test hosts with multiple roles."""

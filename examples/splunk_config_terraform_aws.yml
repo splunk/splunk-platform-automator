@@ -31,6 +31,7 @@ terraform:
     root_volume_size: 50
     tags:
       Env: "Splunk Lab"
+      SPADirName: "{{ playbook_dir | dirname | basename }}"
 
 # Splunk default settings
 splunk_defaults:

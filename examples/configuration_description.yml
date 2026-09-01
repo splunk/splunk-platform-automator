@@ -95,6 +95,9 @@ terraform:
     # subnet_id: "subnet-0123456789abcdef0"
     tags:
       Env: "Splunk Lab"
+      SPADirName: "{{ playbook_dir | dirname | basename }}"
+      splunkit_data_classification: public
+      splunkit_environment_type: non-prd
     # Per-host overrides in splunk_hosts[].terraform.aws
 
 # Recommended OS (SPA preference, latest AMI in region): RHEL → Ubuntu LTS → Amazon Linux → Debian

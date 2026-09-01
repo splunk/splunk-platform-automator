@@ -30,6 +30,7 @@ terraform:
     root_volume_type: "gp3"
     tags:
       Env: "Splunk Lab"
+      SPADirName: "{{ playbook_dir | dirname | basename }}"
       splunkit_data_classification: "public"
       splunkit_environment_type: "non-prd"
 

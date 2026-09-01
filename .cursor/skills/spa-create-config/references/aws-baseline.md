@@ -12,6 +12,7 @@ Global `terraform.aws` block applies to all hosts unless overridden per host in 
 | `security_group_names` | `Splunk_Basic` | If present in account |
 | `key_name` | User key in region | Must exist |
 | `ssh_private_key_file` | Controller path | e.g. `~/.ssh/aws_key.pem` |
+| `tags.SPADirName` | `{{ playbook_dir | dirname | basename }}` | SPA repo folder name on controller (cost/ownership tagging) |
 
 ## Feature / app lab
 
@@ -42,6 +43,7 @@ terraform:
     root_volume_type: "gp3"
     tags:
       Env: "Splunk Lab"
+      SPADirName: "{{ playbook_dir | dirname | basename }}"
       splunkit_data_classification: "public"
       splunkit_environment_type: "non-prd"
 ```

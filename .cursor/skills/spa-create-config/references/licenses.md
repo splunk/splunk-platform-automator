@@ -27,8 +27,9 @@ Returns:
 |-----------|--------|
 | Lab / app lab / production-like | Ask whether to add licenses when files exist in Software |
 | `license_manager` role on any host | **Required** — `splunk_license_file` must be set (schema) |
+| `splunk_license_file` in `splunk_defaults` | **Required** — `license_manager` role on a host (schema); co-locate on `cm` or `mc` for labs |
 | ITSI in `splunk_app_deployment` | Propose `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` if present; require `license_manager` role |
-| Config / infra test, no LM | Enterprise license optional (trial may suffice); still recommend if file exists |
+| Config / infra test, trial only | Omit both `splunk_license_file` and `license_manager` (Splunk trial applies) |
 | No files in Software | Warn; user may use trial or add licenses before deploy |
 
 ## Canonical filenames (SPA examples)
@@ -62,8 +63,10 @@ splunk_defaults:
 
 1. Run `splunk_config_licenses.py` after Phase 6 (apps) so ITSI detection is accurate.
 2. If `proposed_splunk_license_file` is non-empty, AskQuestion: add to config for lab?
-3. If ITSI and no `license_manager`, prompt to add LM role (or co-locate per [role-placement.md](role-placement.md)).
-4. Include chosen licenses in Phase 7 write under `splunk_defaults`.
+3. **If adding `splunk_license_file`**, also add `license_manager` to a host in Phase 5b (co-locate on `cm` or `mc` per [role-placement.md](role-placement.md)). Do not write license file without LM role.
+4. If ITSI and no `license_manager`, prompt to add LM role (or co-locate per [role-placement.md](role-placement.md)).
+5. **Trial-only labs** — omit both `splunk_license_file` and `license_manager`.
+6. Include chosen licenses in Phase 7 write under `splunk_defaults`.
 
 ## Out of scope
 

@@ -12,6 +12,7 @@ See [role-placement.md](role-placement.md) opening strategy question in SKILL.md
 | Multisite CM/indexers need `site:` | Multisite IDXC |
 | `deployer` host needs `shcluster:` | Deployer pushes to a specific SHC |
 | `license_manager` requires `splunk_license_file` in `splunk_defaults` | Schema validation |
+| `splunk_license_file` requires `license_manager` on a host | Schema validation — omit file for trial-only labs |
 | SHC members: `search_head` + `shcluster:` on SH nodes only | Not on CM/indexers |
 | Indexer members: `indexer` + `idxcluster:` | No SHC on indexers in clustered topologies |
 

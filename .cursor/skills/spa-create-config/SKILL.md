@@ -178,9 +178,11 @@ python3 bin/splunk_config_licenses.py --config config/splunk_config.yml --json
 
 1. Scan `../Software` for `*.lic` / `*.License` (SPA `splunk_software_dir`).
 2. If `proposed_splunk_license_file` is non-empty, AskQuestion: add to `splunk_defaults`? (especially for lab / app lab intent).
-3. **ITSI in config** → propose `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` when files exist; ensure `license_manager` role (Phase 5b).
-4. **License manager role** → `splunk_license_file` is required (schema).
-5. No files in Software → warn (trial only or add licenses before deploy).
+3. **If user accepts license file** → add `license_manager` role on a host in Phase 5b (typical lab: co-locate on `cm` or dedicated `mc`).
+4. **ITSI in config** → propose `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` when files exist; ensure `license_manager` role (Phase 5b).
+5. **License manager role** → `splunk_license_file` is required (schema). **License file in config** → `license_manager` role is required (schema).
+6. **Trial-only labs** → omit both `splunk_license_file` and `license_manager`; do not add license file from Software scan alone.
+7. No files in Software → warn (trial only or add licenses before deploy).
 
 Use `yaml_snippet` from JSON under `splunk_defaults` in Phase 7.
 
@@ -203,10 +205,18 @@ Use `yaml_snippet` from JSON under `splunk_defaults` in Phase 7.
 ./bin/validate_splunk_config.sh config/splunk_config.yml
 ```
 
+This always runs schema validation, inventory load, **license file ↔ license_manager pairing**, and playbook syntax-check. Fix any failure before handoff.
+
 With AWS creds:
 
 ```bash
 ./bin/validate_splunk_config.sh --splunk-config-aws config/splunk_config.yml
+```
+
+Optional: verify license files exist in `../Software`:
+
+```bash
+./bin/validate_splunk_config.sh --check-licenses config/splunk_config.yml
 ```
 
 Optional: `./tests/run_schema_tests.sh -q`

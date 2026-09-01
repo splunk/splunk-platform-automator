@@ -70,18 +70,16 @@
           You can now run:
             ansible-playbook ansible/deploy_site.yml
 
+- name: Preflight deployment readiness
+  import_playbook: preflight_deploy.yml
+
 - name: Verify host system readiness
   hosts: all
   gather_facts: true
   tasks:
-    - name: Check Python availability
-      ansible.builtin.raw: python3 --version || python --version
-      register: python_check
-      changed_when: false
-
-    - name: Display Python version
+    - name: Display Python version from gathered facts
       ansible.builtin.debug:
-        msg: "{{ inventory_hostname }}: {{ python_check.stdout_lines[0] }}"
+        msg: "{{ inventory_hostname }}: Python {{ ansible_python_version }} ({{ ansible_python.executable }})"
 
     - name: Check system uptime
       ansible.builtin.command: uptime

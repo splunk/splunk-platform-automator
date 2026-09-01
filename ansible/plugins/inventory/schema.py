@@ -1201,6 +1201,18 @@ class SplunkConfig(BaseModel):
             )
         return self
 
+    def _has_license_manager_role(self) -> bool:
+        return any(AllowedRole.license_manager in host.roles for host in self.splunk_hosts)
+
+    def _has_splunk_license_file_configured(self) -> bool:
+        if self.splunk_defaults is not None and self.splunk_defaults.splunk_license_file is not None:
+            return True
+        if self.splunk_environments:
+            for env in self.splunk_environments:
+                if env.splunk_license_file is not None:
+                    return True
+        return any(host.splunk_license_file is not None for host in self.splunk_hosts)
+
     @model_validator(mode='after')
     def validate_license_manager_requires_license_file(self) -> 'SplunkConfig':
         """Ensure license_manager role has splunk_license_file defined.
@@ -1208,25 +1220,36 @@ class SplunkConfig(BaseModel):
         If a license_manager role is defined, the splunk_defaults must include
         a splunk_license_file setting.
         """
-        has_license_manager = False
-        
-        for host in self.splunk_hosts:
-            if AllowedRole.license_manager in host.roles:
-                has_license_manager = True
-                break
-        
-        if has_license_manager:
-            # Check if splunk_license_file is defined in splunk_defaults
-            has_license_file = (
-                self.splunk_defaults is not None and 
-                self.splunk_defaults.splunk_license_file is not None
+        if not self._has_license_manager_role():
+            return self
+
+        if not self._has_splunk_license_file_configured():
+            raise ValueError(
+                "When a license_manager role is defined, 'splunk_license_file' must be specified "
+                "in splunk_defaults (or splunk_environments / host override)."
             )
-            if not has_license_file:
-                raise ValueError(
-                    "When a license_manager role is defined, 'splunk_license_file' must be specified "
-                    "in splunk_defaults."
-                )
-        
+
+        return self
+
+    @model_validator(mode='after')
+    def validate_license_file_requires_license_manager(self) -> 'SplunkConfig':
+        """Ensure splunk_license_file is only set when a license_manager role exists.
+
+        License files are applied by the license_manager role during deploy. Setting
+        splunk_license_file without that role has no effect and is usually a config mistake.
+        For trial-only labs, omit splunk_license_file instead.
+        """
+        if not self._has_splunk_license_file_configured():
+            return self
+
+        if not self._has_license_manager_role():
+            raise ValueError(
+                "When 'splunk_license_file' is set in splunk_defaults (or splunk_environments / "
+                "host override), at least one host in splunk_hosts must have the license_manager "
+                "role. Add license_manager to a host (for example co-locate on cm or mc) or remove "
+                "splunk_license_file for trial-only labs."
+            )
+
         return self
 
     @model_validator(mode='after')
