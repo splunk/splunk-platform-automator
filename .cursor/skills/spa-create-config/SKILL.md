@@ -7,7 +7,8 @@ description: >-
   splunk_config_aws.py discovery, license files in ../Software, basic apps, and
   pre-deploy validation. Invoke in Cursor with /spa-create-config. Use
   when creating or updating splunk_config.yml, designing Splunk Enterprise lab
-  topology, multisite IDXC, SHC layout, or AWS Terraform block for SPA.
+  topology, multisite IDXC, SHC layout, architecture plan before config, or
+  AWS Terraform block for SPA.
 paths:
   - "config/splunk_config.yml"
   - "examples/**/*.yml"
@@ -21,6 +22,7 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 ## When to Use
 
 - Creating or updating `config/splunk_config.yml` for AWS Terraform provisioning
+- **Planning a new architecture** before writing YAML (plan mode — discuss until approved)
 - Designing lab topology (IDXC, multisite, SHC, forwarders)
 - Choosing OS, AMI, `ssh_username`, and `terraform.aws` settings
 - Basic app deployment blocks before first deploy
@@ -50,25 +52,30 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 | RF / SF & sizing | [references/rf-sf-sizing.md](references/rf-sf-sizing.md) |
 | Validate / deploy | [references/validation.md](references/validation.md) |
 | Header template | [assets/config-header-template.md](assets/config-header-template.md) |
+| Architecture plan | [assets/architecture-plan-template.md](assets/architecture-plan-template.md) |
 
 Repo keys: [examples/configuration_description.yml](examples/configuration_description.yml), [examples/aws_lab_baseline.yml](examples/aws_lab_baseline.yml).
 
 ## Step 0 — Environment setup
 
-**Entry:** User wants a deployment config.
+**Entry:** User wants a deployment config or architecture plan.
 
 **Actions:**
 
 1. Confirm **project root** (contains `ansible.cfg`, `bin/`).
-2. Target path: default `config/splunk_config.yml`.
-3. If file exists: **merge vs overwrite** — AskQuestion before destructive write.
-4. **AWS API probe** — `python3 bin/splunk_config_aws.py --check-auth --json` (needs `boto3`; no region required). Record result:
+2. **Mode** — AskQuestion unless user already stated intent:
+   - **plan** — Phases 0a–6b + architecture plan; **no** `splunk_config.yml` write until user approves.
+   - **write** — Full flow through Phase 7–9 (or continue after approved plan).
+   Infer **plan** from phrases like “design”, “discuss”, “plan architecture”; infer **write** from “create config”, “write yaml”, “approve and write”.
+3. Target path: default `config/splunk_config.yml` (for write mode or post-approval).
+4. If file exists and **mode=write** (or approving plan): **merge vs overwrite** — AskQuestion before destructive write. Skip in **plan** mode until Phase 7.
+5. **AWS API probe** — `python3 bin/splunk_config_aws.py --check-auth --json` (needs `boto3`; no region required). Record result:
    - **Available** → Phase 4 uses API discovery; optional `--splunk-config-aws` at validate.
    - **Unavailable** → follow [aws-without-credentials.md](references/aws-without-credentials.md); do not block the workflow.
-5. Read existing config if merging.
-6. Optional inventory: `python3 bin/splunk_config_licenses.py --json` — note what exists in `../Software`.
+6. Read existing config if merging or revising an existing plan from prior config.
+7. Optional inventory: `python3 bin/splunk_config_licenses.py --json` — note what exists in `../Software`.
 
-**Exit:** Target path known; merge policy clear; **AWS API status recorded**; Software licenses noted if scanned.
+**Exit:** **Mode recorded**; target path known; merge policy clear when applicable; **AWS API status recorded**; Software licenses noted if scanned.
 
 ## Phase 0a — Deployment intent
 
@@ -192,7 +199,27 @@ Use `yaml_snippet` from JSON under `splunk_defaults` in Phase 7.
 
 **Exit:** License list decided or explicitly skipped; LM + ITSI warnings addressed.
 
+## Phase 6c — Architecture plan (plan mode)
+
+**Entry:** `mode=plan` OR user has not yet approved writing config.
+
+**Actions:**
+
+1. Fill [architecture-plan-template.md](assets/architecture-plan-template.md) from phase exits (0a–6b).
+2. Present the plan in chat. Offer optional file: `docs/plans/<short-name>-architecture-plan.md`.
+3. End with: *Revise anything, or say **approve and write config** to continue to Phase 7.*
+
+**Revision loop:** User changes (“add multisite”, “drop HF”) → update affected phases mentally, refresh plan; do **not** write YAML.
+
+**Exit:** Plan delivered; status **draft** until user approves.
+
+**Do not run Phase 7–9** until user explicitly approves (treat approval as `mode=write` for remainder of session).
+
 ## Phase 7 — Write config
+
+**Entry:** `mode=write` OR user said **approve and write config** (or equivalent).
+
+**Do not enter** while plan mode is active and plan is still draft.
 
 1. `plugin: splunk-platform-automator`
 2. Header from [assets/config-header-template.md](assets/config-header-template.md)
@@ -254,6 +281,7 @@ Use consistently: `cluster_manager`, `terraform.aws`, `splunk_hosts`, `plugin: s
 - [ ] Description third person with trigger terms
 - [ ] SKILL.md under 500 lines; details in `references/`
 - [ ] When to Use / When NOT to Use present
+- [ ] Step 0 mode (`plan` vs `write`) recorded; plan mode skips YAML until approval
 - [ ] Step 0 and phase exit criteria followed
 - [ ] `bin/*` invoked from project root
 - [ ] Validation passed before handoff
