@@ -53,6 +53,7 @@ terraform:
 From repo root (requires `boto3` and AWS credentials):
 
 ```bash
+python3 bin/splunk_config_aws.py --check-auth --json
 python3 bin/splunk_config_aws.py --list-regions --json
 python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os all --json
 python3 bin/splunk_config_aws.py --region eu-central-1 --list-instance-types --family t3 --json
@@ -72,6 +73,6 @@ python3 bin/splunk_config_aws.py --survey --region eu-central-1 --json
 - SSH private key on Ansible controller
 - AMI valid in target region (AMIs expire — prefer API discovery)
 
-## Static fallback
+## Static fallback (no AWS API)
 
-If credentials unavailable, use [aws-os-matrix.md](aws-os-matrix.md) and example AMIs in `defaults/aws.yml` / `examples/single_node_itsi.yml` with **verify in AWS console** warning.
+If `--check-auth` fails or boto3 is missing, follow [aws-without-credentials.md](aws-without-credentials.md). Copy `terraform.aws` from examples; use [aws-os-matrix.md](aws-os-matrix.md) for `ssh_username` and `os.packages`. **Verify AMI IDs in the AWS console** before provision, or re-run discovery when credentials are available.

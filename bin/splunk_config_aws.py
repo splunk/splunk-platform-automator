@@ -5,6 +5,7 @@ AWS discovery and validation for splunk_config.yml terraform.aws settings.
 Requires boto3 and AWS credentials (env, profile, or instance role).
 
 Examples:
+  python3 bin/splunk_config_aws.py --check-auth --json
   python3 bin/splunk_config_aws.py --list-regions --json
   python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os amazon_linux --json
   python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os all --json
@@ -721,6 +722,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", help="Output JSON")
     p.add_argument("--region", help="AWS region")
 
+    p.add_argument("--check-auth", action="store_true", help="Verify AWS credentials via STS (no --region required)")
     p.add_argument("--list-regions", action="store_true", help="List enabled regions")
     p.add_argument("--list-amis", action="store_true", help="List AMIs in region (use --name-filter or --os)")
     p.add_argument("--latest-ami", action="store_true", help="Resolve latest AMI for recommended OS (--os)")
@@ -751,6 +753,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     as_json = args.json
+
+    if args.check_auth:
+        session = _session()
+        result = check_auth(session)
+        _output(result, as_json)
+        return 0 if result.get("ok") else 1
 
     if args.list_regions:
         session = _session()
@@ -855,7 +863,7 @@ def main() -> int:
         _output(result, as_json)
         return 0 if result.get("ok") else 1
 
-    _err("No operation specified. Use --list-regions, --latest-ami, --list-amis, --validate, or --survey.")
+    _err("No operation specified. Use --check-auth, --list-regions, --latest-ami, --list-amis, --validate, or --survey.")
     return 1
 
 

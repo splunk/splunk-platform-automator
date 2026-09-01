@@ -43,6 +43,7 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 | SVA → examples | [references/sva-topology-map.md](references/sva-topology-map.md) |
 | Role co-location | [references/role-placement.md](references/role-placement.md) |
 | AWS defaults | [references/aws-baseline.md](references/aws-baseline.md) |
+| No AWS API / creds | [references/aws-without-credentials.md](references/aws-without-credentials.md) |
 | OS / SSH / Java | [references/aws-os-matrix.md](references/aws-os-matrix.md) |
 | Apps | [references/apps-questionnaire.md](references/apps-questionnaire.md) |
 | Licenses | [references/licenses.md](references/licenses.md) |
@@ -61,11 +62,13 @@ Repo keys: [examples/configuration_description.yml](examples/configuration_descr
 1. Confirm **project root** (contains `ansible.cfg`, `bin/`).
 2. Target path: default `config/splunk_config.yml`.
 3. If file exists: **merge vs overwrite** — AskQuestion before destructive write.
-4. Check AWS creds: `AWS_ACCESS_KEY_ID` / profile / instance role; optional `python3 bin/splunk_config_aws.py --list-regions --json`.
+4. **AWS API probe** — `python3 bin/splunk_config_aws.py --check-auth --json` (needs `boto3`; no region required). Record result:
+   - **Available** → Phase 4 uses API discovery; optional `--splunk-config-aws` at validate.
+   - **Unavailable** → follow [aws-without-credentials.md](references/aws-without-credentials.md); do not block the workflow.
 5. Read existing config if merging.
 6. Optional inventory: `python3 bin/splunk_config_licenses.py --json` — note what exists in `../Software`.
 
-**Exit:** Target path known; merge policy clear; creds status noted; Software licenses noted if scanned.
+**Exit:** Target path known; merge policy clear; **AWS API status recorded**; Software licenses noted if scanned.
 
 ## Phase 0a — Deployment intent
 
@@ -134,11 +137,11 @@ Set global `os:` block, expected `ssh_username`, and **polkit** (`polkit` on AL/
 7. Local: `ssh_private_key_file`, tags, volume size
 8. `--validate` before write
 
-**Without creds:** Static matrix + example AMIs; warn AMIs may be stale.
+**Without creds:** [aws-without-credentials.md](references/aws-without-credentials.md) — static matrix, example AMIs, user-supplied key/SG names; **warn AMIs may be stale**; header note `AWS API: not available`. Do **not** run `--splunk-config-aws`.
 
 Cap displayed API results (~10–15 AMIs, ~5 instance types).
 
-**Exit:** All `terraform.aws` fields chosen; validation OK if creds available.
+**Exit:** All `terraform.aws` fields chosen (API-validated if creds available, else documented as unverified).
 
 ## Phase 5 — Topology counts
 
@@ -207,6 +210,8 @@ Use `yaml_snippet` from JSON under `splunk_defaults` in Phase 7.
 ```
 
 This always runs schema validation, inventory load, **license file ↔ license_manager pairing**, and playbook syntax-check. Fix any failure before handoff.
+
+**Without AWS credentials:** default validate above is enough for handoff. **Do not** use `--splunk-config-aws` (it will fail). Note in header; user re-validates with API before provision — see [aws-without-credentials.md](references/aws-without-credentials.md).
 
 With AWS creds:
 

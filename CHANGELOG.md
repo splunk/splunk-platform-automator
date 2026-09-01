@@ -20,12 +20,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 - **Guided `splunk_config.yml` setup (Cursor skill)** – Interactive workflow for designing AWS Linux deployments without hand-editing every field:
   - **Skill**: `.cursor/skills/spa-create-config/` (`/spa-create-config` in Cursor) — phased flow (deployment intent, SVA topology, sizing, OS/SSH, role placement, apps, licenses, write, validate, handoff). SPA project skills use the `spa-*` prefix for `/` command discovery.
-  - **References**: architecture requirements, SVA questionnaire/map, AWS baseline, OS matrix (Amazon Linux 2023, RHEL 10, Ubuntu 24.04), role placement, apps questionnaire, license questionnaire, **RF/SF sizing** ([rf-sf-sizing.md](.cursor/skills/spa-create-config/references/rf-sf-sizing.md) — Splunk doc formulas for replication/search factors, peer minimums, multisite `total` calculation, ingest/storage hints), validation checklist.
+  - **References**: architecture requirements, SVA questionnaire/map, AWS baseline, OS matrix (Amazon Linux 2023, RHEL 10, Ubuntu 24.04), role placement, apps questionnaire, license questionnaire, **RF/SF sizing** ([rf-sf-sizing.md](.cursor/skills/spa-create-config/references/rf-sf-sizing.md) — Splunk doc formulas for replication/search factors, peer minimums, multisite `total` calculation, ingest/storage hints), **AWS without credentials** ([aws-without-credentials.md](.cursor/skills/spa-create-config/references/aws-without-credentials.md) — Step 0 `--check-auth` probe, static AMI fallback, skip `--splunk-config-aws` when API unavailable), validation checklist.
   - **Docs**: [Splunk_Config_Guided_Setup.md](docs/Splunk_Config_Guided_Setup.md); README link to guided setup.
 
 - **`bin/splunk_config_aws.py`** – AWS discovery and validation for `terraform.aws`:
   - List regions, key pairs, security groups, instance types.
   - **Dynamic AMI resolution** for Amazon Linux 2023, RHEL 10, and Ubuntu 24.04 (SSM public parameters and `describe-images` where needed).
+  - `--check-auth` — STS credential probe (no `--region` required); use in skill Step 0 before discovery.
   - `--latest-ami`, `--survey` (recommended AMIs + defaults), `--describe-ami`, `--validate` with `--json` output.
 
 - **`bin/splunk_config_licenses.py`** – Scan `../Software` (`splunk_software_dir`) for license files and propose `splunk_defaults.splunk_license_file`:
@@ -43,6 +44,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - **Cursor skill naming** — Project skills renamed to `spa-*` for `/` command discovery: `spa-create-config` (was `create-splunk-config`), `spa-add-test-scenario` (was `add-test-scenario`).
+
+- **`spa-create-config` AWS credential handling** — Step 0 runs `splunk_config_aws.py --check-auth` and records API availability; Phase 4 branches to static examples when creds or boto3 are missing; Phase 8 uses default `validate_splunk_config.sh` only (no `--splunk-config-aws`) until credentials work.
 
 - **Default AWS tag `SPADirName`** — Lab examples and [configuration_description.yml](examples/configuration_description.yml) include `SPADirName: "{{ playbook_dir | dirname | basename }}"` under `terraform.aws.tags` (SPA repo folder name on the controller).
 

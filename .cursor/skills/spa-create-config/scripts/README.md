@@ -4,7 +4,7 @@ Canonical scripts live in the **repository** `bin/` directory. Run from project 
 
 | Script | Purpose |
 |--------|---------|
-| `bin/splunk_config_aws.py` | AWS discovery: `--latest-ami --os rhel|ubuntu|amazon_linux|debian|all` (dynamic lookup), `--survey`, `--validate` |
+| `bin/splunk_config_aws.py` | AWS discovery: `--check-auth`, `--latest-ami`, `--survey`, `--validate` |
 | `bin/splunk_config_licenses.py` | Scan `../Software` for `.lic` files; propose `splunk_license_file` (ITSI-aware with `--config`) |
 | `bin/validate_splunk_config.sh` | Schema + inventory + playbook syntax-check; optional `--check-licenses` |
 

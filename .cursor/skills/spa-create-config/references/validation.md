@@ -86,4 +86,5 @@ ap ansible/destroy_terraform_aws.yml -e auto_approve=true
 | Deployer without `shcluster:` | Add `shcluster` on deployer host |
 | Multisite without `site:` | Add `site` on CM and indexers |
 | Missing `ssh_username` | Set in `terraform.aws` per [aws-os-matrix.md](aws-os-matrix.md) |
+| AWS validate fails / no creds | Use default `validate_splunk_config.sh` only; see [aws-without-credentials.md](aws-without-credentials.md) |
 | Policykit not installed (Ubuntu UF) | Add `policykit-1` to global `os.packages` or set `splunk_use_policykit: false` |
