@@ -49,6 +49,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 - **`spa-create-config` plan mode** — Step 0 `plan` vs `write`; Phases 0a–6b unchanged; Phase 6c outputs architecture plan from [architecture-plan-template.md](.cursor/skills/spa-create-config/assets/architecture-plan-template.md); Phase 7–9 only after user approves plan.
 
+- **`spa-create-config` secrets handling** — [secrets-handling.md](.cursor/skills/spa-create-config/references/secrets-handling.md): never display Splunkbase (or other) credential env values in chat or terminal; report set/not-set only; forbid `echo`/`printenv` on `SPLUNKBASE_*`.
+
 - **Default AWS tag `SPADirName`** — Lab examples and [configuration_description.yml](examples/configuration_description.yml) include `SPADirName: "{{ playbook_dir | dirname | basename }}"` under `terraform.aws.tags` (SPA repo folder name on the controller).
 
 - [examples/splunk_config_terraform_aws.yml](examples/splunk_config_terraform_aws.yml) — default AMI guidance aligned with RHEL 10 / latest-OS discovery.

@@ -10,12 +10,19 @@ If no → omit `splunk_app_deployment` entirely.
 
 ## 2. Credentials
 
-Prefer environment variables on controller:
+Prefer environment variables on controller — see [secrets-handling.md](secrets-handling.md):
 
-- `SPLUNKBASE_USERNAME`
-- `SPLUNKBASE_PASSWORD`
+- `SPLUNKBASE_USERNAME` — **set / not set** only in chat; never display the value
+- `SPLUNKBASE_PASSWORD` — **set / not set** only in chat; never display the value
 
-See [docs/App_Deployment.md](docs/App_Deployment.md). Optional vault in config.
+In `splunk_config.yml` use lookups only (never hardcode):
+
+```yaml
+splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
+splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
+```
+
+See [docs/App_Deployment.md](docs/App_Deployment.md). Optional vault in config. Do not verify with `echo $SPLUNKBASE_*`.
 
 ## 3. App sources
 

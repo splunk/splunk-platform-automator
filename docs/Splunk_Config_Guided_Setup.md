@@ -108,7 +108,7 @@ Lab configs: add licenses when files exist (avoids trial limits). ITSI in `splun
 
 ## Basic apps
 
-See [App Deployment](App_Deployment.md). Use env vars `SPLUNKBASE_USERNAME` and `SPLUNKBASE_PASSWORD`.
+See [App Deployment](App_Deployment.md). Set `SPLUNKBASE_USERNAME` and `SPLUNKBASE_PASSWORD` on the controller (never paste values into chat or echo them in the terminal).
 
 ITSI example: [examples/single_node_itsi.yml](examples/single_node_itsi.yml).
 

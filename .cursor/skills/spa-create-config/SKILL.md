@@ -35,6 +35,15 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 - Production sizing / PS engagement (guidance only; no auto-sizing)
 - Auto-running provision/deploy (user runs playbooks after validation)
 
+## Secrets — never display credential values (mandatory)
+
+Follow [secrets-handling.md](references/secrets-handling.md) for the full list.
+
+- **Splunkbase:** Use `lookup('env', 'SPLUNKBASE_USERNAME')` / `lookup('env', 'SPLUNKBASE_PASSWORD')` in YAML only. In chat, plans, and terminal output shown to the user: report **set** or **not set** — **never** the username, email, or password.
+- **Do not run** `echo`, `printenv`, or `env | grep` on `SPLUNKBASE_*` (or other secret env vars).
+- **Safe optional check:** loop in [secrets-handling.md](references/secrets-handling.md) that prints only `SPLUNKBASE_USERNAME: set` / `not set`.
+- Never paste resolved lookup values, AWS secret keys, or private key contents into chat or plan files.
+
 ## Reference files (load on demand)
 
 | Topic | File |
@@ -53,6 +62,7 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 | Validate / deploy | [references/validation.md](references/validation.md) |
 | Header template | [assets/config-header-template.md](assets/config-header-template.md) |
 | Architecture plan | [assets/architecture-plan-template.md](assets/architecture-plan-template.md) |
+| Secrets / env vars | [references/secrets-handling.md](references/secrets-handling.md) |
 
 Repo keys: [examples/configuration_description.yml](examples/configuration_description.yml), [examples/aws_lab_baseline.yml](examples/aws_lab_baseline.yml).
 
@@ -284,4 +294,4 @@ Use consistently: `cluster_manager`, `terraform.aws`, `splunk_hosts`, `plugin: s
 - [ ] Step 0 mode (`plan` vs `write`) recorded; plan mode skips YAML until approval
 - [ ] Step 0 and phase exit criteria followed
 - [ ] `bin/*` invoked from project root
-- [ ] Validation passed before handoff
+- [ ] Secrets: Splunkbase and other credential env values never shown in chat or terminal output
