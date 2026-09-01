@@ -10,7 +10,7 @@ python3 bin/splunk_config_aws.py --check-auth --json
 
 | Result | Meaning | Skill path |
 |--------|---------|------------|
-| `ok: true` + `account` | Credentials work | Phase 4 **with creds** (`--survey`, `--latest-ami`, optional `--splunk-config-aws`) |
+| `ok: true` + `account` | Credentials work | Phase 4 **with creds** (`--survey`, `--latest-ami`, optional `--splunk-config-aws`). Report account ID only — see [secrets-handling.md](secrets-handling.md) |
 | `ok: false`, error mentions credentials | No AWS creds / expired session | Phase 4 **without creds** (this doc) |
 | Exit 2, `boto3 is required` | boto3 not installed | `pip install boto3`; until then, **without creds** path |
 | `ok: false`, other API error | Profile/region/permission issue | Fix AWS setup or fall back **without creds** and note in header |

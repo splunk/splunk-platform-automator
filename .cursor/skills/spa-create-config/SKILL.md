@@ -39,10 +39,11 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 
 Follow [secrets-handling.md](references/secrets-handling.md) for the full list.
 
-- **Splunkbase:** Use `lookup('env', 'SPLUNKBASE_USERNAME')` / `lookup('env', 'SPLUNKBASE_PASSWORD')` in YAML only. In chat, plans, and terminal output shown to the user: report **set** or **not set** — **never** the username, email, or password.
-- **Do not run** `echo`, `printenv`, or `env | grep` on `SPLUNKBASE_*` (or other secret env vars).
-- **Safe optional check:** loop in [secrets-handling.md](references/secrets-handling.md) that prints only `SPLUNKBASE_USERNAME: set` / `not set`.
-- Never paste resolved lookup values, AWS secret keys, or private key contents into chat or plan files.
+- **Splunkbase:** Use `lookup('env', 'SPLUNKBASE_USERNAME')` / `lookup('env', 'SPLUNKBASE_PASSWORD')` in YAML only. In chat, plans, and terminal: **set** or **not set** — never username/email/password.
+- **AWS:** Prefer `splunk_config_aws.py --check-auth --json` for API status. Never show `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_SESSION_TOKEN` values. **OK:** account ID, ARN, `AWS_PROFILE` name, region.
+- **Do not run** `echo` / `printenv` / `env | grep` on `SPLUNKBASE_*` or secret `AWS_*` vars; do not run `aws configure get aws_secret_access_key` or `aws configure list`.
+- **Safe checks:** set/not-set loops in [secrets-handling.md](references/secrets-handling.md).
+- Never paste resolved lookup values, private key contents, or credential file contents into chat or plan files.
 
 ## Reference files (load on demand)
 
@@ -294,4 +295,4 @@ Use consistently: `cluster_manager`, `terraform.aws`, `splunk_hosts`, `plugin: s
 - [ ] Step 0 mode (`plan` vs `write`) recorded; plan mode skips YAML until approval
 - [ ] Step 0 and phase exit criteria followed
 - [ ] `bin/*` invoked from project root
-- [ ] Secrets: Splunkbase and other credential env values never shown in chat or terminal output
+- [ ] Secrets: Splunkbase and AWS credential env values never shown in chat or terminal output
