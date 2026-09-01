@@ -1,0 +1,220 @@
+---
+name: create-splunk-config
+description: >-
+  Guides interactive design and creation of config/splunk_config.yml for Splunk
+  Platform Automator on AWS Linux. Covers deployment intent, Lantern/SF
+  requirements, SVA topology, role placement, scale-out guidance, OS/SSH,
+  splunk_config_aws.py discovery, basic apps, and pre-deploy validation. Use
+  when creating or updating splunk_config.yml, designing Splunk Enterprise lab
+  topology, multisite IDXC, SHC layout, or AWS Terraform block for SPA.
+paths:
+  - "config/splunk_config.yml"
+  - "examples/**/*.yml"
+  - "examples/configuration_description.yml"
+---
+
+# Create splunk_config.yml (AWS Linux)
+
+Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
+
+## When to Use
+
+- Creating or updating `config/splunk_config.yml` for AWS Terraform provisioning
+- Designing lab topology (IDXC, multisite, SHC, forwarders)
+- Choosing OS, AMI, `ssh_username`, and `terraform.aws` settings
+- Basic app deployment blocks before first deploy
+
+## When NOT to Use
+
+- App-scope test distillation → [add-test-scenario](.cursor/skills/add-test-scenario/SKILL.md)
+- Flat deployment test configs under `tests/configs/*.yml` only
+- Splunkbase catalog search (user supplies `app_id` manually)
+- Production sizing / PS engagement (guidance only; no auto-sizing)
+- Auto-running provision/deploy (user runs playbooks after validation)
+
+## Reference files (load on demand)
+
+| Topic | File |
+|-------|------|
+| Lantern / requirements | [references/architecture-requirements.md](references/architecture-requirements.md) |
+| External links | [references/reference-links.md](references/reference-links.md) |
+| SVA questions | [references/sva-questionnaire.md](references/sva-questionnaire.md) |
+| SVA → examples | [references/sva-topology-map.md](references/sva-topology-map.md) |
+| Role co-location | [references/role-placement.md](references/role-placement.md) |
+| AWS defaults | [references/aws-baseline.md](references/aws-baseline.md) |
+| OS / SSH / Java | [references/aws-os-matrix.md](references/aws-os-matrix.md) |
+| Apps | [references/apps-questionnaire.md](references/apps-questionnaire.md) |
+| Validate / deploy | [references/validation.md](references/validation.md) |
+| Header template | [assets/config-header-template.md](assets/config-header-template.md) |
+
+Repo keys: [examples/configuration_description.yml](examples/configuration_description.yml), [examples/aws_lab_baseline.yml](examples/aws_lab_baseline.yml).
+
+## Step 0 — Environment setup
+
+**Entry:** User wants a deployment config.
+
+**Actions:**
+
+1. Confirm **project root** (contains `ansible.cfg`, `bin/`).
+2. Target path: default `config/splunk_config.yml`.
+3. If file exists: **merge vs overwrite** — AskQuestion before destructive write.
+4. Check AWS creds: `AWS_ACCESS_KEY_ID` / profile / instance role; optional `python3 bin/splunk_config_aws.py --list-regions --json`.
+5. Read existing config if merging.
+
+**Exit:** Target path known; merge policy clear; creds status noted.
+
+## Phase 0a — Deployment intent
+
+Ask: *What are you proving with this environment?*
+
+| Intent | Behavior |
+|--------|----------|
+| Config / infra test | Minimal hosts; lab co-location OK; flag SVA gaps |
+| Feature / app lab | Right tier sizes; Java 21 for ITSI; licenses |
+| Production-like | SVA separation; multisite; document RTO/RPO |
+
+See [architecture-requirements.md](references/architecture-requirements.md).
+
+**Exit:** Intent recorded for header comment.
+
+## Phase 0b — Architecture requirements
+
+Gather workload, DR, data path, retention (light touch). Feed into SVA path; do not duplicate blindly.
+
+Ask scale-out vs scale-up; default **scale out** for Splunk.
+
+**Exit:** Short requirements summary for header.
+
+## Phase 1 — Topology path
+
+**Entry:** Requirements known or skipped for config-test.
+
+| Path | Action |
+|------|--------|
+| User knows SVA code | Confirm code → [sva-topology-map.md](references/sva-topology-map.md) |
+| Needs help | [sva-questionnaire.md](references/sva-questionnaire.md) |
+| Config test only | Minimal topology (e.g. CM + 2 idx + SH) |
+
+**Exit:** SVA code or lab compromise; closest `examples/*.yml` chosen.
+
+## Phase 2 — Sizing tier
+
+| Purpose | Default |
+|---------|---------|
+| Config test | `t3.medium`, 50 GB global `terraform.aws` |
+| App lab | Larger SH if needed; ITSI Java 21 |
+| Production-like | Document overrides |
+
+**Exit:** Default instance type and volume size for global block.
+
+## Phase 3 — Linux OS
+
+Pick OS → [aws-os-matrix.md](references/aws-os-matrix.md).
+
+Set global `os:` block and expected `ssh_username`.
+
+**Exit:** OS family chosen; `os:` template ready.
+
+## Phase 4 — AWS settings
+
+**With creds:** Run `bin/splunk_config_aws.py` — see [aws-baseline.md](references/aws-baseline.md).
+
+1. Region (`--list-regions` or confirm)
+2. AMI (`--list-amis` with OS filter from Phase 3)
+3. `ssh_username` (`--describe-ami`)
+4. Instance type (`--list-instance-types --family t3`; suggest `t3.medium` for config tests)
+5. Key pair (`--list-key-pairs`)
+6. Security groups (`--list-security-groups`)
+7. Local: `ssh_private_key_file`, tags, volume size
+8. `--validate` before write
+
+**Without creds:** Static matrix + example AMIs; warn AMIs may be stale.
+
+Cap displayed API results (~10–15 AMIs, ~5 instance types).
+
+**Exit:** All `terraform.aws` fields chosen; validation OK if creds available.
+
+## Phase 5 — Topology counts
+
+Determine roles and node counts (not host mapping yet):
+
+- IDXC vs standalone indexers
+- Multisite: `site`, RF/SF
+- Standalone SH vs SHC (min 3)
+- MC, LM, DS, HF, UF needed?
+
+Copy `splunk_idxclusters` / `splunk_shclusters` from closest example.
+
+**Exit:** Tier counts documented.
+
+## Phase 5b — Role placement
+
+[role-placement.md](references/role-placement.md) — strategy: SVA-aligned, lab-minimal, hybrid, or user-defined.
+
+Enforce SPA hard constraints (CM+idxcluster, deployer+shcluster, LM+license file, etc.).
+
+Summarize hosts before YAML write.
+
+**Exit:** Host ↔ role map; strategy for header.
+
+## Phase 6 — Apps (optional)
+
+[apps-questionnaire.md](references/apps-questionnaire.md). Skip entire `splunk_app_deployment` if no.
+
+**Exit:** App block ready or explicitly skipped.
+
+## Phase 7 — Write config
+
+1. `plugin: splunk-platform-automator`
+2. Header from [assets/config-header-template.md](assets/config-header-template.md)
+3. Global `terraform.aws` with **`ssh_username`** and AMI comment
+4. Matching global `os:` block
+5. `splunk_defaults`, clusters, `splunk_hosts` from closest example
+6. Cross-check [configuration_description.yml](examples/configuration_description.yml)
+
+**Exit:** File written at target path.
+
+## Phase 8 — Validate (quality gate)
+
+```bash
+./bin/validate_splunk_config.sh config/splunk_config.yml
+```
+
+With AWS creds:
+
+```bash
+./bin/validate_splunk_config.sh --splunk-config-aws config/splunk_config.yml
+```
+
+Optional: `./tests/run_schema_tests.sh -q`
+
+Do not hand off until validation passes. See [validation.md](references/validation.md).
+
+**Exit:** Scripts exit 0.
+
+## Phase 9 — Handoff
+
+User runs (skill does **not** auto-provision):
+
+```bash
+ap ansible/provision_terraform_aws.yml -e auto_approve=true
+ap ansible/deploy_site.yml
+```
+
+Destroy: `ap ansible/destroy_terraform_aws.yml -e auto_approve=true`
+
+Optional: distill app-scope tests via [add-test-scenario](.cursor/skills/add-test-scenario/SKILL.md).
+
+## Terminology
+
+Use consistently: `cluster_manager`, `terraform.aws`, `splunk_hosts`, `plugin: splunk-platform-automator` (not "master").
+
+## Skill quality checklist
+
+- [ ] `name` matches folder `create-splunk-config`
+- [ ] Description third person with trigger terms
+- [ ] SKILL.md under 500 lines; details in `references/`
+- [ ] When to Use / When NOT to Use present
+- [ ] Step 0 and phase exit criteria followed
+- [ ] `bin/*` invoked from project root
+- [ ] Validation passed before handoff
