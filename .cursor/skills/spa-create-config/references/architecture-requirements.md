@@ -10,14 +10,14 @@ Distilled from Lantern scalable architecture and related SF paths. See [referenc
 |----------|-----------------|----------------|----------------|
 | Daily ingest | &lt;2 GB, 2–300 GB, 300+ GB, unknown/lab | Indexer count; standalone vs distributed vs clustered | `splunk_hosts` indexer count; SVA S vs D vs C |
 | Concurrent users / searches | &lt;4, 8, 16, 24, 48+ | SH count; SHC vs standalone | SHC if HA or high concurrent search load |
-| Use case | ops metrics, security, audit, dev/test | Search completeness → clustering | RF/SF, multisite |
+| Use case | ops metrics, security, audit, dev/test | Search completeness → clustering | RF/SF — see [sva-topology-map.md](sva-topology-map.md) |
 | Premium apps | none, ITSI, ES, other | Extra nodes, licenses, Java on SH | `splunk_license_file`; ITSI Java 21 |
 
 ## Availability and DR
 
 | Question | Why | Config touchpoint |
 |----------|-----|-------------------|
-| RTO / RPO | Multisite, replication | `idxc_site_rf`, `idxc_site_sf`; M2 vs M4 |
+| RTO / RPO | Multisite, replication | `idxc_site_rf`, `idxc_site_sf`; M2 vs M4 — lab defaults in [sva-topology-map.md](sva-topology-map.md) |
 | Multi-site / multi-DC | Multisite IDXC, SH per site | `site:` on hosts |
 | HA search tier | SHC minimum 3 nodes | `splunk_shclusters`, deployer |
 | Cross-site KO sync | Stretched SHC (M4) | Complex SHC layout — escalate to SVA + PS |
@@ -48,7 +48,7 @@ After topology is chosen, ask: **more nodes (horizontal) or larger instances (ve
 
 Default for Splunk + SPA lab work: **scale out** (more indexers/SH nodes). Use larger `instance_type` only when node count is fixed (e.g. single-node S1).
 
-Performance table in Lantern/docs is **guidance only** — this skill does not auto-size from ingest math.
+Performance table: use ingest × users band from [rf-sf-sizing.md](rf-sf-sizing.md) for indexer/SH **count hints** only.
 
 ## Requirements summary (header comment template)
 

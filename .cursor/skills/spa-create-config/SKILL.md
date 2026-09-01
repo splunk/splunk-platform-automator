@@ -46,6 +46,7 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 | OS / SSH / Java | [references/aws-os-matrix.md](references/aws-os-matrix.md) |
 | Apps | [references/apps-questionnaire.md](references/apps-questionnaire.md) |
 | Licenses | [references/licenses.md](references/licenses.md) |
+| RF / SF & sizing | [references/rf-sf-sizing.md](references/rf-sf-sizing.md) |
 | Validate / deploy | [references/validation.md](references/validation.md) |
 | Header template | [assets/config-header-template.md](assets/config-header-template.md) |
 
@@ -144,13 +145,13 @@ Cap displayed API results (~10–15 AMIs, ~5 instance types).
 Determine roles and node counts (not host mapping yet):
 
 - IDXC vs standalone indexers
-- Multisite: `site`, RF/SF
+- Multisite: `site`, RF/SF — [sva-topology-map.md](references/sva-topology-map.md) + [rf-sf-sizing.md](references/rf-sf-sizing.md) (Splunk doc formulas; ingest/users → performance table)
 - Standalone SH vs SHC (min 3)
 - MC, LM, DS, HF, UF needed?
 
-Copy `splunk_idxclusters` / `splunk_shclusters` from closest example.
+Copy `splunk_idxclusters` / `splunk_shclusters` from closest example; apply RF/SF table from topology map when not copying verbatim.
 
-**Exit:** Tier counts documented.
+**Exit:** Tier counts documented; RF/SF match peer counts per checklist.
 
 ## Phase 5b — Role placement
 

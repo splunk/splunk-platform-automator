@@ -17,6 +17,7 @@ Curated links for the `spa-create-config` workflow. Use for user handoff and hea
 ## Performance (guidance only — not auto-sizing)
 
 - [Summary of performance recommendations](https://help.splunk.com/en/splunk-enterprise/get-started/deployment-capacity-manual/10.2/performance-reference/summary-of-performance-recommendations) — ingest and concurrent search bands; defer production sizing to PS / capacity planning.
+- RF / SF calculation rules: [rf-sf-sizing.md](references/rf-sf-sizing.md) in this skill.
 
 ## Splunk Platform Automator (SPA)
 
