@@ -1,14 +1,16 @@
 ---
 name: spa-create-config
 description: >-
-  Guides interactive design and creation of config/splunk_config.yml for Splunk
-  Platform Automator on AWS Linux. Covers deployment intent, Lantern/SF
-  requirements, SVA topology, role placement, scale-out guidance, OS/SSH,
-  splunk_config_aws.py discovery, license files in ../Software, basic apps, and
-  pre-deploy validation. Invoke in Cursor with /spa-create-config. Use
-  when creating or updating splunk_config.yml, designing Splunk Enterprise lab
-  topology, multisite IDXC, SHC layout, architecture plan before config, or
-  AWS Terraform block for SPA.
+  Use when creating or updating splunk_config.yml, designing Splunk Enterprise lab
+  topology, multisite IDXC, SHC layout, architecture plan before config, or AWS
+  Terraform block for SPA. Guides interactive design on AWS Linux: deployment intent,
+  SVA topology, role placement, OS/SSH, splunk_config_aws.py discovery, licenses,
+  apps, validation. In Cursor invoke with /spa-create-config.
+license: Proprietary
+compatibility: Requires SPA repo root (ansible.cfg, bin/). Optional boto3 for AWS discovery.
+metadata:
+  product: splunk-platform-automator
+  version: "1.0.0"
 paths:
   - "config/splunk_config.yml"
   - "examples/**/*.yml"
@@ -29,7 +31,7 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 
 ## When NOT to Use
 
-- App-scope test distillation → [spa-add-test-scenario](.cursor/skills/spa-add-test-scenario/SKILL.md)
+- App-scope test distillation → [spa-add-test-scenario](../spa-add-test-scenario/SKILL.md)
 - Flat deployment test configs under `tests/configs/*.yml` only
 - Splunkbase catalog search (user supplies `app_id` manually)
 - Production sizing / PS engagement (guidance only; no auto-sizing)
@@ -74,12 +76,12 @@ Repo keys: [examples/configuration_description.yml](examples/configuration_descr
 **Actions:**
 
 1. Confirm **project root** (contains `ansible.cfg`, `bin/`).
-2. **Mode** — AskQuestion unless user already stated intent:
+2. **Mode** — AskQuestion if available, otherwise ask in chat, unless user already stated intent:
    - **plan** — Phases 0a–6b + architecture plan; **no** `splunk_config.yml` write until user approves.
    - **write** — Full flow through Phase 7–9 (or continue after approved plan).
    Infer **plan** from phrases like “design”, “discuss”, “plan architecture”; infer **write** from “create config”, “write yaml”, “approve and write”.
 3. Target path: default `config/splunk_config.yml` (for write mode or post-approval).
-4. If file exists and **mode=write** (or approving plan): **merge vs overwrite** — AskQuestion before destructive write. Skip in **plan** mode until Phase 7.
+4. If file exists and **mode=write** (or approving plan): **merge vs overwrite** — AskQuestion if available, otherwise ask in chat, before destructive write. Skip in **plan** mode until Phase 7.
 5. **AWS API probe** — `python3 bin/splunk_config_aws.py --check-auth --json` (needs `boto3`; no region required). Record result:
    - **Available** → Phase 4 uses API discovery; optional `--splunk-config-aws` at validate.
    - **Unavailable** → follow [aws-without-credentials.md](references/aws-without-credentials.md); do not block the workflow.
@@ -199,7 +201,7 @@ python3 bin/splunk_config_licenses.py --config config/splunk_config.yml --json
 ```
 
 1. Scan `../Software` for `*.lic` / `*.License` (SPA `splunk_software_dir`).
-2. If `proposed_splunk_license_file` is non-empty, AskQuestion: add to `splunk_defaults`? (especially for lab / app lab intent).
+2. If `proposed_splunk_license_file` is non-empty, ask (AskQuestion if available): add to `splunk_defaults`? (especially for lab / app lab intent).
 3. **If user accepts license file** → add `license_manager` role on a host in Phase 5b (typical lab: co-locate on `cm` or dedicated `mc`).
 4. **ITSI in config** → propose `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` when files exist; ensure `license_manager` role (Phase 5b).
 5. **License manager role** → `splunk_license_file` is required (schema). **License file in config** → `license_manager` role is required (schema).
@@ -280,7 +282,7 @@ ap ansible/deploy_site.yml
 
 Destroy: `ap ansible/destroy_terraform_aws.yml -e auto_approve=true`
 
-Optional: distill app-scope tests via [spa-add-test-scenario](.cursor/skills/spa-add-test-scenario/SKILL.md).
+Optional: distill app-scope tests via [spa-add-test-scenario](../spa-add-test-scenario/SKILL.md).
 
 ## Terminology
 

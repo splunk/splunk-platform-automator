@@ -3,7 +3,7 @@
 # Copy terraform.aws + os + splunk_defaults; add splunk_hosts from an SVA example.
 # Recommended OS (SPA preference): RHEL, Ubuntu LTS, Amazon Linux, Debian — latest AMI in region.
 # Guided setup: docs/Splunk_Config_Guided_Setup.md
-# Skill: .cursor/skills/spa-create-config/
+# Skill: skills/spa/spa-create-config/ (Cursor: .cursor/skills/ symlink)
 plugin: splunk-platform-automator
 
 general:

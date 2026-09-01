@@ -1,12 +1,15 @@
 ---
 name: spa-add-test-scenario
 description: >-
-  Create app scope scenario tests from a splunk_config.yml. Distills a source
-  config into tests/configs/app_scope/<name>/, generates expected_scope.json,
-  and adds optional assertions. Invoke in Cursor with /spa-add-test-scenario. Use
-  when adding app scope/routing test coverage
-  (deployer, CM, DS, direct). NOT for flat deployment test configs under
-  tests/configs/*.yml — see "Deployment test configs" below.
+  Use when adding app scope/routing test coverage (deployer, CM, DS, direct).
+  Distills splunk_config.yml into tests/configs/app_scope/<name>/ with
+  expected_scope.json. NOT for flat deployment test configs under tests/configs/*.yml.
+  In Cursor invoke with /spa-add-test-scenario.
+license: Proprietary
+compatibility: Requires SPA repo root (ansible.cfg, tests/). No AWS or SSH required.
+metadata:
+  product: splunk-platform-automator
+  version: "1.0.0"
 ---
 
 # spa-add-test-scenario — App scope test scenarios

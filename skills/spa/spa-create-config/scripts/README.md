@@ -12,7 +12,7 @@ Do not duplicate logic in this skill folder. See [references/aws-baseline.md](..
 
 ## SPA skill naming
 
-Project Cursor skills use the **`spa-`** prefix (folder name = `name` in SKILL.md frontmatter) so they are easy to invoke with `/spa-create-config`, `/spa-add-test-scenario`, etc.
+Canonical skills live under `skills/spa/` ([Agent Skills spec](https://agentskills.io/specification.md)). Cursor discovers them via `.cursor/skills/` symlinks. Use the **`spa-`** prefix (`spa-create-config`, `spa-add-test-scenario`) for `/` command names in Cursor.
 
 ## Dependencies
 

@@ -19,8 +19,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - **Bidirectional license / license_manager schema validation** – `splunk_license_file` now requires a `license_manager` host (and vice versa), including overrides on hosts and `splunk_environments`. Enforced in Pydantic (`schema.py`) and in `validate_splunk_config.sh` (default step 3/4). Optional `--check-licenses` also verifies files in `../Software` and ITSI license presence. `splunk_config_licenses.py` reports the same gaps in `warnings`. Unit tests in `tests/test_schema.py`.
 
 - **Guided `splunk_config.yml` setup (Cursor skill)** – Interactive workflow for designing AWS Linux deployments without hand-editing every field:
-  - **Skill**: `.cursor/skills/spa-create-config/` (`/spa-create-config` in Cursor) — phased flow (deployment intent, SVA topology, sizing, OS/SSH, role placement, apps, licenses, write, validate, handoff). SPA project skills use the `spa-*` prefix for `/` command discovery.
-  - **References**: architecture requirements, SVA questionnaire/map, AWS baseline, OS matrix (Amazon Linux 2023, RHEL 10, Ubuntu 24.04), role placement, apps questionnaire, license questionnaire, **RF/SF sizing** ([rf-sf-sizing.md](.cursor/skills/spa-create-config/references/rf-sf-sizing.md) — Splunk doc formulas for replication/search factors, peer minimums, multisite `total` calculation, ingest/storage hints), **AWS without credentials** ([aws-without-credentials.md](.cursor/skills/spa-create-config/references/aws-without-credentials.md) — Step 0 `--check-auth` probe, static AMI fallback, skip `--splunk-config-aws` when API unavailable), validation checklist.
+  - **Skill**: `skills/spa/spa-create-config/` ([Agent Skills spec](https://agentskills.io/specification.md); Cursor: `.cursor/skills/` symlink, `/spa-create-config`) — phased flow (deployment intent, SVA topology, sizing, OS/SSH, role placement, apps, licenses, write, validate, handoff). SPA project skills use the `spa-*` prefix for `/` command discovery.
+  - **References**: architecture requirements, SVA questionnaire/map, AWS baseline, OS matrix (Amazon Linux 2023, RHEL 10, Ubuntu 24.04), role placement, apps questionnaire, license questionnaire, **RF/SF sizing** ([rf-sf-sizing.md](skills/spa/spa-create-config/references/rf-sf-sizing.md) — Splunk doc formulas for replication/search factors, peer minimums, multisite `total` calculation, ingest/storage hints), **AWS without credentials** ([aws-without-credentials.md](skills/spa/spa-create-config/references/aws-without-credentials.md) — Step 0 `--check-auth` probe, static AMI fallback, skip `--splunk-config-aws` when API unavailable), validation checklist.
   - **Docs**: [Splunk_Config_Guided_Setup.md](docs/Splunk_Config_Guided_Setup.md); README link to guided setup.
 
 - **`bin/splunk_config_aws.py`** – AWS discovery and validation for `terraform.aws`:
@@ -39,7 +39,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 - **Example**: [examples/aws_lab_baseline.yml](examples/aws_lab_baseline.yml) — minimal lab starting point with recommended OS packages (including polkit).
 
-- **`spa-create-config` RF/SF guidance** – [sva-topology-map.md](.cursor/skills/spa-create-config/references/sva-topology-map.md) SVA code → lab RF/SF defaults and peer checklist; [rf-sf-sizing.md](.cursor/skills/spa-create-config/references/rf-sf-sizing.md) documents Splunk Enterprise rules (failure tolerance, multisite `total` minimum, `idxc_rf` for two-peer sites) and links to SVA M2/M12 and Deployment Capacity Manual performance/storage tables.
+- **`spa-create-config` RF/SF guidance** – [sva-topology-map.md](skills/spa/spa-create-config/references/sva-topology-map.md) SVA code → lab RF/SF defaults and peer checklist; [rf-sf-sizing.md](skills/spa/spa-create-config/references/rf-sf-sizing.md) documents Splunk Enterprise rules (failure tolerance, multisite `total` minimum, `idxc_rf` for two-peer sites) and links to SVA M2/M12 and Deployment Capacity Manual performance/storage tables.
 
 ### Changed
 
@@ -47,9 +47,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 - **`spa-create-config` AWS credential handling** — Step 0 runs `splunk_config_aws.py --check-auth` and records API availability; Phase 4 branches to static examples when creds or boto3 are missing; Phase 8 uses default `validate_splunk_config.sh` only (no `--splunk-config-aws`) until credentials work.
 
-- **`spa-create-config` plan mode** — Step 0 `plan` vs `write`; Phases 0a–6b unchanged; Phase 6c outputs architecture plan from [architecture-plan-template.md](.cursor/skills/spa-create-config/assets/architecture-plan-template.md); Phase 7–9 only after user approves plan.
+- **`spa-create-config` plan mode** — Step 0 `plan` vs `write`; Phases 0a–6b unchanged; Phase 6c outputs architecture plan from [architecture-plan-template.md](skills/spa/spa-create-config/assets/architecture-plan-template.md); Phase 7–9 only after user approves plan.
 
-- **`spa-create-config` secrets handling** — [secrets-handling.md](.cursor/skills/spa-create-config/references/secrets-handling.md): never display Splunkbase or AWS credential env values in chat or terminal; report set/not-set only; prefer `--check-auth` for AWS; forbid `echo`/`printenv` on secrets and `aws configure list`.
+- **`spa-create-config` secrets handling** — [secrets-handling.md](skills/spa/spa-create-config/references/secrets-handling.md): never display Splunkbase or AWS credential env values in chat or terminal; report set/not-set only; prefer `--check-auth` for AWS; forbid `echo`/`printenv` on secrets and `aws configure list`.
+
+- **Agent skills layout** — Canonical packages under `skills/spa/` ([Agent Skills](https://agentskills.io/specification.md) format); Cursor discovery via `.cursor/skills/` symlinks; [AGENTS.md](AGENTS.md) and [docs/Agent_Skills.md](docs/Agent_Skills.md) for cross-tool setup.
 
 - **Default AWS tag `SPADirName`** — Lab examples and [configuration_description.yml](examples/configuration_description.yml) include `SPADirName: "{{ playbook_dir | dirname | basename }}"` under `terraform.aws.tags` (SPA repo folder name on the controller).
 

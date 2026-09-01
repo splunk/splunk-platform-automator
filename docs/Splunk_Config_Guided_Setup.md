@@ -2,7 +2,7 @@
 
 Human-readable guide for building `config/splunk_config.yml` on **AWS Linux** with Splunk Platform Automator (SPA).
 
-For interactive agent assistance in Cursor, use the project skill: `.cursor/skills/spa-create-config/` (invoke with `/spa-create-config`).
+For interactive agent assistance in Cursor, use the project skill at [skills/spa/spa-create-config](../skills/spa/spa-create-config/) (Cursor discovers it via `.cursor/skills/` symlink; invoke with `/spa-create-config`). See [Agent Skills](Agent_Skills.md) for other tools.
 
 ## Quick path
 
@@ -132,7 +132,7 @@ ansible-galaxy collection install ansible.windows
 
 - [Ansible-Terraform AWS Integration](Ansible_Terraform_AWS_Integration.md)
 - [App Deployment Guide](App_Deployment_Guide.md)
-- Cursor skill: `.cursor/skills/spa-create-config/SKILL.md` (`/spa-create-config`)
+- Agent skill: [skills/spa/spa-create-config/SKILL.md](../skills/spa/spa-create-config/SKILL.md) (Cursor: `/spa-create-config` via `.cursor/skills/` symlink)
 
 ## Destroy
 
