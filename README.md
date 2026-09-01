@@ -2,10 +2,10 @@
 
 ![Splunk Platform Automator Overview](https://github.com/splunk/splunk-platform-automator/blob/master/pic/splunk-platform-automator_overview.png)
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](#license)
-[![Ansible](https://img.shields.io/badge/Ansible-2.10%2B-red.svg?logo=ansible&logoColor=white)](#supported-ansible-versions)
-[![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg?logo=python&logoColor=white)](#build-your-own-python-version)
-[![Terraform](https://img.shields.io/badge/Terraform-1.3.0%2B-purple.svg?logo=terraform&logoColor=white)](#option-b-aws-with-terraform-recommended-for-aws)
+![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
+![Ansible](https://img.shields.io/badge/Ansible-2.10%2B-red.svg?logo=ansible&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg?logo=python&logoColor=white)
+![Terraform](https://img.shields.io/badge/Terraform-1.3.0%2B-purple.svg?logo=terraform&logoColor=white)
 
 Ever wanted to build a complex Splunk environment for testing, which looks as close as possible to a production deployment? Need to test a Splunk upgrade? See how Splunk indexer- or search head clustering works? Or just need to verify some configuration changes? This is the right place for you! The aim of this framework is to produce a Splunk environment in a fast and convenient way for testing purposes or maybe also for production use. The created Splunk installation and setup follows best practices. There are many ways to configure a Splunk environment in terms of configuration file locations, so this is just another example how to do it.
 
@@ -22,7 +22,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
     - [Install Virtualbox support (optional)](#install-virtualbox-support-optional)
     - [Setup Windows Subsystem for Linux (WSL2)](#setup-windows-subsystem-for-linux-wsl2)
     - [Install and configure AWS support (optional - Legacy Vagrant Plugin)](#install-and-configure-aws-support-optional---legacy-vagrant-plugin)
-      - [Example Basic AWS Security Group 'Splunk\_Basic'](#example-basic-aws-security-group-splunk_basic)
+      - [Example Basic AWS Security Group 'SplunkBasic'](#example-basic-aws-security-group-splunk_basic)
         - [Inbound Rules](#inbound-rules)
         - [Outbound Rules](#outbound-rules)
   - [Upgrade](#upgrade)
@@ -58,6 +58,8 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
     - [Supported Ansible Versions](#supported-ansible-versions)
   - [License](#license)
 
+
+
 ## Support
 
 **Note: This framework is not officially supported by Splunk. I am developing this on best effort in my spare time.**
@@ -81,6 +83,8 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
 - Can deploy Splunk on existing hosts (virtual or physical)
 - Developed and tested on MacOSX but should support Linux as well.
 
+
+
 ## Roadmap
 
 See the upcoming features in the [Roadmap](ROADMAP.md)
@@ -96,19 +100,19 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 ### Framework Installation
 
 1. Make sure you have Python 3.9+ installed. If not available for your distro, you can [build your own Python version](#build-your-own-python-version).
-    - [Install needed python libraries](#install-needed-python-libraries-in-your-virtualenv)
-1. (Optional) Download and install [Vagrant](https://www.vagrantup.com). If you are using the VirtualBox plugin.
-1. Install Ansible, I personally prefer [Brew](https://brew.sh) (on OSX) which makes it as easy as `brew install ansible`. If you use Brew, also install pydantic (required for config schema validation): `brew install pydantic`. For [supported Ansible versions check here](#supported-ansible-versions)
-1. Create a folder called `Vagrant` and change into it.
-1. Download and extract a [Splunk Platform Automator release here](https://github.com/splunk/splunk-platform-automator/tags) or clone from GitHub when using the master branch: `git clone https://github.com/splunk/splunk-platform-automator.git`
-1. Create a folder called `Software`.
-1. Download the tgz. archive for the Splunk Software and put in the `Software` directory
-    - [Splunk Enterprise](http://www.splunk.com/en_us/download/splunk-enterprise.html)
+  - [Install needed python libraries](#install-needed-python-libraries-in-your-virtualenv)
+2. (Optional) Download and install [Vagrant](https://www.vagrantup.com). If you are using the VirtualBox plugin.
+3. Install Ansible, I personally prefer [Brew](https://brew.sh) (on OSX) which makes it as easy as `brew install ansible`. If you use Brew, also install pydantic (required for config schema validation): `brew install pydantic`. For [supported Ansible versions check here](#supported-ansible-versions)
+4. Create a folder called `Vagrant` and change into it.
+5. Download and extract a [Splunk Platform Automator release here](https://github.com/splunk/splunk-platform-automator/tags) or clone from GitHub when using the master branch: `git clone https://github.com/splunk/splunk-platform-automator.git`
+6. Create a folder called `Software`.
+7. Download the tgz. archive for the Splunk Software and put in the `Software` directory
+  - [Splunk Enterprise](http://www.splunk.com/en_us/download/splunk-enterprise.html)
     - [Splunk Universal Forwarder](http://www.splunk.com/en_us/download/universal-forwarder.html)
-1. Copy Splunk Professional Services Best Practices Base Config Apps and extract them into the `Software` directory. The Apps are not available for public download, please contact your Splunk Professional Services representative to get them.
-    - Configurations Base Apps
+8. Copy Splunk Professional Services Best Practices Base Config Apps and extract them into the `Software` directory. The Apps are not available for public download, please contact your Splunk Professional Services representative to get them.
+  - Configurations Base Apps
     - Configurations Cluster Apps
-1. If you have a Splunk License file, link it to the name `Splunk_Enterprise.lic` inside the `Software` directory.
+9. If you have a Splunk License file, link it to the name `Splunk_Enterprise.lic` inside the `Software` directory.
 
 Your directory structure should now look like this:
 
@@ -116,15 +120,19 @@ Your directory structure should now look like this:
 ./Vagrant/splunk-platform-automator/...
 ./Vagrant/Software/Configurations - Base/...
 ./Vagrant/Software/Configurations - Index Replication/...
-./Vagrant/Software/splunk-8.1.2-545206cc9f70-Linux-x86_64.tgz
-./Vagrant/Software/splunkforwarder-8.1.2-545206cc9f70-Linux-x86_64.tgz
+./Vagrant/Software/splunk-10.4.0-f798d4d49089-linux-amd64.tgz
+./Vagrant/Software/splunkforwarder-10.4.0-f798d4d49089-linux-amd64.tgz
 ./Vagrant/Software/Splunk_Enterprise.lic
 ```
+
+
 
 ### Install Virtualbox support (optional)
 
 1. Download and install [Virtualbox](https://www.virtualbox.org/wiki/Downloads).
-1. Install the Virtualbox plugin for Vagrant: `vagrant plugin install vagrant-vbguest`
+2. Install the Virtualbox plugin for Vagrant: `vagrant plugin install vagrant-vbguest`
+
+
 
 ### Setup Windows Subsystem for Linux (WSL2)
 
@@ -147,24 +155,31 @@ export VAGRANT_WSL_ENABLE_WINDOWS_ACCESS="1"
 export PATH="$PATH:/mnt/c/Program Files/Oracle/VirtualBox"
 ```
 
+
+
 ### Install and configure AWS support (optional - Legacy Vagrant Plugin)
 
 > ⚠️ **Note:** This section describes the legacy Vagrant AWS plugin setup. For new AWS deployments, we recommend using the [Terraform approach](#option-b-aws-with-terraform-recommended-for-aws) instead, which is more modern and easier to manage.
 
 1. Install either of the aws vagrant plugins:
-    - [vagrant-aws](https://github.com/mitchellh/vagrant-aws): This is te orig plugin but not maintained anymore and has issues with newer vagrant versions on OSX. The last working version of vagrant is 2.3.4. Install it with `vagrant plugin install vagrant-aws`
+  - [vagrant-aws](https://github.com/mitchellh/vagrant-aws): This is te orig plugin but not maintained anymore and has issues with newer vagrant versions on OSX. The last working version of vagrant is 2.3.4. Install it with `vagrant plugin install vagrant-aws`
     - [vagrant-gecko-aws](https://github.com/geckoboard/vagrant-aws): This is a clone of the orig project and does support newer versions (up to 2.3.7) of vagrant. Install it with `vagrant plugin install vagrant-gecko-aws --entry-point vagrant-aws`
-1. Download the vagrant dummy box for aws: `vagrant box add aws-dummy https://github.com/mitchellh/vagrant-aws/raw/master/dummy.box`
-1. Generate AWS ACCESS Keys, described [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html#cli-configure-quickstart-creds)
-1. Optional, but recommended:
-    - Add AWS_ACCESS_KEY_ID=\<your access key ID\> as environment variable
-    - Add AWS_SECRET_ACCESS_KEY=\<your secret access key\> as environment variable
-1. Create an ssh key pair described [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair) and store the public key on your disk for later reference in the config file
-1. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it for example 'Splunk_Basic' and add the following TCP ports
+2. Download the vagrant dummy box for aws: `vagrant box add aws-dummy https://github.com/mitchellh/vagrant-aws/raw/master/dummy.box`
+3. Generate AWS ACCESS Keys, described [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html#cli-configure-quickstart-creds)
+4. Optional, but recommended:
+  - Add AWS_ACCESS_KEY_ID=your access key ID as environment variable
+    - Add AWS_SECRET_ACCESS_KEY=your secret access key as environment variable
+5. Create an ssh key pair described [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair) and store the public key on your disk for later reference in the config file
+6. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it for example 'Splunk_Basic' and add the following TCP ports
+
+
 
 #### Example Basic AWS Security Group 'Splunk_Basic'
 
+
+
 ##### Inbound Rules
+
 
 | Type       | Protocol | Port Range | Source        | Description                |
 | ---------- | -------- | ---------- | ------------- | -------------------------- |
@@ -172,11 +187,18 @@ export PATH="$PATH:/mnt/c/Program Files/Oracle/VirtualBox"
 | Custom TCP | TCP      | 8000       | 0.0.0.0/0     | Splunk Web Interface       |
 | SSH        | TCP      | 22         | 0.0.0.0/0     | SSH to all hosts           |
 
+
+
+
 ##### Outbound Rules
 
-| Type        | Protocol | Port Range | Destination   | Description               |
-| ----------- | -------- | ---------- | ------------- | ------------------------- |
-| All Traffic | All      | All        | 0.0.0.0/0     | Allow all traffic         |
+
+| Type        | Protocol | Port Range | Destination | Description       |
+| ----------- | -------- | ---------- | ----------- | ----------------- |
+| All Traffic | All      | All        | 0.0.0.0/0   | Allow all traffic |
+
+
+
 
 ## Upgrade
 
@@ -185,6 +207,8 @@ To upgrade your Splunk Platform Automator, just update your local code from the 
 ```bash
 git pull
 ```
+
+
 
 ### Migrate existing Splunk Platform Automator Environments from 1.x to 2.x
 
@@ -200,6 +224,8 @@ To build your own windows vagrant image follow [Setup Windows Vagrant image](doc
 
 ## Framework Usage
 
+
+
 ### First start and initialization
 
 Run vagrant the first time to initialize itself and create needed directories. You must execute vagrant always in side the Splunk Platform Automator directory where the `Vagrantfile` sits, otherwise it will not work correctly. You will see the usage page, when executing vagrant without options.
@@ -208,6 +234,8 @@ Run vagrant the first time to initialize itself and create needed directories. Y
 cd splunk-platform-automator
 vagrant
 ```
+
+
 
 ### Copy a configuration file
 
@@ -244,6 +272,8 @@ vagrant up; ansible-playbook ansible/deploy_site.yml
 ```
 
 ---
+
+
 
 #### Option B: AWS with Terraform (Recommended for AWS)
 
@@ -316,6 +346,8 @@ ansible-playbook ansible/destroy_terraform_aws.yml
 
 ---
 
+
+
 #### Option C: AWS with Vagrant Plugin (Legacy)
 
 **Traditional Vagrant-based approach using the vagrant-aws plugin.**
@@ -325,9 +357,11 @@ ansible-playbook ansible/destroy_terraform_aws.yml
 To use the Vagrant AWS plugin:
 
 1. Follow the [AWS plugin installation instructions](#install-and-configure-aws-support-optional---legacy-vagrant-plugin)
-1. Configure `config/splunk_config.yml` with an `aws` section (see [splunk_config_aws.yml](examples/splunk_config_aws.yml))
-1. Run `vagrant up` to create instances
-1. Run `ansible-playbook ansible/deploy_site.yml` to deploy Splunk
+2. Configure `config/splunk_config.yml` with an `aws` section (see [splunk_config_aws.yml](examples/splunk_config_aws.yml))
+3. Run `vagrant up` to create instances
+4. Run `ansible-playbook ansible/deploy_site.yml` to deploy Splunk
+
+
 
 ### Stop hosts
 
@@ -337,6 +371,8 @@ This will gracefully shutdown all the virtual machines.
 vagrant halt
 ```
 
+
+
 ### Destroy hosts
 
 You can destroy all the virtual machines with one command.
@@ -344,6 +380,8 @@ You can destroy all the virtual machines with one command.
 ```bash
 vagrant destroy [-f] [<hostname>]
 ```
+
+
 
 ### Rerun provisioning
 
@@ -353,7 +391,11 @@ Ansible playbooks can be run over and over again. If the virtual machine is alre
 ansible-playbook ansible/deploy_site.yml [--limit <hostname>]
 ```
 
+
+
 ### Login to the hosts
+
+
 
 #### Login to Splunk Browser Interface
 
@@ -363,6 +405,8 @@ If something changes along the way and you need to update the linkpage just call
 ```bash
 ansible-playbook ansible/create_linkpage.yml
 ```
+
+
 
 #### Login with spash (Splunk Platform Automator Shell)
 
@@ -381,6 +425,8 @@ ansible-playbook ansible/create_linkpage.yml
 ./bin/spash idx1 -L 8089:localhost:8089
 ```
 
+
+
 #### Login by SSH
 
 Vagrant deployes an ssh key for the vagrant user to login without a password.
@@ -388,6 +434,8 @@ Vagrant deployes an ssh key for the vagrant user to login without a password.
 ```bash
 vagrant ssh <hostname>
 ```
+
+
 
 #### Install additional SSH public keys
 
@@ -406,7 +454,11 @@ To deploy keys without running a full site deployment, use the standalone playbo
 ansible-playbook ansible/install_ssh_keys.yml
 ```
 
+
+
 ### Environment Users
+
+
 
 #### User vagrant
 
@@ -420,7 +472,11 @@ Splunk Enterprise is installed and run as user `splunk`. You can switch to this 
 alias
 ```
 
+
+
 ### Copy files
+
+
 
 #### Copy with spash (Splunk Platform Automator Shell)
 
@@ -434,6 +490,8 @@ alias
 ./bin/spash -c idx1:/opt/splunk/etc/system/local/server.conf .
 ```
 
+
+
 #### Copy with vagrant scp
 
 You can copy files from your host system to the virtual nodes with the vagrant command. You need to install the vagrant plugin `vagrant-scp` to have this feature available. Check [Vagrant Docs](https://www.vagrantup.com/docs/plugins/usage.html) on how to do this.
@@ -442,11 +500,15 @@ You can copy files from your host system to the virtual nodes with the vagrant c
 vagrant scp <files> <target_on_dest> [vm_name]
 ```
 
+
+
 ##### scp example
 
 ```bash
 vagrant scp ../app_dir/splunk-add-on-for-unix-and-linux_831.tgz /var/tmp uf
 ```
+
+
 
 ### Ansible playbooks only
 
@@ -477,6 +539,8 @@ And then some more ansible prerequisites with this playbook
 ansible-playbook ansible/test_ansible_prereqs.yml
 ```
 
+
+
 ### Build your own Python version
 
 You can build your own python version, if you need a specific python version or your local one is outdated.
@@ -496,6 +560,8 @@ cd Python-3.9.9/
 make
 make install
 ```
+
+
 
 ### Create vitualenv for specific Ansible version
 
@@ -537,6 +603,8 @@ virtual environment again with the command from above.
 source ansible_414/bin/activate
 ```
 
+
+
 ## Known issues, limitations
 
 - Ubuntu 20.04 fails on checking the systemd settings and needs a more current ansible version. See [service_facts broken in Ubuntu 20.04](https://github.com/DataDog/ansible-datadog/issues/274)
@@ -546,6 +614,8 @@ source ansible_414/bin/activate
 - Virtualbox has some issues with clock time skew, when not using virtualbox additions. I added a workaround with forcing time clock sync every 5 minutes. A working internet connection on the Virtualbox host is needed.
 - AWS: Due to security reasons the login page with the admin password information has been disabled and https is enabled with splunk's own self signed certs.
 - AWS: OS images (AMI) do not have ntp configured by default. This will be added in Splunk Platform Automator later.
+
+
 
 ### Supported Ansible Versions
 
@@ -565,7 +635,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-<http://www.apache.org/licenses/LICENSE-2.0>
+[http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0)
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
