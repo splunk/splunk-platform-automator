@@ -173,7 +173,7 @@ splunk_hosts:
         root_volume_type: "gp3"
     os:
       packages:
-        - java-25-openjdk # Redhat 10
+        - java-21-openjdk # RHEL 10 — ITSI max Java 21
 
   # Standalone Search Head
   - name: sh
@@ -186,7 +186,7 @@ splunk_hosts:
         root_volume_type: "gp3"
     os:
       packages:
-        - java-25-openjdk # Redhat 10
+        - java-21-openjdk # RHEL 10 — ITSI max Java 21
 
   # Universal Forwarder
   - name: uf

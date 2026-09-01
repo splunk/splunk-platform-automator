@@ -10,8 +10,10 @@ general:
 
 os:
   # time_zone: "Europe/Zurich"
-  # Set hostname to ansible_inventory name
   set_hostname: true
+  packages:
+    - acl
+  disable_selinux: true
 
 # Terraform configuration for AWS infrastructure
 terraform:
@@ -19,7 +21,8 @@ terraform:
     #access_key_id: '' # defaults to ENV['AWS_ACCESS_KEY_ID']
     #secret_access_key: '' # ENV['AWS_SECRET_ACCESS_KEY']
     region: "eu-central-1"
-    ami_id: "ami-0badcc5b522737046" # Redhat 8 (eu-central-1)
+    ami_id: "ami-0badcc5b522737046" # RHEL 8 (eu-central-1)
+    ssh_username: "ec2-user"  # use "ubuntu" for Ubuntu AMIs
     key_name: "aws_key"
     ssh_private_key_file: "~/.ssh/aws_key.pem"
     security_group_names: ["Splunk_Basic"]

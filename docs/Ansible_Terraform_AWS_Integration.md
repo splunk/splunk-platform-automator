@@ -497,6 +497,7 @@ terraform:
 
 ## Additional Resources
 
+- [Splunk Config Guided Setup](Splunk_Config_Guided_Setup.md) — interactive workflow, OS/SSH, SVA links, validation
 - [Terraform AWS README](../terraform/aws/README.md)
 - [Terraform AWS Provider Documentation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 - [AWS EC2 Instance Types](https://aws.amazon.com/ec2/instance-types/)

@@ -1,0 +1,52 @@
+---
+# AWS lab baseline — splunk_config.yml skeleton (no topology hosts/apps)
+# Copy terraform.aws + os + splunk_defaults; add splunk_hosts from an SVA example.
+# Guided setup: docs/Splunk_Config_Guided_Setup.md
+# Skill: .cursor/skills/create-splunk-config/
+plugin: splunk-platform-automator
+
+general:
+  url_locale: en-US
+
+os:
+  set_hostname: true
+  packages:
+    - acl
+  disable_selinux: true
+
+terraform:
+  aws:
+    region: "eu-central-1"
+    ami_id: "ami-0f5fb818aeff8f5fb"  # RHEL 10 (eu-central-1) — verify in AWS console or splunk_config_aws.py
+    ssh_username: "ec2-user"
+    key_name: "aws_key"
+    ssh_private_key_file: "~/.ssh/aws_key.pem"
+    security_group_names: ["Splunk_Basic"]
+    instance_type: "t3.medium"
+    root_volume_size: 50
+    root_volume_type: "gp3"
+    tags:
+      Env: "Splunk Lab"
+      splunkit_data_classification: "public"
+      splunkit_environment_type: "non-prd"
+
+splunk_defaults:
+  splunk_env_name: splk
+  splunk_download:
+    splunk: true
+    splunkforwarder: true
+  splunk_set_servername: true
+  splunk_set_default_hostname: true
+  splunk_loginpage_print_userpw: false
+  splunk_ssl:
+    web:
+      enable: true
+    inputs:
+      enable: true
+    outputs:
+      enable: true
+  splunk_volume_defaults:
+    VolumeDataSize_Free_MB: 5000
+
+# Add splunk_idxclusters, splunk_shclusters, and splunk_hosts from examples/
+# e.g. examples/4idxc2site_sh.yml (M2), examples/cm_2idxc_sh_uf.yml (C1)

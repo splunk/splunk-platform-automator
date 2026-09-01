@@ -78,6 +78,33 @@ os:
   splunk_group_create: false
   splunk_user_create: false
 
+# Terraform AWS infrastructure (recommended for AWS deployments)
+# See docs/Ansible_Terraform_AWS_Integration.md and docs/Splunk_Config_Guided_Setup.md
+terraform:
+  aws:
+    # access_key_id / secret_access_key default from AWS env vars
+    region: "eu-central-1"
+    ami_id: "ami-03cbad7144aeda3eb"  # RHEL 9 (eu-central-1) — verify per region/OS
+  # SSH user for Ansible/terraform remote commands — must match AMI (ec2-user for RHEL/AL; ubuntu for Ubuntu)
+    ssh_username: "ec2-user"
+    key_name: "aws_key"
+    ssh_private_key_file: "~/.ssh/aws_key.pem"
+    security_group_names: ["Splunk_Basic"]
+    instance_type: "t2.micro"
+    root_volume_size: 50
+    root_volume_type: "gp3"
+    # subnet_id: "subnet-0123456789abcdef0"
+    tags:
+      Env: "Splunk Lab"
+    # Per-host overrides in splunk_hosts[].terraform.aws
+
+# Pair global os block with AMI OS — RHEL example:
+# os:
+#   set_hostname: true
+#   packages: [acl]
+#   disable_selinux: true
+# Ubuntu: disable_apparmor: true; ssh_username: ubuntu
+
 splunk_defaults:
   # Defines the environment name and org name for the base_config apps
   splunk_env_name: splunk1
