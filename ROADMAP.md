@@ -8,12 +8,25 @@ Shipped work stays checked. Git clone remains the contributor path. Splunk insta
 
 Homebrew installs the **shared** framework once (playbooks, Terraform, skills, `spa` binary). `spa init` writes **config only** for that lab. Linux should feel the same: install the prefix, then `spa init` / `spa deploy` — no per-lab git clone.
 
+**Contract:** `SPA_HOME` is the framework (`ansible/`, Terraform modules, `skills/`, `bin/`). `SPA_LAB_DIR` is the lab (`splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state). Unset both → the git clone; today's `ansible-playbook` workflow is unchanged. When they differ, do not write lab state into the prefix (Homebrew / `/opt/spa` would lose it on upgrade).
+
+Ship as **four minors**, in order. Pickup: the issue for that milestone (not a Cursor plan). After a milestone ships: check it here, close the issue, CHANGELOG, cut the minor. Do not start the next until the prior is in a released tag.
+
+- [ ] **M1** Path contract + lab scaffold — [#46](https://github.com/splunk/splunk-platform-automator/issues/46)
+- [ ] **M2** `spa` CLI over the clone prefix — [#47](https://github.com/splunk/splunk-platform-automator/issues/47)
+- [ ] **M3** Homebrew tap + framework tarball — [#48](https://github.com/splunk/splunk-platform-automator/issues/48)
+- [ ] **M4** Native Linux packages + `curl | sh` — [#49](https://github.com/splunk/splunk-platform-automator/issues/49)
+
+### Outcomes
+
 - [x] Semver GitHub Releases from [CHANGELOG.md](CHANGELOG.md) ([RELEASE.md](RELEASE.md))
-- [ ] Homebrew tap (`splunk/tap`) on **macOS and Linux**: shared prefix + `spa` binary (depends on ansible, terraform, python, pydantic). Same formula; [Homebrew on Linux](https://docs.brew.sh/Homebrew-on-Linux) is the primary Linux path
-- [ ] Native Linux packages from the same release tarball as the brew formula: `.deb` (apt), `.rpm` (dnf/yum), and a tarball into `/opt/spa` with `spa` on `PATH` (`SPA_HOME` or prefix next to the binary)
-- [ ] Optional `curl | sh` installer that uses the brew formula when Homebrew is present, otherwise the Linux tarball
-- [ ] `spa init` writes lab config only (`splunk_config.yml`, optional `.spa.yml` for Software/license paths) — no per-lab clone of `ansible/`
-- [ ] `spa` commands use the shared prefix (`init`, `validate`, `provision`, `deploy`, `destroy`, `shell`, and the rest of the playbook surface)
+- [ ] `SPA_HOME` / `SPA_LAB_DIR` path contract; clone defaults keep today's layout (**M1**)
+- [ ] `bin/init_lab_dir.sh` scaffolds a lab dir (example config, `.spa.yml`; no copy of `ansible/`) (**M1**); `spa init` wraps it (**M2**)
+- [ ] Separate lab dirs against one clone `SPA_HOME` (**M1**)
+- [ ] `spa` commands use the shared prefix (`init`, `validate`, `provision`, `deploy`, `destroy`, `shell`, and the rest of the playbook surface) (**M2**)
+- [ ] Homebrew tap (`splunk/tap`) on **macOS and Linux**: shared prefix + `spa` binary (depends on ansible, terraform, python, pydantic). Same formula; [Homebrew on Linux](https://docs.brew.sh/Homebrew-on-Linux) is the primary Linux path (**M3**)
+- [ ] Native Linux packages from the same release tarball as the brew formula: `.deb` (apt), `.rpm` (dnf/yum), and a tarball into `/opt/spa` with `spa` on `PATH` (**M4**)
+- [ ] Optional `curl | sh` installer that uses the brew formula when Homebrew is present, otherwise the Linux tarball (**M4**)
 - [ ] Optional later: Ansible collection extract of roles/plugins — not the primary install
 
 ## Agent platform and CLI
