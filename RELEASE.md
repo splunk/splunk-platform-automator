@@ -49,7 +49,7 @@ cat VERSION
    git push origin master && git push origin vX.Y.Z
    ```
 
-`--push` only pushes `master` and `vX.Y.Z`. The GitHub Release is created by [`.github/workflows/release.yml`](.github/workflows/release.yml) **after** local tests pass on that tag. If the tag workflow fails, you get a tag but **no** Release page. Do not run `gh release create` until that workflow is green (or you are intentionally publishing a known-good tag).
+`--push` only pushes `master` and `vX.Y.Z`. The GitHub Release is created by [`.github/workflows/release.yml`](.github/workflows/release.yml) **after** local tests pass on that tag. Notes come from `CHANGELOG.md` plus a Full changelog link to that tag (same footer as v2.4.0). If the tag workflow fails, you get a tag but **no** Release page. Do not run `gh release create` until that workflow is green (or you are intentionally publishing a known-good tag).
 
 ## CI
 
