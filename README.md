@@ -89,7 +89,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
 
 ## Roadmap
 
-See the upcoming features in the [Roadmap](ROADMAP.md)
+Shipped and upcoming work is tracked in the [Roadmap](ROADMAP.md).
 
 ## Changelog
 
