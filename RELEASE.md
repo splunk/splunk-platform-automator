@@ -62,6 +62,8 @@ CI does **not** provision AWS, download Splunkbase apps, or read `config/splunk_
 
 After the workflow exists, enable **branch protection on `master`**: require the `CI / Local tests` check, and disallow force-push.
 
+Merged PR head branches are deleted automatically (`delete_branch_on_merge` on the GitHub repo). This is a repository setting, not an in-tree file: Settings → General → Pull Requests → **Automatically delete head branches**.
+
 ## Manual lab / AWS (not in CI)
 
 Run these when the delta warrants it (app routing, ITSI, Terraform), not for every patch. See [docs/App_Deployment_Testing.md](docs/App_Deployment_Testing.md).
