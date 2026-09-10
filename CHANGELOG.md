@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **GitHub Release notes** – Each release page ends with a Full changelog link to `CHANGELOG.md` at that tag, matching v2.4.0.
+
 ## [2.5.2](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.5.2) - 2026-09-10
 
 ### Fixed

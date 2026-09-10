@@ -3,9 +3,24 @@
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
+
+DEFAULT_REPO_URL = "https://github.com/splunk/splunk-platform-automator"
+
+
+def github_repo_url() -> str:
+    slug = (os.environ.get("GITHUB_REPOSITORY") or "").strip()
+    if slug:
+        return f"https://github.com/{slug}"
+    return DEFAULT_REPO_URL
+
+
+def full_changelog_url(version: str, repo_url: str | None = None) -> str:
+    base = (repo_url or github_repo_url()).rstrip("/")
+    return f"{base}/blob/v{version}/CHANGELOG.md"
 
 
 def extract_notes(changelog: str, version: str) -> str:
@@ -24,6 +39,13 @@ def extract_notes(changelog: str, version: str) -> str:
     return body
 
 
+def format_release_notes(changelog: str, version: str, repo_url: str | None = None) -> str:
+    """Section body plus the Full changelog footer used on v2.4.0."""
+    body = extract_notes(changelog, version)
+    url = full_changelog_url(version, repo_url)
+    return f"{body}\n\nFull changelog: [CHANGELOG.md]({url})"
+
+
 def main() -> int:
     if len(sys.argv) != 2 or sys.argv[1] in ("-h", "--help"):
         print(f"Usage: {sys.argv[0]} X.Y.Z", file=sys.stderr)
@@ -31,7 +53,7 @@ def main() -> int:
     version = sys.argv[1]
     changelog = Path(__file__).resolve().parent.parent / "CHANGELOG.md"
     try:
-        print(extract_notes(changelog.read_text(encoding="utf-8"), version))
+        print(format_release_notes(changelog.read_text(encoding="utf-8"), version))
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
