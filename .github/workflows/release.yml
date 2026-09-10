@@ -32,7 +32,7 @@ jobs:
       - name: Run local tests
         run: ./tests/run_local_tests.sh
 
-      - name: Create GitHub Release if missing
+      - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -40,9 +40,10 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           VERSION="${TAG#v}"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists."
+            echo "Release $TAG already exists (created before this workflow)."
             exit 0
           fi
           NOTES_FILE="$(mktemp)"
           python3 scripts/changelog_notes.py "$VERSION" > "$NOTES_FILE"
           gh release create "$TAG" --title "$TAG" --notes-file "$NOTES_FILE"
+          echo "Created GitHub Release ${TAG} after tests passed."

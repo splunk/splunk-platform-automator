@@ -35,7 +35,7 @@ cat VERSION
 
    ```bash
    ./scripts/release.sh minor              # local commit + tag only
-   ./scripts/release.sh minor --push       # also push and create the GitHub Release
+   ./scripts/release.sh minor --push       # push master + tag; wait for CI
    ./scripts/release.sh minor --push --yes
    ```
 
@@ -47,11 +47,9 @@ cat VERSION
    ./scripts/release.sh minor --push
    # or:
    git push origin master && git push origin vX.Y.Z
-   gh release create vX.Y.Z --title vX.Y.Z \
-     --notes-file <(python3 scripts/changelog_notes.py X.Y.Z)
    ```
 
-`--push` requires the [GitHub CLI](https://cli.github.com/) (`gh`) authenticated to this repo’s `origin`. It creates the GitHub Release from the new changelog section. The optional tag workflow (`.github/workflows/release.yml`) creates the same Release if the tag was pushed without `gh`.
+`--push` only pushes `master` and `vX.Y.Z`. The GitHub Release is created by [`.github/workflows/release.yml`](.github/workflows/release.yml) **after** local tests pass on that tag. If the tag workflow fails, you get a tag but **no** Release page. Do not run `gh release create` until that workflow is green (or you are intentionally publishing a known-good tag).
 
 ## CI
 
@@ -90,4 +88,4 @@ ansible-playbook ansible/verification/verify_app_deployment.yml -e fail_on_misma
 | Local tests | `./tests/run_local_tests.sh` |
 | Pre-release check | `./scripts/release.sh --check` |
 | Cut release | `./scripts/release.sh patch\|minor\|major` |
-| Cut + publish | `./scripts/release.sh minor --push --yes` |
+| Cut + push tag | `./scripts/release.sh minor --push --yes` (Release after tag CI) |

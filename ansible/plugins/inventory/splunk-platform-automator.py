@@ -150,6 +150,14 @@ class InventoryModule(BaseInventoryPlugin):
 
         return merged_dict
 
+    def _resolve_override_dir(self, cwd, configured, env_var):
+        '''Resolve a Software/baseconfig directory, honoring an absolute or relative env override.'''
+        override = os.environ.get(env_var, '').strip()
+        rel = override or configured
+        if os.path.isabs(rel):
+            return rel
+        return os.path.join(cwd, rel)
+
     def _check_splunk_archive(self,arch_type,splunk_architecture,splunk_version,directory):
         '''Check if splunk version archive is available'''
         if splunk_version == 'latest':
@@ -270,16 +278,11 @@ class InventoryModule(BaseInventoryPlugin):
             self.groups['all']['splunk_app_deployment'] = self.configfiles['splunk_app_deployment']
 
         # Check Base Config App availability
-        # SPA_BASECONFIG_DIR overrides the configured path (used by local/CI tests
-        # that only need inventory parse, not real PS baseconfig apps).
+        # SPA_BASECONFIG_DIR / SPA_SOFTWARE_DIR override configured paths (local/CI tests).
         cwd = os.getcwd()
-        configured_baseconfig_dir = self.groups['all']['splunk_baseconfig_dir']
-        override_baseconfig_dir = os.environ.get('SPA_BASECONFIG_DIR', '').strip()
-        baseconfig_rel = override_baseconfig_dir or configured_baseconfig_dir
-        if os.path.isabs(baseconfig_rel):
-            splunk_baseconfig_dir = baseconfig_rel
-        else:
-            splunk_baseconfig_dir = os.path.join(cwd, baseconfig_rel)
+        splunk_baseconfig_dir = self._resolve_override_dir(
+            cwd, self.groups['all']['splunk_baseconfig_dir'], 'SPA_BASECONFIG_DIR'
+        )
         check_base = glob.glob(os.path.join(splunk_baseconfig_dir, "*/org_ds_secure_server"))
         check_cluster = glob.glob(os.path.join(splunk_baseconfig_dir, "*/org_cluster_manager_base"))
         if len(check_base) < 1 or len(check_cluster) < 1:
@@ -427,7 +430,12 @@ class InventoryModule(BaseInventoryPlugin):
                             else:
                                 license_list.append(license_file_value)
                             for license_file_name in license_list:
-                                license_file = os.path.join(cwd, self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'],license_file_name)
+                                software_dir = self._resolve_override_dir(
+                                    cwd,
+                                    self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'],
+                                    'SPA_SOFTWARE_DIR',
+                                )
+                                license_file = os.path.join(software_dir, license_file_name)
                                 if not os.path.isfile(license_file):
                                     raise AnsibleParserError("Error: Cannot read license file %s" % license_file)
 
@@ -515,12 +523,15 @@ class InventoryModule(BaseInventoryPlugin):
                         splunk_architecture = self.environments[splunk_env]['splunk_defaults']['splunk_architecture']
                     else:
                         splunk_architecture = 'amd64'
-                    directory = os.path.join(cwd, self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'])
+                    directory = self._resolve_override_dir(
+                        cwd,
+                        self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'],
+                        'SPA_SOFTWARE_DIR',
+                    )
                     if role == 'universal_forwarder':
                         arch_type = 'splunkforwarder'
                     elif role == 'universal_forwarder_windows':
                         arch_type = 'windowsforwarder'
-                        directory = os.path.join(cwd,self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'])
                     else:
                         arch_type = 'splunk'
                     self.versions = self._merge_dict(self.versions,{splunk_env: {arch_type+'_'+splunk_version+'_'+splunk_architecture: {'arch_type':arch_type,'splunk_version':splunk_version,'splunk_architecture':splunk_architecture}}})
@@ -559,7 +570,11 @@ class InventoryModule(BaseInventoryPlugin):
         # Check the archive availability for all versions needed
         for splunk_env, versions_combs in self.versions.items():
             #print("Checking Versions combs: %s in splunk_env %s" % (versions_combs, splunk_env))
-            directory = os.path.join(cwd,self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'])
+            directory = self._resolve_override_dir(
+                cwd,
+                self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'],
+                'SPA_SOFTWARE_DIR',
+            )
             for versions_comb, versions_values in versions_combs.items():
                 arch_type = versions_values['arch_type']
                 splunk_version = versions_values['splunk_version']

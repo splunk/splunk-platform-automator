@@ -24,7 +24,7 @@ Usage: $0 [--check] [patch|minor|major] [--push] [--yes] [--remote NAME] [--bran
 
   --check              Run validation and local tests only (no version bump)
   patch|minor|major    Semver bump (local commit + vX.Y.Z tag)
-  --push               Push branch + tag, then create the GitHub Release
+  --push               Push branch + tag (GitHub Release is created only after CI passes)
   --yes                Skip confirmation before --push
   --remote NAME        Git remote (default: origin)
   --branch NAME        Expected branch (default: master)
@@ -71,34 +71,11 @@ confirm_push() {
         return 0
     fi
     local ans
-    read -r -p "Push ${GIT_REMOTE}/${GIT_BRANCH} and tag v${version}, then create GitHub Release? [y/N] " ans
+    read -r -p "Push ${GIT_REMOTE}/${GIT_BRANCH} and tag v${version}? Release is created only if the tag workflow passes. [y/N] " ans
     case "$ans" in
         [yY]|[yY][eE][sS]) return 0 ;;
         *) echo "Aborted."; exit 1 ;;
     esac
-}
-
-create_github_release() {
-    local version="$1"
-    local tag="v${version}"
-    local notes_file
-
-    if ! command -v gh >/dev/null 2>&1; then
-        echo "ERROR: gh CLI is required to create a GitHub Release." >&2
-        echo "       Install GitHub CLI, or create the release manually after pushing ${tag}." >&2
-        exit 1
-    fi
-
-    if gh release view "$tag" >/dev/null 2>&1; then
-        echo "GitHub Release ${tag} already exists."
-        return 0
-    fi
-
-    notes_file="$(mktemp)"
-    python3 "$ROOT/scripts/changelog_notes.py" "$version" > "$notes_file"
-    gh release create "$tag" --title "$tag" --notes-file "$notes_file"
-    rm -f "$notes_file"
-    echo "Created GitHub Release ${tag}."
 }
 
 push_release() {
@@ -117,19 +94,21 @@ push_release() {
     git push "$GIT_REMOTE" "$GIT_BRANCH"
     git push "$GIT_REMOTE" "v${version}"
 
-    echo "==> GitHub Release"
-    create_github_release "$version"
+    echo ""
+    echo "Pushed ${GIT_BRANCH} and v${version}."
+    echo "The GitHub Release is created only after .github/workflows/release.yml passes."
+    echo "Watch: gh run watch --exit-status"
 }
 
 print_next_steps() {
     local version="$1"
     echo ""
     echo "Release prep done locally (v${version})."
-    echo "  Push and publish:  $0 ${BUMP_TYPE} --push"
+    echo "  Push tag (Release after CI):  $0 ${BUMP_TYPE} --push"
     echo "  Or manually:"
     echo "    git push ${GIT_REMOTE} ${GIT_BRANCH}"
     echo "    git push ${GIT_REMOTE} v${version}"
-    echo "    gh release create v${version} --title v${version} --notes-file <(python3 scripts/changelog_notes.py ${version})"
+    echo "  Do not run gh release create until the tag workflow is green."
 }
 
 while [[ $# -gt 0 ]]; do

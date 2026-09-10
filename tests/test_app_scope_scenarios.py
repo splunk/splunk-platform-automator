@@ -78,6 +78,25 @@ def _collect_scenario_names():
     return sorted(names)
 
 
+def _ensure_software_stubs(stub_dir: Path) -> None:
+    """Create installer/license filenames the inventory plugin requires.
+
+    Real Splunk tarballs are gitignored (*.tgz) and are not in CI. Empty
+    placeholders are enough for existence checks during debug_app_scope.yml.
+    """
+    (stub_dir / "spa_ci_stub" / "org_ds_secure_server").mkdir(parents=True, exist_ok=True)
+    (stub_dir / "spa_ci_stub" / "org_cluster_manager_base").mkdir(parents=True, exist_ok=True)
+    for name in (
+        "Splunk_Enterprise.lic",
+        "Splunk_ITSI.lic",
+        "splunk-9.4.0-ci-linux-amd64.tgz",
+        "splunkforwarder-9.4.0-ci-linux-amd64.tgz",
+    ):
+        path = stub_dir / name
+        if not path.exists():
+            path.write_text("# CI stub\n", encoding="utf-8")
+
+
 def _run_scope_playbook(scenario_name: str, scope_output_path: Path) -> subprocess.CompletedProcess:
     """Run debug_app_scope.yml with -i <scenario_config> -e run_scope_locally=true etc."""
     root = _project_root()
@@ -99,16 +118,17 @@ def _run_scope_playbook(scenario_name: str, scope_output_path: Path) -> subproce
         "-e", f"scope_output_path={scope_output_path}",
         "-e", "assert_scope_invariants=true",
     ]
-    # Inventory plugin requires org_ds_secure_server + org_cluster_manager_base
-    # under splunk_baseconfig_dir. CI and clean checkouts have no ../Software;
-    # point at committed stubs so debug_app_scope.yml can parse inventory.
-    stub_baseconfig = root / "tests" / "fixtures" / "baseconfig"
+    # Inventory plugin requires PS baseconfig apps, installer archives, and
+    # license files under ../Software. CI has none of those; point at stubs.
+    stub_software = root / "tests" / "fixtures" / "baseconfig"
+    _ensure_software_stubs(stub_software)
     env = {
         **os.environ,
         "ANSIBLE_CONFIG": str(root / "ansible.cfg"),
         "ANSIBLE_LOCAL_TEMP": str(ansible_tmp),
         "ANSIBLE_REMOTE_TEMP": str(remote_tmp),
-        "SPA_BASECONFIG_DIR": str(stub_baseconfig),
+        "SPA_BASECONFIG_DIR": str(stub_software),
+        "SPA_SOFTWARE_DIR": str(stub_software),
     }
     result = subprocess.run(
         cmd,
