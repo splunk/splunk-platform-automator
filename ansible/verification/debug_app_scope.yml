@@ -131,7 +131,8 @@
         loop_var: _dsh
       vars:
         _ds_apps_raw: "{{ hostvars[_dsh].ds_app_scope_debug | default([]) }}"
-        _ds_apps_filtered: "{{ _ds_apps_raw | json_query('[?target_hosts && length(target_hosts) > `0`]') | default([]) }}"
+        # Builtin filters only — ansible-core does not ship json_query (needs community.general).
+        _ds_apps_filtered: "{{ _ds_apps_raw | default([]) | selectattr('target_hosts', 'defined') | rejectattr('target_hosts', 'eq', []) | list }}"
 
     - name: Build combined report (direct_scope, deployer, cluster_manager, deployment_server as lists)
       ansible.builtin.set_fact:

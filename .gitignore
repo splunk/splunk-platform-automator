@@ -44,6 +44,7 @@ tests/configs/app_scope/output/.ansible_tmp
 # Test runner (vault unit tests)
 tests/.venv
 tests/.ansible_tmp
+tests/.collections
 
 # Python
 __pycache__/

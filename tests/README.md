@@ -57,7 +57,7 @@ tests/
 ├── run_local_tests.sh         # Run all local suites above (no AWS)
 ├── run_schema_tests.sh        # Helper script for schema validation tests
 ├── run_verification_tests.sh  # Helper script for verification tests
-├── run_venv.sh                # Common venv setup (sourced by run_*.sh scripts)
+├── run_venv.sh                # Common venv setup; installs requirements.yml collections when ansible-galaxy is present
 ├── scope_assertions.py        # Helpers for app scope scenario assertions
 └── test_app_scope_scenarios.py # Scenario-based app scope tests
 ```

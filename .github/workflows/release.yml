@@ -25,6 +25,12 @@ jobs:
             requirements.txt
             tests/requirements.txt
 
+      - name: Cache Ansible collections
+        uses: actions/cache@v4
+        with:
+          path: tests/.collections
+          key: ansible-collections-${{ runner.os }}-${{ hashFiles('requirements.yml') }}
+
       - name: Syntax-check shell scripts
         run: |
           bash -n bin/*.sh tests/run_*.sh scripts/*.sh

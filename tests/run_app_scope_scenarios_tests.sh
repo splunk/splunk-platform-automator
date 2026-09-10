@@ -8,7 +8,8 @@
 # runs debug_app_scope.yml with run_scope_locally=true and asserts on the
 # produced scope_debug.json. No SSH or real Splunk hosts required.
 #
-# Requires ansible-playbook, jmespath, lxml in the venv (installed via run_venv.sh).
+# Requires ansible-playbook, jmespath, and lxml in the venv (via run_venv.sh).
+# run_venv.sh also installs requirements.yml collections when ansible-galaxy is present.
 # Uses tests/.venv (created if missing).
 #
 # Usage:

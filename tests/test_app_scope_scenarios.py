@@ -130,6 +130,12 @@ def _run_scope_playbook(scenario_name: str, scope_output_path: Path) -> subproce
         "SPA_BASECONFIG_DIR": str(stub_software),
         "SPA_SOFTWARE_DIR": str(stub_software),
     }
+    collections_dir = root / "tests" / ".collections"
+    if collections_dir.is_dir():
+        existing = env.get("ANSIBLE_COLLECTIONS_PATH", "")
+        env["ANSIBLE_COLLECTIONS_PATH"] = (
+            f"{collections_dir}{os.pathsep}{existing}" if existing else str(collections_dir)
+        )
     result = subprocess.run(
         cmd,
         cwd=str(root),

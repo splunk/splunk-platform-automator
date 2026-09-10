@@ -47,4 +47,17 @@ if [[ ${#_run_venv_pkgs[@]} -gt 0 ]]; then
 fi
 unset _arg _run_venv_pkgs
 
+# ansible-core does not ship collection filters (e.g. json_query). Isolate from
+# ~/.ansible so galaxy actually installs into the project path on developer machines.
+if command -v ansible-galaxy >/dev/null 2>&1 && [[ -f "$PROJECT_ROOT/requirements.yml" ]]; then
+    _collections_dir="$SCRIPT_DIR/.collections"
+    mkdir -p "$_collections_dir" "${ANSIBLE_LOCAL_TEMP:-$SCRIPT_DIR/.ansible_tmp}"
+    export ANSIBLE_COLLECTIONS_PATH="$_collections_dir"
+    if [[ ! -d "$_collections_dir/ansible_collections/community/general" ]]; then
+        echo "Installing Ansible collections from requirements.yml..."
+        ansible-galaxy collection install -r "$PROJECT_ROOT/requirements.yml" -p "$_collections_dir"
+    fi
+    unset _collections_dir
+fi
+
 cd "$PROJECT_ROOT"
