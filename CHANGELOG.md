@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.5.0](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.5.0) - 2026-09-10
+
 ### Added
 
 - **Deploy preflight checks for stale Ansible fact cache** – `ansible/preflight_deploy.yml` runs at the start of `deploy_site.yml` and `wait_for_terraform_aws_hosts.yml`:
