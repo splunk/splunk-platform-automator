@@ -99,11 +99,16 @@ def _run_scope_playbook(scenario_name: str, scope_output_path: Path) -> subproce
         "-e", f"scope_output_path={scope_output_path}",
         "-e", "assert_scope_invariants=true",
     ]
+    # Inventory plugin requires org_ds_secure_server + org_cluster_manager_base
+    # under splunk_baseconfig_dir. CI and clean checkouts have no ../Software;
+    # point at committed stubs so debug_app_scope.yml can parse inventory.
+    stub_baseconfig = root / "tests" / "fixtures" / "baseconfig"
     env = {
         **os.environ,
         "ANSIBLE_CONFIG": str(root / "ansible.cfg"),
         "ANSIBLE_LOCAL_TEMP": str(ansible_tmp),
         "ANSIBLE_REMOTE_TEMP": str(remote_tmp),
+        "SPA_BASECONFIG_DIR": str(stub_baseconfig),
     }
     result = subprocess.run(
         cmd,

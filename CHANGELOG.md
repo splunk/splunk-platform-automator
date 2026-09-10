@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **CI app-scope tests without `../Software`** – Inventory parse for `debug_app_scope.yml` honors `SPA_BASECONFIG_DIR`. Local tests point at committed stubs under `tests/fixtures/baseconfig/` so GitHub Actions does not need Splunk PS baseconfig apps.
+
 ## [2.5.0](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.5.0) - 2026-09-10
 
 ### Added

@@ -270,10 +270,18 @@ class InventoryModule(BaseInventoryPlugin):
             self.groups['all']['splunk_app_deployment'] = self.configfiles['splunk_app_deployment']
 
         # Check Base Config App availability
+        # SPA_BASECONFIG_DIR overrides the configured path (used by local/CI tests
+        # that only need inventory parse, not real PS baseconfig apps).
         cwd = os.getcwd()
-        splunk_baseconfig_dir = os.path.join(cwd,self.groups['all']['splunk_baseconfig_dir'])
-        check_base = glob.glob(os.path.join(cwd,self.groups['all']['splunk_baseconfig_dir']+"/*/org_ds_secure_server"))
-        check_cluster = glob.glob(os.path.join(cwd,self.groups['all']['splunk_baseconfig_dir']+"/*/org_cluster_manager_base"))
+        configured_baseconfig_dir = self.groups['all']['splunk_baseconfig_dir']
+        override_baseconfig_dir = os.environ.get('SPA_BASECONFIG_DIR', '').strip()
+        baseconfig_rel = override_baseconfig_dir or configured_baseconfig_dir
+        if os.path.isabs(baseconfig_rel):
+            splunk_baseconfig_dir = baseconfig_rel
+        else:
+            splunk_baseconfig_dir = os.path.join(cwd, baseconfig_rel)
+        check_base = glob.glob(os.path.join(splunk_baseconfig_dir, "*/org_ds_secure_server"))
+        check_cluster = glob.glob(os.path.join(splunk_baseconfig_dir, "*/org_cluster_manager_base"))
         if len(check_base) < 1 or len(check_cluster) < 1:
             raise AnsibleParserError('Error: Cannot find the latest Splunk baseconfig apps mentioned in the README.md. Extract them under %s' % splunk_baseconfig_dir)
 
