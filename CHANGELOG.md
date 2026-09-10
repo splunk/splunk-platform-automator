@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.5.2](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.5.2) - 2026-09-10
+
 ### Fixed
 
 - **CI `json_query` on GitHub Actions** – `debug_app_scope.yml` now filters DS apps with builtin Jinja (`selectattr`/`rejectattr`) instead of `json_query`, which ansible-core does not ship. Test runners also install `requirements.yml` collections into `tests/.collections` for other playbooks.
