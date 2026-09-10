@@ -11,7 +11,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 - **CI app-scope tests without `../Software`** – Inventory parse for `debug_app_scope.yml` honors `SPA_BASECONFIG_DIR` and `SPA_SOFTWARE_DIR`. Local tests create installer/license stubs under `tests/fixtures/baseconfig/` so GitHub Actions does not need a real Software directory.
 
-- **Release only after tag CI** – `scripts/release.sh --push` no longer runs `gh release create`. [`.github/workflows/release.yml`](.github/workflows/release.yml) publishes the GitHub Release only after local tests pass on the tag.
+- **Release only after tag CI** – `scripts/release.sh --push` no longer runs `gh release create`. [`.github/workflows/release.yml`](.github/workflows/release.yml) publishes the GitHub Release only after local tests pass on the tag. Bump/`--push` do not re-run `./tests/run_local_tests.sh`; use `--check` for that.
 
 ## [2.5.0](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.5.0) - 2026-09-10
 

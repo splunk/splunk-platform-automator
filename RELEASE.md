@@ -25,13 +25,13 @@ cat VERSION
 
 1. Land changes on `master`.
 2. Fill `## [Unreleased]` in `CHANGELOG.md` with what this version ships.
-3. Run pre-release checks (local tests only; no AWS):
+3. Optionally run local tests (also what CI runs on the tag):
 
    ```bash
    ./scripts/release.sh --check
    ```
 
-4. Cut the release (must be on `master`):
+4. Cut the release (must be on `master`; this does **not** re-run the test suite):
 
    ```bash
    ./scripts/release.sh minor              # local commit + tag only
@@ -78,7 +78,7 @@ ansible-playbook ansible/verification/verify_app_deployment.yml -e fail_on_misma
 - No moving `latest` tag
 - No artifact publish beyond GitHub’s source archives
 - No AWS or Splunkbase in GitHub Actions
-- `release.sh --check` is for cutting a release; everyday PR validation is CI / `./tests/run_local_tests.sh`
+- `release.sh --check` is optional local validation; `patch|minor|major` and `--push` do not re-run tests (the tag workflow does)
 
 ## Quick reference
 

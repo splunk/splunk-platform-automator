@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Release helper: pre-checks, version bump, optional GitHub Release.
+# Release helper: optional --check, version bump, optional push.
+# Tests run in GitHub Actions on the tag; do not re-run them on bump/--push.
 # Usage:
 #   ./scripts/release.sh --check
 #   ./scripts/release.sh patch|minor|major [--push] [--yes]
@@ -23,7 +24,7 @@ usage() {
 Usage: $0 [--check] [patch|minor|major] [--push] [--yes] [--remote NAME] [--branch NAME]
 
   --check              Run validation and local tests only (no version bump)
-  patch|minor|major    Semver bump (local commit + vX.Y.Z tag)
+  patch|minor|major    Semver bump (local commit + vX.Y.Z tag; does not re-run tests)
   --push               Push branch + tag (GitHub Release is created only after CI passes)
   --yes                Skip confirmation before --push
   --remote NAME        Git remote (default: origin)
@@ -156,8 +157,6 @@ if [[ -n "$current_branch" && "$current_branch" != "$GIT_BRANCH" ]]; then
     exit 1
 fi
 
-run_checks
-echo ""
 echo "==> Bumping version ($BUMP_TYPE)"
 RELEASE_NO_PUSH_HINT=1 "$ROOT/scripts/bump-version.sh" "$BUMP_TYPE"
 
