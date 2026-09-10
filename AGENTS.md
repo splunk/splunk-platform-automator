@@ -13,6 +13,7 @@ Splunk Platform Automator (SPA) provisions and deploys Splunk Enterprise on **AW
 | Provision AWS | `ap ansible/provision_terraform_aws.yml -e auto_approve=true` |
 | Deploy Splunk | `ap ansible/deploy_site.yml` |
 | Local tests | `./tests/run_local_tests.sh` |
+| Release | [RELEASE.md](RELEASE.md), `./scripts/release.sh --check` |
 
 ## Agent skills (portable packages)
 

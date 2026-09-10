@@ -44,6 +44,11 @@ tests/
 ├── test_deployment.py         # Phase 1: Infrastructure + Splunk deployment
 ├── test_app_deployment.py     # App deployment pre-deployment checks (no infra)
 ├── test_schema.py             # Schema validation unit tests
+├── test_schema_files.py       # validate_config_file + examples/app_scope sweep
+├── test_splunk_config_licenses.py # bin/splunk_config_licenses.py helpers
+├── test_splunk_config_aws.py  # bin/splunk_config_aws.py pure functions
+├── test_validate_splunk_config.py # bash -n / smoke for validate_splunk_config.sh
+├── test_changelog_notes.py    # CHANGELOG section extractor for releases
 ├── test_verification.py       # Phase 2: Health verification tests
 ├── run_deployment_tests.sh    # Helper script for deployment tests
 ├── run_app_deployment_tests.sh # Helper script for app deployment tests

@@ -2238,5 +2238,174 @@ class TestTargetFilterOptions:
         assert "shc_whitelist" in msg or "idxc_whitelist" in msg
 
 
+class TestNoDirectDeployToShcMembers:
+    """validate_no_direct_deploy_to_shc_members: direct + search_head when SHC exists."""
+
+    def _shc_config(self, apps):
+        return {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "deployer1", "roles": ["deployer"], "shcluster": "shc1"},
+                {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+                {"name": "standalone_sh", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+            ],
+            "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
+            "splunk_app_deployment": {"apps": apps},
+        }
+
+    def test_direct_to_search_head_with_shc_raises(self):
+        config = self._shc_config([
+            {
+                "name": "MyApp",
+                "source": "local",
+                "path": "MyApp.tgz",
+                "target_roles": ["search_head"],
+                "deployment_target": "direct",
+            }
+        ])
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "direct" in msg
+        assert "search_head" in msg or "shc" in msg
+
+    def test_direct_with_hosts_whitelist_allowed(self):
+        config = self._shc_config([
+            {
+                "name": "MyApp",
+                "source": "local",
+                "path": "MyApp.tgz",
+                "target_roles": ["search_head"],
+                "deployment_target": "direct",
+                "hosts_whitelist": ["standalone_sh"],
+            }
+        ])
+        result = validate_config(config)
+        assert result.splunk_app_deployment.apps[0]["deployment_target"] == "direct"
+
+    def test_direct_with_empty_effective_shc_allowed(self):
+        """shc_blacklist of all SHCs leaves only standalone SHs — direct is allowed."""
+        config = self._shc_config([
+            {
+                "name": "MyApp",
+                "source": "local",
+                "path": "MyApp.tgz",
+                "target_roles": ["search_head"],
+                "deployment_target": "direct",
+                "shc_blacklist": ["shc1"],
+            }
+        ])
+        result = validate_config(config)
+        assert result.splunk_app_deployment.apps[0]["deployment_target"] == "direct"
+
+    def test_auto_target_to_search_head_with_shc_valid(self):
+        config = self._shc_config([
+            {
+                "name": "MyApp",
+                "source": "local",
+                "path": "MyApp.tgz",
+                "target_roles": ["search_head"],
+            }
+        ])
+        result = validate_config(config)
+        assert result.splunk_app_deployment.apps[0]["name"] == "MyApp"
+
+
+class TestRunPlaybookAfterRestart:
+    """customizations.run_playbook_after_restart is forbidden for CM-routed apps."""
+
+    def test_indexer_only_without_direct_raises(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "idx1", "roles": ["indexer"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {
+                        "name": "MyApp",
+                        "source": "local",
+                        "path": "MyApp.tgz",
+                        "target_roles": ["indexer"],
+                        "customizations": {
+                            "run_playbook_after_restart": "ansible/apps_playbooks/example.yml",
+                        },
+                    }
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "run_playbook_after_restart" in msg
+        assert "cluster manager" in msg or "direct" in msg
+
+    def test_direct_indexer_allowed(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "idx1", "roles": ["indexer"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {
+                        "name": "MyApp",
+                        "source": "local",
+                        "path": "MyApp.tgz",
+                        "target_roles": ["indexer"],
+                        "deployment_target": "direct",
+                        "customizations": {
+                            "run_playbook_after_restart": "ansible/apps_playbooks/example.yml",
+                        },
+                    }
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert result.splunk_app_deployment.apps[0]["customizations"]["run_playbook_after_restart"]
+
+    def test_search_head_target_allowed(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "sh1", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    {
+                        "name": "MyApp",
+                        "source": "local",
+                        "path": "MyApp.tgz",
+                        "target_roles": ["search_head"],
+                        "customizations": {
+                            "run_playbook_after_restart": "ansible/apps_playbooks/example.yml",
+                        },
+                    }
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert "search_head" in result.splunk_app_deployment.apps[0]["target_roles"]
+
+    def test_empty_run_playbook_after_restart_raises(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "idx1", "roles": ["indexer"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {
+                        "name": "MyApp",
+                        "source": "local",
+                        "path": "MyApp.tgz",
+                        "target_roles": ["indexer"],
+                        "deployment_target": "direct",
+                        "customizations": {"run_playbook_after_restart": "  "},
+                    }
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "run_playbook_after_restart" in str(exc_info.value).lower()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

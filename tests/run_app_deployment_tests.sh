@@ -8,8 +8,8 @@
 #   valid config) via ansible-playbook with static localhost inventory.
 # - test_schema.py: TestAppDeploymentConfig (splunk_app_deployment schema).
 #
-# No real Splunk hosts or AWS required. Requires ansible-playbook on PATH for
-# playbook tests; schema tests need only pytest and pydantic.
+# No real Splunk hosts or AWS required. ansible-core is installed in tests/.venv
+# via run_venv.sh so playbook tests do not depend on a system ansible-playbook.
 #
 # Usage:
 #   ./run_app_deployment_tests.sh [pytest args...]
@@ -31,7 +31,7 @@ NC='\033[0m'
 
 echo -e "${GREEN}=== Splunk Platform Automator - App Deployment Tests ===${NC}"
 
-source "$SCRIPT_DIR/run_venv.sh" 'pydantic>=2.0'
+source "$SCRIPT_DIR/run_venv.sh" 'pydantic>=2.0' 'ansible-core'
 
 mkdir -p "${SCRIPT_DIR}/.ansible_tmp"
 export ANSIBLE_LOCAL_TMP="${SCRIPT_DIR}/.ansible_tmp"

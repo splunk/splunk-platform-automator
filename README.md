@@ -17,6 +17,8 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
   - [Features](#features)
   - [Roadmap](#roadmap)
   - [Changelog](#changelog)
+  - [Testing](#testing)
+  - [Releasing](#releasing)
   - [Installation](#installation)
     - [Framework Installation](#framework-installation)
     - [Install Virtualbox support (optional)](#install-virtualbox-support-optional)
@@ -92,6 +94,20 @@ See the upcoming features in the [Roadmap](ROADMAP.md)
 ## Changelog
 
 Implemented changes are to be found in the [Changelog](CHANGELOG.md)
+
+## Testing
+
+Automated tests that do not need AWS or a live Splunk deployment:
+
+```bash
+./tests/run_local_tests.sh
+```
+
+See [tests/README.md](tests/README.md). Full AWS deployment tests stay manual.
+
+## Releasing
+
+Cut a version from `master` with [RELEASE.md](RELEASE.md) and `./scripts/release.sh`.
 
 ## Installation
 

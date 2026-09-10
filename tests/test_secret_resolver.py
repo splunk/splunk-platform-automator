@@ -33,7 +33,64 @@ from secret_resolver import (
     get_vault_resolver,
     get_yaml_loader,
     load_config_with_secrets,
+    _normalize_vault_ciphertext,
+    _resolve_env_lookups,
+    _resolve_plain_string_secret,
 )
+
+
+class TestNormalizeVaultCiphertext:
+    def test_newline_lines_are_stripped(self):
+        raw = "  $ANSIBLE_VAULT;1.1;AES256  \n    deadbeef  \n"
+        assert _normalize_vault_ciphertext(raw) == "$ANSIBLE_VAULT;1.1;AES256\ndeadbeef"
+
+    def test_spaces_become_newlines(self):
+        raw = "$ANSIBLE_VAULT;1.1;AES256 deadbeef cafe"
+        assert _normalize_vault_ciphertext(raw) == "$ANSIBLE_VAULT;1.1;AES256\ndeadbeef\ncafe"
+
+    def test_non_string_unchanged(self):
+        assert _normalize_vault_ciphertext(None) is None
+
+
+class TestResolveEnvLookups:
+    def test_full_string_lookup(self, monkeypatch):
+        monkeypatch.setenv("SPA_TEST_SECRET", "from-env")
+        assert _resolve_env_lookups("{{ lookup('env', 'SPA_TEST_SECRET') }}") == "from-env"
+
+    def test_unset_lookup_is_empty(self, monkeypatch):
+        monkeypatch.delenv("SPA_TEST_UNSET", raising=False)
+        assert _resolve_env_lookups("{{ lookup('env', 'SPA_TEST_UNSET') }}") == ""
+
+    def test_inline_lookup(self, monkeypatch):
+        monkeypatch.setenv("SPA_TEST_USER", "alice")
+        assert _resolve_env_lookups("user={{ lookup('env', 'SPA_TEST_USER') }}") == "user=alice"
+
+    def test_no_lookup_unchanged(self):
+        assert _resolve_env_lookups("plain") == "plain"
+
+
+class TestResolvePlainStringSecret:
+    def test_env_lookup_before_vault(self, monkeypatch):
+        monkeypatch.setenv("SPA_TEST_PW", "resolved")
+        out = _resolve_plain_string_secret("{{ lookup('env', 'SPA_TEST_PW') }}", vault_decrypt_fn=lambda ref: "nope")
+        assert out == "resolved"
+
+    def test_quoted_vault_calls_decrypt(self):
+        seen = {}
+
+        def decrypt(ref):
+            seen["text"] = ref
+            return "decrypted"
+
+        out = _resolve_plain_string_secret(
+            "$ANSIBLE_VAULT;1.1;AES256 deadbeef",
+            vault_decrypt_fn=decrypt,
+        )
+        assert out == "decrypted"
+        assert seen["text"].ciphertext == b"$ANSIBLE_VAULT;1.1;AES256\ndeadbeef"
+
+    def test_plain_string_unchanged(self):
+        assert _resolve_plain_string_secret("hello", vault_decrypt_fn=lambda ref: "x") == "hello"
 
 
 class TestResolveConfig:

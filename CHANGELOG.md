@@ -39,6 +39,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 - **Example**: [examples/aws_lab_baseline.yml](examples/aws_lab_baseline.yml) — minimal lab starting point with recommended OS packages (including polkit).
 
+- **CI and release tooling** – GitHub Actions [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs `bash -n` and [`tests/run_local_tests.sh`](tests/run_local_tests.sh) on pull requests and `master`. Tag workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) publishes a GitHub Release from `CHANGELOG.md` if one is missing. Maintainer commands: [`RELEASE.md`](RELEASE.md), [`scripts/release.sh`](scripts/release.sh).
+
+- **Local unit tests** – Schema sweep for shipped examples and app-scope fixtures; SHC-direct and `run_playbook_after_restart` rules; `bin/splunk_config_licenses.py` and `bin/splunk_config_aws.py` helpers; secret-resolver env/vault normalization.
+
 - **`spa-create-config` RF/SF guidance** – [sva-topology-map.md](skills/spa/spa-create-config/references/sva-topology-map.md) SVA code → lab RF/SF defaults and peer checklist; [rf-sf-sizing.md](skills/spa/spa-create-config/references/rf-sf-sizing.md) documents Splunk Enterprise rules (failure tolerance, multisite `total` minimum, `idxc_rf` for two-peer sites) and links to SVA M2/M12 and Deployment Capacity Manual performance/storage tables.
 
 ### Changed
