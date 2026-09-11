@@ -331,7 +331,10 @@ def scan_licenses(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Discover Splunk licenses in Software and propose splunk_license_file")
+    p = argparse.ArgumentParser(
+        prog="spa licenses",
+        description="Discover Splunk licenses in Software and propose splunk_license_file",
+    )
     p.add_argument("--json", action="store_true", help="Output JSON")
     p.add_argument(
         "--software-dir",
@@ -347,8 +350,8 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main() -> int:
-    args = build_parser().parse_args()
+def main(argv: Optional[List[str]] = None) -> int:
+    args = build_parser().parse_args(argv)
     project_root = resolve_env_root()
     config_path = None
     if args.config:

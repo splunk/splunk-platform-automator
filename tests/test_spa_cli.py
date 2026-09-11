@@ -22,6 +22,56 @@ def test_spa_help():
     assert "run" in result.stdout
 
 
+def test_shell_help_is_the_shell_parser():
+    """spa shell -h must reach shell.py, not the spa dispatcher."""
+    result = run_spa(["shell", "--help"])
+    assert result.returncode == 0, result.stderr
+    assert "usage: spa shell" in result.stdout
+    assert "-l, --list" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["shell", "-l"],
+        ["shell", "-c", "local.txt", "idx1:/tmp/"],
+        ["aws", "--check-auth", "--json"],
+        ["licenses", "--json"],
+    ],
+)
+def test_native_flags_are_not_parsed_by_spa(args):
+    """argparse.REMAINDER drops a leading option; these must never bubble up."""
+    result = run_spa(args)
+    assert "unrecognized arguments" not in (result.stdout + result.stderr)
+
+
+def test_aws_and_licenses_help_use_own_parser():
+    for command, usage in (("aws", "usage: spa aws"), ("licenses", "usage: spa licenses")):
+        result = run_spa([command, "--help"])
+        assert result.returncode == 0, result.stderr
+        assert usage in result.stdout
+
+
+def test_split_native_keeps_spa_globals():
+    from spa.cli import _split_native, _split_passthrough
+
+    head, extra = _split_passthrough(["shell", "idx1", "--", "-L", "8000:localhost:8000"])
+    head, native = _split_native(head)
+    assert head == ["shell"]
+    assert native == ["idx1"]
+    assert extra == ["-L", "8000:localhost:8000"]
+
+    # A global option value that matches a command name is not the command.
+    head, native = _split_native(["--start-dir", "aws", "aws", "--list-regions"])
+    assert head == ["--start-dir", "aws", "aws"]
+    assert native == ["--list-regions"]
+
+    # Non-passthrough commands keep their flags on the spa parser.
+    head, native = _split_native(["run", "--list"])
+    assert head == ["run", "--list"]
+    assert native == []
+
+
 def test_run_list_includes_verification(tmp_path):
     result = run_spa(["run", "--list"])
     assert result.returncode == 0, result.stderr

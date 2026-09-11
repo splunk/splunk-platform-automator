@@ -718,7 +718,10 @@ def parse_security_groups(value: Optional[str]) -> Optional[List[str]]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="AWS discovery and validation for splunk_config.yml")
+    p = argparse.ArgumentParser(
+        prog="spa aws",
+        description="AWS discovery and validation for splunk_config.yml",
+    )
     p.add_argument("--json", action="store_true", help="Output JSON")
     p.add_argument("--region", help="AWS region")
 
@@ -750,8 +753,8 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main() -> int:
-    args = build_parser().parse_args()
+def main(argv: Optional[List[str]] = None) -> int:
+    args = build_parser().parse_args(argv)
     as_json = args.json
 
     if args.check_auth:

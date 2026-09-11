@@ -146,8 +146,7 @@ except ConfigValidationError as e:
             sgs = aws.get("security_group_names") or []
             if sgs:
                 argv_aws.extend(["--security-groups", ",".join(sgs)])
-            sys.argv = ["spa-aws", *argv_aws]
-            rc = aws_mod.main()
+            rc = aws_mod.main(argv_aws)
             if rc != 0:
                 return rc
         print("AWS validation OK")

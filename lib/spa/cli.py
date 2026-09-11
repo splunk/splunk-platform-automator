@@ -11,10 +11,34 @@ from spa.executil import apply_paths_env
 from spa.paths import resolve_spa_paths
 
 
+# Commands whose flags belong to the wrapped tool, not to spa (spa shell -l,
+# spa aws --check-auth). argparse.REMAINDER drops a leading option, so these are
+# split off before the spa parser runs.
+NATIVE_FLAG_COMMANDS = ("shell", "aws", "licenses")
+GLOBAL_OPTS_WITH_VALUE = ("--start-dir",)
+
+
 def _split_passthrough(argv: Sequence[str]) -> Tuple[List[str], List[str]]:
     if "--" in argv:
         idx = list(argv).index("--")
         return list(argv[:idx]), list(argv[idx + 1 :])
+    return list(argv), []
+
+
+def _split_native(argv: Sequence[str]) -> Tuple[List[str], List[str]]:
+    """Split at a native-flag command: (spa args incl. command, tool args)."""
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        if token in GLOBAL_OPTS_WITH_VALUE:
+            index += 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        if token in NATIVE_FLAG_COMMANDS:
+            return list(argv[: index + 1]), list(argv[index + 1 :])
+        break
     return list(argv), []
 
 
@@ -28,6 +52,7 @@ def _paths(start_dir: Optional[str] = None):
 def main(argv: Optional[Sequence[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     head, extra = _split_passthrough(argv)
+    head, native = _split_native(head)
 
     import argparse
 
@@ -90,22 +115,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p_run.add_argument("--list", action="store_true")
     p_run.add_argument("--dir", dest="playbook_dir", help="Extra env-dir folder to list/run")
 
-    p_shell = sub.add_parser("shell", help="SSH/SCP via inventory")
-    p_shell.add_argument("shell_args", nargs=argparse.REMAINDER)
-
-    p_aws = sub.add_parser("aws", help="AWS discovery")
-    p_aws.add_argument("aws_args", nargs=argparse.REMAINDER)
-
-    p_lic = sub.add_parser("licenses", help="License discovery")
-    p_lic.add_argument("license_args", nargs=argparse.REMAINDER)
+    # Flags for these are parsed by the wrapped tool (see _split_native).
+    sub.add_parser("shell", help="SSH/SCP via inventory (spa shell --help)", add_help=False)
+    sub.add_parser("aws", help="AWS discovery (spa aws --help)", add_help=False)
+    sub.add_parser("licenses", help="License discovery (spa licenses --help)", add_help=False)
 
     p_agent = sub.add_parser("agent", help="Agent helpers")
     p_agent.add_argument("agent_cmd", nargs="?", default="schema")
 
     args = parser.parse_args(head)
     as_agent = agent_mode(force_agent=args.agent or args.json, force_human=args.no_agent)
-    # spa aws --json is native JSON; still allow global --json as envelope
-    if args.command in {"aws", "licenses"} and not args.agent and not args.no_agent:
+    # These print their own output (aws/licenses have a native --json); an
+    # envelope would only apply to a path-resolution failure below.
+    if args.command in NATIVE_FLAG_COMMANDS and not args.agent:
         as_agent = agent_mode(force_agent=False, force_human=args.no_agent)
 
     try:
@@ -257,39 +279,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.command == "shell":
         from spa import shell as shell_mod
 
-        shell_argv = list(args.shell_args)
-        if extra:
-            shell_argv = [a for a in shell_argv if a != "--"] + extra
+        # SSH/SCP is interactive: no JSON envelope even in agent mode.
         try:
-            shell_mod.main(shell_argv)
+            shell_mod.main([*native, *extra])
         except SystemExit as exc:
-            code = exc.code if isinstance(exc.code, int) else 1
-            if as_agent:
-                emit(code == 0, as_agent=True)
-            return code or 0
+            return exc.code if isinstance(exc.code, int) else 1
         return 0
 
     if args.command == "aws":
         from spa import aws as aws_mod
 
-        saved = sys.argv
-        sys.argv = ["spa-aws", *args.aws_args, *extra]
         try:
-            rc = aws_mod.main()
-        finally:
-            sys.argv = saved
-        return rc
+            return aws_mod.main([*native, *extra])
+        except SystemExit as exc:
+            return exc.code if isinstance(exc.code, int) else 1
 
     if args.command == "licenses":
         from spa import licenses as licenses_mod
 
-        saved = sys.argv
-        sys.argv = ["spa-licenses", *args.license_args, *extra]
         try:
-            rc = licenses_mod.main()
-        finally:
-            sys.argv = saved
-        return rc
+            return licenses_mod.main([*native, *extra])
+        except SystemExit as exc:
+            return exc.code if isinstance(exc.code, int) else 1
 
     parser.print_help()
     return 1

@@ -307,7 +307,10 @@ def resolve_connection_details(target_host, inventory):
 def main(argv=None):
     apply_spa_env()
 
-    parser = argparse.ArgumentParser(description="SSH or SCP into/with an Ansible host.")
+    parser = argparse.ArgumentParser(
+        prog="spa shell",
+        description="SSH or SCP into/with an Ansible host.",
+    )
     parser.add_argument("host", nargs='?', help="The name of the host to connect to or copy source/destination")
     parser.add_argument("-l", "--list", action="store_true", help="List available hosts")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output (with -l), performs live check for status")
