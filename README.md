@@ -123,7 +123,7 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 4. Ansible, Pydantic, and Ansible collections are **not** installed with Homebrew. `spa init` (or `./bin/spa_venv.sh --create`) creates `$SPA_HOME/.venv` from `requirements.txt` and `requirements.yml`. Check the machine with `spa doctor`.
 5. **AWS environments:** install Terraform 1.3+ (e.g. `brew install terraform`) and an AWS key pair / security group. **VirtualBox:** install Vagrant (and VirtualBox); see [Install Virtualbox support](#install-virtualbox-support-optional). **Optional:** [direnv](https://direnv.net) so `cd` into an env dir activates the venv and `SPA_*` variables (`brew install direnv` plus the [shell hook](https://direnv.net/docs/hook.html)).
 
-Primary flow: `spa init ~/envs/my-env` then `spa validate && spa provision && spa deploy`. `ansible-playbook` remains documented as the equivalent, not the default.
+Primary flow: `spa init ~/envs/my-env` then `spa validate && spa provision --yes && spa deploy`. `ansible-playbook` remains documented as the equivalent, not the default.
 
 Your directory structure should now look like this:
 
@@ -256,8 +256,7 @@ cd ~/envs/my-env
 #   source /path/to/clone/bin/spa_venv.sh --env ~/envs/my-env
 #   eval "$(spa env --export)"
 spa validate
-spa provision --yes
-spa deploy
+spa provision --yes && spa deploy
 ```
 
 Host links: `$SPA_ENV_DIR/config/index.html`. Destroy: `spa destroy --yes`. Details: [Multiple environments, one clone](#multiple-environments-one-clone) and [Option B](#option-b-aws-with-terraform-recommended-for-aws).
@@ -354,7 +353,7 @@ The test suites keep their own `tests/.venv` (pytest dependencies stay out of th
 
 Installers and PS baseconfig apps default to `../Software`. Local `source: local` apps default to `../apps` (env sibling), then `$SPA_HOME/apps`. Resolution order for each: env (`SPA_SOFTWARE_DIR` / `SPA_BASECONFIG_DIR` / `SPA_APPS_DIR`), then a **custom** path in `splunk_config.yml` (`splunk_dirs.splunk_software_dir`, `splunk_dirs.splunk_baseconfig_dir`, `splunk_app_deployment.local_app_repo_path`), then `.spa.yml` (`software_dir` / `baseconfig_dir` / `apps_dir`), then discovery. Built-in defaults such as `../Software` do not override `.spa.yml`. `spa init` writes the keys it finds. Unset `SPA_HOME` / `SPA_ENV_DIR` to keep today's in-repo workflow.
 
-Day-to-day commands: `spa validate`, `spa provision`, `spa deploy`, `spa run NAME`. Equivalent: `ansible-playbook` from `$SPA_HOME` after `eval "$(spa env --export)"`.
+Day-to-day commands: `spa validate`, `spa provision --yes && spa deploy`, `spa run NAME`. Equivalent: `ansible-playbook` from `$SPA_HOME` after `eval "$(spa env --export)"`.
 
 ### Copy a configuration file
 
@@ -410,7 +409,7 @@ vagrant up; ansible-playbook ansible/deploy_site.yml
 
 Prefer an **environment directory** ([Start here](#start-here)) so Terraform state is not written into the clone. Clone-equal (`config/splunk_config.yml` in the checkout) still works.
 
-**Quick Start** (clone-equal). For an env dir, `cd` the env first so `ANSIBLE_INVENTORY` points at that config, then run `spa provision` / `spa deploy` (or the same playbooks with `"$SPA_HOME/ansible/..."`).
+**Quick Start** (clone-equal). For an env dir, `cd` the env first so `ANSIBLE_INVENTORY` points at that config, then run `spa provision --yes && spa deploy` (or the same playbooks with `"$SPA_HOME/ansible/..."`).
 
 - Configure `config/splunk_config.yml` with a `terraform.aws` section:
 

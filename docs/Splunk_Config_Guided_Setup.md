@@ -23,8 +23,7 @@ spa validate config/splunk_config.yml
 6. Provision and deploy:
 
 ```bash
-spa provision --yes
-spa deploy
+spa provision --yes && spa deploy
 ```
 
 `deploy_site.yml` runs `preflight_deploy.yml` first. It probes each host for `python3`, flushes stale Ansible fact cache when the cached interpreter no longer matches (for example after switching OS/AMI while reusing hostnames like `cm` and `idx1`), and verifies Ansible connectivity before the main deploy. Terraform provisioning also flushes cache for affected hosts when inventory is regenerated.

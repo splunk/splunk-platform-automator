@@ -2,6 +2,7 @@
 
 import json
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -72,13 +73,57 @@ def test_split_native_keeps_spa_globals():
     assert native == []
 
 
-def test_run_list_includes_verification(tmp_path):
+def test_provision_help_includes_yes():
+    result = run_spa(["provision", "--help"])
+    assert result.returncode == 0, result.stderr
+    assert "--yes" in result.stdout
+    assert "-y" in result.stdout
+
+
+def test_provision_yes_after_subcommand_auto_approves(monkeypatch):
+    """spa provision --yes must be a subcommand flag, not only spa --yes provision."""
+    captured = {}
+
+    def fake_run(playbook, paths, extra):
+        captured["extra"] = extra
+        return 0
+
+    monkeypatch.setattr("spa.playbooks.run_playbook", fake_run)
+    monkeypatch.setattr("spa.playbooks.resolve", lambda name, paths: Path("/dev/null"))
+    from spa.cli import main
+
+    rc = main(["provision", "--yes"])
+    assert rc == 0
+    assert captured["extra"][:2] == ["-e", "auto_approve=true"]
+
+
+def test_destroy_yes_after_subcommand_auto_approves(monkeypatch):
+    captured = {}
+
+    def fake_run(playbook, paths, extra):
+        captured["extra"] = extra
+        return 0
+
+    monkeypatch.setattr("spa.playbooks.run_playbook", fake_run)
+    monkeypatch.setattr("spa.playbooks.resolve", lambda name, paths: Path("/dev/null"))
+    from spa.cli import main
+
+    rc = main(["destroy", "--yes"])
+    assert rc == 0
+    assert captured["extra"][:2] == ["-e", "auto_approve=true"]
+
+
+def test_run_list_groups_by_root(tmp_path):
     result = run_spa(["run", "--list"])
     assert result.returncode == 0, result.stderr
-    assert "verification/ping_hosts" in result.stdout
-    assert "deploy_site" in result.stdout
+    assert "Framework playbooks" in result.stdout
+    assert "Verification playbooks" in result.stdout
+    # The source belongs in --json, not as a column next to every name.
+    assert "\tansible" not in result.stdout
+    names = [line.strip() for line in result.stdout.splitlines() if line.startswith("  ")]
+    assert "deploy_site" in names
+    assert "verification/ping_hosts" in names
     # bare verification stem is not listed as ping_hosts alone as the catalog name
-    names = [line.split("\t")[0] for line in result.stdout.splitlines() if line.strip()]
     assert "ping_hosts" not in names
 
 
@@ -107,6 +152,10 @@ def test_env_dir_playbook_resolves(tmp_path):
     assert found.resolve() == play.resolve()
     with pytest.raises(PlaybookError):
         resolve("foo", paths)
+
+    listing = run_spa(["run", "--list", "--dir", "custom"], env=env)
+    assert "Env playbooks" in listing.stdout
+    assert "custom/foo" in listing.stdout
 
 
 def test_run_path_escape_rejected(tmp_path):

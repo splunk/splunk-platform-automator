@@ -31,7 +31,7 @@ This generates `terraform/aws/terraform.tfvars`, runs `terraform init` / `plan`,
 spa provision
 ```
 
-Non-interactive (agents / CI): `spa provision --yes`.
+Non-interactive (agents / CI): `spa provision --yes && spa deploy`. `--yes` after `provision` auto-approves Terraform apply (`-y` is the short form; `spa -y provision` also works).
 
 This will:
 
@@ -89,9 +89,10 @@ In agent mode, destroy requires `-y` / `--yes`. This permanently deletes EC2 ins
 | `spa doctor` | Host prerequisites |
 | `spa aws --check-auth --json` | Credential probe (no secret values) |
 | `spa provision -- --tags plan` | Preview changes |
-| `spa provision` / `spa provision --yes` | Provision infrastructure |
+| `spa provision --yes && spa deploy` | Provision then deploy (stop if provision fails) |
+| `spa provision` / `spa provision --yes` | Provision infrastructure only |
 | `spa run wait_for_terraform_aws_hosts` | Verify host readiness |
-| `spa deploy` | Deploy Splunk |
+| `spa deploy` | Deploy Splunk (hosts already provisioned) |
 | `spa run create_linkpage` | Host link page |
 | `spa destroy` | Destroy infrastructure |
 | `spa shell <host>` | SSH via inventory |

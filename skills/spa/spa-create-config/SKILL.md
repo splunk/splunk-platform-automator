@@ -276,8 +276,7 @@ Do not hand off until validation passes. See [validation.md](references/validati
 User runs (skill does **not** auto-provision):
 
 ```bash
-spa provision --yes
-spa deploy
+spa provision --yes && spa deploy
 ```
 
 Destroy: `spa destroy --yes`

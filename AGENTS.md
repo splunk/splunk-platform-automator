@@ -13,8 +13,8 @@ Splunk Platform Automator (SPA) provisions and deploys Splunk Enterprise on **AW
 | Python env (Ansible, Pydantic) | `source bin/spa_venv.sh` (shared `SPA_HOME/.venv`; env `.venv` wins when present). Env dirs get an `.envrc` for direnv; `spa init` creates the venv if missing and runs `direnv allow` when direnv is installed. |
 | Host tools (terraform, direnv, …) | `spa doctor` (also run at end of `spa init`; `--skip-doctor` to skip). Terraform only for AWS; Vagrant only for VirtualBox (`virtualbox:` in config). Not brew ansible/pydantic — use `spa_venv`. |
 | Validate before provision | `spa validate` |
-| Provision AWS | `spa provision --yes` |
-| Deploy Splunk | `spa deploy` |
+| Provision AWS then deploy | `spa provision --yes && spa deploy` |
+| Deploy Splunk only (hosts already up) | `spa deploy` |
 | VirtualBox | Config in the **clone**; `vagrant up` from `SPA_HOME` only. Env dirs have no Vagrantfile. |
 | Local tests | `./tests/run_local_tests.sh` |
 | Release | [RELEASE.md](RELEASE.md), `./scripts/release.sh --check` |

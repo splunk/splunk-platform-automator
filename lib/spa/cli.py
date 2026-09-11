@@ -42,6 +42,36 @@ def _split_native(argv: Sequence[str]) -> Tuple[List[str], List[str]]:
     return list(argv), []
 
 
+def _tilde(path: Path) -> str:
+    try:
+        return "~/" + str(path.relative_to(Path.home()))
+    except ValueError:
+        return str(path)
+
+
+def _print_catalog(rows: List[dict], paths) -> None:
+    """Group the catalog by root; the source column only matters in --json."""
+    groups = (
+        ("ansible", "Framework playbooks", paths.spa_home / "ansible"),
+        ("verification", "Verification playbooks", paths.spa_home / "ansible" / "verification"),
+        ("env", "Env playbooks", paths.spa_env_dir),
+    )
+    printed = False
+    for source, title, folder in groups:
+        names = [row["name"] for row in rows if row["source"] == source]
+        if not names:
+            continue
+        if printed:
+            print()
+        printed = True
+        print("%s — %s" % (title, _tilde(folder)))
+        for name in names:
+            print("  %s" % name)
+    if printed:
+        print()
+        print("Run one with: spa run <name> [-- ansible-playbook args]")
+
+
 def _paths(start_dir: Optional[str] = None):
     start = Path(start_dir).resolve() if start_dir else None
     paths = resolve_spa_paths(start_dir=start)
@@ -106,9 +136,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p_env.add_argument("--export", action="store_true", default=True)
     p_env.add_argument("--start-dir")
 
-    sub.add_parser("provision", help="Provision AWS with Terraform")
+    p_prov = sub.add_parser("provision", help="Provision AWS with Terraform")
+    p_prov.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Auto-approve Terraform apply (same as spa -y provision)",
+    )
     sub.add_parser("deploy", help="Deploy Splunk")
-    sub.add_parser("destroy", help="Destroy AWS hosts")
+    p_destroy = sub.add_parser("destroy", help="Destroy AWS hosts")
+    p_destroy.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Auto-approve Terraform destroy (same as spa -y destroy)",
+    )
 
     p_run = sub.add_parser("run", help="Run a playbook by stem")
     p_run.add_argument("name", nargs="?")
@@ -232,7 +274,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "destroy": "destroy_terraform_aws",
         }
         extra = list(extra)
-        if args.command == "provision" and args.yes:
+        if args.command in {"provision", "destroy"} and args.yes:
             extra = ["-e", "auto_approve=true", *extra]
         if args.command == "destroy" and not args.yes and as_agent:
             emit(False, error="destroy requires -y in agent mode", as_agent=True)
@@ -257,9 +299,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if as_agent or args.json:
                 emit(True, data=rows, as_agent=True)
             else:
-                for row in rows:
-                    print("%s\t%s" % (row["name"], row["source"]))
-            return 0 if args.list or not args.name else 1
+                _print_catalog(rows, paths)
+            return 0
         try:
             playbook = resolve(args.name, paths, extra_dir=args.playbook_dir)
         except PlaybookError as exc:
