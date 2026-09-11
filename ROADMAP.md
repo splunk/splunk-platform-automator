@@ -1,32 +1,37 @@
 # spa roadmap
 
-Future work for reproducible Splunk Enterprise labs — shared Homebrew install, agent-ready `spa` CLI, Terraform AWS and [Splunk Operator for Kubernetes](https://github.com/splunk/splunk-operator), without a full repo checkout per lab.
+Future work for reproducible Splunk Enterprise labs — a shared framework prefix, agent-ready `spa` CLI, Terraform AWS and [Splunk Operator for Kubernetes](https://github.com/splunk/splunk-operator), without a full repo checkout per lab.
 
 Shipped work stays checked. Git clone remains the contributor path. Splunk installers, licenses, and Professional Services baseconfig apps stay out of band (`Software/` path in config). vagrant-aws is legacy (replaced by Terraform AWS) and is not listed here.
 
 ## Distribution
 
-Homebrew installs the **shared** framework once (playbooks, Terraform, skills, `spa` binary). `spa init` writes **config only** for that lab. Linux should feel the same: install the prefix, then `spa init` / `spa deploy` — no per-lab git clone.
+Install the **shared** framework once (playbooks, Terraform, skills, `spa` binary). `spa init` writes **config only** for that lab. Controllers should feel the same on macOS and Linux: install the prefix, then `spa init` / `spa deploy` — no per-lab git clone.
 
-**Contract:** `SPA_HOME` is the framework (`ansible/`, Terraform modules, `skills/`, `bin/`). `SPA_LAB_DIR` is the lab (`splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state). Unset both → the git clone; today's `ansible-playbook` workflow is unchanged. When they differ, do not write lab state into the prefix (Homebrew / `/opt/spa` would lose it on upgrade).
+**Contract:** `SPA_HOME` is the framework (`ansible/`, Terraform modules, `skills/`, `bin/`). `SPA_LAB_DIR` is the lab (`splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `saved_base_config_apps/`). Unset both → the git clone; today's `ansible-playbook` workflow is unchanged. When they differ, do not write lab state into the prefix (an upgrade of `~/.local/spa` or `/opt/spa` would lose it).
 
-Ship as **four minors**, in order. Pickup: the issue for that milestone (not a Cursor plan). After a milestone ships: check it here, close the issue, CHANGELOG, cut the minor. Do not start the next until the prior is in a released tag.
+Ship M1–M3 on one integration branch, then **3.0** when M3 is in. Do not cut a minor per milestone. Pickup: the issue for that milestone (not a Cursor plan). After a milestone is done: check it here, close the issue, merge into the parent branch for further testing. Do not start the next until the prior is merged there.
 
-- [ ] **M1** Path contract + lab scaffold — [#46](https://github.com/splunk/splunk-platform-automator/issues/46)
+**Branching:** parent `distribution` (off `main`). Each milestone is `dist/mN` branched from `distribution` and merged back. When M3 is in, PR `distribution` → `main` and tag **3.0**. Clone + `ansible-playbook` stay supported on `main` until then.
+
+- [x] **M1** Path contract + lab scaffold — [#46](https://github.com/splunk/splunk-platform-automator/issues/46)
 - [ ] **M2** `spa` CLI over the clone prefix — [#47](https://github.com/splunk/splunk-platform-automator/issues/47)
-- [ ] **M3** Homebrew tap + framework tarball — [#48](https://github.com/splunk/splunk-platform-automator/issues/48)
-- [ ] **M4** Native Linux packages + `curl | sh` — [#49](https://github.com/splunk/splunk-platform-automator/issues/49)
+- [ ] **M3** `install.sh` + framework tarball — [#48](https://github.com/splunk/splunk-platform-automator/issues/48)
 
 ### Outcomes
 
 - [x] Semver GitHub Releases from [CHANGELOG.md](CHANGELOG.md) ([RELEASE.md](RELEASE.md))
-- [ ] `SPA_HOME` / `SPA_LAB_DIR` path contract; clone defaults keep today's layout (**M1**)
-- [ ] `bin/init_lab_dir.sh` scaffolds a lab dir (example config, `.spa.yml`; no copy of `ansible/`) (**M1**); `spa init` wraps it (**M2**)
-- [ ] Separate lab dirs against one clone `SPA_HOME` (**M1**)
+- [x] `SPA_HOME` / `SPA_LAB_DIR` path contract; clone defaults keep today's layout (**M1**)
+- [x] `bin/init_spa_dir.sh` scaffolds a lab dir (example config, `.spa.yml`; no copy of `ansible/`) and migrates an existing clone env (config, inventory, Terraform state) (**M1**)
+- [x] Separate lab dirs against one clone `SPA_HOME` (**M1**)
+- [x] `bin/spa_venv.sh` shared venv (framework, labs, tests) + lab `.envrc` for direnv; no Homebrew Ansible/Pydantic requirement (**M1**)
+- [ ] `spa init` wraps `bin/init_spa_dir.sh` (**M2**)
 - [ ] `spa` commands use the shared prefix (`init`, `validate`, `provision`, `deploy`, `destroy`, `shell`, and the rest of the playbook surface) (**M2**)
-- [ ] Homebrew tap (`splunk/tap`) on **macOS and Linux**: shared prefix + `spa` binary (depends on ansible, terraform, python, pydantic). Same formula; [Homebrew on Linux](https://docs.brew.sh/Homebrew-on-Linux) is the primary Linux path (**M3**)
-- [ ] Native Linux packages from the same release tarball as the brew formula: `.deb` (apt), `.rpm` (dnf/yum), and a tarball into `/opt/spa` with `spa` on `PATH` (**M4**)
-- [ ] Optional `curl | sh` installer that uses the brew formula when Homebrew is present, otherwise the Linux tarball (**M4**)
+- [ ] Release tarball of the framework (exclude `tests/`, `.git`, lab `config/`) (**M3**)
+- [ ] `install.sh` (cup-style `curl | sh` or `gh release download`): default prefix `~/.local/spa`, or `--prefix` / `SPA_PREFIX`; creates the venv; puts `spa` on `PATH` (**M3**)
+- [ ] Documented extract-anywhere: unpack the tarball, set `SPA_HOME`, run `spa` from that tree (**M3**)
+- [ ] Optional later: native Linux packages (`.deb` / `.rpm`) from the same tarball, unpack to `/opt/spa`; `install.sh` prefers the distro package when it matches
+- [ ] Optional later: Homebrew tap of the same tarball (no brew Ansible/Pydantic; `spa_venv` stays the Python path)
 - [ ] Optional later: Ansible collection extract of roles/plugins — not the primary install
 
 ## Agent platform and CLI

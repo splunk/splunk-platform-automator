@@ -28,7 +28,9 @@ tests/configs/app_scope/output/.ansible_tmp
 /auth
 # Inventory directory
 /inventory
-# Apps directory
+# Pulled-back PS baseconfig apps (lab or clone-equal)
+/saved_base_config_apps
+# Shared local apps (source: local) when using clone-equal $SPA_HOME/apps
 /apps
 # Helpers directory
 /helpers
@@ -45,6 +47,10 @@ tests/configs/app_scope/output/.ansible_tmp
 tests/.venv
 tests/.ansible_tmp
 tests/.collections
+# Shared venv (bin/spa_venv.sh) and its collections
+/.venv
+/.collections
+/.envrc
 
 # Python
 __pycache__/

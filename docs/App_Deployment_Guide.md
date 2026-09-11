@@ -163,7 +163,7 @@ ITSI is delivered as a **single archive (`.spl` or `.tgz`) that contains multipl
 **Source:** Use either **Splunkbase** or **local**:
 
 - **`source: splunkbase`** – Downloads ITSI from Splunkbase (default **`app_id: 1841`**). Set **`version`** (e.g. `"4.21.0"`) or `"latest"`. Respects **`splunk_app_deployment.target_download`**: when `true`, each target host downloads the archive from Splunkbase (reduces controller→host transfer); when `false`, the controller downloads once and the file is used for all hosts.
-- **`source: local`** – Use a local file. Set **`path`** to the filename under `local_app_repo_path` or an absolute path (e.g. `splunk-it-service-intelligence_4210.spl`).
+- **`source: local`** – Use a local folder (or ITSI `.spl`). Relative `path` is under the shared apps dir: `.spa.yml` `apps_dir`, `SPA_APPS_DIR`, lab sibling `../apps`, then `$SPA_HOME/apps`. Override for one lab with `splunk_app_deployment.local_app_repo_path`, or set `path` / `local_path` to an absolute directory. Regular apps must be unpacked (`default/app.conf`).
 
 **Target roles:** You can omit **`target_roles`**. The role then deploys to every role that exists in your inventory:
 

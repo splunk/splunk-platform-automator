@@ -443,9 +443,11 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
           # Remove host_vars dir for this host
           destroy_trigger.push(File.join(host_vars_dir, server['name']))
         end
-        if File.directory?(File.join(splunk_apps['splunk_save_baseconfig_apps_dir'],server['name']))
-          # Remove apps dir for this host
-          destroy_trigger.push(File.join(splunk_apps['splunk_save_baseconfig_apps_dir'],server['name']))
+        save_dir = splunk_apps['splunk_save_baseconfig_apps_dir'] || 'saved_base_config_apps'
+        save_dir = save_dir.start_with?('/') ? save_dir : File.join(dir, save_dir)
+        if File.directory?(File.join(save_dir, server['name']))
+          # Remove pulled-back baseconfig apps for this host
+          destroy_trigger.push(File.join(save_dir, server['name']))
         end
         if destroy_trigger.length > 0
           trigger.info = "Update local Ansible inventory"

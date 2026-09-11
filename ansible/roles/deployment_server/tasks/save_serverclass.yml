@@ -1,5 +1,6 @@
 ---
-# This playbook saves a copy of the serverclass.conf on the ansible host
+# This playbook saves a copy of the serverclass.conf on the ansible host under
+# $SPA_LAB_DIR/saved_base_config_apps (see spa_saved_baseconfig_apps_dir).
 
 - name: Create hostname and system/local dir on ansible host
   tags:
@@ -10,7 +11,7 @@
     - save_baseconfig
     - save_serverclass
   ansible.builtin.file:
-    path: "../{{splunk_save_baseconfig_apps_dir|default('apps')}}/{{inventory_hostname}}/{{ splunk_install_dir }}/splunk/etc/system/local/"
+    path: "{{ spa_saved_baseconfig_apps_dir }}/{{ inventory_hostname }}/{{ splunk_install_dir }}/splunk/etc/system/local/"
     state: directory
   become: false
   delegate_to: localhost
@@ -25,7 +26,7 @@
     - save_serverclass
   synchronize:
     src: "{{ splunk_install_dir }}/splunk/etc/system/local/serverclass.conf"
-    dest: "../{{splunk_save_baseconfig_apps_dir|default('apps')}}/{{splunk_deployment_server|first}}/{{ splunk_install_dir }}/splunk/etc/system/local/"
+    dest: "{{ spa_saved_baseconfig_apps_dir }}/{{ splunk_deployment_server|first }}/{{ splunk_install_dir }}/splunk/etc/system/local/"
     rsync_path: "{{ become_method|default('sudo') }} -u {{splunk_user}} rsync"
     mode: pull
   become: false

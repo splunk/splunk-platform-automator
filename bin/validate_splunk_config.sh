@@ -13,10 +13,11 @@
 set -euo pipefail
 
 BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$BIN_DIR/.." && pwd)"
-CONFIG_PATH="${PROJECT_ROOT}/config/splunk_config.yml"
+DEFAULT_SPA_HOME="$(cd "$BIN_DIR/.." && pwd)"
+RESOLVER="${SPA_HOME:-$DEFAULT_SPA_HOME}/ansible/plugins/inventory/spa_paths.py"
 RUN_AWS_VALIDATE=false
 RUN_LICENSE_CHECK=false
+USER_CONFIG=""
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -41,14 +42,27 @@ while [[ $# -gt 0 ]]; do
             usage
             ;;
         *)
-            CONFIG_PATH="$1"
-            if [[ "$CONFIG_PATH" != /* ]]; then
-                CONFIG_PATH="${PROJECT_ROOT}/${CONFIG_PATH}"
-            fi
+            USER_CONFIG="$1"
             shift
             ;;
     esac
 done
+
+if [[ -n "$USER_CONFIG" ]]; then
+    if [[ "$USER_CONFIG" != /* ]]; then
+        if [[ -f "$(pwd)/${USER_CONFIG}" ]]; then
+            USER_CONFIG="$(pwd)/${USER_CONFIG}"
+        else
+            USER_CONFIG="${SPA_HOME:-$DEFAULT_SPA_HOME}/${USER_CONFIG}"
+        fi
+    fi
+    export SPLUNK_CONFIG_FILE="$USER_CONFIG"
+fi
+
+# Resolve SPA_HOME / SPA_LAB_DIR and override ansible.cfg inventory (lab, not clone).
+eval "$(python3 "$RESOLVER" --export)"
+PROJECT_ROOT="$SPA_HOME"
+CONFIG_PATH="$SPLUNK_CONFIG_FILE"
 
 if [[ ! -f "$CONFIG_PATH" ]]; then
     echo -e "${RED}Config file not found: ${CONFIG_PATH}${NC}" >&2
@@ -61,7 +75,15 @@ echo -e "${GREEN}=== Validating ${CONFIG_PATH} ===${NC}"
 
 # Schema validation via Pydantic
 echo -e "${GREEN}[1/4] Schema validation (Pydantic)...${NC}"
-source "${PROJECT_ROOT}/tests/run_venv.sh" 'pydantic>=2.0' 'PyYAML>=6.0' 'ansible-core>=2.10' 'jmespath' 'lxml'
+# Reuse an already active venv (test runners, direnv); otherwise the lab .venv,
+# otherwise the shared SPA_HOME/.venv.
+if [[ -n "${VIRTUAL_ENV:-}" ]]; then
+    source "${PROJECT_ROOT}/bin/spa_venv.sh" --dir "$VIRTUAL_ENV" \
+        'pydantic>=2.0' 'PyYAML>=6.0' 'ansible-core>=2.10' 'jmespath' 'lxml'
+else
+    source "${PROJECT_ROOT}/bin/spa_venv.sh" --lab "$SPA_LAB_DIR" \
+        'pydantic>=2.0' 'PyYAML>=6.0' 'ansible-core>=2.10' 'jmespath' 'lxml'
+fi
 
 PYTHONPATH="${PROJECT_ROOT}/ansible/plugins/inventory" python3 - "$CONFIG_PATH" <<'PY'
 import sys
@@ -119,6 +141,7 @@ echo "License role pairing OK"
 # Playbook syntax-check
 echo -e "${GREEN}[4/4] Playbook syntax-check...${NC}"
 export ANSIBLE_CONFIG="${PROJECT_ROOT}/ansible.cfg"
+# spa_venv.sh exports ANSIBLE_COLLECTIONS_PATH (community.general, ansible.posix, ansible.windows)
 ansible-playbook ansible/provision_terraform_aws.yml --syntax-check
 ansible-playbook ansible/deploy_site.yml --syntax-check
 echo "Playbook syntax OK"

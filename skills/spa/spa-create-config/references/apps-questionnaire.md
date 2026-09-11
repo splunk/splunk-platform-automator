@@ -54,7 +54,7 @@ Per app: `name` (folder name), `app_id`, optional `version: latest`, `target_rol
 
 ## 8. Local org apps
 
-`source: local`, path under software directory.
+`source: local`, `path` under the shared apps dir (`.spa.yml` `apps_dir` / `SPA_APPS_DIR` / `$SPA_HOME/apps`). Override per lab with `splunk_app_deployment.local_app_repo_path`.
 
 ## Minimal block sketch
 

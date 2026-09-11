@@ -2,7 +2,7 @@
 """
 Discover Splunk license files in the Software directory and propose splunk_license_file.
 
-Files must live in splunk_software_dir (default ../Software relative to repo root).
+Files must live in splunk_software_dir (default ../Software relative to SPA_LAB_DIR).
 SPA references licenses by basename only (e.g. Splunk_Enterprise.lic).
 
 Examples:
@@ -42,12 +42,36 @@ def repo_root_from_script() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def _inventory_plugin_dir() -> Path:
+    return repo_root_from_script() / "ansible" / "plugins" / "inventory"
+
+
+def resolve_lab_root(project_root: Optional[Path] = None) -> Path:
+    """Lab root (SPA_LAB_DIR). Software may still fall back to the clone sibling."""
+    plugin_dir = _inventory_plugin_dir()
+    if str(plugin_dir) not in sys.path:
+        sys.path.insert(0, str(plugin_dir))
+    try:
+        from spa_paths import resolve_spa_paths
+    except ImportError:
+        return (project_root or repo_root_from_script()).resolve()
+    return resolve_spa_paths().spa_lab_dir
+
+
 def resolve_software_dir(project_root: Path, explicit: Optional[str] = None) -> Path:
     if explicit:
         path = Path(explicit).expanduser()
         if not path.is_absolute():
             path = (project_root / path).resolve()
         return path.resolve()
+    plugin_dir = _inventory_plugin_dir()
+    if str(plugin_dir) not in sys.path:
+        sys.path.insert(0, str(plugin_dir))
+    try:
+        from spa_paths import resolve_spa_paths
+        return resolve_spa_paths().software_dir
+    except ImportError:
+        pass
     for candidate in (project_root / "../Software", project_root / "Software"):
         resolved = candidate.resolve()
         if resolved.is_dir():
@@ -321,7 +345,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", help="Output JSON")
     p.add_argument(
         "--software-dir",
-        help="Software directory (default: ../Software from repo root, SPA splunk_software_dir)",
+        help="Software directory (default: ../Software from SPA_LAB_DIR, SPA splunk_software_dir)",
     )
     p.add_argument("--config", help="splunk_config.yml path to detect ITSI and current license settings")
     p.add_argument(
@@ -334,12 +358,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
-    project_root = repo_root_from_script()
+    project_root = resolve_lab_root()
     config_path = None
     if args.config:
         config_path = Path(args.config).expanduser()
         if not config_path.is_absolute():
-            config_path = (project_root / config_path).resolve()
+            config_path = (Path.cwd() / config_path).resolve()
+            if not config_path.is_file():
+                config_path = (repo_root_from_script() / args.config).resolve()
 
     try:
         result = scan_licenses(

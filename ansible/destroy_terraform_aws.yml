@@ -11,8 +11,9 @@
   hosts: localhost
   gather_facts: false
   vars:
-    config_file: "{{ lookup('env', 'SPLUNK_CONFIG_FILE') | default('../config/splunk_config.yml', true) }}"
-    terraform_dir: "{{ playbook_dir }}/../terraform/aws"
+    config_file: "{{ spa_config_file }}"
+    terraform_dir: "{{ spa_terraform_state_dir }}"
+    terraform_modules_dir: "{{ spa_terraform_modules_dir }}"
 
   tasks:
     - name: Load Splunk configuration
@@ -32,6 +33,24 @@
         - terraform.aws.access_key_id is defined
         - terraform.aws.secret_access_key is defined
       tags: always
+
+    - name: Ensure Terraform state directory exists
+      ansible.builtin.file:
+        path: "{{ terraform_dir }}"
+        state: directory
+        mode: '0755'
+      tags: always
+
+    - name: Link Terraform modules into the lab state directory
+      ansible.builtin.file:
+        src: "{{ item }}"
+        dest: "{{ terraform_dir }}/{{ item | basename }}"
+        state: link
+        force: true
+      loop: "{{ query('fileglob', terraform_modules_dir + '/*.tf') }}"
+      when: spa_roots_differ | bool
+      tags: always
+
     - name: Check if Terraform state exists
       ansible.builtin.stat:
         path: "{{ terraform_dir }}/terraform.tfstate"
@@ -62,7 +81,7 @@
         path: "{{ item }}"
         state: absent
       loop:
-        - "{{ playbook_dir }}/../inventory/hosts"
+        - "{{ spa_inventory_dir }}/hosts"
         - "{{ terraform_dir }}/tfplan"
         - "{{ terraform_dir }}/terraform.tfvars"
       when: tfstate.stat.exists

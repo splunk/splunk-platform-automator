@@ -6,7 +6,7 @@ SVA codes describe **topology**, not sizing. Lab configs may diverge from full S
 |----------|-------------|---------|
 | S1 | `examples/single_node.yml` | Single host: indexer + search_head (+ optional LM) |
 | D1 | `examples/idx_sh_uf.yml` | Standalone indexers + SH |
-| C1 / C11 | `examples/cm_2idxc_sh_uf.yml` | CM + indexers + standalone SH |
+| C1 / C11 | `examples/cm_2idxc_sh_uf.yml` (VirtualBox); `examples/cm_2idxc_sh_uf_aws.yml` (AWS) | CM + indexers + standalone SH |
 | C3 / C13 | `examples/cm_2idxc1site_3shc_uf.yml` | CM + indexers + SHC + deployer |
 | M2 / M12 | `examples/4idxc2site_sh.yml` | Multisite IDXC + SH (standalone) |
 | M3 / M13 | `examples/cm_4idxc2site_3shc_ds_uf.yml` | Multisite IDXC + SHC per site |

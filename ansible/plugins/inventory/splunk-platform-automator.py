@@ -118,6 +118,12 @@ try:
 except ImportError:
     load_config_with_secrets = None
 
+try:
+    from spa_paths import resolve_shared_data_dir, resolve_spa_paths
+except ImportError:
+    resolve_spa_paths = None
+    resolve_shared_data_dir = None
+
 class InventoryModule(BaseInventoryPlugin):
     NAME = 'splunk-platform-automator'
 
@@ -150,13 +156,45 @@ class InventoryModule(BaseInventoryPlugin):
 
         return merged_dict
 
-    def _resolve_override_dir(self, cwd, configured, env_var):
-        '''Resolve a Software/baseconfig directory, honoring an absolute or relative env override.'''
+    def _is_defaultish_dir(self, configured, env_var):
+        '''True when config uses the built-in default (let spa_paths / .spa.yml win).'''
+        if not configured:
+            return True
+        value = str(configured).strip()
+        if '{{' in value:
+            return True
+        defaults = {
+            'SPA_SOFTWARE_DIR': ('../Software', 'Software'),
+            'SPA_BASECONFIG_DIR': ('../Software', 'Software'),
+            'SPA_APPS_DIR': ('../apps', 'apps'),
+        }
+        return value in defaults.get(env_var, ())
+
+    def _resolve_override_dir(self, base_dir, configured, env_var):
+        '''Resolve Software/baseconfig/apps: env, then config override, then spa_paths.'''
+        paths = getattr(self, 'spa_paths', None)
+        defaultish = self._is_defaultish_dir(configured, env_var)
+        if resolve_shared_data_dir is not None and paths is not None:
+            if defaultish and env_var == 'SPA_SOFTWARE_DIR':
+                return str(paths.software_dir)
+            if defaultish and env_var == 'SPA_BASECONFIG_DIR':
+                return str(paths.baseconfig_dir)
+            if defaultish and env_var == 'SPA_APPS_DIR':
+                return str(paths.apps_dir)
+            home_leaf = 'apps' if env_var == 'SPA_APPS_DIR' else 'Software'
+            default_rel = '../apps' if env_var == 'SPA_APPS_DIR' else '../Software'
+            return str(resolve_shared_data_dir(
+                paths.spa_home,
+                paths.spa_lab_dir,
+                configured=configured or default_rel,
+                env_var=env_var,
+                home_leaf=home_leaf,
+            ))
         override = os.environ.get(env_var, '').strip()
         rel = override or configured
         if os.path.isabs(rel):
             return rel
-        return os.path.join(cwd, rel)
+        return os.path.normpath(os.path.join(base_dir, rel))
 
     def _check_splunk_archive(self,arch_type,splunk_architecture,splunk_version,directory):
         '''Check if splunk version archive is available'''
@@ -189,14 +227,12 @@ class InventoryModule(BaseInventoryPlugin):
             raise AnsibleParserError("Missing required python libraries: {}. Please run 'pip install -r requirements.txt' to install them.".format(", ".join(missing)))
 
     def _init_inventory(self):
-        # Calculate correct path to inventory dir relative to this script
-        # Script location: ansible/plugins/inventory/splunk-platform-automator.py
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-        inventory_dir = os.path.join(base_dir, "inventory")
+        # Lab inventory (SPA_LAB_DIR/inventory). Clone-equal keeps today's layout.
+        inventory_dir = str(self.spa_paths.inventory_dir)
 
         if not os.path.isdir(inventory_dir):
             try:
-                os.mkdir(inventory_dir)
+                os.makedirs(inventory_dir, exist_ok=True)
             except Exception as e:
                 raise AnsibleParserError('Cannot create inventory directory. Error: {}'.format(e))
         if not os.path.exists(os.path.join(inventory_dir, "hosts")):
@@ -205,22 +241,25 @@ class InventoryModule(BaseInventoryPlugin):
                     f.write('')
             except Exception as e:
                 raise AnsibleParserError('Cannot create inventory/hosts file. Error: {}'.format(e))
-        
-        # Create symlink for group_vars to ensure they are picked up
-        # inventory/group_vars -> ../ansible/group_vars
-        group_vars_source = os.path.join(base_dir, "ansible", "group_vars")
+
+        # inventory/group_vars -> $SPA_HOME/ansible/group_vars
+        group_vars_source = os.path.join(str(self.spa_paths.spa_home), "ansible", "group_vars")
         group_vars_link = os.path.join(inventory_dir, "group_vars")
-        
-        if not os.path.exists(group_vars_link):
-            try:
-                # We need a relative path for the symlink to be portable if possible, 
-                # but absolute is safer given we calculated base_dir
-                # Actually, os.symlink(src, dst)
-                # Let's use relative path: ../ansible/group_vars
-                os.symlink("../ansible/group_vars", group_vars_link)
-            except Exception as e:
-                # If symlink fails (e.g. Windows), we might warn but usually ignored
-                pass            
+        if self.spa_paths.roots_differ:
+            link_target = group_vars_source
+        else:
+            link_target = "../ansible/group_vars"
+
+        try:
+            if os.path.islink(group_vars_link) or os.path.exists(group_vars_link):
+                if os.path.islink(group_vars_link) and os.readlink(group_vars_link) != link_target:
+                    os.remove(group_vars_link)
+                elif not os.path.islink(group_vars_link):
+                    link_target = None
+            if link_target and not os.path.exists(group_vars_link):
+                os.symlink(link_target, group_vars_link)
+        except Exception:
+            pass
 
     def _set_virtualization(self, resolved_config):
         '''Set virtualization type based on the definition in the config (resolved dict).'''
@@ -231,14 +270,29 @@ class InventoryModule(BaseInventoryPlugin):
                 setattr(self, 'virtualization', virtualization)
 
     def _populate_defaults(self):
-        '''Read all the default values from the files in the defaults directory'''
+        '''Read all the default values from $SPA_HOME/defaults'''
         defaults = {}
-        for file in glob.glob("defaults/*.yml"):
+        defaults_glob = os.path.join(str(self.spa_paths.spa_home), "defaults", "*.yml")
+        for file in glob.glob(defaults_glob):
             with open(file,"r") as configfile:
               file_content = yaml.load(configfile, Loader=yaml.FullLoader)
             stanza=Path(file).resolve().stem
             defaults[stanza] = file_content[stanza]
         setattr(self, 'defaults', defaults)
+
+    def _publish_spa_paths(self):
+        '''Expose resolved roots to playbooks (terraform state, inventory, config).'''
+        paths = self.spa_paths
+        self.inventory.set_variable('all', 'spa_home', str(paths.spa_home))
+        self.inventory.set_variable('all', 'spa_lab_dir', str(paths.spa_lab_dir))
+        self.inventory.set_variable('all', 'spa_config_file', str(paths.config_file))
+        self.inventory.set_variable('all', 'spa_inventory_dir', str(paths.inventory_dir))
+        self.inventory.set_variable('all', 'spa_terraform_modules_dir', str(paths.terraform_modules_dir))
+        self.inventory.set_variable('all', 'spa_terraform_state_dir', str(paths.terraform_state_dir))
+        self.inventory.set_variable('all', 'spa_roots_differ', paths.roots_differ)
+        self.inventory.set_variable('all', 'spa_software_dir', str(paths.software_dir))
+        self.inventory.set_variable('all', 'spa_baseconfig_dir', str(paths.baseconfig_dir))
+        self.inventory.set_variable('all', 'spa_apps_dir', str(paths.apps_dir))
 
     def _populate_groupvars(self, vardict, groupname):
         '''adds all the variables from a dictionary to the given group'''
@@ -277,19 +331,40 @@ class InventoryModule(BaseInventoryPlugin):
         if isinstance(self.configfiles.get('splunk_app_deployment'), dict):
             self.groups['all']['splunk_app_deployment'] = self.configfiles['splunk_app_deployment']
 
+        # Config-file overrides for Software / baseconfig / local apps.
+        # Default relative values yield to spa_paths (.spa.yml / env / discovery).
+        # A custom path in splunk_config.yml still wins over .spa.yml (env still wins over both).
+        lab_dir = str(self.spa_paths.spa_lab_dir)
+        app_dep = self.groups['all'].get('splunk_app_deployment')
+        if isinstance(app_dep, dict):
+            configured_apps = app_dep.get('local_app_repo_path')
+            if configured_apps and not self._is_defaultish_dir(configured_apps, 'SPA_APPS_DIR'):
+                app_dep['local_app_repo_path'] = self._resolve_override_dir(
+                    lab_dir, configured_apps, 'SPA_APPS_DIR'
+                )
+
         # Check Base Config App availability
         # SPA_BASECONFIG_DIR / SPA_SOFTWARE_DIR override configured paths (local/CI tests).
-        cwd = os.getcwd()
+        # Relative ../Software is a sibling of the lab (SPA_LAB_DIR), not the prefix.
         splunk_baseconfig_dir = self._resolve_override_dir(
-            cwd, self.groups['all']['splunk_baseconfig_dir'], 'SPA_BASECONFIG_DIR'
+            lab_dir, self.groups['all']['splunk_baseconfig_dir'], 'SPA_BASECONFIG_DIR'
         )
         check_base = glob.glob(os.path.join(splunk_baseconfig_dir, "*/org_ds_secure_server"))
         check_cluster = glob.glob(os.path.join(splunk_baseconfig_dir, "*/org_cluster_manager_base"))
         if len(check_base) < 1 or len(check_cluster) < 1:
-            raise AnsibleParserError('Error: Cannot find the latest Splunk baseconfig apps mentioned in the README.md. Extract them under %s' % splunk_baseconfig_dir)
+            lab_sw = os.path.normpath(os.path.join(lab_dir, '..', 'Software'))
+            home_sw = os.path.normpath(os.path.join(str(self.spa_paths.spa_home), '..', 'Software'))
+            raise AnsibleParserError(
+                "Error: Cannot find the latest Splunk baseconfig apps mentioned in the README.md. "
+                "Looked in %s. Place them next to the lab (%s) or next to SPA_HOME (%s), "
+                "or set SPA_BASECONFIG_DIR / SPA_SOFTWARE_DIR."
+                % (splunk_baseconfig_dir, lab_sw, home_sw)
+            )
 
-        # Create auth dir if not existing
-        splunk_auth_dir = os.path.join(cwd,"ansible",self.groups['all']['splunk_auth_dir'])
+        # Create auth dir if not existing (lab/auth when ../auth; clone-equal unchanged)
+        splunk_auth_dir = os.path.normpath(
+            os.path.join(lab_dir, "ansible", self.groups['all']['splunk_auth_dir'])
+        )
         if self.groups['all']['splunk_secret_share']['splunk'] == True or self.groups['all']['splunk_secret_share']['splunkforwarder'] == True:
             if not os.path.isdir(splunk_auth_dir):
                 try:
@@ -431,7 +506,7 @@ class InventoryModule(BaseInventoryPlugin):
                                 license_list.append(license_file_value)
                             for license_file_name in license_list:
                                 software_dir = self._resolve_override_dir(
-                                    cwd,
+                                    lab_dir,
                                     self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'],
                                     'SPA_SOFTWARE_DIR',
                                 )
@@ -524,7 +599,7 @@ class InventoryModule(BaseInventoryPlugin):
                     else:
                         splunk_architecture = 'amd64'
                     directory = self._resolve_override_dir(
-                        cwd,
+                        lab_dir,
                         self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'],
                         'SPA_SOFTWARE_DIR',
                     )
@@ -571,7 +646,7 @@ class InventoryModule(BaseInventoryPlugin):
         for splunk_env, versions_combs in self.versions.items():
             #print("Checking Versions combs: %s in splunk_env %s" % (versions_combs, splunk_env))
             directory = self._resolve_override_dir(
-                cwd,
+                lab_dir,
                 self.environments[splunk_env]['splunk_defaults']['splunk_software_dir'],
                 'SPA_SOFTWARE_DIR',
             )
@@ -626,6 +701,25 @@ class InventoryModule(BaseInventoryPlugin):
         # Check for required python libraries
         self._check_requirements()
 
+        if resolve_spa_paths is None:
+            raise AnsibleParserError('Path resolver module (spa_paths) not found.')
+        try:
+            setattr(self, 'spa_paths', resolve_spa_paths())
+        except Exception as e:
+            raise AnsibleParserError('Failed to resolve SPA_HOME / SPA_LAB_DIR: %s' % e)
+
+        # When roots differ, ansible.cfg would still list the clone config. Refuse
+        # that file so a separate lab cannot pick up the checkout's splunk_config.yml.
+        if self.spa_paths.roots_differ:
+            clone_config = (self.spa_paths.spa_home / "config" / "splunk_config.yml").resolve()
+            parsed = Path(path).resolve()
+            if parsed == clone_config and parsed != self.spa_paths.config_file.resolve():
+                raise AnsibleParserError(
+                    "SPA_LAB_DIR (%s) differs from SPA_HOME. Refusing clone config %s. "
+                    "Set ANSIBLE_INVENTORY to the lab (source bin/spa_env.sh) or pass "
+                    "-i %s." % (self.spa_paths.spa_lab_dir, path, self.spa_paths.config_file)
+                )
+
         # Load config with secret resolution (!vault) and build configfiles from it
         if load_config_with_secrets is None:
             raise AnsibleParserError('Secret resolver module (secret_resolver) not found.')
@@ -675,3 +769,4 @@ class InventoryModule(BaseInventoryPlugin):
         self._populate_defaults()
         # Call our internal helper to populate the dynamic inventory from the config file
         self._populate()
+        self._publish_spa_paths()

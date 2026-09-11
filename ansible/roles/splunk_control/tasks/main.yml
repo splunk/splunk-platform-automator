@@ -8,10 +8,19 @@
   ansible.builtin.debug:
     msg: "role '{{ role_name }}' start"
 
+- name: Ensure lab config directory exists
+  tags:
+    - splunk
+    - splunk_control
+  ansible.builtin.file:
+    path: "{{ spa_lab_dir }}/config"
+    state: directory
+    mode: "0755"
+
 - name: Create Splunk Hosts index.html
   tags:
     - splunk
     - splunk_control
   ansible.builtin.template:
     src: "config/index.html.j2"
-    dest: "../config/index.html"
+    dest: "{{ spa_lab_dir }}/config/index.html"

@@ -7,9 +7,27 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Changed
+Distribution work on the `distribution` integration branch toward **3.0** (M1–M3: path contract, `spa` CLI, `install.sh` + tarball). Linux packages and Homebrew are later, not part of 3.0.
 
-- **GitHub Release notes** – Each release page ends with a Full changelog link to `CHANGELOG.md` at that tag, matching v2.4.0.
+### Added
+
+- **Distribution M1 — path contract and lab scaffold** ([#46](https://github.com/splunk/splunk-platform-automator/issues/46)):
+  - `SPA_HOME` is the framework (`ansible/`, Terraform modules, `skills/`, `bin/`). `SPA_LAB_DIR` is the lab (`config/splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `saved_base_config_apps/`). Unset both → the git clone; today's `ansible-playbook` workflow is unchanged.
+  - `bin/init_spa_dir.sh` scaffolds a lab dir (example config, `.spa.yml`, `inventory/`, `terraform/aws/`). Never copies `ansible/`. `--example`, refuse overwrite unless `--force`. If the source already has `config/splunk_config.yml`, the existing env is **migrated** (config, inventory, Terraform state) so a running deployment stays manageable from the new lab. `--from`, `--migrate`, `--keep-source`. An old clone copied as the target is converted in place (framework dirs stripped, state kept).
+  - Resolver in `ansible/plugins/inventory/spa_paths.py` (plus `bin/spa_env.sh`) sets `ANSIBLE_INVENTORY` to the lab so a separate lab does not pick up the clone's `config/splunk_config.yml`. Relative `../Software` prefers a sibling of the **lab**, then a sibling of `SPA_HOME`. `.spa.yml` records `software_dir`, `baseconfig_dir`, and `apps_dir` (local `source: local` apps; same discovery as Software, plus `$SPA_HOME/apps`). Config still overrides: `splunk_dirs.splunk_software_dir`, `splunk_dirs.splunk_baseconfig_dir`, `splunk_app_deployment.local_app_repo_path` (env vars win over both).
+  - Lab `.envrc` puts `$SPA_HOME/bin` on `PATH` so `spash` works from a lab (labs have no `bin/` of their own). Pulled-back PS apps go to `$SPA_LAB_DIR/saved_base_config_apps/`. The host link page is `$SPA_LAB_DIR/config/index.html`.
+  - Inventory plugin, Terraform provision/destroy/wait, `validate_splunk_config.sh`, `spash`, and `splunk_config_licenses.py` honor the contract. When roots differ, Terraform modules stay under `$SPA_HOME/terraform/aws`; state stays under the lab.
+  - `requirements.yml` includes `ansible.windows` so `validate_splunk_config.sh` can syntax-check `deploy_site.yml` (Windows UF `win_stat`).
+
+- **`bin/spa_venv.sh` — shared Python virtualenv** for the framework, labs, and tests, so Ansible and Pydantic no longer have to come from Homebrew or the system Python:
+  - Resolution order: `--dir` / `SPA_VENV_DIR`, then `LAB/.venv` when present, then the shared `$SPA_HOME/.venv`. Ansible collections from `requirements.yml` install next to the venv and `ANSIBLE_COLLECTIONS_PATH` is exported.
+  - `source bin/spa_venv.sh` activates (creating when missing); `--create`, `--path`, `--no-create`, `--no-install`, `--python`, `--requirements`.
+  - `init_spa_dir.sh` creates the shared `$SPA_HOME/.venv` (or a lab `.venv` with `--venv`) when it is missing, then runs **`direnv allow`** when direnv is installed, then `spa_doctor.sh` (`--skip-doctor` to skip).
+  - `tests/run_venv.sh` is now a thin wrapper around the same script; tests keep their own `tests/.venv` so pytest dependencies stay out of a lab venv. `validate_splunk_config.sh` reuses an active venv, then the lab venv, then the shared venv.
+
+- **`bin/spa_doctor.sh` — host prerequisite check** (Python/venv, Terraform **only** when the lab uses `terraform.aws`, Vagrant **only** when the lab has a top-level `virtualbox:` section, Software/, direnv **including the shell hook** in `~/.zshrc` / `~/.bashrc`, and which `spash` on `PATH` wins). `--fix-direnv` adds the hook. Interactive `init_spa_dir.sh` runs that for you. Suggests `brew install …` on macOS. `init_spa_dir.sh` runs doctor after scaffold (`--skip-doctor` to skip) and **`direnv allow`** on the new lab.
+
+- README, AGENTS.md, and Splunk Config Guided Setup: **Start here** for AWS lab dirs vs VirtualBox in the clone; Installation uses `spa_venv` / `spa_doctor` (not brew Ansible/Pydantic). Lab-dir Vagrant is documented as unsupported.
 
 ## [2.5.2](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.5.2) - 2026-09-10
 

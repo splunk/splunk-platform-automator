@@ -48,6 +48,10 @@ tests/
 ├── test_splunk_config_licenses.py # bin/splunk_config_licenses.py helpers
 ├── test_splunk_config_aws.py  # bin/splunk_config_aws.py pure functions
 ├── test_validate_splunk_config.py # bash -n / smoke for validate_splunk_config.sh
+├── test_spa_paths.py              # SPA_HOME / SPA_LAB_DIR resolver (Distribution M1)
+├── test_init_spa_dir.py           # bin/init_spa_dir.sh scaffold and migrate
+├── test_spa_venv.py               # bin/spa_venv.sh resolution + lab .envrc
+├── test_lab_scaffold.py           # separate lab inventory/validate; no clone writes
 ├── test_changelog_notes.py    # CHANGELOG section extractor for releases
 ├── test_verification.py       # Phase 2: Health verification tests
 ├── run_deployment_tests.sh    # Helper script for deployment tests
@@ -57,7 +61,7 @@ tests/
 ├── run_local_tests.sh         # Run all local suites above (no AWS)
 ├── run_schema_tests.sh        # Helper script for schema validation tests
 ├── run_verification_tests.sh  # Helper script for verification tests
-├── run_venv.sh                # Common venv setup; installs requirements.yml collections when ansible-galaxy is present
+├── run_venv.sh                # tests/.venv wrapper around bin/spa_venv.sh (shared venv implementation)
 ├── scope_assertions.py        # Helpers for app scope scenario assertions
 └── test_app_scope_scenarios.py # Scenario-based app scope tests
 ```

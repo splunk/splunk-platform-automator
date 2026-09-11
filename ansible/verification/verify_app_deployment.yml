@@ -43,7 +43,7 @@
       ansible.builtin.set_fact:
         _verify_local_app_repo_path: >-
           {{ splunk_app_deployment.local_app_repo_path
-             | default(playbook_dir + '/../../apps') }}
+             | default(spa_apps_dir | default(playbook_dir + '/../../apps', true), true) }}
       run_once: true
       delegate_to: localhost
       delegate_facts: true

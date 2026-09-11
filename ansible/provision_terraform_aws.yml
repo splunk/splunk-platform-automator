@@ -12,8 +12,9 @@
   hosts: localhost
   gather_facts: false
   vars:
-    config_file: "{{ lookup('env', 'SPLUNK_CONFIG_FILE') | default('../config/splunk_config.yml', true) }}"
-    terraform_dir: "{{ playbook_dir }}/../terraform/aws"
+    config_file: "{{ spa_config_file }}"
+    terraform_dir: "{{ spa_terraform_state_dir }}"
+    terraform_modules_dir: "{{ spa_terraform_modules_dir }}"
 
   tasks:
     - name: Load Splunk configuration
@@ -49,6 +50,30 @@
         - terraform.aws.access_key_id is defined
         - terraform.aws.secret_access_key is defined
       tags: always
+
+    - name: Ensure Terraform state directory exists
+      ansible.builtin.file:
+        path: "{{ terraform_dir }}"
+        state: directory
+        mode: '0755'
+      tags:
+        - generate
+        - always
+
+    # When SPA_LAB_DIR differs from SPA_HOME, modules stay under the prefix;
+    # state (tfvars, .terraform, tfstate) lives in the lab. Symlink *.tf so
+    # community.general.terraform can use project_path = lab state dir.
+    - name: Link Terraform modules into the lab state directory
+      ansible.builtin.file:
+        src: "{{ item }}"
+        dest: "{{ terraform_dir }}/{{ item | basename }}"
+        state: link
+        force: true
+      loop: "{{ query('fileglob', terraform_modules_dir + '/*.tf') }}"
+      when: spa_roots_differ | bool
+      tags:
+        - generate
+        - always
 
     - name: Generate terraform.tfvars from template
       ansible.builtin.template:
@@ -110,6 +135,16 @@
         - apply
         - outputs
 
+    - name: Ensure lab inventory directory exists
+      ansible.builtin.file:
+        path: "{{ spa_inventory_dir }}"
+        state: directory
+        mode: '0755'
+      when: terraform_outputs.outputs.ansible_inventory is defined
+      tags:
+        - apply
+        - outputs
+
     - name: Generate Ansible inventory from Terraform outputs
       ansible.builtin.copy:
         content: |
@@ -120,7 +155,7 @@
           {{ hostname }} ansible_host={{ details.public_ip }} ansible_user={{ details.ansible_user }} ansible_ssh_private_key_file={{ details.ansible_ssh_private_key_file }} ip_addr={{ details.private_ip }} private_ip={{ details.private_ip }} public_dns_name={{ details.public_dns_name }} private_dns_name={{ details.private_dns_name }}
 
           {% endfor %}
-        dest: "{{ playbook_dir }}/../inventory/hosts"
+        dest: "{{ spa_inventory_dir }}/hosts"
         mode: '0644'
       when: terraform_outputs.outputs.ansible_inventory is defined
       register: inventory_result
@@ -130,7 +165,7 @@
 
     - name: Confirm inventory generation
       ansible.builtin.debug:
-        msg: "✅ Generated Ansible inventory at {{ playbook_dir }}/../inventory/hosts"
+        msg: "✅ Generated Ansible inventory at {{ spa_inventory_dir }}/hosts"
       when:
         - terraform_outputs.outputs.ansible_inventory is defined
         - inventory_result is changed
