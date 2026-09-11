@@ -1,6 +1,7 @@
 """Tests for bin/spa_doctor.sh host prerequisite checks."""
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -63,7 +64,7 @@ def test_doctor_ok_when_spash_comes_from_spa_home(tmp_path):
 
 def test_doctor_aws_strict_fails_without_terraform(tmp_path, monkeypatch):
     """When --aws is set and terraform is absent, doctor must fail."""
-    if subprocess.run(["command", "-v", "terraform"], capture_output=True).returncode == 0:
+    if shutil.which("terraform"):
         pytest.skip("terraform is installed")
     env = os.environ.copy()
     env["PATH"] = "/usr/bin:/bin"
@@ -139,7 +140,7 @@ def test_doctor_warns_when_hook_missing(tmp_path):
     )
     out = result.stdout + result.stderr
     assert "direnv" in out.lower()
-    if subprocess.run(["command", "-v", "direnv"], capture_output=True).returncode == 0:
+    if shutil.which("direnv"):
         assert "fix-direnv" in out or "shell" in out.lower()
 
 
@@ -176,7 +177,7 @@ def test_doctor_ok_when_hook_in_sourced_zshrc(tmp_path):
         env=env,
     )
     out = result.stdout + result.stderr
-    if subprocess.run(["command", "-v", "direnv"], capture_output=True).returncode != 0:
+    if not shutil.which("direnv"):
         pytest.skip("direnv not installed")
     assert "set up in your shell" in out or "environment is loaded" in out
     assert "does not load it yet" not in out
@@ -216,7 +217,7 @@ def test_doctor_ok_when_hook_present(tmp_path):
         env=env,
     )
     out = result.stdout + result.stderr
-    if subprocess.run(["command", "-v", "direnv"], capture_output=True).returncode != 0:
+    if not shutil.which("direnv"):
         pytest.skip("direnv not installed")
     assert "set up in your shell" in out or "environment is loaded" in out
     assert "does not load it yet" not in out
@@ -241,8 +242,6 @@ def test_doctor_virtualbox_requires_vagrant(tmp_path):
         env=env,
     )
     out = result.stdout + result.stderr
-    if subprocess.run(["command", "-v", "vagrant"], capture_output=True).returncode == 0:
-        pass
     assert "vagrant" in out.lower()
     if result.returncode != 0:
         assert "virtualbox" in out.lower() or "vagrant" in out.lower()
