@@ -166,6 +166,17 @@ def run(argv: Optional[List[str]] = None) -> int:
     if env_dir:
         venv = resolve_venv_dir(resolve_spa_paths(start_dir=env_dir, environ={**os.environ, "SPA_ENV_DIR": str(env_dir), "SPA_HOME": str(spa_home)}))
     shared = spa_home / ".venv"
+    # Report on the env under test (--env), not whatever SPA_ENV_DIR the shell has.
+    checked = [env_dir / ".venv"] if env_dir else []
+    checked.append(shared)
+    for candidate in checked:
+        if candidate.is_dir() and not (candidate / "bin" / "activate").is_file():
+            rec(
+                "warn",
+                "spa_venv",
+                "incomplete venv at %s (no bin/activate)" % candidate,
+                "%s --create" % (spa_home / "bin" / "spa_venv.sh"),
+            )
     if venv and (venv / "bin" / "activate").is_file():
         rec("ok", "spa_venv", "venv at %s" % venv)
         ansible = venv / "bin" / "ansible"

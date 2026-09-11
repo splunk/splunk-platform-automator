@@ -216,8 +216,14 @@ if [[ "$_spa_venv_mode" == "create" && $_spa_venv_rc -eq 0 ]]; then
     echo "Virtual environment ready: ${_spa_venv_dir}"
 fi
 
-SPA_VENV_DIR="$_spa_venv_dir"
-export SPA_VENV_DIR
+if [[ -f "${_spa_venv_dir}/bin/activate" ]]; then
+    SPA_VENV_DIR="$_spa_venv_dir"
+    export SPA_VENV_DIR
+else
+    # Never pin SPA_VENV_DIR to a venv we could not activate: spa resolves every
+    # tool against it and would fail instead of falling back to SPA_HOME/.venv.
+    unset SPA_VENV_DIR
+fi
 
 _spa_venv_exit=$_spa_venv_rc
 unset -f _spa_venv_usage _spa_venv_fail

@@ -1,6 +1,7 @@
 """CLI tests for spa run, agent envelope, and playbook resolution."""
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -111,6 +112,37 @@ def test_destroy_yes_after_subcommand_auto_approves(monkeypatch):
     rc = main(["destroy", "--yes"])
     assert rc == 0
     assert captured["extra"][:2] == ["-e", "auto_approve=true"]
+
+
+def test_broken_spa_venv_dir_falls_back(tmp_path):
+    """An empty .venv (interrupted create) must not break every spa command."""
+    from spa.executil import resolve_venv_dir
+
+    broken = tmp_path / "env" / ".venv"
+    broken.mkdir(parents=True)
+    env = spa_env({"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(tmp_path / "env")})
+    paths = resolve_spa_paths(start_dir=tmp_path / "env", environ=env)
+    monkey = os.environ.get("SPA_VENV_DIR")
+    os.environ["SPA_VENV_DIR"] = str(broken)
+    try:
+        assert resolve_venv_dir(paths) != broken
+    finally:
+        if monkey is None:
+            os.environ.pop("SPA_VENV_DIR", None)
+        else:
+            os.environ["SPA_VENV_DIR"] = monkey
+
+
+def test_missing_tool_raises_actionable_error(tmp_path):
+    from spa.executil import ToolNotFound, tool_path
+
+    paths = resolve_spa_paths(start_dir=PROJECT_ROOT)
+    with pytest.raises(ToolNotFound) as excinfo:
+        tool_path(paths, "spa-no-such-tool")
+    message = str(excinfo.value)
+    assert "spa-no-such-tool not found" in message
+    assert "spa_venv.sh --create" in message
+    assert "spa doctor" in message
 
 
 def test_run_list_groups_by_root(tmp_path):

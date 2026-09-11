@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
 from spa.agent import COMMAND_SCHEMA, agent_mode, emit
-from spa.executil import apply_paths_env
+from spa.executil import ToolNotFound, apply_paths_env
 from spa.paths import resolve_spa_paths
 
 
@@ -79,8 +79,29 @@ def _paths(start_dir: Optional[str] = None):
     return paths
 
 
+def _error_agent_mode(argv: List[str]) -> bool:
+    """Agent mode for a failure raised outside normal command dispatch."""
+    head, _ = _split_passthrough(argv)
+    head, _ = _split_native(head)
+    if head and head[-1] in NATIVE_FLAG_COMMANDS:
+        return False
+    return agent_mode(
+        force_agent="--agent" in head or "--json" in head,
+        force_human="--no-agent" in head,
+    )
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    argv = list(sys.argv[1:] if argv is None else argv)
+    raw = list(sys.argv[1:] if argv is None else argv)
+    try:
+        return _run(raw)
+    except ToolNotFound as exc:
+        emit(False, error=str(exc), as_agent=_error_agent_mode(raw))
+        return 1
+
+
+def _run(argv: Sequence[str]) -> int:
+    argv = list(argv)
     head, extra = _split_passthrough(argv)
     head, native = _split_native(head)
 

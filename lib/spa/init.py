@@ -235,6 +235,18 @@ def strip_framework(dest: Path, spa_home: Path) -> None:
     link_terraform_modules(dest, spa_home)
 
 
+def prune_incomplete_venv(dest: Path) -> None:
+    """Remove an env .venv with no bin/activate (interrupted or failed create).
+
+    It holds no state, and leaving it makes spa_venv.sh fail on every cd. A
+    complete venv is user state (a pinned Ansible) and is never removed here.
+    """
+    venv = dest / ".venv"
+    if venv.is_dir() and not (venv / "bin" / "activate").is_file():
+        shutil.rmtree(venv)
+        print("  venv:      removed incomplete %s" % venv)
+
+
 def create_venv(
     dest: Path,
     spa_home: Path,
@@ -352,6 +364,8 @@ def init_env(
         raise InitError("Source and dest are the same path (%s)." % dest)
     if example_set and migrate_set:
         raise InitError("Use --example or --migrate/--from, not both.")
+    if force:
+        prune_incomplete_venv(dest)
 
     if is_old_clone_tree(dest) and not example_set and from_dir is None:
         if not force:

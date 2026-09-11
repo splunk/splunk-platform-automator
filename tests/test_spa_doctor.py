@@ -77,6 +77,22 @@ def test_doctor_skips_vagrant_without_virtualbox(tmp_path):
     assert "vagrant is on PATH" not in out
 
 
+def test_doctor_reports_incomplete_venv_for_the_env_under_test(tmp_path):
+    """--env decides which .venv is checked, not the caller's SPA_ENV_DIR."""
+    dest = tmp_path / "env"
+    run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    (dest / ".venv" / "include").mkdir(parents=True)
+    other = tmp_path / "other"
+    (other / ".venv" / "include").mkdir(parents=True)
+    env = spa_env({"SPA_ENV_DIR": str(other)})
+    result = run_spa(
+        ["doctor", "--spa-home", str(PROJECT_ROOT), "--env", str(dest)], env=env
+    )
+    out = result.stdout + result.stderr
+    assert "incomplete venv at %s" % (dest / ".venv") in out
+    assert str(other / ".venv") not in out
+
+
 def test_doctor_warns_when_hook_missing(tmp_path):
     env = spa_env()
     env["HOME"] = str(tmp_path)

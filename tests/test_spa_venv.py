@@ -103,6 +103,21 @@ def test_incomplete_venv_reported_with_no_create(tmp_path):
     assert "incomplete venv" in result.stderr
 
 
+def test_incomplete_venv_does_not_export_spa_venv_dir(tmp_path):
+    """A venv we could not activate must not be pinned for later spa commands."""
+    venv = tmp_path / "broken"
+    (venv / "include").mkdir(parents=True)
+    probe = subprocess.run(
+        ["bash", "-c", 'source "$1" --no-create --dir "$2"; echo "SPA_VENV_DIR=[${SPA_VENV_DIR:-}]"',
+         "bash", str(SCRIPT), str(venv)],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        env=spa_env(),
+    )
+    assert "SPA_VENV_DIR=[]" in probe.stdout
+
+
 def test_no_create_does_not_create(tmp_path):
     venv = tmp_path / "missing"
     result = _run(["--no-create", "--dir", str(venv)])

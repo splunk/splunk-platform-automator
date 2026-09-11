@@ -35,6 +35,9 @@ def get_inventory_data():
     except subprocess.CalledProcessError as e:
         print(f"Error running ansible-inventory: {e.stderr}", file=sys.stderr)
         sys.exit(1)
+    except FileNotFoundError as e:
+        print(f"Error: {e.filename} not found. Run: spa doctor", file=sys.stderr)
+        sys.exit(1)
     except json.JSONDecodeError as e:
         print(f"Error parsing inventory JSON: {e}", file=sys.stderr)
         sys.exit(1)

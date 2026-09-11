@@ -17,8 +17,11 @@ Distribution work on the `distribution` integration branch toward **3.0** (M1–
   - Term is **env** (Splunk environment): `SPA_ENV_DIR` / `spa_env_dir`. No `SPA_LAB_DIR` alias. `SPADirName: "{{ spa_env_dir | basename }}"`.
   - `spa init --force` never replaces `splunk_config.yml` unless `--example`. Old mixed clones print keep/remove and exit 2 until `--force`.
   - `spa init --venv` / `--python` / `--ansible VER` / `--pip PKG`; env `$DIR/requirements.txt` last. Runtime venv: `SPA_VENV_DIR` → `$SPA_ENV_DIR/.venv` → `$SPA_HOME/.venv`.
-  - `spa run`: `ansible/<stem>`, `verification/<stem>`, or `$SPA_ENV_DIR/<dir>/<stem>`. `--list` catalogs framework stems (custom folders only if `playbook_dirs` in `.spa.yml`).
+  - `spa run`: `ansible/<stem>`, `verification/<stem>`, or `$SPA_ENV_DIR/<dir>/<stem>`. `--list` catalogs framework stems (custom folders only if `playbook_dirs` in `.spa.yml`) and groups them by root; `--json` keeps the `source` field.
   - Cup-style agent mode: auto-detect, JSON envelope, `--agent` / `--no-agent`, `-y`. Skills and `.agent/workflows` call only `spa`.
+  - `--yes` works after the subcommand (`spa provision --yes`, `spa destroy --yes`), not only as a global (`spa -y provision`). `spa destroy --yes` now also passes `auto_approve=true`. Documented one-shot: `spa provision --yes && spa deploy`.
+  - Native tool flags reach the wrapped tool: `spa shell -l`, `spa aws --check-auth --json`, `spa licenses --json`. `spa shell --help` shows `usage: spa shell`.
+  - An incomplete env `.venv` (no `bin/activate`) no longer breaks every command. `spa_venv.sh` will not export `SPA_VENV_DIR` for a venv it could not activate, venv resolution skips unusable candidates and falls back to `$SPA_HOME/.venv`, a missing tool reports the venv to create instead of a traceback, `spa doctor` warns about it, and `spa init --force` removes it (a complete venv is never removed).
 
 - **Distribution M1 — path contract and env scaffold** ([#46](https://github.com/splunk/splunk-platform-automator/issues/46)):
   - `SPA_HOME` is the framework (`ansible/`, Terraform modules, `skills/`, `bin/`). `SPA_ENV_DIR` (M1: `SPA_LAB_DIR`) is the env (`config/splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `saved_base_config_apps/`). Unset both → the git clone; today's `ansible-playbook` workflow is unchanged.

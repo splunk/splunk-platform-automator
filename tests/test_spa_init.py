@@ -89,6 +89,29 @@ def test_force_without_example_keeps_config(tmp_path):
     assert marker in cfg.read_text()
 
 
+def test_force_removes_incomplete_env_venv(tmp_path):
+    """An empty .venv holds no state and breaks every cd into the env."""
+    dest = tmp_path / "exists"
+    assert run_spa_init(["--example", "single_node.yml", str(dest)]).returncode == 0
+    broken = dest / ".venv"
+    (broken / "include").mkdir(parents=True)
+    result = run_spa_init(["--force", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert not broken.exists()
+
+
+def test_force_keeps_complete_env_venv(tmp_path):
+    """A usable venv is user state (pinned Ansible); --force must not delete it."""
+    dest = tmp_path / "exists"
+    assert run_spa_init(["--example", "single_node.yml", str(dest)]).returncode == 0
+    venv = dest / ".venv"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "activate").write_text("# pretend venv\n")
+    result = run_spa_init(["--force", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (venv / "bin" / "activate").is_file()
+
+
 def test_refuse_spa_home():
     result = run_spa_init([str(PROJECT_ROOT)])
     assert result.returncode != 0
