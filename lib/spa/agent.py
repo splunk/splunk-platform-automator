@@ -75,7 +75,10 @@ COMMAND_SCHEMA = {
         },
         {"name": "shell", "summary": "SSH/SCP using inventory"},
         {"name": "aws", "summary": "AWS discovery for terraform.aws"},
-        {"name": "licenses", "summary": "License file discovery"},
+        {
+            "name": "licenses",
+            "summary": "Inspect license type, expiration and ITSI/ES entitlements",
+        },
         {"name": "run", "summary": "Run an ansible playbook by stem"},
         {"name": "agent schema", "summary": "This schema"},
     ],

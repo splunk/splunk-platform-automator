@@ -107,7 +107,20 @@ spa licenses --json
 spa licenses --config config/splunk_config.yml --json
 ```
 
-Lab configs: add licenses when files exist (avoids trial limits). ITSI in `splunk_app_deployment` requires `license_manager` role and `Splunk_ITSI.lic` when deploying ITSI.
+The scanner reads license type, expiration, and add-on entitlements from each
+file; filenames are not treated as proof of entitlement. It excludes invalid
+and expired files, chooses the latest equivalent license, and combines files
+when needed to satisfy Enterprise plus ITSI or ES. Output is sanitized: raw
+license XML, signatures, and GUIDs are never printed.
+
+Run `spa validate --check-licenses config/splunk_config.yml` to fail on a
+missing, invalid, expired, or wrong-entitlement configured license. Expiration
+within 30 days is a warning.
+
+Lab configs: add licenses when files exist (avoids trial limits). ITSI in
+`splunk_app_deployment` requires `license_manager` and Enterprise + ITSI
+capabilities. Enterprise Security app ID `263` requires Enterprise + ES
+capabilities.
 
 ## Basic apps
 

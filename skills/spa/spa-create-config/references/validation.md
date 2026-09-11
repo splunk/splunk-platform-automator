@@ -17,9 +17,12 @@ Default path: `config/splunk_config.yml`.
 3. **License / role pairing** — `splunk_license_file` requires `license_manager` role (and vice versa); ITSI requires LM
 4. **Playbook syntax** — included in `spa validate` (`--syntax-check` on provision and deploy)
 
-### Optional license file on disk check
+### Optional license content and entitlement check
 
-Verifies `splunk_license_file` basenames exist in `../Software` and reports ITSI / license-manager gaps:
+Parses configured licenses from `../Software` and fails when a file is missing,
+invalid XML, expired, or lacks an Enterprise / ITSI / ES capability required by
+the selected apps. It warns when expiration is within 30 days or cannot be
+determined:
 
 ```bash
 spa validate --check-licenses config/splunk_config.yml
@@ -60,20 +63,20 @@ spa aws --region eu-central-1 --validate \
 Do not hand off to user provision until:
 
 - [ ] `spa validate` exits 0
+- [ ] `spa validate --check-licenses` exits 0 when licenses are configured
 - [ ] No schema errors from inventory plugin
 - [ ] Playbook syntax-check passes
 
 ## User deploy (skill does not run these)
 
 ```bash
-ap ansible/provision_terraform_aws.yml -e auto_approve=true
-ap ansible/deploy_site.yml
+spa provision --yes && spa deploy
 ```
 
 Destroy:
 
 ```bash
-ap ansible/destroy_terraform_aws.yml -e auto_approve=true
+spa destroy --yes
 ```
 
 ## Common failures
@@ -82,6 +85,7 @@ ap ansible/destroy_terraform_aws.yml -e auto_approve=true
 |-------|-----|
 | `license_manager` without `splunk_license_file` | Add license file or remove LM role |
 | `splunk_license_file` without `license_manager` | Add `license_manager` to a host (e.g. on `cm`) or remove license file for trial labs |
+| License invalid, expired, or wrong entitlement | Use `spa licenses --config config/splunk_config.yml --json`; choose the proposed non-expired files that satisfy all required capabilities |
 | CM without `idxcluster:` | Add `idxcluster` on CM host |
 | Deployer without `shcluster:` | Add `shcluster` on deployer host |
 | Multisite without `site:` | Add `site` on CM and indexers |

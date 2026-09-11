@@ -105,16 +105,15 @@ except ConfigValidationError as e:
     print("Playbook syntax OK")
 
     if args.check_licenses:
-        print("[optional] Software license file check...")
+        print("[optional] Software license content and entitlement check...")
         print(json.dumps(data, indent=2, default=str))
-        discovered = {d["basename"] for d in data.get("discovered_files") or []}
-        if configured:
-            missing = [name for name in configured if name not in discovered]
-            if missing:
-                print("Configured license file(s) not found in Software: %s" % ", ".join(missing), file=sys.stderr)
-                return 1
-        if data.get("itsi_in_config") and data.get("itsi_license") is None:
-            print("ITSI in config but Splunk_ITSI.lic not found in Software", file=sys.stderr)
+        validation = data.get("license_validation") or {}
+        for warning in validation.get("warnings") or []:
+            print("License warning: %s" % warning, file=sys.stderr)
+        errors = validation.get("errors") or []
+        if errors:
+            for error in errors:
+                print("License error: %s" % error, file=sys.stderr)
             return 1
         print("License check OK")
 

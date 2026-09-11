@@ -200,17 +200,21 @@ Summarize hosts before YAML write.
 spa licenses --config config/splunk_config.yml --json
 ```
 
-1. Scan `../Software` for `*.lic` / `*.License` (SPA `splunk_software_dir`).
+1. Scan `../Software` for `*.lic` / `*.License` and inspect sanitized parsed
+   metadata: `license_type`, `group_id`, `addons`, `capabilities`, `expires_at`,
+   and `status`. Never expose raw license XML, signatures, or GUIDs.
 2. If `proposed_splunk_license_file` is non-empty, ask (AskQuestion if available): add to `splunk_defaults`? (especially for lab / app lab intent).
 3. **If user accepts license file** → add `license_manager` role on a host in Phase 5b (typical lab: co-locate on `cm` or dedicated `mc`).
-4. **ITSI in config** → propose `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` when files exist; ensure `license_manager` role (Phase 5b).
-5. **License manager role** → `splunk_license_file` is required (schema). **License file in config** → `license_manager` role is required (schema).
-6. **Trial-only labs** → omit both `splunk_license_file` and `license_manager`; do not add license file from Software scan alone.
-7. No files in Software → warn (trial only or add licenses before deploy).
+4. **ITSI in config** → require parsed `enterprise` + `itsi` capabilities; ensure `license_manager` role (Phase 5b). Do not infer capability from filenames.
+5. **Enterprise Security in config** (app ID `263` or exact ES name) → require parsed `enterprise` + `es` capabilities. `premium_app: es` is not supported by the deployment schema; do not add it.
+6. **License manager role** → `splunk_license_file` is required (schema). **License file in config** → `license_manager` role is required (schema).
+7. Reject configured files that are missing, invalid, expired, or do not collectively satisfy the selected premium apps. Warn for expiration within 30 days or an unknown expiration.
+8. **Trial-only labs** → omit both `splunk_license_file` and `license_manager`; do not add license file from Software scan alone.
+9. No usable files in Software → warn (trial only or add licenses before deploy).
 
 Use `yaml_snippet` from JSON under `splunk_defaults` in Phase 7.
 
-**Exit:** License list decided or explicitly skipped; LM + ITSI warnings addressed.
+**Exit:** License list decided or explicitly skipped; LM + ITSI/ES warnings addressed.
 
 ## Phase 6c — Architecture plan (plan mode)
 
@@ -259,7 +263,8 @@ With AWS creds:
 spa validate --splunk-config-aws config/splunk_config.yml
 ```
 
-Optional: verify license files exist in `../Software`:
+Optional: verify license files exist, parse as valid XML, are not expired, and
+provide the Enterprise / ITSI / ES capabilities required by the config:
 
 ```bash
 spa validate --check-licenses config/splunk_config.yml
