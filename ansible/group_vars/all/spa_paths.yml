@@ -1,18 +1,18 @@
 ---
-# Distribution M1 path contract. The inventory plugin overwrites these with
+# Distribution M2 path contract. The inventory plugin overwrites these with
 # fully resolved values. Fallbacks keep clone-equal ansible-playbook working
-# when SPA_HOME / SPA_LAB_DIR are unset (both default to the checkout).
+# when SPA_HOME / SPA_ENV_DIR are unset (both default to the checkout).
 
 spa_home: "{{ lookup('env', 'SPA_HOME') | default(playbook_dir + '/..', true) }}"
-spa_lab_dir: "{{ lookup('env', 'SPA_LAB_DIR') | default(lookup('env', 'SPA_HOME') | default(playbook_dir + '/..', true), true) }}"
-spa_config_file: "{{ lookup('env', 'SPLUNK_CONFIG_FILE') | default(spa_lab_dir + '/config/splunk_config.yml', true) }}"
-spa_inventory_dir: "{{ spa_lab_dir }}/inventory"
+spa_env_dir: "{{ lookup('env', 'SPA_ENV_DIR') | default(lookup('env', 'SPA_HOME') | default(playbook_dir + '/..', true), true) }}"
+spa_config_file: "{{ lookup('env', 'SPLUNK_CONFIG_FILE') | default(spa_env_dir + '/config/splunk_config.yml', true) }}"
+spa_inventory_dir: "{{ spa_env_dir }}/inventory"
 spa_terraform_modules_dir: "{{ spa_home }}/terraform/aws"
-spa_terraform_state_dir: "{{ spa_lab_dir }}/terraform/aws"
-spa_roots_differ: "{{ (spa_home | realpath) != (spa_lab_dir | realpath) }}"
-spa_software_dir: "{{ lookup('env', 'SPA_SOFTWARE_DIR') | default(spa_lab_dir + '/../Software', true) }}"
-spa_baseconfig_dir: "{{ lookup('env', 'SPA_BASECONFIG_DIR') | default(lookup('env', 'SPA_SOFTWARE_DIR') | default(spa_lab_dir + '/../Software', true), true) }}"
+spa_terraform_state_dir: "{{ spa_env_dir }}/terraform/aws"
+spa_roots_differ: "{{ (spa_home | realpath) != (spa_env_dir | realpath) }}"
+spa_software_dir: "{{ lookup('env', 'SPA_SOFTWARE_DIR') | default(spa_env_dir + '/../Software', true) }}"
+spa_baseconfig_dir: "{{ lookup('env', 'SPA_BASECONFIG_DIR') | default(lookup('env', 'SPA_SOFTWARE_DIR') | default(spa_env_dir + '/../Software', true), true) }}"
 spa_apps_dir: "{{ lookup('env', 'SPA_APPS_DIR') | default(spa_home + '/apps', true) }}"
 # Optional pull-back of rendered PS baseconfig apps (splunk_save_baseconfig_apps).
-# Relative names are under the lab; an absolute splunk_save_baseconfig_apps_dir wins.
-spa_saved_baseconfig_apps_dir: "{% if splunk_save_baseconfig_apps_dir is defined and (splunk_save_baseconfig_apps_dir | string | regex_search('^/')) %}{{ splunk_save_baseconfig_apps_dir }}{% else %}{{ spa_lab_dir }}/{{ splunk_save_baseconfig_apps_dir | default('saved_base_config_apps') }}{% endif %}"
+# Relative names are under the env dir; an absolute splunk_save_baseconfig_apps_dir wins.
+spa_saved_baseconfig_apps_dir: "{% if splunk_save_baseconfig_apps_dir is defined and (splunk_save_baseconfig_apps_dir | string | regex_search('^/')) %}{{ splunk_save_baseconfig_apps_dir }}{% else %}{{ spa_env_dir }}/{{ splunk_save_baseconfig_apps_dir | default('saved_base_config_apps') }}{% endif %}"

@@ -1,4 +1,4 @@
-"""Scaffold a temp lab, parse inventory, and assert the clone is not written."""
+"""Scaffold a temp env, parse inventory, and assert the clone is not written."""
 
 import os
 import subprocess
@@ -6,11 +6,9 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.local
+from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init, spa_env
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-INIT = PROJECT_ROOT / "bin" / "init_spa_dir.sh"
-VALIDATE = PROJECT_ROOT / "bin" / "validate_splunk_config.sh"
+pytestmark = pytest.mark.local
 
 
 def _ensure_software_stubs(stub_dir: Path) -> None:
@@ -28,7 +26,6 @@ def _ensure_software_stubs(stub_dir: Path) -> None:
 
 
 def _clone_snapshots():
-    """Paths under the clone that a separate lab must not create or change."""
     return {
         PROJECT_ROOT / "inventory" / "hosts": (
             (PROJECT_ROOT / "inventory" / "hosts").read_bytes()
@@ -51,19 +48,14 @@ def _clone_snapshots():
 def _assert_clone_untouched(before):
     for path, content in before.items():
         if content is None:
-            assert not path.exists(), "separate lab wrote %s under the clone" % path
+            assert not path.exists(), "separate env wrote %s under the clone" % path
         else:
-            assert path.read_bytes() == content, "separate lab modified %s under the clone" % path
+            assert path.read_bytes() == content, "separate env modified %s under the clone" % path
 
 
-def test_separate_lab_inventory_does_not_write_clone(tmp_path):
-    lab = tmp_path / "lab"
-    result = subprocess.run(
-        [str(INIT), "--example", "single_node.yml", "--skip-doctor", str(lab)],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-    )
+def test_separate_env_inventory_does_not_write_clone(tmp_path):
+    dest = tmp_path / "env"
+    result = run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
     assert result.returncode == 0, result.stderr
 
     stub = tmp_path / "Software"
@@ -71,15 +63,14 @@ def test_separate_lab_inventory_does_not_write_clone(tmp_path):
 
     before = _clone_snapshots()
 
-    env = os.environ.copy()
+    env = spa_env()
     env["SPA_HOME"] = str(PROJECT_ROOT)
-    env["SPA_LAB_DIR"] = str(lab)
+    env["SPA_ENV_DIR"] = str(dest)
     env["SPA_SOFTWARE_DIR"] = str(stub)
     env["SPA_BASECONFIG_DIR"] = str(stub)
     env["ANSIBLE_CONFIG"] = str(PROJECT_ROOT / "ansible.cfg")
     env.pop("ANSIBLE_INVENTORY", None)
 
-    # Fresh inventory dir so a leftover clone inventory is not required.
     ansible_tmp = tmp_path / "ansible_tmp"
     ansible_tmp.mkdir()
     env["ANSIBLE_LOCAL_TEMP"] = str(ansible_tmp)
@@ -88,7 +79,7 @@ def test_separate_lab_inventory_does_not_write_clone(tmp_path):
         "ansible-inventory",
         "--list",
         "-i",
-        str(lab / "config" / "splunk_config.yml"),
+        str(dest / "config" / "splunk_config.yml"),
     ]
     parsed = subprocess.run(
         cmd,
@@ -99,32 +90,26 @@ def test_separate_lab_inventory_does_not_write_clone(tmp_path):
     )
     assert parsed.returncode == 0, parsed.stderr + parsed.stdout
     assert '"shidx"' in parsed.stdout
-    assert '"spa_lab_dir"' in parsed.stdout
-    assert str(lab) in parsed.stdout
-    assert not (lab / "ansible").exists()
+    assert '"spa_env_dir"' in parsed.stdout
+    assert str(dest) in parsed.stdout
+    assert not (dest / "ansible").exists()
 
-    # Lab inventory was created; clone inventory/hosts was not.
-    assert (lab / "inventory" / "hosts").is_file()
+    assert (dest / "inventory" / "hosts").is_file()
     _assert_clone_untouched(before)
 
 
-def test_validate_separate_lab(tmp_path):
-    lab = tmp_path / "lab"
-    result = subprocess.run(
-        [str(INIT), "--example", "single_node.yml", "--skip-doctor", str(lab)],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-    )
+def test_validate_separate_env(tmp_path):
+    dest = tmp_path / "env"
+    result = run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
     assert result.returncode == 0, result.stderr
 
     stub = PROJECT_ROOT / "tests" / "fixtures" / "baseconfig"
     _ensure_software_stubs(stub)
 
     before = _clone_snapshots()
-    env = os.environ.copy()
+    env = spa_env()
     env["SPA_HOME"] = str(PROJECT_ROOT)
-    env["SPA_LAB_DIR"] = str(lab)
+    env["SPA_ENV_DIR"] = str(dest)
     env["SPA_SOFTWARE_DIR"] = str(stub)
     env["SPA_BASECONFIG_DIR"] = str(stub)
     env["ANSIBLE_LOCAL_TEMP"] = str(tmp_path / "ansible_tmp")
@@ -133,11 +118,8 @@ def test_validate_separate_lab(tmp_path):
         env["ANSIBLE_COLLECTIONS_PATH"] = str(collections)
     (tmp_path / "ansible_tmp").mkdir()
 
-    validated = subprocess.run(
-        [str(VALIDATE), str(lab / "config" / "splunk_config.yml")],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
+    validated = run_spa(
+        ["validate", str(dest / "config" / "splunk_config.yml")],
         env=env,
     )
     out = validated.stderr + validated.stdout
@@ -145,26 +127,22 @@ def test_validate_separate_lab(tmp_path):
     assert "Inventory OK" in out, out
     assert "License role pairing OK" in out, out
     if validated.returncode != 0:
-        # deploy_site.yml syntax-check needs ansible.windows (win_stat). That
-        # collection is not in requirements.yml; do not treat it as an M1 miss.
         assert "win_stat" in out, out
     _assert_clone_untouched(before)
 
 
 def test_clone_equal_inventory_still_parses(tmp_path):
-    """Unset roots keep today's checkout layout (existing suite contract)."""
     stub = PROJECT_ROOT / "tests" / "fixtures" / "baseconfig"
     _ensure_software_stubs(stub)
-    env = os.environ.copy()
+    env = spa_env()
     env.pop("SPA_HOME", None)
-    env.pop("SPA_LAB_DIR", None)
+    env.pop("SPA_ENV_DIR", None)
     env["SPA_SOFTWARE_DIR"] = str(stub)
     env["SPA_BASECONFIG_DIR"] = str(stub)
     env["ANSIBLE_CONFIG"] = str(PROJECT_ROOT / "ansible.cfg")
     env["ANSIBLE_LOCAL_TEMP"] = str(tmp_path / "ansible_tmp")
     os.makedirs(env["ANSIBLE_LOCAL_TEMP"], exist_ok=True)
 
-    # Copy so the plugin's aws_ec2.yml sidecar does not land under examples/.
     cfg = tmp_path / "splunk_config.yml"
     cfg.write_text((PROJECT_ROOT / "examples" / "single_node.yml").read_text())
     parsed = subprocess.run(
@@ -178,15 +156,9 @@ def test_clone_equal_inventory_still_parses(tmp_path):
     assert '"shidx"' in parsed.stdout
 
 
-def test_create_linkpage_writes_lab_not_clone(tmp_path):
-    """create_linkpage.yml must write $SPA_LAB_DIR/config/index.html even when CWD is the lab."""
-    lab = tmp_path / "lab"
-    result = subprocess.run(
-        [str(INIT), "--example", "single_node.yml", "--skip-doctor", str(lab)],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-    )
+def test_create_linkpage_writes_env_not_clone(tmp_path):
+    dest = tmp_path / "env"
+    result = run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
     assert result.returncode == 0, result.stderr
 
     stub = tmp_path / "Software"
@@ -196,13 +168,13 @@ def test_create_linkpage_writes_lab_not_clone(tmp_path):
     clone_index_before = clone_index.read_bytes() if clone_index.is_file() else None
     before = _clone_snapshots()
 
-    env = os.environ.copy()
+    env = spa_env()
     env["SPA_HOME"] = str(PROJECT_ROOT)
-    env["SPA_LAB_DIR"] = str(lab)
+    env["SPA_ENV_DIR"] = str(dest)
     env["SPA_SOFTWARE_DIR"] = str(stub)
     env["SPA_BASECONFIG_DIR"] = str(stub)
     env["ANSIBLE_CONFIG"] = str(PROJECT_ROOT / "ansible.cfg")
-    env["ANSIBLE_INVENTORY"] = str(lab / "config" / "splunk_config.yml")
+    env["ANSIBLE_INVENTORY"] = str(dest / "config" / "splunk_config.yml")
     env["ANSIBLE_LOCAL_TEMP"] = str(tmp_path / "ansible_tmp")
     os.makedirs(env["ANSIBLE_LOCAL_TEMP"], exist_ok=True)
     collections = PROJECT_ROOT / "tests" / ".collections"
@@ -211,14 +183,14 @@ def test_create_linkpage_writes_lab_not_clone(tmp_path):
 
     played = subprocess.run(
         ["ansible-playbook", str(PROJECT_ROOT / "ansible" / "create_linkpage.yml")],
-        cwd=lab,
+        cwd=dest,
         capture_output=True,
         text=True,
         env=env,
     )
     assert played.returncode == 0, played.stderr + played.stdout
-    assert (lab / "config" / "index.html").is_file()
-    html = (lab / "config" / "index.html").read_text(encoding="utf-8")
+    assert (dest / "config" / "index.html").is_file()
+    html = (dest / "config" / "index.html").read_text(encoding="utf-8")
     assert "Splunk Platform Automator Host List" in html
 
     if clone_index_before is None:

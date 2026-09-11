@@ -9,8 +9,8 @@ See [README.md](README.md) Framework Installation — link or copy `Splunk_Enter
 From repo root:
 
 ```bash
-python3 bin/splunk_config_licenses.py --json
-python3 bin/splunk_config_licenses.py --config config/splunk_config.yml --json
+spa licenses --json
+spa licenses --config config/splunk_config.yml --json
 ```
 
 Returns:
@@ -61,7 +61,7 @@ splunk_defaults:
 
 ## Skill workflow
 
-1. Run `splunk_config_licenses.py` after Phase 6 (apps) so ITSI detection is accurate.
+1. Run `spa licenses` after Phase 6 (apps) so ITSI detection is accurate.
 2. If `proposed_splunk_license_file` is non-empty, ask the user (AskQuestion if available): add to config for lab?
 3. **If adding `splunk_license_file`**, also add `license_manager` to a host in Phase 5b (co-locate on `cm` or `mc` per [role-placement.md](role-placement.md)). Do not write license file without LM role.
 4. If ITSI and no `license_manager`, prompt to add LM role (or co-locate per [role-placement.md](role-placement.md)).

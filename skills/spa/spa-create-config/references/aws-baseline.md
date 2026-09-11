@@ -8,11 +8,11 @@ Global `terraform.aws` block applies to all hosts unless overridden per host in 
 |---------|---------|-------|
 | `instance_type` | `t3.medium` | Config tests; not capacity proof |
 | `root_volume_size` | 50 | GB, `gp3` |
-| `region` | User/org choice | Discover via `splunk_config_aws.py` |
+| `region` | User/org choice | Discover via `spa aws` |
 | `security_group_names` | `Splunk_Basic` | If present in account |
 | `key_name` | User key in region | Must exist |
 | `ssh_private_key_file` | Controller path | e.g. `~/.ssh/aws_key.pem` |
-| `tags.SPADirName` | `{{ playbook_dir | dirname | basename }}` | SPA repo folder name on controller (cost/ownership tagging) |
+| `tags.SPADirName` | `{{ spa_env_dir | basename }}` | Env dir folder name (clone folder when clone-equal) |
 
 ## Feature / app lab
 
@@ -43,26 +43,26 @@ terraform:
     root_volume_type: "gp3"
     tags:
       Env: "Splunk Lab"
-      SPADirName: "{{ playbook_dir | dirname | basename }}"
+      SPADirName: "{{ spa_env_dir | basename }}"
       splunkit_data_classification: "public"
       splunkit_environment_type: "non-prd"
 ```
 
-## `splunk_config_aws.py` usage
+## `spa aws` usage
 
 From repo root (requires `boto3` and AWS credentials):
 
 ```bash
-python3 bin/splunk_config_aws.py --check-auth --json
-python3 bin/splunk_config_aws.py --list-regions --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os all --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --list-instance-types --family t3 --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --list-key-pairs --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --list-security-groups --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --describe-ami --ami-id ami-xxx --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --validate \
+spa aws --check-auth --json
+spa aws --list-regions --json
+spa aws --region eu-central-1 --latest-ami --os all --json
+spa aws --region eu-central-1 --list-instance-types --family t3 --json
+spa aws --region eu-central-1 --list-key-pairs --json
+spa aws --region eu-central-1 --list-security-groups --json
+spa aws --region eu-central-1 --describe-ami --ami-id ami-xxx --json
+spa aws --region eu-central-1 --validate \
   --ami-id ami-xxx --key-name aws_key --security-groups Splunk_Basic --instance-type t3.medium --json
-python3 bin/splunk_config_aws.py --survey --region eu-central-1 --json
+spa aws --survey --region eu-central-1 --json
 ```
 
 ## Prerequisites checklist

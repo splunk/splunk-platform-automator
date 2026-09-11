@@ -29,7 +29,7 @@ terraform:
     root_volume_type: "gp3"
     tags:
       Env: ITSI 5.0.0 (Lab)
-      SPADirName: "{{ playbook_dir | dirname | basename }}"
+      SPADirName: "{{ spa_env_dir | basename }}"
       splunkit_data_classification: "public"
       splunkit_environment_type: "non-prd"
 

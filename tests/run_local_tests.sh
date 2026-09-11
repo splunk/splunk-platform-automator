@@ -37,6 +37,8 @@ echo -e "${GREEN}=== Splunk Platform Automator - All Local Tests ===${NC}"
 # ansible-core + jmespath/lxml; collections from requirements.yml when galaxy is present
 source "$SCRIPT_DIR/run_venv.sh" 'pydantic>=2.0' 'ansible-core' 'jmespath' 'lxml'
 
+export PYTHONPATH="$(cd "$SCRIPT_DIR/.." && pwd)/lib${PYTHONPATH:+:$PYTHONPATH}"
+
 mkdir -p "${SCRIPT_DIR}/.ansible_tmp"
 export ANSIBLE_LOCAL_TMP="${SCRIPT_DIR}/.ansible_tmp"
 

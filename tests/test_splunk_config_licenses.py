@@ -1,6 +1,5 @@
-"""Unit tests for bin/splunk_config_licenses.py (no Software/ or AWS required)."""
+"""Unit tests for spa.licenses (no Software/ or AWS required)."""
 
-import importlib.util
 import os
 import sys
 
@@ -8,11 +7,9 @@ import pytest
 
 pytestmark = pytest.mark.local
 
-_MODULE_PATH = os.path.join(os.path.dirname(__file__), "..", "bin", "splunk_config_licenses.py")
-_spec = importlib.util.spec_from_file_location("splunk_config_licenses", _MODULE_PATH)
-licenses = importlib.util.module_from_spec(_spec)
-sys.modules["splunk_config_licenses"] = licenses
-_spec.loader.exec_module(licenses)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
+
+from spa import licenses  # noqa: E402
 
 
 def test_discover_license_files(tmp_path):

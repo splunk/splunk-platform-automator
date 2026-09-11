@@ -2,13 +2,13 @@
 """
 Discover Splunk license files in the Software directory and propose splunk_license_file.
 
-Files must live in splunk_software_dir (default ../Software relative to SPA_LAB_DIR).
+Files must live in splunk_software_dir (default ../Software relative to SPA_ENV_DIR).
 SPA references licenses by basename only (e.g. Splunk_Enterprise.lic).
 
 Examples:
-  python3 bin/splunk_config_licenses.py --json
-  python3 bin/splunk_config_licenses.py --config config/splunk_config.yml --json
-  python3 bin/splunk_config_licenses.py --software-dir ../Software --propose --json
+  spa licenses --json
+  spa licenses --config config/splunk_config.yml --json
+  spa licenses --software-dir ../Software --propose --json
 """
 
 from __future__ import annotations
@@ -39,23 +39,16 @@ def _output(data: Any, as_json: bool) -> None:
 
 
 def repo_root_from_script() -> Path:
-    return Path(__file__).resolve().parent.parent
+    return Path(__file__).resolve().parents[2]
 
 
-def _inventory_plugin_dir() -> Path:
-    return repo_root_from_script() / "ansible" / "plugins" / "inventory"
-
-
-def resolve_lab_root(project_root: Optional[Path] = None) -> Path:
-    """Lab root (SPA_LAB_DIR). Software may still fall back to the clone sibling."""
-    plugin_dir = _inventory_plugin_dir()
-    if str(plugin_dir) not in sys.path:
-        sys.path.insert(0, str(plugin_dir))
+def resolve_env_root(project_root: Optional[Path] = None) -> Path:
+    """Env root (SPA_ENV_DIR). Software may still fall back to the clone sibling."""
     try:
-        from spa_paths import resolve_spa_paths
+        from spa.paths import resolve_spa_paths
     except ImportError:
         return (project_root or repo_root_from_script()).resolve()
-    return resolve_spa_paths().spa_lab_dir
+    return resolve_spa_paths().spa_env_dir
 
 
 def resolve_software_dir(project_root: Path, explicit: Optional[str] = None) -> Path:
@@ -64,11 +57,8 @@ def resolve_software_dir(project_root: Path, explicit: Optional[str] = None) -> 
         if not path.is_absolute():
             path = (project_root / path).resolve()
         return path.resolve()
-    plugin_dir = _inventory_plugin_dir()
-    if str(plugin_dir) not in sys.path:
-        sys.path.insert(0, str(plugin_dir))
     try:
-        from spa_paths import resolve_spa_paths
+        from spa.paths import resolve_spa_paths
         return resolve_spa_paths().software_dir
     except ImportError:
         pass
@@ -210,7 +200,7 @@ def current_license_files(config: Dict[str, Any]) -> Optional[List[str]]:
 def propose_license_files(
     discovered: List[Dict[str, Any]],
     itsi_in_config: bool,
-    lab_recommend: bool = True,
+    env_recommend: bool = True,
 ) -> Dict[str, Any]:
     reasons: List[str] = []
     proposed: List[str] = []
@@ -228,7 +218,7 @@ def propose_license_files(
             reasons.append(f"ITSI in config — include ITSI license: {itsi}")
         else:
             reasons.append("ITSI in config but no ITSI license file found in Software (expected Splunk_ITSI.lic)")
-    elif lab_recommend:
+    elif env_recommend:
         itsi = pick_canonical(discovered, ITSI_CANONICAL, "itsi")
         if itsi and itsi not in proposed:
             reasons.append(f"Optional: {itsi} found in Software (not required unless ITSI is deployed)")
@@ -256,7 +246,7 @@ def scan_licenses(
     project_root: Path,
     software_dir: Optional[str] = None,
     config_path: Optional[Path] = None,
-    lab_recommend: bool = True,
+    env_recommend: bool = True,
 ) -> Dict[str, Any]:
     sw_dir = resolve_software_dir(project_root, software_dir)
     discovered = discover_license_files(sw_dir)
@@ -285,7 +275,7 @@ def scan_licenses(
             config_error = str(exc)
             config_scan_mode = None
 
-    proposal = propose_license_files(discovered, itsi_in_config, lab_recommend=lab_recommend)
+    proposal = propose_license_files(discovered, itsi_in_config, env_recommend=env_recommend)
 
     result: Dict[str, Any] = {
         "ok": sw_dir.is_dir(),
@@ -332,7 +322,7 @@ def scan_licenses(
             "ITSI in config but Splunk_ITSI.lic not found in Software directory."
         ]
 
-    if not discovered and lab_recommend:
+    if not discovered and env_recommend:
         result["warnings"] = result.get("warnings", []) + [
             "No .lic files in Software — lab deploy may use trial license only, or add licenses to ../Software."
         ]
@@ -345,11 +335,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", help="Output JSON")
     p.add_argument(
         "--software-dir",
-        help="Software directory (default: ../Software from SPA_LAB_DIR, SPA splunk_software_dir)",
+        help="Software directory (default: ../Software from SPA_ENV_DIR, SPA splunk_software_dir)",
     )
     p.add_argument("--config", help="splunk_config.yml path to detect ITSI and current license settings")
     p.add_argument(
-        "--no-lab-recommend",
+        "--no-env-recommend",
+        dest="no_env_recommend",
         action="store_true",
         help="Do not mention optional licenses when ITSI is not in config",
     )
@@ -358,7 +349,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
-    project_root = resolve_lab_root()
+    project_root = resolve_env_root()
     config_path = None
     if args.config:
         config_path = Path(args.config).expanduser()
@@ -372,7 +363,7 @@ def main() -> int:
             project_root,
             software_dir=args.software_dir,
             config_path=config_path,
-            lab_recommend=not args.no_lab_recommend,
+            env_recommend=not args.no_env_recommend,
         )
     except Exception as exc:
         _err(str(exc))

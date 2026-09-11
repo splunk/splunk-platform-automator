@@ -5,15 +5,15 @@ AWS discovery and validation for splunk_config.yml terraform.aws settings.
 Requires boto3 and AWS credentials (env, profile, or instance role).
 
 Examples:
-  python3 bin/splunk_config_aws.py --check-auth --json
-  python3 bin/splunk_config_aws.py --list-regions --json
-  python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os amazon_linux --json
-  python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os all --json
-  python3 bin/splunk_config_aws.py --region eu-central-1 --list-amis --name-filter "custom*" --json
-  python3 bin/splunk_config_aws.py --region eu-central-1 --validate \\
+  spa aws --check-auth --json
+  spa aws --list-regions --json
+  spa aws --region eu-central-1 --latest-ami --os amazon_linux --json
+  spa aws --region eu-central-1 --latest-ami --os all --json
+  spa aws --region eu-central-1 --list-amis --name-filter "custom*" --json
+  spa aws --region eu-central-1 --validate \\
     --ami-id ami-xxx --key-name aws_key --security-groups Splunk_Basic \\
     --instance-type t3.medium --json
-  python3 bin/splunk_config_aws.py --survey --region eu-central-1 --json
+  spa aws --survey --region eu-central-1 --json
 """
 
 from __future__ import annotations
@@ -31,14 +31,14 @@ except ImportError:
     boto3 = None  # type: ignore
 
 
-LAB_INSTANCE_TYPES = ("t3.small", "t3.medium", "t3.large", "t3.xlarge")
+ENV_INSTANCE_TYPES = ("t3.small", "t3.medium", "t3.large", "t3.xlarge")
 DEFAULT_AMI_OWNERS = ("amazon", "aws-marketplace", "self")
 RHEL_OFFICIAL_OWNER = "309956199498"  # AWS alias: amazon (official RHEL AMIs)
 
 RHEL_OFFICIAL_OWNER = "309956199498"  # AWS alias: amazon (official RHEL AMIs)
 DEBIAN_OFFICIAL_OWNER = "136693071363"  # Debian Cloud Team
 
-# Preference order for labs (RHEL best tested; Debian least tested with SPA).
+# Preference order for SPA envs (RHEL best tested; Debian least tested with SPA).
 RECOMMENDED_OS_ORDER = ("rhel", "ubuntu", "amazon_linux", "debian")
 
 # Version-agnostic OS keys — latest AMI resolved at runtime (SSM or EC2 describe).
@@ -595,7 +595,7 @@ def list_instance_types(
             prefix = family if family.endswith(".") else f"{family}."
             offered = {t for t in offered if t.startswith(prefix)}
         if curated:
-            items = [t for t in LAB_INSTANCE_TYPES if t in offered]
+            items = [t for t in ENV_INSTANCE_TYPES if t in offered]
             if not items:
                 items = sorted(offered)[:10]
         else:

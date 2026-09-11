@@ -268,7 +268,7 @@ ansible-playbook ansible/provision_terraform_aws.yml --tags outputs
 - `inventory/hosts` - Ansible inventory with connection details
 - `terraform/aws/tfplan` - Terraform plan file (temporary)
 
-When `SPA_LAB_DIR` differs from `SPA_HOME` (see [Multiple labs, one clone](../README.md#multiple-labs-one-clone)), modules stay under `$SPA_HOME/terraform/aws` and the generated files above live under the lab (`$SPA_LAB_DIR/terraform/aws` and `$SPA_LAB_DIR/inventory/hosts`). Clone-equal labs keep writing into the checkout `terraform/aws/` directory. To move an already-provisioned clone into a lab dir without replacing the hosts, run `./bin/init_spa_dir.sh ~/labs/my-lab` from that clone (or `--from /path/to/old-clone`); Terraform state is migrated, not recreated.
+When `SPA_ENV_DIR` differs from `SPA_HOME` (see [Multiple environments, one clone](../README.md#multiple-environments-one-clone)), modules stay under `$SPA_HOME/terraform/aws` and the generated files above live under the env (`$SPA_ENV_DIR/terraform/aws` and `$SPA_ENV_DIR/inventory/hosts`). Clone-equal envs keep writing into the checkout `terraform/aws/` directory. To move an already-provisioned clone into an env dir without replacing the hosts, run `spa init ~/envs/my-env` from that clone (or `--from /path/to/old-clone`); Terraform state is migrated, not recreated.
 
 ### Managed by Terraform
 

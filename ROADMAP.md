@@ -6,27 +6,26 @@ Shipped work stays checked. Git clone remains the contributor path. Splunk insta
 
 ## Distribution
 
-Install the **shared** framework once (playbooks, Terraform, skills, `spa` binary). `spa init` writes **config only** for that lab. Controllers should feel the same on macOS and Linux: install the prefix, then `spa init` / `spa deploy` — no per-lab git clone.
+Install the **shared** framework once (playbooks, Terraform, skills, `spa` binary). `spa init` writes **config only** for that environment. Controllers should feel the same on macOS and Linux: install the prefix, then `spa init` / `spa deploy` — no per-env git clone.
 
-**Contract:** `SPA_HOME` is the framework (`ansible/`, Terraform modules, `skills/`, `bin/`). `SPA_LAB_DIR` is the lab (`splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `saved_base_config_apps/`). Unset both → the git clone; today's `ansible-playbook` workflow is unchanged. When they differ, do not write lab state into the prefix (an upgrade of `~/.local/spa` or `/opt/spa` would lose it).
+**Contract:** `SPA_HOME` is the framework (`ansible/`, Terraform modules, `skills/`, `bin/`). `SPA_ENV_DIR` is the Splunk environment (`splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `saved_base_config_apps/`). Unset both → the git clone; today's `ansible-playbook` workflow is unchanged. When they differ, do not write env state into the prefix (an upgrade of `~/.local/spa` or `/opt/spa` would lose it).
 
 Ship M1–M3 on one integration branch, then **3.0** when M3 is in. Do not cut a minor per milestone. Pickup: the issue for that milestone (not a Cursor plan). After a milestone is done: check it here, close the issue, merge into the parent branch for further testing. Do not start the next until the prior is merged there.
 
 **Branching:** parent `distribution` (off `main`). Each milestone is `dist/mN` branched from `distribution` and merged back. When M3 is in, PR `distribution` → `main` and tag **3.0**. Clone + `ansible-playbook` stay supported on `main` until then.
 
-- [x] **M1** Path contract + lab scaffold — [#46](https://github.com/splunk/splunk-platform-automator/issues/46)
-- [ ] **M2** `spa` CLI over the clone prefix — [#47](https://github.com/splunk/splunk-platform-automator/issues/47)
+- [x] **M1** Path contract + env scaffold — [#46](https://github.com/splunk/splunk-platform-automator/issues/46)
+- [x] **M2** `spa` CLI over the clone prefix — [#47](https://github.com/splunk/splunk-platform-automator/issues/47)
 - [ ] **M3** `install.sh` + framework tarball — [#48](https://github.com/splunk/splunk-platform-automator/issues/48)
 
 ### Outcomes
 
 - [x] Semver GitHub Releases from [CHANGELOG.md](CHANGELOG.md) ([RELEASE.md](RELEASE.md))
-- [x] `SPA_HOME` / `SPA_LAB_DIR` path contract; clone defaults keep today's layout (**M1**)
-- [x] `bin/init_spa_dir.sh` scaffolds a lab dir (example config, `.spa.yml`; no copy of `ansible/`) and migrates an existing clone env (config, inventory, Terraform state) (**M1**)
-- [x] Separate lab dirs against one clone `SPA_HOME` (**M1**)
-- [x] `bin/spa_venv.sh` shared venv (framework, labs, tests) + lab `.envrc` for direnv; no Homebrew Ansible/Pydantic requirement (**M1**)
-- [ ] `spa init` wraps `bin/init_spa_dir.sh` (**M2**)
-- [ ] `spa` commands use the shared prefix (`init`, `validate`, `provision`, `deploy`, `destroy`, `shell`, and the rest of the playbook surface) (**M2**)
+- [x] `SPA_HOME` / `SPA_ENV_DIR` path contract; clone defaults keep today's layout (**M1**)
+- [x] `spa init` scaffolds an env dir (example config, `.spa.yml`; no copy of `ansible/`) and migrates an existing clone env (config, inventory, Terraform state) (**M1** / **M2**)
+- [x] Separate env dirs against one clone `SPA_HOME` (**M1**)
+- [x] `bin/spa_venv.sh` shared venv (framework, envs, tests) + env `.envrc` for direnv; no Homebrew Ansible/Pydantic requirement (**M1**)
+- [x] `spa` commands use the shared prefix (`init`, `validate`, `provision`, `deploy`, `destroy`, `shell`, `run`, `aws`, `licenses`) (**M2**)
 - [ ] Release tarball of the framework (exclude `tests/`, `.git`, lab `config/`) (**M3**)
 - [ ] `install.sh` (cup-style `curl | sh` or `gh release download`): default prefix `~/.local/spa`, or `--prefix` / `SPA_PREFIX`; creates the venv; puts `spa` on `PATH` (**M3**)
 - [ ] Documented extract-anywhere: unpack the tarball, set `SPA_HOME`, run `spa` from that tree (**M3**)
@@ -39,9 +38,9 @@ Ship M1–M3 on one integration branch, then **3.0** when M3 is in. Do not cut a
 Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JSON envelope, `agent schema`, `-y`).
 
 - [x] Portable skills under [skills/spa/](skills/spa/) + Cursor `/spa-create-config` ([docs/Agent_Skills.md](docs/Agent_Skills.md))
-- [ ] Agent-mode `spa`: auto-detect agent env, JSON envelope, `spa agent schema`, `--agent` / `--no-agent`, `-y` for destructive ops, parse-error hints
-- [ ] Fold [bin/spash](bin/spash) into `spa shell` (SSH, `-l` host list, `-c` copy) — keep `spash` as a thin alias at most
-- [ ] Map top-level [ansible/](ansible/) playbooks to `spa` subcommands (deploy, apps, upgrade, restart, license, certs, …) — every playbook is a main entry point; do not require raw `ansible-playbook` for day-to-day use
+- [x] Agent-mode `spa`: auto-detect agent env, JSON envelope, `spa agent schema`, `--agent` / `--no-agent`, `-y` for destructive ops, parse-error hints
+- [x] Fold SSH/SCP into `spa shell` (`-l` host list, `-c` copy) — no `spash` alias
+- [x] Map top-level [ansible/](ansible/) playbooks to `spa run` (and named `provision` / `deploy` / `destroy`) — every playbook is a main entry point; do not require raw `ansible-playbook` for day-to-day use
 - [ ] `spa skills install` (Claude / Cursor / Codex) from the shared prefix
 - [ ] `spa apps search` / `spa apps snippet`: search Splunkbase and print a copy-paste `splunk_app_deployment` app entry (`name`, `app_id`, `version`, `source`)
 - [ ] Skill for Splunkbase search → YAML snippet (calls the same CLI; never display Splunkbase passwords — [secrets-handling.md](skills/spa/spa-create-config/references/secrets-handling.md))
@@ -51,7 +50,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 
 ## Config and validation
 
-- [x] Pydantic schema + [bin/validate_splunk_config.sh](bin/validate_splunk_config.sh) (idxc / role pairing; supersedes a Vagrantfile-only idxc check)
+- [x] Pydantic schema + `spa validate` (idxc / role pairing; supersedes a Vagrantfile-only idxc check)
 - [x] Host ranges (`iter.numbers: "1..N"`)
 - [x] Index definitions including `datatype: metric` (`splunk_indexes`)
 - [x] First-login splash disabled ([ansible/roles/splunk_software/tasks/ui_config.yml](ansible/roles/splunk_software/tasks/ui_config.yml))
@@ -63,7 +62,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 
 ## Provisioning
 
-- [x] Terraform AWS + [bin/splunk_config_aws.py](bin/splunk_config_aws.py) ([docs/Ansible_Terraform_AWS_Integration.md](docs/Ansible_Terraform_AWS_Integration.md))
+- [x] Terraform AWS + `spa aws` ([docs/Ansible_Terraform_AWS_Integration.md](docs/Ansible_Terraform_AWS_Integration.md))
 - [ ] Splunk Operator for Kubernetes: `splunk_config.yml` → Operator CRs (IndexerCluster, SearchHeadCluster, ClusterManager, LicenseManager, MonitoringConsole, Standalone) plus namespace, storage, and image settings
 - [ ] Windows Universal Forwarder on AWS (AMI + WinRM); VirtualBox UF role exists but needs an undocumented box ([docs/Setup_Windows_Box.md](docs/Setup_Windows_Box.md))
 

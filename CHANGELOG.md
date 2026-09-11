@@ -11,11 +11,20 @@ Distribution work on the `distribution` integration branch toward **3.0** (M1–
 
 ### Added
 
-- **Distribution M1 — path contract and lab scaffold** ([#46](https://github.com/splunk/splunk-platform-automator/issues/46)):
-  - `SPA_HOME` is the framework (`ansible/`, Terraform modules, `skills/`, `bin/`). `SPA_LAB_DIR` is the lab (`config/splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `saved_base_config_apps/`). Unset both → the git clone; today's `ansible-playbook` workflow is unchanged.
+- **Distribution M2 — `spa` CLI** ([#47](https://github.com/splunk/splunk-platform-automator/issues/47)):
+  - One user-facing entry: `bin/spa` (`lib/spa/`). Subcommands: `init`, `validate`, `doctor`, `env --export`, `provision`, `deploy`, `destroy`, `shell`, `aws`, `licenses`, `run`, `agent schema`.
+  - Folded `init_spa_dir.sh`, `spa_env.sh`, `spa_doctor.sh`, `validate_splunk_config.sh`, `spash`, `splunk_config_aws.py`, and `splunk_config_licenses.py`. Keep `bin/spa_venv.sh` (must be sourced). `--lab` is now `--env`.
+  - Term is **env** (Splunk environment): `SPA_ENV_DIR` / `spa_env_dir`. No `SPA_LAB_DIR` alias. `SPADirName: "{{ spa_env_dir | basename }}"`.
+  - `spa init --force` never replaces `splunk_config.yml` unless `--example`. Old mixed clones print keep/remove and exit 2 until `--force`.
+  - `spa init --venv` / `--python` / `--ansible VER` / `--pip PKG`; env `$DIR/requirements.txt` last. Runtime venv: `SPA_VENV_DIR` → `$SPA_ENV_DIR/.venv` → `$SPA_HOME/.venv`.
+  - `spa run`: `ansible/<stem>`, `verification/<stem>`, or `$SPA_ENV_DIR/<dir>/<stem>`. `--list` catalogs framework stems (custom folders only if `playbook_dirs` in `.spa.yml`).
+  - Cup-style agent mode: auto-detect, JSON envelope, `--agent` / `--no-agent`, `-y`. Skills and `.agent/workflows` call only `spa`.
+
+- **Distribution M1 — path contract and env scaffold** ([#46](https://github.com/splunk/splunk-platform-automator/issues/46)):
+  - `SPA_HOME` is the framework (`ansible/`, Terraform modules, `skills/`, `bin/`). `SPA_ENV_DIR` (M1: `SPA_LAB_DIR`) is the env (`config/splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `saved_base_config_apps/`). Unset both → the git clone; today's `ansible-playbook` workflow is unchanged.
   - `bin/init_spa_dir.sh` scaffolds a lab dir (example config, `.spa.yml`, `inventory/`, `terraform/aws/`). Never copies `ansible/`. `--example`, refuse overwrite unless `--force`. If the source already has `config/splunk_config.yml`, the existing env is **migrated** (config, inventory, Terraform state) so a running deployment stays manageable from the new lab. `--from`, `--migrate`, `--keep-source`. An old clone copied as the target is converted in place (framework dirs stripped, state kept).
   - Resolver in `ansible/plugins/inventory/spa_paths.py` (plus `bin/spa_env.sh`) sets `ANSIBLE_INVENTORY` to the lab so a separate lab does not pick up the clone's `config/splunk_config.yml`. Relative `../Software` prefers a sibling of the **lab**, then a sibling of `SPA_HOME`. `.spa.yml` records `software_dir`, `baseconfig_dir`, and `apps_dir` (local `source: local` apps; same discovery as Software, plus `$SPA_HOME/apps`). Config still overrides: `splunk_dirs.splunk_software_dir`, `splunk_dirs.splunk_baseconfig_dir`, `splunk_app_deployment.local_app_repo_path` (env vars win over both).
-  - Lab `.envrc` puts `$SPA_HOME/bin` on `PATH` so `spash` works from a lab (labs have no `bin/` of their own). Pulled-back PS apps go to `$SPA_LAB_DIR/saved_base_config_apps/`. The host link page is `$SPA_LAB_DIR/config/index.html`.
+  - Env `.envrc` puts `$SPA_HOME/bin` on `PATH` so `spa` works from an env dir (envs have no `bin/` of their own). Pulled-back PS apps go to `$SPA_ENV_DIR/saved_base_config_apps/`. The host link page is `$SPA_ENV_DIR/config/index.html`.
   - Inventory plugin, Terraform provision/destroy/wait, `validate_splunk_config.sh`, `spash`, and `splunk_config_licenses.py` honor the contract. When roots differ, Terraform modules stay under `$SPA_HOME/terraform/aws`; state stays under the lab.
   - `requirements.yml` includes `ansible.windows` so `validate_splunk_config.sh` can syntax-check `deploy_site.yml` (Windows UF `win_stat`).
 

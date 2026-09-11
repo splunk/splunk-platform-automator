@@ -1,36 +1,31 @@
-#!/usr/bin/env python3
-
-import os
-import sys
-import json
-import subprocess
 import argparse
-
-_BIN_DIR = os.path.dirname(os.path.abspath(__file__))
-_PLUGIN_DIR = os.path.join(os.path.dirname(_BIN_DIR), "ansible", "plugins", "inventory")
-if _PLUGIN_DIR not in sys.path:
-    sys.path.insert(0, _PLUGIN_DIR)
+import json
+import os
+import subprocess
+import sys
 
 
 def apply_spa_env():
-    """Export SPA_HOME / SPA_LAB_DIR / ANSIBLE_* so inventory uses the lab, not the clone."""
-    try:
-        from spa_paths import resolve_spa_paths
-    except ImportError:
-        return
-    for key, value in resolve_spa_paths().export_env().items():
-        os.environ.setdefault(key, value)
+    """Export SPA_HOME / SPA_ENV_DIR / ANSIBLE_* so inventory uses the env, not the clone."""
+    from spa.executil import apply_paths_env
+    from spa.paths import resolve_spa_paths
+
+    apply_paths_env(resolve_spa_paths())
+
 
 
 def get_inventory_data():
     """Retrieves inventory data from ansible-inventory."""
     try:
-        # Run ansible-inventory to get the full inventory in JSON format
+        from spa.executil import tool_path
+        from spa.paths import resolve_spa_paths
+
+        inventory_bin = tool_path(resolve_spa_paths(), "ansible-inventory")
         result = subprocess.run(
-            ['ansible-inventory', '--list'],
+            [inventory_bin, "--list"],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
         )
         output = result.stdout
         # JSON should start with {
@@ -309,7 +304,7 @@ def resolve_connection_details(target_host, inventory):
         'ssh_common_args': ssh_common_args
     }
 
-def main():
+def main(argv=None):
     apply_spa_env()
 
     parser = argparse.ArgumentParser(description="SSH or SCP into/with an Ansible host.")
@@ -318,7 +313,7 @@ def main():
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output (with -l), performs live check for status")
     parser.add_argument("-c", "--copy", action="store_true", help="Use scp to copy files")
     parser.add_argument("args", nargs=argparse.REMAINDER, help="Additional arguments to pass to ssh/scp")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.list:
         inventory = get_inventory_data()
@@ -431,5 +426,3 @@ def main():
         # Replace current process with ssh
         os.execvp('ssh', ssh_cmd)
 
-if __name__ == '__main__':
-    main()

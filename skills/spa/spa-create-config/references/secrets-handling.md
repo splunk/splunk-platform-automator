@@ -15,7 +15,7 @@ Do **not** paste resolved lookup results if a command or playbook prints them.
 
 ## AWS API credentials (Phase 4 / validate)
 
-Used by `splunk_config_aws.py`, Terraform provision, and optional `--splunk-config-aws`.
+Used by `spa aws`, Terraform provision, and optional `--splunk-config-aws`.
 
 | Variable / item | Show in chat? | Notes |
 |-----------------|---------------|-------|
@@ -31,7 +31,7 @@ Used by `splunk_config_aws.py`, Terraform provision, and optional `--splunk-conf
 **Preferred AWS check** (no env echo):
 
 ```bash
-python3 bin/splunk_config_aws.py --check-auth --json
+spa aws --check-auth --json
 ```
 
 Report: *AWS API: ok (account 123456789012)* or *AWS API: failed — credentials not available* — not raw env vars.

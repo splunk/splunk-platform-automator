@@ -9,13 +9,13 @@ Splunk Platform Automator (SPA) provisions and deploys Splunk Enterprise on **AW
 | Main config | `config/splunk_config.yml` (copy from `examples/`) |
 | Config keys reference | `examples/configuration_description.yml` |
 | Guided human + agent workflow | [docs/Splunk_Config_Guided_Setup.md](docs/Splunk_Config_Guided_Setup.md) |
-| New AWS lab (one clone, many labs) | `./bin/init_spa_dir.sh --example cm_2idxc_sh_uf_aws.yml ~/labs/my-lab` then `cd ~/labs/my-lab` (direnv loads venv + `SPA_*`; otherwise `source bin/spa_venv.sh --lab DIR` and `eval "$(./bin/spa_env.sh --start-dir DIR)"`). Existing clone env: `./bin/init_spa_dir.sh ~/labs/my-lab` (migrates config/inventory/tfstate). |
-| Python env (Ansible, Pydantic) | `source bin/spa_venv.sh` (shared `SPA_HOME/.venv`; lab `.venv` wins when present). Labs get an `.envrc` for direnv; `init_spa_dir.sh` creates the venv if missing and runs `direnv allow` when direnv is installed. |
-| Host tools (terraform, direnv, …) | `./bin/spa_doctor.sh` (also run at end of `init_spa_dir.sh`; `--skip-doctor` to skip). Terraform only for AWS labs; Vagrant only for VirtualBox (`virtualbox:` in config). Not brew ansible/pydantic — use `spa_venv`. |
-| Validate before provision | `./bin/validate_splunk_config.sh` |
-| Provision AWS | `ansible-playbook "$SPA_HOME/ansible/provision_terraform_aws.yml" -e auto_approve=true` |
-| Deploy Splunk | `ansible-playbook "$SPA_HOME/ansible/deploy_site.yml"` |
-| VirtualBox | Config in the **clone**; `vagrant up` from `SPA_HOME` only. Lab dirs have no Vagrantfile. |
+| New AWS environment (one clone, many envs) | `spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env` then `cd ~/envs/my-env` (direnv loads venv + `SPA_*`; otherwise `source "$SPA_HOME/bin/spa_venv.sh" --env DIR` and `eval "$(spa env --export)"`). Existing clone env: `spa init ~/envs/my-env` (migrates config/inventory/tfstate). |
+| Python env (Ansible, Pydantic) | `source bin/spa_venv.sh` (shared `SPA_HOME/.venv`; env `.venv` wins when present). Env dirs get an `.envrc` for direnv; `spa init` creates the venv if missing and runs `direnv allow` when direnv is installed. |
+| Host tools (terraform, direnv, …) | `spa doctor` (also run at end of `spa init`; `--skip-doctor` to skip). Terraform only for AWS; Vagrant only for VirtualBox (`virtualbox:` in config). Not brew ansible/pydantic — use `spa_venv`. |
+| Validate before provision | `spa validate` |
+| Provision AWS | `spa provision --yes` |
+| Deploy Splunk | `spa deploy` |
+| VirtualBox | Config in the **clone**; `vagrant up` from `SPA_HOME` only. Env dirs have no Vagrantfile. |
 | Local tests | `./tests/run_local_tests.sh` |
 | Release | [RELEASE.md](RELEASE.md), `./scripts/release.sh --check` |
 
@@ -36,8 +36,8 @@ Canonical location: `skills/spa/` ([Agent Skills spec](https://agentskills.io/sp
 
 Never display credential values in chat or terminal output.
 
-- Splunkbase: `SPLUNKBASE_USERNAME`, `SPLUNKBASE_PASSWORD` — report **set** / **not set** only in YAML use `lookup('env', ...)`.
-- AWS: prefer `python3 bin/splunk_config_aws.py --check-auth --json`; never echo `AWS_SECRET_ACCESS_KEY` or similar.
+- Splunkbase: `SPLUNKBASE_USERNAME`, `SPLUNKBASE_PASSWORD` — report **set** / **not set** only; in YAML use `lookup('env', ...)`.
+- AWS: prefer `spa aws --check-auth --json`; never echo `AWS_SECRET_ACCESS_KEY` or similar.
 
 Full rules: [skills/spa/spa-create-config/references/secrets-handling.md](skills/spa/spa-create-config/references/secrets-handling.md).
 
@@ -51,12 +51,13 @@ Full rules: [skills/spa/spa-create-config/references/secrets-handling.md](skills
 
 ```text
 ansible/          Playbooks and roles (SPA_HOME)
-bin/              init_spa_dir.sh, spa_env.sh, spa_venv.sh, spa_doctor.sh, validate_splunk_config.sh, …
-config/           splunk_config.yml in the clone (gitignored) or in SPA_LAB_DIR
-saved_base_config_apps/  optional pull-back of rendered PS apps (lab)
+bin/              spa, spa_venv.sh
+lib/spa/          spa CLI implementation
+config/           splunk_config.yml in the clone (gitignored) or in SPA_ENV_DIR
+saved_base_config_apps/  optional pull-back of rendered PS apps (env dir)
 examples/         Example configs and configuration_description.yml
 skills/spa/       Agent skill packages (canonical)
 tests/            Schema, local, and AWS deployment tests
 ```
 
-**Path contract:** `SPA_HOME` is this checkout (framework). `SPA_LAB_DIR` is a lab (`config/`, `.spa.yml`, `inventory/`, Terraform state, optional `saved_base_config_apps/`). Unset both → the clone; existing `ansible-playbook` usage is unchanged. When they differ, do not write lab state into the prefix. `../Software` and `../apps` prefer a sibling of the **lab**, then the clone (`Software/` sibling or `$SPA_HOME/apps`). `.spa.yml` may set `software_dir`, `baseconfig_dir`, `apps_dir`. Config-file overrides: `splunk_dirs.splunk_software_dir`, `splunk_dirs.splunk_baseconfig_dir`, `splunk_app_deployment.local_app_repo_path`. Pulled-back PS apps: `splunk_apps.splunk_save_baseconfig_apps_dir` (default `saved_base_config_apps` under the lab). See [Multiple labs, one clone](README.md#multiple-labs-one-clone).
+**Path contract:** `SPA_HOME` is this checkout (framework). `SPA_ENV_DIR` is an environment dir (`config/`, `.spa.yml`, `inventory/`, Terraform state, optional `saved_base_config_apps/`). Unset both → the clone; existing `ansible-playbook` usage is unchanged. When they differ, do not write env state into the prefix. `../Software` and `../apps` prefer a sibling of the **env**, then the clone (`Software/` sibling or `$SPA_HOME/apps`). `.spa.yml` may set `software_dir`, `baseconfig_dir`, `apps_dir`. Config-file overrides: `splunk_dirs.splunk_software_dir`, `splunk_dirs.splunk_baseconfig_dir`, `splunk_app_deployment.local_app_repo_path`. Pulled-back PS apps: `splunk_apps.splunk_save_baseconfig_apps_dir` (default `saved_base_config_apps` under the env). See [Multiple environments, one clone](README.md#multiple-environments-one-clone).

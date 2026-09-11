@@ -1,6 +1,5 @@
-"""Pure-function tests for bin/splunk_config_aws.py (no live AWS)."""
+"""Pure-function tests for spa.aws (no live AWS)."""
 
-import importlib.util
 import os
 import sys
 
@@ -8,11 +7,9 @@ import pytest
 
 pytestmark = pytest.mark.local
 
-_MODULE_PATH = os.path.join(os.path.dirname(__file__), "..", "bin", "splunk_config_aws.py")
-_spec = importlib.util.spec_from_file_location("splunk_config_aws", _MODULE_PATH)
-aws = importlib.util.module_from_spec(_spec)
-sys.modules["splunk_config_aws"] = aws
-_spec.loader.exec_module(aws)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
+
+from spa import aws  # noqa: E402
 
 
 @pytest.mark.parametrize(

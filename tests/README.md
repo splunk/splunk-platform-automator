@@ -45,13 +45,14 @@ tests/
 ├── test_app_deployment.py     # App deployment pre-deployment checks (no infra)
 ├── test_schema.py             # Schema validation unit tests
 ├── test_schema_files.py       # validate_config_file + examples/app_scope sweep
-├── test_splunk_config_licenses.py # bin/splunk_config_licenses.py helpers
-├── test_splunk_config_aws.py  # bin/splunk_config_aws.py pure functions
-├── test_validate_splunk_config.py # bash -n / smoke for validate_splunk_config.sh
-├── test_spa_paths.py              # SPA_HOME / SPA_LAB_DIR resolver (Distribution M1)
-├── test_init_spa_dir.py           # bin/init_spa_dir.sh scaffold and migrate
-├── test_spa_venv.py               # bin/spa_venv.sh resolution + lab .envrc
-├── test_lab_scaffold.py           # separate lab inventory/validate; no clone writes
+├── test_splunk_config_licenses.py # spa licenses helpers
+├── test_splunk_config_aws.py      # spa aws pure functions
+├── test_validate_splunk_config.py # spa validate missing-config smoke
+├── test_spa_paths.py              # SPA_HOME / SPA_ENV_DIR resolver
+├── test_spa_init.py               # spa init scaffold and migrate
+├── test_env_scaffold.py           # separate env inventory vs clone
+├── test_spa_cli.py                # spa run catalog, agent JSON
+├── test_spa_venv.py               # bin/spa_venv.sh resolution + env .envrc
 ├── test_changelog_notes.py    # CHANGELOG section extractor for releases
 ├── test_verification.py       # Phase 2: Health verification tests
 ├── run_deployment_tests.sh    # Helper script for deployment tests

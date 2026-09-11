@@ -5,7 +5,7 @@ Run from **repository root** after writing `config/splunk_config.yml`.
 ## Primary script
 
 ```bash
-./bin/validate_splunk_config.sh [path/to/splunk_config.yml]
+spa validate [path/to/splunk_config.yml]
 ```
 
 Default path: `config/splunk_config.yml`.
@@ -15,20 +15,20 @@ Default path: `config/splunk_config.yml`.
 1. **Pydantic schema** — `ansible/plugins/inventory/schema.py` `validate_config_file`
 2. **Inventory plugin** — `ansible-inventory --list` with config as inventory source
 3. **License / role pairing** — `splunk_license_file` requires `license_manager` role (and vice versa); ITSI requires LM
-4. **Playbook syntax** — `ansible-playbook --syntax-check` on provision and deploy playbooks
+4. **Playbook syntax** — included in `spa validate` (`--syntax-check` on provision and deploy)
 
 ### Optional license file on disk check
 
 Verifies `splunk_license_file` basenames exist in `../Software` and reports ITSI / license-manager gaps:
 
 ```bash
-./bin/validate_splunk_config.sh --check-licenses config/splunk_config.yml
+spa validate --check-licenses config/splunk_config.yml
 ```
 
 Or directly:
 
 ```bash
-python3 bin/splunk_config_licenses.py --config config/splunk_config.yml --json
+spa licenses --config config/splunk_config.yml --json
 ```
 
 ### Optional AWS validation
@@ -36,15 +36,15 @@ python3 bin/splunk_config_licenses.py --config config/splunk_config.yml --json
 When credentials are available:
 
 ```bash
-./bin/validate_splunk_config.sh --splunk-config-aws config/splunk_config.yml
+spa validate --splunk-config-aws config/splunk_config.yml
 ```
 
-Parses `terraform.aws` from the YAML and runs `bin/splunk_config_aws.py --validate`.
+Parses `terraform.aws` from the YAML and runs `spa aws --validate`.
 
 Or directly:
 
 ```bash
-python3 bin/splunk_config_aws.py --region eu-central-1 --validate \
+spa aws --region eu-central-1 --validate \
   --ami-id ami-xxx --key-name aws_key --security-groups Splunk_Basic \
   --instance-type t3.medium --json
 ```
@@ -59,7 +59,7 @@ python3 bin/splunk_config_aws.py --region eu-central-1 --validate \
 
 Do not hand off to user provision until:
 
-- [ ] `validate_splunk_config.sh` exits 0
+- [ ] `spa validate` exits 0
 - [ ] No schema errors from inventory plugin
 - [ ] Playbook syntax-check passes
 
@@ -86,5 +86,5 @@ ap ansible/destroy_terraform_aws.yml -e auto_approve=true
 | Deployer without `shcluster:` | Add `shcluster` on deployer host |
 | Multisite without `site:` | Add `site` on CM and indexers |
 | Missing `ssh_username` | Set in `terraform.aws` per [aws-os-matrix.md](aws-os-matrix.md) |
-| AWS validate fails / no creds | Use default `validate_splunk_config.sh` only; see [aws-without-credentials.md](aws-without-credentials.md) |
+| AWS validate fails / no creds | Use default `spa validate` only; see [aws-without-credentials.md](aws-without-credentials.md) |
 | Policykit not installed (Ubuntu UF) | Add `policykit-1` to global `os.packages` or set `splunk_use_policykit: false` |

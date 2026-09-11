@@ -1,53 +1,41 @@
-"""Tests for bin/init_spa_dir.sh (Distribution M1 lab scaffold)."""
+"""Tests for spa init (env scaffold, migrate, --force vs config)."""
 
-import os
-import subprocess
 from pathlib import Path
 
 import pytest
 import yaml
 
+from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init
+
 pytestmark = pytest.mark.local
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-SCRIPT = PROJECT_ROOT / "bin" / "init_spa_dir.sh"
 
-
-def _run(args, env=None, cwd=None):
-    full_env = os.environ.copy()
-    if env:
-        full_env.update(env)
-    argv = [str(SCRIPT), *args]
-    # Unit tests do not require host Vagrant/Terraform; doctor still runs in test_spa_doctor.
-    if "--skip-doctor" not in args:
-        argv.insert(1, "--skip-doctor")
-    return subprocess.run(
-        argv,
-        cwd=cwd or PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-        env=full_env,
-    )
-
-
-def test_init_script_bash_syntax():
-    result = subprocess.run(["bash", "-n", str(SCRIPT)], cwd=PROJECT_ROOT)
+def test_init_help():
+    result = run_spa(["init", "--help"])
     assert result.returncode == 0
+    assert "splunk_config.yml" in result.stdout
 
 
-def test_scaffold_creates_lab_without_ansible(tmp_path):
-    lab = tmp_path / "my-lab"
-    result = _run(["--example", "single_node.yml", str(lab)])
+def test_init_list_examples():
+    result = run_spa(["init", "--list"])
+    assert result.returncode == 0
+    assert "single_node.yml" in result.stdout
+    assert "cm_2idxc_sh_uf_aws.yml" in result.stdout
+
+
+def test_scaffold_creates_env_without_ansible(tmp_path):
+    dest = tmp_path / "my-env"
+    result = run_spa_init(["--example", "single_node.yml", str(dest)])
     assert result.returncode == 0, result.stderr + result.stdout
-    assert (lab / "config" / "splunk_config.yml").is_file()
-    assert (lab / ".spa.yml").is_file()
-    assert (lab / "inventory").is_dir()
-    assert (lab / "inventory" / "hosts").is_file()
-    assert (lab / "terraform" / "aws").is_dir()
-    assert (lab / "saved_base_config_apps").is_dir()
-    assert not (lab / "ansible").exists()
+    assert (dest / "config" / "splunk_config.yml").is_file()
+    assert (dest / ".spa.yml").is_file()
+    assert (dest / "inventory").is_dir()
+    assert (dest / "inventory" / "hosts").is_file()
+    assert (dest / "terraform" / "aws").is_dir()
+    assert (dest / "saved_base_config_apps").is_dir()
+    assert not (dest / "ansible").exists()
 
-    spa_yml = yaml.safe_load((lab / ".spa.yml").read_text())
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
     assert spa_yml["spa_home"] == str(PROJECT_ROOT)
     clone_software = (PROJECT_ROOT / ".." / "Software").resolve()
     if clone_software.is_dir():
@@ -60,44 +48,55 @@ def test_scaffold_creates_lab_without_ansible(tmp_path):
     elif clone_apps.is_dir():
         assert Path(spa_yml["apps_dir"]).resolve() == clone_apps
 
-    cfg = yaml.safe_load((lab / "config" / "splunk_config.yml").read_text())
+    cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
     assert cfg["plugin"] == "splunk-platform-automator"
     assert cfg["splunk_hosts"]
 
 
 def test_example_flag(tmp_path):
-    lab = tmp_path / "c1"
-    result = _run(["--example", "cm_2idxc_sh_uf", str(lab)])
+    dest = tmp_path / "c1"
+    result = run_spa_init(["--example", "cm_2idxc_sh_uf", str(dest)])
     assert result.returncode == 0, result.stderr
-    cfg = yaml.safe_load((lab / "config" / "splunk_config.yml").read_text())
+    cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
     names = [h.get("name") for h in cfg["splunk_hosts"] if "name" in h]
     assert "cm" in names
 
 
 def test_refuse_overwrite(tmp_path):
-    lab = tmp_path / "exists"
-    first = _run(["--example", "single_node.yml", str(lab)])
+    dest = tmp_path / "exists"
+    first = run_spa_init(["--example", "single_node.yml", str(dest)])
     assert first.returncode == 0
-    second = _run(["--example", "single_node.yml", str(lab)])
+    second = run_spa_init(["--example", "single_node.yml", str(dest)])
     assert second.returncode != 0
     assert "already exists" in (second.stderr + second.stdout).lower()
 
 
-def test_force_overwrite(tmp_path):
-    lab = tmp_path / "exists"
-    assert _run(["--example", "single_node.yml", str(lab)]).returncode == 0
-    result = _run(["--force", "--example", "single_node.yml", str(lab)])
+def test_force_overwrite_with_example(tmp_path):
+    dest = tmp_path / "exists"
+    assert run_spa_init(["--example", "single_node.yml", str(dest)]).returncode == 0
+    result = run_spa_init(["--force", "--example", "single_node.yml", str(dest)])
     assert result.returncode == 0, result.stderr
 
 
+def test_force_without_example_keeps_config(tmp_path):
+    dest = tmp_path / "exists"
+    assert run_spa_init(["--example", "single_node.yml", str(dest)]).returncode == 0
+    marker = "# keep-me-marker\n"
+    cfg = dest / "config" / "splunk_config.yml"
+    cfg.write_text(cfg.read_text() + marker)
+    result = run_spa_init(["--force", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert marker in cfg.read_text()
+
+
 def test_refuse_spa_home():
-    result = _run([str(PROJECT_ROOT)])
+    result = run_spa_init([str(PROJECT_ROOT)])
     assert result.returncode != 0
     assert "SPA_HOME" in (result.stderr + result.stdout)
 
 
 def test_missing_example(tmp_path):
-    result = _run(["--example", "does-not-exist.yml", str(tmp_path / "x")])
+    result = run_spa_init(["--example", "does-not-exist.yml", str(tmp_path / "x")])
     assert result.returncode != 0
     assert "not found" in (result.stderr + result.stdout).lower()
 
@@ -118,45 +117,43 @@ def _write_old_env(root: Path, marker: str = "migrated-env") -> None:
 
 def test_auto_migrate_when_spa_home_has_config(tmp_path):
     source = tmp_path / "old-home"
-    lab = tmp_path / "lab"
+    dest = tmp_path / "env"
     _write_old_env(source)
-    result = _run([str(lab)], env={"SPA_HOME": str(source)})
+    result = run_spa_init([str(dest)], env={"SPA_HOME": str(source)})
     assert result.returncode == 0, result.stderr + result.stdout
     assert "Migrating existing env" in (result.stderr + result.stdout)
-    assert (lab / "config" / "splunk_config.yml").is_file()
+    assert (dest / "config" / "splunk_config.yml").is_file()
     assert not (source / "config" / "splunk_config.yml").exists()
-    spa_yml = yaml.safe_load((lab / ".spa.yml").read_text())
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
     assert spa_yml["spa_home"] == str(source)
 
 
 def test_migrate_from_existing_env(tmp_path):
     source = tmp_path / "old-clone"
-    lab = tmp_path / "lab"
+    dest = tmp_path / "env"
     _write_old_env(source)
     (source / "ansible").mkdir()
     (source / "ansible" / "deploy_site.yml").write_text("# framework\n")
 
-    result = _run(["--from", str(source), str(lab)])
+    result = run_spa_init(["--from", str(source), str(dest)])
     assert result.returncode == 0, result.stderr + result.stdout
     out = result.stderr + result.stdout
     assert "Migrating existing env" in out
-    assert (lab / "config" / "splunk_config.yml").is_file()
-    assert "migrated-env" in (lab / "config" / "splunk_config.yml").read_text()
-    assert (lab / "config" / "index.html").is_file()
-    assert (lab / "inventory" / "hosts").read_text() == "cm ansible_host=10.0.0.1\n"
-    assert (lab / "terraform" / "aws" / "terraform.tfstate").is_file()
-    assert (lab / "terraform" / "aws" / "terraform.tfvars").is_file()
-    assert (lab / ".spa.yml").is_file()
-    assert not (lab / "ansible").exists()
-    spa_yml = yaml.safe_load((lab / ".spa.yml").read_text())
+    assert (dest / "config" / "splunk_config.yml").is_file()
+    assert "migrated-env" in (dest / "config" / "splunk_config.yml").read_text()
+    assert (dest / "config" / "index.html").is_file()
+    assert (dest / "inventory" / "hosts").read_text() == "cm ansible_host=10.0.0.1\n"
+    assert (dest / "terraform" / "aws" / "terraform.tfstate").is_file()
+    assert (dest / "terraform" / "aws" / "terraform.tfvars").is_file()
+    assert (dest / ".spa.yml").is_file()
+    assert not (dest / "ansible").exists()
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
     assert spa_yml["spa_home"] == str(PROJECT_ROOT)
 
-    # Modules stay in SPA_HOME; lab gets a symlink, not a copied main.tf.
-    lab_main = lab / "terraform" / "aws" / "main.tf"
-    assert lab_main.is_symlink()
-    assert lab_main.resolve() == (PROJECT_ROOT / "terraform" / "aws" / "main.tf").resolve()
+    dest_main = dest / "terraform" / "aws" / "main.tf"
+    assert dest_main.is_symlink()
+    assert dest_main.resolve() == (PROJECT_ROOT / "terraform" / "aws" / "main.tf").resolve()
 
-    # Default is move — source lab files are gone; framework files stay.
     assert not (source / "config" / "splunk_config.yml").exists()
     assert not (source / "inventory" / "hosts").exists()
     assert not (source / "terraform" / "aws" / "terraform.tfstate").exists()
@@ -165,23 +162,41 @@ def test_migrate_from_existing_env(tmp_path):
 
 def test_migrate_keep_source(tmp_path):
     source = tmp_path / "old-clone"
-    lab = tmp_path / "lab"
+    dest = tmp_path / "env"
     _write_old_env(source)
-    result = _run(["--from", str(source), "--keep-source", str(lab)])
+    result = run_spa_init(["--from", str(source), "--keep-source", str(dest)])
     assert result.returncode == 0, result.stderr + result.stdout
-    assert (lab / "config" / "splunk_config.yml").is_file()
+    assert (dest / "config" / "splunk_config.yml").is_file()
     assert (source / "config" / "splunk_config.yml").is_file()
 
 
 def test_migrate_requires_config(tmp_path):
     source = tmp_path / "empty"
     source.mkdir()
-    result = _run(["--from", str(source), str(tmp_path / "lab")])
+    result = run_spa_init(["--from", str(source), str(tmp_path / "env")])
     assert result.returncode != 0
     assert "nothing to migrate" in (result.stderr + result.stdout).lower()
 
 
-def test_convert_old_clone_in_place(tmp_path):
+def test_old_clone_without_force_exits_2(tmp_path):
+    dest = tmp_path / "copied-clone"
+    _write_old_env(dest)
+    (dest / "ansible" / "roles").mkdir(parents=True)
+    (dest / "bin").mkdir()
+    (dest / "README.md").write_text("# old clone\n")
+    (dest / "ansible.cfg").write_text("[defaults]\n")
+    cfg_before = (dest / "config" / "splunk_config.yml").read_text()
+
+    result = run_spa_init([str(dest)])
+    assert result.returncode == 2
+    assert "old clone-style" in (result.stderr + result.stdout).lower() or "clone-style" in (
+        result.stderr + result.stdout
+    ).lower()
+    assert (dest / "ansible").is_dir()
+    assert (dest / "config" / "splunk_config.yml").read_text() == cfg_before
+
+
+def test_old_clone_force_strips_keeps_config(tmp_path):
     dest = tmp_path / "copied-clone"
     _write_old_env(dest)
     (dest / "ansible" / "roles").mkdir(parents=True)
@@ -189,9 +204,8 @@ def test_convert_old_clone_in_place(tmp_path):
     (dest / "README.md").write_text("# old clone\n")
     (dest / "ansible.cfg").write_text("[defaults]\n")
 
-    result = _run([str(dest)])
+    result = run_spa_init(["--force", str(dest)])
     assert result.returncode == 0, result.stderr + result.stdout
-    assert "Detected an existing clone-style env" in (result.stderr + result.stdout)
     assert (dest / "config" / "splunk_config.yml").is_file()
     assert "migrated-env" in (dest / "config" / "splunk_config.yml").read_text()
     assert (dest / "inventory" / "hosts").is_file()
@@ -205,8 +219,8 @@ def test_convert_old_clone_in_place(tmp_path):
 
 
 def test_example_and_migrate_conflict(tmp_path):
-    result = _run(
-        ["--example", "single_node.yml", "--migrate", str(tmp_path / "lab")]
+    result = run_spa_init(
+        ["--example", "single_node.yml", "--migrate", str(tmp_path / "env")]
     )
     assert result.returncode != 0
     assert "not both" in (result.stderr + result.stdout).lower()
@@ -215,7 +229,7 @@ def test_example_and_migrate_conflict(tmp_path):
 def test_refuse_same_source_and_dest(tmp_path):
     source = tmp_path / "old"
     _write_old_env(source)
-    result = _run(["--from", str(source), str(source)])
+    result = run_spa_init(["--from", str(source), str(source)])
     assert result.returncode != 0
     assert "same path" in (result.stderr + result.stdout).lower()
 
@@ -224,8 +238,8 @@ def test_init_uses_existing_shared_venv(tmp_path):
     shared = PROJECT_ROOT / ".venv" / "bin" / "activate"
     if not shared.is_file():
         pytest.skip("shared venv not present")
-    lab = tmp_path / "lab"
-    result = _run(["--example", "single_node.yml", "--skip-doctor", str(lab)])
+    dest = tmp_path / "env"
+    result = run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
     assert result.returncode == 0, result.stderr + result.stdout
     out = result.stderr + result.stdout
     assert "venv:" in out
@@ -233,7 +247,34 @@ def test_init_uses_existing_shared_venv(tmp_path):
     assert "Creating Python venv" not in out
 
 
-def test_save_baseconfig_tasks_write_under_lab_dir():
+def test_ansible_pin_passed_to_venv(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_call(cmd, *args, **kwargs):
+        calls.append(list(cmd))
+        return 0
+
+    monkeypatch.setattr("spa.init.subprocess.check_call", fake_call)
+    monkeypatch.setattr("spa.init.allow_direnv", lambda dest: None)
+    monkeypatch.setattr("spa.init.run_doctor", lambda *a, **k: None)
+    from spa.init import init_env
+
+    dest = tmp_path / "pinned"
+    rc = init_env(
+        dest,
+        PROJECT_ROOT,
+        example="single_node.yml",
+        example_set=True,
+        env_venv=True,
+        ansible="2.17.8",
+        skip_doctor=True,
+        write_envrc_file=False,
+        rebuild_venv=True,
+    )
+    assert rc == 0
+    joined = " ".join(" ".join(c) for c in calls)
+    assert "ansible==2.17.8" in joined
+    assert str(dest / ".venv") in joined
     save_app = PROJECT_ROOT / "ansible" / "roles" / "baseconfig_app" / "tasks" / "save_app.yml"
     save_sc = (
         PROJECT_ROOT / "ansible" / "roles" / "deployment_server" / "tasks" / "save_serverclass.yml"
@@ -243,5 +284,5 @@ def test_save_baseconfig_tasks_write_under_lab_dir():
     for path in (save_app, save_sc):
         text = path.read_text()
         assert "spa_saved_baseconfig_apps_dir" in text
-        assert '../{{' not in text
-        assert '../{{splunk_save_baseconfig_apps_dir' not in text
+        assert "../{{" not in text
+        assert "../{{splunk_save_baseconfig_apps_dir" not in text

@@ -60,7 +60,7 @@
         - generate
         - always
 
-    # When SPA_LAB_DIR differs from SPA_HOME, modules stay under the prefix;
+    # When SPA_ENV_DIR differs from SPA_HOME, modules stay under the prefix;
     # state (tfvars, .terraform, tfstate) lives in the lab. Symlink *.tf so
     # community.general.terraform can use project_path = lab state dir.
     - name: Link Terraform modules into the lab state directory
