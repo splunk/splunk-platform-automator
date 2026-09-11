@@ -17,9 +17,9 @@ splunk_app_deployment:
   # ===================================================================
   # LOCAL APP REPOSITORY (Optional - has default)
   # ===================================================================
-  # Default: "../apps" (relative to ansible directory)
-  # Only specify if your apps are in a different location:
-  # local_app_repo_path: "../app_repo"
+  # Default: spa_apps_dir (.spa.yml apps_dir / SPA_APPS_DIR / $SPA_HOME/apps)
+  # Only specify if this lab should use a different folder:
+  # local_app_repo_path: "/path/to/apps"
   
   # ===================================================================
   # APP DEFINITIONS

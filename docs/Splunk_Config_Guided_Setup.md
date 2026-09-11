@@ -6,8 +6,12 @@ For interactive agent assistance in Cursor, use the project skill at [skills/spa
 
 ## Quick path
 
-1. Copy [examples/aws_lab_baseline.yml](examples/aws_lab_baseline.yml) or start from [examples/splunk_config_terraform_aws.yml](examples/splunk_config_terraform_aws.yml).
-2. Add topology from an SVA-aligned example (e.g. [examples/4idxc2site_sh.yml](examples/4idxc2site_sh.yml) for multisite IDXC + SH).
+**Separate lab directory (recommended):** from the clone, `./bin/init_spa_dir.sh --example cm_2idxc_sh_uf_aws.yml ~/labs/my-lab`, then `cd ~/labs/my-lab` (direnv or `spa_env.sh`). Validate and provision with `"$SPA_HOME/bin/validate_splunk_config.sh"` and `"$SPA_HOME/ansible/provision_terraform_aws.yml"`. See [README — Start here](../README.md#start-here).
+
+**Clone-equal:**
+
+1. Copy [examples/aws_lab_baseline.yml](../examples/aws_lab_baseline.yml) or start from [examples/splunk_config_terraform_aws.yml](../examples/splunk_config_terraform_aws.yml) to `config/splunk_config.yml`.
+2. Add topology from an SVA-aligned example (e.g. [examples/4idxc2site_sh.yml](../examples/4idxc2site_sh.yml) for multisite IDXC + SH).
 3. Set **`terraform.aws.ssh_username`** to match your AMI (`ec2-user` for Amazon Linux / RHEL; `ubuntu` for Ubuntu).
 4. Set global **`os:`** block per OS — include **polkit** (`policykit-1` on Ubuntu). See [OS and SSH matrix](#os-and-ssh-matrix) below.
 5. Validate before provision:

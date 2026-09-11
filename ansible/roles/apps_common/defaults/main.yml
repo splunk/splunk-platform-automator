@@ -27,8 +27,10 @@ splunk_app_deployment_defaults:
   splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
   splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
   
-  # Local app repository settings
-  local_app_repo_path: "{{ playbook_dir }}/../apps"
+  # Local app repository: spa_apps_dir from .spa.yml / SPA_APPS_DIR / discovery
+  # ($SPA_HOME/apps historically). Override per lab with
+  # splunk_app_deployment.local_app_repo_path in splunk_config.yml.
+  local_app_repo_path: "{{ spa_apps_dir | default(playbook_dir + '/../apps', true) }}"
   
   # Update mode: 'merge' overlays new files on existing (keeps local/ customizations); 'clean' removes old app before installing
   update_mode: "merge"

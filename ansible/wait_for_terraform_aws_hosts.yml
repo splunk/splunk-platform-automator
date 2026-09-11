@@ -6,8 +6,9 @@
   hosts: localhost
   gather_facts: false
   vars:
-    config_file: "{{ lookup('env', 'SPLUNK_CONFIG_FILE') | default('../config/splunk_config.yml', true) }}"
-    terraform_dir: "{{ playbook_dir }}/../terraform/aws"
+    config_file: "{{ spa_config_file }}"
+    terraform_dir: "{{ spa_terraform_state_dir }}"
+    terraform_modules_dir: "{{ spa_terraform_modules_dir }}"
     ssh_timeout: 300 # 5 minutes timeout
     ssh_delay: 10 # Check every 10 seconds
 
@@ -15,6 +16,15 @@
     - name: Load Splunk configuration
       ansible.builtin.include_vars:
         file: "{{ config_file }}"
+
+    - name: Link Terraform modules into the lab state directory
+      ansible.builtin.file:
+        src: "{{ item }}"
+        dest: "{{ terraform_dir }}/{{ item | basename }}"
+        state: link
+        force: true
+      loop: "{{ query('fileglob', terraform_modules_dir + '/*.tf') }}"
+      when: spa_roots_differ | bool
 
     - name: Get Terraform Outputs
       community.general.terraform:

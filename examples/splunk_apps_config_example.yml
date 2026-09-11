@@ -24,11 +24,12 @@ splunk_app_deployment:
   # splunkbase_password: "{{ vault_splunkbase_password }}"
   
   # ===========================================
-  # LOCAL APP REPOSITORY (Optional - has default)
+  # LOCAL APP REPOSITORY (Optional)
   # ===========================================
-  # Default: "../apps" (relative to ansible directory)
-  # Override if your apps are in a different location:
-  # local_app_repo_path: "../app_repo"  # Path relative to ansible directory
+  # Default: spa_apps_dir from .spa.yml (apps_dir), SPA_APPS_DIR, then
+  # lab sibling ../apps, then $SPA_HOME/apps.
+  # Set this only to override that shared path for this lab:
+  # local_app_repo_path: "/Users/shared/spa-apps"
   
   # ===========================================
   # OPERATIONAL SETTINGS (Optional - has defaults)

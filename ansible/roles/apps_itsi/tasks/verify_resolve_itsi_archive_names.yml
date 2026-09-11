@@ -13,7 +13,7 @@
     _itsi_verify_archive_path: >-
       {{ verify_app_item.local_path
          | default(verify_app_item.path if (verify_app_item.path is defined and verify_app_item.path is search('^/'))
-         else (_verify_local_app_repo_path | default(splunk_app_deployment.local_app_repo_path | default(playbook_dir + '/../../apps'))
+         else (_verify_local_app_repo_path | default(splunk_app_deployment.local_app_repo_path | default(spa_apps_dir | default(playbook_dir + '/../../apps', true), true))
          ~ '/' ~ (verify_app_item.path | default('splunk-it-service-intelligence_' ~ ((verify_app_item.version | default('latest')) | string | replace('.', '')) ~ '.spl')))) }}
     _itsi_verify_resolved_version: "{{ verify_app_item.version | default('latest') }}"
   when: (verify_app_item.source | default('local')) != 'splunkbase'

@@ -6,6 +6,22 @@ import json
 import subprocess
 import argparse
 
+_BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+_PLUGIN_DIR = os.path.join(os.path.dirname(_BIN_DIR), "ansible", "plugins", "inventory")
+if _PLUGIN_DIR not in sys.path:
+    sys.path.insert(0, _PLUGIN_DIR)
+
+
+def apply_spa_env():
+    """Export SPA_HOME / SPA_LAB_DIR / ANSIBLE_* so inventory uses the lab, not the clone."""
+    try:
+        from spa_paths import resolve_spa_paths
+    except ImportError:
+        return
+    for key, value in resolve_spa_paths().export_env().items():
+        os.environ.setdefault(key, value)
+
+
 def get_inventory_data():
     """Retrieves inventory data from ansible-inventory."""
     try:
@@ -294,6 +310,8 @@ def resolve_connection_details(target_host, inventory):
     }
 
 def main():
+    apply_spa_env()
+
     parser = argparse.ArgumentParser(description="SSH or SCP into/with an Ansible host.")
     parser.add_argument("host", nargs='?', help="The name of the host to connect to or copy source/destination")
     parser.add_argument("-l", "--list", action="store_true", help="List available hosts")

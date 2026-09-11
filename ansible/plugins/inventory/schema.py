@@ -175,7 +175,8 @@ class SplunkDefaultsConfig(BaseModel):
     splunk_conf: Optional[Dict[str, Dict[str, Any]]] = None
     splunk_indexes: Optional[Dict[str, Any]] = None
     splunk_indexes_default_paths: Optional[bool] = None
-    splunk_indexer_volumes: Optional[Dict[str, SplunkVolumeConfig]] = None
+    # A volume with no properties (e.g. 'hot:') falls back to the default path at deploy time.
+    splunk_indexer_volumes: Optional[Dict[str, Optional[SplunkVolumeConfig]]] = None
     splunk_volume_defaults: Optional[SplunkVolumeDefaultsConfig] = None
     splunk_ssl: Optional[SplunkSslConfig] = None
     splunk_secret_share: Optional[SplunkSecretShareConfig] = None

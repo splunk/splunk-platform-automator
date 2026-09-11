@@ -190,6 +190,26 @@ class TestValidConfigurations:
         assert result.general.url_locale == "en-GB"
         assert result.splunk_defaults.splunk_version == "9.1.0"
 
+    def test_indexer_volume_without_properties(self):
+        """A volume with no properties gets the default path at deploy time (SmartStore examples)."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_defaults": {
+                "splunk_indexer_volumes": {
+                    "hot": None,
+                    "s2volume": {
+                        "path": "s3://bucket/subfolder",
+                        "storageType": "remote",
+                    },
+                }
+            },
+            "splunk_hosts": [{"name": "idx1", "roles": ["indexer"]}]
+        }
+        result = validate_config(config)
+        volumes = result.splunk_defaults.splunk_indexer_volumes
+        assert volumes["hot"] is None
+        assert volumes["s2volume"].path == "s3://bucket/subfolder"
+
     def test_url_locale_with_underscore(self):
         """Test url_locale accepts underscore separator."""
         config = {

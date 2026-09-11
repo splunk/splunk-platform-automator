@@ -24,26 +24,9 @@ SKIP_EXAMPLE_BASENAMES = {
     "aws_lab_baseline.yml",
 }
 
-# Complete examples that currently fail schema (known drift — do not silently pass).
-XFAIL_EXAMPLE_BASENAMES = {
-    "idx_sh_uf_SmartStore.yml": "splunk_indexer_volumes.hot is null; schema requires a volume mapping",
-    "cm_4idxc2site_3shc_ds_uf_SmartStore.yml": "splunk_indexer_volumes.hot is null; schema requires a volume mapping",
-    "single_node_itsi.yml": "license_manager present but splunk_license_file is commented out",
-}
-
-
 def _example_paths():
     paths = sorted(glob.glob(os.path.join(PROJECT_ROOT, "examples", "*.yml")))
-    params = []
-    for path in paths:
-        name = os.path.basename(path)
-        if name in SKIP_EXAMPLE_BASENAMES:
-            continue
-        mark = None
-        if name in XFAIL_EXAMPLE_BASENAMES:
-            mark = pytest.mark.xfail(reason=XFAIL_EXAMPLE_BASENAMES[name], strict=False)
-        params.append(pytest.param(path, id=name, marks=mark) if mark else path)
-    return params
+    return [p for p in paths if os.path.basename(p) not in SKIP_EXAMPLE_BASENAMES]
 
 
 def _app_scope_paths():
@@ -80,7 +63,7 @@ class TestValidateConfigFile:
             validate_config_file(str(cfg))
 
 
-@pytest.mark.parametrize("config_path", _example_paths())
+@pytest.mark.parametrize("config_path", _example_paths(), ids=os.path.basename)
 def test_example_config_validates(config_path):
     validate_config_file(config_path)
 

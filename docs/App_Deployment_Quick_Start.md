@@ -10,7 +10,7 @@ Add this section to your `config/splunk_config.yml`:
 splunk_app_deployment:
   splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
   splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
-  local_app_repo_path: "../app_repo"
+  # local_app_repo_path: "/path/to/shared/apps"   # optional; default is spa_apps_dir
   
   apps:
     - name: "Splunk_TA_nix"
@@ -155,7 +155,7 @@ splunk_app_deployment:
 
 # 2. Configure in splunk_config.yml
 splunk_app_deployment:
-  local_app_repo_path: "../app_repo"
+  # local_app_repo_path: "/path/to/shared/apps"   # optional; default is spa_apps_dir
   apps:
     - name: "my_custom_app"
       source: local
@@ -224,7 +224,7 @@ splunk_app_deployment:
 splunk_app_deployment:
   splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
   splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
-  local_app_repo_path: "../app_repo"
+  # local_app_repo_path: "/path/to/shared/apps"   # optional; default is spa_apps_dir
   
   apps:
     # Splunkbase apps - auto-deployed to optimal location
