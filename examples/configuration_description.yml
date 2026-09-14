@@ -62,7 +62,7 @@ os:
   # Each entry is a path to a public key file on the Ansible controller.
   # Keys are added to ~/.ssh/authorized_keys (existing keys are preserved).
   # Can also be set per host in splunk_hosts[].os.ssh_keys.
-  # Deploy independently with: ansible-playbook ansible/install_ssh_keys.yml
+  # Deploy independently with: ansible-playbook ansible/ssh_keys.yml
   ssh_keys:
     - ~/.ssh/id_ed25519.pub
     - ~/.ssh/colleague_key.pub
@@ -250,7 +250,7 @@ splunk_defaults:
 
   # Share the same splunk.secret file with all Splunk nodes
   # Note: You must first deploy splunk to one host only to store the splunk.secret file
-  #       You can do that by running: ansible-playbook ansible/setup_common.yml ansible/install_splunk.yml --limit <one_host_from_the_list>
+  #       You can do that by running: ansible-playbook ansible/setup_common.yml ansible/splunk_install.yml --limit <one_host_from_the_list>
   #       After that you can run ansible/deploy_site.yml to all hosts
   splunk_secret_share:
     # for Splunk Enterprise

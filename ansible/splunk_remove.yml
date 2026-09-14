@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Uninstall Splunk from hosts.
+#   description: Removes the Splunk installation from targeted hosts.
+#   category: operations
+#   risk: destructive
+#   examples:
+#     - spa run splunk_remove --hosts uf1
 # remove the splunk installation
 
 - name: Remove the complete splunk installation

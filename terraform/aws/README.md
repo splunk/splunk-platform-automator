@@ -8,7 +8,7 @@ This directory contains Terraform configuration for provisioning EC2 instances f
 
 ```bash
 # From the main directory
-ansible-playbook ansible/provision_terraform_aws.yml
+ansible-playbook ansible/aws_provision.yml
 ```
 
 This approach:
@@ -99,13 +99,13 @@ splunk_hosts:
 
 ```bash
 # From the main directory
-ansible-playbook ansible/provision_terraform_aws.yml
+ansible-playbook ansible/aws_provision.yml
 ```
 
 ### 3. Destroy Infrastructure
 
 ```bash
-ansible-playbook ansible/destroy_terraform_aws.yml
+ansible-playbook ansible/aws_destroy.yml
 ```
 
 ---

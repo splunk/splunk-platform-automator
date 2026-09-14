@@ -8,7 +8,7 @@ This directory contains playbooks to verify the state of your Splunk deployment.
 
 ### 1. `verify_app_deployment.yml`
 
-Verifies that Splunk apps are deployed correctly according to the configuration in `config/splunk_config.yml`. Performs the same version checks as `deploy_splunk_apps.yml`.
+Verifies that Splunk apps are deployed correctly according to the configuration in `config/splunk_config.yml`. Performs the same version checks as `splunk_apps_deploy.yml`.
 
 **What it checks:**
 - ✅ Apps that should be installed are present
@@ -111,7 +111,7 @@ ansible-playbook ansible/verification/debug_app_scope.yml \
 You can also run the full deploy with scope debugging (still no install/remove for the direct role when the flag is set):
 
 ```bash
-ansible-playbook ansible/deploy_splunk_apps.yml -e debug_app_scope=true
+ansible-playbook ansible/splunk_apps_deploy.yml -e debug_app_scope=true
 ```
 
 This runs the direct role in “scope only” mode (`scope_debug_results` is set per host; no role debug dump—use `debug_app_scope.yml` or the JSON output file to inspect scope); deployer and other steps still run as usual.
@@ -235,7 +235,7 @@ Controls whether verification playbooks fail on mismatches.
 **Solution:**
 ```bash
 # Re-run deployment
-ansible-playbook ansible/deploy_splunk_apps.yml
+ansible-playbook ansible/splunk_apps_deploy.yml
 ```
 
 ### Verification shows "VERSION DRIFT"
@@ -245,7 +245,7 @@ ansible-playbook ansible/deploy_splunk_apps.yml
 **Solution:**
 ```bash
 # Re-run deployment to update apps
-ansible-playbook ansible/deploy_splunk_apps.yml
+ansible-playbook ansible/splunk_apps_deploy.yml
 ```
 
 ### Verification shows "UNEXPECTED" apps
@@ -278,7 +278,7 @@ This is normal and expected behavior.
 
 1. **Run verification after every deployment:**
    ```bash
-   ansible-playbook ansible/deploy_splunk_apps.yml
+   ansible-playbook ansible/splunk_apps_deploy.yml
    ansible-playbook ansible/verification/verify_app_deployment.yml
    ```
 

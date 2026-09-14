@@ -1,6 +1,14 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Remove Splunk apps marked absent.
+#   description: Removes apps with state absent without running a full deploy.
+#   category: operations
+#   risk: destructive
+#   examples:
+#     - spa run splunk_apps_remove
 # Remove Splunk Apps (processes apps with state: absent from config)
-# Uses the same four roles as deploy_splunk_apps.yml with a filtered app list.
+# Uses the same four roles as splunk_apps_deploy.yml with a filtered app list.
 #
 # Flow: Play 1 filters to apps with state=absent and sets splunk_app_deployment_filtered.
 # Plays 2–5 run the same roles as deploy, passing that filtered config so each role only

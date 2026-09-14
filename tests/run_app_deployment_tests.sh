@@ -2,7 +2,7 @@
 # ==============================================================================
 # Run App Deployment Tests
 # ==============================================================================
-# Runs automated tests for Splunk app deployment (deploy_splunk_apps.yml).
+# Runs automated tests for Splunk app deployment (splunk_apps_deploy.yml).
 #
 # - test_app_deployment.py: pre-deployment checks (duplicate app, credentials,
 #   valid config) via ansible-playbook with static localhost inventory.

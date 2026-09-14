@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Destroy AWS hosts managed by Terraform.
+#   description: Tears down terraform.aws infrastructure. Prefer spa destroy --yes.
+#   category: infrastructure
+#   risk: destructive
+#   examples:
+#     - spa destroy --yes
 # Destroy AWS infrastructure managed by Terraform
 #
 # If terraform.aws credentials in config are vault-encrypted (quoted !vault),

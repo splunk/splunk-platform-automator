@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Install Splunk Enterprise on hosts.
+#   description: Installs Splunk software from the configured package. Used by deploy_site.
+#   category: deployment
+#   risk: mutating
+#   examples:
+#     - spa run splunk_install --hosts uf1
 # This playbook installs the splunk software
 
 - name: Install the splunk enterprise software

@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Verify data is flowing into Splunk.
+#   description: Checks that expected data reaches indexers or search heads.
+#   category: verification
+#   risk: read-only
+#   examples:
+#     - spa run verification/verify_data_flow
 - name: Verify Data Flow (SPL Search)
   hosts: role_search_head
   # Run on search heads if available, otherwise indexers (for single node)

@@ -16,6 +16,7 @@ Splunk Platform Automator (SPA) provisions and deploys Splunk Enterprise on **AW
 | Validate before provision | `spa validate` |
 | Provision AWS then deploy | `spa provision --yes && spa deploy` |
 | Deploy Splunk only (hosts already up) | `spa deploy` (optional `--hosts` names or roles) |
+| Run a playbook | `spa run --list`, `spa run NAME --help`, `spa run NAME` (optional `--hosts`) |
 | Pause/resume AWS compute | `spa suspend --yes` / `spa resume --yes` (optional `--hosts`; keeps Terraform state and EBS; resume refreshes inventory addresses) |
 | List / SSH / copy | `spa hosts list --status`, `spa hosts ssh NAME`, `spa hosts copy SRC DST` (`spa sh` / `spa shell` still SSH) |
 | Destroy managed infrastructure | `spa destroy --yes` (env-wide; later `--all` vs `--hosts` decommission) |
@@ -79,4 +80,4 @@ One backend (`spa.api.LocalSpaSession` via `open_session()`). Two clients:
 
 The CLI is also a backend client (parse argv → session → print / JSON envelope). `open_session(url=...)` is reserved for a later remote controller; do not start a daemon unless that work is explicit. Env dirs and Ansible/Terraform stay on the machine that runs `LocalSpaSession`. A later thin laptop `spa` can use `SPA_CONTROLLER` so skills still run `spa` against remote env dirs.
 
-`--hosts` on `deploy`, `run`, `suspend`, `resume`, and `hosts list` takes inventory names or roles (for example `indexer`). Skills should use full command names (`spa hosts ssh`, `spa validate`), not short aliases (`spa sh`, `spa val`). Do not remove a live host from `splunk_config.yml` and run `spa provision` — Terraform will terminate that instance until the provision destroy-guard exists (see ROADMAP).
+`--hosts` on `deploy`, `run`, `suspend`, `resume`, and `hosts list` takes inventory names or roles (for example `indexer`). Discover playbooks with `spa --json run --list` then `spa run NAME --help`. Skills should use full command names (`spa hosts ssh`, `spa validate`), not short aliases (`spa sh`, `spa val`). Do not remove a live host from `splunk_config.yml` and run `spa provision` — Terraform will terminate that instance until the provision destroy-guard exists (see ROADMAP).

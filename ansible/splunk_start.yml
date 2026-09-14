@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Start splunkd on selected hosts.
+#   description: Starts the Splunk service using inventory connection settings.
+#   category: operations
+#   risk: mutating
+#   examples:
+#     - spa run splunk_start --hosts indexer
 - name: Start splunk
   hosts:
     - role_cluster_manager

@@ -184,9 +184,22 @@ class LocalSpaSession:
         )
 
     def catalog(self, extra_dir: Optional[str] = None) -> CommandResult:
-        from spa.playbooks import catalog
+        from spa.playbooks import MetadataError, catalog
 
-        return CommandResult(ok=True, data=catalog(self.paths, extra_dir=extra_dir))
+        try:
+            rows = catalog(self.paths, extra_dir=extra_dir)
+        except MetadataError as exc:
+            return CommandResult(ok=False, error=str(exc), code=1)
+        return CommandResult(ok=True, data=rows)
+
+    def describe_playbook(self, name: str, extra_dir: Optional[str] = None) -> CommandResult:
+        from spa.playbooks import MetadataError, PlaybookError, describe
+
+        try:
+            data = describe(name, self.paths, extra_dir=extra_dir)
+        except (MetadataError, PlaybookError) as exc:
+            return CommandResult(ok=False, error=str(exc), code=1)
+        return CommandResult(ok=True, data=data)
 
     def list_examples(self) -> CommandResult:
         from spa.init import list_examples
@@ -403,7 +416,7 @@ class LocalSpaSession:
         hosts: Optional[Sequence[str]] = None,
     ) -> CommandResult:
         from spa.hosts import with_ansible_limit
-        from spa.playbooks import PlaybookError, resolve, run_playbook
+        from spa.playbooks import PlaybookError, resolve_named, run_playbook
 
         try:
             resolved = self._resolve_hosts(hosts)
@@ -413,11 +426,14 @@ class LocalSpaSession:
         if verbose:
             args = ["-v", *args]
         try:
-            playbook = resolve(name, self.paths, extra_dir=extra_dir)
+            playbook, renamed_from, canonical = resolve_named(name, self.paths, extra_dir=extra_dir)
         except PlaybookError as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
         rc = run_playbook(playbook, self.paths, args, on_progress=self.on_progress)
-        data: Dict[str, Any] = {"playbook": name, "path": str(playbook)}
+        data: Dict[str, Any] = {"playbook": canonical, "path": str(playbook)}
+        if renamed_from:
+            data["renamed_from"] = renamed_from
+            data["use"] = canonical
         if resolved:
             data["hosts"] = resolved
         return CommandResult(

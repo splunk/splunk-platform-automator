@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Upgrade a distributed Splunk environment.
+#   description: Orchestrates Splunk upgrades across a multi-role environment.
+#   category: upgrade
+#   risk: mutating
+#   examples:
+#     - spa run upgrade_distributed
 # This playbook upgrades the splunk software
 
 # This example upgrades from 6.6.x to 7.0.x or from 7.0.x to 7.1.x

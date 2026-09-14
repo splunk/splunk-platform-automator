@@ -213,11 +213,21 @@ def test_run_list_groups_by_root(tmp_path):
     assert "Verification playbooks" in result.stdout
     # The source belongs in --json, not as a column next to every name.
     assert "\tansible" not in result.stdout
-    names = [line.strip() for line in result.stdout.splitlines() if line.startswith("  ")]
+    entries = [line for line in result.stdout.splitlines() if line.startswith("  ")]
+    names = [line.split()[0] for line in entries]
     assert "deploy_site" in names
+    assert "splunk_cli" in names
     assert "verification/ping_hosts" in names
     # bare verification stem is not listed as ping_hosts alone as the catalog name
     assert "ping_hosts" not in names
+    assert "run_splunk_command" not in names
+    # Summaries start in one column for every group, so they read as a table.
+    starts = {
+        len(line) - len(line.split(maxsplit=1)[1])
+        for line in entries
+        if len(line.split(maxsplit=1)) == 2
+    }
+    assert len(starts) == 1
 
 
 def test_run_list_json():
@@ -230,6 +240,66 @@ def test_run_list_json():
     sources = {row["name"]: row["source"] for row in payload["data"]}
     assert sources["verification/ping_hosts"] == "verification"
     assert sources["deploy_site"] == "ansible"
+    deploy = next(row for row in payload["data"] if row["name"] == "deploy_site")
+    assert deploy.get("summary")
+    assert deploy.get("risk") == "mutating"
+    names = {row["name"] for row in payload["data"]}
+    assert "splunk_start" in names
+    assert "start_splunk" not in names
+
+
+def test_run_playbook_help_does_not_execute(monkeypatch):
+    called = []
+
+    def fake_run(*args, **kwargs):
+        called.append(True)
+        return 0
+
+    monkeypatch.setattr("spa.playbooks.run_playbook", fake_run)
+    from spa.cli import main
+
+    rc = main(["--no-agent", "run", "splunk_cli", "--help"])
+    assert rc == 0
+    assert not called
+
+
+def test_run_playbook_help_text():
+    result = run_spa(["run", "splunk_cli", "--help"])
+    assert result.returncode == 0, result.stderr
+    assert "splunk_command" in result.stdout
+    assert "--hosts" in result.stdout
+    assert "--limit" not in result.stdout
+
+
+def test_run_playbook_help_json():
+    result = run_spa(["--json", "run", "splunk_cli", "--help"])
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["data"]["name"] == "splunk_cli"
+    assert payload["data"]["metadata"]["risk"] == "mutating"
+
+
+def test_run_legacy_stem_help():
+    result = run_spa(["run", "run_splunk_command", "--help"])
+    assert result.returncode == 0, result.stderr
+    assert "use spa run splunk_cli" in result.stdout
+
+
+def test_run_help_passthrough_after_dashdash(monkeypatch):
+    captured = {}
+
+    def fake_run(playbook, paths, extra, on_progress=None):
+        captured["extra"] = extra
+        captured["playbook"] = str(playbook)
+        return 0
+
+    monkeypatch.setattr("spa.playbooks.run_playbook", fake_run)
+    from spa.cli import main
+
+    rc = main(["--no-agent", "run", "splunk_cli", "--", "--help"])
+    assert rc == 0
+    assert captured.get("extra") == ["--help"]
+    assert captured["playbook"].endswith("splunk_cli.yml")
 
 
 def test_env_dir_playbook_resolves(tmp_path):
@@ -249,6 +319,11 @@ def test_env_dir_playbook_resolves(tmp_path):
     listing = run_spa(["run", "--list", "--dir", "custom"], env=env)
     assert "Env playbooks" in listing.stdout
     assert "custom/foo" in listing.stdout
+    json_listing = run_spa(["--json", "run", "--list", "--dir", "custom"], env=env)
+    payload = json.loads(json_listing.stdout)
+    foo = next(row for row in payload["data"] if row["name"] == "custom/foo")
+    assert foo.get("missing") is True
+    assert foo.get("metadata") is None
 
 
 def test_run_path_escape_rejected(tmp_path):
@@ -282,6 +357,11 @@ def test_agent_schema():
     names = {c["name"] for c in payload["data"]["commands"]}
     assert "run" in names
     assert "shell" in names
+    run = next(c for c in payload["data"]["commands"] if c["name"] == "run")
+    flags = [item["long"] for item in run.get("flags") or []]
+    assert "--hosts" in flags
+    assert "--list" in flags
+    assert "spa --json run --list" in run["summary"]
 
 
 def test_env_export_is_shell(tmp_path):

@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Check Ansible prerequisites on the controller.
+#   description: Verifies local Ansible and Python requirements before a deploy.
+#   category: operations
+#   risk: read-only
+#   examples:
+#     - spa run ansible_check
 # This playbook test the needed capabilities for ansible
 
 - name: Test user switching and file creation in /tmp

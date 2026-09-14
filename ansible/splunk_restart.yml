@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Restart splunkd on selected hosts.
+#   description: Restarts the Splunk service on the targeted inventory hosts.
+#   category: operations
+#   risk: mutating
+#   examples:
+#     - spa run splunk_restart --hosts search_head
 - name: Restart splunk
   hosts:
     - role_cluster_manager

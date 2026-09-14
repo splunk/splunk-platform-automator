@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Enable Splunk Web.
+#   description: Enables the Splunk Web UI on targeted hosts.
+#   category: operations
+#   risk: mutating
+#   examples:
+#     - spa run splunk_web_enable --hosts sh1
 - name: Enable splunkweb
   hosts: all,!role_universal_forwarder,!role_universal_forwarder_windows
   become: true
@@ -8,4 +16,4 @@
     - name: Call enable_splunkweb from role splunk_common
       ansible.builtin.include_role:
         name: splunk_software
-        tasks_from: enable_splunkweb.yml
+        tasks_from: splunk_web_enable.yml

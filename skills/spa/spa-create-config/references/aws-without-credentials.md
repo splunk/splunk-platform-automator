@@ -39,7 +39,7 @@ Record in config header comment when API was not used:
 | `--list-regions`, `--survey`, `--latest-ami`, `--validate` | `ok: false` in JSON or non-zero exit |
 | `spa validate --splunk-config-aws` | **Fails** if validate runs and AWS rejects the call — **do not use** without creds |
 
-Provision/deploy (`ap ansible/provision_terraform_aws.yml`) **requires** working AWS credentials at run time — building config offline is fine, but user must configure creds before provision.
+Provision/deploy (`ap ansible/aws_provision.yml`) **requires** working AWS credentials at run time — building config offline is fine, but user must configure creds before provision.
 
 ## Without-creds Phase 4 workflow
 

@@ -3,7 +3,7 @@
 plugin: splunk-platform-automator
 
 #
-# ap ansible/provision_terraform_aws.yml -e auto_approve=true; ap ansible/deploy_site.yml
+# ap ansible/aws_provision.yml -e auto_approve=true; ap ansible/deploy_site.yml
 
 # General settings
 general:

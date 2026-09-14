@@ -1,7 +1,15 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Verify apps match splunk_config.yml.
+#   description: Confirms app presence, absence, and version on targeted hosts.
+#   category: verification
+#   risk: read-only
+#   examples:
+#     - spa run verification/verify_app_deployment
 # Verify App Deployment
 # Checks if apps defined in splunk_config.yml are actually deployed correctly.
-# Verifies both presence/absence AND version drift (same checks as deploy_splunk_apps.yml).
+# Verifies both presence/absence AND version drift (same checks as splunk_apps_deploy.yml).
 # Inventory is provided by the framework (ansible.cfg); run from project root.
 #
 # Usage:

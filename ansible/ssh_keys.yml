@@ -1,9 +1,17 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Install SSH public keys on hosts.
+#   description: Copies configured SSH keys onto inventory hosts.
+#   category: operations
+#   risk: mutating
+#   examples:
+#     - spa run ssh_keys
 # This playbook installs SSH public keys on all managed hosts.
 # Keys are read from the os.ssh_keys list in config/splunk_config.yml
 # and added to the ansible login user's authorized_keys.
 #
-# Usage: ansible-playbook ansible/install_ssh_keys.yml
+# Usage: ansible-playbook ansible/ssh_keys.yml
 
 - name: Install SSH public keys
   hosts: all:!role_universal_forwarder_windows

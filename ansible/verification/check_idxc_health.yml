@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Check indexer cluster health.
+#   description: Verifies indexer cluster status from the cluster manager.
+#   category: verification
+#   risk: read-only
+#   examples:
+#     - spa run verification/check_idxc_health
 - name: Check Indexer Cluster Health
   hosts: role_cluster_manager
   become: true

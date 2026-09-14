@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Add a Splunk license to the license manager.
+#   description: Installs the configured license file on the license manager host.
+#   category: operations
+#   risk: mutating
+#   examples:
+#     - spa run splunk_license
 # add a splunk license if not existing
 
 - name: Add splunk license to license manager

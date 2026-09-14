@@ -1,10 +1,10 @@
 ---
 # Post-restart task: install content pack via ITSI API.
-# Included from deploy_splunk_apps.yml Step 5 when content_pack_install is true.
+# Included from splunk_apps_deploy.yml Step 5 when content_pack_install is true.
 # Expects: app_name, customization_extra_vars (version, install_all, saved_search_action, backfill, resolution, enabled, prefix).
 # Only runs POST install when the content pack is not already installed (GET check).
 # When the pack is already installed we set content_pack_already_installed; Step 5 skips run_playbook_after_restart unless customizations.force_run_playbook_after_restart is true (default false).
-# SHC wait (service_ready_flag, rolling_restart_flag) is done once in deploy_splunk_apps.yml Step 5 before the playbook loop.
+# SHC wait (service_ready_flag, rolling_restart_flag) is done once in splunk_apps_deploy.yml Step 5 before the playbook loop.
 # customization_extra_vars is set when building post_restart_playbooks_to_run / _pending_post_restart_first_shc in
 # apps_itsi_content_pack/tasks/main.yml, where each key is resolved from item.content_pack_api with role defaults
 # (cp_api_* from defaults/main.yml). Here we only fallback to the same hardcoded values if a key is missing (e.g. older playbook data).
@@ -70,7 +70,7 @@
     ((cp_status.json | default({})).installed_versions | default([]) | first | default('')) != _cp_version
   changed_when: true
 
-# Record when content pack was already installed so deploy_splunk_apps can skip run_playbook_after_restart unless force_run_playbook_after_restart is true.
+# Record when content pack was already installed so splunk_apps_deploy can skip run_playbook_after_restart unless force_run_playbook_after_restart is true.
 - name: "Record content pack ({{ app_name }}) was already installed (skip run_playbook_after_restart unless forced)"
   ansible.builtin.set_fact:
     content_pack_already_installed: "{{ (content_pack_already_installed | default({})) | combine({app_name: true}) }}"

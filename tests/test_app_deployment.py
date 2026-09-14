@@ -1,5 +1,5 @@
 """
-Automated tests for Splunk app deployment (deploy_splunk_apps.yml).
+Automated tests for Splunk app deployment (splunk_apps_deploy.yml).
 
 These tests run the app deployment playbook with static localhost inventory and
 extra-vars fixtures. No real Splunk hosts or AWS are required.
@@ -35,7 +35,7 @@ def _test_ansible_config_path() -> str:
 
 
 def _minimal_playbook_env(*, ansible_config: str, extra: dict | None = None) -> dict:
-    """Subprocess env for deploy_splunk_apps.yml tests — excludes CI secrets (e.g. SPLUNKBASE_*)."""
+    """Subprocess env for splunk_apps_deploy.yml tests — excludes CI secrets (e.g. SPLUNKBASE_*)."""
     keep = (
         "PATH",
         "HOME",
@@ -70,9 +70,9 @@ def _run_deploy_playbook(
     env_overrides: dict | None = None,
     expect_failure: bool = False,
 ) -> subprocess.CompletedProcess:
-    """Run ansible/deploy_splunk_apps.yml with -i localhost,. Extra vars from extra_vars_path (-e @file) unless extra_vars_dict is set (then -e json.dumps(extra_vars_dict))."""
+    """Run ansible/splunk_apps_deploy.yml with -i localhost,. Extra vars from extra_vars_path (-e @file) unless extra_vars_dict is set (then -e json.dumps(extra_vars_dict))."""
     root = _project_root()
-    playbook = os.path.join(root, "ansible", "deploy_splunk_apps.yml")
+    playbook = os.path.join(root, "ansible", "splunk_apps_deploy.yml")
     if extra_vars_dict is not None:
         extra_args = ["-e", json.dumps(extra_vars_dict)]
     else:
@@ -93,7 +93,7 @@ def _run_deploy_playbook(
         timeout=60,
     )
     if result.returncode != 0 and not expect_failure:
-        print("\n--- deploy_splunk_apps.yml output ---")
+        print("\n--- splunk_apps_deploy.yml output ---")
         print("STDOUT:", result.stdout[-3000:] if len(result.stdout) > 3000 else result.stdout)
         print("STDERR:", result.stderr[-1500:] if len(result.stderr) > 1500 else result.stderr)
     return result
@@ -426,7 +426,7 @@ class TestAppDeploymentSchemaValidation:
 
 
 class TestAppDeploymentPreDeploymentChecks:
-    """Test pre-deployment check behaviour of deploy_splunk_apps.yml.
+    """Test pre-deployment check behaviour of splunk_apps_deploy.yml.
 
     Playbook subprocess uses _minimal_playbook_env (no SPLUNKBASE_* inheritance) so
     tests pass in CI even when deployment secrets are exported globally.

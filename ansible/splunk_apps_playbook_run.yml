@@ -1,6 +1,23 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Run one apps_playbooks task file.
+#   description: Executes a single app customization playbook without a full app deploy.
+#   category: operations
+#   risk: mutating
+#   inputs:
+#     - name: apps_playbook
+#       kind: extra-var
+#       required: true
+#       description: Path under ansible/ to the task file.
+#     - name: app_name
+#       kind: extra-var
+#       required: true
+#       description: Splunk app folder name.
+#   examples:
+#     - spa run splunk_apps_playbook_run --hosts sh1 -- -e apps_playbook=apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml -e app_name=DA-ITSI-CP-monitoring-alerting
 # Run an apps_playbook in isolation (no full app deployment).
-# Use -l or --limit to target specific hosts (e.g. -l sh, -l searchhead1).
+# Target hosts with spa run ... --hosts (names or roles).
 # Use the same inventory and group_vars/host_vars as full deploy so splunk_home, splunk_admin_password, etc. are set.
 #
 # Required extra vars (-e):

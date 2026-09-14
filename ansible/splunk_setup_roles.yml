@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Apply Splunk role setup (pipeline step).
+#   description: Configures Splunk roles as part of deploy_site. Prefer spa deploy for a full site.
+#   category: deployment
+#   risk: mutating
+#   examples:
+#     - spa run splunk_setup_roles
 # This playbook configures the splunk roles
 
 - name: Setup deployment server role

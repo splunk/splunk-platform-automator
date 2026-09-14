@@ -42,7 +42,7 @@ class TestSplunkDeployment:
         Helper to run an Ansible playbook.
         
         Args:
-            playbook_path: Relative path from workspace root (e.g., 'ansible/install_splunk.yml')
+            playbook_path: Relative path from workspace root (e.g., 'ansible/splunk_install.yml')
             extra_args: Additional command line arguments
             
         Returns:
@@ -109,7 +109,7 @@ class TestSplunkDeployment:
         # First ensure the inventory plugin can read the config
         # Run provision with --tags that only do terraform prep
         result = self._run_playbook(
-            "ansible/provision_terraform_aws.yml",
+            "ansible/aws_provision.yml",
             ["-e", "auto_approve=false", "--tags", "generate"]
         )
         
@@ -132,13 +132,13 @@ class TestSplunkDeployment:
         """
         Step 3: Provision AWS infrastructure with Terraform.
         
-        - Runs provision_terraform_aws.yml with auto_approve=true
+        - Runs aws_provision.yml with auto_approve=true
         """
         print("\n[PROVISION] Deploying virtual hosts to AWS...")
         
         # Run terraform provisioning (skip verify tag as we do our own verification)
         result = self._run_playbook(
-            "ansible/provision_terraform_aws.yml",
+            "ansible/aws_provision.yml",
             ["-e", "auto_approve=true", "--skip-tags", "verify"]
         )
         
@@ -222,17 +222,17 @@ class TestSplunkDeployment:
         """
         Step 7: Install Splunk software on all hosts.
         
-        Runs: ansible/install_splunk.yml
+        Runs: ansible/splunk_install.yml
         - Downloads and installs Splunk Enterprise/UF
         - Configures initial admin password
         """
         if not getattr(self, 'is_provisioned', False):
             pytest.fail("Previous step failed: Infrastructure not provisioned")
         
-        print("\n[DEPLOY] Running install_splunk.yml...")
-        result = self._run_playbook("ansible/install_splunk.yml")
+        print("\n[DEPLOY] Running splunk_install.yml...")
+        result = self._run_playbook("ansible/splunk_install.yml")
         
-        assert result.returncode == 0, "install_splunk.yml failed"
+        assert result.returncode == 0, "splunk_install.yml failed"
         
         # Mark Splunk as installed for dependent tests
         self.manager.is_splunk_installed = True
@@ -247,16 +247,16 @@ class TestSplunkDeployment:
         """
         Step 8: Configure Splunk roles (indexer, search_head, etc).
         
-        Runs: ansible/setup_splunk_roles.yml
+        Runs: ansible/splunk_setup_roles.yml
         - Configures clustering, replication, etc.
         """
         if not getattr(self, 'is_splunk_installed', False):
             pytest.fail("Previous step failed: Splunk not installed")
         
-        print("\n[DEPLOY] Running setup_splunk_roles.yml...")
-        result = self._run_playbook("ansible/setup_splunk_roles.yml")
+        print("\n[DEPLOY] Running splunk_setup_roles.yml...")
+        result = self._run_playbook("ansible/splunk_setup_roles.yml")
         
-        assert result.returncode == 0, "setup_splunk_roles.yml failed"
+        assert result.returncode == 0, "splunk_setup_roles.yml failed"
         
         # Mark Splunk as configured for dependent tests
         self.manager.is_splunk_configured = True
@@ -271,16 +271,16 @@ class TestSplunkDeployment:
         """
         Step 9: Apply Splunk configuration settings.
         
-        Runs: ansible/setup_splunk_conf.yml
+        Runs: ansible/splunk_setup_conf.yml
         - Applies custom .conf file settings
         """
         if not getattr(self, 'is_splunk_installed', False):
             pytest.fail("Previous step failed: Splunk not installed")
         
-        print("\n[DEPLOY] Running setup_splunk_conf.yml...")
-        result = self._run_playbook("ansible/setup_splunk_conf.yml")
+        print("\n[DEPLOY] Running splunk_setup_conf.yml...")
+        result = self._run_playbook("ansible/splunk_setup_conf.yml")
         
-        assert result.returncode == 0, "setup_splunk_conf.yml failed"
+        assert result.returncode == 0, "splunk_setup_conf.yml failed"
         print("[DEPLOY] Splunk conf settings applied")
     
     # =========================================================================
@@ -311,7 +311,7 @@ class TestSplunkDeployment:
         """
         Step 11: Deploy Splunk apps according to configuration.
         
-        Runs: ansible/deploy_splunk_apps.yml
+        Runs: ansible/splunk_apps_deploy.yml
         - Deploys apps via deployment server, cluster manager, deployer, and direct
         """
         if not getattr(self, 'is_splunk_configured', False):
@@ -319,9 +319,9 @@ class TestSplunkDeployment:
         
         print("\n[DEPLOY] Deploying Splunk apps...")
         
-        result = self._run_playbook("ansible/deploy_splunk_apps.yml")
+        result = self._run_playbook("ansible/splunk_apps_deploy.yml")
         
-        assert result.returncode == 0, "deploy_splunk_apps.yml failed"
+        assert result.returncode == 0, "splunk_apps_deploy.yml failed"
         
         # Mark apps as deployed for dependent tests
         self.manager.is_apps_deployed = True

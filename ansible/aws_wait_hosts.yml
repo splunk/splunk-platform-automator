@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Wait until AWS hosts accept SSH and Ansible.
+#   description: Checks Terraform inventory hosts for SSH, then runs preflight_deploy.
+#   category: infrastructure
+#   risk: read-only
+#   examples:
+#     - spa run aws_wait_hosts
 # Wait for AWS hosts to be ready for Ansible provisioning
 # This playbook checks SSH connectivity and ensures hosts are fully booted
 

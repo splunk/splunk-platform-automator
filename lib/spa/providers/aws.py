@@ -24,14 +24,14 @@ class Provider:
 
     def provision(self, extra: List[str]) -> int:
         return run_playbook(
-            resolve("provision_terraform_aws", self.paths),
+            resolve("aws_provision", self.paths),
             self.paths,
             extra,
         )
 
     def destroy(self, extra: List[str]) -> int:
         return run_playbook(
-            resolve("destroy_terraform_aws", self.paths),
+            resolve("aws_destroy", self.paths),
             self.paths,
             extra,
         )

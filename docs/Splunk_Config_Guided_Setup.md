@@ -165,5 +165,5 @@ ansible-galaxy collection install ansible.windows
 ## Destroy
 
 ```bash
-ap ansible/destroy_terraform_aws.yml -e auto_approve=true
+ap ansible/aws_destroy.yml -e auto_approve=true
 ```

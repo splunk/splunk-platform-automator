@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Deploy a full Splunk site (pipeline).
+#   description: Imports preflight, OS setup, install, roles, conf, and apps. Prefer spa deploy.
+#   category: deployment
+#   risk: mutating
+#   examples:
+#     - spa deploy
 # This playbook deploys a full splunk site
 # yaml-language-server: $schema=playbook-schema.json
 
@@ -22,19 +30,19 @@
   tags:
     - splunk
     - splunk_software
-  import_playbook: install_splunk.yml
+  import_playbook: splunk_install.yml
 
 - name: Setup splunk roles
   tags:
     - splunk
     - splunk_roles
-  import_playbook: setup_splunk_roles.yml
+  import_playbook: splunk_setup_roles.yml
 
 - name: Configure splunk conf settings
   tags:
     - splunk
     - splunk_conf
-  import_playbook: setup_splunk_conf.yml
+  import_playbook: splunk_setup_conf.yml
 
 - name: Setup other roles
   tags:
@@ -45,4 +53,4 @@
   tags:
     - splunk
     - splunk_apps
-  import_playbook: deploy_splunk_apps.yml
+  import_playbook: splunk_apps_deploy.yml

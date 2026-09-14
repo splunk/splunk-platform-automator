@@ -85,6 +85,44 @@ spa provision --yes && spa deploy
 
 Do not delete a live host from `splunk_config.yml` and run `spa provision`. Terraform will terminate that instance. Later work will refuse instance destroys on provision and add `spa destroy --hosts` / `--all` (see [ROADMAP.md](../ROADMAP.md)).
 
+## Playbook stems (3.0)
+
+`spa run --list` shows current names. `spa run OLD` still resolves and prints `use spa run NEW`. Prefer `spa provision` / `spa destroy` / `spa deploy` over running the AWS or site pipeline playbooks directly.
+
+| 2.x | 3.0 |
+| --- | --- |
+| `start_splunk` | `splunk_start` |
+| `stop_splunk` | `splunk_stop` |
+| `restart_splunk` | `splunk_restart` |
+| `run_splunk_command` | `splunk_cli` |
+| `call_splunk_rest` | `splunk_rest` |
+| `install_splunk` | `splunk_install` |
+| `remove_splunk` | `splunk_remove` |
+| `enable_splunkweb` | `splunk_web_enable` |
+| `disable_stop_splunkweb` | `splunk_web_disable` |
+| `add_splunk_license` | `splunk_license` |
+| `backup_splunk_etc` | `splunk_backup_etc` |
+| `cleanup_backup_dir` | `splunk_backup_cleanup` |
+| `update_splunk_certs_web` | `splunk_certs_web` |
+| `update_splunk_certs_inputs` | `splunk_certs_inputs` |
+| `setup_splunk_roles` | `splunk_setup_roles` |
+| `setup_splunk_conf` | `splunk_setup_conf` |
+| `upgrade_splunk_shc_rolling` | `upgrade_shc_rolling` |
+| `upgrade_splunk_idxc_rolling` | `upgrade_idxc_rolling` |
+| `upgrade_splunk_dist_env` | `upgrade_distributed` |
+| `provision_terraform_aws` | `aws_provision` |
+| `destroy_terraform_aws` | `aws_destroy` |
+| `wait_for_terraform_aws_hosts` | `aws_wait_hosts` |
+| `deploy_splunk_apps` | `splunk_apps_deploy` |
+| `remove_splunk_apps` | `splunk_apps_remove` |
+| `run_apps_playbook` | `splunk_apps_playbook_run` |
+| `install_ssh_keys` | `ssh_keys` |
+| `test_ansible_prereqs` | `ansible_check` |
+
+Unchanged: `deploy_site`, `preflight_deploy`, `setup_common`, `create_linkpage`, `setup_other_roles`, `update_hosts_file`, `upgrade_splunk`.
+
+First-party playbooks carry a `# spa-run:` comment. `spa run NAME --help` prints it; `spa --json run --list` includes `summary` / `risk` / `category`.
+
 ## Already in 2.5.x
 
 If you jump from an older 2.x (before 2.5) to 3.0:

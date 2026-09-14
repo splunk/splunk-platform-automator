@@ -166,7 +166,7 @@ The verification is integrated into `tests/test_deployment.py`:
 ```python
 def test_11_deploy_splunk_apps(self, config_file):
     """Deploy Splunk apps according to configuration."""
-    result = self._run_playbook("ansible/deploy_splunk_apps.yml")
+    result = self._run_playbook("ansible/splunk_apps_deploy.yml")
     assert result.returncode == 0
     self.manager.is_apps_deployed = True
 
@@ -303,7 +303,7 @@ tests/
 
 **1. Re-run deployment:**
 ```bash
-ansible-playbook ansible/deploy_splunk_apps.yml
+ansible-playbook ansible/splunk_apps_deploy.yml
 ansible-playbook ansible/verification/verify_app_deployment.yml
 ```
 
@@ -329,7 +329,7 @@ Version drift means the installed version differs from the expected version. Thi
 **Solution:**
 ```bash
 # Re-run deployment to apply the update
-ansible-playbook ansible/deploy_splunk_apps.yml
+ansible-playbook ansible/splunk_apps_deploy.yml
 ```
 
 ### Splunkbase Version Checks Skipped
@@ -354,7 +354,7 @@ If verification is skipped for a host, it means no apps are expected there based
 
 1. **Always verify after deployment:**
    ```bash
-   ansible-playbook ansible/deploy_splunk_apps.yml && \
+   ansible-playbook ansible/splunk_apps_deploy.yml && \
    ansible-playbook ansible/verification/verify_app_deployment.yml
    ```
 

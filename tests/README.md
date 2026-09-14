@@ -81,9 +81,9 @@ Sequential tests that build the environment:
 | 4 | `test_04_verify_host_connectivity` | `ping_hosts.yml` |
 | 5 | `test_05_setup_common` | `setup_common.yml` |
 | 6 | `test_06_create_linkpage` | `create_linkpage.yml` |
-| 7 | `test_07_install_splunk` | `install_splunk.yml` |
-| 8 | `test_08_setup_splunk_roles` | `setup_splunk_roles.yml` |
-| 9 | `test_09_setup_splunk_conf` | `setup_splunk_conf.yml` |
+| 7 | `test_07_install_splunk` | `splunk_install.yml` |
+| 8 | `test_08_setup_splunk_roles` | `splunk_setup_roles.yml` |
+| 9 | `test_09_setup_splunk_conf` | `splunk_setup_conf.yml` |
 | 10 | `test_10_setup_other_roles` | `setup_other_roles.yml` |
 | 11 | `test_11_verify_data_flow` | Verify data in `_internal` index |
 | 12 | `test_12_check_idxc_health` | Indexer cluster health (if applicable) |
@@ -267,7 +267,7 @@ Use `-k` with test names to run only specific steps:
 
 ### App deployment
 
-Step **test_11** runs `ansible/deploy_splunk_apps.yml`; **test_17** runs app deployment verification. For manual scenarios (DS vs direct, ITSI, cache cleanup), see [App Deployment Testing](../docs/App_Deployment_Testing.md).
+Step **test_11** runs `ansible/splunk_apps_deploy.yml`; **test_17** runs app deployment verification. For manual scenarios (DS vs direct, ITSI, cache cleanup), see [App Deployment Testing](../docs/App_Deployment_Testing.md).
 
 ## Adding New Test Configurations
 

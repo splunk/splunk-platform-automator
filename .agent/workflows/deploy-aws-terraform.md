@@ -47,7 +47,7 @@ Skip SSH wait: `spa provision -- -e wait_for_ssh=false`.
 ## Step 4: Verify Host Readiness (optional)
 
 ```bash
-spa run wait_for_terraform_aws_hosts
+spa run aws_wait_hosts
 ```
 
 SSH, Python, uptime, cloud-init. Success text in the playbook may mention deploy; continue with `spa deploy`.
@@ -89,8 +89,8 @@ continue to incur charges. In agent mode both commands require `--yes`.
 ## Troubleshooting
 
 - `spa doctor` and `spa aws --check-auth --json` first.
-- Verbose wait: `spa run wait_for_terraform_aws_hosts -- -v`
-- Longer SSH timeout: `spa run wait_for_terraform_aws_hosts -- -e ssh_timeout=600`
+- Verbose wait: `spa run aws_wait_hosts -- -v`
+- Longer SSH timeout: `spa run aws_wait_hosts -- -e ssh_timeout=600`
 
 ## Cleanup
 
@@ -109,7 +109,7 @@ In agent mode, destroy requires `-y` / `--yes`. This permanently deletes EC2 ins
 | `spa provision -- --tags plan` | Preview changes |
 | `spa provision --yes && spa deploy` | Provision then deploy (stop if provision fails) |
 | `spa provision` / `spa provision --yes` | Provision infrastructure only |
-| `spa run wait_for_terraform_aws_hosts` | Verify host readiness |
+| `spa run aws_wait_hosts` | Verify host readiness |
 | `spa deploy` | Deploy Splunk (hosts already provisioned); `--hosts` for a subset |
 | `spa suspend --yes` | Stop EC2 instances; keep state and disks; optional `--hosts` |
 | `spa resume --yes` | Start EC2 instances; wait and refresh inventory; optional `--hosts` |

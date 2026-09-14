@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Preflight checks before deploy.
+#   description: Validates host readiness and fact cache before Splunk install. Used by deploy_site.
+#   category: deployment
+#   risk: read-only
+#   examples:
+#     - spa run preflight_deploy
 # Preflight checks before deploy_site.yml.
 # Detects stale Ansible fact cache (e.g. after reprovisioning with a different OS/AMI
 # while reusing the same inventory hostnames) and flushes invalid cache entries.

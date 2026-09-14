@@ -51,6 +51,15 @@ def _tilde(path: Path) -> str:
         return str(path)
 
 
+def _start_dir_from_head(head: Sequence[str]) -> Optional[str]:
+    tokens = list(head)
+    if "--start-dir" in tokens:
+        index = tokens.index("--start-dir")
+        if index + 1 < len(tokens):
+            return tokens[index + 1]
+    return None
+
+
 def _print_catalog(rows: List[dict], paths) -> None:
     """Group the catalog by root; the source column only matters in --json."""
     groups = (
@@ -58,20 +67,131 @@ def _print_catalog(rows: List[dict], paths) -> None:
         ("verification", "Verification playbooks", paths.spa_home / "ansible" / "verification"),
         ("env", "Env playbooks", paths.spa_env_dir),
     )
+    # One column start for every group so summaries line up across sections.
+    width = max((len(row["name"]) for row in rows if row.get("summary")), default=0) + 2
     printed = False
     for source, title, folder in groups:
-        names = [row["name"] for row in rows if row["source"] == source]
-        if not names:
+        group_rows = [row for row in rows if row.get("source") == source]
+        if not group_rows:
             continue
         if printed:
             print()
         printed = True
         print("%s — %s" % (title, _tilde(folder)))
-        for name in names:
-            print("  %s" % name)
+        for row in group_rows:
+            summary = row.get("summary")
+            if summary:
+                print("  %s%s" % (row["name"].ljust(width), summary))
+            else:
+                print("  %s" % row["name"])
     if printed:
         print()
-        print("Run one with: spa run <name> [-- ansible-playbook args]")
+        print("Run one with: spa run <name> [--hosts NAME] [-- ansible-playbook args]")
+        print("Describe one: spa run <name> --help")
+
+
+def _run_help_target(head: Sequence[str]) -> Optional[str]:
+    """Playbook stem, empty string for spa run --help, or None to use argparse."""
+    help_flags = {"-h", "--help"}
+    skip_value = {"--start-dir"}
+    index = 0
+    while index < len(head):
+        token = head[index]
+        if token in skip_value:
+            index += 2
+            continue
+        if token.startswith("-") and token not in help_flags:
+            index += 1
+            continue
+        if token == "run":
+            rest = list(head[index + 1 :])
+            break
+        return None
+    else:
+        return None
+    if not any(item in help_flags for item in rest):
+        return None
+    names: List[str] = []
+    skip_run_value = {"--dir", "--hosts"}
+    cursor = 0
+    while cursor < len(rest):
+        token = rest[cursor]
+        if token in help_flags or token == "--list":
+            cursor += 1
+            continue
+        if token in skip_run_value:
+            cursor += 2
+            continue
+        if token.startswith("-"):
+            cursor += 1
+            continue
+        names.append(token)
+        cursor += 1
+    if names:
+        return names[0]
+    return ""
+
+
+def _print_run_usage() -> None:
+    print("usage: spa run [-h] [--list] [--dir DIR] [--hosts NAME] [NAME]")
+    print()
+    print("Run a playbook by stem, or list/describe playbooks without executing Ansible.")
+    print()
+    print("  spa run --list              catalog (name — summary)")
+    print("  spa run NAME --help         description, risk, inputs, examples")
+    print("  spa run NAME [--hosts NAME] [-- ansible-playbook args]")
+    print()
+    print("Discover first with spa --json run --list, then spa run NAME --help.")
+
+
+def _print_playbook_help(data: dict) -> None:
+    meta = data.get("metadata") or {}
+    print(data.get("name") or "")
+    if data.get("renamed_from"):
+        print("Renamed in 3.0; use spa run %s" % (data.get("use") or data.get("name")))
+        print()
+    if meta.get("summary"):
+        print(meta["summary"])
+        print()
+    if meta.get("description"):
+        print(meta["description"])
+        print()
+    extras = []
+    if meta.get("category"):
+        extras.append("category: %s" % meta["category"])
+    if meta.get("risk"):
+        extras.append("risk: %s" % meta["risk"])
+    if extras:
+        print("  %s" % "  |  ".join(extras))
+    if data.get("path"):
+        print("  path: %s" % data["path"])
+    if data.get("missing"):
+        print()
+        print("No # spa-run: metadata on this playbook.")
+    requires = meta.get("requires") or []
+    if requires:
+        print()
+        print("Requires:")
+        for item in requires:
+            print("  - %s" % item)
+    inputs = meta.get("inputs") or []
+    if inputs:
+        print()
+        print("Inputs:")
+        for item in inputs:
+            if isinstance(item, dict):
+                name = item.get("name") or ""
+                desc = item.get("description") or ""
+                req = "required" if item.get("required") else "optional"
+                print("  %s (%s)%s" % (name, req, (": " + desc) if desc else ""))
+            else:
+                print("  %s" % item)
+    examples = meta.get("examples") or []
+    if examples:
+        print()
+        print("Examples:")
+        for item in examples:
+            print("  %s" % item)
 
 
 def _add_command(sub, name, aliases=(), **kwargs):
@@ -138,6 +258,36 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 def _run(argv: Sequence[str]) -> int:
     argv = list(argv)
     head, extra = _split_passthrough(argv)
+    help_name = _run_help_target(head)
+    if help_name is not None and not extra:
+        as_agent = agent_mode(
+            force_agent="--agent" in head or "--json" in head,
+            force_human="--no-agent" in head,
+        )
+        paths = _paths(_start_dir_from_head(head))
+        session = open_session(start_dir=str(paths.spa_env_dir))
+        if help_name == "":
+            if as_agent:
+                return _emit_result(
+                    CommandResult(
+                        ok=True,
+                        data={
+                            "usage": "spa run [--list] [NAME]",
+                            "discover": ["spa --json run --list", "spa run NAME --help"],
+                        },
+                    ),
+                    True,
+                )
+            _print_run_usage()
+            return 0
+        result = session.describe_playbook(help_name)
+        if as_agent:
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+            return result.code
+        _print_playbook_help(result.data or {})
+        return 0
     head, native = _split_native(head)
 
     import argparse
@@ -224,7 +374,11 @@ def _run(argv: Sequence[str]) -> int:
     p_resume.add_argument("-y", "--yes", action="store_true", default=argparse.SUPPRESS)
     _add_hosts_option(p_resume)
 
-    p_run = _add_command(sub, "run", help="Run a playbook by stem")
+    p_run = _add_command(
+        sub,
+        "run",
+        help="Run a playbook by stem (spa run --list; spa run NAME --help)",
+    )
     p_run.add_argument("name", nargs="?")
     p_run.add_argument("--list", action="store_true")
     p_run.add_argument("--dir", dest="playbook_dir", help="Extra env-dir folder to list/run")
@@ -472,6 +626,11 @@ def _run(argv: Sequence[str]) -> int:
         )
         if as_agent:
             return _emit_result(result, True)
+        if result.data and result.data.get("renamed_from"):
+            print(
+                "use spa run %s" % (result.data.get("use") or result.data.get("playbook")),
+                file=sys.stderr,
+            )
         if result.error:
             print(result.error, file=sys.stderr)
             print("spa run --list for the catalog", file=sys.stderr)

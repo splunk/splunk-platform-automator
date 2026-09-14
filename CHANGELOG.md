@@ -17,7 +17,7 @@ Distribution work on the `distribution` integration branch toward **3.0** (M1–
   - Term is **env** (Splunk environment): `SPA_ENV_DIR` / `spa_env_dir`. No `SPA_LAB_DIR` alias. `SPADirName: "{{ spa_env_dir | basename }}"`.
   - `spa init --force` never replaces `splunk_config.yml` unless `--example`. Old mixed clones print keep/remove and exit 2 until `--force`.
   - `spa init --venv` / `--python` / `--ansible VER` / `--pip PKG`; env `$DIR/requirements.txt` last. Runtime venv: `SPA_VENV_DIR` → `$SPA_ENV_DIR/.venv` → `$SPA_HOME/.venv`.
-  - `spa run`: `ansible/<stem>`, `verification/<stem>`, or `$SPA_ENV_DIR/<dir>/<stem>`. `--list` catalogs framework stems (custom folders only if `playbook_dirs` in `.spa.yml`) and groups them by root; `--json` keeps the `source` field.
+  - `spa run`: `ansible/<stem>`, `verification/<stem>`, or `$SPA_ENV_DIR/<dir>/<stem>`. `--list` catalogs framework stems with `name — summary` (custom folders only if `playbook_dirs` in `.spa.yml`); `--json` keeps `source` plus metadata. `spa run NAME --help` describes a playbook without running Ansible. First-party playbooks use `# spa-run:` comments. 3.0 renamed operator stems (`run_splunk_command` → `splunk_cli`, `provision_terraform_aws` → `aws_provision`, …); old stems still resolve with a hint. See [docs/Migrate_SPA_2x_to_3x.md](docs/Migrate_SPA_2x_to_3x.md).
   - Cup-style agent mode: auto-detect, JSON envelope, `--agent` / `--no-agent`, `-y`. Skills and `.agent/workflows` call only `spa`.
   - `--yes` works after the subcommand (`spa provision --yes`, `spa destroy --yes`), not only as a global (`spa -y provision`). `spa destroy --yes` now also passes `auto_approve=true`. Documented one-shot: `spa provision --yes && spa deploy`.
   - `spa hosts` lists inventory (`list --status`), opens SSH (`ssh` / `spa sh` / `spa shell`), and copies files (`copy SRC DST`, remote side `HOST:PATH`, `-r` for directories). `--hosts` on `deploy`, `run`, `suspend`, `resume`, and `hosts list` takes names or roles from this env (not Ansible jargon). There is no `spa shell -l`; use `spa hosts list`. Human aliases: `val`, `prov`, `dep`, `sus`, `res`, `doc`, `lic`, `h`. Skills keep full command names. Do not drop a live host from config and `spa provision` (Terraform would terminate it); ROADMAP tracks a provision destroy-guard and later `destroy --hosts` / `--all`. 2.x → 3.0 operator changes: [docs/Migrate_SPA_2x_to_3x.md](docs/Migrate_SPA_2x_to_3x.md).
@@ -65,11 +65,11 @@ Distribution work on the `distribution` integration branch toward **3.0** (M1–
 
 ### Added
 
-- **Deploy preflight checks for stale Ansible fact cache** – `ansible/preflight_deploy.yml` runs at the start of `deploy_site.yml` and `wait_for_terraform_aws_hosts.yml`:
+- **Deploy preflight checks for stale Ansible fact cache** – `ansible/preflight_deploy.yml` runs at the start of `deploy_site.yml` and `aws_wait_hosts.yml`:
   - Probes each host for `python3` with `raw` (bypasses cached interpreter).
   - Flushes jsonfile fact cache entries when the cached `discovered_interpreter_python` differs from the live host (common after OS/AMI changes with the same hostnames).
   - Verifies Ansible `ping` with the probed interpreter before the main deploy.
-  - `provision_terraform_aws.yml` flushes cache for provisioned hosts when Terraform inventory is regenerated (`spa_flush_fact_cache_on_provision`, default `true` in `ansible/group_vars/all/ansible.yml`).
+  - `aws_provision.yml` flushes cache for provisioned hosts when Terraform inventory is regenerated (`spa_flush_fact_cache_on_provision`, default `true` in `ansible/group_vars/all/ansible.yml`).
   - `spa_preflight_deploy` (default `true`) controls whether preflight runs at deploy start.
 
 - **Bidirectional license / license_manager schema validation** – `splunk_license_file` now requires a `license_manager` host (and vice versa), including overrides on hosts and `splunk_environments`. Enforced in Pydantic (`schema.py`) and in `validate_splunk_config.sh` (default step 3/4). Optional `--check-licenses` also verifies files in `../Software` and ITSI license presence. `splunk_config_licenses.py` reports the same gaps in `warnings`. Unit tests in `tests/test_schema.py`.
@@ -131,7 +131,7 @@ Distribution work on the `distribution` integration branch toward **3.0** (M1–
 - **App Deployment** – New automated deployment of Splunk apps from Splunkbase or local filesystem, with per-host routing.
   - **General**:
     - **Config**: `splunk_app_deployment` in `splunk_config.yml` (credentials, `apps` list with `name`, `source` (splunkbase/local), `app_id` or `path`, `version`, `target_roles`, optional `state`, `deployment_target`, `serverclass`, etc.).
-    - **Playbooks**: `ansible/deploy_splunk_apps.yml` (deploy/update apps), `ansible/remove_splunk_apps.yml` (remove apps with `state: absent`).
+    - **Playbooks**: `ansible/splunk_apps_deploy.yml` (deploy/update apps), `ansible/splunk_apps_remove.yml` (remove apps with `state: absent`).
     - **Routing**: Apps are deployed to the correct location per host—Deployment Server (`etc/deployment-apps`), Cluster Manager (`etc/manager-apps`), Search Head Cluster Deployer (`etc/shcluster/apps`), or directly to the host (`etc/apps`). Routing respects cluster membership and optional `deployment_target: direct`.
     - **Roles**: `apps_deployment_server`, `apps_cluster_manager`, `apps_deployer`, `apps_direct` (shared logic in `apps_common`). Handlers: Restart Splunk, Reload deploy-server, Push shcluster bundle, Apply indexer cluster bundle.
     - **Sources**: Splunkbase (with env-based credentials) or local path; idempotent install/update with optional backup.
@@ -151,7 +151,7 @@ Distribution work on the `distribution` integration branch toward **3.0** (M1–
     - **`remove`**: Delete files or directories from the app (paths relative to app root).
     - **`local_configs`**: Create or update Splunk `.conf` files in the app’s `local/` folder (same structure as `splunk_conf` in `splunk_config.yml`).
     - **`run_playbook`** / **`run_role`**: Run a custom Ansible task file or role for that app (path from project root; `app_path`, `app_name`, and optional `extra_vars` provided by the framework).
-    - **`run_playbook_after_restart`**: Register a task file to run **after** the deployment handler (e.g. Restart splunk) has run on the host. Use when the playbook must run once Splunk is back up (e.g. wait for port, then call REST or configure lookups). Supported for **direct deployment** only; requires `deployment_target: direct` (enforced by schema). The playbook runs in a follow-up play in `deploy_splunk_apps.yml` with `app_path`, `app_name`, and `extra_vars` passed in. Example: `ansible/apps_playbooks/Splunk_SIM_addon-configure.yml` for the Splunk Infrastructure Monitoring add-on.
+    - **`run_playbook_after_restart`**: Register a task file to run **after** the deployment handler (e.g. Restart splunk) has run on the host. Use when the playbook must run once Splunk is back up (e.g. wait for port, then call REST or configure lookups). Supported for **direct deployment** only; requires `deployment_target: direct` (enforced by schema). The playbook runs in a follow-up play in `splunk_apps_deploy.yml` with `app_path`, `app_name`, and `extra_vars` passed in. Example: `ansible/apps_playbooks/Splunk_SIM_addon-configure.yml` for the Splunk Infrastructure Monitoring add-on.
     - Same app can appear multiple times in `splunk_app_deployment.apps` with different `target_roles` and different `customizations`.
     - Customizations run in order: deploy app → remove → local_configs → update_indexes → run_playbook/run_role. Setting `update_needed: true` in a custom task file triggers the correct deployment handler.
     - **`update_indexes`**: When `true`, copies `default/indexes.conf` to `local/` and rewrites `homePath`/`coldPath` to use configured volumes (`splunk_volume_defaults`). Useful for apps that ship index definitions with hardcoded paths. Normal (non-premium) apps only.
@@ -181,13 +181,13 @@ Distribution work on the `distribution` integration branch toward **3.0** (M1–
 - **Vault support for config values** – Encrypted values in config and playbooks:
   - **Inventory decryption**: Vault-encrypted values in `splunk_config.yml` are decrypted in place by the inventory plugin’s `secret_resolver.py` when the config is loaded (e.g. for Splunk admin password and other variables used by roles).
   - **Environment variable lookups**: `{{ lookup('env', 'VAR_NAME') }}` expressions in `splunk_config.yml` are resolved at config load time by the inventory plugin (e.g. for Splunkbase credentials).
-  - **Lookup plugin**: Custom lookup plugin `spa_vault_decrypt` for playbooks that load config via `include_vars` (e.g. Terraform AWS credentials in `provision_terraform_aws.yml` and `destroy_terraform_aws.yml`); lookup plugin path set in `ansible.cfg` via `lookup_plugins = ./ansible/plugins/lookup`.
+  - **Lookup plugin**: Custom lookup plugin `spa_vault_decrypt` for playbooks that load config via `include_vars` (e.g. Terraform AWS credentials in `aws_provision.yml` and `aws_destroy.yml`); lookup plugin path set in `ansible.cfg` via `lookup_plugins = ./ansible/plugins/lookup`.
   - **Docs**: [Secrets_and_Vault.md](docs/Secrets_and_Vault.md), [Secrets_Vault_Concept.md](docs/Secrets_Vault_Concept.md).
 
 - **SSH public keys** – Install additional SSH public keys on managed hosts:
   - New `os.ssh_keys` config option: list of local public key file paths to install into the Ansible login user's `authorized_keys`.
   - Can be set globally in the `os:` section or per host in `splunk_hosts[].os.ssh_keys`.
-  - Standalone playbook `ansible/install_ssh_keys.yml` to deploy keys without a full site deployment.
+  - Standalone playbook `ansible/ssh_keys.yml` to deploy keys without a full site deployment.
   - Documented in [configuration_description.yml](examples/configuration_description.yml) and [README.md](README.md).
 
 - **Terraform AWS** – Optional `subnet_id` for VPC subnet placement:

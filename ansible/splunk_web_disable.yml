@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Disable Splunk Web.
+#   description: Disables Splunk Web on targeted hosts (stops the web UI).
+#   category: operations
+#   risk: mutating
+#   examples:
+#     - spa run splunk_web_disable --hosts indexer
 - name: Disable splunkweb
   hosts: all,!role_universal_forwarder,!role_universal_forwarder_windows
   become: true

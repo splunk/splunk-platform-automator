@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Rolling upgrade for an indexer cluster.
+#   description: Performs a rolling Splunk upgrade across indexer cluster peers.
+#   category: upgrade
+#   risk: mutating
+#   examples:
+#     - spa run upgrade_idxc_rolling
 # This playbook does a rolling upgrade of indexer cluster members
 
 - name: Begin tasks

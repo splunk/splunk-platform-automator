@@ -137,7 +137,7 @@ except ConfigValidationError as e:
     steps.append({"id": "license_role", "ok": True, "message": "License role pairing OK"})
 
     _note(on_progress, "[4/4] Playbook syntax-check...")
-    for pb in ("ansible/provision_terraform_aws.yml", "ansible/deploy_site.yml"):
+    for pb in ("ansible/aws_provision.yml", "ansible/deploy_site.yml"):
         rc = subprocess.run(
             [tool_path(paths, "ansible-playbook"), pb, "--syntax-check"],
             cwd=str(paths.spa_home),

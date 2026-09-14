@@ -234,7 +234,7 @@ class WorkspaceManager:
         print("\n[TEARDOWN] Destroying infrastructure...")
         destroy_cmd = [
             self.get_ansible_playbook_bin(),
-            "ansible/destroy_terraform_aws.yml",
+            "ansible/aws_destroy.yml",
             "-e", "auto_approve=true"
         ]
         

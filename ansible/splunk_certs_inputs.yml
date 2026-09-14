@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Update Splunk inputs TLS certificates.
+#   description: Installs or refreshes certificates used by Splunk data inputs.
+#   category: operations
+#   risk: mutating
+#   examples:
+#     - spa run splunk_certs_inputs --hosts indexer
 # add a splunk web certs if not existing
 
 - name: Add splunk web certs

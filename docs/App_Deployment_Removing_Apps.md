@@ -1,6 +1,6 @@
 # App Deployment – Removing Apps
 
-**Playbook**: `ansible/remove_splunk_apps.yml`  
+**Playbook**: `ansible/splunk_apps_remove.yml`  
 **Purpose**: Safely remove Splunk apps from your environment
 
 ## Overview
@@ -33,7 +33,7 @@ splunk_app_deployment:
 2. **Run the removal playbook**:
 
 ```bash
-ansible-playbook ansible/remove_splunk_apps.yml
+ansible-playbook ansible/splunk_apps_remove.yml
 ```
 
 The playbook will:
@@ -60,7 +60,7 @@ splunk_app_deployment:
 
 **Run removal**:
 ```bash
-$ ansible-playbook ansible/remove_splunk_apps.yml
+$ ansible-playbook ansible/splunk_apps_remove.yml
 PLAY [Remove Splunk Apps from Environment] ***********************
 
 TASK [Filter apps with state=absent] ****************************
@@ -112,7 +112,7 @@ splunk_app_deployment:
 
 **Run removal**:
 ```bash
-ansible-playbook ansible/remove_splunk_apps.yml
+ansible-playbook ansible/splunk_apps_remove.yml
 ```
 
 All three apps will be removed in a single run.
@@ -448,22 +448,22 @@ Error: Failed to restart Splunk
 - Verify no functionality breaks
 - Confirm app can be restored if needed
 
-## Alternative: Use deploy_splunk_apps.yml
+## Alternative: Use splunk_apps_deploy.yml
 
 You can also use the main deployment playbook for removals:
 
 ```bash
 # Mark apps with state: absent in config
 # Then run the deployment playbook
-ansible-playbook ansible/deploy_splunk_apps.yml
+ansible-playbook ansible/splunk_apps_deploy.yml
 ```
 
 **When to use each playbook**:
 
 | Playbook | Use When |
 |----------|----------|
-| `remove_splunk_apps.yml` | Focus only on removals, see what will be removed |
-| `deploy_splunk_apps.yml` | Mixed operations (install and remove together) |
+| `splunk_apps_remove.yml` | Focus only on removals, see what will be removed |
+| `splunk_apps_deploy.yml` | Mixed operations (install and remove together) |
 
 Both playbooks:
 - ✅ Read from same config file
@@ -474,7 +474,7 @@ Both playbooks:
 
 ## See Also
 
-- **Deploy Apps**: `ansible/deploy_splunk_apps.yml`
+- **Deploy Apps**: `ansible/splunk_apps_deploy.yml`
 - **App Deployment Guide**: [App_Deployment_Guide.md](App_Deployment_Guide.md)
 - **Target Logic**: [App_Deployment_Target_Logic.md](App_Deployment_Target_Logic.md)
 

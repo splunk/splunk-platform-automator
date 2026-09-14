@@ -368,7 +368,7 @@ The test suites keep their own `tests/.venv` (pytest dependencies stay out of th
 
 Installers and PS baseconfig apps default to `../Software`. Local `source: local` apps default to `../apps` (env sibling), then `$SPA_HOME/apps`. Resolution order for each: env (`SPA_SOFTWARE_DIR` / `SPA_BASECONFIG_DIR` / `SPA_APPS_DIR`), then a **custom** path in `splunk_config.yml` (`splunk_dirs.splunk_software_dir`, `splunk_dirs.splunk_baseconfig_dir`, `splunk_app_deployment.local_app_repo_path`), then `.spa.yml` (`software_dir` / `baseconfig_dir` / `apps_dir`), then discovery. Built-in defaults such as `../Software` do not override `.spa.yml`. `spa init` writes the keys it finds. Unset `SPA_HOME` / `SPA_ENV_DIR` to keep today's in-repo workflow.
 
-Day-to-day commands: `spa validate`, `spa provision --yes && spa deploy`, `spa run NAME`. Equivalent: `ansible-playbook` from `$SPA_HOME` after `eval "$(spa env --export)"`.
+Day-to-day commands: `spa validate`, `spa provision --yes && spa deploy`, `spa run NAME`. `spa run --list` shows playbook summaries; `spa run NAME --help` prints risk, inputs, and examples without running Ansible. Equivalent: `ansible-playbook` from `$SPA_HOME` after `eval "$(spa env --export)"`. 2.x playbook stems are listed in [Migrate SPA 2.x to 3.0](docs/Migrate_SPA_2x_to_3x.md).
 
 ### Copy a configuration file
 
@@ -451,7 +451,7 @@ splunk_hosts:
 - Provision infrastructure:
 
 ```bash
-ansible-playbook ansible/provision_terraform_aws.yml
+ansible-playbook ansible/aws_provision.yml
 ```
 
 - Deploy Splunk:
@@ -463,7 +463,7 @@ ansible-playbook ansible/deploy_site.yml
 - Destroy infrastructure:
 
 ```bash
-ansible-playbook ansible/destroy_terraform_aws.yml
+ansible-playbook ansible/aws_destroy.yml
 ```
 
 **Features:**
@@ -591,7 +591,7 @@ os:
 To deploy keys without running a full site deployment, use the standalone playbook:
 
 ```bash
-ansible-playbook ansible/install_ssh_keys.yml
+ansible-playbook ansible/ssh_keys.yml
 ```
 
 
@@ -684,7 +684,7 @@ ansible -m ping all
 And then some more ansible prerequisites with this playbook
 
 ```bash
-ansible-playbook ansible/test_ansible_prereqs.yml
+ansible-playbook ansible/ansible_check.yml
 ```
 
 

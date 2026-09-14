@@ -1,13 +1,13 @@
 # Running Apps Playbooks Standalone (Wrapper)
 
-This document describes how to run **apps playbooks** (e.g. `*_configure.yml` under `ansible/apps_playbooks/`) in isolation using the wrapper playbook `run_apps_playbook.yml`. The same wrapper works for both **`run_playbook`** and **`run_playbook_after_restart`** playbooks.
+This document describes how to run **apps playbooks** (e.g. `*_configure.yml` under `ansible/apps_playbooks/`) in isolation using the wrapper playbook `splunk_apps_playbook_run.yml`. The same wrapper works for both **`run_playbook`** and **`run_playbook_after_restart`** playbooks.
 
 ## When playbooks run in the full deployment
 
 | Customization | When it runs | Typical use |
 |---------------|--------------|-------------|
 | **`run_playbook`** | During app deployment, in **apply_customizations** (before the “Restart splunk” handler). | One-off config, local files, REST calls that don’t require Splunk to be restarted first. |
-| **`run_playbook_after_restart`** | In a **follow-up play** in `deploy_splunk_apps.yml`, **after** the deployment handler (e.g. Restart splunk) has run on the host. | Config that must run once Splunk is back up (e.g. wait for port, then REST or lookups). |
+| **`run_playbook_after_restart`** | In a **follow-up play** in `splunk_apps_deploy.yml`, **after** the deployment handler (e.g. Restart splunk) has run on the host. | Config that must run once Splunk is back up (e.g. wait for port, then REST or lookups). |
 
 Both types of playbooks receive the same variables when invoked by the framework: `app_path`, `app_name`, and optionally `customization_extra_vars` (from `extra_vars` in app customizations).
 
@@ -74,9 +74,9 @@ Example — force reinstall an ITSI content pack:
 
 > **Note:** Remember to remove `force_install: true` after the run, or it will re-extract and restart Splunk on every subsequent execution.
 
-## Wrapper: `run_apps_playbook.yml`
+## Wrapper: `splunk_apps_playbook_run.yml`
 
-**`ansible/run_apps_playbook.yml`** runs a single apps playbook in isolation (no full app deployment). Use it to:
+**`ansible/splunk_apps_playbook_run.yml`** runs a single apps playbook in isolation (no full app deployment). Use it to:
 
 - Re-run a configure playbook after changing config or fixing an error.
 - Test a playbook against a specific host or group.
@@ -105,7 +105,7 @@ Use **`-l` / `--limit`** to restrict to specific hosts (e.g. `-l sh`, `-l search
 **Run a post-restart–style configure playbook on search heads:**
 
 ```bash
-ansible-playbook ansible/run_apps_playbook.yml \
+ansible-playbook ansible/splunk_apps_playbook_run.yml \
   -e "apps_playbook=apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml" \
   -e "app_name=DA-ITSI-CP-monitoring-alerting" \
   -l sh
@@ -114,7 +114,7 @@ ansible-playbook ansible/run_apps_playbook.yml \
 **Run a `run_playbook`–style configure playbook:**
 
 ```bash
-ansible-playbook ansible/run_apps_playbook.yml \
+ansible-playbook ansible/splunk_apps_playbook_run.yml \
   -e "apps_playbook=apps_playbooks/Splunk_ML_Toolkit-configure.yml" \
   -e "app_name=Splunk_ML_Toolkit" \
   -l sh
@@ -123,7 +123,7 @@ ansible-playbook ansible/run_apps_playbook.yml \
 **With extra vars for the playbook:**
 
 ```bash
-ansible-playbook ansible/run_apps_playbook.yml \
+ansible-playbook ansible/splunk_apps_playbook_run.yml \
   -e "apps_playbook=apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml" \
   -e "app_name=DA-ITSI-CP-monitoring-alerting" \
   -e 'playbook_extra_vars={"generic_alerts_index":"generic_alerts"}' \

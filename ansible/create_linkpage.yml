@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Write the env host link page.
+#   description: Generates index.html with links to Splunk Web and SSH targets.
+#   category: operations
+#   risk: mutating
+#   examples:
+#     - spa run create_linkpage
 # This playbook configures navigation page
 
 - name: Create splunk hosts link page

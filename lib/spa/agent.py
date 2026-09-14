@@ -108,7 +108,7 @@ COMMAND_SCHEMA = {
             "name": "licenses",
             "summary": "Inspect license type, expiration and ITSI/ES entitlements",
         },
-        {"name": "run", "summary": "Run an ansible playbook by stem", "flags": [{"long": "--hosts", "help": "only these hosts (names or roles from this env)"}]},
+        {"name": "run", "summary": "Run a playbook by stem. Discover: spa --json run --list then spa run NAME --help", "flags": [{"long": "--hosts", "help": "only these hosts (names or roles from this env)"}, {"long": "--list", "help": "Catalog playbooks with summaries"}], "example": "spa run --list"},
         {"name": "agent schema", "summary": "This schema"},
     ],
 }
