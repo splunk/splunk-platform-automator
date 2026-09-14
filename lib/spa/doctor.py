@@ -88,15 +88,16 @@ def _hook_in_rc() -> bool:
 
 
 def _apply_hook() -> Optional[str]:
-    if not shutil.which("direnv"):
-        return "direnv is not installed; cannot add the hook."
     line = _direnv_hook_line()
     if _hook_in_rc():
         return None
     rc = Path.home() / (".zshrc" if os.path.basename(os.environ.get("SHELL") or "zsh") != "bash" else ".bashrc")
     with rc.open("a", encoding="utf-8") as handle:
         handle.write("\n# direnv (spa doctor --fix-direnv)\n%s\n" % line)
-    return "Added direnv hook to %s" % rc
+    msg = "Added direnv hook to %s" % rc
+    if not shutil.which("direnv"):
+        return "%s (direnv is not installed yet)" % msg
+    return msg
 
 
 def collect_checks(
