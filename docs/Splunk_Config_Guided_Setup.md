@@ -33,7 +33,7 @@ Terraform state or EBS volumes. `spa resume --yes` starts them, waits for AWS
 health, and refreshes `inventory/hosts` because public addresses may change.
 Pass `--hosts idx1` or `--hosts indexer` to limit suspend, resume, or `spa deploy`
 to some hosts. `spa hosts list --status` shows names and runtime state; `spa sh idx1`
-(or `spa hosts ssh idx1`) opens SSH. Human aliases include `spa val` and `spa dep`;
+(or `spa hosts ssh idx1`) opens SSH. Human aliases include `spa val`, `spa dep`, and `spa des`;
 skills should keep full names.
 
 Retained resources continue to incur charges. Use `spa destroy --yes` only for

@@ -405,7 +405,9 @@ def _run(argv: Sequence[str]) -> int:
         help="Confirm deploy (required in agent mode)",
     )
     _add_hosts_option(p_deploy)
-    p_destroy = _add_command(sub, "destroy", help="Destroy infrastructure for the configured provider")
+    p_destroy = _add_command(
+        sub, "destroy", aliases=["des"], help="Destroy infrastructure for the configured provider"
+    )
     p_destroy.add_argument(
         "-y",
         "--yes",

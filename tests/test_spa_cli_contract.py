@@ -186,6 +186,7 @@ ALIASES = {
     "doc": "usage: spa doctor",
     "prov": "usage: spa provision",
     "dep": "usage: spa deploy",
+    "des": "usage: spa destroy",
     "sus": "usage: spa suspend",
     "res": "usage: spa resume",
     "h": "usage: spa hosts",
