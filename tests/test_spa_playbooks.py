@@ -7,11 +7,17 @@ import pytest
 
 from spa_testutil import LIB, PROJECT_ROOT
 
-pytestmark = pytest.mark.local
+pytestmark = [pytest.mark.local, pytest.mark.cli]
 
 sys.path.insert(0, str(LIB))
 
 from spa.api import open_session  # noqa: E402
+from spa.confirm import (  # noqa: E402
+    ConfirmationError,
+    ensure_confirmed,
+    prompt_text,
+    requires_confirmation,
+)
 from spa.playbooks import (  # noqa: E402
     MetadataError,
     catalog,
@@ -92,6 +98,8 @@ def test_first_party_catalog_has_valid_metadata():
         assert row.get("missing") is False, row["name"]
         assert row.get("summary"), row["name"]
         assert row["metadata"]["schema"] == 1
+        want = row["risk"] != "read-only"
+        assert row.get("requires_confirmation") is want, row["name"]
 
 
 def test_session_describe_does_not_run(monkeypatch):
@@ -110,3 +118,57 @@ def test_describe_legacy_stem():
     data = describe("provision_terraform_aws", paths)
     assert data["name"] == "aws_provision"
     assert data["renamed_from"] == "provision_terraform_aws"
+    assert data.get("requires_confirmation") is True
+
+
+def test_requires_confirmation_from_risk():
+    assert requires_confirmation(risk="read-only", missing_metadata=False) is False
+    assert requires_confirmation(risk="mutating", missing_metadata=False) is True
+    assert requires_confirmation(risk="destructive", missing_metadata=False) is True
+    assert requires_confirmation(missing_metadata=True) is True
+    assert requires_confirmation(risk=None, missing_metadata=False) is True
+
+
+def test_ensure_confirmed_agent_never_prompts(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("prompted")))
+    with pytest.raises(ConfirmationError, match="requires -y/--yes"):
+        ensure_confirmed("destroy", confirm=False, agent=True)
+    ensure_confirmed("destroy", confirm=True, agent=True)
+
+
+def test_prompt_text_names_command_and_risk():
+    destroy = prompt_text("destroy", risk="destructive")
+    assert destroy.startswith("destroy ")
+    assert "permanently remove or uninstall" in destroy
+    assert destroy.endswith("Proceed? [y/N] ")
+
+    deploy = prompt_text("deploy", risk="mutating")
+    assert deploy.startswith("deploy ")
+    assert "change hosts or configuration" in deploy
+
+    unknown = prompt_text("run custom/foo", risk=None)
+    assert unknown.startswith("run custom/foo ")
+    assert "no playbook metadata" in unknown
+
+
+def test_ensure_confirmed_human_prompt_uses_risk(monkeypatch):
+    seen = []
+    monkeypatch.setattr("builtins.input", lambda prompt="": seen.append(prompt) or "n")
+    with pytest.raises(ConfirmationError, match="run splunk_remove cancelled"):
+        ensure_confirmed("run splunk_remove", confirm=False, agent=False, risk="destructive")
+    assert seen == [prompt_text("run splunk_remove", risk="destructive")]
+
+
+def test_ensure_confirmed_prints_hosts_not_extra_vars(monkeypatch, capsys):
+    monkeypatch.setattr("builtins.input", lambda prompt="": "y")
+    ensure_confirmed(
+        "deploy",
+        confirm=False,
+        agent=False,
+        risk="mutating",
+        details=["hosts: idx1, sh1"],
+    )
+    captured = capsys.readouterr()
+    assert "hosts: idx1, sh1" in captured.err
+    assert "extra-var" not in captured.err
+    assert "password" not in captured.err.lower()

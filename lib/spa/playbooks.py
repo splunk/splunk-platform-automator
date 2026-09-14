@@ -237,11 +237,14 @@ def _validate_metadata(data: Dict[str, Any], path: Path) -> Dict[str, Any]:
 
 
 def _row_from_stem(stem: str, source: str, path: Path, require_meta: bool) -> Dict[str, Any]:
+    from spa.confirm import requires_confirmation
+
     row: Dict[str, Any] = {"name": stem, "source": source, "path": str(path)}
     meta = parse_playbook_metadata(path)
     if meta is None:
         row["metadata"] = None
         row["missing"] = True
+        row["requires_confirmation"] = True
         if require_meta:
             raise MetadataError("Missing # spa-run: metadata in %s" % path)
         return row
@@ -250,6 +253,9 @@ def _row_from_stem(stem: str, source: str, path: Path, require_meta: bool) -> Di
     row["summary"] = meta["summary"]
     row["category"] = meta["category"]
     row["risk"] = meta["risk"]
+    row["requires_confirmation"] = requires_confirmation(
+        risk=meta["risk"], missing_metadata=False
+    )
     return row
 
 

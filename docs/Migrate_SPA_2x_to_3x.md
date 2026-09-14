@@ -74,7 +74,7 @@ Recommended AWS loop:
 spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env
 cd ~/envs/my-env
 spa validate
-spa provision --yes && spa deploy
+spa provision --yes && spa deploy --yes
 ```
 
 `ansible-playbook ansible/deploy_site.yml` still works from a clone after `eval "$(spa env --export)"`. Default docs and agents use `spa`.

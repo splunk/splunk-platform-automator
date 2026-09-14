@@ -51,7 +51,10 @@ tests/
 ├── test_spa_paths.py              # SPA_HOME / SPA_ENV_DIR resolver
 ├── test_spa_init.py               # spa init scaffold and migrate
 ├── test_env_scaffold.py           # separate env inventory vs clone
+├── test_spa_agent_contract.py     # agent detection, JSON envelopes, error formats
+├── test_spa_api.py                # stable SpaSession backend/transport contract
 ├── test_spa_cli.py                # spa run catalog, agent JSON
+├── test_spa_cli_contract.py       # complete public help/schema release contract
 ├── test_spa_venv.py               # bin/spa_venv.sh resolution + env .envrc
 ├── test_changelog_notes.py    # CHANGELOG section extractor for releases
 ├── test_verification.py       # Phase 2: Health verification tests
@@ -59,6 +62,7 @@ tests/
 ├── run_app_deployment_tests.sh # Helper script for app deployment tests
 ├── run_app_scope_scenarios_tests.sh # App scope scenario tests (debug_app_scope per scenario)
 ├── run_itsi_content_pack_tests.sh # ITSI content pack tests (role wiring, schema, scope)
+├── run_cli_tests.sh           # Fast CLI help, routing, schema, and session suite
 ├── run_local_tests.sh         # Run all local suites above (no AWS)
 ├── run_schema_tests.sh        # Helper script for schema validation tests
 ├── run_verification_tests.sh  # Helper script for verification tests
@@ -181,6 +185,20 @@ Scenario-based tests for app scope (no SSH or real hosts). Each scenario under `
 Requires `ansible-playbook`, `ansible-core`, `jmespath`, and `lxml` in the test venv (installed by the run script). Output: `tests/configs/app_scope/output/<scenario>_scope.json`.
 
 ## Running Tests
+
+### Run SPA CLI Release Tests
+
+```bash
+./tests/run_cli_tests.sh
+./tests/run_cli_tests.sh -v
+# Equivalent after activating the test venv:
+pytest -m cli tests/
+```
+
+This fast suite checks every public command and subcommand help surface, every
+alias, the complete agent schema, argument routing, confirmation behavior, env
+initialization, session calls, and mocked provider dispatch. It does not contact
+AWS, SSH to hosts, or execute deployment playbooks.
 
 ### Run All Local Tests (no AWS)
 

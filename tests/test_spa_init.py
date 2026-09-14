@@ -7,7 +7,7 @@ import yaml
 
 from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init
 
-pytestmark = pytest.mark.local
+pytestmark = [pytest.mark.local, pytest.mark.cli]
 
 
 def test_init_help():

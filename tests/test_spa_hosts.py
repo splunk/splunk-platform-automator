@@ -7,7 +7,7 @@ import pytest
 
 from spa_testutil import LIB, PROJECT_ROOT, run_spa
 
-pytestmark = pytest.mark.local
+pytestmark = [pytest.mark.local, pytest.mark.cli]
 
 sys.path.insert(0, str(LIB))
 
@@ -127,7 +127,7 @@ def test_session_deploy_injects_limit(monkeypatch):
         lambda: INVENTORY,
     )
     session = open_session(start_dir=str(PROJECT_ROOT))
-    result = session.deploy(hosts=["indexer"])
+    result = session.deploy(hosts=["indexer"], confirm=True)
     assert result.ok
     assert result.data["hosts"] == ["idx1", "idx2"]
     assert captured["args"][:2] == ["--limit", "idx1:idx2"]

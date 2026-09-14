@@ -9,14 +9,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence
+from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence, runtime_checkable
 
-from spa.agent import COMMAND_SCHEMA
+from spa.agent import COMMAND_SCHEMA, SCHEMA_VERSION
 from spa.executil import apply_paths_env
 from spa.paths import SpaPaths, format_export, resolve_spa_paths
 
-
-SCHEMA_VERSION = 1
 
 ProgressCallback = Callable[[Dict[str, Any]], None]
 
@@ -67,6 +65,7 @@ class CommandResult:
         return payload
 
 
+@runtime_checkable
 class SpaSession(Protocol):
     """Backend port. The CLI and a future GUI both depend on this, not each other."""
 
@@ -75,6 +74,10 @@ class SpaSession(Protocol):
     def env(self) -> CommandResult: ...
 
     def catalog(self, extra_dir: Optional[str] = None) -> CommandResult: ...
+
+    def describe_playbook(
+        self, name: str, extra_dir: Optional[str] = None
+    ) -> CommandResult: ...
 
     def validate(
         self,
@@ -113,11 +116,22 @@ class SpaSession(Protocol):
 
     def list_examples(self) -> CommandResult: ...
 
-    def provision(self, extra: Optional[List[str]] = None, confirm: bool = False) -> CommandResult: ...
+    def provision(
+        self, extra: Optional[List[str]] = None, confirm: bool = False, agent: bool = False
+    ) -> CommandResult: ...
 
-    def destroy(self, extra: Optional[List[str]] = None, confirm: bool = False) -> CommandResult: ...
+    def destroy(
+        self, extra: Optional[List[str]] = None, confirm: bool = False, agent: bool = False
+    ) -> CommandResult: ...
 
-    def deploy(self, extra: Optional[List[str]] = None, verbose: bool = False, hosts: Optional[Sequence[str]] = None) -> CommandResult: ...
+    def deploy(
+        self,
+        extra: Optional[List[str]] = None,
+        verbose: bool = False,
+        hosts: Optional[Sequence[str]] = None,
+        confirm: bool = False,
+        agent: bool = False,
+    ) -> CommandResult: ...
 
     def suspend(self, confirm: bool = False, wait: bool = True, agent: bool = False, hosts: Optional[Sequence[str]] = None) -> CommandResult: ...
 
@@ -130,6 +144,8 @@ class SpaSession(Protocol):
         extra_dir: Optional[str] = None,
         verbose: bool = False,
         hosts: Optional[Sequence[str]] = None,
+        confirm: bool = False,
+        agent: bool = False,
     ) -> CommandResult: ...
 
     def aws(self, argv: Optional[List[str]] = None) -> CommandResult: ...
@@ -291,20 +307,58 @@ class LocalSpaSession:
             error=None if rc == 0 else "init failed",
         )
 
-    def provision(self, extra: Optional[List[str]] = None, confirm: bool = False) -> CommandResult:
-        return self._lifecycle_playbook("provision", extra, confirm)
+    def _confirm_gate(
+        self,
+        label: str,
+        *,
+        confirm: bool,
+        agent: bool,
+        details: Optional[Sequence[str]] = None,
+        risk: Optional[str] = None,
+    ) -> Optional[CommandResult]:
+        from spa.confirm import ConfirmationError, ensure_confirmed
 
-    def destroy(self, extra: Optional[List[str]] = None, confirm: bool = False) -> CommandResult:
-        return self._lifecycle_playbook("destroy", extra, confirm)
+        try:
+            ensure_confirmed(
+                label, confirm=confirm, agent=agent, details=details, risk=risk
+            )
+        except ConfirmationError as exc:
+            return CommandResult(ok=False, error=str(exc), code=1)
+        return None
+
+    @staticmethod
+    def _confirm_details(hosts: Optional[Sequence[str]] = None) -> Optional[List[str]]:
+        if not hosts:
+            return None
+        from spa.hosts import format_names
+
+        return ["hosts: %s" % format_names(hosts)]
+
+    def provision(
+        self, extra: Optional[List[str]] = None, confirm: bool = False, agent: bool = False
+    ) -> CommandResult:
+        return self._lifecycle_playbook("provision", extra, confirm, agent)
+
+    def destroy(
+        self, extra: Optional[List[str]] = None, confirm: bool = False, agent: bool = False
+    ) -> CommandResult:
+        return self._lifecycle_playbook("destroy", extra, confirm, agent)
 
     def _lifecycle_playbook(
-        self, action: str, extra: Optional[List[str]], confirm: bool
+        self, action: str, extra: Optional[List[str]], confirm: bool, agent: bool
     ) -> CommandResult:
+        from spa.confirm import LIFECYCLE_RISK
         from spa.providers import ProviderError, get_provider
 
-        args = list(extra or [])
-        if confirm:
-            args = ["-e", "auto_approve=true", *args]
+        blocked = self._confirm_gate(
+            action,
+            confirm=confirm,
+            agent=agent,
+            risk=LIFECYCLE_RISK.get(action),
+        )
+        if blocked:
+            return blocked
+        args = ["-e", "auto_approve=true", *list(extra or [])]
         try:
             provider = get_provider(self.paths)
             rc = getattr(provider, action)(args)
@@ -335,6 +389,8 @@ class LocalSpaSession:
         extra: Optional[List[str]] = None,
         verbose: bool = False,
         hosts: Optional[Sequence[str]] = None,
+        confirm: bool = False,
+        agent: bool = False,
     ) -> CommandResult:
         from spa.hosts import with_ansible_limit
         from spa.playbooks import PlaybookError, resolve, run_playbook
@@ -343,6 +399,15 @@ class LocalSpaSession:
             resolved = self._resolve_hosts(hosts)
         except HostLookupError as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
+        blocked = self._confirm_gate(
+            "deploy",
+            confirm=confirm,
+            agent=agent,
+            details=self._confirm_details(resolved),
+            risk="mutating",
+        )
+        if blocked:
+            return blocked
         args = with_ansible_limit(extra, resolved)
         if verbose:
             args = ["-v", *args]
@@ -387,16 +452,26 @@ class LocalSpaSession:
         agent: bool,
         hosts: Optional[Sequence[str]] = None,
     ) -> CommandResult:
+        from spa.confirm import LIFECYCLE_RISK
         from spa.providers import ProviderError, get_provider
 
         try:
             resolved = self._resolve_hosts(hosts)
         except HostLookupError as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
+        blocked = self._confirm_gate(
+            action,
+            confirm=confirm,
+            agent=agent,
+            details=self._confirm_details(resolved),
+            risk=LIFECYCLE_RISK.get(action),
+        )
+        if blocked:
+            return blocked
         try:
             provider = get_provider(self.paths)
             data = getattr(provider, action)(
-                yes=confirm, agent=agent, wait=wait, hosts=resolved
+                yes=True, agent=agent, wait=wait, hosts=resolved
             )
         except ProviderError as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
@@ -414,9 +489,18 @@ class LocalSpaSession:
         extra_dir: Optional[str] = None,
         verbose: bool = False,
         hosts: Optional[Sequence[str]] = None,
+        confirm: bool = False,
+        agent: bool = False,
     ) -> CommandResult:
+        from spa.confirm import requires_confirmation
         from spa.hosts import with_ansible_limit
-        from spa.playbooks import PlaybookError, resolve_named, run_playbook
+        from spa.playbooks import (
+            MetadataError,
+            PlaybookError,
+            parse_playbook_metadata,
+            resolve_named,
+            run_playbook,
+        )
 
         try:
             resolved = self._resolve_hosts(hosts)
@@ -427,8 +511,21 @@ class LocalSpaSession:
             args = ["-v", *args]
         try:
             playbook, renamed_from, canonical = resolve_named(name, self.paths, extra_dir=extra_dir)
-        except PlaybookError as exc:
+            meta = parse_playbook_metadata(playbook)
+        except (PlaybookError, MetadataError) as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
+        missing = meta is None
+        risk = None if missing else meta.get("risk")
+        if requires_confirmation(risk=risk, missing_metadata=missing):
+            blocked = self._confirm_gate(
+                "run %s" % canonical,
+                confirm=confirm,
+                agent=agent,
+                details=self._confirm_details(resolved),
+                risk=risk if isinstance(risk, str) else None,
+            )
+            if blocked:
+                return blocked
         rc = run_playbook(playbook, self.paths, args, on_progress=self.on_progress)
         data: Dict[str, Any] = {"playbook": canonical, "path": str(playbook)}
         if renamed_from:

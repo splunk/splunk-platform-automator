@@ -9,7 +9,7 @@ import pytest
 
 from spa_testutil import PROJECT_ROOT, LIB, run_spa, run_spa_init, spa_env
 
-pytestmark = pytest.mark.local
+pytestmark = [pytest.mark.local, pytest.mark.cli]
 
 sys.path.insert(0, str(LIB))
 
@@ -243,6 +243,9 @@ def test_run_list_json():
     deploy = next(row for row in payload["data"] if row["name"] == "deploy_site")
     assert deploy.get("summary")
     assert deploy.get("risk") == "mutating"
+    assert deploy.get("requires_confirmation") is True
+    ping = next(row for row in payload["data"] if row["name"] == "verification/ping_hosts")
+    assert ping.get("requires_confirmation") is False
     names = {row["name"] for row in payload["data"]}
     assert "splunk_start" in names
     assert "start_splunk" not in names
@@ -269,6 +272,7 @@ def test_run_playbook_help_text():
     assert "splunk_command" in result.stdout
     assert "--hosts" in result.stdout
     assert "--limit" not in result.stdout
+    assert "confirmation: required" in result.stdout
 
 
 def test_run_playbook_help_json():
@@ -277,6 +281,7 @@ def test_run_playbook_help_json():
     assert payload["ok"] is True
     assert payload["data"]["name"] == "splunk_cli"
     assert payload["data"]["metadata"]["risk"] == "mutating"
+    assert payload["data"]["requires_confirmation"] is True
 
 
 def test_run_legacy_stem_help():
@@ -296,7 +301,7 @@ def test_run_help_passthrough_after_dashdash(monkeypatch):
     monkeypatch.setattr("spa.playbooks.run_playbook", fake_run)
     from spa.cli import main
 
-    rc = main(["--no-agent", "run", "splunk_cli", "--", "--help"])
+    rc = main(["--no-agent", "run", "splunk_cli", "--yes", "--", "--help"])
     assert rc == 0
     assert captured.get("extra") == ["--help"]
     assert captured["playbook"].endswith("splunk_cli.yml")
@@ -324,6 +329,7 @@ def test_env_dir_playbook_resolves(tmp_path):
     foo = next(row for row in payload["data"] if row["name"] == "custom/foo")
     assert foo.get("missing") is True
     assert foo.get("metadata") is None
+    assert foo.get("requires_confirmation") is True
 
 
 def test_run_path_escape_rejected(tmp_path):
@@ -361,7 +367,43 @@ def test_agent_schema():
     flags = [item["long"] for item in run.get("flags") or []]
     assert "--hosts" in flags
     assert "--list" in flags
+    assert "--yes" in flags
     assert "spa --json run --list" in run["summary"]
+    by_name = {c["name"]: c for c in payload["data"]["commands"]}
+    for name in ("provision", "destroy", "deploy", "suspend", "resume"):
+        assert by_name[name].get("requires_confirmation") is True
+
+
+def test_agent_help_documents_schema():
+    result = run_spa(["--no-agent", "agent", "--help"])
+    assert result.returncode == 0, result.stderr
+    assert "usage: spa agent [schema]" in result.stdout
+    assert "ACTION" in result.stdout
+    assert "spa agent schema" in result.stdout
+    assert "requires_confirmation" in result.stdout
+    # The schema covers commands; playbooks are discovered separately.
+    assert "spa --json run --list" in result.stdout
+
+
+def test_agent_rejects_unknown_action():
+    result = run_spa(["--no-agent", "agent", "bogus"])
+    assert result.returncode != 0
+    assert "invalid choice" in result.stderr
+
+
+def test_agent_default_action_is_schema():
+    """spa agent and spa agent schema must print the same envelope."""
+    bare = run_spa(["agent"])
+    explicit = run_spa(["agent", "schema"])
+    assert bare.returncode == 0, bare.stderr
+    assert json.loads(bare.stdout) == json.loads(explicit.stdout)
+
+
+def test_global_agent_flags_have_help():
+    result = run_spa(["--no-agent", "--help"])
+    assert result.returncode == 0, result.stderr
+    assert "Force agent mode" in result.stdout
+    assert "Force human mode" in result.stdout
 
 
 def test_env_export_is_shell(tmp_path):
@@ -375,3 +417,168 @@ def test_env_export_is_shell(tmp_path):
     assert "export SPA_ENV_DIR=" in result.stdout
     assert str(dest) in result.stdout
     assert not result.stdout.strip().startswith("{")
+
+
+def _fake_run_playbook(monkeypatch):
+    called = []
+
+    def fake_run(*args, **kwargs):
+        called.append(True)
+        return 0
+
+    monkeypatch.setattr("spa.playbooks.run_playbook", fake_run)
+    return called
+
+
+def test_agent_run_mutating_requires_yes(monkeypatch):
+    called = _fake_run_playbook(monkeypatch)
+    from spa.cli import main
+
+    rc = main(["--agent", "run", "splunk_remove"])
+    assert rc != 0
+    assert not called
+
+
+def test_agent_run_readonly_without_yes(monkeypatch):
+    called = _fake_run_playbook(monkeypatch)
+    from spa.cli import main
+
+    rc = main(["--agent", "run", "verification/ping_hosts"])
+    assert rc == 0
+    assert called
+
+
+def test_human_run_mutating_cancel(monkeypatch):
+    called = _fake_run_playbook(monkeypatch)
+    monkeypatch.setattr("builtins.input", lambda *_a, **_k: "n")
+    from spa.cli import main
+
+    rc = main(["--no-agent", "run", "splunk_remove"])
+    assert rc != 0
+    assert not called
+
+
+def test_human_run_mutating_accept(monkeypatch):
+    called = _fake_run_playbook(monkeypatch)
+    monkeypatch.setattr("builtins.input", lambda *_a, **_k: "y")
+    from spa.cli import main
+
+    rc = main(["--no-agent", "run", "splunk_remove"])
+    assert rc == 0
+    assert called
+
+
+def test_human_run_prompt_names_playbook_and_risk(monkeypatch):
+    from spa.confirm import prompt_text
+
+    seen = []
+    called = _fake_run_playbook(monkeypatch)
+    monkeypatch.setattr("builtins.input", lambda prompt="": seen.append(prompt) or "n")
+    from spa.cli import main
+
+    rc = main(["--no-agent", "run", "splunk_remove"])
+    assert rc != 0
+    assert not called
+    assert seen == [prompt_text("run splunk_remove", risk="destructive")]
+
+
+@pytest.mark.parametrize(
+    ("command", "risk"),
+    [("provision", "mutating"), ("destroy", "destructive"), ("deploy", "mutating")],
+)
+def test_human_lifecycle_prompt_names_command_and_risk(monkeypatch, command, risk):
+    from spa.confirm import prompt_text
+
+    seen = []
+    called = []
+
+    class FakeProvider:
+        name = "test"
+
+        def provision(self, extra):
+            called.append("provision")
+            return 0
+
+        def destroy(self, extra):
+            called.append("destroy")
+            return 0
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    monkeypatch.setattr(
+        "spa.playbooks.run_playbook", lambda *a, **k: called.append("deploy") or 0
+    )
+    monkeypatch.setattr("builtins.input", lambda prompt="": seen.append(prompt) or "n")
+    from spa.cli import main
+
+    rc = main(["--no-agent", command])
+    assert rc != 0
+    assert not called
+    assert seen == [prompt_text(command, risk=risk)]
+
+
+@pytest.mark.parametrize("command", ["provision", "destroy", "deploy"])
+def test_agent_lifecycle_requires_yes(monkeypatch, command):
+    called = []
+
+    class FakeProvider:
+        name = "test"
+
+        def provision(self, extra):
+            called.append("provision")
+            return 0
+
+        def destroy(self, extra):
+            called.append("destroy")
+            return 0
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    monkeypatch.setattr(
+        "spa.playbooks.run_playbook", lambda *a, **k: called.append("deploy") or 0
+    )
+    from spa.cli import main
+
+    rc = main(["--agent", command])
+    assert rc != 0
+    assert not called
+
+
+def test_env_playbook_without_metadata_requires_yes(tmp_path, monkeypatch, capsys):
+    dest = tmp_path / "env"
+    run_spa_init(["--example", "single_node.yml", str(dest)])
+    custom = dest / "custom"
+    custom.mkdir()
+    (custom / "foo.yml").write_text("---\n- hosts: localhost\n  gather_facts: false\n  tasks: []\n")
+    called = _fake_run_playbook(monkeypatch)
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(dest))
+    from spa.cli import main
+
+    rc = main(["--agent", "run", "--dir", "custom", "custom/foo"])
+    assert rc != 0
+    assert not called
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert "requires -y/--yes" in payload["error"]
+    assert "Unknown playbook" not in payload["error"]
+
+
+def test_human_env_playbook_prompt_mentions_missing_metadata(tmp_path, monkeypatch):
+    from spa.confirm import prompt_text
+
+    dest = tmp_path / "env"
+    run_spa_init(["--example", "single_node.yml", str(dest)])
+    custom = dest / "custom"
+    custom.mkdir()
+    (custom / "foo.yml").write_text("---\n- hosts: localhost\n  gather_facts: false\n  tasks: []\n")
+    called = _fake_run_playbook(monkeypatch)
+    seen = []
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(dest))
+    monkeypatch.setattr("builtins.input", lambda prompt="": seen.append(prompt) or "n")
+    from spa.cli import main
+
+    rc = main(["--no-agent", "run", "--dir", "custom", "custom/foo"])
+    assert rc != 0
+    assert not called
+    assert seen == [prompt_text("run custom/foo", risk=None)]
+    assert "no playbook metadata" in seen[0]

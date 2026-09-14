@@ -70,7 +70,7 @@ Do not hand off to user provision until:
 ## User deploy (skill does not run these)
 
 ```bash
-spa provision --yes && spa deploy
+spa provision --yes && spa deploy --yes
 ```
 
 Destroy:

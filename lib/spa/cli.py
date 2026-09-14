@@ -18,6 +18,14 @@ from spa.paths import resolve_spa_paths
 NATIVE_FLAG_COMMANDS = ("shell", "sh", "aws", "licenses", "lic")
 GLOBAL_OPTS_WITH_VALUE = ("--start-dir",)
 HOSTS_FLAG_HELP = "only these hosts (names or roles from this env)"
+AGENT_EXAMPLES = """examples:
+  spa agent schema       command schema (name, summary, flags, requires_confirmation)
+  spa agent              same as spa agent schema
+  spa --json run --list  playbook catalog, incl. per-playbook requires_confirmation
+
+Commands whose schema entry sets requires_confirmation need -y/--yes in agent
+mode; agents never answer an interactive prompt.
+"""
 
 
 def _split_passthrough(argv: Sequence[str]) -> Tuple[List[str], List[str]]:
@@ -133,14 +141,15 @@ def _run_help_target(head: Sequence[str]) -> Optional[str]:
 
 
 def _print_run_usage() -> None:
-    print("usage: spa run [-h] [--list] [--dir DIR] [--hosts NAME] [NAME]")
+    print("usage: spa run [-h] [--list] [--dir DIR] [--hosts NAME] [-y] [NAME]")
     print()
     print("Run a playbook by stem, or list/describe playbooks without executing Ansible.")
     print()
     print("  spa run --list              catalog (name — summary)")
     print("  spa run NAME --help         description, risk, inputs, examples")
-    print("  spa run NAME [--hosts NAME] [-- ansible-playbook args]")
+    print("  spa run NAME [-y] [--hosts NAME] [-- ansible-playbook args]")
     print()
+    print("Mutating playbooks need --yes in agent mode (see requires_confirmation).")
     print("Discover first with spa --json run --list, then spa run NAME --help.")
 
 
@@ -161,6 +170,10 @@ def _print_playbook_help(data: dict) -> None:
         extras.append("category: %s" % meta["category"])
     if meta.get("risk"):
         extras.append("risk: %s" % meta["risk"])
+    if data.get("requires_confirmation"):
+        extras.append("confirmation: required")
+    elif meta.get("risk") == "read-only":
+        extras.append("confirmation: none")
     if extras:
         print("  %s" % "  |  ".join(extras))
     if data.get("path"):
@@ -292,55 +305,86 @@ def _run(argv: Sequence[str]) -> int:
 
     import argparse
 
-    parser = argparse.ArgumentParser(
+    parse_as_agent = agent_mode(
+        force_agent="--agent" in head or "--json" in head,
+        force_human="--no-agent" in head,
+    )
+
+    class AgentAwareArgumentParser(argparse.ArgumentParser):
+        """Keep parse failures machine-readable when an agent invokes spa."""
+
+        def error(self, message):
+            if parse_as_agent:
+                emit(False, error="spa: %s" % message, as_agent=True)
+                raise SystemExit(2)
+            super().error(message)
+
+    parser = AgentAwareArgumentParser(
         prog="spa",
         description="Splunk Platform Automator — env dirs against one SPA_HOME prefix.",
     )
     parser.add_argument("--json", action="store_true", help="JSON output / agent envelope")
-    parser.add_argument("--agent", action="store_true")
-    parser.add_argument("--no-agent", action="store_true")
-    parser.add_argument("-y", "--yes", action="store_true", help="Non-interactive / auto-approve")
-    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument(
+        "--agent",
+        action="store_true",
+        help="Force agent mode (JSON envelope, never prompt); auto-detected otherwise",
+    )
+    parser.add_argument(
+        "--no-agent",
+        action="store_true",
+        help="Force human mode (text output, may prompt) even inside an agent",
+    )
+    parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Confirm a mutating command without prompting (required in agent mode)",
+    )
+    parser.add_argument("-v", "--verbose", action="store_true", help="Show verbose command output")
     parser.add_argument("--start-dir", help="Directory to resolve .spa.yml from")
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
     p_init = _add_command(sub, "init", help="Scaffold or migrate an env dir")
-    p_init.add_argument("env_dir", nargs="?")
-    p_init.add_argument("--example")
+    p_init.add_argument("env_dir", nargs="?", help="Environment directory to create or migrate")
+    p_init.add_argument("--example", metavar="NAME", help="Copy a bundled example configuration")
     p_init.add_argument("--list", action="store_true", help="List example YAML names")
-    p_init.add_argument("--from", dest="from_dir")
-    p_init.add_argument("--migrate", action="store_true")
-    p_init.add_argument("--keep-source", action="store_true")
+    p_init.add_argument("--from", dest="from_dir", metavar="DIR", help="Migrate an existing SPA environment")
+    p_init.add_argument("--migrate", action="store_true", help="Migrate the source environment into ENV_DIR")
+    p_init.add_argument("--keep-source", action="store_true", help="Keep state files in the migration source")
     p_init.add_argument(
         "--force",
         action="store_true",
         help="Overwrite .spa.yml / .envrc (and strip old clone leftovers). "
         "Does not replace splunk_config.yml unless --example is also given.",
     )
-    p_init.add_argument("--venv", action="store_true")
-    p_init.add_argument("--python")
+    p_init.add_argument("--venv", action="store_true", help="Create the environment Python virtualenv")
+    p_init.add_argument("--python", metavar="PATH", help="Python interpreter used to create the virtualenv")
     p_init.add_argument("--ansible", help="Pin ansible==VER in the env venv")
     p_init.add_argument("--pip", action="append", default=[], help="Extra pip spec (repeatable)")
-    p_init.add_argument("--no-envrc", action="store_true")
-    p_init.add_argument("--skip-doctor", action="store_true")
+    p_init.add_argument("--no-envrc", action="store_true", help="Do not create a direnv .envrc file")
+    p_init.add_argument("--skip-doctor", action="store_true", help="Skip prerequisite checks after init")
 
     p_val = _add_command(sub, "validate", aliases=["val"], help="Validate splunk_config.yml")
-    p_val.add_argument("config", nargs="?")
-    p_val.add_argument("--check-licenses", action="store_true")
-    p_val.add_argument("--splunk-config-aws", action="store_true")
+    p_val.add_argument("config", nargs="?", help="Configuration file (defaults to this environment)")
+    p_val.add_argument("--check-licenses", action="store_true", help="Validate configured license files")
+    p_val.add_argument(
+        "--splunk-config-aws",
+        action="store_true",
+        help="Include legacy splunk_config_aws compatibility checks",
+    )
 
     p_doc = _add_command(sub, "doctor", aliases=["doc"], help="Host prerequisite checks")
-    p_doc.add_argument("--spa-home")
-    p_doc.add_argument("--env")
-    p_doc.add_argument("--aws", action="store_true")
-    p_doc.add_argument("--virtualbox", action="store_true")
-    p_doc.add_argument("--strict", action="store_true")
+    p_doc.add_argument("--spa-home", metavar="DIR", help="Framework directory to inspect")
+    p_doc.add_argument("--env", metavar="DIR", help="Environment directory to inspect")
+    p_doc.add_argument("--aws", action="store_true", help="Check AWS prerequisites")
+    p_doc.add_argument("--virtualbox", action="store_true", help="Check VirtualBox prerequisites")
+    p_doc.add_argument("--strict", action="store_true", help="Treat optional-tool warnings as failures")
     p_doc.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
-    p_doc.add_argument("--fix-direnv", action="store_true")
+    p_doc.add_argument("--fix-direnv", action="store_true", help="Install the direnv shell hook when possible")
 
     p_env = _add_command(sub, "env", help="Print export statements")
-    p_env.add_argument("--export", action="store_true", default=True)
-    p_env.add_argument("--start-dir")
+    p_env.add_argument("--export", action="store_true", default=True, help="Print shell export statements")
+    p_env.add_argument("--start-dir", metavar="DIR", help="Directory used to resolve .spa.yml")
 
     p_prov = _add_command(
         sub, "provision", aliases=["prov"], help="Provision infrastructure for the configured provider"
@@ -353,6 +397,13 @@ def _run(argv: Sequence[str]) -> int:
         help="Auto-approve Terraform apply (same as spa -y provision)",
     )
     p_deploy = _add_command(sub, "deploy", aliases=["dep"], help="Deploy Splunk")
+    p_deploy.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm deploy (required in agent mode)",
+    )
     _add_hosts_option(p_deploy)
     p_destroy = _add_command(sub, "destroy", help="Destroy infrastructure for the configured provider")
     p_destroy.add_argument(
@@ -365,13 +416,19 @@ def _run(argv: Sequence[str]) -> int:
     p_suspend = _add_command(
         sub, "suspend", aliases=["sus"], help="Stop managed cloud instances without destroying them"
     )
-    p_suspend.add_argument("-y", "--yes", action="store_true", default=argparse.SUPPRESS)
+    p_suspend.add_argument(
+        "-y", "--yes", action="store_true", default=argparse.SUPPRESS,
+        help="Confirm power change (required in agent mode)",
+    )
     p_suspend.add_argument("--no-wait", action="store_true", help="Return after requesting the stop")
     _add_hosts_option(p_suspend)
     p_resume = _add_command(
         sub, "resume", aliases=["res"], help="Start managed cloud instances and refresh inventory"
     )
-    p_resume.add_argument("-y", "--yes", action="store_true", default=argparse.SUPPRESS)
+    p_resume.add_argument(
+        "-y", "--yes", action="store_true", default=argparse.SUPPRESS,
+        help="Confirm power change (required in agent mode)",
+    )
     _add_hosts_option(p_resume)
 
     p_run = _add_command(
@@ -379,9 +436,16 @@ def _run(argv: Sequence[str]) -> int:
         "run",
         help="Run a playbook by stem (spa run --list; spa run NAME --help)",
     )
-    p_run.add_argument("name", nargs="?")
-    p_run.add_argument("--list", action="store_true")
+    p_run.add_argument("name", nargs="?", help="Playbook stem from spa run --list")
+    p_run.add_argument("--list", action="store_true", help="List available playbooks and summaries")
     p_run.add_argument("--dir", dest="playbook_dir", help="Extra env-dir folder to list/run")
+    p_run.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm a mutating playbook (required in agent mode)",
+    )
     _add_hosts_option(p_run)
 
     p_hosts = _add_command(sub, "hosts", aliases=["h"], help="List, SSH, or copy using inventory hosts")
@@ -401,7 +465,7 @@ def _run(argv: Sequence[str]) -> int:
     _add_hosts_option(p_hosts_list)
     p_hosts_ssh = hosts_sub.add_parser("ssh", help="SSH to one host")
     p_hosts_ssh.add_argument("name", help="Inventory hostname")
-    p_hosts_ssh.add_argument("ssh_args", nargs=argparse.REMAINDER, help="Extra ssh arguments")
+    p_hosts_ssh.add_argument("ssh_args", nargs=argparse.REMAINDER, help="Additional arguments passed to ssh")
     p_hosts_copy = hosts_sub.add_parser(
         "copy",
         aliases=["cp"],
@@ -429,8 +493,27 @@ def _run(argv: Sequence[str]) -> int:
     _add_command(sub, "aws", help="AWS discovery (spa aws --help)", add_help=False)
     _add_command(sub, "licenses", aliases=["lic"], help="License discovery (spa licenses --help)", add_help=False)
 
-    p_agent = _add_command(sub, "agent", help="Agent helpers")
-    p_agent.add_argument("agent_cmd", nargs="?", default="schema")
+    p_agent = _add_command(
+        sub,
+        "agent",
+        help="Print the machine-readable command schema (spa agent schema)",
+        usage="spa agent [schema]",
+        description="Machine-readable contract for agents and skills: every command with\n"
+        "its summary, flags, and whether it requires -y/--yes.\n"
+        "\n"
+        "Always prints the JSON envelope, with or without --json, because only agents\n"
+        "read it. Playbooks are not in this schema; list them with spa --json run --list.",
+        epilog=AGENT_EXAMPLES,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_agent.add_argument(
+        "agent_cmd",
+        nargs="?",
+        default="schema",
+        choices=["schema"],
+        metavar="ACTION",
+        help="schema (the default and only action today)",
+    )
 
     args = parser.parse_args(head)
     invoked = args.command
@@ -545,10 +628,7 @@ def _run(argv: Sequence[str]) -> int:
 
     if args.command in {"provision", "destroy"}:
         extra = list(extra)
-        if args.command == "destroy" and not args.yes and as_agent:
-            emit(False, error="destroy requires -y in agent mode", as_agent=True)
-            return 1
-        result = getattr(session, args.command)(extra, confirm=args.yes)
+        result = getattr(session, args.command)(extra, confirm=args.yes, agent=as_agent)
         if as_agent:
             return _emit_result(result, True)
         if result.error:
@@ -558,7 +638,11 @@ def _run(argv: Sequence[str]) -> int:
     if args.command == "deploy":
         extra = list(extra)
         result = session.deploy(
-            extra, verbose=args.verbose, hosts=getattr(args, "hosts", None)
+            extra,
+            verbose=args.verbose,
+            hosts=getattr(args, "hosts", None),
+            confirm=args.yes,
+            agent=as_agent,
         )
         if as_agent:
             return _emit_result(result, True)
@@ -623,6 +707,8 @@ def _run(argv: Sequence[str]) -> int:
             extra_dir=args.playbook_dir,
             verbose=args.verbose,
             hosts=getattr(args, "hosts", None),
+            confirm=args.yes,
+            agent=as_agent,
         )
         if as_agent:
             return _emit_result(result, True)

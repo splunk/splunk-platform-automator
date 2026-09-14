@@ -8,7 +8,7 @@ import pytest
 
 from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init, spa_env
 
-pytestmark = pytest.mark.local
+pytestmark = [pytest.mark.local, pytest.mark.cli]
 
 
 def test_doctor_passes_on_dev_machine():

@@ -8,6 +8,9 @@ import sys
 from typing import Any, Dict, Optional
 
 
+SCHEMA_VERSION = 1
+
+
 AGENT_ENV_VARS = (
     "SPA_AGENT",
     "CLAUDECODE",
@@ -34,7 +37,7 @@ def agent_mode(force_agent: bool = False, force_human: bool = False) -> bool:
 
 
 def envelope(ok: bool, data: Any = None, error: Optional[str] = None) -> Dict[str, Any]:
-    payload: Dict[str, Any] = {"ok": ok}
+    payload: Dict[str, Any] = {"ok": ok, "schema_version": SCHEMA_VERSION}
     if data is not None:
         payload["data"] = data
     if error:
@@ -56,7 +59,7 @@ def emit(ok: bool, data: Any = None, error: Optional[str] = None, as_agent: bool
 
 COMMAND_SCHEMA = {
     "name": "spa",
-    "schema_version": 1,
+    "schema_version": SCHEMA_VERSION,
     "commands": [
         {"name": "init", "summary": "Scaffold or migrate an env dir"},
         {"name": "validate", "summary": "Validate splunk_config.yml"},
@@ -65,18 +68,29 @@ COMMAND_SCHEMA = {
         {
             "name": "provision",
             "summary": "Provision infrastructure using the provider selected by splunk_config.yml",
-            "flags": [{"long": "--yes", "short": "-y", "help": "Auto-approve Terraform apply"}],
-            "example": "spa provision --yes && spa deploy",
+            "requires_confirmation": True,
+            "flags": [{"long": "--yes", "short": "-y", "help": "Confirm and auto-approve Terraform apply"}],
+            "example": "spa provision --yes && spa deploy --yes",
         },
-        {"name": "deploy", "summary": "Deploy Splunk (deploy_site.yml)", "flags": [{"long": "--hosts", "help": "only these hosts (names or roles from this env)"}]},
+        {
+            "name": "deploy",
+            "summary": "Deploy Splunk (deploy_site.yml)",
+            "requires_confirmation": True,
+            "flags": [
+                {"long": "--yes", "short": "-y", "help": "Confirm deploy (required in agent mode)"},
+                {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
+            ],
+        },
         {
             "name": "destroy",
             "summary": "Destroy infrastructure using the configured provider",
-            "flags": [{"long": "--yes", "short": "-y", "help": "Auto-approve Terraform destroy"}],
+            "requires_confirmation": True,
+            "flags": [{"long": "--yes", "short": "-y", "help": "Confirm and auto-approve Terraform destroy"}],
         },
         {
             "name": "suspend",
             "summary": "Stop managed cloud instances without destroying state or disks",
+            "requires_confirmation": True,
             "flags": [
                 {"long": "--yes", "short": "-y", "help": "Confirm power change"},
                 {"long": "--no-wait", "help": "Return after requesting stop"},
@@ -86,6 +100,7 @@ COMMAND_SCHEMA = {
         {
             "name": "resume",
             "summary": "Start managed cloud instances, wait for health, and refresh inventory",
+            "requires_confirmation": True,
             "flags": [
                 {"long": "--yes", "short": "-y", "help": "Confirm power change"},
                 {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
@@ -108,7 +123,16 @@ COMMAND_SCHEMA = {
             "name": "licenses",
             "summary": "Inspect license type, expiration and ITSI/ES entitlements",
         },
-        {"name": "run", "summary": "Run a playbook by stem. Discover: spa --json run --list then spa run NAME --help", "flags": [{"long": "--hosts", "help": "only these hosts (names or roles from this env)"}, {"long": "--list", "help": "Catalog playbooks with summaries"}], "example": "spa run --list"},
+        {
+            "name": "run",
+            "summary": "Run a playbook by stem. Discover: spa --json run --list then spa run NAME --help. Honor data[].requires_confirmation with --yes.",
+            "flags": [
+                {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
+                {"long": "--list", "help": "Catalog playbooks with summaries"},
+                {"long": "--yes", "short": "-y", "help": "Confirm a mutating playbook (required in agent mode)"},
+            ],
+            "example": "spa run --list",
+        },
         {"name": "agent schema", "summary": "This schema"},
     ],
 }

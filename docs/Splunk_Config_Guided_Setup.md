@@ -6,7 +6,7 @@ For interactive agent assistance in Cursor, use the project skill at [skills/spa
 
 ## Quick path
 
-**Separate environment directory (recommended):** from the clone, `spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env`, then `cd ~/envs/my-env` (direnv or `eval "$(spa env --export)"`). Then `spa validate && spa provision --yes && spa deploy`. See [README — Start here](../README.md#start-here).
+**Separate environment directory (recommended):** from the clone, `spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env`, then `cd ~/envs/my-env` (direnv or `eval "$(spa env --export)"`). Then `spa validate && spa provision --yes && spa deploy --yes`. See [README — Start here](../README.md#start-here).
 
 **Clone-equal:**
 
@@ -23,7 +23,7 @@ spa validate config/splunk_config.yml
 6. Provision and deploy:
 
 ```bash
-spa provision --yes && spa deploy
+spa provision --yes && spa deploy --yes
 ```
 
 `deploy_site.yml` runs `preflight_deploy.yml` first. It probes each host for `python3`, flushes stale Ansible fact cache when the cached interpreter no longer matches (for example after switching OS/AMI while reusing hostnames like `cm` and `idx1`), and verifies Ansible connectivity before the main deploy. Terraform provisioning also flushes cache for affected hosts when inventory is regenerated.

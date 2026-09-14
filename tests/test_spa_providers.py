@@ -10,7 +10,7 @@ from spa.providers import ProviderError, detect_provider
 from spa.providers.aws import Provider as AwsProvider
 from spa_testutil import PROJECT_ROOT, run_spa
 
-pytestmark = pytest.mark.local
+pytestmark = [pytest.mark.local, pytest.mark.cli]
 
 
 def _paths(tmp_path, config):

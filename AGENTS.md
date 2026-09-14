@@ -14,9 +14,9 @@ Splunk Platform Automator (SPA) provisions and deploys Splunk Enterprise on **AW
 | Python env (Ansible, Pydantic) | `source bin/spa_venv.sh` (shared `SPA_HOME/.venv`; env `.venv` wins when present). Env dirs get an `.envrc` for direnv; `spa init` creates the venv if missing and runs `direnv allow` when direnv is installed. |
 | Host tools (terraform, direnv, …) | `spa doctor` (also run at end of `spa init`; `--skip-doctor` to skip). Terraform only for AWS; Vagrant only for VirtualBox (`virtualbox:` in config). Not brew ansible/pydantic — use `spa_venv`. |
 | Validate before provision | `spa validate` |
-| Provision AWS then deploy | `spa provision --yes && spa deploy` |
-| Deploy Splunk only (hosts already up) | `spa deploy` (optional `--hosts` names or roles) |
-| Run a playbook | `spa run --list`, `spa run NAME --help`, `spa run NAME` (optional `--hosts`) |
+| Provision AWS then deploy | `spa provision --yes && spa deploy --yes` |
+| Deploy Splunk only (hosts already up) | `spa deploy --yes` (optional `--hosts` names or roles) |
+| Run a playbook | `spa run --list`, `spa run NAME --help`, then `spa run NAME --yes` when `requires_confirmation` |
 | Pause/resume AWS compute | `spa suspend --yes` / `spa resume --yes` (optional `--hosts`; keeps Terraform state and EBS; resume refreshes inventory addresses) |
 | List / SSH / copy | `spa hosts list --status`, `spa hosts ssh NAME`, `spa hosts copy SRC DST` (`spa sh` / `spa shell` still SSH) |
 | Destroy managed infrastructure | `spa destroy --yes` (env-wide; later `--all` vs `--hosts` decommission) |
@@ -75,9 +75,9 @@ tests/            Schema, local, and AWS deployment tests
 
 One backend (`spa.api.LocalSpaSession` via `open_session()`). Two clients:
 
-- **Skills and agents** call only `bin/spa` (`spa validate --json`, `spa agent schema`, `spa provision --yes`). They must not import `spa.api` or talk to a daemon.
+- **Skills and agents** call only `bin/spa` (`spa validate --json`, `spa agent schema`, `spa provision --yes && spa deploy --yes`). They must not import `spa.api` or talk to a daemon. Mutating commands require `--yes`; agents never answer an interactive prompt.
 - **A future GUI** talks to the backend (`open_session()` in-process, or a later daemon wrapping the same session). It does not shell out to `spa` for ordinary operations.
 
-The CLI is also a backend client (parse argv → session → print / JSON envelope). `open_session(url=...)` is reserved for a later remote controller; do not start a daemon unless that work is explicit. Env dirs and Ansible/Terraform stay on the machine that runs `LocalSpaSession`. A later thin laptop `spa` can use `SPA_CONTROLLER` so skills still run `spa` against remote env dirs.
+The CLI is also a backend client (parse argv → session → print / JSON envelope). `open_session(url=...)` is reserved for a later remote controller; do not start a daemon unless that work is explicit. Env dirs and Ansible/Terraform stay on the machine that runs `LocalSpaSession`. A later thin laptop `spa` can use `SPA_CONTROLLER` so skills still run `spa` against remote env dirs. The compatibility, transport, confirmation, and security contract is documented in [Controller, GUI, and remote-client architecture](docs/Controller_Architecture.md).
 
-`--hosts` on `deploy`, `run`, `suspend`, `resume`, and `hosts list` takes inventory names or roles (for example `indexer`). Discover playbooks with `spa --json run --list` then `spa run NAME --help`. Skills should use full command names (`spa hosts ssh`, `spa validate`), not short aliases (`spa sh`, `spa val`). Do not remove a live host from `splunk_config.yml` and run `spa provision` — Terraform will terminate that instance until the provision destroy-guard exists (see ROADMAP).
+`--hosts` on `deploy`, `run`, `suspend`, `resume`, and `hosts list` takes inventory names or roles (for example `indexer`). Discover playbooks with `spa --json run --list` then `spa run NAME --help`. If `requires_confirmation` is true, pass `--yes`. Skills should use full command names (`spa hosts ssh`, `spa validate`), not short aliases (`spa sh`, `spa val`). Do not remove a live host from `splunk_config.yml` and run `spa provision` — Terraform will terminate that instance until the provision destroy-guard exists (see ROADMAP).
