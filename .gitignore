@@ -58,6 +58,8 @@ __pycache__/
 *$py.class
 # VSCode
 .vscode
+# Cursor local plans (keep .cursor/skills in the tree)
+.cursor/plans/
 # Terraform
 .terraform/
 .terraform.*
