@@ -22,6 +22,9 @@ def test_spa_help():
     assert result.returncode == 0
     assert "init" in result.stdout
     assert "run" in result.stdout
+    # argparse would otherwise dump every alias into usage: spa {init,val,...}
+    assert "{init," not in result.stdout
+    assert "COMMAND" in result.stdout
 
 
 def test_shell_help_is_the_shell_parser():
@@ -29,13 +32,21 @@ def test_shell_help_is_the_shell_parser():
     result = run_spa(["shell", "--help"])
     assert result.returncode == 0, result.stderr
     assert "usage: spa shell" in result.stdout
-    assert "-l, --list" in result.stdout
+    assert "-c, --copy" in result.stdout
+    assert "-l" not in result.stdout
+
+
+def test_shell_list_flag_is_gone():
+    result = run_spa(["shell", "-l"])
+    assert result.returncode != 0
+    combined = result.stdout + result.stderr
+    assert "unrecognized arguments" in combined or "error" in combined.lower()
 
 
 @pytest.mark.parametrize(
     "args",
     [
-        ["shell", "-l"],
+        ["sh", "idx1"],
         ["shell", "-c", "local.txt", "idx1:/tmp/"],
         ["aws", "--check-auth", "--json"],
         ["licenses", "--json"],
@@ -63,6 +74,10 @@ def test_split_native_keeps_spa_globals():
     assert native == ["idx1"]
     assert extra == ["-L", "8000:localhost:8000"]
 
+    head, native = _split_native(["sh", "idx1"])
+    assert head == ["sh"]
+    assert native == ["idx1"]
+
     # A global option value that matches a command name is not the command.
     head, native = _split_native(["--start-dir", "aws", "aws", "--list-regions"])
     assert head == ["--start-dir", "aws", "aws"]
@@ -85,33 +100,79 @@ def test_provision_yes_after_subcommand_auto_approves(monkeypatch):
     """spa provision --yes must be a subcommand flag, not only spa --yes provision."""
     captured = {}
 
-    def fake_run(playbook, paths, extra):
-        captured["extra"] = extra
-        return 0
+    class FakeProvider:
+        name = "test"
 
-    monkeypatch.setattr("spa.playbooks.run_playbook", fake_run)
-    monkeypatch.setattr("spa.playbooks.resolve", lambda name, paths: Path("/dev/null"))
+        def provision(self, extra):
+            captured["extra"] = extra
+            return 0
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
     from spa.cli import main
 
-    rc = main(["provision", "--yes"])
+    rc = main(["--no-agent", "provision", "--yes"])
     assert rc == 0
     assert captured["extra"][:2] == ["-e", "auto_approve=true"]
+
+
+@pytest.mark.parametrize("argv", [["-y", "provision"], ["provision", "-y"]])
+def test_provision_yes_works_before_or_after_subcommand(monkeypatch, argv):
+    captured = []
+
+    class FakeProvider:
+        name = "test"
+
+        def provision(self, extra):
+            captured.extend(extra)
+            return 0
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    from spa.cli import main
+
+    rc = main(["--no-agent", *argv])
+    assert rc == 0
+    assert captured[:2] == ["-e", "auto_approve=true"]
 
 
 def test_destroy_yes_after_subcommand_auto_approves(monkeypatch):
     captured = {}
 
-    def fake_run(playbook, paths, extra):
-        captured["extra"] = extra
-        return 0
+    class FakeProvider:
+        name = "test"
 
-    monkeypatch.setattr("spa.playbooks.run_playbook", fake_run)
-    monkeypatch.setattr("spa.playbooks.resolve", lambda name, paths: Path("/dev/null"))
+        def destroy(self, extra):
+            captured["extra"] = extra
+            return 0
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
     from spa.cli import main
 
-    rc = main(["destroy", "--yes"])
+    rc = main(["--no-agent", "destroy", "--yes"])
     assert rc == 0
     assert captured["extra"][:2] == ["-e", "auto_approve=true"]
+
+
+@pytest.mark.parametrize("command", ["suspend", "resume"])
+def test_lifecycle_commands_dispatch_to_provider(monkeypatch, command):
+    called = {}
+
+    class FakeProvider:
+        name = "test"
+
+        def suspend(self, **kwargs):
+            called.update(kwargs)
+            return {"instances": []}
+
+        def resume(self, **kwargs):
+            called.update(kwargs)
+            return {"instances": []}
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    from spa.cli import main
+
+    rc = main(["--no-agent", command, "--yes"])
+    assert rc == 0
+    assert called == {"yes": True, "agent": False, "wait": True, "hosts": None}
 
 
 def test_broken_spa_venv_dir_falls_back(tmp_path):

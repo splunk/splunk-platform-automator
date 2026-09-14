@@ -6,16 +6,18 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
-from spa.agent import COMMAND_SCHEMA, agent_mode, emit
+from spa.agent import agent_mode, emit
+from spa.api import CommandResult, open_session
 from spa.executil import ToolNotFound, apply_paths_env
 from spa.paths import resolve_spa_paths
 
 
-# Commands whose flags belong to the wrapped tool, not to spa (spa shell -l,
+# Commands whose flags belong to the wrapped tool, not to spa (spa shell idx1,
 # spa aws --check-auth). argparse.REMAINDER drops a leading option, so these are
 # split off before the spa parser runs.
-NATIVE_FLAG_COMMANDS = ("shell", "aws", "licenses")
+NATIVE_FLAG_COMMANDS = ("shell", "sh", "aws", "licenses", "lic")
 GLOBAL_OPTS_WITH_VALUE = ("--start-dir",)
+HOSTS_FLAG_HELP = "only these hosts (names or roles from this env)"
 
 
 def _split_passthrough(argv: Sequence[str]) -> Tuple[List[str], List[str]]:
@@ -72,11 +74,44 @@ def _print_catalog(rows: List[dict], paths) -> None:
         print("Run one with: spa run <name> [-- ansible-playbook args]")
 
 
+def _add_command(sub, name, aliases=(), **kwargs):
+    parser = sub.add_parser(name, aliases=list(aliases), **kwargs)
+    parser.set_defaults(canonical=name)
+    return parser
+
+
+def shell_copy_examples() -> str:
+    from spa.shell import COPY_EXAMPLES
+
+    return COPY_EXAMPLES
+
+
+def _add_hosts_option(parser) -> None:
+    parser.add_argument(
+        "--hosts",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help=HOSTS_FLAG_HELP,
+    )
+
+
 def _paths(start_dir: Optional[str] = None):
     start = Path(start_dir).resolve() if start_dir else None
     paths = resolve_spa_paths(start_dir=start)
     apply_paths_env(paths)
     return paths
+
+
+def _emit_result(result: CommandResult, as_agent: bool) -> int:
+    emit(result.ok, data=result.data, error=result.error, as_agent=as_agent)
+    return result.code
+
+
+def _print_init_messages(result: CommandResult) -> None:
+    messages = (result.data or {}).get("messages") if isinstance(result.data, dict) else None
+    if messages:
+        print("\n".join(messages))
 
 
 def _error_agent_mode(argv: List[str]) -> bool:
@@ -117,9 +152,9 @@ def _run(argv: Sequence[str]) -> int:
     parser.add_argument("-y", "--yes", action="store_true", help="Non-interactive / auto-approve")
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("--start-dir", help="Directory to resolve .spa.yml from")
-    sub = parser.add_subparsers(dest="command")
+    sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    p_init = sub.add_parser("init", help="Scaffold or migrate an env dir")
+    p_init = _add_command(sub, "init", help="Scaffold or migrate an env dir")
     p_init.add_argument("env_dir", nargs="?")
     p_init.add_argument("--example")
     p_init.add_argument("--list", action="store_true", help="List example YAML names")
@@ -139,58 +174,118 @@ def _run(argv: Sequence[str]) -> int:
     p_init.add_argument("--no-envrc", action="store_true")
     p_init.add_argument("--skip-doctor", action="store_true")
 
-    p_val = sub.add_parser("validate", help="Validate splunk_config.yml")
+    p_val = _add_command(sub, "validate", aliases=["val"], help="Validate splunk_config.yml")
     p_val.add_argument("config", nargs="?")
     p_val.add_argument("--check-licenses", action="store_true")
     p_val.add_argument("--splunk-config-aws", action="store_true")
 
-    p_doc = sub.add_parser("doctor", help="Host prerequisite checks")
+    p_doc = _add_command(sub, "doctor", aliases=["doc"], help="Host prerequisite checks")
     p_doc.add_argument("--spa-home")
     p_doc.add_argument("--env")
     p_doc.add_argument("--aws", action="store_true")
     p_doc.add_argument("--virtualbox", action="store_true")
     p_doc.add_argument("--strict", action="store_true")
-    p_doc.add_argument("--json", action="store_true")
+    p_doc.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p_doc.add_argument("--fix-direnv", action="store_true")
 
-    p_env = sub.add_parser("env", help="Print export statements")
+    p_env = _add_command(sub, "env", help="Print export statements")
     p_env.add_argument("--export", action="store_true", default=True)
     p_env.add_argument("--start-dir")
 
-    p_prov = sub.add_parser("provision", help="Provision AWS with Terraform")
+    p_prov = _add_command(
+        sub, "provision", aliases=["prov"], help="Provision infrastructure for the configured provider"
+    )
     p_prov.add_argument(
         "-y",
         "--yes",
         action="store_true",
+        default=argparse.SUPPRESS,
         help="Auto-approve Terraform apply (same as spa -y provision)",
     )
-    sub.add_parser("deploy", help="Deploy Splunk")
-    p_destroy = sub.add_parser("destroy", help="Destroy AWS hosts")
+    p_deploy = _add_command(sub, "deploy", aliases=["dep"], help="Deploy Splunk")
+    _add_hosts_option(p_deploy)
+    p_destroy = _add_command(sub, "destroy", help="Destroy infrastructure for the configured provider")
     p_destroy.add_argument(
         "-y",
         "--yes",
         action="store_true",
+        default=argparse.SUPPRESS,
         help="Auto-approve Terraform destroy (same as spa -y destroy)",
     )
+    p_suspend = _add_command(
+        sub, "suspend", aliases=["sus"], help="Stop managed cloud instances without destroying them"
+    )
+    p_suspend.add_argument("-y", "--yes", action="store_true", default=argparse.SUPPRESS)
+    p_suspend.add_argument("--no-wait", action="store_true", help="Return after requesting the stop")
+    _add_hosts_option(p_suspend)
+    p_resume = _add_command(
+        sub, "resume", aliases=["res"], help="Start managed cloud instances and refresh inventory"
+    )
+    p_resume.add_argument("-y", "--yes", action="store_true", default=argparse.SUPPRESS)
+    _add_hosts_option(p_resume)
 
-    p_run = sub.add_parser("run", help="Run a playbook by stem")
+    p_run = _add_command(sub, "run", help="Run a playbook by stem")
     p_run.add_argument("name", nargs="?")
     p_run.add_argument("--list", action="store_true")
     p_run.add_argument("--dir", dest="playbook_dir", help="Extra env-dir folder to list/run")
+    _add_hosts_option(p_run)
+
+    p_hosts = _add_command(sub, "hosts", aliases=["h"], help="List, SSH, or copy using inventory hosts")
+    p_hosts.add_argument(
+        "--status",
+        action="store_true",
+        help="Include runtime power state and connectivity",
+    )
+    _add_hosts_option(p_hosts)
+    hosts_sub = p_hosts.add_subparsers(dest="hosts_cmd", metavar="ACTION")
+    p_hosts_list = hosts_sub.add_parser("list", aliases=["ls"], help="List hosts in this env")
+    p_hosts_list.add_argument(
+        "--status",
+        action="store_true",
+        help="Include runtime power state and connectivity",
+    )
+    _add_hosts_option(p_hosts_list)
+    p_hosts_ssh = hosts_sub.add_parser("ssh", help="SSH to one host")
+    p_hosts_ssh.add_argument("name", help="Inventory hostname")
+    p_hosts_ssh.add_argument("ssh_args", nargs=argparse.REMAINDER, help="Extra ssh arguments")
+    p_hosts_copy = hosts_sub.add_parser(
+        "copy",
+        aliases=["cp"],
+        help="Copy files with scp (SRC DST, remote side is HOST:PATH)",
+        usage="spa hosts copy [-r] SRC [SRC ...] DST",
+        description="Copy files between this machine and an env host.",
+        epilog=shell_copy_examples(),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_hosts_copy.add_argument(
+        "-r",
+        "--recursive",
+        action="store_true",
+        help="Copy directories",
+    )
+    p_hosts_copy.add_argument(
+        "paths",
+        nargs=argparse.REMAINDER,
+        metavar="SRC DST",
+        help="Source and destination paths; HOST:PATH for the remote side",
+    )
 
     # Flags for these are parsed by the wrapped tool (see _split_native).
-    sub.add_parser("shell", help="SSH/SCP via inventory (spa shell --help)", add_help=False)
-    sub.add_parser("aws", help="AWS discovery (spa aws --help)", add_help=False)
-    sub.add_parser("licenses", help="License discovery (spa licenses --help)", add_help=False)
+    _add_command(sub, "shell", aliases=["sh"], help="SSH via inventory (alias of spa hosts ssh)", add_help=False)
+    _add_command(sub, "aws", help="AWS discovery (spa aws --help)", add_help=False)
+    _add_command(sub, "licenses", aliases=["lic"], help="License discovery (spa licenses --help)", add_help=False)
 
-    p_agent = sub.add_parser("agent", help="Agent helpers")
+    p_agent = _add_command(sub, "agent", help="Agent helpers")
     p_agent.add_argument("agent_cmd", nargs="?", default="schema")
 
     args = parser.parse_args(head)
+    invoked = args.command
+    if getattr(args, "canonical", None):
+        args.command = args.canonical
     as_agent = agent_mode(force_agent=args.agent or args.json, force_human=args.no_agent)
     # These print their own output (aws/licenses have a native --json); an
     # envelope would only apply to a path-resolution failure below.
-    if args.command in NATIVE_FLAG_COMMANDS and not args.agent:
+    if invoked in NATIVE_FLAG_COMMANDS and not args.agent:
         as_agent = agent_mode(force_agent=False, force_human=args.no_agent)
 
     try:
@@ -199,12 +294,15 @@ def _run(argv: Sequence[str]) -> int:
         emit(False, error=str(exc), as_agent=as_agent)
         return 1
 
+    session = open_session(paths=paths)
+
     if args.command is None:
         parser.print_help()
         return 0
 
     if args.command == "agent":
-        emit(True, data=COMMAND_SCHEMA, as_agent=True)
+        result = session.schema()
+        emit(True, data=result.data, as_agent=True)
         return 0
 
     if args.command == "env":
@@ -218,125 +316,232 @@ def _run(argv: Sequence[str]) -> int:
         return 0
 
     if args.command == "init":
-        from spa import init as init_mod
-
         if args.list:
-            names = init_mod.list_examples(paths.spa_home)
+            result = session.list_examples()
             if as_agent:
-                emit(True, data=names, as_agent=True)
-            else:
-                print("\n".join(names))
+                return _emit_result(result, True)
+            print("\n".join(result.data or []))
             return 0
         if not args.env_dir:
             print("spa init: env dir is required", file=sys.stderr)
             return 1
-        try:
-            rc = init_mod.init_env(
-                Path(args.env_dir),
-                paths.spa_home,
-                example=args.example,
-                example_set=args.example is not None,
-                from_dir=Path(args.from_dir) if args.from_dir else None,
-                migrate_set=args.migrate or args.from_dir is not None,
-                keep_source=args.keep_source,
-                force=args.force,
-                env_venv=args.venv or bool(args.python) or bool(args.ansible) or bool(args.pip),
-                python=args.python,
-                ansible=args.ansible,
-                pip_pkgs=args.pip,
-                write_envrc_file=not args.no_envrc,
-                skip_doctor=args.skip_doctor,
-                rebuild_venv=bool(args.ansible or args.pip) and args.force,
+        result = session.init(
+            args.env_dir,
+            example=args.example,
+            example_set=args.example is not None,
+            from_dir=args.from_dir,
+            migrate_set=args.migrate or args.from_dir is not None,
+            keep_source=args.keep_source,
+            force=args.force,
+            env_venv=args.venv or bool(args.python) or bool(args.ansible) or bool(args.pip),
+            python=args.python,
+            ansible=args.ansible,
+            pip_pkgs=args.pip,
+            write_envrc_file=not args.no_envrc,
+            skip_doctor=args.skip_doctor,
+            rebuild_venv=bool(args.ansible or args.pip) and args.force,
+        )
+        if as_agent:
+            emit(
+                result.ok,
+                data={"env_dir": str(Path(args.env_dir).resolve())},
+                error=result.error,
+                as_agent=True,
             )
-            if as_agent:
-                emit(rc == 0, data={"env_dir": str(Path(args.env_dir).resolve())}, as_agent=True)
-            return rc
-        except init_mod.InitError as exc:
-            emit(False, error=str(exc), as_agent=as_agent)
-            return exc.code
+            return result.code
+        _print_init_messages(result)
+        if result.error:
+            print(result.error, file=sys.stderr)
+        return result.code
 
     if args.command == "validate":
-        from spa import validate as validate_mod
+        from spa.validate import format_validate_text
 
-        val_argv = []
-        if args.check_licenses:
-            val_argv.append("--check-licenses")
-        if args.splunk_config_aws:
-            val_argv.append("--splunk-config-aws")
-        if args.config:
-            val_argv.append(args.config)
-        rc = validate_mod.run(val_argv)
+        result = session.validate(
+            config=args.config,
+            check_licenses=args.check_licenses,
+            splunk_config_aws=args.splunk_config_aws,
+        )
         if as_agent:
-            emit(rc == 0, error=None if rc == 0 else "validate failed", as_agent=True)
-        return rc
+            return _emit_result(result, True)
+        sys.stdout.write(format_validate_text(result))
+        if result.error:
+            print(result.error, file=sys.stderr)
+        validation = ((result.data or {}).get("license_validation") or {})
+        for warning in validation.get("warnings") or []:
+            print("License warning: %s" % warning, file=sys.stderr)
+        return result.code
 
     if args.command == "doctor":
-        from spa import doctor as doctor_mod
+        from spa.doctor import format_doctor_text
 
-        doc_argv = []
-        if args.spa_home:
-            doc_argv.extend(["--spa-home", args.spa_home])
-        if args.env:
-            doc_argv.extend(["--env", args.env])
-        for flag in ("aws", "virtualbox", "strict", "json", "fix_direnv"):
-            if getattr(args, flag, False):
-                doc_argv.append("--" + flag.replace("_", "-"))
-        rc = doctor_mod.run(doc_argv)
-        if as_agent and not args.json:
-            emit(rc == 0, error=None if rc == 0 else "doctor failed", as_agent=True)
-        return rc
+        result = session.doctor(
+            spa_home=args.spa_home,
+            env_dir=args.env,
+            aws=args.aws,
+            virtualbox=args.virtualbox,
+            strict=args.strict,
+            fix_direnv=args.fix_direnv,
+        )
+        want_json = as_agent or bool(getattr(args, "json", False))
+        if want_json:
+            return _emit_result(result, True)
+        sys.stdout.write(format_doctor_text(result))
+        return result.code
 
-    if args.command in {"provision", "deploy", "destroy"}:
-        from spa.playbooks import PlaybookError, resolve, run_playbook
-
-        names = {
-            "provision": "provision_terraform_aws",
-            "deploy": "deploy_site",
-            "destroy": "destroy_terraform_aws",
-        }
+    if args.command in {"provision", "destroy"}:
         extra = list(extra)
-        if args.command in {"provision", "destroy"} and args.yes:
-            extra = ["-e", "auto_approve=true", *extra]
         if args.command == "destroy" and not args.yes and as_agent:
             emit(False, error="destroy requires -y in agent mode", as_agent=True)
             return 1
-        try:
-            playbook = resolve(names[args.command], paths)
-        except PlaybookError as exc:
-            emit(False, error=str(exc), as_agent=as_agent)
-            return 1
-        if args.verbose:
-            extra = ["-v", *extra]
-        rc = run_playbook(playbook, paths, extra)
+        result = getattr(session, args.command)(extra, confirm=args.yes)
         if as_agent:
-            emit(rc == 0, error=None if rc == 0 else "playbook failed", as_agent=True)
-        return rc
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+        return result.code
+
+    if args.command == "deploy":
+        extra = list(extra)
+        result = session.deploy(
+            extra, verbose=args.verbose, hosts=getattr(args, "hosts", None)
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+        return result.code
+
+    if args.command in {"suspend", "resume"}:
+        if extra:
+            emit(
+                False,
+                error="%s does not accept arguments after --" % args.command,
+                as_agent=as_agent,
+            )
+            return 1
+        result = getattr(session, args.command)(
+            confirm=args.yes,
+            wait=not getattr(args, "no_wait", False),
+            agent=as_agent,
+            hosts=getattr(args, "hosts", None),
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+            return result.code
+        from spa.hosts import format_names
+
+        data = result.data or {}
+        instances = data.get("instances") or []
+        print(
+            "%s %s complete (%d host%s)."
+            % (
+                str(data.get("provider") or "").upper(),
+                args.command,
+                len(instances),
+                "" if len(instances) == 1 else "s",
+            )
+        )
+        by_state: dict = {}
+        for instance in instances:
+            by_state.setdefault(instance["state"], []).append(instance["name"])
+        for state, names in sorted(by_state.items()):
+            print("  %s (%d): %s" % (state, len(names), format_names(sorted(names))))
+        if data.get("inventory"):
+            print("  inventory: %s" % data["inventory"])
+        if data.get("note"):
+            print("  note: %s" % data["note"])
+        return 0
 
     if args.command == "run":
-        from spa.playbooks import PlaybookError, catalog, resolve, run_playbook
-
         if args.list or not args.name:
-            rows = catalog(paths, extra_dir=args.playbook_dir)
+            result = session.catalog(extra_dir=args.playbook_dir)
             if as_agent or args.json:
-                emit(True, data=rows, as_agent=True)
-            else:
-                _print_catalog(rows, paths)
+                return _emit_result(result, True)
+            _print_catalog(result.data or [], paths)
             return 0
-        try:
-            playbook = resolve(args.name, paths, extra_dir=args.playbook_dir)
-        except PlaybookError as exc:
-            emit(False, error=str(exc), as_agent=as_agent)
-            if not as_agent:
-                print(str(exc), file=sys.stderr)
-                print("spa run --list for the catalog", file=sys.stderr)
-            return 1
         extra_args = list(extra)
-        if args.verbose:
-            extra_args = ["-v", *extra_args]
-        rc = run_playbook(playbook, paths, extra_args)
+        result = session.run(
+            args.name,
+            extra=extra_args,
+            extra_dir=args.playbook_dir,
+            verbose=args.verbose,
+            hosts=getattr(args, "hosts", None),
+        )
         if as_agent:
-            emit(rc == 0, error=None if rc == 0 else "playbook failed", as_agent=True)
-        return rc
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+            print("spa run --list for the catalog", file=sys.stderr)
+        return result.code
+
+    if args.command == "hosts":
+        hosts_cmd = args.hosts_cmd or "list"
+        if hosts_cmd in {"list", "ls"}:
+            result = session.hosts_list(
+                status=bool(getattr(args, "status", False) or args.verbose),
+                hosts=getattr(args, "hosts", None),
+            )
+            if as_agent:
+                return _emit_result(result, True)
+            if result.error:
+                print(result.error, file=sys.stderr)
+                return result.code
+            data = result.data or {}
+            if data.get("provider") and getattr(args, "status", False):
+                print("Checking %s status..." % str(data["provider"]).upper(), file=sys.stderr)
+            if data.get("provider_error"):
+                print("Warning: %s" % data["provider_error"], file=sys.stderr)
+            for row in data.get("hosts") or []:
+                roles_str = ""
+                if row.get("roles"):
+                    roles_str = " (%s)" % ", ".join(row["roles"])
+                extra_info = ""
+                if row.get("ansible") or row.get("provider_status"):
+                    provider_status = ""
+                    if row.get("provider_status"):
+                        provider_status = ", %s: %s" % (
+                            str(row.get("provider") or "provider").upper(),
+                            row["provider_status"],
+                        )
+                    extra_info = " - Ansible: %s%s" % (
+                        row.get("ansible", "N/A"),
+                        provider_status,
+                    )
+                print("%s%s%s" % (row["name"], roles_str, extra_info))
+            return 0
+        from spa import shell as shell_mod
+
+        if hosts_cmd == "ssh":
+            try:
+                shell_mod.main([args.name, *list(getattr(args, "ssh_args", []) or []), *extra])
+            except SystemExit as exc:
+                return exc.code if isinstance(exc.code, int) else 1
+            return 0
+        if hosts_cmd in {"copy", "cp"}:
+            paths_args = [*extra, *list(getattr(args, "paths", []) or [])]
+            if getattr(args, "recursive", False):
+                paths_args.insert(0, "-r")
+            if len([item for item in paths_args if not item.startswith("-")]) < 2:
+                print(
+                    "spa hosts copy needs a source and a destination, "
+                    "for example: spa hosts copy app.tgz idx1:/tmp/",
+                    file=sys.stderr,
+                )
+                return 1
+            try:
+                shell_mod.apply_spa_env()
+                shell_mod.run_scp(paths_args)
+            except shell_mod.ShellError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+            except SystemExit as exc:
+                return exc.code if isinstance(exc.code, int) else 1
+            return 0
+        parser.print_help()
+        return 1
 
     if args.command == "shell":
         from spa import shell as shell_mod

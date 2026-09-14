@@ -56,6 +56,7 @@ def emit(ok: bool, data: Any = None, error: Optional[str] = None, as_agent: bool
 
 COMMAND_SCHEMA = {
     "name": "spa",
+    "schema_version": 1,
     "commands": [
         {"name": "init", "summary": "Scaffold or migrate an env dir"},
         {"name": "validate", "summary": "Validate splunk_config.yml"},
@@ -63,23 +64,51 @@ COMMAND_SCHEMA = {
         {"name": "env", "summary": "Print export statements for direnv"},
         {
             "name": "provision",
-            "summary": "Terraform AWS provision playbook",
+            "summary": "Provision infrastructure using the provider selected by splunk_config.yml",
             "flags": [{"long": "--yes", "short": "-y", "help": "Auto-approve Terraform apply"}],
             "example": "spa provision --yes && spa deploy",
         },
-        {"name": "deploy", "summary": "Deploy Splunk (deploy_site.yml)"},
+        {"name": "deploy", "summary": "Deploy Splunk (deploy_site.yml)", "flags": [{"long": "--hosts", "help": "only these hosts (names or roles from this env)"}]},
         {
             "name": "destroy",
-            "summary": "Destroy AWS hosts",
+            "summary": "Destroy infrastructure using the configured provider",
             "flags": [{"long": "--yes", "short": "-y", "help": "Auto-approve Terraform destroy"}],
         },
-        {"name": "shell", "summary": "SSH/SCP using inventory"},
+        {
+            "name": "suspend",
+            "summary": "Stop managed cloud instances without destroying state or disks",
+            "flags": [
+                {"long": "--yes", "short": "-y", "help": "Confirm power change"},
+                {"long": "--no-wait", "help": "Return after requesting stop"},
+                {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
+            ],
+        },
+        {
+            "name": "resume",
+            "summary": "Start managed cloud instances, wait for health, and refresh inventory",
+            "flags": [
+                {"long": "--yes", "short": "-y", "help": "Confirm power change"},
+                {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
+            ],
+        },
+        {
+            "name": "hosts list",
+            "summary": "List inventory hosts and roles",
+            "flags": [
+                {"long": "--status", "help": "Include runtime power state and connectivity"},
+                {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
+            ],
+            "example": "spa hosts list --status",
+        },
+        {"name": "hosts ssh", "summary": "SSH using inventory", "example": "spa hosts ssh idx1"},
+        {"name": "hosts copy", "summary": "Copy files with scp: SRC DST, remote side HOST:PATH (-r for directories)", "example": "spa hosts copy local.txt idx1:/tmp/"},
+        {"name": "shell", "summary": "Alias of spa hosts ssh"},
         {"name": "aws", "summary": "AWS discovery for terraform.aws"},
         {
             "name": "licenses",
             "summary": "Inspect license type, expiration and ITSI/ES entitlements",
         },
-        {"name": "run", "summary": "Run an ansible playbook by stem"},
+        {"name": "run", "summary": "Run an ansible playbook by stem", "flags": [{"long": "--hosts", "help": "only these hosts (names or roles from this env)"}]},
         {"name": "agent schema", "summary": "This schema"},
     ],
 }

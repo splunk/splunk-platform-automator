@@ -6,10 +6,21 @@ import os
 import shutil
 import subprocess
 import sys
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence
 
 from spa.paths import is_spa_home
+
+_LOG: ContextVar[Optional[List[str]]] = ContextVar("spa_init_log", default=None)
+
+
+def _say(message: str) -> None:
+    log = _LOG.get()
+    if log is not None:
+        log.append(message)
+        return
+    print(message)
 
 FRAMEWORK_LEFTOVERS = (
     "ansible",
@@ -198,21 +209,21 @@ def leftover_present(root: Path) -> List[str]:
     return found
 
 
-def print_old_clone_report(dest: Path) -> None:
-    print("This looks like an old clone-style Splunk environment:")
-    print("  %s" % dest)
-    print()
-    print("Keep:")
+def _say_old_clone_report(dest: Path) -> None:
+    _say("This looks like an old clone-style Splunk environment:")
+    _say("  %s" % dest)
+    _say("")
+    _say("Keep:")
     for item in KEEP_HINT:
-        print("  - %s" % item)
-    print()
-    print("Remove with --force:")
+        _say("  - %s" % item)
+    _say("")
+    _say("Remove with --force:")
     leftovers = leftover_present(dest) or list(FRAMEWORK_LEFTOVERS[:8]) + ["…"]
     for item in leftovers:
-        print("  - %s" % item)
-    print()
-    print("Re-run:  spa init --force %s" % dest)
-    print("Config (splunk_config.yml) is left alone unless you also pass --example.")
+        _say("  - %s" % item)
+    _say("")
+    _say("Re-run:  spa init --force %s" % dest)
+    _say("Config (splunk_config.yml) is left alone unless you also pass --example.")
 
 
 def strip_framework(dest: Path, spa_home: Path) -> None:
@@ -244,7 +255,7 @@ def prune_incomplete_venv(dest: Path) -> None:
     venv = dest / ".venv"
     if venv.is_dir() and not (venv / "bin" / "activate").is_file():
         shutil.rmtree(venv)
-        print("  venv:      removed incomplete %s" % venv)
+        _say("  venv:      removed incomplete %s" % venv)
 
 
 def create_venv(
@@ -258,7 +269,7 @@ def create_venv(
 ) -> None:
     venv_script = spa_home / "bin" / "spa_venv.sh"
     if not venv_script.is_file():
-        print("  venv:      skipped (no bin/spa_venv.sh under %s)" % spa_home)
+        _say("  venv:      skipped (no bin/spa_venv.sh under %s)" % spa_home)
         return
     if env_venv:
         venv_dir = dest / ".venv"
@@ -267,7 +278,7 @@ def create_venv(
     if rebuild and (venv_dir / "bin" / "activate").is_file():
         shutil.rmtree(venv_dir)
     if (venv_dir / "bin" / "activate").is_file() and not rebuild:
-        print("  venv:      %s (existing)" % venv_dir)
+        _say("  venv:      %s (existing)" % venv_dir)
         extra = []
         if ansible:
             extra.append("ansible==%s" % ansible)
@@ -280,10 +291,10 @@ def create_venv(
             cmd.extend(["--requirements", str(spa_home / "requirements.txt"), "--requirements", str(env_req)])
         if extra:
             cmd.extend(extra)
-            print("Creating/updating Python venv extras: %s" % venv_dir)
+            _say("Creating/updating Python venv extras: %s" % venv_dir)
             subprocess.check_call(cmd)
         return
-    print("Creating Python venv: %s" % venv_dir)
+    _say("Creating Python venv: %s" % venv_dir)
     cmd = ["bash", str(venv_script), "--create", "--dir", str(venv_dir)]
     if python:
         cmd.extend(["--python", python])
@@ -303,19 +314,24 @@ def allow_direnv(dest: Path) -> None:
         return
     result = subprocess.run(["direnv", "allow"], cwd=str(dest), capture_output=True, text=True)
     if result.returncode == 0:
-        print("direnv: approved %s/.envrc (cd into the env to load venv + SPA_*)" % dest)
+        _say("direnv: approved %s/.envrc (cd into the env to load venv + SPA_*)" % dest)
     else:
-        print("direnv: could not approve .envrc (run: cd %s && direnv allow)" % dest)
+        _say("direnv: could not approve .envrc (run: cd %s && direnv allow)" % dest)
 
 
 def run_doctor(dest: Path, spa_home: Path, skip: bool) -> None:
     if skip:
         return
-    from spa import doctor as doctor_mod
+    from spa.doctor import collect_checks, format_doctor_text
 
-    extra = ["--fix-direnv"] if sys.stdout.isatty() else []
-    rc = doctor_mod.run(["--spa-home", str(spa_home), "--env", str(dest), *extra])
-    if rc != 0:
+    result = collect_checks(
+        spa_home=str(spa_home),
+        env_dir=str(dest),
+        fix_direnv=sys.stdout.isatty(),
+    )
+    for line in format_doctor_text(result).rstrip().splitlines():
+        _say(line)
+    if not result.ok:
         raise InitError(
             "Host prerequisite check failed. Fix the items above before provision/deploy."
         )
@@ -331,6 +347,49 @@ def list_examples(spa_home: Path) -> List[str]:
 
 
 def init_env(
+    dest: Path,
+    spa_home: Path,
+    *,
+    example: Optional[str] = None,
+    example_set: bool = False,
+    from_dir: Optional[Path] = None,
+    migrate_set: bool = False,
+    keep_source: bool = False,
+    force: bool = False,
+    env_venv: bool = False,
+    python: Optional[str] = None,
+    ansible: Optional[str] = None,
+    pip_pkgs: Optional[Sequence[str]] = None,
+    write_envrc_file: bool = True,
+    skip_doctor: bool = False,
+    rebuild_venv: bool = False,
+    log: Optional[List[str]] = None,
+) -> int:
+    token = _LOG.set(log) if log is not None else None
+    try:
+        return _init_env(
+            dest,
+            spa_home,
+            example=example,
+            example_set=example_set,
+            from_dir=from_dir,
+            migrate_set=migrate_set,
+            keep_source=keep_source,
+            force=force,
+            env_venv=env_venv,
+            python=python,
+            ansible=ansible,
+            pip_pkgs=pip_pkgs,
+            write_envrc_file=write_envrc_file,
+            skip_doctor=skip_doctor,
+            rebuild_venv=rebuild_venv,
+        )
+    finally:
+        if token is not None:
+            _LOG.reset(token)
+
+
+def _init_env(
     dest: Path,
     spa_home: Path,
     *,
@@ -369,9 +428,9 @@ def init_env(
 
     if is_old_clone_tree(dest) and not example_set and from_dir is None:
         if not force:
-            print_old_clone_report(dest)
+            _say_old_clone_report(dest)
             raise InitError("Refusing to strip framework files without --force.", code=2)
-        print("Converting clone-style env at %s" % dest)
+        _say("Converting clone-style env at %s" % dest)
         strip_framework(dest, spa_home)
         ensure_env_dirs(dest)
         write_spa_yml(dest, spa_home)
@@ -380,8 +439,8 @@ def init_env(
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
         allow_direnv(dest)
         run_doctor(dest, spa_home, skip_doctor)
-        print("Converted to an env dir at %s" % dest)
-        print("  config:    %s" % config_dest)
+        _say("Converted to an env dir at %s" % dest)
+        _say("  config:    %s" % config_dest)
         return 0
 
     want_migrate = migrate_set or (not example_set and has_config(source) and source != dest)
@@ -403,16 +462,16 @@ def init_env(
             create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
             allow_direnv(dest)
             run_doctor(dest, spa_home, skip_doctor)
-            print("Refreshed env pointer files at %s (splunk_config.yml kept)" % dest)
+            _say("Refreshed env pointer files at %s (splunk_config.yml kept)" % dest)
             return 0
-        print("Migrating existing env from %s" % source)
+        _say("Migrating existing env from %s" % source)
         migrate_state(source, dest, spa_home, keep_source)
         if write_envrc_file:
             write_envrc(dest, spa_home)
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
         allow_direnv(dest)
         run_doctor(dest, spa_home, skip_doctor)
-        print("Env migrated to %s" % dest)
+        _say("Env migrated to %s" % dest)
         return 0
 
     if is_spa_env(dest) and not force:
@@ -434,9 +493,9 @@ def init_env(
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
         allow_direnv(dest)
         run_doctor(dest, spa_home, skip_doctor)
-        print("Env scaffolded at %s" % dest)
-        print("  example:   %s" % name)
-        print("  config:    %s" % config_dest)
+        _say("Env scaffolded at %s" % dest)
+        _say("  example:   %s" % name)
+        _say("  config:    %s" % config_dest)
         return 0
 
     # --force without --example on an existing env: refresh metadata, keep config
@@ -449,7 +508,7 @@ def init_env(
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
         allow_direnv(dest)
         run_doctor(dest, spa_home, skip_doctor)
-        print("Refreshed env at %s (splunk_config.yml kept)" % dest)
+        _say("Refreshed env at %s (splunk_config.yml kept)" % dest)
         return 0
 
     # Fresh env, default example
@@ -467,7 +526,7 @@ def init_env(
     create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
     allow_direnv(dest)
     run_doctor(dest, spa_home, skip_doctor)
-    print("Env scaffolded at %s" % dest)
-    print("  example:   %s" % name)
-    print("  config:    %s" % config_dest)
+    _say("Env scaffolded at %s" % dest)
+    _say("  example:   %s" % name)
+    _say("  config:    %s" % config_dest)
     return 0

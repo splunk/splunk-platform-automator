@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from spa.api import CommandResult
 from spa.executil import resolve_venv_dir
 from spa.paths import resolve_spa_paths
 
@@ -86,41 +87,36 @@ def _hook_in_rc() -> bool:
     return any(root.is_file() and scan(root) for root in roots)
 
 
-def _apply_hook() -> None:
+def _apply_hook() -> Optional[str]:
     if not shutil.which("direnv"):
-        print("direnv is not installed; cannot add the hook.", file=sys.stderr)
-        return
+        return "direnv is not installed; cannot add the hook."
     line = _direnv_hook_line()
     if _hook_in_rc():
-        return
+        return None
     rc = Path.home() / (".zshrc" if os.path.basename(os.environ.get("SHELL") or "zsh") != "bash" else ".bashrc")
     with rc.open("a", encoding="utf-8") as handle:
         handle.write("\n# direnv (spa doctor --fix-direnv)\n%s\n" % line)
-    print("Added direnv hook to %s" % rc)
+    return "Added direnv hook to %s" % rc
 
 
-def run(argv: Optional[List[str]] = None) -> int:
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Check host prerequisites for SPA")
-    parser.add_argument("--spa-home")
-    parser.add_argument("--env", "--lab", dest="env_dir", help="Env dir")
-    parser.add_argument("--aws", action="store_true")
-    parser.add_argument("--virtualbox", action="store_true")
-    parser.add_argument("--strict", action="store_true")
-    parser.add_argument("--json", action="store_true")
-    parser.add_argument("--fix-direnv", action="store_true")
-    args = parser.parse_args(argv)
-
-    spa_home = Path(args.spa_home).resolve() if args.spa_home else resolve_spa_paths().spa_home
-    env_dir = Path(args.env_dir).resolve() if args.env_dir else None
-    require_aws = args.aws
-    require_vbox = args.virtualbox
+def collect_checks(
+    *,
+    spa_home: Optional[str] = None,
+    env_dir: Optional[str] = None,
+    aws: bool = False,
+    virtualbox: bool = False,
+    strict: bool = False,
+    fix_direnv: bool = False,
+) -> CommandResult:
+    spa_home_path = Path(spa_home).resolve() if spa_home else resolve_spa_paths().spa_home
+    env_path = Path(env_dir).resolve() if env_dir else None
+    require_aws = aws
+    require_vbox = virtualbox
     cfg = None
-    if env_dir and (env_dir / "config" / "splunk_config.yml").is_file():
-        cfg = env_dir / "config" / "splunk_config.yml"
-    elif (spa_home / "config" / "splunk_config.yml").is_file():
-        cfg = spa_home / "config" / "splunk_config.yml"
+    if env_path and (env_path / "config" / "splunk_config.yml").is_file():
+        cfg = env_path / "config" / "splunk_config.yml"
+    elif (spa_home_path / "config" / "splunk_config.yml").is_file():
+        cfg = spa_home_path / "config" / "splunk_config.yml"
     if cfg:
         text = cfg.read_text(encoding="utf-8", errors="replace")
         if not require_aws and "terraform:" in text and "aws:" in text:
@@ -131,6 +127,7 @@ def run(argv: Optional[List[str]] = None) -> int:
     ok: List[Dict[str, str]] = []
     warns: List[Dict[str, str]] = []
     errors: List[Dict[str, str]] = []
+    notes: List[str] = []
 
     def rec(level: str, ident: str, msg: str, fix: str = "") -> None:
         row = {"id": ident, "message": msg, "fix": fix, "level": level}
@@ -156,18 +153,19 @@ def run(argv: Optional[List[str]] = None) -> int:
     else:
         rec("error", "python", "python3 not on PATH", _brew_hint("python3"))
 
-    paths = resolve_spa_paths(start_dir=env_dir or spa_home)
-    if args.spa_home:
-        # keep doctor --spa-home
-        pass
-    venv = resolve_venv_dir(paths) if env_dir else (
-        spa_home / ".venv" if (spa_home / ".venv" / "bin" / "activate").is_file() else None
+    paths = resolve_spa_paths(start_dir=env_path or spa_home_path)
+    venv = resolve_venv_dir(paths) if env_path else (
+        spa_home_path / ".venv" if (spa_home_path / ".venv" / "bin" / "activate").is_file() else None
     )
-    if env_dir:
-        venv = resolve_venv_dir(resolve_spa_paths(start_dir=env_dir, environ={**os.environ, "SPA_ENV_DIR": str(env_dir), "SPA_HOME": str(spa_home)}))
-    shared = spa_home / ".venv"
-    # Report on the env under test (--env), not whatever SPA_ENV_DIR the shell has.
-    checked = [env_dir / ".venv"] if env_dir else []
+    if env_path:
+        venv = resolve_venv_dir(
+            resolve_spa_paths(
+                start_dir=env_path,
+                environ={**os.environ, "SPA_ENV_DIR": str(env_path), "SPA_HOME": str(spa_home_path)},
+            )
+        )
+    shared = spa_home_path / ".venv"
+    checked = [env_path / ".venv"] if env_path else []
     checked.append(shared)
     for candidate in checked:
         if candidate.is_dir() and not (candidate / "bin" / "activate").is_file():
@@ -175,7 +173,7 @@ def run(argv: Optional[List[str]] = None) -> int:
                 "warn",
                 "spa_venv",
                 "incomplete venv at %s (no bin/activate)" % candidate,
-                "%s --create" % (spa_home / "bin" / "spa_venv.sh"),
+                "%s --create" % (spa_home_path / "bin" / "spa_venv.sh"),
             )
     if venv and (venv / "bin" / "activate").is_file():
         rec("ok", "spa_venv", "venv at %s" % venv)
@@ -189,12 +187,11 @@ def run(argv: Optional[List[str]] = None) -> int:
         rec("warn", "spa_venv", "shared venv not created yet", "spa init or source bin/spa_venv.sh --create")
 
     spa_bin = shutil.which("spa")
-    expected = str(spa_home / "bin" / "spa")
+    expected = str(spa_home_path / "bin" / "spa")
     if not spa_bin:
         rec("warn", "spa", "spa is not on PATH", "cd the env (direnv), or run %s directly" % expected)
     else:
-        resolved = str(Path(spa_bin).resolve())
-        if Path(spa_bin).parent.resolve() != (spa_home / "bin").resolve():
+        if Path(spa_bin).parent.resolve() != (spa_home_path / "bin").resolve():
             rec(
                 "warn",
                 "spa",
@@ -210,8 +207,10 @@ def run(argv: Optional[List[str]] = None) -> int:
         else:
             rec("error", "terraform", "terraform required for AWS (not on PATH)", _brew_hint("terraform"))
 
-    if args.fix_direnv:
-        _apply_hook()
+    if fix_direnv:
+        hook_msg = _apply_hook()
+        if hook_msg:
+            notes.append(hook_msg)
     if shutil.which("direnv"):
         if _hook_in_rc() or os.environ.get("DIRENV_DIR"):
             rec("ok", "direnv", "direnv is installed and set up in your shell")
@@ -226,11 +225,11 @@ def run(argv: Optional[List[str]] = None) -> int:
         rec("warn", "direnv", "direnv is not installed", _brew_hint("direnv") + "; then spa doctor --fix-direnv")
 
     software = None
-    roots = [spa_home]
-    if env_dir:
-        roots.insert(0, env_dir)
+    roots = [spa_home_path]
+    if env_path:
+        roots.insert(0, env_path)
     for root in roots:
-        for candidate in (root / "../Software", spa_home / "../Software", spa_home / "Software"):
+        for candidate in (root / "../Software", spa_home_path / "../Software", spa_home_path / "Software"):
             if candidate.is_dir():
                 software = candidate.resolve()
                 break
@@ -239,7 +238,12 @@ def run(argv: Optional[List[str]] = None) -> int:
     if software:
         rec("ok", "software", "Software at %s" % software)
     else:
-        rec("warn", "software", "no Software/ directory (installers and baseconfig apps)", "sibling of env or SPA_HOME: ../Software")
+        rec(
+            "warn",
+            "software",
+            "no Software/ directory (installers and baseconfig apps)",
+            "sibling of env or SPA_HOME: ../Software",
+        )
 
     if require_vbox:
         if shutil.which("vagrant"):
@@ -250,31 +254,70 @@ def run(argv: Optional[List[str]] = None) -> int:
     if shutil.which("brew"):
         rec("ok", "brew", "Homebrew available (optional; SPA uses spa_venv, not brew ansible)")
 
-    if args.json:
-        print(json.dumps({"errors": len(errors), "warnings": len(warns), "checks": ok + warns + errors}, indent=2))
-    else:
-        print("SPA host prerequisites (SPA_HOME=%s)" % spa_home)
-        print()
-        for row in ok:
-            print("OK   %s" % row["message"])
-        for row in warns:
-            print("WARN %s" % row["message"])
-            if row.get("fix"):
-                print("       → %s" % row["fix"])
-        for row in errors:
-            print("FAIL %s" % row["message"])
-            if row.get("fix"):
-                print("       → %s" % row["fix"])
-        print()
-        if errors:
-            print("%s required check(s) failed." % len(errors))
-        elif warns:
-            print("%s warning(s). Env may still work; fix before deploy if they apply." % len(warns))
-        else:
-            print("All checks passed.")
-
+    payload = {
+        "spa_home": str(spa_home_path),
+        "errors": len(errors),
+        "warnings": len(warns),
+        "checks": ok + warns + errors,
+        "notes": notes,
+    }
+    code = 0
+    error = None
     if errors:
-        return 1
-    if args.strict and warns:
-        return 1
-    return 0
+        code = 1
+        error = "%s required check(s) failed." % len(errors)
+    elif strict and warns:
+        code = 1
+        error = "%s warning(s) treated as failure (--strict)." % len(warns)
+    return CommandResult(ok=code == 0, data=payload, error=error, code=code)
+
+
+def format_doctor_text(result: CommandResult) -> str:
+    data = result.data or {}
+    lines = ["SPA host prerequisites (SPA_HOME=%s)" % data.get("spa_home", "")]
+    for note in data.get("notes") or []:
+        lines.append(note)
+    lines.append("")
+    for row in data.get("checks") or []:
+        level = row.get("level")
+        prefix = {"ok": "OK  ", "warn": "WARN", "error": "FAIL"}.get(level, "    ")
+        lines.append("%s %s" % (prefix, row.get("message", "")))
+        if row.get("fix") and level in {"warn", "error"}:
+            lines.append("       → %s" % row["fix"])
+    lines.append("")
+    errors = data.get("errors") or 0
+    warns = data.get("warnings") or 0
+    if errors:
+        lines.append("%s required check(s) failed." % errors)
+    elif warns:
+        lines.append("%s warning(s). Env may still work; fix before deploy if they apply." % warns)
+    else:
+        lines.append("All checks passed.")
+    return "\n".join(lines) + "\n"
+
+
+def run(argv: Optional[List[str]] = None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Check host prerequisites for SPA")
+    parser.add_argument("--spa-home")
+    parser.add_argument("--env", "--lab", dest="env_dir", help="Env dir")
+    parser.add_argument("--aws", action="store_true")
+    parser.add_argument("--virtualbox", action="store_true")
+    parser.add_argument("--strict", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--fix-direnv", action="store_true")
+    args = parser.parse_args(argv)
+    result = collect_checks(
+        spa_home=args.spa_home,
+        env_dir=args.env_dir,
+        aws=args.aws,
+        virtualbox=args.virtualbox,
+        strict=args.strict,
+        fix_direnv=args.fix_direnv,
+    )
+    if args.json:
+        print(json.dumps(result.data, indent=2, default=str))
+    else:
+        sys.stdout.write(format_doctor_text(result))
+    return result.code

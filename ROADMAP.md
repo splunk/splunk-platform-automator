@@ -25,7 +25,7 @@ Ship M1–M3 on one integration branch, then **3.0** when M3 is in. Do not cut a
 - [x] `spa init` scaffolds an env dir (example config, `.spa.yml`; no copy of `ansible/`) and migrates an existing clone env (config, inventory, Terraform state) (**M1** / **M2**)
 - [x] Separate env dirs against one clone `SPA_HOME` (**M1**)
 - [x] `bin/spa_venv.sh` shared venv (framework, envs, tests) + env `.envrc` for direnv; no Homebrew Ansible/Pydantic requirement (**M1**)
-- [x] `spa` commands use the shared prefix (`init`, `validate`, `provision`, `deploy`, `destroy`, `shell`, `run`, `aws`, `licenses`) (**M2**)
+- [x] `spa` commands use the shared prefix (`init`, `validate`, `provision`, `deploy`, `suspend`, `resume`, `destroy`, `hosts`, `shell`, `run`, `aws`, `licenses`) (**M2**)
 - [ ] Release tarball of the framework (exclude `tests/`, `.git`, lab `config/`) (**M3**)
 - [ ] `install.sh` (cup-style `curl | sh` or `gh release download`): default prefix `~/.local/spa`, or `--prefix` / `SPA_PREFIX`; creates the venv; puts `spa` on `PATH` (**M3**)
 - [ ] Documented extract-anywhere: unpack the tarball, set `SPA_HOME`, run `spa` from that tree (**M3**)
@@ -39,7 +39,8 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 
 - [x] Portable skills under [skills/spa/](skills/spa/) + Cursor `/spa-create-config` ([docs/Agent_Skills.md](docs/Agent_Skills.md))
 - [x] Agent-mode `spa`: auto-detect agent env, JSON envelope, `spa agent schema`, `--agent` / `--no-agent`, `-y` for destructive ops, parse-error hints
-- [x] Fold SSH/SCP into `spa shell` (`-l` host list, `-c` copy) — no `spash` alias
+- [x] `spa.api` backend session (`open_session` / `LocalSpaSession`) for the CLI and a future GUI; optional remote daemon later; skills stay on `spa`
+- [x] Fold SSH/SCP into `spa hosts` (`list` / `ssh` / `copy`); `spa shell` / `spa sh` remain SSH aliases (no `spa shell -l`)
 - [x] Map top-level [ansible/](ansible/) playbooks to `spa run` (and named `provision` / `deploy` / `destroy`) — every playbook is a main entry point; do not require raw `ansible-playbook` for day-to-day use
 - [ ] `spa skills install` (Claude / Cursor / Codex) from the shared prefix
 - [ ] `spa apps search` / `spa apps snippet`: search Splunkbase and print a copy-paste `splunk_app_deployment` app entry (`name`, `app_id`, `version`, `source`)
@@ -90,7 +91,8 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [x] Manual upgrade playbooks, including rolling IDXC and SHC (`ansible/upgrade_splunk*.yml`)
 - [ ] Include Windows UF in the upgrade host set
 - [ ] Config-driven version bump (`splunk_version` change → rolling upgrade) — same runbook-vs-playbook choice as the upgrade skill
-- [ ] Remove a host from config: decommission IDXC peer / SHC member, drop DS serverclass entries, then destroy the instance (apps already have `state: absent`; hosts do not)
+- [ ] Remove a host: `spa destroy --hosts NAME` runs decommission (IDXC peer / SHC member, DS serverclass), then tears down only those instances and drops them from config/state. `spa destroy --all` is whole-env teardown. Omitting both `--hosts` and `--all` is an error (do not treat “no hosts” as destroy-everything). No separate `decommission` command. Until this exists, `spa destroy --yes` remains whole-env.
+- [ ] `spa provision` must abort if the Terraform plan would **destroy or replace** an instance (host removed from `splunk_config.yml`, or AMI / instance-type replacement). Tell the operator to restore the host or use `spa destroy --hosts`. Creates and in-place updates still apply. Today, deleting a host from config and running provision **terminates that VM** with no Splunk decommission.
 - [ ] Cluster topology changes on a live site (RF/SF, add a site, move a host between clusters) — not just re-run bootstrap
 
 ## Testing

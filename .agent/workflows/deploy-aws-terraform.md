@@ -66,7 +66,25 @@ Open `$SPA_ENV_DIR/config/index.html`, or:
 spa run create_linkpage
 ```
 
-SSH: `spa shell <host>` when the host is in inventory.
+SSH: `spa hosts ssh <host>` or `spa sh <host>` when the host is in inventory.
+
+## Pause and Resume
+
+Stop EC2 compute while retaining Terraform state and EBS volumes:
+
+```bash
+spa suspend --yes
+```
+
+Resume waits for AWS instance health and rewrites `inventory/hosts` with the
+new public DNS names/IPs before returning:
+
+```bash
+spa resume --yes
+```
+
+This is not a destroy operation, but EBS volumes and other retained resources
+continue to incur charges. In agent mode both commands require `--yes`.
 
 ## Troubleshooting
 
@@ -92,8 +110,11 @@ In agent mode, destroy requires `-y` / `--yes`. This permanently deletes EC2 ins
 | `spa provision --yes && spa deploy` | Provision then deploy (stop if provision fails) |
 | `spa provision` / `spa provision --yes` | Provision infrastructure only |
 | `spa run wait_for_terraform_aws_hosts` | Verify host readiness |
-| `spa deploy` | Deploy Splunk (hosts already provisioned) |
+| `spa deploy` | Deploy Splunk (hosts already provisioned); `--hosts` for a subset |
+| `spa suspend --yes` | Stop EC2 instances; keep state and disks; optional `--hosts` |
+| `spa resume --yes` | Start EC2 instances; wait and refresh inventory; optional `--hosts` |
 | `spa run create_linkpage` | Host link page |
 | `spa destroy` | Destroy infrastructure |
-| `spa shell <host>` | SSH via inventory |
+| `spa hosts list --status` | Inventory names, roles, runtime state |
+| `spa hosts ssh <host>` / `spa sh <host>` | SSH via inventory |
 | `spa run --list` | Playbook catalog |

@@ -29,6 +29,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
         - [Outbound Rules](#outbound-rules)
   - [Upgrade](#upgrade)
     - [Migrate existing Splunk Platform Automator Environments from 1.x to 2.x](#migrate-existing-splunk-platform-automator-environments-from-1x-to-2x)
+    - [Migrate existing Splunk Platform Automator Environments from 2.x to 3.0](#migrate-existing-splunk-platform-automator-environments-from-2x-to-30)
   - [Removed Biased Language](#removed-biased-language)
   - [Building Windows Virtual Machine Template](#building-windows-virtual-machine-template)
   - [Framework Usage](#framework-usage)
@@ -45,13 +46,13 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
     - [Rerun provisioning](#rerun-provisioning)
     - [Login to the hosts](#login-to-the-hosts)
       - [Login to Splunk Browser Interface](#login-to-splunk-browser-interface)
-      - [Login with spa shell](#login-with-spa-shell)
+      - [Login with spa hosts](#login-with-spa-hosts)
       - [Login by SSH](#login-by-ssh)
     - [Environment Users](#environment-users)
       - [User vagrant](#user-vagrant)
       - [User splunk](#user-splunk)
     - [Copy files](#copy-files)
-      - [Copy with spa shell](#copy-with-spa-shell)
+      - [Copy with spa hosts](#copy-with-spa-hosts)
       - [Copy with vagrant scp](#copy-with-vagrant-scp)
         - [scp example](#scp-example)
     - [Ansible playbooks only](#ansible-playbooks-only)
@@ -231,6 +232,10 @@ git pull
 
 Please refer to the [Migration Guide](docs/Migrate_SPA_1x_to_2x.md).
 
+### Migrate existing Splunk Platform Automator Environments from 2.x to 3.0
+
+Please refer to the [Migration Guide](docs/Migrate_SPA_2x_to_3x.md).
+
 ## Removed Biased Language
 
 Please refer to the [Removed Biased Language Guide](docs/Removed_Biased_Language.md).
@@ -259,9 +264,19 @@ spa validate
 spa provision --yes && spa deploy
 ```
 
-Host links: `$SPA_ENV_DIR/config/index.html`. Destroy: `spa destroy --yes`. Details: [Multiple environments, one clone](#multiple-environments-one-clone) and [Option B](#option-b-aws-with-terraform-recommended-for-aws).
+Host links: `$SPA_ENV_DIR/config/index.html`. Temporarily stop AWS compute
+without deleting Terraform state or EBS volumes with `spa suspend`; bring it
+back and refresh changed public addresses in `inventory/hosts` with
+`spa resume`. EBS and other retained resources still incur charges while
+instances are stopped. Permanently remove the environment with
+`spa destroy --yes`. Details: [Multiple environments, one clone](#multiple-environments-one-clone) and [Option B](#option-b-aws-with-terraform-recommended-for-aws).
 
 **VirtualBox (local VMs).** Keep config in the **clone** (`config/splunk_config.yml`). Run Vagrant from the directory that contains `Vagrantfile` (`SPA_HOME`). An env dir from `spa init` does **not** get a Vagrantfile; `vagrant up` from `~/envs/...` is not supported yet.
+
+`spa provision`, `spa suspend`, `spa resume`, and `spa destroy` select their
+infrastructure provider from `splunk_config.yml`. AWS (`terraform.aws`) is
+implemented. VirtualBox lifecycle is deliberately not routed through `spa`
+yet; use `vagrant up` / `vagrant halt` from `SPA_HOME`.
 
 ```bash
 cd /path/to/splunk-platform-automator
@@ -529,21 +544,23 @@ spa run create_linkpage
 
 
 
-#### Login with spa shell
+#### Login with spa hosts
 
-`spa shell` looks up host details from the Ansible inventory. It handles keys, users, and IP addresses automatically. (`spash` was never shipped on master; 3.0 uses `spa shell` only.)
+`spa hosts ssh` looks up host details from inventory (keys, user, address). `spa sh` and `spa shell` are aliases of that SSH command.
 
 **Usage:**
 
 ```bash
-# SSH into a host (matches partial names)
-spa shell <hostname>
+# SSH into a host
+spa hosts ssh <hostname>
+spa sh <hostname>
 
-# List all available hosts
-spa shell -l
+# List hosts (add --status for runtime power and connectivity)
+spa hosts list
+spa hosts list --status
 
 # Pass extra arguments to SSH
-spa shell idx1 -- -L 8089:localhost:8089
+spa hosts ssh idx1 -- -L 8089:localhost:8089
 ```
 
 From an env dir the generated `.envrc` adds `$SPA_HOME/bin` to `PATH`, so plain `spa` works. If it is not found, or runs from a different checkout than you expect, `spa doctor` reports which one wins — "not on PATH" usually means the direnv shell hook is not loaded in that shell (`spa doctor --fix-direnv`).
@@ -601,17 +618,25 @@ alias
 
 
 
-#### Copy with spa shell
+#### Copy with spa hosts
 
-`spa shell -c` copies files to and from hosts using scp. It automatically resolves the connection details from the inventory.
+`spa hosts copy` copies files to and from hosts using scp. The syntax is `spa hosts copy SRC [SRC ...] DST`, where a remote side is written `HOST:PATH` with the inventory name from `spa hosts list`. User and SSH key come from inventory. `spa shell -c` still works.
 
 ```bash
 # Copy a local file to a remote host
-spa shell -c local_file.txt idx1:/tmp/
+spa hosts copy local_file.txt idx1:/tmp/
 
 # Copy a remote file to the current directory
-spa shell -c idx1:/opt/splunk/etc/system/local/server.conf .
+spa hosts copy idx1:/opt/splunk/etc/system/local/server.conf .
+
+# Copy a directory
+spa hosts copy -r ./myapp idx1:/tmp/
+
+# Pass other scp flags after --
+spa hosts copy -- -p local_file.txt idx1:/tmp/
 ```
+
+One remote host per run; repeat the command for the next host.
 
 
 

@@ -28,6 +28,18 @@ spa provision --yes && spa deploy
 
 `deploy_site.yml` runs `preflight_deploy.yml` first. It probes each host for `python3`, flushes stale Ansible fact cache when the cached interpreter no longer matches (for example after switching OS/AMI while reusing hostnames like `cm` and `idx1`), and verifies Ansible connectivity before the main deploy. Terraform provisioning also flushes cache for affected hosts when inventory is regenerated.
 
+For AWS environments, `spa suspend --yes` stops EC2 instances without deleting
+Terraform state or EBS volumes. `spa resume --yes` starts them, waits for AWS
+health, and refreshes `inventory/hosts` because public addresses may change.
+Pass `--hosts idx1` or `--hosts indexer` to limit suspend, resume, or `spa deploy`
+to some hosts. `spa hosts list --status` shows names and runtime state; `spa sh idx1`
+(or `spa hosts ssh idx1`) opens SSH. Human aliases include `spa val` and `spa dep`;
+skills should keep full names.
+
+Retained resources continue to incur charges. Use `spa destroy --yes` only for
+permanent teardown. Do not delete a live host from `splunk_config.yml` and run
+`spa provision` — that terminates the instance without Splunk decommission.
+
 To skip preflight: `ap ansible/deploy_site.yml --skip-tags preflight`. To disable cache flush on provision: `-e spa_flush_fact_cache_on_provision=false`.
 
 ## Architecture design references

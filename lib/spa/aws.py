@@ -753,32 +753,38 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: Optional[List[str]] = None) -> int:
-    args = build_parser().parse_args(argv)
-    as_json = args.json
+def _aws_result(data: Dict[str, Any], error: Optional[str] = None):
+    from spa.api import CommandResult
+
+    ok = bool(data.get("ok", True)) if isinstance(data, dict) else True
+    return CommandResult(
+        ok=ok if error is None else False,
+        data=data,
+        error=error or (None if ok else data.get("error")),
+        code=0 if (ok and not error) else 1,
+    )
+
+
+def execute(args: Any):
+    from spa.api import CommandResult
 
     if args.check_auth:
-        session = _session()
-        result = check_auth(session)
-        _output(result, as_json)
-        return 0 if result.get("ok") else 1
+        return _aws_result(check_auth(_session()))
 
     if args.list_regions:
-        session = _session()
-        result = list_regions(session)
-        _output(result, as_json)
-        return 0 if result.get("ok") else 1
+        return _aws_result(list_regions(_session()))
 
     if not args.region and not args.list_regions:
-        _err("--region is required for this operation (except --list-regions)")
-        return 1
+        return CommandResult(
+            ok=False,
+            error="--region is required for this operation (except --list-regions)",
+            code=1,
+        )
 
     session = _session(args.region)
 
     if args.survey:
-        result = survey(session, args.region)
-        _output(result, as_json)
-        return 0 if result.get("ok") else 1
+        return _aws_result(survey(session, args.region))
 
     if args.list_amis:
         if args.os:
@@ -787,11 +793,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             else:
                 normalized = normalize_os_key(args.os)
                 if normalized not in RECOMMENDED_OS:
-                    _err(
-                        f"Unknown --os {args.os}. Valid: {', '.join(valid_os_keys())}, all "
-                        f"(aliases: {', '.join(OS_ALIASES)})"
+                    return CommandResult(
+                        ok=False,
+                        error=(
+                            "Unknown --os %s. Valid: %s, all (aliases: %s)"
+                            % (args.os, ", ".join(valid_os_keys()), ", ".join(OS_ALIASES))
+                        ),
+                        code=1,
                     )
-                    return 1
                 os_keys = [normalized]
             combined: Dict[str, Any] = {"ok": True, "region": args.region, "items": []}
             for key in os_keys:
@@ -805,69 +814,82 @@ def main(argv: Optional[List[str]] = None) -> int:
                 else:
                     for item in entry.get("items", []):
                         combined["items"].append({**item, "os": key, "label": entry.get("label")})
-            _output(combined, as_json)
-            return 0 if combined.get("ok") else 1
+            return _aws_result(combined)
         owners = args.owners.split(",") if args.owners else None
-        result = list_amis(session, args.region, args.name_filter, owners, args.max_results)
-        _output(result, as_json)
-        return 0 if result.get("ok") else 1
+        return _aws_result(list_amis(session, args.region, args.name_filter, owners, args.max_results))
 
     if args.latest_ami:
         if not args.os:
-            _err("--os is required for --latest-ami (rhel, ubuntu, amazon_linux, debian, or all)")
-            return 1
+            return CommandResult(
+                ok=False,
+                error="--os is required for --latest-ami (rhel, ubuntu, amazon_linux, debian, or all)",
+                code=1,
+            )
         if args.os == "all":
-            result = recommended_os_amis(session, args.region)
-        else:
-            normalized = normalize_os_key(args.os)
-            if normalized not in RECOMMENDED_OS:
-                _err(
-                    f"Unknown --os {args.os}. Valid: {', '.join(valid_os_keys())}, all "
-                    f"(aliases: {', '.join(OS_ALIASES)})"
-                )
-                return 1
-            result = resolve_recommended_os_ami(session, args.region, normalized, max_results=1)
-        _output(result, as_json)
-        return 0 if result.get("ok") else 1
+            return _aws_result(recommended_os_amis(session, args.region))
+        normalized = normalize_os_key(args.os)
+        if normalized not in RECOMMENDED_OS:
+            return CommandResult(
+                ok=False,
+                error=(
+                    "Unknown --os %s. Valid: %s, all (aliases: %s)"
+                    % (args.os, ", ".join(valid_os_keys()), ", ".join(OS_ALIASES))
+                ),
+                code=1,
+            )
+        return _aws_result(resolve_recommended_os_ami(session, args.region, normalized, max_results=1))
 
     if args.list_instance_types:
-        result = list_instance_types(session, args.region, family=args.family, curated=not args.family)
-        _output(result, as_json)
-        return 0 if result.get("ok") else 1
+        return _aws_result(
+            list_instance_types(session, args.region, family=args.family, curated=not args.family)
+        )
 
     if args.list_key_pairs:
-        result = list_key_pairs(session, args.region)
-        _output(result, as_json)
-        return 0 if result.get("ok") else 1
+        return _aws_result(list_key_pairs(session, args.region))
 
     if args.list_security_groups:
-        result = list_security_groups(session, args.region)
-        _output(result, as_json)
-        return 0 if result.get("ok") else 1
+        return _aws_result(list_security_groups(session, args.region))
 
     if args.describe_ami:
         if not args.ami_id:
-            _err("--ami-id is required for --describe-ami")
-            return 1
-        result = describe_ami(session, args.region, args.ami_id)
-        _output(result, as_json)
-        return 0 if result.get("ok") else 1
+            return CommandResult(ok=False, error="--ami-id is required for --describe-ami", code=1)
+        return _aws_result(describe_ami(session, args.region, args.ami_id))
 
     if args.validate:
         sg = parse_security_groups(args.security_groups)
-        result = validate_selections(
-            session,
-            args.region,
-            ami_id=args.ami_id,
-            key_name=args.key_name,
-            security_groups=sg,
-            instance_type=args.instance_type,
+        return _aws_result(
+            validate_selections(
+                session,
+                args.region,
+                ami_id=args.ami_id,
+                key_name=args.key_name,
+                security_groups=sg,
+                instance_type=args.instance_type,
+            )
         )
-        _output(result, as_json)
-        return 0 if result.get("ok") else 1
 
-    _err("No operation specified. Use --check-auth, --list-regions, --latest-ami, --list-amis, --validate, or --survey.")
-    return 1
+    return CommandResult(
+        ok=False,
+        error=(
+            "No operation specified. Use --check-auth, --list-regions, "
+            "--latest-ami, --list-amis, --validate, or --survey."
+        ),
+        code=1,
+    )
+
+
+def execute_argv(argv: Optional[List[str]] = None):
+    return execute(build_parser().parse_args(argv))
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = build_parser().parse_args(argv)
+    result = execute(args)
+    if result.data is not None:
+        _output(result.data, args.json)
+    elif result.error:
+        _err(result.error)
+    return result.code
 
 
 if __name__ == "__main__":

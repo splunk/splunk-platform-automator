@@ -5,6 +5,10 @@ import subprocess
 import sys
 
 
+class ShellError(RuntimeError):
+    """Inventory or host lookup failed (library path; CLI still may sys.exit)."""
+
+
 def apply_spa_env():
     """Export SPA_HOME / SPA_ENV_DIR / ANSIBLE_* so inventory uses the env, not the clone."""
     from spa.executil import apply_paths_env
@@ -33,14 +37,11 @@ def get_inventory_data():
              output = output[output.find('{'):]
         return json.loads(output)
     except subprocess.CalledProcessError as e:
-        print(f"Error running ansible-inventory: {e.stderr}", file=sys.stderr)
-        sys.exit(1)
+        raise ShellError("Error running ansible-inventory: %s" % (e.stderr or e)) from e
     except FileNotFoundError as e:
-        print(f"Error: {e.filename} not found. Run: spa doctor", file=sys.stderr)
-        sys.exit(1)
+        raise ShellError("Error: %s not found. Run: spa doctor" % (e.filename or "ansible-inventory")) from e
     except json.JSONDecodeError as e:
-        print(f"Error parsing inventory JSON: {e}", file=sys.stderr)
-        sys.exit(1)
+        raise ShellError("Error parsing inventory JSON: %s" % e) from e
 
 def get_host_vars(inventory, hostname):
     """Finds variables for a specific host in the inventory."""
@@ -110,170 +111,147 @@ def check_ansible_status(hosts):
         
     return status_map
 
-def verify_aws_config():
-    """Checks if AWS is configured in config/splunk_config.yml."""
-    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config', 'splunk_config.yml')
-    if not os.path.exists(config_path):
-        return False
-        
-    try:
-        with open(config_path, 'r') as f:
-            lines = f.readlines()
-            
-        in_terraform = False
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith('#'): continue
-            
-            # Simple hierarchical check
-            if line.startswith('terraform:'):
-                in_terraform = True
-                continue
-                
-            if in_terraform:
-                # Check for indented aws: key
-                if stripped.startswith('aws:') and (len(line) - len(line.lstrip()) > 0):
-                    return True
-                # Break if we leave terraform block (start of new block at root level)
-                if line[0].isalpha(): # simplistic check for root keys
-                   in_terraform = False
-                   
-    except Exception:
-        pass
-        
-    return False
+def get_provider_status(paths=None):
+    """Return provider status without coupling shell UX to a cloud SDK."""
+    from spa.paths import resolve_spa_paths
+    from spa.providers import ProviderError, get_provider
 
-def check_aws_status():
-    """Checks AWS instance status using aws cli."""
-    aws_map = {}
-    
-    if not verify_aws_config():
-        return aws_map
-        
+    paths = paths or resolve_spa_paths()
     try:
-        # Check if aws is available
-        subprocess.run(['aws', '--version'], check=True, capture_output=True)
-        
-        print("Checking AWS status...", file=sys.stderr)
-        # Get instances with Name tag and private IP
-        cmd = [
-            'aws', 'ec2', 'describe-instances',
-            '--query', 'Reservations[*].Instances[*].{InstanceId:InstanceId, PrivateIpAddress:PrivateIpAddress, PublicIpAddress:PublicIpAddress, State:State.Name, Tags:Tags}',
-            '--output', 'json'
-        ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode == 0:
-            data = json.loads(result.stdout)
-            # Flatten the list of lists
-            instances = [item for sublist in data for item in sublist]
-            
-            for inst in instances:
-                state = inst.get('State')
-                private_ip = inst.get('PrivateIpAddress')
-                public_ip = inst.get('PublicIpAddress')
-                tags = inst.get('Tags', [])
-                name = None
-                for tag in tags:
-                    if tag['Key'] == 'Name':
-                        name = tag['Value']
-                        break
-                
-                # Map by Private IP (common ansible_host)
-                if private_ip:
-                    aws_map[private_ip] = state
-                # Map by Public IP
-                if public_ip:
-                    aws_map[public_ip] = state
-                # Map by Name tag (if matches inventory alias)
-                if name:
-                     if name not in aws_map:
-                         aws_map[name] = state
-                         
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        # AWS CLI not installed or not configured, ignore
-        pass
-    except json.JSONDecodeError:
-        pass
-        
-    return aws_map
+        provider = get_provider(paths)
+    except ProviderError as exc:
+        return {"name": None, "hosts": {}, "error": str(exc)}
+    status_fn = getattr(provider, "host_status", None)
+    if status_fn is None:
+        return {
+            "name": provider.name,
+            "hosts": {},
+            "error": "%s provider does not expose host status." % provider.name,
+        }
+    try:
+        return {"name": provider.name, "hosts": status_fn(), "error": None}
+    except ProviderError as exc:
+        return {"name": provider.name, "hosts": {}, "error": str(exc)}
 
-def list_hosts(inventory, verbose=False):
-    """Lists all hosts in the inventory with their roles."""
+
+def _provider_record(host, inventory, provider_hosts):
+    host_vars = get_host_vars(inventory, host)
+    identifiers = (
+        host,
+        host_vars.get("ansible_host"),
+        host_vars.get("public_dns_name"),
+        host_vars.get("public_ip"),
+        host_vars.get("private_dns_name"),
+        host_vars.get("private_ip"),
+        host_vars.get("instance_id"),
+    )
+    for identifier in identifiers:
+        if identifier and str(identifier) in provider_hosts:
+            return provider_hosts[str(identifier)]
+    return None
+
+
+def host_report(inventory, verbose=False, paths=None, provider_snapshot=None):
+    """Return hosts plus optional provider and Ansible runtime status."""
     hosts = set()
-    if '_meta' in inventory and 'hostvars' in inventory['_meta']:
-        hosts.update(inventory['_meta']['hostvars'].keys())
+    if "_meta" in inventory and "hostvars" in inventory["_meta"]:
+        hosts.update(inventory["_meta"]["hostvars"].keys())
     else:
-        # Fallback if _meta is not present
         for group in inventory:
-             if group == "_meta": continue
-             if 'hosts' in inventory[group]:
-                 hosts.update(inventory[group]['hosts'])
-    
+            if group == "_meta":
+                continue
+            if "hosts" in inventory[group]:
+                hosts.update(inventory[group]["hosts"])
+
     hosts_sorted = sorted(list(hosts))
-    
     ansible_status = {}
-    aws_status = {}
-    
+    provider = {"name": None, "hosts": {}, "error": None}
     if verbose:
-        # Check AWS First
-        aws_status = check_aws_status()
-        
-        # Determine which hosts to ping with Ansible
+        provider = provider_snapshot or get_provider_status(paths)
+        provider_hosts = provider.get("hosts") or {}
         hosts_to_ping = []
         for host in hosts_sorted:
-            # Resolve AWS status for decision
-            w_stat = aws_status.get(host)
-            if not w_stat:
-                 host_vars = get_host_vars(inventory, host)
-                 ip = host_vars.get('ansible_host')
-                 if ip:
-                     w_stat = aws_status.get(ip)
-            
-            # If we know AWS status is NOT running, skip ping.
-            # "running" is the standard EC2 state name for ON.
-            # If w_stat is None (not AWS or unknown), we ping.
-            if w_stat and w_stat != 'running':
-                ansible_status[host] = 'N/A'
+            record = _provider_record(host, inventory, provider_hosts)
+            if record and record.get("reachable") is False:
+                ansible_status[host] = "N/A"
             else:
                 hosts_to_ping.append(host)
-        
         if hosts_to_ping:
             ping_results = check_ansible_status(hosts_to_ping)
             ansible_status.update(ping_results)
 
+    rows = []
     for host in hosts_sorted:
         roles = []
         for group in inventory:
-            if group.startswith('role_'):
-                if 'hosts' in inventory[group] and host in inventory[group]['hosts']:
-                    # Format: role_deployment_server -> Deployment Server
-                    role_name = group[5:].replace('_', ' ').title()
+            if group.startswith("role_"):
+                if "hosts" in inventory[group] and host in inventory[group]["hosts"]:
+                    role_name = group[5:].replace("_", " ").title()
                     roles.append(role_name)
-        
+        roles.sort()
+        row = {"name": host, "roles": roles}
+        if verbose:
+            row["ansible"] = ansible_status.get(host, "N/A")
+            record = _provider_record(host, inventory, provider.get("hosts") or {})
+            if record:
+                row["provider"] = provider.get("name")
+                row["provider_status"] = record.get("state")
+        rows.append(row)
+    return {
+        "provider": provider.get("name"),
+        "provider_error": provider.get("error"),
+        "hosts": rows,
+    }
+
+
+def host_listing(inventory, verbose=False, paths=None, provider_snapshot=None):
+    """Return structured host rows (compatibility wrapper)."""
+    return host_report(
+        inventory,
+        verbose=verbose,
+        paths=paths,
+        provider_snapshot=provider_snapshot,
+    )["hosts"]
+
+
+def filter_report(report, names):
+    """Keep only named hosts in a host_report payload."""
+    if not names:
+        return report
+    wanted = set(names)
+    filtered = dict(report)
+    filtered["hosts"] = [row for row in report.get("hosts") or [] if row.get("name") in wanted]
+    filtered["resolved_hosts"] = list(names)
+    return filtered
+
+
+def list_hosts(inventory, verbose=False, paths=None, names=None):
+    """Lists all hosts in the inventory with their roles."""
+    report = filter_report(
+        host_report(inventory, verbose=verbose, paths=paths),
+        names,
+    )
+    if verbose and report.get("provider"):
+        print("Checking %s status..." % report["provider"].upper(), file=sys.stderr)
+    if verbose and report.get("provider_error"):
+        print("Warning: %s" % report["provider_error"], file=sys.stderr)
+    for row in report["hosts"]:
         roles_str = ""
-        if roles:
-            roles.sort()
-            roles_str = f" ({', '.join(roles)})"
-        
+        if row.get("roles"):
+            roles_str = " (%s)" % ", ".join(row["roles"])
         extra_info = ""
         if verbose:
-            # Determine Ansible Status
-            a_stat = ansible_status.get(host, "N/A")
-            
-            # Determine AWS Status
-            # Re-resolve for display
-            w_stat = aws_status.get(host)
-            if not w_stat:
-                 host_vars = get_host_vars(inventory, host)
-                 ip = host_vars.get('ansible_host')
-                 if ip:
-                     w_stat = aws_status.get(ip)
-            
-            w_stat_str = f", AWS: {w_stat}" if w_stat else ""
-            extra_info = f" - Ansible: {a_stat}{w_stat_str}"
-            
-        print(f"{host}{roles_str}{extra_info}")
+            provider_status = ""
+            if row.get("provider_status"):
+                provider_status = ", %s: %s" % (
+                    str(row.get("provider") or "provider").upper(),
+                    row["provider_status"],
+                )
+            extra_info = " - Ansible: %s%s" % (
+                row.get("ansible", "N/A"),
+                provider_status,
+            )
+        print("%s%s%s" % (row["name"], roles_str, extra_info))
 
 def resolve_connection_details(target_host, inventory):
     """Resolves a target host alias to connection details."""
@@ -307,30 +285,107 @@ def resolve_connection_details(target_host, inventory):
         'ssh_common_args': ssh_common_args
     }
 
+COPY_EXAMPLES = """Path syntax:
+  HOST:PATH   a path on an env host, using the inventory name (idx1:/tmp/)
+  PATH        a path on this machine
+
+Examples:
+  spa hosts copy app.tgz idx1:/tmp/
+  spa hosts copy idx1:/opt/splunk/etc/system/local/server.conf .
+  spa hosts copy cm:/opt/splunk/var/log/splunk/splunkd.log ./cm-splunkd.log
+  spa hosts copy -r ./myapp idx1:/tmp/
+  spa hosts copy -- -p app.tgz idx1:/tmp/         (other scp flags after --)
+
+Names come from spa hosts list; user and SSH key come from the inventory.
+One remote host per run; repeat the command for the next host."""
+
+
+def run_scp(cmd_args, inventory=None):
+    """Exec scp, resolving HOST:PATH against inventory. scp flags may lead."""
+    if inventory is None:
+        inventory = get_inventory_data()
+    all_hosts = []
+    if '_meta' in inventory and 'hostvars' in inventory['_meta']:
+        all_hosts = list(inventory['_meta']['hostvars'].keys())
+
+    scp_cmd = ['scp']
+    resolved_details = None
+    processed_args = []
+    options = []
+
+    for arg in cmd_args:
+        # Simple heuristic for remote path: has colon and starts with a known host
+        if ':' in arg:
+            parts = arg.split(':', 1)
+            candidate_host = parts[0]
+            path = parts[1]
+
+            if candidate_host in all_hosts:
+                if not resolved_details:
+                    resolved_details = resolve_connection_details(candidate_host, inventory)
+
+                if resolved_details:
+                    # Replace alias with real connection string
+                    # user@host:path
+                    remote_str = resolved_details['real_host']
+                    if resolved_details['user']:
+                        remote_str = f"{resolved_details['user']}@{remote_str}"
+                    processed_args.append(f"{remote_str}:{path}")
+                    continue
+        # scp uses getopt: its own flags must come before the paths.
+        if arg.startswith('-') and not processed_args:
+            options.append(arg)
+            continue
+
+        processed_args.append(arg)
+
+    # Build scp command
+    if resolved_details:
+        if resolved_details['key_file']:
+            if os.path.exists(resolved_details['key_file']):
+                scp_cmd.extend(['-i', resolved_details['key_file']])
+            else:
+                print(f"Warning: Private key file '{resolved_details['key_file']}' not found.", file=sys.stderr)
+
+        if resolved_details['ssh_common_args']:
+            scp_cmd.extend(resolved_details['ssh_common_args'].split())
+
+    # Add strict host key checking=no for convenience
+    scp_cmd.extend(['-o', 'StrictHostKeyChecking=no'])
+    scp_cmd.extend(['-o', 'UserKnownHostsFile=/dev/null'])
+
+    scp_cmd.extend(options)
+    scp_cmd.extend(processed_args)
+
+    print(f"Copying: {' '.join(scp_cmd)}")
+    os.execvp('scp', scp_cmd)
+
+
 def main(argv=None):
     apply_spa_env()
 
     parser = argparse.ArgumentParser(
         prog="spa shell",
-        description="SSH or SCP into/with an Ansible host.",
+        description="SSH or SCP using inventory (alias of spa hosts ssh / spa hosts copy).",
+        epilog="Copy: spa shell -c SRC DST, where a remote side is HOST:PATH\n"
+        "  spa shell -c app.tgz idx1:/tmp/\n"
+        "  spa shell -c idx1:/opt/splunk/etc/system/local/server.conf .\n",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("host", nargs='?', help="The name of the host to connect to or copy source/destination")
-    parser.add_argument("-l", "--list", action="store_true", help="List available hosts")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output (with -l), performs live check for status")
-    parser.add_argument("-c", "--copy", action="store_true", help="Use scp to copy files")
+    parser.add_argument("host", nargs='?', help="Inventory hostname to SSH to, or first scp path with -c")
+    parser.add_argument("-c", "--copy", action="store_true", help="Use scp to copy files (SRC DST)")
     parser.add_argument("args", nargs=argparse.REMAINDER, help="Additional arguments to pass to ssh/scp")
     args = parser.parse_args(argv)
-
-    if args.list:
-        inventory = get_inventory_data()
-        list_hosts(inventory, verbose=args.verbose)
-        sys.exit(0)
 
     if not args.host:
         parser.print_help()
         sys.exit(1)
 
-    inventory = get_inventory_data()
+    try:
+        inventory = get_inventory_data()
+    except ShellError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
     
     # Check if host is known
     all_hosts = []
@@ -338,56 +393,15 @@ def main(argv=None):
         all_hosts = list(inventory['_meta']['hostvars'].keys())
 
     if args.copy:
-        # SCP Mode
-        cmd_args = [args.host]
-        if args.args:
-            cmd_args.extend(args.args)
-            
-        scp_cmd = ['scp']
-        resolved_details = None
-        processed_args = []
-        
-        for arg in cmd_args:
-            # Simple heuristic for remote path: has colon and starts with a known host
-            if ':' in arg:
-                parts = arg.split(':', 1)
-                candidate_host = parts[0]
-                path = parts[1]
-                
-                if candidate_host in all_hosts:
-                    if not resolved_details:
-                        resolved_details = resolve_connection_details(candidate_host, inventory)
-                    
-                    if resolved_details:
-                        # Replace alias with real connection string
-                        # user@host:path
-                        remote_str = resolved_details['real_host']
-                        if resolved_details['user']:
-                            remote_str = f"{resolved_details['user']}@{remote_str}"
-                        processed_args.append(f"{remote_str}:{path}")
-                        continue
-            
-            processed_args.append(arg)
-            
-        # Build scp command
-        if resolved_details:
-             if resolved_details['key_file']:
-                if os.path.exists(resolved_details['key_file']):
-                    scp_cmd.extend(['-i', resolved_details['key_file']])
-                else:
-                     print(f"Warning: Private key file '{resolved_details['key_file']}' not found.", file=sys.stderr)
-             
-             if resolved_details['ssh_common_args']:
-                  scp_cmd.extend(resolved_details['ssh_common_args'].split())
-
-        # Add strict host key checking=no for convenience
-        scp_cmd.extend(['-o', 'StrictHostKeyChecking=no'])
-        scp_cmd.extend(['-o', 'UserKnownHostsFile=/dev/null'])
-
-        scp_cmd.extend(processed_args)
-        
-        print(f"Copying: {' '.join(scp_cmd)}")
-        os.execvp('scp', scp_cmd)
+        cmd_args = [args.host, *(args.args or [])]
+        if len(cmd_args) < 2:
+            print(
+                "spa shell -c needs a source and a destination, "
+                "for example: spa shell -c app.tgz idx1:/tmp/",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        run_scp(cmd_args, inventory)
 
     else:
         # SSH Mode

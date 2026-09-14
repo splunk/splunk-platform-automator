@@ -7,7 +7,7 @@ description: >-
   SVA topology, role placement, OS/SSH, spa aws discovery, licenses,
   apps, validation. In Cursor invoke with /spa-create-config.
 license: Proprietary
-compatibility: Requires SPA repo root (ansible.cfg, bin/). Optional boto3 for AWS discovery.
+compatibility: Requires SPA repo root (ansible.cfg, bin/). Boto3 is required for AWS discovery and suspend/resume.
 metadata:
   product: splunk-platform-automator
   version: "1.0.0"
@@ -285,6 +285,10 @@ spa provision --yes && spa deploy
 ```
 
 Destroy: `spa destroy --yes`
+
+Pause AWS compute while retaining Terraform state and EBS volumes:
+`spa suspend --yes`. Resume and refresh changed inventory addresses:
+`spa resume --yes`. Retained resources continue to incur charges.
 
 Optional: distill app-scope tests via [spa-add-test-scenario](../spa-add-test-scenario/SKILL.md).
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import subprocess
 
@@ -129,9 +129,26 @@ def resolve(name: str, paths: Optional[SpaPaths] = None, extra_dir: Optional[str
     raise PlaybookError("Unknown playbook: %s" % name)
 
 
-def run_playbook(playbook: Path, paths: SpaPaths, extra: Optional[List[str]] = None) -> int:
+def run_playbook(
+    playbook: Path,
+    paths: SpaPaths,
+    extra: Optional[List[str]] = None,
+    on_progress: Optional[Callable[[Dict[str, str]], None]] = None,
+) -> int:
     apply_paths_env(paths)
     cmd = [tool_path(paths, "ansible-playbook"), str(playbook)]
     if extra:
         cmd.extend(extra)
-    return subprocess.run(cmd, cwd=str(paths.spa_home)).returncode
+    if on_progress is None:
+        return subprocess.run(cmd, cwd=str(paths.spa_home)).returncode
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(paths.spa_home),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        on_progress({"type": "line", "stream": "stdout", "line": line.rstrip("\n")})
+    return proc.wait()
