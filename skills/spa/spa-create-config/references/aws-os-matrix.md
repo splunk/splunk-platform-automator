@@ -4,7 +4,7 @@
 
 ## Recommended OS choices (pick one)
 
-Use the **latest** AMI in your region (AMIs expire). Discover with `bin/splunk_config_aws.py` or AWS console — do not rely on example AMI IDs without verification.
+Use the **latest** AMI in your region (AMIs expire). Discover with `spa aws` or AWS console — do not rely on example AMI IDs without verification.
 
 **SPA preference order:** RHEL → Ubuntu LTS → Amazon Linux → Debian (Debian is least tested).
 
@@ -18,12 +18,12 @@ Use the **latest** AMI in your region (AMIs expire). Discover with `bin/splunk_c
 Discover latest AMI (no hardcoded versions):
 
 ```bash
-python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os rhel --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os ubuntu --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os amazon_linux --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os debian --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os all --json
-python3 bin/splunk_config_aws.py --survey --region eu-central-1 --json
+spa aws --region eu-central-1 --latest-ami --os rhel --json
+spa aws --region eu-central-1 --latest-ami --os ubuntu --json
+spa aws --region eu-central-1 --latest-ami --os amazon_linux --json
+spa aws --region eu-central-1 --latest-ami --os debian --json
+spa aws --region eu-central-1 --latest-ami --os all --json
+spa aws --survey --region eu-central-1 --json
 ```
 
 | OS | Resolution method |
@@ -120,7 +120,7 @@ terraform:
 
 ## AMI → ssh_username heuristic
 
-`splunk_config_aws.py --describe-ami` suggests username from AMI name:
+`spa aws --describe-ami` suggests username from AMI name:
 
 - Contains `ubuntu` → `ubuntu`
 - Contains `debian` → `admin`

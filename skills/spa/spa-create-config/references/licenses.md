@@ -9,17 +9,27 @@ See [README.md](README.md) Framework Installation — link or copy `Splunk_Enter
 From repo root:
 
 ```bash
-python3 bin/splunk_config_licenses.py --json
-python3 bin/splunk_config_licenses.py --config config/splunk_config.yml --json
+spa licenses --json
+spa licenses --config config/splunk_config.yml --json
 ```
 
 Returns:
 
-- `discovered_files` — all `*.lic` / `*.License` in Software
-- `proposed_splunk_license_file` — suggested list for `splunk_defaults`
+- `discovered_files` — sanitized metadata for all `*.lic` / `*.License`: type,
+  group, normalized add-ons, creation/expiration dates, capabilities, and status
+- `required_capabilities` — `enterprise`, plus `itsi` / `es` selected by config
+- `selected_licenses` — newest usable files that collectively meet requirements
+- `recommended_additions` — selected files not already in the config
+- `unsatisfied_requirements` — capabilities no valid file provides
+- `proposed_splunk_license_file` — content-based suggested list for `splunk_defaults`
 - `yaml_snippet` — paste into `splunk_defaults`
-- `itsi_in_config` — derived from `splunk_app_deployment` when `--config` is set
-- `warnings` — e.g. ITSI without `license_manager` or missing ITSI license file
+- `itsi_in_config` / `es_in_config` — derived from installed app entries
+- `license_validation` — errors for missing, invalid, expired, or wrong-entitlement
+  configured files; warnings for expiry within 30 days or unknown expiration
+
+The scanner does not trust filenames. It parses the license XML but never emits
+the raw payload, signature, or GUID. A canonical filename is only a final
+tie-breaker between otherwise equivalent licenses.
 
 ## When to ask the user
 
@@ -28,18 +38,24 @@ Returns:
 | Lab / app lab / production-like | Ask whether to add licenses when files exist in Software |
 | `license_manager` role on any host | **Required** — `splunk_license_file` must be set (schema) |
 | `splunk_license_file` in `splunk_defaults` | **Required** — `license_manager` role on a host (schema); co-locate on `cm` or `mc` for labs |
-| ITSI in `splunk_app_deployment` | Propose `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` if present; require `license_manager` role |
+| ITSI in `splunk_app_deployment` | Require Enterprise + ITSI capabilities; require `license_manager` role |
+| ES app ID `263` / exact Enterprise Security name | Require Enterprise + ES capabilities; warn if no `license_manager` role |
 | Config / infra test, trial only | Omit both `splunk_license_file` and `license_manager` (Splunk trial applies) |
-| No files in Software | Warn; user may use trial or add licenses before deploy |
+| Missing, invalid, or expired file | Do not propose it; fail `spa validate --check-licenses` if configured |
 
-## Canonical filenames (SPA examples)
+## License selection
 
-| File | When to include |
-|------|-----------------|
-| `Splunk_Enterprise.lic` | Almost all lab/production configs when file exists |
-| `Splunk_ITSI.lic` | When ITSI app (`premium_app: itsi` or app_id `1841`) is in config |
+Select by parsed capability, not by filename:
 
-Other `*.lic` names in Software are listed in `discovered_files`; only add to config if the user explicitly needs them.
+1. Exclude invalid and expired files.
+2. Prefer a file that satisfies more required capabilities.
+3. Prefer perpetual, then valid, then expiring, then unknown-expiration.
+4. Among equivalent dated licenses, prefer the latest expiration.
+5. Keep multiple files when they provide complementary capabilities.
+
+Do not assume that the newest date makes multiple stackable licenses
+interchangeable. The proposal chooses one best candidate per required
+capability; review additional commercial stack entitlements with the user.
 
 ## YAML examples
 
@@ -61,14 +77,14 @@ splunk_defaults:
 
 ## Skill workflow
 
-1. Run `splunk_config_licenses.py` after Phase 6 (apps) so ITSI detection is accurate.
+1. Run `spa licenses` after Phase 6 (apps) so ITSI detection is accurate.
 2. If `proposed_splunk_license_file` is non-empty, ask the user (AskQuestion if available): add to config for lab?
 3. **If adding `splunk_license_file`**, also add `license_manager` to a host in Phase 5b (co-locate on `cm` or `mc` per [role-placement.md](role-placement.md)). Do not write license file without LM role.
-4. If ITSI and no `license_manager`, prompt to add LM role (or co-locate per [role-placement.md](role-placement.md)).
+4. If ITSI or ES and no `license_manager`, prompt to add LM role (or co-locate per [role-placement.md](role-placement.md)).
 5. **Trial-only labs** — omit both `splunk_license_file` and `license_manager`.
 6. Include chosen licenses in Phase 7 write under `splunk_defaults`.
 
 ## Out of scope
 
-- Downloading or validating license entitlements
+- Downloading licenses or validating them against Splunk licensing services
 - Splunkbase license acquisition

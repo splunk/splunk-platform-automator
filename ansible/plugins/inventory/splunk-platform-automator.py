@@ -185,7 +185,7 @@ class InventoryModule(BaseInventoryPlugin):
             default_rel = '../apps' if env_var == 'SPA_APPS_DIR' else '../Software'
             return str(resolve_shared_data_dir(
                 paths.spa_home,
-                paths.spa_lab_dir,
+                paths.spa_env_dir,
                 configured=configured or default_rel,
                 env_var=env_var,
                 home_leaf=home_leaf,
@@ -227,7 +227,7 @@ class InventoryModule(BaseInventoryPlugin):
             raise AnsibleParserError("Missing required python libraries: {}. Please run 'pip install -r requirements.txt' to install them.".format(", ".join(missing)))
 
     def _init_inventory(self):
-        # Lab inventory (SPA_LAB_DIR/inventory). Clone-equal keeps today's layout.
+        # Lab inventory (SPA_ENV_DIR/inventory). Clone-equal keeps today's layout.
         inventory_dir = str(self.spa_paths.inventory_dir)
 
         if not os.path.isdir(inventory_dir):
@@ -284,7 +284,7 @@ class InventoryModule(BaseInventoryPlugin):
         '''Expose resolved roots to playbooks (terraform state, inventory, config).'''
         paths = self.spa_paths
         self.inventory.set_variable('all', 'spa_home', str(paths.spa_home))
-        self.inventory.set_variable('all', 'spa_lab_dir', str(paths.spa_lab_dir))
+        self.inventory.set_variable('all', 'spa_env_dir', str(paths.spa_env_dir))
         self.inventory.set_variable('all', 'spa_config_file', str(paths.config_file))
         self.inventory.set_variable('all', 'spa_inventory_dir', str(paths.inventory_dir))
         self.inventory.set_variable('all', 'spa_terraform_modules_dir', str(paths.terraform_modules_dir))
@@ -334,7 +334,7 @@ class InventoryModule(BaseInventoryPlugin):
         # Config-file overrides for Software / baseconfig / local apps.
         # Default relative values yield to spa_paths (.spa.yml / env / discovery).
         # A custom path in splunk_config.yml still wins over .spa.yml (env still wins over both).
-        lab_dir = str(self.spa_paths.spa_lab_dir)
+        lab_dir = str(self.spa_paths.spa_env_dir)
         app_dep = self.groups['all'].get('splunk_app_deployment')
         if isinstance(app_dep, dict):
             configured_apps = app_dep.get('local_app_repo_path')
@@ -345,7 +345,7 @@ class InventoryModule(BaseInventoryPlugin):
 
         # Check Base Config App availability
         # SPA_BASECONFIG_DIR / SPA_SOFTWARE_DIR override configured paths (local/CI tests).
-        # Relative ../Software is a sibling of the lab (SPA_LAB_DIR), not the prefix.
+        # Relative ../Software is a sibling of the lab (SPA_ENV_DIR), not the prefix.
         splunk_baseconfig_dir = self._resolve_override_dir(
             lab_dir, self.groups['all']['splunk_baseconfig_dir'], 'SPA_BASECONFIG_DIR'
         )
@@ -706,7 +706,7 @@ class InventoryModule(BaseInventoryPlugin):
         try:
             setattr(self, 'spa_paths', resolve_spa_paths())
         except Exception as e:
-            raise AnsibleParserError('Failed to resolve SPA_HOME / SPA_LAB_DIR: %s' % e)
+            raise AnsibleParserError('Failed to resolve SPA_HOME / SPA_ENV_DIR: %s' % e)
 
         # When roots differ, ansible.cfg would still list the clone config. Refuse
         # that file so a separate lab cannot pick up the checkout's splunk_config.yml.
@@ -715,9 +715,9 @@ class InventoryModule(BaseInventoryPlugin):
             parsed = Path(path).resolve()
             if parsed == clone_config and parsed != self.spa_paths.config_file.resolve():
                 raise AnsibleParserError(
-                    "SPA_LAB_DIR (%s) differs from SPA_HOME. Refusing clone config %s. "
-                    "Set ANSIBLE_INVENTORY to the lab (source bin/spa_env.sh) or pass "
-                    "-i %s." % (self.spa_paths.spa_lab_dir, path, self.spa_paths.config_file)
+                    "SPA_ENV_DIR (%s) differs from SPA_HOME. Refusing clone config %s. "
+                    "Set ANSIBLE_INVENTORY to the env (eval \"$(spa env --export)\") or pass "
+                    "-i %s." % (self.spa_paths.spa_env_dir, path, self.spa_paths.config_file)
                 )
 
         # Load config with secret resolution (!vault) and build configfiles from it

@@ -1,0 +1,24 @@
+---
+# spa-run:
+#   schema: 1
+#   summary: Update Splunk Web TLS certificates.
+#   description: Installs or refreshes web certificates on targeted Splunk hosts.
+#   category: operations
+#   risk: mutating
+#   examples:
+#     - spa run splunk_certs_web --hosts sh1
+# add a splunk web certs if not existing
+
+- name: Add splunk web certs
+  hosts: all,!role_indexer,!role_universal_forwarder,!role_universal_forwarder_windows
+  roles:
+    - splunk_common
+  become: true
+  become_user: root
+
+  tasks:
+    - name: Install certs for web ssl
+      ansible.builtin.include_role:
+        name: baseconfig_app
+        tasks_from: splunk_ssl_web_certs
+      when: splunk_ssl.web.enable and splunk_ssl.web.own_certs

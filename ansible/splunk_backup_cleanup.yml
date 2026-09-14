@@ -1,0 +1,28 @@
+---
+# spa-run:
+#   schema: 1
+#   summary: Remove Splunk etc backup directories.
+#   description: Cleans backup directories created by splunk_backup_etc.
+#   category: operations
+#   risk: destructive
+#   examples:
+#     - spa run splunk_backup_cleanup --hosts sh1
+- name: Backup splunk config
+  hosts:
+    - role_cluster_manager
+    - role_deployer
+    - role_deployment_server
+    - role_heavy_forwarder
+    - role_indexer
+    - role_license_manager
+    - role_monitoring_console
+    - role_search_head
+    - role_universal_forwarder
+  become: true
+  become_user: root
+
+  tasks:
+    - name: Call cleanup_backup_dir splunk from role splunk_software
+      ansible.builtin.include_role:
+        name: splunk_software
+        tasks_from: cleanup_backup_dir

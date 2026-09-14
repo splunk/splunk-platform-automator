@@ -38,7 +38,7 @@ terraform:
     tags:
       Env: "SPA Testing (ITSI + apps, 2 site IDXC, ITSI SHC, MC/LM, DS/DPL, CM, SH, HF, UF)"
       TestConfig: "2site-idxc_shc_mc_ds_sh_hf_uf_itsi_apps"
-      SPADirName: "{{ playbook_dir | dirname | basename }}"
+      SPADirName: "{{ spa_env_dir | basename }}"
       splunkit_data_classification: "public"
       splunkit_environment_type: "non-prd"
 

@@ -4,10 +4,10 @@ description: >-
   Use when creating or updating splunk_config.yml, designing Splunk Enterprise lab
   topology, multisite IDXC, SHC layout, architecture plan before config, or AWS
   Terraform block for SPA. Guides interactive design on AWS Linux: deployment intent,
-  SVA topology, role placement, OS/SSH, splunk_config_aws.py discovery, licenses,
+  SVA topology, role placement, OS/SSH, spa aws discovery, licenses,
   apps, validation. In Cursor invoke with /spa-create-config.
 license: Proprietary
-compatibility: Requires SPA repo root (ansible.cfg, bin/). Optional boto3 for AWS discovery.
+compatibility: Requires SPA repo root (ansible.cfg, bin/). Boto3 is required for AWS discovery and suspend/resume.
 metadata:
   product: splunk-platform-automator
   version: "1.0.0"
@@ -35,14 +35,14 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 - Flat deployment test configs under `tests/configs/*.yml` only
 - Splunkbase catalog search (user supplies `app_id` manually)
 - Production sizing / PS engagement (guidance only; no auto-sizing)
-- Auto-running provision/deploy (user runs playbooks after validation)
+- Auto-running provision/deploy (user runs `spa provision` / `spa deploy` after validation)
 
 ## Secrets — never display credential values (mandatory)
 
 Follow [secrets-handling.md](references/secrets-handling.md) for the full list.
 
 - **Splunkbase:** Use `lookup('env', 'SPLUNKBASE_USERNAME')` / `lookup('env', 'SPLUNKBASE_PASSWORD')` in YAML only. In chat, plans, and terminal: **set** or **not set** — never username/email/password.
-- **AWS:** Prefer `splunk_config_aws.py --check-auth --json` for API status. Never show `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_SESSION_TOKEN` values. **OK:** account ID, ARN, `AWS_PROFILE` name, region.
+- **AWS:** Prefer `spa aws --check-auth --json` for API status. Never show `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_SESSION_TOKEN` values. **OK:** account ID, ARN, `AWS_PROFILE` name, region.
 - **Do not run** `echo` / `printenv` / `env | grep` on `SPLUNKBASE_*` or secret `AWS_*` vars; do not run `aws configure get aws_secret_access_key` or `aws configure list`.
 - **Safe checks:** set/not-set loops in [secrets-handling.md](references/secrets-handling.md).
 - Never paste resolved lookup values, private key contents, or credential file contents into chat or plan files.
@@ -82,11 +82,11 @@ Repo keys: [examples/configuration_description.yml](examples/configuration_descr
    Infer **plan** from phrases like “design”, “discuss”, “plan architecture”; infer **write** from “create config”, “write yaml”, “approve and write”.
 3. Target path: default `config/splunk_config.yml` (for write mode or post-approval).
 4. If file exists and **mode=write** (or approving plan): **merge vs overwrite** — AskQuestion if available, otherwise ask in chat, before destructive write. Skip in **plan** mode until Phase 7.
-5. **AWS API probe** — `python3 bin/splunk_config_aws.py --check-auth --json` (needs `boto3`; no region required). Record result:
+5. **AWS API probe** — `spa aws --check-auth --json` (needs `boto3`; no region required). Record result:
    - **Available** → Phase 4 uses API discovery; optional `--splunk-config-aws` at validate.
    - **Unavailable** → follow [aws-without-credentials.md](references/aws-without-credentials.md); do not block the workflow.
 6. Read existing config if merging or revising an existing plan from prior config.
-7. Optional inventory: `python3 bin/splunk_config_licenses.py --json` — note what exists in `../Software`.
+7. Optional inventory: `spa licenses --json` — note what exists in `../Software`.
 
 **Exit:** **Mode recorded**; target path known; merge policy clear when applicable; **AWS API status recorded**; Software licenses noted if scanned.
 
@@ -146,7 +146,7 @@ Set global `os:` block, expected `ssh_username`, and **polkit** (`polkit` on AL/
 
 ## Phase 4 — AWS settings
 
-**With creds:** Run `bin/splunk_config_aws.py` — see [aws-baseline.md](references/aws-baseline.md).
+**With creds:** Run `spa aws` — see [aws-baseline.md](references/aws-baseline.md).
 
 1. Region (`--list-regions` or confirm)
 2. AMI — if unknown, `--latest-ami --os <rhel|ubuntu|amazon_linux|debian>` or `--survey` → user picks from `recommended_amis` (preference: RHEL first)
@@ -197,20 +197,24 @@ Summarize hosts before YAML write.
 [licenses.md](references/licenses.md). Run **after Phase 6** so ITSI detection is accurate.
 
 ```bash
-python3 bin/splunk_config_licenses.py --config config/splunk_config.yml --json
+spa licenses --config config/splunk_config.yml --json
 ```
 
-1. Scan `../Software` for `*.lic` / `*.License` (SPA `splunk_software_dir`).
+1. Scan `../Software` for `*.lic` / `*.License` and inspect sanitized parsed
+   metadata: `license_type`, `group_id`, `addons`, `capabilities`, `expires_at`,
+   and `status`. Never expose raw license XML, signatures, or GUIDs.
 2. If `proposed_splunk_license_file` is non-empty, ask (AskQuestion if available): add to `splunk_defaults`? (especially for lab / app lab intent).
 3. **If user accepts license file** → add `license_manager` role on a host in Phase 5b (typical lab: co-locate on `cm` or dedicated `mc`).
-4. **ITSI in config** → propose `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` when files exist; ensure `license_manager` role (Phase 5b).
-5. **License manager role** → `splunk_license_file` is required (schema). **License file in config** → `license_manager` role is required (schema).
-6. **Trial-only labs** → omit both `splunk_license_file` and `license_manager`; do not add license file from Software scan alone.
-7. No files in Software → warn (trial only or add licenses before deploy).
+4. **ITSI in config** → require parsed `enterprise` + `itsi` capabilities; ensure `license_manager` role (Phase 5b). Do not infer capability from filenames.
+5. **Enterprise Security in config** (app ID `263` or exact ES name) → require parsed `enterprise` + `es` capabilities. `premium_app: es` is not supported by the deployment schema; do not add it.
+6. **License manager role** → `splunk_license_file` is required (schema). **License file in config** → `license_manager` role is required (schema).
+7. Reject configured files that are missing, invalid, expired, or do not collectively satisfy the selected premium apps. Warn for expiration within 30 days or an unknown expiration.
+8. **Trial-only labs** → omit both `splunk_license_file` and `license_manager`; do not add license file from Software scan alone.
+9. No usable files in Software → warn (trial only or add licenses before deploy).
 
 Use `yaml_snippet` from JSON under `splunk_defaults` in Phase 7.
 
-**Exit:** License list decided or explicitly skipped; LM + ITSI warnings addressed.
+**Exit:** License list decided or explicitly skipped; LM + ITSI/ES warnings addressed.
 
 ## Phase 6c — Architecture plan (plan mode)
 
@@ -246,7 +250,7 @@ Use `yaml_snippet` from JSON under `splunk_defaults` in Phase 7.
 ## Phase 8 — Validate (quality gate)
 
 ```bash
-./bin/validate_splunk_config.sh config/splunk_config.yml
+spa validate config/splunk_config.yml
 ```
 
 This always runs schema validation, inventory load, **license file ↔ license_manager pairing**, and playbook syntax-check. Fix any failure before handoff.
@@ -256,13 +260,14 @@ This always runs schema validation, inventory load, **license file ↔ license_m
 With AWS creds:
 
 ```bash
-./bin/validate_splunk_config.sh --splunk-config-aws config/splunk_config.yml
+spa validate --splunk-config-aws config/splunk_config.yml
 ```
 
-Optional: verify license files exist in `../Software`:
+Optional: verify license files exist, parse as valid XML, are not expired, and
+provide the Enterprise / ITSI / ES capabilities required by the config:
 
 ```bash
-./bin/validate_splunk_config.sh --check-licenses config/splunk_config.yml
+spa validate --check-licenses config/splunk_config.yml
 ```
 
 Optional: `./tests/run_schema_tests.sh -q`
@@ -276,11 +281,14 @@ Do not hand off until validation passes. See [validation.md](references/validati
 User runs (skill does **not** auto-provision):
 
 ```bash
-ap ansible/provision_terraform_aws.yml -e auto_approve=true
-ap ansible/deploy_site.yml
+spa provision --yes && spa deploy --yes
 ```
 
-Destroy: `ap ansible/destroy_terraform_aws.yml -e auto_approve=true`
+Destroy: `spa destroy --yes`
+
+Pause AWS compute while retaining Terraform state and EBS volumes:
+`spa suspend --yes`. Resume and refresh changed inventory addresses:
+`spa resume --yes`. Retained resources continue to incur charges.
 
 Optional: distill app-scope tests via [spa-add-test-scenario](../spa-add-test-scenario/SKILL.md).
 

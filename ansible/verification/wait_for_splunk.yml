@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Wait until splunkd is up.
+#   description: Polls Splunk until the service answers on targeted hosts.
+#   category: verification
+#   risk: read-only
+#   examples:
+#     - spa run verification/wait_for_splunk
 # Wait for Splunk to be fully running on all hosts
 # Run this after deployment and before verification tests
 # Splunk services may have been restarted and need time to fully start

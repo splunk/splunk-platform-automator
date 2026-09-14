@@ -62,7 +62,7 @@ os:
   # Each entry is a path to a public key file on the Ansible controller.
   # Keys are added to ~/.ssh/authorized_keys (existing keys are preserved).
   # Can also be set per host in splunk_hosts[].os.ssh_keys.
-  # Deploy independently with: ansible-playbook ansible/install_ssh_keys.yml
+  # Deploy independently with: ansible-playbook ansible/ssh_keys.yml
   ssh_keys:
     - ~/.ssh/id_ed25519.pub
     - ~/.ssh/colleague_key.pub
@@ -84,7 +84,7 @@ terraform:
   aws:
     # access_key_id / secret_access_key default from AWS env vars
     region: "eu-central-1"
-    ami_id: "ami-0443f7d10da53831f"  # RHEL 10 (eu-central-1) — verify via splunk_config_aws.py --latest-ami --os rhel
+    ami_id: "ami-0443f7d10da53831f"  # RHEL 10 (eu-central-1) — verify via spa aws --latest-ami --os rhel
     ssh_username: "ec2-user"  # ec2-user for RHEL / Amazon Linux; ubuntu for Ubuntu; admin for Debian
     key_name: "aws_key"
     ssh_private_key_file: "~/.ssh/aws_key.pem"
@@ -95,7 +95,7 @@ terraform:
     # subnet_id: "subnet-0123456789abcdef0"
     tags:
       Env: "Splunk Lab"
-      SPADirName: "{{ playbook_dir | dirname | basename }}"
+      SPADirName: "{{ spa_env_dir | basename }}"
       splunkit_data_classification: public
       splunkit_environment_type: non-prd
     # Per-host overrides in splunk_hosts[].terraform.aws
@@ -250,7 +250,7 @@ splunk_defaults:
 
   # Share the same splunk.secret file with all Splunk nodes
   # Note: You must first deploy splunk to one host only to store the splunk.secret file
-  #       You can do that by running: ansible-playbook ansible/setup_common.yml ansible/install_splunk.yml --limit <one_host_from_the_list>
+  #       You can do that by running: ansible-playbook ansible/setup_common.yml ansible/splunk_install.yml --limit <one_host_from_the_list>
   #       After that you can run ansible/deploy_site.yml to all hosts
   splunk_secret_share:
     # for Splunk Enterprise
@@ -272,8 +272,8 @@ splunk_dirs:
 
 splunk_apps:
   # Copy rendered PS baseconfig apps (and optional serverclass.conf) back to the
-  # Ansible controller after deploy. Destination is $SPA_LAB_DIR/<name> (clone
-  # root when SPA_HOME == SPA_LAB_DIR). Distinct from .spa.yml apps_dir, which
+  # Ansible controller after deploy. Destination is $SPA_ENV_DIR/<name> (clone
+  # root when SPA_HOME == SPA_ENV_DIR). Distinct from .spa.yml apps_dir, which
   # is the shared source for splunk_app_deployment source: local.
   #splunk_save_baseconfig_apps_dir: saved_base_config_apps
   splunk_save_baseconfig_apps: true

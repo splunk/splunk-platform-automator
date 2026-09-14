@@ -1,0 +1,268 @@
+---
+# spa-run:
+#   schema: 1
+#   summary: Deploy Splunk apps from splunk_config.yml.
+#   description: Installs, updates, or removes apps according to app deployment config.
+#   category: deployment
+#   risk: mutating
+#   examples:
+#     - spa run splunk_apps_deploy
+# Deploy Splunk Apps - Orchestrator Playbook
+# Runs specialized roles in sequence for different deployment methods
+
+- name: Pre-deployment checks
+  hosts: localhost
+  gather_facts: no
+  become: false
+  
+  tasks:
+    - name: Verify app configuration
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.debug:
+        msg: "Deploying {{ splunk_app_deployment.apps | default([]) | length }} apps"
+      run_once: true
+      when: splunk_app_deployment is defined
+
+    - name: Verify Splunkbase credentials (if needed)
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.assert:
+        that:
+          - (lookup('env', 'SPLUNKBASE_USERNAME') | default('', true) | trim | length) > 0 or (splunk_app_deployment.splunkbase_username | default('', true) | trim | length) > 0
+          - (lookup('env', 'SPLUNKBASE_PASSWORD') | default('', true) | trim | length) > 0 or (splunk_app_deployment.splunkbase_password | default('', true) | trim | length) > 0
+        fail_msg: "Splunkbase credentials not configured. Set SPLUNKBASE_USERNAME and SPLUNKBASE_PASSWORD environment variables or configure in splunk_config.yml"
+      run_once: true
+      when: >-
+        (_splunkbase_credentials_check | default(false) | bool)
+        or (splunk_app_deployment is defined and (splunk_app_deployment.apps | default([]) | selectattr('source', 'equalto', 'splunkbase') | list | length) > 0)
+
+# Step 0b: Set _splunk_is_deployment_client on clients (btool when deploymentclient_check, else inventory heuristic).
+- name: Detect deployment clients for DS staging whitelist
+  hosts: role_cluster_manager,role_deployer,role_heavy_forwarder,role_indexer,role_license_manager,role_monitoring_console,role_search_head,role_universal_forwarder,role_universal_forwarder_windows
+  become: true
+  become_user: root
+  gather_facts: true
+  tasks:
+    - name: Run deployment client detection (btool; sets _splunk_is_deployment_client on each host)
+      ansible.builtin.include_role:
+        name: apps_direct
+        tasks_from: detect_deployment_client.yml
+      when:
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+        - (groups['role_deployment_server'] | default([]) | length) > 0
+        - (splunk_app_deployment.deploymentclient_check | default(true)) | bool
+
+    - name: Assume deployment clients without btool (deploymentclient_check false)
+      ansible.builtin.include_role:
+        name: apps_direct
+        tasks_from: assume_deployment_client_heuristic.yml
+      when:
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+        - (groups['role_deployment_server'] | default([]) | length) > 0
+        - not ((splunk_app_deployment.deploymentclient_check | default(true)) | bool)
+
+# Step 1: Deploy apps to Deployment Server
+- name: Deploy apps to Deployment Server
+  hosts: role_deployment_server
+  become: true
+  become_user: root
+  gather_facts: yes
+  
+  roles:
+    - role: apps_deployment_server
+      when: 
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+
+# Step 2: Deploy apps to Cluster Managers
+- name: Deploy apps to Cluster Managers
+  hosts: role_cluster_manager
+  become: true
+  become_user: root
+  gather_facts: yes
+  
+  roles:
+    - role: apps_cluster_manager
+      when:
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+
+# Step 3: Deploy apps to Deployers
+- name: Deploy apps to Deployers
+  hosts: role_deployer
+  become: true
+  become_user: root
+  gather_facts: yes
+  
+  roles:
+    - role: apps_deployer
+      when:
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+
+# Step 4: Deploy apps directly to hosts (all AllowedRole from schema.py plugins/inventory/schema.py)
+- name: Deploy apps directly to hosts
+  hosts: role_cluster_manager,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_manager,role_monitoring_console,role_search_head,role_universal_forwarder,role_universal_forwarder_windows
+  become: true
+  become_user: root
+  gather_facts: yes
+  
+  roles:
+    - role: apps_direct
+      when:
+        - splunk_app_deployment is defined
+        - splunk_app_deployment.apps is defined
+
+# Step 5: Run post-restart playbooks (after Restart splunk / other handlers from direct deployment)
+# Default: runbooks run on the host that has the app (from Step 4 direct deployment); each host has its own list.
+# Deployer+SHC only: apps deployed via deployer have no etc/apps on ds; we accumulate playbooks on ds and load them
+# onto the first SHC member here so they run once there. Post-restart runbooks never run on the deployer.
+- name: Run post-restart playbooks (direct deployment)
+  hosts: role_cluster_manager,role_deployer,role_deployment_server,role_heavy_forwarder,role_indexer,role_license_manager,role_monitoring_console,role_search_head,role_universal_forwarder,role_universal_forwarder_windows
+  become: true
+  become_user: root
+  gather_facts: yes
+
+  tasks:
+    # Deployer+SHC only: load each deployer's playbooks onto THAT deployer's first SHC member (so ITSI on shc1 runs on shc1, not shc2).
+    - name: "Load post-restart playbooks for first SHC member (from deployer)"
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.set_fact:
+        post_restart_playbooks_to_run: "{{ (post_restart_playbooks_to_run | default([])) + (hostvars[item]._pending_post_restart_first_shc | default([])) }}"
+      loop: "{{ groups['role_deployer'] | default([]) }}"
+      when:
+        - (groups['role_deployer'] | default([]) | length) > 0
+        - inventory_hostname == (hostvars[item]._first_shc_member | default(''))
+      loop_control:
+        label: "{{ item }}"
+
+    # Pre-compute whether any post-restart playbook will actually execute
+    # (entries only actionable when app_updated_this_run or force_run_playbook_after_restart).
+    - name: "Check if any post-restart playbooks will actually execute"
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.set_fact:
+        _has_actionable_post_restart: "{% set ns = namespace(found=false) %}{% for item in (post_restart_playbooks_to_run | default([])) %}{% if (item.app_updated_this_run | default(true) | bool) or ((item.extra_vars | default({})).get('force_run_playbook_after_restart', false) | bool) %}{% set ns.found = true %}{% endif %}{% endfor %}{{ ns.found }}"
+
+    # Wait for splunkd once per host before any post-restart playbook (e.g. cp_api_install) runs.
+    - name: "Wait for splunkd before post-restart playbooks (once per host)"
+      tags:
+        - splunk
+        - splunk_apps
+      block:
+        - name: "Wait for splunkd port"
+          ansible.builtin.include_role:
+            name: splunk_common
+            tasks_from: wait_for_splunkd_port
+        - name: "Wait for splunkd full service"
+          ansible.builtin.include_role:
+            name: splunk_common
+            tasks_from: wait_for_splunkd_full
+      when:
+        - _has_actionable_post_restart | default(false) | bool
+        - inventory_hostname not in (groups['role_deployer'] | default([]))
+
+    # On SHC members, wait for cluster ready once before any post-restart playbook (e.g. cp_api_install) runs.
+    - name: "Wait for SHC service_ready_flag and rolling_restart_flag before post-restart playbooks (once per host)"
+      tags:
+        - splunk
+        - splunk_apps
+      block:
+        - name: "Poll SHC status until service_ready_flag=1 and rolling_restart_flag=0 (post-restart)"
+          ansible.builtin.uri:
+            url: "https://localhost:8089/services/shcluster/status?output_mode=json"
+            user: admin
+            password: "{{ splunk_admin_password }}"
+            method: GET
+            force_basic_auth: true
+            validate_certs: false
+            status_code: [200]
+          register: _cp_shc_status
+          until: >-
+            ((_cp_shc_status.json | default({}) | json_query('entry[0].content.captain.service_ready_flag') | default(false)) | bool)
+            and ((_cp_shc_status.json | default({}) | json_query('entry[0].content.captain.rolling_restart_flag') | default(1)) == 0)
+          retries: 30
+          delay: 10
+          ignore_errors: true
+
+        - name: "Fail if SHC not ready before post-restart playbooks"
+          ansible.builtin.fail:
+            msg: "Search Head Cluster did not become ready (service_ready_flag=1 and rolling_restart_flag=0) before post-restart playbooks."
+          when: >-
+            not (((_cp_shc_status.json | default({}) | json_query('entry[0].content.captain.service_ready_flag') | default(false)) | bool)
+            and ((_cp_shc_status.json | default({}) | json_query('entry[0].content.captain.rolling_restart_flag') | default(1)) == 0))
+      when:
+        - _has_actionable_post_restart | default(false) | bool
+        - inventory_hostname not in (groups['role_deployer'] | default([]))
+        - (group_names | select('match', '^shcluster_') | list | length) > 0
+
+    # Run all cp_api_install playbooks first so content_pack_already_installed is set before we decide which configure playbooks to run.
+    - name: "Run cp_api_install (content pack API install) for each app"
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.include_tasks: "{{ (playbook_dir | dirname) }}/{{ _cp_item.playbook }}"
+      vars:
+        app_path: "{{ _cp_item.app_path }}"
+        app_name: "{{ _cp_item.app_name }}"
+        customization_extra_vars: "{{ (_cp_item.extra_vars | default({})) | combine({'app_path': _cp_item.app_path, 'app_name': _cp_item.app_name}) }}"
+      loop: "{{ post_restart_playbooks_to_run | default([]) | selectattr('playbook', 'search', 'cp_api_install') | list }}"
+      loop_control:
+        label: "{{ _cp_item.app_name }} (cp_api_install)"
+        loop_var: _cp_item
+      when:
+        - (post_restart_playbooks_to_run | default([])) | length > 0
+        - inventory_hostname not in (groups['role_deployer'] | default([]))
+        - (_cp_item.app_updated_this_run | default(true) | bool) or ((_cp_item.extra_vars | default({})).get('force_run_playbook_after_restart', false) | bool)
+
+    # Run run_playbook_after_restart (configure) playbooks:
+    # - Normal apps: only when app was updated this run (app_updated_this_run) OR force_run_playbook_after_restart is true
+    # - Content packs: only when pack was not already installed (content_pack_already_installed) OR force_run_playbook_after_restart is true
+    - name: "Run run_playbook_after_restart (configure) for app"
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.include_tasks: "{{ (playbook_dir | dirname) }}/{{ _cfg_item.playbook }}"
+      vars:
+        app_path: "{{ _cfg_item.app_path }}"
+        app_name: "{{ _cfg_item.app_name }}"
+        customization_extra_vars: "{{ (_cfg_item.extra_vars | default({})) | combine({'app_path': _cfg_item.app_path, 'app_name': _cfg_item.app_name}) }}"
+      loop: "{{ post_restart_playbooks_to_run | default([]) | rejectattr('playbook', 'search', 'cp_api_install') | list }}"
+      loop_control:
+        label: "{{ _cfg_item.app_name }} ({{ _cfg_item.playbook | basename }})"
+        loop_var: _cfg_item
+      when:
+        - (post_restart_playbooks_to_run | default([])) | length > 0
+        - inventory_hostname not in (groups['role_deployer'] | default([]))
+        # Normal apps: app_updated_this_run gates (defaults true for content pack entries that don't set it)
+        # Content packs: content_pack_already_installed gates (defaults false for normal app entries)
+        # Either type: force_run_playbook_after_restart overrides both gates
+        - ((_cfg_item.app_updated_this_run | default(true) | bool) or ((_cfg_item.extra_vars | default({})).get('force_run_playbook_after_restart', false) | bool)) and ((not ((content_pack_already_installed | default({})).get(_cfg_item.app_name, false) | bool)) or ((_cfg_item.extra_vars | default({})).get('force_run_playbook_after_restart', false) | bool))
+
+# Final summary
+- name: Deployment summary
+  hosts: localhost
+  gather_facts: no
+  become: false
+  
+  tasks:
+    - name: Display completion message
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.debug:
+        msg:
+          - "========================================="
+          - "SPLUNK APP DEPLOYMENT COMPLETE"
+          - "========================================="
+          - "All apps have been deployed to their targets"
+          - "Check handler notifications for any required restarts/reloads"
+          - "========================================="

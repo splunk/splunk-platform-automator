@@ -1,0 +1,86 @@
+---
+# spa-run:
+#   schema: 1
+#   summary: Check Ansible prerequisites on the controller.
+#   description: Verifies local Ansible and Python requirements before a deploy.
+#   category: operations
+#   risk: read-only
+#   examples:
+#     - spa run ansible_check
+# This playbook test the needed capabilities for ansible
+
+- name: Test user switching and file creation in /tmp
+  hosts: all
+  become: false
+
+  vars:
+    splunk_user: splunk
+    splunk_group: splunk
+
+  tasks:
+    - name: Call check_ansible_requirements role common
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: check_ansible_requirements.yml
+
+    - name: "Touch file for the ansible {{ ansible_user }}"
+      ansible.builtin.file:
+        path: /tmp/user.conf
+        state: touch
+        mode: "0644"
+
+    - name: "Remove file for the ansible {{ ansible_user }}"
+      ansible.builtin.file:
+        path: /tmp/user.conf
+        state: absent
+
+    - name: "Touch file for technical user root"
+      ansible.builtin.file:
+        path: /tmp/root.conf
+        state: touch
+        mode: "0644"
+      become: true
+      become_user: root
+
+    - name: "Remove file for technical user root"
+      ansible.builtin.file:
+        path: /tmp/root.conf
+        state: absent
+      become: true
+      become_user: root
+
+    - name: Determine available groups
+      ansible.builtin.getent:
+        database: group
+
+    - name: Determine available users
+      ansible.builtin.getent:
+        database: passwd
+
+    - name: "Touch file for splunk user {{ splunk_user }}"
+      ansible.builtin.file:
+        path: /tmp/splunk.conf
+        state: touch
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        mode: "0644"
+      become: true
+      become_user: "{{ splunk_user }}"
+      when:
+        - splunk_group in ansible_facts.getent_group
+        - splunk_user in ansible_facts.getent_passwd
+
+    - name: "Remove file for splunk user {{ splunk_user }}"
+      ansible.builtin.file:
+        path: /tmp/splunk.conf
+        state: absent
+      become: true
+      become_user: "{{ splunk_user }}"
+      when:
+        - splunk_group in ansible_facts.getent_group
+        - splunk_user in ansible_facts.getent_passwd
+
+    - name: Call check_policykit role splunk_common
+      ansible.builtin.include_role:
+        name: splunk_common
+        tasks_from: check_policykit.yml

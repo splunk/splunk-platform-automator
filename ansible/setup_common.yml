@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Apply common OS settings (pipeline step).
+#   description: Configures shared host settings as part of deploy_site.
+#   category: deployment
+#   risk: mutating
+#   examples:
+#     - spa run setup_common
 # This playbook configures common settings
 
 - name: Apply common configurations

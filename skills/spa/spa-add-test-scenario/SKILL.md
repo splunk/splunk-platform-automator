@@ -127,7 +127,7 @@ mkdir -p tests/configs/app_scope/output/.ansible_tmp/remote
 ANSIBLE_CONFIG="$(pwd)/ansible.cfg" \
 ANSIBLE_LOCAL_TEMP="$(pwd)/tests/configs/app_scope/output/.ansible_tmp" \
 ANSIBLE_REMOTE_TEMP="$(pwd)/tests/configs/app_scope/output/.ansible_tmp/remote" \
-ansible-playbook ansible/verification/debug_app_scope.yml \
+spa run verification/debug_app_scope -- \
   -i tests/configs/app_scope/<scenario_name>/splunk_config.yml \
   -e run_scope_locally=true \
   -e "scope_output_path=$(pwd)/tests/configs/app_scope/output/<scenario_name>_scope.json" \

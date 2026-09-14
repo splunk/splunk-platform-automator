@@ -10,7 +10,7 @@ Copy into the top of `config/splunk_config.yml` (YAML comments).
 # SVA target: <code> (lab compromises: <list gaps>)
 # Role placement: <SVA-aligned | lab-minimal | hybrid> — <host summary>
 # OS: <RHEL 10 | RHEL 9 | RHEL 8 | Ubuntu>; ssh_username=<ec2-user|ubuntu>
-# Deploy: ap ansible/provision_terraform_aws.yml -e auto_approve=true; ap ansible/deploy_site.yml
+# Deploy: ap ansible/aws_provision.yml -e auto_approve=true; ap ansible/deploy_site.yml
 plugin: splunk-platform-automator
 ```
 

@@ -1,6 +1,6 @@
 ---
 # This playbook saves a copy of the app on the ansible host under
-# $SPA_LAB_DIR/saved_base_config_apps (see spa_saved_baseconfig_apps_dir).
+# $SPA_ENV_DIR/saved_base_config_apps (see spa_saved_baseconfig_apps_dir).
 
 - name: Create hostname and app dir on ansible host
   tags:

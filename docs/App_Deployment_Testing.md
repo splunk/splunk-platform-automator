@@ -12,7 +12,7 @@ Run the dedicated app deployment test suite from the project root:
 
 This runs:
 
-- **test_app_deployment.py** – Pre-deployment checks by running `deploy_splunk_apps.yml` with static inventory `localhost,` and extra-vars from `tests/configs/app_deployment/`:
+- **test_app_deployment.py** – Pre-deployment checks by running `splunk_apps_deploy.yml` with static inventory `localhost,` and extra-vars from `tests/configs/app_deployment/`:
   - Same app name may appear multiple times with different `target_roles`/customizations (deployment target is calculated from roles).
   - Valid config with no Splunkbase apps → first play passes.
   - Splunkbase app without credentials → playbook must fail (Splunkbase credentials message).
@@ -54,7 +54,7 @@ Use your current `config/splunk_config.yml` and inventory. No AWS required if yo
 ### Deploy apps
 
 ```bash
-ansible-playbook ansible/deploy_splunk_apps.yml -v
+ansible-playbook ansible/splunk_apps_deploy.yml -v
 ```
 
 Watch for:
@@ -105,7 +105,7 @@ The existing deployment tests already run app deploy and app verification.
    ./tests/run_deployment_tests.sh
    ```
 3. **Relevant steps**:
-   - **test_11_deploy_splunk_apps** – runs `ansible/deploy_splunk_apps.yml`.
+   - **test_11_deploy_splunk_apps** – runs `ansible/splunk_apps_deploy.yml`.
    - **test_17_verify_app_deployment** – runs `ansible/verification/verify_app_deployment.yml`.
 
 To run only app deploy + verify (after Splunk is installed and configured):

@@ -20,7 +20,7 @@ os:
 terraform:
   aws:
     region: "eu-central-1"
-    ami_id: "ami-0443f7d10da53831f"  # RHEL 10 (eu-central-1) — verify via splunk_config_aws.py --latest-ami --os rhel
+    ami_id: "ami-0443f7d10da53831f"  # RHEL 10 (eu-central-1) — verify via spa aws --latest-ami --os rhel
     ssh_username: "ec2-user"
     key_name: "aws_key"
     ssh_private_key_file: "~/.ssh/aws_key.pem"
@@ -30,7 +30,7 @@ terraform:
     root_volume_type: "gp3"
     tags:
       Env: "Splunk Lab"
-      SPADirName: "{{ playbook_dir | dirname | basename }}"
+      SPADirName: "{{ spa_env_dir | basename }}"
       splunkit_data_classification: "public"
       splunkit_environment_type: "non-prd"
 

@@ -45,19 +45,24 @@ tests/
 ├── test_app_deployment.py     # App deployment pre-deployment checks (no infra)
 ├── test_schema.py             # Schema validation unit tests
 ├── test_schema_files.py       # validate_config_file + examples/app_scope sweep
-├── test_splunk_config_licenses.py # bin/splunk_config_licenses.py helpers
-├── test_splunk_config_aws.py  # bin/splunk_config_aws.py pure functions
-├── test_validate_splunk_config.py # bash -n / smoke for validate_splunk_config.sh
-├── test_spa_paths.py              # SPA_HOME / SPA_LAB_DIR resolver (Distribution M1)
-├── test_init_spa_dir.py           # bin/init_spa_dir.sh scaffold and migrate
-├── test_spa_venv.py               # bin/spa_venv.sh resolution + lab .envrc
-├── test_lab_scaffold.py           # separate lab inventory/validate; no clone writes
+├── test_splunk_config_licenses.py # spa licenses helpers
+├── test_splunk_config_aws.py      # spa aws pure functions
+├── test_validate_splunk_config.py # spa validate missing-config smoke
+├── test_spa_paths.py              # SPA_HOME / SPA_ENV_DIR resolver
+├── test_spa_init.py               # spa init scaffold and migrate
+├── test_env_scaffold.py           # separate env inventory vs clone
+├── test_spa_agent_contract.py     # agent detection, JSON envelopes, error formats
+├── test_spa_api.py                # stable SpaSession backend/transport contract
+├── test_spa_cli.py                # spa run catalog, agent JSON
+├── test_spa_cli_contract.py       # complete public help/schema release contract
+├── test_spa_venv.py               # bin/spa_venv.sh resolution + env .envrc
 ├── test_changelog_notes.py    # CHANGELOG section extractor for releases
 ├── test_verification.py       # Phase 2: Health verification tests
 ├── run_deployment_tests.sh    # Helper script for deployment tests
 ├── run_app_deployment_tests.sh # Helper script for app deployment tests
 ├── run_app_scope_scenarios_tests.sh # App scope scenario tests (debug_app_scope per scenario)
 ├── run_itsi_content_pack_tests.sh # ITSI content pack tests (role wiring, schema, scope)
+├── run_cli_tests.sh           # Fast CLI help, routing, schema, and session suite
 ├── run_local_tests.sh         # Run all local suites above (no AWS)
 ├── run_schema_tests.sh        # Helper script for schema validation tests
 ├── run_verification_tests.sh  # Helper script for verification tests
@@ -80,9 +85,9 @@ Sequential tests that build the environment:
 | 4 | `test_04_verify_host_connectivity` | `ping_hosts.yml` |
 | 5 | `test_05_setup_common` | `setup_common.yml` |
 | 6 | `test_06_create_linkpage` | `create_linkpage.yml` |
-| 7 | `test_07_install_splunk` | `install_splunk.yml` |
-| 8 | `test_08_setup_splunk_roles` | `setup_splunk_roles.yml` |
-| 9 | `test_09_setup_splunk_conf` | `setup_splunk_conf.yml` |
+| 7 | `test_07_install_splunk` | `splunk_install.yml` |
+| 8 | `test_08_setup_splunk_roles` | `splunk_setup_roles.yml` |
+| 9 | `test_09_setup_splunk_conf` | `splunk_setup_conf.yml` |
 | 10 | `test_10_setup_other_roles` | `setup_other_roles.yml` |
 | 11 | `test_11_verify_data_flow` | Verify data in `_internal` index |
 | 12 | `test_12_check_idxc_health` | Indexer cluster health (if applicable) |
@@ -181,6 +186,20 @@ Requires `ansible-playbook`, `ansible-core`, `jmespath`, and `lxml` in the test 
 
 ## Running Tests
 
+### Run SPA CLI Release Tests
+
+```bash
+./tests/run_cli_tests.sh
+./tests/run_cli_tests.sh -v
+# Equivalent after activating the test venv:
+pytest -m cli tests/
+```
+
+This fast suite checks every public command and subcommand help surface, every
+alias, the complete agent schema, argument routing, confirmation behavior, env
+initialization, session calls, and mocked provider dispatch. It does not contact
+AWS, SSH to hosts, or execute deployment playbooks.
+
 ### Run All Local Tests (no AWS)
 
 ```bash
@@ -266,7 +285,7 @@ Use `-k` with test names to run only specific steps:
 
 ### App deployment
 
-Step **test_11** runs `ansible/deploy_splunk_apps.yml`; **test_17** runs app deployment verification. For manual scenarios (DS vs direct, ITSI, cache cleanup), see [App Deployment Testing](../docs/App_Deployment_Testing.md).
+Step **test_11** runs `ansible/splunk_apps_deploy.yml`; **test_17** runs app deployment verification. For manual scenarios (DS vs direct, ITSI, cache cleanup), see [App Deployment Testing](../docs/App_Deployment_Testing.md).
 
 ## Adding New Test Configurations
 

@@ -1,4 +1,4 @@
-"""Tests for bin/spa_venv.sh (shared venv) and the lab .envrc it is wired into.
+"""Tests for bin/spa_venv.sh (shared venv) and the env .envrc it is wired into.
 
 Venv resolution is checked with --path (no side effects). Creation is checked
 with --no-install so no pip/galaxy download is needed.
@@ -10,18 +10,17 @@ from pathlib import Path
 
 import pytest
 
+from spa_testutil import PROJECT_ROOT, run_spa_init, spa_env
+
 pytestmark = pytest.mark.local
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = PROJECT_ROOT / "bin" / "spa_venv.sh"
-INIT = PROJECT_ROOT / "bin" / "init_spa_dir.sh"
 
 
 def _run(args, env=None):
-    full_env = os.environ.copy()
-    # A venv activated by the test runner must not leak into resolution tests.
+    full_env = spa_env()
     full_env.pop("SPA_VENV_DIR", None)
-    full_env.pop("SPA_LAB_DIR", None)
+    full_env.pop("SPA_ENV_DIR", None)
     if env:
         full_env.update(env)
     return subprocess.run(
@@ -44,28 +43,28 @@ def test_path_defaults_to_shared_venv():
     assert result.stdout.strip() == str(PROJECT_ROOT / ".venv")
 
 
-def test_lab_venv_wins_when_present(tmp_path):
-    lab = tmp_path / "lab"
-    (lab / ".venv").mkdir(parents=True)
-    result = _run(["--path", "--lab", str(lab)])
+def test_env_venv_wins_when_present(tmp_path):
+    dest = tmp_path / "env"
+    (dest / ".venv").mkdir(parents=True)
+    result = _run(["--path", "--env", str(dest)])
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == str(lab / ".venv")
+    assert result.stdout.strip() == str(dest / ".venv")
 
 
-def test_lab_without_venv_falls_back_to_shared(tmp_path):
-    lab = tmp_path / "lab"
-    lab.mkdir()
-    result = _run(["--path", "--lab", str(lab)])
+def test_env_without_venv_falls_back_to_shared(tmp_path):
+    dest = tmp_path / "env"
+    dest.mkdir()
+    result = _run(["--path", "--env", str(dest)])
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == str(PROJECT_ROOT / ".venv")
 
 
 def test_env_override_wins(tmp_path):
-    lab = tmp_path / "lab"
-    (lab / ".venv").mkdir(parents=True)
+    dest = tmp_path / "env"
+    (dest / ".venv").mkdir(parents=True)
     explicit = tmp_path / "explicit"
     result = _run(
-        ["--path", "--lab", str(lab)], env={"SPA_VENV_DIR": str(explicit)}
+        ["--path", "--env", str(dest)], env={"SPA_VENV_DIR": str(explicit)}
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == str(explicit)
@@ -88,7 +87,6 @@ def test_create_without_install(tmp_path):
 
 
 def test_incomplete_venv_is_recreated(tmp_path):
-    """A half-created venv (interrupted install) must not be sourced as-is."""
     venv = tmp_path / "broken"
     (venv / "include").mkdir(parents=True)
     result = _run(["--create", "--no-install", "--dir", str(venv)])
@@ -105,6 +103,21 @@ def test_incomplete_venv_reported_with_no_create(tmp_path):
     assert "incomplete venv" in result.stderr
 
 
+def test_incomplete_venv_does_not_export_spa_venv_dir(tmp_path):
+    """A venv we could not activate must not be pinned for later spa commands."""
+    venv = tmp_path / "broken"
+    (venv / "include").mkdir(parents=True)
+    probe = subprocess.run(
+        ["bash", "-c", 'source "$1" --no-create --dir "$2"; echo "SPA_VENV_DIR=[${SPA_VENV_DIR:-}]"',
+         "bash", str(SCRIPT), str(venv)],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        env=spa_env(),
+    )
+    assert "SPA_VENV_DIR=[]" in probe.stdout
+
+
 def test_no_create_does_not_create(tmp_path):
     venv = tmp_path / "missing"
     result = _run(["--no-create", "--dir", str(venv)])
@@ -119,85 +132,66 @@ def test_unknown_option_fails():
 
 
 def test_init_writes_envrc(tmp_path):
-    lab = tmp_path / "lab"
-    result = subprocess.run(
-        [str(INIT), "--example", "single_node.yml", "--skip-doctor", str(lab)],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-    )
+    dest = tmp_path / "env"
+    result = run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
     assert result.returncode == 0, result.stderr + result.stdout
-    envrc = lab / ".envrc"
+    envrc = dest / ".envrc"
     assert envrc.is_file()
     body = envrc.read_text()
     assert "spa_venv.sh" in body
-    assert "spa_env.sh" in body
+    assert "env --export" in body
     assert str(PROJECT_ROOT) in body
     assert subprocess.run(["bash", "-n", str(envrc)]).returncode == 0
 
-    # A stale SPA_LAB_DIR / SPLUNK_CONFIG_FILE from another lab must not win.
-    env = os.environ.copy()
-    env["SPA_LAB_DIR"] = "/somewhere/else"
+    env = spa_env()
+    env["SPA_ENV_DIR"] = "/somewhere/else"
     env["SPLUNK_CONFIG_FILE"] = "/somewhere/else/config/splunk_config.yml"
     sourced = subprocess.run(
-        ["bash", "-c", 'source .envrc >/dev/null 2>&1; echo "$SPA_LAB_DIR"; echo "$SPLUNK_CONFIG_FILE"'],
-        cwd=lab,
+        ["bash", "-c", 'source .envrc >/dev/null 2>&1; echo "$SPA_ENV_DIR"; echo "$SPLUNK_CONFIG_FILE"'],
+        cwd=dest,
         capture_output=True,
         text=True,
         env=env,
     )
     lines = sourced.stdout.split()
-    assert lines[0] == str(lab)
-    assert lines[1] == str(lab / "config" / "splunk_config.yml")
+    assert lines[0] == str(dest)
+    assert lines[1] == str(dest / "config" / "splunk_config.yml")
 
 
 def test_envrc_puts_spa_home_bin_on_path(tmp_path):
-    """A lab has no bin/, so .envrc must supply SPA_HOME/bin, ahead of any other clone."""
-    lab = tmp_path / "lab"
+    dest = tmp_path / "env"
     other_bin = tmp_path / "other-clone" / "bin"
     other_bin.mkdir(parents=True)
-    (other_bin / "spash").write_text("#!/bin/sh\nexit 0\n")
-    (other_bin / "spash").chmod(0o755)
-    result = subprocess.run(
-        [str(INIT), "--example", "single_node.yml", "--skip-doctor", str(lab)],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-    )
+    (other_bin / "spa").write_text("#!/bin/sh\nexit 0\n")
+    (other_bin / "spa").chmod(0o755)
+    result = run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
     assert result.returncode == 0, result.stderr + result.stdout
 
-    env = os.environ.copy()
+    env = spa_env()
     env["PATH"] = env["PATH"] + os.pathsep + str(other_bin)
     sourced = subprocess.run(
-        ["bash", "-c", 'source .envrc >/dev/null 2>&1; command -v spash'],
-        cwd=lab,
+        ["bash", "-c", 'source .envrc >/dev/null 2>&1; command -v spa'],
+        cwd=dest,
         capture_output=True,
         text=True,
         env=env,
     )
-    assert sourced.stdout.strip() == str(PROJECT_ROOT / "bin" / "spash")
+    assert sourced.stdout.strip() == str(PROJECT_ROOT / "bin" / "spa")
 
 
 def test_init_no_envrc(tmp_path):
-    lab = tmp_path / "lab"
-    result = subprocess.run(
-        [str(INIT), "--example", "single_node.yml", "--no-envrc", "--skip-doctor", str(lab)],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-    )
+    dest = tmp_path / "env"
+    result = run_spa_init(["--example", "single_node.yml", "--no-envrc", "--skip-doctor", str(dest)])
     assert result.returncode == 0, result.stderr + result.stdout
-    assert not (lab / ".envrc").exists()
+    assert not (dest / ".envrc").exists()
 
 
 def test_collections_install_is_forced_into_target_path():
-    """galaxy says 'nothing to do' when ~/.ansible has them; the target must still fill."""
     body = SCRIPT.read_text()
     assert "collection install --force" in body
 
 
 def test_collections_not_reinstalled_when_present():
-    """Detection must match the on-disk namespace/name, or every activation reinstalls."""
     collections = PROJECT_ROOT / ".collections" / "ansible_collections"
     if not (PROJECT_ROOT / ".venv" / "bin" / "activate").is_file() or not collections.is_dir():
         pytest.skip("shared venv/collections not built on this machine")
@@ -207,7 +201,6 @@ def test_collections_not_reinstalled_when_present():
 
 
 def test_run_venv_wrapper_uses_tests_venv():
-    """tests/run_venv.sh must stay on tests/.venv, not the shared venv."""
     body = (PROJECT_ROOT / "tests" / "run_venv.sh").read_text()
     assert "bin/spa_venv.sh" in body
     assert ".venv" in body

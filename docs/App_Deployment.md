@@ -52,10 +52,10 @@ For Splunkbase **folder-backed** apps, **`name`** must match the top-level folde
 
 ```bash
 # Test first
-ansible-playbook ansible/deploy_splunk_apps.yml --check
+ansible-playbook ansible/splunk_apps_deploy.yml --check
 
 # Deploy
-ansible-playbook ansible/deploy_splunk_apps.yml
+ansible-playbook ansible/splunk_apps_deploy.yml
 ```
 
 ## 📚 Documentation
@@ -95,7 +95,7 @@ See `examples/` directory:
 
 ## 🔧 Roles
 
-App deployment uses the following roles (run by `deploy_splunk_apps.yml` in sequence):
+App deployment uses the following roles (run by `splunk_apps_deploy.yml` in sequence):
 
 - `ansible/roles/apps_deployment_server/` – Deployment Server distribution (forwarders, non-clustered targets)
 - `ansible/roles/apps_cluster_manager/` – Cluster Manager distribution (indexer cluster apps)
@@ -108,8 +108,8 @@ See the [App Deployment Guide](App_Deployment_Guide.md) for [ITSI (premium apps)
 
 ## 🎭 Playbooks
 
-- `ansible/deploy_splunk_apps.yml` – Deploy apps (and remove apps when `state: absent` in config)
-- `ansible/remove_splunk_apps.yml` - Remove apps only (when `state: absent`)
+- `ansible/splunk_apps_deploy.yml` – Deploy apps (and remove apps when `state: absent` in config)
+- `ansible/splunk_apps_remove.yml` - Remove apps only (when `state: absent`)
 
 ## 📊 Status
 

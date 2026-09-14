@@ -69,7 +69,7 @@ Merged PR head branches are deleted automatically (`delete_branch_on_merge` on t
 Run these when the delta warrants it (app routing, ITSI, Terraform), not for every patch. See [docs/App_Deployment_Testing.md](docs/App_Deployment_Testing.md).
 
 ```bash
-ansible-playbook ansible/deploy_splunk_apps.yml -v
+ansible-playbook ansible/splunk_apps_deploy.yml -v
 ansible-playbook ansible/verification/verify_app_deployment.yml -e fail_on_mismatch=true
 # Full AWS pipeline (installers in ../Software/):
 ./tests/run_deployment_tests.sh

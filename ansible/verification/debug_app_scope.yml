@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Debug app scope routing.
+#   description: Prints how apps would be routed without changing hosts.
+#   category: verification
+#   risk: read-only
+#   examples:
+#     - spa run verification/debug_app_scope
 # Debug App Scope – compute direct, deployment server, deployer, and cluster manager scope and dump to file
 # Works for both state=installed and state=absent. No install/remove is performed.
 # Output format: direct_scope (list); deployer, cluster_manager, deployment_server are each a list of entries
@@ -74,7 +82,7 @@
   become: false
 
   vars:
-    # Same role union as direct deploy (deploy_splunk_apps.yml); parenthesize before | unique (Jinja binds | to last term only).
+    # Same role union as direct deploy (splunk_apps_deploy.yml); parenthesize before | unique (Jinja binds | to last term only).
     _scope_hosts: "{{ ((groups['role_cluster_manager'] | default([])) + (groups['role_deployer'] | default([])) + (groups['role_deployment_server'] | default([])) + (groups['role_heavy_forwarder'] | default([])) + (groups['role_indexer'] | default([])) + (groups['role_license_manager'] | default([])) + (groups['role_monitoring_console'] | default([])) + (groups['role_search_head'] | default([])) + (groups['role_universal_forwarder'] | default([])) + (groups['role_universal_forwarder_windows'] | default([]))) | unique | list }}"
     _scope_output_path: "{{ scope_output_path | default(playbook_dir + '/output/scope_debug.json') }}"
 

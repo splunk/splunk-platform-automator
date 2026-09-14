@@ -29,12 +29,13 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
         - [Outbound Rules](#outbound-rules)
   - [Upgrade](#upgrade)
     - [Migrate existing Splunk Platform Automator Environments from 1.x to 2.x](#migrate-existing-splunk-platform-automator-environments-from-1x-to-2x)
+    - [Migrate existing Splunk Platform Automator Environments from 2.x to 3.0](#migrate-existing-splunk-platform-automator-environments-from-2x-to-30)
   - [Removed Biased Language](#removed-biased-language)
   - [Building Windows Virtual Machine Template](#building-windows-virtual-machine-template)
   - [Framework Usage](#framework-usage)
     - [Start here](#start-here)
     - [First start and initialization](#first-start-and-initialization)
-    - [Multiple labs, one clone](#multiple-labs-one-clone)
+    - [Multiple environments, one clone](#multiple-environments-one-clone)
     - [Copy a configuration file](#copy-a-configuration-file)
     - [Start the deployment](#start-the-deployment)
       - [Option A: Virtualbox (Local Virtual Machines)](#option-a-virtualbox-local-virtual-machines)
@@ -45,13 +46,13 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
     - [Rerun provisioning](#rerun-provisioning)
     - [Login to the hosts](#login-to-the-hosts)
       - [Login to Splunk Browser Interface](#login-to-splunk-browser-interface)
-      - [Login with spash (Splunk Platform Automator Shell)](#login-with-spash-splunk-platform-automator-shell)
+      - [Login with spa hosts](#login-with-spa-hosts)
       - [Login by SSH](#login-by-ssh)
     - [Environment Users](#environment-users)
       - [User vagrant](#user-vagrant)
       - [User splunk](#user-splunk)
     - [Copy files](#copy-files)
-      - [Copy with spash (Splunk Platform Automator Shell)](#copy-with-spash-splunk-platform-automator-shell)
+      - [Copy with spa hosts](#copy-with-spa-hosts)
       - [Copy with vagrant scp](#copy-with-vagrant-scp)
         - [scp example](#scp-example)
     - [Ansible playbooks only](#ansible-playbooks-only)
@@ -118,12 +119,12 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 ### Framework Installation
 
 1. Install **Python 3.9+** (with the `venv` module). If your distro has no suitable package, [build your own Python](#build-your-own-python-version).
-2. Clone this repository or extract a [release](https://github.com/splunk/splunk-platform-automator/tags). That checkout is the framework (`SPA_HOME`). Do not copy `ansible/` into each lab.
-3. Create a `Software` directory as a **sibling** of the clone (or of the lab). Put Splunk Enterprise and Universal Forwarder tarballs there, Professional Services baseconfig apps, and optionally `Splunk_Enterprise.lic`. See the layout below.
-4. Ansible, Pydantic, and Ansible collections are **not** installed with Homebrew. `./bin/init_spa_dir.sh` (or `./bin/spa_venv.sh --create`) creates `$SPA_HOME/.venv` from `requirements.txt` and `requirements.yml`. Check the machine with `./bin/spa_doctor.sh`.
-5. **AWS labs:** install Terraform 1.3+ (e.g. `brew install terraform`) and an AWS key pair / security group. **VirtualBox labs:** install Vagrant (and VirtualBox); see [Install Virtualbox support](#install-virtualbox-support-optional). **Optional:** [direnv](https://direnv.net) so `cd` into a lab activates the venv and `SPA_*` variables (`brew install direnv` plus the [shell hook](https://direnv.net/docs/hook.html)).
+2. Clone this repository or extract a [release](https://github.com/splunk/splunk-platform-automator/tags). That checkout is the framework (`SPA_HOME`). Do not copy `ansible/` into each environment.
+3. Create a `Software` directory as a **sibling** of the clone (or of the env dir). Put Splunk Enterprise and Universal Forwarder tarballs there, Professional Services baseconfig apps, and optionally `Splunk_Enterprise.lic`. See the layout below.
+4. Ansible, Pydantic, and Ansible collections are **not** installed with Homebrew. `spa init` (or `./bin/spa_venv.sh --create`) creates `$SPA_HOME/.venv` from `requirements.txt` and `requirements.yml`. Check the machine with `spa doctor`.
+5. **AWS environments:** install Terraform 1.3+ (e.g. `brew install terraform`) and an AWS key pair / security group. **VirtualBox:** install Vagrant (and VirtualBox); see [Install Virtualbox support](#install-virtualbox-support-optional). **Optional:** [direnv](https://direnv.net) so `cd` into an env dir activates the venv and `SPA_*` variables (`brew install direnv` plus the [shell hook](https://direnv.net/docs/hook.html)).
 
-A `spa` CLI (`spa init`, `spa deploy`) is the next milestone. Until then use the commands below.
+Primary flow: `spa init ~/envs/my-env` then `spa validate && spa provision --yes && spa deploy --yes`. `ansible-playbook` remains documented as the equivalent, not the default.
 
 Your directory structure should now look like this:
 
@@ -142,7 +143,7 @@ Put installers in `Software/`:
 - Splunk Professional Services Best Practices baseconfig apps (not public; ask your PS contact)
 - Optional license as `Splunk_Enterprise.lic`
 
-The `Vagrant/` parent name is traditional (VirtualBox). The clone and `Software/` sibling can live anywhere; labs created with `init_spa_dir.sh` look for `../Software` next to the lab, then next to `SPA_HOME`.
+The `Vagrant/` parent name is traditional (VirtualBox). The clone and `Software/` sibling can live anywhere; env dirs created with `spa init` look for `../Software` next to the env, then next to `SPA_HOME`.
 
 ### Install Virtualbox support (optional)
 
@@ -231,6 +232,10 @@ git pull
 
 Please refer to the [Migration Guide](docs/Migrate_SPA_1x_to_2x.md).
 
+### Migrate existing Splunk Platform Automator Environments from 2.x to 3.0
+
+Please refer to the [Migration Guide](docs/Migrate_SPA_2x_to_3x.md).
+
 ## Removed Biased Language
 
 Please refer to the [Removed Biased Language Guide](docs/Removed_Biased_Language.md).
@@ -243,34 +248,43 @@ To build your own windows vagrant image follow [Setup Windows Vagrant image](doc
 
 ### Start here
 
-Pick one path. Ansible always comes from `bin/spa_venv.sh` (created by `init_spa_dir.sh` if missing), not from Homebrew.
+Pick one path. Ansible always comes from `bin/spa_venv.sh` (created by `spa init` if missing), not from Homebrew.
 
-**AWS (recommended for a separate lab directory).** One clone, many labs. Terraform state and `splunk_config.yml` live in the lab. `vagrant up` is not used.
+**AWS (recommended for a separate environment directory).** One clone, many environments. Terraform state and `splunk_config.yml` live in the env dir. `vagrant up` is not used.
 
 ```bash
 cd /path/to/splunk-platform-automator
-./bin/init_spa_dir.sh --example cm_2idxc_sh_uf_aws.yml ~/labs/my-lab
-cd ~/labs/my-lab
-# With direnv: venv + SPA_HOME / SPA_LAB_DIR / ANSIBLE_* load on cd (init ran direnv allow).
+spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env
+cd ~/envs/my-env
+# With direnv: venv + SPA_HOME / SPA_ENV_DIR / ANSIBLE_* load on cd (init ran direnv allow).
 # Without direnv:
-#   source /path/to/clone/bin/spa_venv.sh --lab ~/labs/my-lab
-#   eval "$(/path/to/clone/bin/spa_env.sh --start-dir ~/labs/my-lab)"
-"$SPA_HOME/bin/validate_splunk_config.sh"
-ansible-playbook "$SPA_HOME/ansible/provision_terraform_aws.yml" -e auto_approve=true
-ansible-playbook "$SPA_HOME/ansible/deploy_site.yml"
+#   source /path/to/clone/bin/spa_venv.sh --env ~/envs/my-env
+#   eval "$(spa env --export)"
+spa validate
+spa provision --yes && spa deploy --yes
 ```
 
-Host links: `$SPA_LAB_DIR/config/index.html`. Destroy: `ansible-playbook "$SPA_HOME/ansible/destroy_terraform_aws.yml"`. Details: [Multiple labs, one clone](#multiple-labs-one-clone) and [Option B](#option-b-aws-with-terraform-recommended-for-aws).
+Host links: `$SPA_ENV_DIR/config/index.html`. Temporarily stop AWS compute
+without deleting Terraform state or EBS volumes with `spa suspend`; bring it
+back and refresh changed public addresses in `inventory/hosts` with
+`spa resume`. EBS and other retained resources still incur charges while
+instances are stopped. Permanently remove the environment with
+`spa destroy --yes`. Details: [Multiple environments, one clone](#multiple-environments-one-clone) and [Option B](#option-b-aws-with-terraform-recommended-for-aws).
 
-**VirtualBox (local VMs).** Keep config in the **clone** (`config/splunk_config.yml`). Run Vagrant from the directory that contains `Vagrantfile` (`SPA_HOME`). A lab dir from `init_spa_dir.sh` does **not** get a Vagrantfile; `vagrant up` from `~/labs/...` is not supported yet.
+**VirtualBox (local VMs).** Keep config in the **clone** (`config/splunk_config.yml`). Run Vagrant from the directory that contains `Vagrantfile` (`SPA_HOME`). An env dir from `spa init` does **not** get a Vagrantfile; `vagrant up` from `~/envs/...` is not supported yet.
+
+`spa provision`, `spa suspend`, `spa resume`, and `spa destroy` select their
+infrastructure provider from `splunk_config.yml`. AWS (`terraform.aws`) is
+implemented. VirtualBox lifecycle is deliberately not routed through `spa`
+yet; use `vagrant up` / `vagrant halt` from `SPA_HOME`.
 
 ```bash
 cd /path/to/splunk-platform-automator
 cp examples/single_node.yml config/splunk_config.yml   # or another VirtualBox example
 source bin/spa_venv.sh
-./bin/spa_doctor.sh
+spa doctor
 vagrant up
-ansible-playbook ansible/deploy_site.yml
+spa deploy
 ```
 
 ### First start and initialization
@@ -282,82 +296,83 @@ cd splunk-platform-automator
 vagrant
 ```
 
-### Multiple labs, one clone
+### Multiple environments, one clone
 
-Keep one git checkout as the framework (`SPA_HOME`) and put each lab in its own directory (`SPA_LAB_DIR`). Lab state is the config (including generated `index.html`), `.spa.yml`, `inventory/hosts`, Terraform state, and optional `saved_base_config_apps/` (pulled-back PS baseconfig apps) — not a copy of `ansible/`.
+Keep one git checkout as the framework (`SPA_HOME`) and put each Splunk environment in its own directory (`SPA_ENV_DIR`). Env state is the config (including generated `index.html`), `.spa.yml`, `inventory/hosts`, Terraform state, and optional `saved_base_config_apps/` (pulled-back PS baseconfig apps) — not a copy of `ansible/`.
 
 ```bash
-# Fresh AWS lab from an example (not a VirtualBox example):
-./bin/init_spa_dir.sh --example cm_2idxc_sh_uf_aws.yml ~/labs/itsi
+# Fresh AWS env from an example (not a VirtualBox example):
+spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/itsi
 
 # Old clone that already has a running env (config + inventory + Terraform state):
-./bin/init_spa_dir.sh ~/labs/itsi
+spa init ~/envs/itsi
 # or, from a new framework checkout, pull state out of the old clone:
-./bin/init_spa_dir.sh --from /path/to/old-clone ~/labs/itsi
+spa init --from /path/to/old-clone ~/envs/itsi
 
-eval "$(./bin/spa_env.sh --start-dir ~/labs/itsi)"
-./bin/validate_splunk_config.sh
+eval "$(spa env --export)"
+spa validate
 ```
 
-If `config/splunk_config.yml` already exists in `SPA_HOME` (or `--from`), `init_spa_dir.sh` **migrates** that state instead of copying an example. Config, `inventory/hosts`, and Terraform state/`tfvars`/`.terraform` move into the lab so destroy/redeploy still sees the same AWS resources. Framework files (`ansible/`, modules) stay in the clone. Use `--keep-source` to copy instead of move. Use `--example` when you want a new config even if the clone already has one.
+If `config/splunk_config.yml` already exists in `SPA_HOME` (or `--from`), `spa init` **migrates** that state instead of copying an example. Config, `inventory/hosts`, and Terraform state/`tfvars`/`.terraform` move into the env so destroy/redeploy still sees the same AWS resources. Framework files (`ansible/`, modules) stay in the clone. Use `--keep-source` to copy instead of move. Use `--example` when you want a new config even if the clone already has one. `--force` refreshes `.spa.yml` / `.envrc` and never replaces `splunk_config.yml` unless `--example` is also given.
 
-If you copied a whole old checkout as the lab directory, `init_spa_dir.sh` that path converts it in place: lab state is kept, `ansible/` and other framework files are removed, and `.spa.yml` points at the clone you ran the script from.
+If you copied a whole old checkout as the env directory, `spa init DIR` detects it and exits 2 until you pass `--force`. Then env state is kept, `ansible/` and other framework leftovers are removed, and `.spa.yml` points at the clone you ran `spa` from.
 
-`spa_env.sh` sets `SPA_HOME`, `SPA_LAB_DIR`, `SPLUNK_CONFIG_FILE`, and `ANSIBLE_INVENTORY` so playbooks use the lab YAML, not `config/splunk_config.yml` in the clone.
+`spa env --export` prints `SPA_HOME`, `SPA_ENV_DIR`, `SPLUNK_CONFIG_FILE`, and `ANSIBLE_INVENTORY` so playbooks use the env YAML, not `config/splunk_config.yml` in the clone.
 
-#### Python environment for a lab
+#### Python environment for an env dir
 
-Ansible, Pydantic, and the other Python dependencies come from a virtualenv managed by `bin/spa_venv.sh`, so a broken system or Homebrew package does not block a lab:
+Ansible, Pydantic, and the other Python dependencies come from a virtualenv managed by `bin/spa_venv.sh`, so a broken system or Homebrew package does not block an environment:
 
 ```bash
-# Created automatically by init_spa_dir.sh when missing; or by hand:
+# Created automatically by spa init when missing; or by hand:
 ./bin/spa_venv.sh --create              # shared venv in SPA_HOME/.venv
 source bin/spa_venv.sh                  # activate (creates it when missing)
 ```
 
-The venv used is the first match of `SPA_VENV_DIR` (or `--dir`), then `LAB/.venv` when that exists, then `SPA_HOME/.venv`. Ansible collections from `requirements.yml` install next to the venv and `ANSIBLE_COLLECTIONS_PATH` is exported. Terraform stays a system binary.
+The venv used is the first match of `SPA_VENV_DIR` (or `--dir`), then `$SPA_ENV_DIR/.venv` when that exists, then `SPA_HOME/.venv`. Ansible collections from `requirements.yml` install next to the venv and `ANSIBLE_COLLECTIONS_PATH` is exported. Terraform stays a system binary.
 
-Give one lab its own Python or Ansible version with a lab-local venv:
+Give one environment its own Python or Ansible version with an env-local venv:
 
 ```bash
-./bin/init_spa_dir.sh --example single_node.yml --venv ~/labs/py311
-./bin/init_spa_dir.sh --example single_node.yml --venv --python python3.11 ~/labs/py311
-# existing lab:
-./bin/spa_venv.sh --create --dir ~/labs/py311/.venv --python python3.11
+spa init --example single_node.yml --venv ~/envs/py311
+spa init --example single_node.yml --venv --python python3.11 ~/envs/py311
+spa init --force --venv --ansible 2.17.8 ~/envs/py311   # keeps splunk_config.yml
+# existing env:
+./bin/spa_venv.sh --create --dir ~/envs/py311/.venv --python python3.11
 ```
 
-`init_spa_dir.sh` also writes an `.envrc` (skip with `--no-envrc`) and runs **`direnv allow`** for that lab. For `cd` to load the environment automatically, direnv must run in your shell — a one-time setup:
+`spa init` also writes an `.envrc` (skip with `--no-envrc`) and runs **`direnv allow`** for that env. For `cd` to load the environment automatically, direnv must run in your shell — a one-time setup:
 
 ```bash
 brew install direnv
-./bin/spa_doctor.sh --fix-direnv    # adds one line to ~/.zshrc (or ~/.bashrc)
-# Close the terminal, open a new one, then: cd ~/labs/my-lab
+spa doctor --fix-direnv    # adds one line to ~/.zshrc (or ~/.bashrc)
+# Close the terminal, open a new one, then: cd ~/envs/my-env
 ```
 
-`spa_doctor.sh` checks that this line exists (not only that the `direnv` program is installed). Interactive `init_spa_dir.sh` runs `--fix-direnv` for you. Then:
+`spa doctor` checks that this line exists (not only that the `direnv` program is installed). Interactive `spa init` runs `--fix-direnv` for you. Then:
 
 ```bash
-./bin/spa_doctor.sh --lab ~/labs/my-lab
+spa doctor --env ~/envs/my-env
 ```
 
-`init_spa_dir.sh` runs the same check at the end (use `--skip-doctor` to skip). Ansible and Pydantic are **not** brew requirements — they install into `spa_venv`.
+`spa init` runs the same check at the end (use `--skip-doctor` to skip). Ansible and Pydantic are **not** brew requirements — they install into `spa_venv`.
 
 Without direnv, activate the same environment explicitly:
 
 ```bash
-source /path/to/clone/bin/spa_venv.sh --lab ~/labs/itsi
-eval "$(/path/to/clone/bin/spa_env.sh --start-dir ~/labs/itsi)"
+source /path/to/clone/bin/spa_venv.sh --env ~/envs/itsi
+eval "$(spa env --export)"
 ```
 
-The test suites keep their own `tests/.venv` (pytest dependencies stay out of the venv a lab uses); `tests/run_venv.sh` is a thin wrapper around the same `bin/spa_venv.sh`.
+The test suites keep their own `tests/.venv` (pytest dependencies stay out of the venv an env uses); `tests/run_venv.sh` is a thin wrapper around the same `bin/spa_venv.sh`.
 
-Installers and PS baseconfig apps default to `../Software`. Local `source: local` apps default to `../apps` (lab sibling), then `$SPA_HOME/apps`. Resolution order for each: env (`SPA_SOFTWARE_DIR` / `SPA_BASECONFIG_DIR` / `SPA_APPS_DIR`), then a **custom** path in `splunk_config.yml` (`splunk_dirs.splunk_software_dir`, `splunk_dirs.splunk_baseconfig_dir`, `splunk_app_deployment.local_app_repo_path`), then `.spa.yml` (`software_dir` / `baseconfig_dir` / `apps_dir`), then discovery. Built-in defaults such as `../Software` do not override `.spa.yml`. `init_spa_dir.sh` writes the keys it finds. Unset `SPA_HOME` / `SPA_LAB_DIR` to keep today's in-repo workflow.
+Installers and PS baseconfig apps default to `../Software`. Local `source: local` apps default to `../apps` (env sibling), then `$SPA_HOME/apps`. Resolution order for each: env (`SPA_SOFTWARE_DIR` / `SPA_BASECONFIG_DIR` / `SPA_APPS_DIR`), then a **custom** path in `splunk_config.yml` (`splunk_dirs.splunk_software_dir`, `splunk_dirs.splunk_baseconfig_dir`, `splunk_app_deployment.local_app_repo_path`), then `.spa.yml` (`software_dir` / `baseconfig_dir` / `apps_dir`), then discovery. Built-in defaults such as `../Software` do not override `.spa.yml`. `spa init` writes the keys it finds. Unset `SPA_HOME` / `SPA_ENV_DIR` to keep today's in-repo workflow.
 
-A `spa` CLI (`spa init`, `spa deploy`, …) is the next milestone; until then `cd` the lab (direnv) or source `bin/spa_env.sh` before `ansible-playbook`.
+Day-to-day commands: `spa validate`, `spa provision --yes && spa deploy --yes`, `spa run NAME` (`--yes` when the catalog marks `requires_confirmation`). `spa run --list` shows playbook summaries; `spa run NAME --help` prints risk, confirmation, inputs, and examples without running Ansible. Equivalent: `ansible-playbook` from `$SPA_HOME` after `eval "$(spa env --export)"`. 2.x playbook stems are listed in [Migrate SPA 2.x to 3.0](docs/Migrate_SPA_2x_to_3x.md). The backend boundary and future daemon/GUI design are in [Controller, GUI, and remote-client architecture](docs/Controller_Architecture.md).
 
 ### Copy a configuration file
 
-There is one single configuration file, where all settings for your deployment are defined. For a **separate lab**, `init_spa_dir.sh --example … LAB_DIR` copies an example into `$SPA_LAB_DIR/config/splunk_config.yml`. For **clone-equal** (VirtualBox, or a single env in the checkout), copy an example to `config/splunk_config.yml` in the clone. Adjust the settings to your needs. For a standard setup you should be fine with most of the default settings, but there are a lot of things you can adjust for special cases. See the [configuration description](examples/configuration_description.yml) file, where all existing values are described. For a step-by-step AWS lab workflow (SVA topology, OS/SSH, validation), see [Splunk Config Guided Setup](docs/Splunk_Config_Guided_Setup.md). For AI agent skills (`spa-create-config`, `spa-add-test-scenario`), see [AGENTS.md](AGENTS.md) and [skills/spa/](skills/spa/). To store passwords and other secrets securely (e.g. Splunk admin password, cluster secrets), see [Storing secrets in splunk_config.yml](docs/Secrets_and_Vault.md).
+There is one single configuration file, where all settings for your deployment are defined. For a **separate environment**, `spa init --example … ENV_DIR` copies an example into `$SPA_ENV_DIR/config/splunk_config.yml`. For **clone-equal** (VirtualBox, or a single env in the checkout), copy an example to `config/splunk_config.yml` in the clone. Adjust the settings to your needs. For a standard setup you should be fine with most of the default settings, but there are a lot of things you can adjust for special cases. See the [configuration description](examples/configuration_description.yml) file, where all existing values are described. For a step-by-step AWS lab workflow (SVA topology, OS/SSH, validation), see [Splunk Config Guided Setup](docs/Splunk_Config_Guided_Setup.md). For AI agent skills (`spa-create-config`, `spa-add-test-scenario`), see [AGENTS.md](AGENTS.md) and [skills/spa/](skills/spa/). To store passwords and other secrets securely (e.g. Splunk admin password, cluster secrets), see [Storing secrets in splunk_config.yml](docs/Secrets_and_Vault.md).
 
 AWS: See [instruction here](#option-b-aws-with-terraform-recommended-for-aws) when deploying into Amazon Cloud. You can start with [splunk_config_terraform_aws.yml](examples/splunk_config_terraform_aws.yml) for a simple environment. Copy `splunk_idxclusters`, `splunk_shclusters` and `splunk_hosts` sections from other examples for more complex deployments.
 
@@ -367,7 +382,7 @@ Splunk Platform Automator supports multiple deployment targets. Choose the appro
 
 #### Option A: Virtualbox (Local Virtual Machines)
 
-Use this path with config in the **clone** and commands run from `SPA_HOME` (where `Vagrantfile` is). Lab directories from `init_spa_dir.sh` do not include a Vagrantfile; do not run `vagrant up` from `$SPA_LAB_DIR`.
+Use this path with config in the **clone** and commands run from `SPA_HOME` (where `Vagrantfile` is). Env directories from `spa init` do not include a Vagrantfile; do not run `vagrant up` from `$SPA_ENV_DIR`.
 
 When building virtual machines for Virtualbox the first time it will pull an OS image from the internet. The box images are cached here: `~/.vagrant.d/boxes`.
 
@@ -401,15 +416,15 @@ vagrant up; ansible-playbook ansible/deploy_site.yml
 
 **Prerequisites:**
 
-- Terraform 1.3.0+ installed (`./bin/spa_doctor.sh --lab …` requires it when the config has `terraform.aws`)
-- Shared venv (`init_spa_dir.sh` or `./bin/spa_venv.sh --create`) so `ansible-playbook` is not Homebrew Ansible
+- Terraform 1.3.0+ installed (`spa doctor --env …` requires it when the config has `terraform.aws`)
+- Shared venv (`spa init` or `./bin/spa_venv.sh --create`) so `ansible-playbook` is not Homebrew Ansible
 - AWS credentials (via environment variables or config file)
 - AWS security group created (e.g., 'Splunk_Basic') - see [security group example](#example-basic-aws-security-group-splunk_basic)
 - EC2 key pair created
 
-Prefer a **lab directory** ([Start here](#start-here)) so Terraform state is not written into the clone. Clone-equal (`config/splunk_config.yml` in the checkout) still works.
+Prefer an **environment directory** ([Start here](#start-here)) so Terraform state is not written into the clone. Clone-equal (`config/splunk_config.yml` in the checkout) still works.
 
-**Quick Start** (clone-equal). For a lab dir, `cd` the lab first so `ANSIBLE_INVENTORY` points at that config, then run the same playbooks with `"$SPA_HOME/ansible/..."`.
+**Quick Start** (clone-equal). For an env dir, `cd` the env first so `ANSIBLE_INVENTORY` points at that config, then run `spa provision --yes && spa deploy --yes` (or the same playbooks with `"$SPA_HOME/ansible/..."`).
 
 - Configure `config/splunk_config.yml` with a `terraform.aws` section:
 
@@ -436,7 +451,7 @@ splunk_hosts:
 - Provision infrastructure:
 
 ```bash
-ansible-playbook ansible/provision_terraform_aws.yml
+ansible-playbook ansible/aws_provision.yml
 ```
 
 - Deploy Splunk:
@@ -448,7 +463,7 @@ ansible-playbook ansible/deploy_site.yml
 - Destroy infrastructure:
 
 ```bash
-ansible-playbook ansible/destroy_terraform_aws.yml
+ansible-playbook ansible/aws_destroy.yml
 ```
 
 **Features:**
@@ -520,33 +535,35 @@ ansible-playbook ansible/deploy_site.yml [--limit <hostname>]
 
 #### Login to Splunk Browser Interface
 
-To login to one of the hosts just open the `index.html` file created in the lab `config/` directory (`$SPA_LAB_DIR/config/index.html`, or `config/index.html` in the clone when you are not using a separate lab). You will find links to every role of your deployment.
+To login to one of the hosts just open the `index.html` file created in the env `config/` directory (`$SPA_ENV_DIR/config/index.html`, or `config/index.html` in the clone when you are not using a separate env). You will find links to every role of your deployment.
 If something changes along the way and you need to update the linkpage just call this playbook:
 
 ```bash
-ansible-playbook ansible/create_linkpage.yml
+spa run create_linkpage
 ```
 
 
 
-#### Login with spash (Splunk Platform Automator Shell)
+#### Login with spa hosts
 
-`spash` is a helper script that makes SSH connections easier by looking up host details directly from the Ansible inventory. It handles keys, users, and IP addresses automatically.
+`spa hosts ssh` looks up host details from inventory (keys, user, address). `spa sh` and `spa shell` are aliases of that SSH command.
 
 **Usage:**
 
 ```bash
-# SSH into a host (matches partial names)
-./bin/spash <hostname>
+# SSH into a host
+spa hosts ssh <hostname>
+spa sh <hostname>
 
-# List all available hosts
-./bin/spash -l
+# List hosts (add --status for runtime power and connectivity)
+spa hosts list
+spa hosts list --status
 
 # Pass extra arguments to SSH
-./bin/spash idx1 -L 8089:localhost:8089
+spa hosts ssh idx1 -- -L 8089:localhost:8089
 ```
 
-From a lab dir the generated `.envrc` adds `$SPA_HOME/bin` to `PATH`, so plain `spash <hostname>` works. If it is not found, or runs from a different checkout than you expect, `./bin/spa_doctor.sh` reports which one wins — "not on PATH" usually means the direnv shell hook is not loaded in that shell (`./bin/spa_doctor.sh --fix-direnv`).
+From an env dir the generated `.envrc` adds `$SPA_HOME/bin` to `PATH`, so plain `spa` works. If it is not found, or runs from a different checkout than you expect, `spa doctor` reports which one wins — "not on PATH" usually means the direnv shell hook is not loaded in that shell (`spa doctor --fix-direnv`).
 
 
 
@@ -574,7 +591,7 @@ os:
 To deploy keys without running a full site deployment, use the standalone playbook:
 
 ```bash
-ansible-playbook ansible/install_ssh_keys.yml
+ansible-playbook ansible/ssh_keys.yml
 ```
 
 
@@ -601,17 +618,25 @@ alias
 
 
 
-#### Copy with spash (Splunk Platform Automator Shell)
+#### Copy with spa hosts
 
-`spash` can also be used to copy files to and from hosts using the scp protocol. It automatically resolves the connection details from the inventory.
+`spa hosts copy` copies files to and from hosts using scp. The syntax is `spa hosts copy SRC [SRC ...] DST`, where a remote side is written `HOST:PATH` with the inventory name from `spa hosts list`. User and SSH key come from inventory. `spa shell -c` still works.
 
 ```bash
 # Copy a local file to a remote host
-./bin/spash -c local_file.txt idx1:/tmp/
+spa hosts copy local_file.txt idx1:/tmp/
 
 # Copy a remote file to the current directory
-./bin/spash -c idx1:/opt/splunk/etc/system/local/server.conf .
+spa hosts copy idx1:/opt/splunk/etc/system/local/server.conf .
+
+# Copy a directory
+spa hosts copy -r ./myapp idx1:/tmp/
+
+# Pass other scp flags after --
+spa hosts copy -- -p local_file.txt idx1:/tmp/
 ```
+
+One remote host per run; repeat the command for the next host.
 
 
 
@@ -659,7 +684,7 @@ ansible -m ping all
 And then some more ansible prerequisites with this playbook
 
 ```bash
-ansible-playbook ansible/test_ansible_prereqs.yml
+ansible-playbook ansible/ansible_check.yml
 ```
 
 
@@ -688,7 +713,7 @@ make install
 
 ### Create a virtualenv for a specific Ansible version
 
-Prefer `bin/spa_venv.sh` (shared `$SPA_HOME/.venv`, or `init_spa_dir.sh --venv` for a lab). The following is only needed if you pin an old Ansible by hand. See [supported Ansible versions](#supported-ansible-versions).
+Prefer `bin/spa_venv.sh` (shared `$SPA_HOME/.venv`, or `spa init --venv` for an env). The following is only needed if you pin an old Ansible by hand. See [supported Ansible versions](#supported-ansible-versions).
 
 If you need a specific Ansible version you can create it inside a virtualenv environment. This can
  be useful when deploying older linux images, which too old python versions. An easy way to install new virtual environments is using [pyenv-virtualenv](https://github.com/pyenv/pyenv-virtualenv) or you can do it manually like the following example.

@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Upgrade Splunk on targeted hosts.
+#   description: Upgrades Splunk Enterprise packages on the selected hosts.
+#   category: upgrade
+#   risk: mutating
+#   examples:
+#     - spa run upgrade_splunk --hosts indexer
 # This playbook upgrades the splunk software
 
 - name: Upgrade splunk software

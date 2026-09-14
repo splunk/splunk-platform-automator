@@ -554,7 +554,7 @@ ansible-playbook ansible/site.yml
 
 ```bash
 # Now app deployment will use DS
-ansible-playbook ansible/deploy_splunk_apps.yml
+ansible-playbook ansible/splunk_apps_deploy.yml
 ```
 
 ### Option 2: Force Direct Deployment
@@ -682,7 +682,7 @@ ls -la /opt/splunk/etc/apps/
 Run with verbose output to see deployment decisions:
 
 ```bash
-ansible-playbook ansible/deploy_splunk_apps.yml -v
+ansible-playbook ansible/splunk_apps_deploy.yml -v
 ```
 
 **Key debug messages:**
@@ -1189,7 +1189,7 @@ Push shcluster bundle:
 **Manual Handler Execution:**
 ```bash
 # Force cluster bundle push
-ansible-playbook ansible/deploy_splunk_apps.yml --tags splunk_apps --flush-handlers
+ansible-playbook ansible/splunk_apps_deploy.yml --tags splunk_apps --flush-handlers
 
 # Or manually:
 ssh cm
@@ -1205,7 +1205,7 @@ ssh cm
 2. ✅ Set `splunk_deployment_server` in `splunk_defaults`
 3. ✅ Run full environment deployment (`site.yml`) to configure deployment clients
 4. ✅ Define apps in `splunk_config.yml` with appropriate `target_roles`
-5. ✅ Deploy apps with `deploy_splunk_apps.yml`
+5. ✅ Deploy apps with `splunk_apps_deploy.yml`
 
 ### For Clustered Environments
 
@@ -1236,12 +1236,12 @@ ssh cm
 
 ```bash
 # Deploy all apps
-ansible-playbook ansible/deploy_splunk_apps.yml
+ansible-playbook ansible/splunk_apps_deploy.yml
 # Deploy specific app (use tags if implemented)
-ansible-playbook ansible/deploy_splunk_apps.yml --limit <target_host>
+ansible-playbook ansible/splunk_apps_deploy.yml --limit <target_host>
 
 # Verbose output for troubleshooting
-ansible-playbook ansible/deploy_splunk_apps.yml -v
+ansible-playbook ansible/splunk_apps_deploy.yml -v
 
 # Check inventory structure
 ansible-inventory --graph

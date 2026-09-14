@@ -1,0 +1,22 @@
+---
+# spa-run:
+#   schema: 1
+#   summary: Uninstall Splunk from hosts.
+#   description: Removes the Splunk installation from targeted hosts.
+#   category: operations
+#   risk: destructive
+#   examples:
+#     - spa run splunk_remove --hosts uf1
+# remove the splunk installation
+
+- name: Remove the complete splunk installation
+  hosts: all
+  become: true
+  become_user: root
+
+  tasks:
+
+    - name: Call uninstall from role splunk_software
+      ansible.builtin.include_role:
+        name: splunk_software
+        tasks_from: uninstall

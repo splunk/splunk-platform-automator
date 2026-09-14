@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Wait for an SHC captain.
+#   description: Waits until the search head cluster elects a captain.
+#   category: verification
+#   risk: read-only
+#   examples:
+#     - spa run verification/wait_for_shc_captain
 - name: Find Search Head Cluster Member
   hosts: localhost
   gather_facts: false

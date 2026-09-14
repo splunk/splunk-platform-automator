@@ -6,7 +6,7 @@ For interactive agent assistance in Cursor, use the project skill at [skills/spa
 
 ## Quick path
 
-**Separate lab directory (recommended):** from the clone, `./bin/init_spa_dir.sh --example cm_2idxc_sh_uf_aws.yml ~/labs/my-lab`, then `cd ~/labs/my-lab` (direnv or `spa_env.sh`). Validate and provision with `"$SPA_HOME/bin/validate_splunk_config.sh"` and `"$SPA_HOME/ansible/provision_terraform_aws.yml"`. See [README — Start here](../README.md#start-here).
+**Separate environment directory (recommended):** from the clone, `spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env`, then `cd ~/envs/my-env` (direnv or `eval "$(spa env --export)"`). Then `spa validate && spa provision --yes && spa deploy --yes`. See [README — Start here](../README.md#start-here).
 
 **Clone-equal:**
 
@@ -17,17 +17,28 @@ For interactive agent assistance in Cursor, use the project skill at [skills/spa
 5. Validate before provision:
 
 ```bash
-./bin/validate_splunk_config.sh config/splunk_config.yml
+spa validate config/splunk_config.yml
 ```
 
 6. Provision and deploy:
 
 ```bash
-ap ansible/provision_terraform_aws.yml -e auto_approve=true
-ap ansible/deploy_site.yml
+spa provision --yes && spa deploy --yes
 ```
 
 `deploy_site.yml` runs `preflight_deploy.yml` first. It probes each host for `python3`, flushes stale Ansible fact cache when the cached interpreter no longer matches (for example after switching OS/AMI while reusing hostnames like `cm` and `idx1`), and verifies Ansible connectivity before the main deploy. Terraform provisioning also flushes cache for affected hosts when inventory is regenerated.
+
+For AWS environments, `spa suspend --yes` stops EC2 instances without deleting
+Terraform state or EBS volumes. `spa resume --yes` starts them, waits for AWS
+health, and refreshes `inventory/hosts` because public addresses may change.
+Pass `--hosts idx1` or `--hosts indexer` to limit suspend, resume, or `spa deploy`
+to some hosts. `spa hosts list --status` shows names and runtime state; `spa sh idx1`
+(or `spa hosts ssh idx1`) opens SSH. Human aliases include `spa val`, `spa dep`, and `spa des`;
+skills should keep full names.
+
+Retained resources continue to incur charges. Use `spa destroy --yes` only for
+permanent teardown. Do not delete a live host from `splunk_config.yml` and run
+`spa provision` — that terminates the instance without Splunk decommission.
 
 To skip preflight: `ap ansible/deploy_site.yml --skip-tags preflight`. To disable cache flush on provision: `-e spa_flush_fact_cache_on_provision=false`.
 
@@ -50,7 +61,7 @@ To skip preflight: `ap ansible/deploy_site.yml --skip-tags preflight`. To disabl
 
 Always set `terraform.aws.ssh_username` explicitly.
 
-**Recommended (latest in region):** Amazon Linux 2023, RHEL 10, or Ubuntu 24.04 LTS. Discover AMIs with `splunk_config_aws.py` — example IDs expire.
+**Recommended (latest in region):** Amazon Linux 2023, RHEL 10, or Ubuntu 24.04 LTS. Discover AMIs with `spa aws` — example IDs expire.
 
 | OS | `ssh_username` | Global `os.packages` (required) |
 |----|----------------|-------------------------------|
@@ -67,8 +78,8 @@ SPA checks for policykit (`pkaction`) by default. **Ubuntu images often lack it*
 Discover AMI and SSH hints:
 
 ```bash
-python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os all --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --describe-ami --ami-id ami-xxx --json
+spa aws --region eu-central-1 --latest-ami --os all --json
+spa aws --region eu-central-1 --describe-ami --ami-id ami-xxx --json
 ```
 
 ## Role placement
@@ -104,11 +115,24 @@ splunk_defaults:
 Discover and propose licenses from Software:
 
 ```bash
-python3 bin/splunk_config_licenses.py --json
-python3 bin/splunk_config_licenses.py --config config/splunk_config.yml --json
+spa licenses --json
+spa licenses --config config/splunk_config.yml --json
 ```
 
-Lab configs: add licenses when files exist (avoids trial limits). ITSI in `splunk_app_deployment` requires `license_manager` role and `Splunk_ITSI.lic` when deploying ITSI.
+The scanner reads license type, expiration, and add-on entitlements from each
+file; filenames are not treated as proof of entitlement. It excludes invalid
+and expired files, chooses the latest equivalent license, and combines files
+when needed to satisfy Enterprise plus ITSI or ES. Output is sanitized: raw
+license XML, signatures, and GUIDs are never printed.
+
+Run `spa validate --check-licenses config/splunk_config.yml` to fail on a
+missing, invalid, expired, or wrong-entitlement configured license. Expiration
+within 30 days is a warning.
+
+Lab configs: add licenses when files exist (avoids trial limits). ITSI in
+`splunk_app_deployment` requires `license_manager` and Enterprise + ITSI
+capabilities. Enterprise Security app ID `263` requires Enterprise + ES
+capabilities.
 
 ## Basic apps
 
@@ -120,9 +144,9 @@ ITSI example: [examples/single_node_itsi.yml](examples/single_node_itsi.yml).
 
 | Check | Command |
 |-------|---------|
-| Schema + inventory + playbooks | `./bin/validate_splunk_config.sh config/splunk_config.yml` |
-| + Software license scan (optional) | `./bin/validate_splunk_config.sh --check-licenses config/splunk_config.yml` |
-| + AWS API (optional) | `./bin/validate_splunk_config.sh --splunk-config-aws config/splunk_config.yml` |
+| Schema + inventory + playbooks | `spa validate config/splunk_config.yml` |
+| + Software license scan (optional) | `spa validate --check-licenses config/splunk_config.yml` |
+| + AWS API (optional) | `spa validate --splunk-config-aws config/splunk_config.yml` |
 | Schema unit tests | `./tests/run_schema_tests.sh -q` |
 
 **Playbook syntax-check** requires Ansible collections (`requirements.yml` and `ansible.windows`). Install with:
@@ -141,5 +165,5 @@ ansible-galaxy collection install ansible.windows
 ## Destroy
 
 ```bash
-ap ansible/destroy_terraform_aws.yml -e auto_approve=true
+ap ansible/aws_destroy.yml -e auto_approve=true
 ```

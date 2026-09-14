@@ -73,7 +73,7 @@ You can use `!vault` for **any** string value; the plugin resolves all encrypted
 
 ## spa_vault_decrypt lookup
 
-Playbooks that load `splunk_config.yml` with **`include_vars`** (for example `provision_terraform_aws.yml` and `destroy_terraform_aws.yml`) do not go through the inventory plugin, so vault-encrypted values in the config are still literal strings after `include_vars`. To decrypt them in the playbook, use the custom lookup **`spa_vault_decrypt`**.
+Playbooks that load `splunk_config.yml` with **`include_vars`** (for example `aws_provision.yml` and `aws_destroy.yml`) do not go through the inventory plugin, so vault-encrypted values in the config are still literal strings after `include_vars`. To decrypt them in the playbook, use the custom lookup **`spa_vault_decrypt`**.
 
 **Usage**
 

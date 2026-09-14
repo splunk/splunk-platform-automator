@@ -30,7 +30,7 @@ ansible-playbook ansible/upgrade_splunk.yml --limit role_license_manager
 Check Indexer Cluster status
 
 ```
-ansible-playbook ansible/run_splunk_command.yml --limit role_cluster_manager -e "splunk_command='show cluster-status --verbose'"
+ansible-playbook ansible/splunk_cli.yml --limit role_cluster_manager -e "splunk_command='show cluster-status --verbose'"
 ```
 
 Note: Look for this line: Pre-flight check successful .................. YES
@@ -67,21 +67,21 @@ Check if we have a KV Store Backup (from the cronjob script)
 
 Check captain and status of SHC
 ```
-ansible-playbook ansible/run_splunk_command.yml --limit sh1 -e "splunk_command='show shcluster-status'"
-ansible-playbook ansible/run_splunk_command.yml --limit sh1 -e "splunk_command='show kvstore-status'"
+ansible-playbook ansible/splunk_cli.yml --limit sh1 -e "splunk_command='show shcluster-status'"
+ansible-playbook ansible/splunk_cli.yml --limit sh1 -e "splunk_command='show kvstore-status'"
 ```
 
 Switch Captain to last node in the cluster (sh3 in this example)
 
 ```
-ansible-playbook ansible/run_splunk_command.yml --limit sh1 -e "splunk_command='transfer shcluster-captain -mgmt_uri https://sh3:8089'"
-ansible-playbook ansible/run_splunk_command.yml --limit sh1 -e "splunk_command='show shcluster-status'"
+ansible-playbook ansible/splunk_cli.yml --limit sh1 -e "splunk_command='transfer shcluster-captain -mgmt_uri https://sh3:8089'"
+ansible-playbook ansible/splunk_cli.yml --limit sh1 -e "splunk_command='show shcluster-status'"
 ```
 
 ### Run SHC Rolling Upgrade
 
 ```
-ansible-playbook ansible/upgrade_splunk_shc_rolling.yml
+ansible-playbook ansible/upgrade_shc_rolling.yml
 ```
 
 ### Check for proper functionality on the SHC
@@ -95,7 +95,7 @@ ansible-playbook ansible/upgrade_splunk_shc_rolling.yml
 ### Run the rolling Indexer Cluster upgrade playbook
 
 ```
-ansible-playbook ansible/upgrade_splunk_idxc_rolling.yml
+ansible-playbook ansible/upgrade_idxc_rolling.yml
 ```
 
 ### Rerun the peer offline
@@ -103,7 +103,7 @@ Sometime it happens after running the peer offline command the indexer does the 
 It can happen that it goes back to status Up and the process does not proceed. You can send the offline call again manually:
 
 ```
-ansible-playbook ansible/call_splunk_rest.yml -e "splunk_software_rest_endpoint=/services/cluster/slave/control/control/decommission" -e "splunk_software_rest_method=POST" --limit <indexer_name>
+ansible-playbook ansible/splunk_rest.yml -e "splunk_software_rest_endpoint=/services/cluster/slave/control/control/decommission" -e "splunk_software_rest_method=POST" --limit <indexer_name>
 ```
 
 ## Upgrade Heavy Forwarders
@@ -130,5 +130,5 @@ ansible-playbook ansible/upgrade_splunk.yml --limit role_universal_forwarder
 ## Check all versions
 
 ```
-ansible-playbook ansible/run_splunk_command.yml -e "splunk_command='version'"
+ansible-playbook ansible/splunk_cli.yml -e "splunk_command='version'"
 ```

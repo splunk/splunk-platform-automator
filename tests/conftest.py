@@ -14,6 +14,13 @@ import subprocess
 import time
 import glob
 
+_LIB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib")
+if _LIB not in sys.path:
+    sys.path.insert(0, _LIB)
+os.environ["PYTHONPATH"] = _LIB + (
+    os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else ""
+)
+
 
 def get_test_configs():
     """
@@ -227,7 +234,7 @@ class WorkspaceManager:
         print("\n[TEARDOWN] Destroying infrastructure...")
         destroy_cmd = [
             self.get_ansible_playbook_bin(),
-            "ansible/destroy_terraform_aws.yml",
+            "ansible/aws_destroy.yml",
             "-e", "auto_approve=true"
         ]
         

@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Wait for indexer bucket fixup.
+#   description: Waits until indexer cluster bucket fixup completes.
+#   category: verification
+#   risk: read-only
+#   examples:
+#     - spa run verification/wait_for_bucket_fixup
 # Wait for bucket fixup tasks to complete on the indexer cluster
 # Run this before checking IDXC health after a fresh deployment or rolling restart
 

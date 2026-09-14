@@ -1,4 +1,12 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Check search head cluster health.
+#   description: Verifies SHC status from a search head.
+#   category: verification
+#   risk: read-only
+#   examples:
+#     - spa run verification/check_shc_health
 - name: Find Search Head Cluster Member
   hosts: localhost
   gather_facts: false
