@@ -441,7 +441,8 @@ def main(argv=None):
         if extra_args:
             ssh_cmd.extend(extra_args)
 
-        print(f"Connecting to {target_host} ({details['real_host']}){f' as {details['user']}' if details['user'] else ''}...")
+        as_user = f" as {details['user']}" if details["user"] else ""
+        print(f"Connecting to {target_host} ({details['real_host']}){as_user}...")
         
         # Replace current process with ssh
         os.execvp('ssh', ssh_cmd)

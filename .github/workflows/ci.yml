@@ -36,5 +36,9 @@ jobs:
             bash -n scripts/*.sh
           fi
 
+      # CI is Python 3.11; nested f-string quotes are 3.12+ and crash spa import.
+      - name: Syntax-check Python (3.11)
+        run: python -m compileall -q lib ansible/plugins
+
       - name: Run local tests
         run: ./tests/run_local_tests.sh
