@@ -54,7 +54,7 @@ require_unreleased_notes() {
 
 run_checks() {
     echo "==> Syntax check"
-    bash -n bin/*.sh tests/run_*.sh scripts/*.sh
+    bash -n bin/*.sh tests/run_*.sh scripts/*.sh install.sh
 
     echo "==> Changelog [Unreleased]"
     require_unreleased_notes

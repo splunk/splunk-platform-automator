@@ -11,6 +11,12 @@ Distribution work on the `distribution` integration branch toward **3.0** (M1–
 
 ### Added
 
+- **Distribution M3 — `install.sh` + framework tarball** ([#48](https://github.com/splunk/splunk-platform-automator/issues/48)):
+  - `scripts/pack-framework.sh` builds `spa-framework-X.Y.Z.tar.gz` (no `tests/`, `.git`, lab `config/` / `inventory/`).
+  - `install.sh` (cup-style `gh release download … | sh` or `curl | sh`): default prefix `~/.local/spa`, `--prefix` / `SPA_PREFIX`, wrapper in `~/.local/bin`, creates the venv.
+  - Extract-anywhere: unpack the tarball, set `SPA_HOME`, run `bin/spa_venv.sh --create`. See [docs/Install.md](docs/Install.md).
+  - GitHub Releases attach the tarball and `install.sh`. Clone remains the contributor path.
+
 - **Distribution M2 — `spa` CLI** ([#47](https://github.com/splunk/splunk-platform-automator/issues/47)):
   - One user-facing entry: `bin/spa` (`lib/spa/`). Subcommands: `init`, `validate`, `doctor`, `env --export`, `provision`, `deploy`, `suspend`, `resume`, `destroy`, `hosts`, `shell`, `aws`, `licenses`, `run`, `agent schema`.
   - Folded `init_spa_dir.sh`, `spa_env.sh`, `spa_doctor.sh`, `validate_splunk_config.sh`, `spash`, `splunk_config_aws.py`, and `splunk_config_licenses.py`. Keep `bin/spa_venv.sh` (must be sourced). `--lab` is now `--env`.

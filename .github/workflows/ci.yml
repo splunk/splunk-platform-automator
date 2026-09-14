@@ -31,7 +31,7 @@ jobs:
 
       - name: Syntax-check shell scripts
         run: |
-          bash -n bin/*.sh tests/run_*.sh
+          bash -n bin/*.sh tests/run_*.sh install.sh
           if compgen -G "scripts/*.sh" > /dev/null; then
             bash -n scripts/*.sh
           fi

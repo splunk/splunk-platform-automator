@@ -6,7 +6,7 @@ Keep this page as the short “what do I change?” list. Full history is in [CH
 
 ## Commands and `bin/`
 
-Only `bin/spa` and `bin/spa_venv.sh` remain. Source the venv script; do not invoke the old wrappers.
+Only `bin/spa` and `bin/spa_venv.sh` remain in a clone. Operators can install a prefix with `install.sh` instead of cloning ([docs/Install.md](Install.md)). Source the venv script; do not invoke the old wrappers.
 
 | 2.x | 3.0 |
 | --- | --- |
