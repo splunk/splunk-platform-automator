@@ -132,6 +132,12 @@ def test_session_deploy_injects_limit(monkeypatch):
         "spa.shell.get_inventory_data",
         lambda: INVENTORY,
     )
+    from spa.preflight import ControllerDataState
+
+    monkeypatch.setattr(
+        "spa.preflight.check_controller_data",
+        lambda paths: ControllerDataState(ok=True),
+    )
     session = open_session(start_dir=str(PROJECT_ROOT))
     result = session.deploy(hosts=["indexer"], confirm=True)
     assert result.ok

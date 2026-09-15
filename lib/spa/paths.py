@@ -84,8 +84,29 @@ def find_spa_yml(start: Optional[Path] = None) -> Optional[Path]:
     return None
 
 
+def parse_flat_yaml(text: str) -> Dict[str, Any]:
+    """Top-level ``key: value`` scalars only. Used when PyYAML is unavailable.
+
+    ``spa`` runs under the system interpreter until the venv exists, so this
+    fallback must read every pointer key, not just ``spa_home``.
+    """
+    data: Dict[str, Any] = {}
+    for line in text.splitlines():
+        if line[:1] in (" ", "\t", "-") or ":" not in line:
+            continue
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        key, _, value = stripped.partition(":")
+        key = key.strip()
+        value = value.split(" #", 1)[0].strip().strip("'\"")
+        if key and value:
+            data[key] = value
+    return data
+
+
 def load_spa_yml(path: Path) -> Dict[str, Any]:
-    """Load .spa.yml. PyYAML if present; otherwise a minimal spa_home reader."""
+    """Load .spa.yml. PyYAML if present; otherwise a flat key/value reader."""
     text = path.read_text(encoding="utf-8")
     try:
         import yaml
@@ -96,15 +117,7 @@ def load_spa_yml(path: Path) -> Dict[str, Any]:
         if not isinstance(data, dict):
             raise ValueError("%s must be a mapping" % path)
         return data
-    spa_home = None
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("#") or not stripped:
-            continue
-        if stripped.startswith("spa_home:"):
-            spa_home = stripped.split(":", 1)[1].strip().strip("'\"")
-            break
-    return {"spa_home": spa_home} if spa_home else {}
+    return parse_flat_yaml(text)
 
 
 def _expand(path: str, relative_to: Path) -> Path:

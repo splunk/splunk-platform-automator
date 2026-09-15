@@ -405,7 +405,22 @@ class LocalSpaSession:
     ) -> CommandResult:
         from spa.hosts import with_ansible_limit
         from spa.playbooks import PlaybookError, resolve, run_playbook
+        from spa.preflight import check_controller_data, controller_data_error
         from spa.providers import ProviderError, check_provisioned
+
+        controller = check_controller_data(self.paths)
+        if not controller.ok:
+            return CommandResult(
+                ok=False,
+                code=1,
+                error=controller_data_error(controller),
+                data={
+                    "software_dir": controller.software_dir,
+                    "baseconfig_dir": controller.baseconfig_dir,
+                    "apps_dir": controller.apps_dir,
+                    "missing": list(controller.missing),
+                },
+            )
 
         provision = None
         try:

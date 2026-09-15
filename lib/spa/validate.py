@@ -74,7 +74,7 @@ except ConfigValidationError as e:
     print(e, file=sys.stderr)
     sys.exit(1)
 """
-    _note(on_progress, "[1/4] Schema validation (Pydantic)...")
+    _note(on_progress, "[1/5] Schema validation (Pydantic)...")
     rc = subprocess.run(
         [tool_path(paths, "python3"), "-c", schema_py, str(config_path)],
         cwd=str(paths.spa_home),
@@ -90,7 +90,30 @@ except ConfigValidationError as e:
         err = (rc.stderr or rc.stdout or "Schema validation failed").strip()
         return CommandResult(ok=False, error=err, data=data, code=rc.returncode)
 
-    _note(on_progress, "[2/4] Inventory plugin (ansible-inventory)...")
+    _note(on_progress, "[2/5] Controller Software / baseconfig / local apps...")
+    from spa.preflight import check_controller_data, controller_data_error
+
+    controller = check_controller_data(paths)
+    data["controller_data"] = {
+        "software_dir": controller.software_dir,
+        "baseconfig_dir": controller.baseconfig_dir,
+        "apps_dir": controller.apps_dir,
+        "missing": list(controller.missing),
+    }
+    if not controller.ok:
+        msg = controller_data_error(controller)
+        steps.append({"id": "controller_data", "ok": False, "message": msg})
+        return CommandResult(ok=False, error=msg, data=data, code=1)
+    steps.append(
+        {
+            "id": "controller_data",
+            "ok": True,
+            "message": "Software %s; baseconfig %s"
+            % (controller.software_dir, controller.baseconfig_dir),
+        }
+    )
+
+    _note(on_progress, "[3/5] Inventory plugin (ansible-inventory)...")
     rc = subprocess.run(
         [tool_path(paths, "ansible-inventory"), "--list"],
         cwd=str(paths.spa_home),
@@ -115,7 +138,7 @@ except ConfigValidationError as e:
             code=rc.returncode,
         )
 
-    _note(on_progress, "[3/4] License and license_manager role check...")
+    _note(on_progress, "[4/5] License and license_manager role check...")
     from spa import licenses as licenses_mod
 
     license_scan = licenses_mod.scan_licenses(paths.spa_env_dir, config_path=config_path)
@@ -136,7 +159,7 @@ except ConfigValidationError as e:
         return CommandResult(ok=False, error=msg, data=data, code=1)
     steps.append({"id": "license_role", "ok": True, "message": "License role pairing OK"})
 
-    _note(on_progress, "[4/4] Playbook syntax-check...")
+    _note(on_progress, "[5/5] Playbook syntax-check...")
     for pb in ("ansible/aws_provision.yml", "ansible/deploy_site.yml"):
         rc = subprocess.run(
             [tool_path(paths, "ansible-playbook"), pb, "--syntax-check"],
@@ -215,10 +238,11 @@ def format_validate_text(result: CommandResult) -> str:
     data = result.data or {}
     lines = ["=== Validating %s ===" % data.get("config_file", "")]
     labels = {
-        "schema": "[1/4] Schema validation (Pydantic)...",
-        "inventory": "[2/4] Inventory plugin (ansible-inventory)...",
-        "license_role": "[3/4] License and license_manager role check...",
-        "syntax": "[4/4] Playbook syntax-check...",
+        "schema": "[1/5] Schema validation (Pydantic)...",
+        "controller_data": "[2/5] Controller Software / baseconfig / local apps...",
+        "inventory": "[3/5] Inventory plugin (ansible-inventory)...",
+        "license_role": "[4/5] License and license_manager role check...",
+        "syntax": "[5/5] Playbook syntax-check...",
         "license_files": "[optional] Software license content and entitlement check...",
         "aws": "[optional] AWS terraform.aws validation...",
     }

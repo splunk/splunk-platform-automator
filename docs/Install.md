@@ -66,7 +66,7 @@ Splunk installers and PS baseconfig apps stay **out of** `SPA_HOME` (`install.sh
 spa init --software-dir ~/Software --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env
 ```
 
-That writes `${XDG_CONFIG_HOME:-~/.config}/spa/paths.yml` (directories only, not secrets) and copies `software_dir` / `baseconfig_dir` into the env `.spa.yml`. Later `spa init` calls reuse `paths.yml`. Optional: `--baseconfig-dir`, `--apps-dir`. The installer does not create `~/.config/spa`.
+That writes `${XDG_CONFIG_HOME:-~/.config}/spa/paths.yml` (directories only, not secrets) and copies `software_dir` / `baseconfig_dir` into the env `.spa.yml`. Later `spa init` calls reuse `paths.yml`. Optional: `--baseconfig-dir`, `--apps-dir`. The installer does not create `~/.config/spa`. `spa validate` and `spa deploy` fail if those directories (and, for local apps, each named source) are still missing.
 
 ## Uninstall
 

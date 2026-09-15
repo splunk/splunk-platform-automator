@@ -12,7 +12,7 @@ from spa.providers import (
     expected_hostnames,
     inventory_hostnames_from_file,
 )
-from spa_testutil import PROJECT_ROOT, run_spa
+from spa_testutil import PROJECT_ROOT, run_spa, seed_software_dir
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -43,6 +43,7 @@ def _paths(tmp_path, config):
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(config)
     base = resolve_spa_paths(start_dir=PROJECT_ROOT)
+    software = seed_software_dir(tmp_path)
     return replace(
         base,
         spa_env_dir=tmp_path,
@@ -50,6 +51,8 @@ def _paths(tmp_path, config):
         inventory_dir=tmp_path / "inventory",
         terraform_state_dir=tmp_path / "terraform" / "aws",
         roots_differ=True,
+        software_dir=software,
+        baseconfig_dir=software,
     )
 
 
@@ -162,6 +165,16 @@ def _session_env(tmp_path, config=AWS_TWO_HOSTS):
     return paths, LocalSpaSession(paths=paths)
 
 
+def _cli_env(paths):
+    return {
+        "SPA_HOME": str(PROJECT_ROOT),
+        "SPA_ENV_DIR": str(paths.spa_env_dir),
+        "SPLUNK_CONFIG_FILE": str(paths.config_file),
+        "SPA_SOFTWARE_DIR": str(paths.software_dir),
+        "SPA_BASECONFIG_DIR": str(paths.baseconfig_dir),
+    }
+
+
 def test_deploy_does_not_run_playbook_when_partial(tmp_path, monkeypatch):
     called = []
     monkeypatch.setattr(
@@ -207,15 +220,27 @@ def test_allow_unprovisioned_without_yes_still_requires_confirmation(tmp_path, m
     assert "requires -y/--yes" in result.error
 
 
+def test_deploy_fails_when_software_missing(tmp_path, monkeypatch):
+    called = []
+    monkeypatch.setattr(
+        "spa.playbooks.run_playbook", lambda *a, **k: called.append(True) or 0
+    )
+    paths, session = _session_env(tmp_path)
+    session = LocalSpaSession(
+        paths=replace(paths, software_dir=tmp_path / "missing-sw", baseconfig_dir=tmp_path / "missing-sw")
+    )
+    result = session.deploy(confirm=True, skip_provision_check=True)
+    assert result.ok is False
+    assert not called
+    assert "Software directory not found" in result.error
+    assert "spa init --software-dir" in result.error
+
+
 def test_cli_unprovisioned_aws_names_provision(tmp_path):
     paths = _paths(tmp_path, AWS_TWO_HOSTS)
     result = run_spa(
         ["--no-agent", "deploy", "--yes"],
-        extra_env={
-            "SPA_HOME": str(PROJECT_ROOT),
-            "SPA_ENV_DIR": str(tmp_path),
-            "SPLUNK_CONFIG_FILE": str(paths.config_file),
-        },
+        extra_env=_cli_env(paths),
         cwd=tmp_path,
     )
     assert result.returncode != 0
@@ -228,11 +253,7 @@ def test_cli_agent_unprovisioned_json(tmp_path):
     paths = _paths(tmp_path, AWS_TWO_HOSTS)
     result = run_spa(
         ["--agent", "deploy", "--yes"],
-        extra_env={
-            "SPA_HOME": str(PROJECT_ROOT),
-            "SPA_ENV_DIR": str(tmp_path),
-            "SPLUNK_CONFIG_FILE": str(paths.config_file),
-        },
+        extra_env=_cli_env(paths),
         cwd=tmp_path,
     )
     assert result.returncode != 0
@@ -255,6 +276,8 @@ def test_cli_allow_unprovisioned_invokes_playbook(tmp_path, monkeypatch):
     monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
     monkeypatch.setenv("SPA_ENV_DIR", str(tmp_path))
     monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(paths.config_file))
+    monkeypatch.setenv("SPA_SOFTWARE_DIR", str(paths.software_dir))
+    monkeypatch.setenv("SPA_BASECONFIG_DIR", str(paths.baseconfig_dir))
     from spa.cli import main
 
     rc = main(["--no-agent", "deploy", "--yes", "--allow-unprovisioned"])

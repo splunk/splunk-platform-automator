@@ -22,6 +22,14 @@ AGENT_ENV_VARS = (
 )
 
 
+def seed_software_dir(root: Path) -> Path:
+    """Minimal PS baseconfig layout so controller-data checks pass in tests."""
+    software = Path(root) / "Software"
+    for name in ("org_ds_secure_server", "org_cluster_manager_base"):
+        (software / "ps" / name).mkdir(parents=True, exist_ok=True)
+    return software
+
+
 def spa_env(extra: Optional[Mapping[str, str]] = None) -> dict:
     env = os.environ.copy()
     for name in AGENT_ENV_VARS:
