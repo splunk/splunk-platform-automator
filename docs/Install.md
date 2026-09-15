@@ -60,6 +60,17 @@ spa validate
 spa provision --yes && spa deploy --yes
 ```
 
+## Uninstall
+
+`install.sh` does not have `--uninstall` yet ([#72](https://github.com/splunk/splunk-platform-automator/issues/72)). Remove only the prefix and launcher — not env dirs, Terraform state, or AWS (`spa destroy` is separate):
+
+```bash
+rm -f ~/.local/bin/spa
+rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/spa"
+```
+
+If you used `--prefix` / `--bindir`, delete those paths instead. Do not `rm -rf` a git clone you still need; uninstall is for an installed prefix.
+
 ## Extract anywhere
 
 Build or download `spa-framework-X.Y.Z.tar.gz` (no wrapping directory). Unpack wherever you want:

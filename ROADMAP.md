@@ -33,6 +33,7 @@ Ship M1–M3 on one integration branch, then **3.0** when M3 is in. Do not cut a
 - [ ] Release tarball of the framework (exclude `tests/`, `.git`, lab `config/`) (**M3**)
 - [ ] `install.sh` (GitHub `releases/latest/download/install.sh` piped to bash, or `gh release download` when private): default prefix `${XDG_DATA_HOME:-~/.local/share}/spa`, launcher `~/.local/bin/spa`, or `--prefix` / `SPA_PREFIX`; creates the venv (**M3**)
 - [ ] Documented extract-anywhere: unpack the tarball, set `SPA_HOME`, run `spa` from that tree (**M3**)
+- [ ] `install.sh --uninstall` (prefix + launcher only; never env dirs / Terraform / AWS) — [#72](https://github.com/splunk/splunk-platform-automator/issues/72)
 - [ ] Optional later: native Linux packages (`.deb` / `.rpm`) from the same tarball, unpack to `/opt/spa`; `install.sh` prefers the distro package when it matches
 - [ ] Optional later: Homebrew tap of the same tarball (no brew Ansible/Pydantic; `spa_venv` stays the Python path)
 - [ ] Optional later: Ansible collection extract of roles/plugins — not the primary install
