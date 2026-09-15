@@ -50,10 +50,11 @@ def test_future_provider_is_recognized_but_not_implemented(tmp_path):
         detect_provider(paths)
 
 
-def test_virtualbox_is_explicitly_deferred(tmp_path):
+def test_detects_virtualbox_from_config(tmp_path):
     paths = _paths(tmp_path, "virtualbox:\n  memory: 4096\n")
-    with pytest.raises(ProviderError, match="not managed by spa yet"):
-        detect_provider(paths)
+    selected = detect_provider(paths)
+    assert selected.name == "virtualbox"
+    assert selected.config["memory"] == 4096
 
 
 def test_legacy_aws_is_not_mistaken_for_terraform(tmp_path):
@@ -62,7 +63,7 @@ def test_legacy_aws_is_not_mistaken_for_terraform(tmp_path):
         detect_provider(paths)
 
 
-def test_virtualbox_lifecycle_cli_fails_cleanly(tmp_path):
+def test_virtualbox_lifecycle_refuses_env_dir(tmp_path):
     paths = _paths(tmp_path, "virtualbox:\n  memory: 4096\n")
     result = run_spa(
         ["--no-agent", "suspend", "--yes"],
@@ -74,7 +75,7 @@ def test_virtualbox_lifecycle_cli_fails_cleanly(tmp_path):
         cwd=tmp_path,
     )
     assert result.returncode != 0
-    assert "VirtualBox lifecycle is not managed by spa yet" in result.stderr
+    assert "VirtualBox lifecycle requires config in the clone" in result.stderr
     assert "Traceback" not in result.stderr
 
 
@@ -290,3 +291,82 @@ def test_terraform_error_does_not_echo_diagnostics(monkeypatch, tmp_path):
     with pytest.raises(ProviderError) as excinfo:
         provider._terraform_output("instance_states")
     assert "must-not-be-emitted" not in str(excinfo.value)
+
+
+def _vbox_paths(tmp_path, config="virtualbox:\n  memory: 4096\nsplunk_hosts:\n  - name: idx1\n    roles: [indexer]\n"):
+    (tmp_path / "Vagrantfile").write_text("# test\n")
+    config_path = tmp_path / "config" / "splunk_config.yml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(config)
+    inv = tmp_path / "inventory"
+    inv.mkdir()
+    base = resolve_spa_paths(start_dir=PROJECT_ROOT)
+    return replace(
+        base,
+        spa_home=tmp_path,
+        spa_env_dir=tmp_path,
+        config_file=config_path,
+        inventory_dir=inv,
+        roots_differ=False,
+    )
+
+
+def test_parse_machine_readable_status():
+    from spa.providers.virtualbox import parse_machine_readable_status
+
+    text = "\n".join(
+        [
+            "1,idx1,provider-name,virtualbox",
+            "1,idx1,state,running",
+            "1,sh1,state,poweroff",
+        ]
+    )
+    assert parse_machine_readable_status(text) == {"idx1": "running", "sh1": "poweroff"}
+
+
+def test_drop_ansible_extra_strips_auto_approve():
+    from spa.providers.virtualbox import drop_ansible_extra
+
+    assert drop_ansible_extra(["-e", "auto_approve=true", "idx1"]) == ["idx1"]
+
+
+def test_virtualbox_suspend_runs_vagrant_halt(tmp_path, monkeypatch):
+    from spa.providers.virtualbox import Provider as VboxProvider
+
+    paths = _vbox_paths(tmp_path)
+    provider = VboxProvider(paths, {"memory": 4096})
+    calls = []
+
+    def fake_run(cmd, cwd=None, capture_output=False, text=True):
+        calls.append((cmd[1:], cwd, capture_output))
+        if cmd[1] == "status":
+            return SimpleNamespace(
+                returncode=0,
+                stdout="1,idx1,state,poweroff\n",
+                stderr="",
+            )
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("spa.providers.virtualbox.tool_path", lambda paths, name: "vagrant")
+    monkeypatch.setattr("spa.providers.virtualbox.subprocess.run", fake_run)
+    result = provider.suspend(yes=True, agent=False, hosts=["idx1"])
+    assert ["halt", "idx1"] in [c[0] for c in calls]
+    assert calls[0][1] == str(tmp_path)
+    assert result["instances"][0]["name"] == "idx1"
+
+
+def test_virtualbox_provision_drops_ansible_flags(tmp_path, monkeypatch):
+    from spa.providers.virtualbox import Provider as VboxProvider
+
+    paths = _vbox_paths(tmp_path)
+    provider = VboxProvider(paths, {})
+    seen = []
+
+    def fake_run(cmd, cwd=None, capture_output=False, text=True):
+        seen.append(cmd[1:])
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("spa.providers.virtualbox.tool_path", lambda paths, name: "vagrant")
+    monkeypatch.setattr("spa.providers.virtualbox.subprocess.run", fake_run)
+    assert provider.provision(["-e", "auto_approve=true"]) == 0
+    assert seen == [["up"]]

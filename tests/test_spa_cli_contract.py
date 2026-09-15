@@ -83,12 +83,12 @@ HELP_CONTRACTS = [
         ],
     ),
     (["env", "--help"], ["usage: spa env", "--export", "--start-dir"]),
-    (["provision", "--help"], ["usage: spa provision", "-y", "--yes", "Terraform apply"]),
+    (["provision", "--help"], ["usage: spa provision", "-y", "--yes", "Confirm provision"]),
     (
         ["deploy", "--help"],
         ["usage: spa deploy", "-y", "--yes", "--hosts", "--allow-unprovisioned", "required in agent mode"],
     ),
-    (["destroy", "--help"], ["usage: spa destroy", "-y", "--yes", "Terraform destroy"]),
+    (["destroy", "--help"], ["usage: spa destroy", "-y", "--yes", "Confirm destroy"]),
     (
         ["suspend", "--help"],
         ["usage: spa suspend", "-y", "--yes", "--no-wait", "--hosts", "power change"],

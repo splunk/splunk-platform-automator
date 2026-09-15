@@ -17,17 +17,15 @@ Splunk Platform Automator (SPA) provisions and deploys Splunk Enterprise on **AW
 | Provision AWS then deploy | `spa provision --yes && spa deploy --yes` |
 | Deploy Splunk only (hosts already up) | `spa deploy --yes` (optional `--hosts` names or roles). Fails if Software/baseconfig (or local app sources) are missing; fails if any `splunk_hosts` entry is missing from inventory; `spa provision --yes` first, or `--allow-unprovisioned` only when the operator asked (e.g. one host already up; interim until [#57](https://github.com/splunk/splunk-platform-automator/issues/57)). |
 | Run a playbook | `spa run --list`, `spa run NAME --help`, then `spa run NAME --yes` when `requires_confirmation` |
-| Pause/resume AWS compute | `spa suspend --yes` / `spa resume --yes` (optional `--hosts`; keeps Terraform state and EBS; resume refreshes inventory addresses) |
+| Pause/resume compute | `spa suspend --yes` / `spa resume --yes` (optional `--hosts`; AWS keeps Terraform state and EBS; VirtualBox is `vagrant halt` / `vagrant up`) |
 | List / SSH / copy | `spa hosts list --status`, `spa hosts ssh NAME`, `spa hosts copy SRC DST` (`spa sh` / `spa shell` still SSH) |
 | Destroy managed infrastructure | `spa destroy --yes` (env-wide; later `--all` vs `--hosts` decommission) |
-| VirtualBox | Config in the **clone**; `vagrant up` from `SPA_HOME` only. Env dirs have no Vagrantfile. |
+| VirtualBox | Config in the **clone**; `spa provision --yes` / `spa deploy --yes` (Vagrant from `SPA_HOME`). Env dirs have no Vagrantfile. |
 | Install framework (operators) | [docs/Install.md](docs/Install.md); `install.sh` from `releases/latest/download` (default `${XDG_DATA_HOME:-~/.local/share}/spa`) or extract `spa-framework-*.tar.gz` |
 | Local tests | `./tests/run_local_tests.sh` |
 | Release | [RELEASE.md](RELEASE.md), `./scripts/release.sh --check` |
 
-Infrastructure commands select a provider from `splunk_config.yml`; currently
-`terraform.aws` is implemented. VirtualBox remains direct `vagrant` usage until
-its SPA provider is added.
+Infrastructure commands select a provider from `splunk_config.yml`: `terraform.aws` or `virtualbox`.
 
 ## Agent skills (portable packages)
 

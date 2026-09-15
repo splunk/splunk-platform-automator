@@ -23,7 +23,6 @@ Vagrant.require_version '>= 2.2.7'
 VAGRANTFILE_API_VERSION = '2'
 
 require 'yaml'
-require 'securerandom'
 dir = File.dirname(File.expand_path(__FILE__))
 config_dir = File.join(dir,"config")
 defaults_dir = File.join(dir,"defaults")
@@ -32,19 +31,6 @@ inventory_dir = File.join(dir,"inventory")
 hosts_file = File.join(inventory_dir, "hosts")
 host_vars_dir = File.join(inventory_dir,"host_vars")
 defaults = {}
-
-# Workaround for bug with vagrant 2.2.7
-# https://github.com/mitchellh/vagrant-aws/issues/566
-class Hash
-  def slice(*keep_keys)
-    h = {}
-    keep_keys.each { |key| h[key] = fetch(key) if has_key?(key) }
-    h
-  end unless Hash.method_defined?(:slice)
-  def except(*less_keys)
-    slice(*keys - less_keys)
-  end unless Hash.method_defined?(:except)
-end
 
 # Check for Ansible binary
 system("type ansible > /dev/null 2>&1")
@@ -88,100 +74,34 @@ if !settings['splunk_apps'].nil?
   splunk_apps = splunk_apps.merge(settings['splunk_apps'])
 end
 
-# Check for virtualization provider
-if !settings.has_key?("virtualbox") and !settings.has_key?("aws")
-    print "ERROR: No virtualization provider defined in #{config_file} \n\n"
-    print "Supported types are virtualbox or aws\n"
+# Check for virtualization provider (VirtualBox only; AWS is terraform.aws via spa)
+if settings.has_key?("aws") and !settings.has_key?("virtualbox")
+    print "ERROR: The Vagrant AWS provider was removed. Use terraform.aws and spa provision.\n"
+    exit 2
+end
+if !settings.has_key?("virtualbox")
+    print "ERROR: No virtualbox section in #{config_file}\n"
     exit 2
 end
 
 stanza_merge_list = ['os']
-if settings.has_key?("virtualbox")
-  provider = "virtualbox"
-  virtualbox = YAML.load_file(File.join(defaults_dir, "virtualbox.yml"))
-  defaults['virtualbox'] = virtualbox['virtualbox']
-  stanza_merge_list.append(provider)
-  if !Vagrant.has_plugin?("vagrant-vbguest")
-    print "ERROR: Plugin for virtualbox provider is missing, install with 'vagrant plugin install vagrant-vbguest'.\n"
-    exit 2
-  end
-  # Create inventory/host_vars directory
-  if !File.directory?(host_vars_dir)
-    FileUtils.mkdir_p(host_vars_dir)
-  end
-elsif settings.has_key?("aws")
-  provider = "aws"
-  aws = YAML.load_file(File.join(defaults_dir,"aws.yml"))
-  defaults['aws'] = aws['aws']
-  stanza_merge_list.append(provider)
-  if !Vagrant.has_plugin?("vagrant-gecko-aws") and !Vagrant.has_plugin?("vagrant-aws")
-    print "ERROR: Plugin for AWS provider missing, install with 'vagrant plugin install vagrant-aws'.\n"
-    exit 2
-  end
-  if !settings['general'].nil? and settings['general'].has_key?("start_ip")
-    print "WARN: Ignoring general.start_ip setting for AWS provider.\n"
-    print "INFO: You can remove this setting from the config file.\n"
-    settings['general'].delete("start_ip")
-  end
+provider = "virtualbox"
+virtualbox = YAML.load_file(File.join(defaults_dir, "virtualbox.yml"))
+defaults['virtualbox'] = virtualbox['virtualbox']
+stanza_merge_list.append(provider)
+if !Vagrant.has_plugin?("vagrant-vbguest")
+  print "ERROR: Plugin for virtualbox provider is missing, install with 'vagrant plugin install vagrant-vbguest'.\n"
+  exit 2
+end
+# Create inventory/host_vars directory
+if !File.directory?(host_vars_dir)
+  FileUtils.mkdir_p(host_vars_dir)
 end
 
 # Create ansible inventory from the config file
 special_host_vars = {}
 network = {}
 defaults['os'] = {}
-aws_merged = {}
-
-# Deal with the aws_ec2 file
-if provider == "aws"
-  if settings['aws'].nil?
-    settings['aws'] = {}
-  end
-  aws_merged = defaults['aws'].merge(settings['aws'])
-  splunkPlatformAutomatorID = "undef"
-  aws_ec2 = false
-  if File.file?(File.join(config_dir, "aws_ec2.yml"))
-    aws_ec2 = YAML.load_file(File.join(config_dir, "aws_ec2.yml"))
-  end
-  if !aws_ec2
-    aws_ec2 = {}
-  end
-  if aws_ec2.has_key?("filters")
-    if aws_ec2['filters'].has_key?("tag:SplunkEnvID")
-      splunkPlatformAutomatorID = aws_ec2['filters']['tag:SplunkEnvID']
-    end
-  else
-    aws_ec2['filters'] = {}
-  end
-  if splunkPlatformAutomatorID == "undef"
-    splunkPlatformAutomatorID = SecureRandom.uuid
-  else
-    aws_ec2['filters']['tag:SplunkEnvID'] = splunkPlatformAutomatorID
-  end
-  # Read access keys from environment variable, if not spcified in settings
-  if aws_merged.has_key?("access_key_id")
-    aws_ec2['aws_access_key'] = aws_merged['access_key_id']
-  else
-    defaults['aws']['access_key_id'] = ENV['AWS_ACCESS_KEY_ID']
-    aws_ec2.delete('aws_access_key')
-  end
-  if aws_merged.has_key?("secret_access_key")
-    aws_ec2['aws_secret_key'] = aws_merged['secret_access_key']
-  else
-    defaults['aws']['secret_access_key'] = ENV['AWS_SECRET_ACCESS_KEY']
-    aws_ec2.delete('aws_secret_key')
-  end
-  aws_ec2['plugin'] = 'aws_ec2'
-  aws_ec2['regions'] = [].append(aws_merged['region'])
-  aws_ec2['filters']['tag:SplunkEnvID'] = splunkPlatformAutomatorID
-  aws_ec2['hostnames'] = [].append("tag:SplunkHostname")
-  aws_ec2['compose'] = {}.update('ansible_host'=>'public_dns_name')
-  aws_ec2['compose']['ip_addr'] = 'private_ip_address'
-  aws_ec2['compose']['ansible_user'] = "ansible_user|default('#{aws_merged['ssh_username']}')"
-  aws_ec2['compose']['ansible_ssh_private_key_file'] = "ansible_ssh_private_key_file|default('#{aws_merged['ssh_private_key_path']}')"
-  File.open(File.join(config_dir,"aws_ec2.yml"), "w") do |f|
-    f.write(aws_ec2.to_yaml)
-  end
-end
 
 # If dynamic IPs are used, calculate the start number
 if provider == "virtualbox"
@@ -198,7 +118,6 @@ end
 # Create inventory host vars and groups
 host_vars = {}
 splunk_host_list = []
-ssh_usernames = {}
 settings['splunk_hosts'].each do |splunk_host|
   hostnames = []
   if !splunk_host['name'].nil?
@@ -230,29 +149,9 @@ settings['splunk_hosts'].each do |splunk_host|
       end
       if !splunk_host[config_group].nil?
         var_obj[config_group] = var_obj[config_group].merge(splunk_host[config_group])
-        if config_group == "aws"
-          if !splunk_host[config_group].nil?
-            ssh_usernames.update(hostname=>splunk_host[config_group]['ssh_username'])
-          end
-        end
       end
     end
     special_host_vars[hostname] = var_obj.dup
-    if provider == "aws"
-      if !aws_merged['tags'].nil?
-        aws_tags = aws_merged['tags'].clone
-      else
-        aws_tags = {}
-      end
-      aws_tags['Name'] = hostname
-      aws_tags['SplunkHostname'] = hostname
-      aws_tags['SplunkEnvID'] = splunkPlatformAutomatorID
-      if special_host_vars[hostname]['aws']['tags'].nil?
-        special_host_vars[hostname]['aws']['tags'] = aws_tags
-      else
-        special_host_vars[hostname]['aws']['tags'] = special_host_vars[hostname]['aws']['tags'].merge(aws_tags)
-      end
-    end
 
     per_host_vars = {}
     ['ip_addr', 'site', 'cname'].each do |var|
@@ -295,16 +194,6 @@ settings['splunk_hosts'].each do |splunk_host|
   end
 end
 
-# Update aws_ec2 with custom ansible_user settings
-if provider == "aws" and ssh_usernames.length > 0
-  # If custom ssh_usernames are defined create a line like this:
-  # "[tags.Name] | map('extract', {'uf': 'ec2-user'})|first|default('admin')"
-  aws_ec2['compose']['ansible_user'] = "[tags.Name] | map(\"extract\", #{ssh_usernames.to_json})|first|default(\"#{aws_merged['ssh_username']}\")"
-  File.open(File.join(config_dir,"aws_ec2.yml"), "w") do |f|
-    f.write(aws_ec2.to_yaml)
-  end
-end
-
 # Create and configure the specified systems
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
@@ -328,9 +217,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
           end
         end
 
-      elsif provider == "aws"
-        # Use dummy AWS box
-        srv.vm.box = 'aws-dummy'
       end
 
       # Don't check for box updates
@@ -384,18 +270,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
           if ENV.key?('VAGRANT_WSL_ENABLE_WINDOWS_ACCESS') and ENV['VAGRANT_WSL_ENABLE_WINDOWS_ACCESS'] == '1'
             vb.customize ['modifyvm', :id, '--uartmode1', 'disconnected']
           end
-        end
-      elsif provider == "aws"
-        # Add all config attributes to the AWS config class
-        srv.vm.provider :aws do |aws, override|
-          special_host_vars[server['name']]['aws'].each do |k,v|
-            next if k == "ssh_username" or k == "ssh_private_key_path"
-            aws.send("#{k}=", v)
-          end
-
-          # Specify username and private key path
-          override.ssh.username = special_host_vars[server['name']]['aws']['ssh_username']
-          override.ssh.private_key_path = special_host_vars[server['name']]['aws']['ssh_private_key_path']
         end
       end
 

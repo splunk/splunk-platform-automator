@@ -64,9 +64,9 @@ source bin/spa_venv.sh --create
 
 ## AWS and VirtualBox
 
-- `spa provision`, `spa destroy`, `spa suspend`, and `spa resume` require **`terraform.aws`** in `splunk_config.yml`. A top-level `aws:` block is inventory-only (legacy vagrant-aws).
-- vagrant-aws is not the 3.0 path. Use Terraform AWS for new work.
-- VirtualBox is not managed by `spa` yet. Keep `virtualbox:` config in the **clone** and run `vagrant` from `SPA_HOME`. Env dirs have no `Vagrantfile`; `vagrant up` from `~/envs/...` is unsupported.
+- `spa provision`, `spa destroy`, `spa suspend`, and `spa resume` follow `splunk_config.yml`: **`terraform.aws`** or **`virtualbox:`**.
+- A top-level `aws:` block is inventory-only (legacy vagrant-aws). vagrant-aws is not the 3.0 path; use Terraform AWS for cloud.
+- VirtualBox: keep config in the **clone** (`$SPA_HOME/config/splunk_config.yml`) and run `spa provision --yes` from `SPA_HOME`. Env dirs have no `Vagrantfile`; `spa init` env dirs are for Terraform AWS.
 
 Recommended AWS loop:
 

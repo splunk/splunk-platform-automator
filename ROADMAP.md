@@ -78,7 +78,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 ## Provisioning
 
 - [x] Terraform AWS + `spa aws` ([docs/Ansible_Terraform_AWS_Integration.md](docs/Ansible_Terraform_AWS_Integration.md))
-- [ ] VirtualBox spa provider (`spa provision` / `destroy` / suspend-resume via Vagrant); remove unmaintained vagrant-aws — [#56](https://github.com/splunk/splunk-platform-automator/issues/56)
+- [x] VirtualBox spa provider (`spa provision` / `destroy` / suspend-resume via Vagrant); remove unmaintained vagrant-aws — [#56](https://github.com/splunk/splunk-platform-automator/issues/56)
 - [ ] Shared network access groups (provider-agnostic CLI; AWS first; SPA_HOME state; env destroy does not delete) — [#58](https://github.com/splunk/splunk-platform-automator/issues/58)
 - [ ] External / BYO SSH hosts (register only; mixed with managed; never terminate the real machine) — [#57](https://github.com/splunk/splunk-platform-automator/issues/57). `spa deploy --allow-unprovisioned` is the interim escape hatch until BYO hosts are first-class.
 - [ ] Splunk Operator for Kubernetes: `splunk_config.yml` → Operator CRs (IndexerCluster, SearchHeadCluster, ClusterManager, LicenseManager, MonitoringConsole, Standalone) plus namespace, storage, and image settings

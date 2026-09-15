@@ -23,10 +23,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
     - [Framework Installation](#framework-installation)
     - [Install Virtualbox support (optional)](#install-virtualbox-support-optional)
     - [Setup Windows Subsystem for Linux (WSL2)](#setup-windows-subsystem-for-linux-wsl2)
-    - [Install and configure AWS support (optional - Legacy Vagrant Plugin)](#install-and-configure-aws-support-optional---legacy-vagrant-plugin)
-      - [Example Basic AWS Security Group 'SplunkBasic'](#example-basic-aws-security-group-splunk_basic)
-        - [Inbound Rules](#inbound-rules)
-        - [Outbound Rules](#outbound-rules)
+    - [Example Basic AWS Security Group Splunk_Basic](#example-basic-aws-security-group-splunk_basic)
   - [Upgrade](#upgrade)
     - [Migrate existing Splunk Platform Automator Environments from 1.x to 2.x](#migrate-existing-splunk-platform-automator-environments-from-1x-to-2x)
     - [Migrate existing Splunk Platform Automator Environments from 2.x to 3.0](#migrate-existing-splunk-platform-automator-environments-from-2x-to-30)
@@ -40,7 +37,6 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
     - [Start the deployment](#start-the-deployment)
       - [Option A: Virtualbox (Local Virtual Machines)](#option-a-virtualbox-local-virtual-machines)
       - [Option B: AWS with Terraform (Recommended for AWS)](#option-b-aws-with-terraform-recommended-for-aws)
-      - [Option C: AWS with Vagrant Plugin (Legacy)](#option-c-aws-with-vagrant-plugin-legacy)
     - [Stop hosts](#stop-hosts)
     - [Destroy hosts](#destroy-hosts)
     - [Rerun provisioning](#rerun-provisioning)
@@ -84,7 +80,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
   - Automatic inventory generation
   - Support for complex configurations (volumes, instance types, etc.)
 - Virtual hosts can be created by [Vagrant](https://www.vagrantup.com)
-  - Currently supports [Virtualbox](https://www.virtualbox.org) or [AWS Cloud](https://aws.amazon.com) (legacy).
+  - Currently supports [Virtualbox](https://www.virtualbox.org). AWS uses Terraform (`spa provision`), not Vagrant.
 - Can deploy Splunk on existing hosts (virtual or physical)
 - Developed and tested on MacOSX but should support Linux as well.
 
@@ -188,24 +184,7 @@ export PATH="$PATH:/mnt/c/Program Files/Oracle/VirtualBox"
 
 
 
-### Install and configure AWS support (optional - Legacy Vagrant Plugin)
-
-> ⚠️ **Note:** This section describes the legacy Vagrant AWS plugin setup. For new AWS deployments, we recommend using the [Terraform approach](#option-b-aws-with-terraform-recommended-for-aws) instead, which is more modern and easier to manage.
-
-1. Install either of the aws vagrant plugins:
-  - [vagrant-aws](https://github.com/mitchellh/vagrant-aws): This is te orig plugin but not maintained anymore and has issues with newer vagrant versions on OSX. The last working version of vagrant is 2.3.4. Install it with `vagrant plugin install vagrant-aws`
-    - [vagrant-gecko-aws](https://github.com/geckoboard/vagrant-aws): This is a clone of the orig project and does support newer versions (up to 2.3.7) of vagrant. Install it with `vagrant plugin install vagrant-gecko-aws --entry-point vagrant-aws`
-2. Download the vagrant dummy box for aws: `vagrant box add aws-dummy https://github.com/mitchellh/vagrant-aws/raw/master/dummy.box`
-3. Generate AWS ACCESS Keys, described [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html#cli-configure-quickstart-creds)
-4. Optional, but recommended:
-  - Add AWS_ACCESS_KEY_ID=your access key ID as environment variable
-    - Add AWS_SECRET_ACCESS_KEY=your secret access key as environment variable
-5. Create an ssh key pair described [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair) and store the public key on your disk for later reference in the config file
-6. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it for example 'Splunk_Basic' and add the following TCP ports
-
-
-
-#### Example Basic AWS Security Group 'Splunk_Basic'
+### Example Basic AWS Security Group Splunk_Basic
 
 
 
@@ -284,20 +263,14 @@ back and refresh changed public addresses in `inventory/hosts` with
 instances are stopped. Permanently remove the environment with
 `spa destroy --yes`. Details: [Multiple environments, one clone](#multiple-environments-one-clone) and [Option B](#option-b-aws-with-terraform-recommended-for-aws).
 
-**VirtualBox (local VMs).** Keep config in the **clone** (`config/splunk_config.yml`). Run Vagrant from the directory that contains `Vagrantfile` (`SPA_HOME`). An env dir from `spa init` does **not** get a Vagrantfile; `vagrant up` from `~/envs/...` is not supported yet.
-
-`spa provision`, `spa suspend`, `spa resume`, and `spa destroy` select their
-infrastructure provider from `splunk_config.yml`. AWS (`terraform.aws`) is
-implemented. VirtualBox lifecycle is deliberately not routed through `spa`
-yet; use `vagrant up` / `vagrant halt` from `SPA_HOME`.
+**VirtualBox (local VMs).** Keep config in the **clone** (`config/splunk_config.yml`). Vagrantfile stays in `SPA_HOME`. Env dirs from `spa init` do **not** get a Vagrantfile.
 
 ```bash
 cd /path/to/splunk-platform-automator
 cp examples/single_node.yml config/splunk_config.yml   # or another VirtualBox example
 source bin/spa_venv.sh
 spa doctor
-vagrant up
-spa deploy
+spa provision --yes && spa deploy --yes
 ```
 
 ### First start and initialization
@@ -395,29 +368,17 @@ Splunk Platform Automator supports multiple deployment targets. Choose the appro
 
 #### Option A: Virtualbox (Local Virtual Machines)
 
-Use this path with config in the **clone** and commands run from `SPA_HOME` (where `Vagrantfile` is). Env directories from `spa init` do not include a Vagrantfile; do not run `vagrant up` from `$SPA_ENV_DIR`.
+Use this path with config in the **clone** and commands run from `SPA_HOME` (where `Vagrantfile` is). Env directories from `spa init` do not include a Vagrantfile; do not run `vagrant` from `$SPA_ENV_DIR`.
 
 When building virtual machines for Virtualbox the first time it will pull an OS image from the internet. The box images are cached here: `~/.vagrant.d/boxes`.
 
-**Create the Virtual Machines:**
+**Create the Virtual Machines and deploy Splunk:**
 
 ```bash
-vagrant up
+spa provision --yes && spa deploy --yes
 ```
 
-**Run Ansible playbooks to deploy and configure the Splunk software:**
-
-The `vagrant up` command only creates the virtual machines. To deploy Splunk afterwards, run this command:
-
-```bash
-ansible-playbook ansible/deploy_site.yml
-```
-
-To run both steps with one command use:
-
-```bash
-vagrant up; ansible-playbook ansible/deploy_site.yml
-```
+`spa provision` runs `vagrant up` from `SPA_HOME`. `spa deploy` is `deploy_site.yml`. Direct `vagrant up` / `ansible-playbook` from the clone still work.
 
 ---
 
@@ -497,38 +458,23 @@ ansible-playbook ansible/aws_destroy.yml
 
 
 
-#### Option C: AWS with Vagrant Plugin (Legacy)
-
-**Traditional Vagrant-based approach using the vagrant-aws plugin.**
-
-> ⚠️ **Note:** This method is considered legacy. The Terraform approach (Option B) above is recommended for new AWS deployments.
-
-To use the Vagrant AWS plugin:
-
-1. Follow the [AWS plugin installation instructions](#install-and-configure-aws-support-optional---legacy-vagrant-plugin)
-2. Configure `config/splunk_config.yml` with an `aws` section (see [splunk_config_aws.yml](examples/splunk_config_aws.yml))
-3. Run `vagrant up` to create instances
-4. Run `ansible-playbook ansible/deploy_site.yml` to deploy Splunk
-
-
-
 ### Stop hosts
 
-This will gracefully shutdown all the virtual machines.
+Gracefully stop managed VMs without destroying disks (AWS: EC2 stop; VirtualBox: `vagrant halt`):
 
 ```bash
-vagrant halt
+spa suspend --yes
 ```
-
-
 
 ### Destroy hosts
 
-You can destroy all the virtual machines with one command.
+Permanently remove managed infrastructure:
 
 ```bash
-vagrant destroy [-f] [<hostname>]
+spa destroy --yes
 ```
+
+Direct `vagrant destroy [-f] [<hostname>]` still works from `SPA_HOME` for VirtualBox.
 
 
 
