@@ -1,6 +1,6 @@
 # Release process
 
-Splunk Platform Automator is an Ansible/Terraform framework. A release is a **semver git tag plus a GitHub Release** whose notes come from `CHANGELOG.md`. There is no PyPI package or container image.
+Splunk Platform Automator is an Ansible/Terraform framework. A release is a **semver git tag plus a GitHub Release** whose notes come from `CHANGELOG.md`. The Release also attaches the operator **framework tarball** and **`install.sh`**. There is no PyPI package or container image.
 
 ## Version source of truth
 
@@ -9,7 +9,7 @@ Splunk Platform Automator is an Ansible/Terraform framework. A release is a **se
 | `VERSION` | Canonical semver (`X.Y.Z`) |
 | `CHANGELOG.md` | Keep a Changelog notes (`[Unreleased]` is promoted on bump) |
 | Git tag `vX.Y.Z` | What users check out |
-| GitHub Release | Release page + automatic source zip/tar |
+| GitHub Release | Release page + `install.sh` + `spa-framework-X.Y.Z.tar.gz` (plus GitHub’s automatic source zip/tar). Operators curl `https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh` (from 3.0). |
 
 ```bash
 cat VERSION
@@ -78,7 +78,7 @@ ansible-playbook ansible/verification/verify_app_deployment.yml -e fail_on_misma
 ## What we do not do
 
 - No moving `latest` tag
-- No artifact publish beyond GitHub’s source archives
+- No PyPI package or container image
 - No AWS or Splunkbase in GitHub Actions
 - `release.sh --check` is optional local validation; `patch|minor|major` and `--push` do not re-run tests (the tag workflow does)
 

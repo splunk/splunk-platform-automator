@@ -110,7 +110,7 @@ See [tests/README.md](tests/README.md). Full AWS deployment tests stay manual.
 
 ## Releasing
 
-Cut a version from `master` with [RELEASE.md](RELEASE.md) and `./scripts/release.sh`.
+Cut a version from `master` with [RELEASE.md](RELEASE.md) and `./scripts/release.sh`. Releases attach `spa-framework-X.Y.Z.tar.gz` and `install.sh`.
 
 ## Installation
 
@@ -118,13 +118,26 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 
 ### Framework Installation
 
+**Operators:** install the shared prefix, then `spa init` for each environment. Full steps: [Install](docs/Install.md).
+
+```bash
+/bin/bash -c "$(curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh)"
+spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env
+```
+
+That URL is the latest published GitHub Release asset (from **3.0**), not a git branch. Private repo: `gh release download --repo splunk/splunk-platform-automator --pattern install.sh -O - | bash`. Details: [Install](docs/Install.md).
+
+Default prefix is `${XDG_DATA_HOME:-~/.local/share}/spa` (`--prefix` / `SPA_PREFIX`); the launcher is `~/.local/bin/spa`. Extract-anywhere: unpack the framework tarball, set `SPA_HOME`, run `bin/spa_venv.sh --create`. To remove an installed prefix: `rm -f ~/.local/bin/spa` and `rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/spa"` (does not destroy env dirs or AWS).
+
+**Develop SPA:** clone this repository. That checkout is `SPA_HOME`. Do not copy `ansible/` into each environment.
+
 1. Install **Python 3.9+** (with the `venv` module). If your distro has no suitable package, [build your own Python](#build-your-own-python-version).
-2. Clone this repository or extract a [release](https://github.com/splunk/splunk-platform-automator/tags). That checkout is the framework (`SPA_HOME`). Do not copy `ansible/` into each environment.
-3. Create a `Software` directory as a **sibling** of the clone (or of the env dir). Put Splunk Enterprise and Universal Forwarder tarballs there, Professional Services baseconfig apps, and optionally `Splunk_Enterprise.lic`. See the layout below.
-4. Ansible, Pydantic, and Ansible collections are **not** installed with Homebrew. `spa init` (or `./bin/spa_venv.sh --create`) creates `$SPA_HOME/.venv` from `requirements.txt` and `requirements.yml`. Check the machine with `spa doctor`.
+2. Clone or extract a [release](https://github.com/splunk/splunk-platform-automator/releases) tarball.
+3. Create a `Software` directory as a **sibling** of the env dir (preferred) or of `SPA_HOME`. Put Splunk Enterprise and Universal Forwarder tarballs there, Professional Services baseconfig apps, and optionally `Splunk_Enterprise.lic`. See the layout below.
+4. Ansible, Pydantic, and Ansible collections are **not** installed with Homebrew. `install.sh` or `spa init` (or `./bin/spa_venv.sh --create`) creates `$SPA_HOME/.venv` from `requirements.txt` and `requirements.yml`. Check the machine with `spa doctor`.
 5. **AWS environments:** install Terraform 1.3+ (e.g. `brew install terraform`) and an AWS key pair / security group. **VirtualBox:** install Vagrant (and VirtualBox); see [Install Virtualbox support](#install-virtualbox-support-optional). **Optional:** [direnv](https://direnv.net) so `cd` into an env dir activates the venv and `SPA_*` variables (`brew install direnv` plus the [shell hook](https://direnv.net/docs/hook.html)).
 
-Primary flow: `spa init ~/envs/my-env` then `spa validate && spa provision --yes && spa deploy --yes`. `ansible-playbook` remains documented as the equivalent, not the default.
+Primary flow: `spa init ~/envs/my-env` then `spa validate && spa provision --yes && spa deploy --yes`. `ansible-playbook` remains documented as the equivalent, not the default. Git clone is for contributing to SPA.
 
 Your directory structure should now look like this:
 
@@ -248,12 +261,12 @@ To build your own windows vagrant image follow [Setup Windows Vagrant image](doc
 
 ### Start here
 
-Pick one path. Ansible always comes from `bin/spa_venv.sh` (created by `spa init` if missing), not from Homebrew.
+Pick one path. Ansible always comes from `bin/spa_venv.sh` (created by `install.sh` or `spa init` if missing), not from Homebrew. Operators install a prefix ([Install](docs/Install.md)); contributors use a git clone.
 
-**AWS (recommended for a separate environment directory).** One clone, many environments. Terraform state and `splunk_config.yml` live in the env dir. `vagrant up` is not used.
+**AWS (recommended for a separate environment directory).** One `SPA_HOME` (prefix or clone), many environments. Terraform state and `splunk_config.yml` live in the env dir. `vagrant up` is not used.
 
 ```bash
-cd /path/to/splunk-platform-automator
+# After install.sh, or from a clone / extracted tarball:
 spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env
 cd ~/envs/my-env
 # With direnv: venv + SPA_HOME / SPA_ENV_DIR / ANSIBLE_* load on cd (init ran direnv allow).
@@ -366,7 +379,7 @@ eval "$(spa env --export)"
 
 The test suites keep their own `tests/.venv` (pytest dependencies stay out of the venv an env uses); `tests/run_venv.sh` is a thin wrapper around the same `bin/spa_venv.sh`.
 
-Installers and PS baseconfig apps default to `../Software`. Local `source: local` apps default to `../apps` (env sibling), then `$SPA_HOME/apps`. Resolution order for each: env (`SPA_SOFTWARE_DIR` / `SPA_BASECONFIG_DIR` / `SPA_APPS_DIR`), then a **custom** path in `splunk_config.yml` (`splunk_dirs.splunk_software_dir`, `splunk_dirs.splunk_baseconfig_dir`, `splunk_app_deployment.local_app_repo_path`), then `.spa.yml` (`software_dir` / `baseconfig_dir` / `apps_dir`), then discovery. Built-in defaults such as `../Software` do not override `.spa.yml`. `spa init` writes the keys it finds. Unset `SPA_HOME` / `SPA_ENV_DIR` to keep today's in-repo workflow.
+Installers and PS baseconfig apps default to `../Software`. Prefix installs (`~/.local/share/spa`) do **not** look in `~/.local/share/Software`. Set them once with `spa init --software-dir ~/Software ENV` (writes `~/.config/spa/paths.yml`, not secrets) or put `software_dir` in env `.spa.yml`. Local `source: local` apps default to `../apps` (env sibling), then `$SPA_HOME/apps` (`--apps-dir` / `apps_dir`). Resolution order: `SPA_SOFTWARE_DIR` / `SPA_BASECONFIG_DIR` / `SPA_APPS_DIR`, then a **custom** path in `splunk_config.yml` (`splunk_dirs.splunk_software_dir`, `splunk_dirs.splunk_baseconfig_dir`, `splunk_app_deployment.local_app_repo_path`), then env `.spa.yml`, then `~/.config/spa/paths.yml`, then discovery. Built-in defaults such as `../Software` do not override `.spa.yml`. Unset `SPA_HOME` / `SPA_ENV_DIR` to keep today's in-repo workflow.
 
 Day-to-day commands: `spa validate`, `spa provision --yes && spa deploy --yes`, `spa run NAME` (`--yes` when the catalog marks `requires_confirmation`). `spa run --list` shows playbook summaries; `spa run NAME --help` prints risk, confirmation, inputs, and examples without running Ansible. Equivalent: `ansible-playbook` from `$SPA_HOME` after `eval "$(spa env --export)"`. 2.x playbook stems are listed in [Migrate SPA 2.x to 3.0](docs/Migrate_SPA_2x_to_3x.md). The backend boundary and future daemon/GUI design are in [Controller, GUI, and remote-client architecture](docs/Controller_Architecture.md).
 

@@ -59,6 +59,9 @@ HELP_CONTRACTS = [
             "--pip",
             "--no-envrc",
             "--skip-doctor",
+            "--software-dir",
+            "--baseconfig-dir",
+            "--apps-dir",
             "Environment directory",
         ],
     ),
@@ -83,7 +86,7 @@ HELP_CONTRACTS = [
     (["provision", "--help"], ["usage: spa provision", "-y", "--yes", "Terraform apply"]),
     (
         ["deploy", "--help"],
-        ["usage: spa deploy", "-y", "--yes", "--hosts", "required in agent mode"],
+        ["usage: spa deploy", "-y", "--yes", "--hosts", "--allow-unprovisioned", "required in agent mode"],
     ),
     (["destroy", "--help"], ["usage: spa destroy", "-y", "--yes", "Terraform destroy"]),
     (

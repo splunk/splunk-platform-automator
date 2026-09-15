@@ -13,9 +13,10 @@ Default path: `config/splunk_config.yml`.
 ### What it runs
 
 1. **Pydantic schema** — `ansible/plugins/inventory/schema.py` `validate_config_file`
-2. **Inventory plugin** — `ansible-inventory --list` with config as inventory source
-3. **License / role pairing** — `splunk_license_file` requires `license_manager` role (and vice versa); ITSI requires LM
-4. **Playbook syntax** — included in `spa validate` (`--syntax-check` on provision and deploy)
+2. **Controller paths** — Software dir, PS baseconfig apps (`org_ds_secure_server`, `org_cluster_manager_base`), and each `source: local` app under `apps_dir`
+3. **Inventory plugin** — `ansible-inventory --list` with config as inventory source
+4. **License / role pairing** — `splunk_license_file` requires `license_manager` role (and vice versa); ITSI requires LM
+5. **Playbook syntax** — included in `spa validate` (`--syntax-check` on provision and deploy)
 
 ### Optional license content and entitlement check
 

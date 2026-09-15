@@ -16,6 +16,9 @@ from spa.paths import (  # noqa: E402
     is_spa_home,
     resolve_shared_data_dir,
     resolve_spa_paths,
+    save_user_paths,
+    user_paths_yml,
+    xdg_config_home,
 )
 
 
@@ -232,3 +235,44 @@ def test_spa_yml_baseconfig_dir_separate(tmp_path):
     paths = resolve_spa_paths(start_dir=dest, environ={}, clone_root=PROJECT_ROOT)
     assert paths.software_dir == software.resolve()
     assert paths.baseconfig_dir == baseconfig.resolve()
+
+
+def test_xdg_config_home_ignores_relative(tmp_path):
+    isolated = {"HOME": str(tmp_path / "home"), "XDG_CONFIG_HOME": "relative-config"}
+    assert xdg_config_home(isolated) == tmp_path / "home" / ".config"
+
+
+def test_user_paths_yml_after_env_spa_yml(tmp_path):
+    dest = tmp_path / "itsi"
+    dest.mkdir()
+    (dest / ".spa.yml").write_text("spa_home: %s\n" % PROJECT_ROOT)
+    software = tmp_path / "controller-sw"
+    software.mkdir()
+    xdg = tmp_path / "xdg-config"
+    save_user_paths(software_dir=str(software), environ={"XDG_CONFIG_HOME": str(xdg)})
+    env = {"XDG_CONFIG_HOME": str(xdg)}
+    paths = resolve_spa_paths(start_dir=dest, environ=env, clone_root=PROJECT_ROOT)
+    assert paths.software_dir == software.resolve()
+    assert paths.baseconfig_dir == software.resolve()
+    assert user_paths_yml(env) == xdg / "spa" / "paths.yml"
+
+
+def test_env_spa_yml_wins_over_user_paths(tmp_path):
+    dest = tmp_path / "itsi"
+    dest.mkdir()
+    env_sw = tmp_path / "env-sw"
+    user_sw = tmp_path / "user-sw"
+    env_sw.mkdir()
+    user_sw.mkdir()
+    (dest / ".spa.yml").write_text(
+        "spa_home: %s\nsoftware_dir: %s\nbaseconfig_dir: %s\n"
+        % (PROJECT_ROOT, env_sw, env_sw)
+    )
+    xdg = tmp_path / "xdg-config"
+    save_user_paths(software_dir=str(user_sw), environ={"XDG_CONFIG_HOME": str(xdg)})
+    paths = resolve_spa_paths(
+        start_dir=dest,
+        environ={"XDG_CONFIG_HOME": str(xdg)},
+        clone_root=PROJECT_ROOT,
+    )
+    assert paths.software_dir == env_sw.resolve()

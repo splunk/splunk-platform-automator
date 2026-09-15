@@ -11,6 +11,15 @@ Distribution work on the `distribution` integration branch toward **3.0** (M1–
 
 ### Added
 
+- **Distribution M3 — `install.sh` + framework tarball** ([#48](https://github.com/splunk/splunk-platform-automator/issues/48)):
+  - `scripts/pack-framework.sh` builds `spa-framework-X.Y.Z.tar.gz` (no `tests/`, `.git`, lab `config/` / `inventory/`).
+  - `install.sh` (latest Release asset: `…/releases/latest/download/install.sh` piped to bash, or `gh release download` when private): default prefix `${XDG_DATA_HOME:-~/.local/share}/spa`, launcher `~/.local/bin/spa`, `--prefix` / `SPA_PREFIX`, creates the venv.
+  - Extract-anywhere: unpack the tarball, set `SPA_HOME`, run `bin/spa_venv.sh --create`. See [docs/Install.md](docs/Install.md).
+  - GitHub Releases attach the tarball and `install.sh`. Clone remains the contributor path.
+  - Controller Software / baseconfig / apps pointers: `spa init --software-dir` writes `${XDG_CONFIG_HOME:-~/.config}/spa/paths.yml` (not inside `SPA_HOME`) and copies keys into each env `.spa.yml` ([#73](https://github.com/splunk/splunk-platform-automator/issues/73)).
+  - `spa deploy` refuses when `terraform.aws` is configured and any `splunk_hosts` name is missing from `inventory/hosts` (or Terraform state is absent). Hint is `spa provision --yes`. `--allow-unprovisioned` skips the check (e.g. one host already up); skills pass it only when the operator asked. Interim until BYO hosts ([#57](https://github.com/splunk/splunk-platform-automator/issues/57)).
+  - `spa validate` and `spa deploy` refuse when Software or PS baseconfig apps are missing on the controller, and when `source: local` apps are listed but `apps_dir` or the named sources are missing. Hint is `spa init --software-dir` / `--apps-dir`.
+
 - **Distribution M2 — `spa` CLI** ([#47](https://github.com/splunk/splunk-platform-automator/issues/47)):
   - One user-facing entry: `bin/spa` (`lib/spa/`). Subcommands: `init`, `validate`, `doctor`, `env --export`, `provision`, `deploy`, `suspend`, `resume`, `destroy`, `hosts`, `shell`, `aws`, `licenses`, `run`, `agent schema`.
   - Folded `init_spa_dir.sh`, `spa_env.sh`, `spa_doctor.sh`, `validate_splunk_config.sh`, `spash`, `splunk_config_aws.py`, and `splunk_config_licenses.py`. Keep `bin/spa_venv.sh` (must be sourced). `--lab` is now `--env`.

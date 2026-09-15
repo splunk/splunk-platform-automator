@@ -62,7 +62,10 @@ COMMAND_SCHEMA = {
     "schema_version": SCHEMA_VERSION,
     "commands": [
         {"name": "init", "summary": "Scaffold or migrate an env dir"},
-        {"name": "validate", "summary": "Validate splunk_config.yml"},
+        {
+            "name": "validate",
+            "summary": "Validate splunk_config.yml (schema, Software/baseconfig/local apps, inventory)",
+        },
         {"name": "doctor", "summary": "Host prerequisite checks"},
         {"name": "env", "summary": "Print export statements for direnv"},
         {
@@ -74,11 +77,15 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "deploy",
-            "summary": "Deploy Splunk (deploy_site.yml)",
+            "summary": "Deploy Splunk (deploy_site.yml); requires Software/baseconfig and local app sources",
             "requires_confirmation": True,
             "flags": [
                 {"long": "--yes", "short": "-y", "help": "Confirm deploy (required in agent mode)"},
                 {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
+                {
+                    "long": "--allow-unprovisioned",
+                    "help": "Skip the check that every config host is in inventory",
+                },
             ],
         },
         {

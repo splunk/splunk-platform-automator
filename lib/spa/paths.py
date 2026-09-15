@@ -19,7 +19,8 @@ Resolution order
 1. Environment: SPA_HOME, SPA_ENV_DIR, SPLUNK_CONFIG_FILE
 2. .spa.yml walking up from the start directory
    (``spa_home``, optional ``software_dir`` / ``baseconfig_dir`` / ``apps_dir``; lab = that dir)
-3. The git clone that contains this module (or ansible.cfg + ansible/ + bin/)
+3. ``~/.config/spa/paths.yml`` (controller Software / baseconfig / apps; not secrets)
+4. The git clone that contains this module (or ansible.cfg + ansible/ + bin/)
 
 This module is importable from the inventory plugin and runnable:
 
@@ -83,8 +84,29 @@ def find_spa_yml(start: Optional[Path] = None) -> Optional[Path]:
     return None
 
 
+def parse_flat_yaml(text: str) -> Dict[str, Any]:
+    """Top-level ``key: value`` scalars only. Used when PyYAML is unavailable.
+
+    ``spa`` runs under the system interpreter until the venv exists, so this
+    fallback must read every pointer key, not just ``spa_home``.
+    """
+    data: Dict[str, Any] = {}
+    for line in text.splitlines():
+        if line[:1] in (" ", "\t", "-") or ":" not in line:
+            continue
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        key, _, value = stripped.partition(":")
+        key = key.strip()
+        value = value.split(" #", 1)[0].strip().strip("'\"")
+        if key and value:
+            data[key] = value
+    return data
+
+
 def load_spa_yml(path: Path) -> Dict[str, Any]:
-    """Load .spa.yml. PyYAML if present; otherwise a minimal spa_home reader."""
+    """Load .spa.yml. PyYAML if present; otherwise a flat key/value reader."""
     text = path.read_text(encoding="utf-8")
     try:
         import yaml
@@ -95,15 +117,7 @@ def load_spa_yml(path: Path) -> Dict[str, Any]:
         if not isinstance(data, dict):
             raise ValueError("%s must be a mapping" % path)
         return data
-    spa_home = None
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("#") or not stripped:
-            continue
-        if stripped.startswith("spa_home:"):
-            spa_home = stripped.split(":", 1)[1].strip().strip("'\"")
-            break
-    return {"spa_home": spa_home} if spa_home else {}
+    return parse_flat_yaml(text)
 
 
 def _expand(path: str, relative_to: Path) -> Path:
@@ -111,6 +125,89 @@ def _expand(path: str, relative_to: Path) -> Path:
     if not expanded.is_absolute():
         expanded = relative_to / expanded
     return expanded.resolve()
+
+
+def xdg_config_home(environ: Optional[Dict[str, str]] = None) -> Path:
+    """XDG Base Directory Spec: ignore a relative XDG_CONFIG_HOME."""
+    env = environ if environ is not None else os.environ
+    raw = (env.get("XDG_CONFIG_HOME") or "").strip()
+    if raw.startswith("/"):
+        return Path(raw)
+    home = (env.get("HOME") or "").strip()
+    if not home:
+        if environ is not None:
+            return Path("/nonexistent-spa-xdg-config")
+        home = str(Path.home())
+    return Path(home) / ".config"
+
+
+def user_spa_config_dir(environ: Optional[Dict[str, str]] = None) -> Path:
+    return xdg_config_home(environ) / "spa"
+
+
+def user_paths_yml(environ: Optional[Dict[str, str]] = None) -> Path:
+    return user_spa_config_dir(environ) / "paths.yml"
+
+
+def load_user_paths(environ: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """Controller-level Software / baseconfig / apps pointers. Not secrets."""
+    path = user_paths_yml(environ)
+    if not path.is_file():
+        return {}
+    try:
+        data = load_spa_yml(path)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_user_paths(
+    *,
+    software_dir: Optional[str] = None,
+    baseconfig_dir: Optional[str] = None,
+    apps_dir: Optional[str] = None,
+    environ: Optional[Dict[str, str]] = None,
+    relative_to: Optional[Path] = None,
+) -> Path:
+    """Create/update ~/.config/spa/paths.yml. Dir is created on first write."""
+    env = environ if environ is not None else os.environ
+    start = (relative_to or Path.cwd()).resolve()
+    data = dict(load_user_paths(env))
+    if software_dir:
+        data["software_dir"] = str(_expand(software_dir, start))
+        if not baseconfig_dir:
+            data["baseconfig_dir"] = data["software_dir"]
+    if baseconfig_dir:
+        data["baseconfig_dir"] = str(_expand(baseconfig_dir, start))
+    if apps_dir:
+        data["apps_dir"] = str(_expand(apps_dir, start))
+    path = user_paths_yml(env)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# Splunk Platform Automator controller paths (not secrets).",
+        "# Installers and PS baseconfig stay out of SPA_HOME so install.sh --force cannot delete them.",
+    ]
+    for key in ("software_dir", "baseconfig_dir", "apps_dir"):
+        value = data.get(key)
+        if value:
+            lines.append("%s: %s" % (key, value))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def _user_path_for_leaf(user: Dict[str, Any], env_var: str, home_leaf: str) -> Optional[str]:
+    if home_leaf == "apps" or env_var == "SPA_APPS_DIR":
+        value = user.get("apps_dir") or user.get("spa_apps_dir")
+        return str(value) if value else None
+    if env_var == "SPA_BASECONFIG_DIR":
+        value = (
+            user.get("baseconfig_dir")
+            or user.get("software_dir")
+            or user.get("spa_software_dir")
+        )
+        return str(value) if value else None
+    value = user.get("software_dir") or user.get("spa_software_dir")
+    return str(value) if value else None
 
 
 def resolve_shared_data_dir(
@@ -125,10 +222,11 @@ def resolve_shared_data_dir(
 ) -> Path:
     """Resolve Software / baseconfig / local apps.
 
-    Order: env override, absolute configured path, ``.spa.yml`` value, then the
-    first existing directory among env-relative, SPA_HOME-relative, and
-    ``$SPA_HOME/<home_leaf>``. If none exist, return the env-relative path (the
-    documented default) so errors stay specific.
+    Order: env override, absolute configured path, env ``.spa.yml`` value,
+    ``~/.config/spa/paths.yml``, then the first existing directory among
+    env-relative, SPA_HOME-relative, and ``$SPA_HOME/<home_leaf>``. If none
+    exist, return the env-relative path (the documented default) so errors stay
+    specific.
     """
     env = environ if environ is not None else os.environ
     start = (start_dir or Path.cwd()).resolve()
@@ -143,6 +241,10 @@ def resolve_shared_data_dir(
 
     if yml_value:
         return _expand(str(yml_value), spa_env_dir)
+
+    user_value = _user_path_for_leaf(load_user_paths(env), env_var, home_leaf)
+    if user_value:
+        return _expand(user_value, start)
 
     rel = configured or default_rel
     candidates = [

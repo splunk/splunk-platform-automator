@@ -309,3 +309,28 @@ def test_ansible_pin_passed_to_venv(tmp_path, monkeypatch):
         assert "spa_saved_baseconfig_apps_dir" in text
         assert "../{{" not in text
         assert "../{{splunk_save_baseconfig_apps_dir" not in text
+
+
+def test_init_software_dir_writes_user_and_env_yml(tmp_path):
+    dest = tmp_path / "env"
+    dest2 = tmp_path / "env2"
+    software = tmp_path / "Software"
+    software.mkdir()
+    xdg = tmp_path / "xdg-config"
+    home = tmp_path / "home"
+    home.mkdir()
+    isolated = {"HOME": str(home), "XDG_CONFIG_HOME": str(xdg)}
+    result = run_spa_init(
+        ["--example", "single_node.yml", "--software-dir", str(software), str(dest)],
+        env=isolated,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    user = yaml.safe_load((xdg / "spa" / "paths.yml").read_text())
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
+    assert Path(user["software_dir"]).resolve() == software.resolve()
+    assert Path(user["baseconfig_dir"]).resolve() == software.resolve()
+    assert Path(spa_yml["software_dir"]).resolve() == software.resolve()
+    second = run_spa_init(["--example", "single_node.yml", str(dest2)], env=isolated)
+    assert second.returncode == 0, second.stderr + second.stdout
+    spa2 = yaml.safe_load((dest2 / ".spa.yml").read_text())
+    assert Path(spa2["software_dir"]).resolve() == software.resolve()

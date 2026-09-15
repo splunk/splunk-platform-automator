@@ -504,6 +504,17 @@ def test_human_lifecycle_prompt_names_command_and_risk(monkeypatch, command, ris
             return 0
 
     monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    from spa.preflight import ControllerDataState
+    from spa.providers import ProvisionState
+
+    monkeypatch.setattr(
+        "spa.providers.check_provisioned",
+        lambda paths: ProvisionState(provider="test", provisioned=True),
+    )
+    monkeypatch.setattr(
+        "spa.preflight.check_controller_data",
+        lambda paths: ControllerDataState(ok=True),
+    )
     monkeypatch.setattr(
         "spa.playbooks.run_playbook", lambda *a, **k: called.append("deploy") or 0
     )
@@ -532,6 +543,17 @@ def test_agent_lifecycle_requires_yes(monkeypatch, command):
             return 0
 
     monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    from spa.preflight import ControllerDataState
+    from spa.providers import ProvisionState
+
+    monkeypatch.setattr(
+        "spa.providers.check_provisioned",
+        lambda paths: ProvisionState(provider="test", provisioned=True),
+    )
+    monkeypatch.setattr(
+        "spa.preflight.check_controller_data",
+        lambda paths: ControllerDataState(ok=True),
+    )
     monkeypatch.setattr(
         "spa.playbooks.run_playbook", lambda *a, **k: called.append("deploy") or 0
     )

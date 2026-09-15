@@ -10,7 +10,7 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence
 
-from spa.paths import is_spa_home
+from spa.paths import _expand, is_spa_home, load_user_paths, save_user_paths
 
 _LOG: ContextVar[Optional[List[str]]] = ContextVar("spa_init_log", default=None)
 
@@ -88,29 +88,79 @@ def ensure_env_dirs(dest: Path) -> None:
         hosts.write_text("", encoding="utf-8")
 
 
-def write_spa_yml(dest: Path, spa_home: Path) -> tuple:
-    software_dir = ""
-    apps_dir = ""
-    for candidate in (dest / "../Software", spa_home / "../Software", spa_home / "Software"):
+def _first_existing(*candidates: Path) -> str:
+    for candidate in candidates:
         if candidate.is_dir():
-            software_dir = str(candidate.resolve())
-            break
-    for candidate in (dest / "../apps", spa_home / "../apps", spa_home / "apps"):
-        if candidate.is_dir():
-            apps_dir = str(candidate.resolve())
-            break
+            return str(candidate.resolve())
+    return ""
+
+
+def write_spa_yml(
+    dest: Path,
+    spa_home: Path,
+    *,
+    software_dir: Optional[str] = None,
+    baseconfig_dir: Optional[str] = None,
+    apps_dir: Optional[str] = None,
+    persist_user: bool = False,
+    environ: Optional[dict] = None,
+) -> tuple:
+    env = environ if environ is not None else os.environ
+    start = dest.resolve()
+    if persist_user and (software_dir or baseconfig_dir or apps_dir):
+        saved = save_user_paths(
+            software_dir=software_dir,
+            baseconfig_dir=baseconfig_dir,
+            apps_dir=apps_dir,
+            environ=env,
+            relative_to=start,
+        )
+        _say("  paths:     %s" % saved)
+
+    user = load_user_paths(env)
+    sw = ""
+    if software_dir:
+        sw = str(_expand(software_dir, start))
+    elif user.get("software_dir"):
+        sw = str(_expand(str(user["software_dir"]), start))
+    else:
+        sw = _first_existing(dest / "../Software", spa_home / "../Software", spa_home / "Software")
+
+    bc = ""
+    if baseconfig_dir:
+        bc = str(_expand(baseconfig_dir, start))
+    elif user.get("baseconfig_dir"):
+        bc = str(_expand(str(user["baseconfig_dir"]), start))
+    elif sw:
+        bc = sw
+    else:
+        bc = sw
+
+    apps = ""
+    if apps_dir:
+        apps = str(_expand(apps_dir, start))
+    elif user.get("apps_dir"):
+        apps = str(_expand(str(user["apps_dir"]), start))
+    else:
+        apps = _first_existing(dest / "../apps", spa_home / "../apps", spa_home / "apps")
+
     lines = [
         "# Splunk Platform Automator env pointer.",
         "# Framework stays in spa_home. Do not copy ansible/ into this directory.",
         "spa_home: %s" % spa_home,
     ]
-    if software_dir:
-        lines.append("software_dir: %s" % software_dir)
-        lines.append("baseconfig_dir: %s" % software_dir)
-    if apps_dir:
-        lines.append("apps_dir: %s" % apps_dir)
+    if sw:
+        lines.append("software_dir: %s" % sw)
+        lines.append("baseconfig_dir: %s" % (bc or sw))
+    if apps:
+        lines.append("apps_dir: %s" % apps)
     (dest / ".spa.yml").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return software_dir, apps_dir
+    if not sw:
+        _say(
+            "No Software directory found. Point once with: spa init --software-dir DIR %s"
+            % dest
+        )
+    return sw, apps
 
 
 def write_envrc(dest: Path, spa_home: Path) -> None:
@@ -160,7 +210,9 @@ def transfer_path(src: Path, dest: Path, keep_source: bool) -> None:
             src.unlink()
 
 
-def migrate_state(src: Path, dest: Path, spa_home: Path, keep_source: bool) -> None:
+def migrate_state(
+    src: Path, dest: Path, spa_home: Path, keep_source: bool, yml_opts: Optional[dict] = None
+) -> None:
     ensure_env_dirs(dest)
     if (src / "config").is_dir():
         for item in src.joinpath("config").iterdir():
@@ -193,7 +245,7 @@ def migrate_state(src: Path, dest: Path, spa_home: Path, keep_source: bool) -> N
         if (src / extra).is_file():
             transfer_path(src / extra, dest / extra, keep_source)
     link_terraform_modules(dest, spa_home)
-    write_spa_yml(dest, spa_home)
+    write_spa_yml(dest, spa_home, **(yml_opts or {}))
 
 
 def leftover_present(root: Path) -> List[str]:
@@ -364,6 +416,9 @@ def init_env(
     skip_doctor: bool = False,
     rebuild_venv: bool = False,
     log: Optional[List[str]] = None,
+    software_dir: Optional[str] = None,
+    baseconfig_dir: Optional[str] = None,
+    apps_dir: Optional[str] = None,
 ) -> int:
     token = _LOG.set(log) if log is not None else None
     try:
@@ -383,6 +438,9 @@ def init_env(
             write_envrc_file=write_envrc_file,
             skip_doctor=skip_doctor,
             rebuild_venv=rebuild_venv,
+            software_dir=software_dir,
+            baseconfig_dir=baseconfig_dir,
+            apps_dir=apps_dir,
         )
     finally:
         if token is not None:
@@ -406,6 +464,9 @@ def _init_env(
     write_envrc_file: bool = True,
     skip_doctor: bool = False,
     rebuild_venv: bool = False,
+    software_dir: Optional[str] = None,
+    baseconfig_dir: Optional[str] = None,
+    apps_dir: Optional[str] = None,
 ) -> int:
     pip_pkgs = list(pip_pkgs or [])
     dest = dest.resolve()
@@ -413,6 +474,15 @@ def _init_env(
     dest.mkdir(parents=True, exist_ok=True)
     source = (from_dir or spa_home).resolve()
     config_dest = dest / "config" / "splunk_config.yml"
+    yml_opts = {
+        "software_dir": software_dir,
+        "baseconfig_dir": baseconfig_dir,
+        "apps_dir": apps_dir,
+        "persist_user": bool(software_dir or baseconfig_dir or apps_dir),
+    }
+
+    def _write() -> tuple:
+        return write_spa_yml(dest, spa_home, **yml_opts)
 
     if dest == spa_home:
         raise InitError(
@@ -433,7 +503,7 @@ def _init_env(
         _say("Converting clone-style env at %s" % dest)
         strip_framework(dest, spa_home)
         ensure_env_dirs(dest)
-        write_spa_yml(dest, spa_home)
+        _write()
         if write_envrc_file:
             write_envrc(dest, spa_home)
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
@@ -455,7 +525,7 @@ def _init_env(
         if has_config(dest) and force and not example_set:
             # refresh pointer files only; do not copy config from source over dest
             ensure_env_dirs(dest)
-            write_spa_yml(dest, spa_home)
+            _write()
             if write_envrc_file:
                 write_envrc(dest, spa_home)
             link_terraform_modules(dest, spa_home)
@@ -465,7 +535,7 @@ def _init_env(
             _say("Refreshed env pointer files at %s (splunk_config.yml kept)" % dest)
             return 0
         _say("Migrating existing env from %s" % source)
-        migrate_state(source, dest, spa_home, keep_source)
+        migrate_state(source, dest, spa_home, keep_source, yml_opts=yml_opts)
         if write_envrc_file:
             write_envrc(dest, spa_home)
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
@@ -487,7 +557,7 @@ def _init_env(
             raise InitError("Example not found: %s" % source_example)
         ensure_env_dirs(dest)
         shutil.copy2(source_example, config_dest)
-        write_spa_yml(dest, spa_home)
+        _write()
         if write_envrc_file:
             write_envrc(dest, spa_home)
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
@@ -501,7 +571,7 @@ def _init_env(
     # --force without --example on an existing env: refresh metadata, keep config
     if force and (has_config(dest) or is_spa_env(dest)):
         ensure_env_dirs(dest)
-        write_spa_yml(dest, spa_home)
+        _write()
         if write_envrc_file:
             write_envrc(dest, spa_home)
         link_terraform_modules(dest, spa_home)
@@ -520,7 +590,7 @@ def _init_env(
         raise InitError("Env already exists (%s). Use --force to refresh .spa.yml/.envrc." % dest)
     ensure_env_dirs(dest)
     shutil.copy2(source_example, config_dest)
-    write_spa_yml(dest, spa_home)
+    _write()
     if write_envrc_file:
         write_envrc(dest, spa_home)
     create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)

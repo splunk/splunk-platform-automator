@@ -112,6 +112,9 @@ class SpaSession(Protocol):
         write_envrc_file: bool = True,
         skip_doctor: bool = False,
         rebuild_venv: bool = False,
+        software_dir: Optional[str] = None,
+        baseconfig_dir: Optional[str] = None,
+        apps_dir: Optional[str] = None,
     ) -> CommandResult: ...
 
     def list_examples(self) -> CommandResult: ...
@@ -131,6 +134,7 @@ class SpaSession(Protocol):
         hosts: Optional[Sequence[str]] = None,
         confirm: bool = False,
         agent: bool = False,
+        skip_provision_check: bool = False,
     ) -> CommandResult: ...
 
     def suspend(self, confirm: bool = False, wait: bool = True, agent: bool = False, hosts: Optional[Sequence[str]] = None) -> CommandResult: ...
@@ -274,6 +278,9 @@ class LocalSpaSession:
         write_envrc_file: bool = True,
         skip_doctor: bool = False,
         rebuild_venv: bool = False,
+        software_dir: Optional[str] = None,
+        baseconfig_dir: Optional[str] = None,
+        apps_dir: Optional[str] = None,
     ) -> CommandResult:
         from spa.init import InitError, init_env
 
@@ -295,6 +302,9 @@ class LocalSpaSession:
                 write_envrc_file=write_envrc_file,
                 skip_doctor=skip_doctor,
                 rebuild_venv=rebuild_venv,
+                software_dir=software_dir,
+                baseconfig_dir=baseconfig_dir,
+                apps_dir=apps_dir,
                 log=messages,
             )
         except InitError as exc:
@@ -391,9 +401,60 @@ class LocalSpaSession:
         hosts: Optional[Sequence[str]] = None,
         confirm: bool = False,
         agent: bool = False,
+        skip_provision_check: bool = False,
     ) -> CommandResult:
         from spa.hosts import with_ansible_limit
         from spa.playbooks import PlaybookError, resolve, run_playbook
+        from spa.preflight import check_controller_data, controller_data_error
+        from spa.providers import ProviderError, check_provisioned
+
+        controller = check_controller_data(self.paths)
+        if not controller.ok:
+            return CommandResult(
+                ok=False,
+                code=1,
+                error=controller_data_error(controller),
+                data={
+                    "software_dir": controller.software_dir,
+                    "baseconfig_dir": controller.baseconfig_dir,
+                    "apps_dir": controller.apps_dir,
+                    "missing": list(controller.missing),
+                },
+            )
+
+        provision = None
+        try:
+            provision = check_provisioned(self.paths)
+        except ProviderError:
+            provision = None
+        if (
+            provision is not None
+            and not provision.provisioned
+            and not skip_provision_check
+        ):
+            error = "%s\nRun: %s\nOr: spa deploy --yes --allow-unprovisioned" % (
+                provision.reason,
+                provision.hint,
+            )
+            if provision.missing:
+                shown = list(provision.missing)
+                extra = ""
+                if len(shown) > 12:
+                    extra = ", +%d more" % (len(shown) - 12)
+                    shown = shown[:12]
+                error = "Missing hosts: %s%s\n%s" % (", ".join(shown), extra, error)
+            return CommandResult(
+                ok=False,
+                code=1,
+                error=error,
+                data={
+                    "provider": provision.provider,
+                    "provisioned": False,
+                    "reason": provision.reason,
+                    "hint": provision.hint,
+                    "missing": list(provision.missing),
+                },
+            )
 
         try:
             resolved = self._resolve_hosts(hosts)
@@ -419,6 +480,13 @@ class LocalSpaSession:
         data: Dict[str, Any] = {"playbook": "deploy_site"}
         if resolved:
             data["hosts"] = resolved
+        if skip_provision_check:
+            data["provision_check_skipped"] = True
+            if provision is not None:
+                data["provisioned"] = provision.provisioned
+                data["provider"] = provision.provider
+                if provision.missing:
+                    data["missing"] = list(provision.missing)
         return CommandResult(
             ok=rc == 0,
             code=rc,

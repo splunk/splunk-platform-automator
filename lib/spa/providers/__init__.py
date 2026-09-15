@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 from dataclasses import dataclass
-from typing import Any, Dict, Protocol
+from typing import Any, Dict, List, Protocol, Tuple
 
 import yaml
 
@@ -29,6 +29,94 @@ class HostStatusProvider(Protocol):
     def host_status(self) -> Dict[str, Dict[str, Any]]:
         """Map inventory names/addresses to state and reachability."""
         ...
+
+
+@dataclass(frozen=True)
+class ProvisionState:
+    """Whether every config host is present in the provisioned inventory."""
+
+    provider: str
+    provisioned: bool
+    reason: str = ""
+    hint: str = ""
+    missing: Tuple[str, ...] = ()
+
+
+class ProvisionStateProvider(Protocol):
+    """Optional provider capability consumed by `spa deploy`."""
+
+    name: str
+
+    def provision_state(self) -> ProvisionState:
+        """Return whether this env has been provisioned for every config host."""
+        ...
+
+
+def expected_hostnames(config: Dict[str, Any]) -> List[str]:
+    """Expand splunk_hosts name / list / iter the same way the inventory plugin does."""
+    names: List[str] = []
+    for host in config.get("splunk_hosts") or []:
+        if not isinstance(host, dict):
+            continue
+        if host.get("name"):
+            names.append(str(host["name"]))
+            continue
+        listed = host.get("list")
+        if listed:
+            names.extend(str(item) for item in listed)
+            continue
+        iteration = host.get("iter")
+        if not isinstance(iteration, dict):
+            continue
+        numbers = str(iteration.get("numbers") or "")
+        if ".." not in numbers:
+            continue
+        start_text, end_text = numbers.split("..", 1)
+        try:
+            start, end = int(start_text), int(end_text)
+        except ValueError:
+            continue
+        prefix = iteration.get("prefix") or ""
+        postfix = iteration.get("postfix") or ""
+        width = len(end_text)
+        for number in range(start, end + 1):
+            names.append("%s%s%s" % (prefix, str(number).zfill(width), postfix))
+    return names
+
+
+def inventory_hostnames_from_file(paths: SpaPaths) -> List[str]:
+    """First token of each non-comment line in inventory/hosts."""
+    hosts_file = paths.inventory_dir / "hosts"
+    if not hosts_file.is_file():
+        return []
+    names: List[str] = []
+    try:
+        lines = hosts_file.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        names.append(stripped.split()[0])
+    return names
+
+
+def check_provisioned(paths: SpaPaths) -> ProvisionState:
+    """Block spa deploy only when a spa-managed provider can prove hosts are missing."""
+    try:
+        config = load_deployment_config(paths)
+    except ProviderError:
+        return ProvisionState(provider="unknown", provisioned=True)
+
+    terraform = config.get("terraform") or {}
+    if isinstance(terraform, dict):
+        configured = [
+            name for name, value in terraform.items() if isinstance(value, dict)
+        ]
+        if len(configured) == 1 and configured[0] in PROVIDER_MODULES:
+            return get_provider(paths).provision_state()
+    return ProvisionState(provider="none", provisioned=True)
 
 
 # Adding GCP later is intentionally a registry change, not a CLI change.

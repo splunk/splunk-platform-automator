@@ -363,6 +363,21 @@ def _run(argv: Sequence[str]) -> int:
     p_init.add_argument("--pip", action="append", default=[], help="Extra pip spec (repeatable)")
     p_init.add_argument("--no-envrc", action="store_true", help="Do not create a direnv .envrc file")
     p_init.add_argument("--skip-doctor", action="store_true", help="Skip prerequisite checks after init")
+    p_init.add_argument(
+        "--software-dir",
+        metavar="DIR",
+        help="Shared Splunk installers directory (saved in ~/.config/spa/paths.yml)",
+    )
+    p_init.add_argument(
+        "--baseconfig-dir",
+        metavar="DIR",
+        help="PS baseconfig apps directory (default: same as --software-dir)",
+    )
+    p_init.add_argument(
+        "--apps-dir",
+        metavar="DIR",
+        help="Local source: local apps directory (saved in ~/.config/spa/paths.yml)",
+    )
 
     p_val = _add_command(sub, "validate", aliases=["val"], help="Validate splunk_config.yml")
     p_val.add_argument("config", nargs="?", help="Configuration file (defaults to this environment)")
@@ -403,6 +418,12 @@ def _run(argv: Sequence[str]) -> int:
         action="store_true",
         default=argparse.SUPPRESS,
         help="Confirm deploy (required in agent mode)",
+    )
+    p_deploy.add_argument(
+        "--allow-unprovisioned",
+        action="store_true",
+        help="Skip the check that every config host is in inventory "
+        "(e.g. spa deploy --yes --hosts idx1 --allow-unprovisioned)",
     )
     _add_hosts_option(p_deploy)
     p_destroy = _add_command(
@@ -579,6 +600,9 @@ def _run(argv: Sequence[str]) -> int:
             write_envrc_file=not args.no_envrc,
             skip_doctor=args.skip_doctor,
             rebuild_venv=bool(args.ansible or args.pip) and args.force,
+            software_dir=args.software_dir,
+            baseconfig_dir=args.baseconfig_dir,
+            apps_dir=args.apps_dir,
         )
         if as_agent:
             emit(
@@ -645,6 +669,7 @@ def _run(argv: Sequence[str]) -> int:
             hosts=getattr(args, "hosts", None),
             confirm=args.yes,
             agent=as_agent,
+            skip_provision_check=bool(getattr(args, "allow_unprovisioned", False)),
         )
         if as_agent:
             return _emit_result(result, True)

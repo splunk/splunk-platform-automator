@@ -226,16 +226,19 @@ def collect_checks(
         rec("warn", "direnv", "direnv is not installed", _brew_hint("direnv") + "; then spa doctor --fix-direnv")
 
     software = None
-    roots = [spa_home_path]
+    env_overlay = {**os.environ, "SPA_HOME": str(spa_home_path)}
     if env_path:
-        roots.insert(0, env_path)
-    for root in roots:
-        for candidate in (root / "../Software", spa_home_path / "../Software", spa_home_path / "Software"):
-            if candidate.is_dir():
-                software = candidate.resolve()
-                break
-        if software:
-            break
+        env_overlay["SPA_ENV_DIR"] = str(env_path)
+    try:
+        resolved = resolve_spa_paths(
+            start_dir=env_path or spa_home_path,
+            environ=env_overlay,
+            clone_root=spa_home_path,
+        )
+        if resolved.software_dir.is_dir():
+            software = resolved.software_dir
+    except Exception:
+        software = None
     if software:
         rec("ok", "software", "Software at %s" % software)
     else:
@@ -243,7 +246,7 @@ def collect_checks(
             "warn",
             "software",
             "no Software/ directory (installers and baseconfig apps)",
-            "sibling of env or SPA_HOME: ../Software",
+            "spa init --software-dir DIR ENV (saves ~/.config/spa/paths.yml); or sibling of env",
         )
 
     if require_vbox:
