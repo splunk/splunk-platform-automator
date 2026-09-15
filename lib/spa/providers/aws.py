@@ -11,7 +11,13 @@ from typing import Any, Dict, List, Optional
 from spa.executil import tool_path
 from spa.paths import SpaPaths
 from spa.playbooks import resolve, run_playbook
-from spa.providers import ProviderError
+from spa.providers import (
+    ProviderError,
+    ProvisionState,
+    expected_hostnames,
+    inventory_hostnames_from_file,
+    load_deployment_config,
+)
 
 
 class Provider:
@@ -28,6 +34,57 @@ class Provider:
             self.paths,
             extra,
         )
+
+    def provision_state(self) -> ProvisionState:
+        """Offline: Terraform state plus every config hostname in inventory/hosts."""
+        expected = expected_hostnames(load_deployment_config(self.paths))
+        inventory = set(inventory_hostnames_from_file(self.paths))
+        missing = tuple(sorted(set(expected) - inventory))
+        hint_provision = "spa provision --yes"
+        hint_resume = "spa provision --yes (spa resume --yes if instances are stopped)"
+        state_path = self.state_dir / "terraform.tfstate"
+        if not state_path.is_file():
+            return ProvisionState(
+                provider=self.name,
+                provisioned=False,
+                reason="No Terraform state for this AWS env: %s" % self.state_dir,
+                hint=hint_provision,
+                missing=tuple(sorted(expected)),
+            )
+        try:
+            payload = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            return ProvisionState(
+                provider=self.name,
+                provisioned=False,
+                reason="Cannot read Terraform state: %s" % state_path,
+                hint=hint_provision,
+                missing=tuple(sorted(expected)),
+            )
+        resources = payload.get("resources") if isinstance(payload, dict) else None
+        if not isinstance(resources, list) or not resources:
+            return ProvisionState(
+                provider=self.name,
+                provisioned=False,
+                reason="Terraform state has no resources: %s" % state_path,
+                hint=hint_provision,
+                missing=tuple(sorted(expected)),
+            )
+        if missing:
+            shown = list(missing)
+            extra = ""
+            cap = 12
+            if len(shown) > cap:
+                extra = ", +%d more" % (len(shown) - cap)
+                shown = shown[:cap]
+            return ProvisionState(
+                provider=self.name,
+                provisioned=False,
+                reason="hosts not in inventory: %s%s" % (", ".join(shown), extra),
+                hint=hint_resume,
+                missing=missing,
+            )
+        return ProvisionState(provider=self.name, provisioned=True)
 
     def destroy(self, extra: List[str]) -> int:
         return run_playbook(

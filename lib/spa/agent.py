@@ -79,6 +79,10 @@ COMMAND_SCHEMA = {
             "flags": [
                 {"long": "--yes", "short": "-y", "help": "Confirm deploy (required in agent mode)"},
                 {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
+                {
+                    "long": "--allow-unprovisioned",
+                    "help": "Skip the check that every config host is in inventory",
+                },
             ],
         },
         {

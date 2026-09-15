@@ -122,6 +122,12 @@ def test_session_deploy_injects_limit(monkeypatch):
 
     monkeypatch.setattr("spa.playbooks.resolve", lambda *a, **k: "deploy_site.yml")
     monkeypatch.setattr("spa.playbooks.run_playbook", fake_run)
+    from spa.providers import ProvisionState
+
+    monkeypatch.setattr(
+        "spa.providers.check_provisioned",
+        lambda paths: ProvisionState(provider="aws", provisioned=True),
+    )
     monkeypatch.setattr(
         "spa.shell.get_inventory_data",
         lambda: INVENTORY,

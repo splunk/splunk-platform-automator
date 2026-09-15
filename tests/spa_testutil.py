@@ -27,6 +27,7 @@ def spa_env(extra: Optional[Mapping[str, str]] = None) -> dict:
     for name in AGENT_ENV_VARS:
         env.pop(name, None)
     env["PYTHONPATH"] = str(LIB) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    env.setdefault("XDG_CONFIG_HOME", str(PROJECT_ROOT / "tests" / ".xdg-config-empty"))
     if extra:
         env.update(extra)
     return env

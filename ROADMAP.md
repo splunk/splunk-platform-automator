@@ -33,6 +33,7 @@ Ship M1–M3 on one integration branch, then **3.0** when M3 is in. Do not cut a
 - [ ] Release tarball of the framework (exclude `tests/`, `.git`, lab `config/`) (**M3**)
 - [ ] `install.sh` (GitHub `releases/latest/download/install.sh` piped to bash, or `gh release download` when private): default prefix `${XDG_DATA_HOME:-~/.local/share}/spa`, launcher `~/.local/bin/spa`, or `--prefix` / `SPA_PREFIX`; creates the venv (**M3**)
 - [ ] Documented extract-anywhere: unpack the tarball, set `SPA_HOME`, run `spa` from that tree (**M3**)
+- [ ] User-level Software / baseconfig / apps pointers (`~/.config/spa/paths.yml`; `spa init --software-dir`) so prefix installs do not look next to `~/.local/share/spa` — [#73](https://github.com/splunk/splunk-platform-automator/issues/73)
 - [ ] `install.sh --uninstall` (prefix + launcher only; never env dirs / Terraform / AWS) — [#72](https://github.com/splunk/splunk-platform-automator/issues/72)
 - [ ] Optional later: native Linux packages (`.deb` / `.rpm`) from the same tarball, unpack to `/opt/spa`; `install.sh` prefers the distro package when it matches
 - [ ] Optional later: Homebrew tap of the same tarball (no brew Ansible/Pydantic; `spa_venv` stays the Python path)
@@ -79,7 +80,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [x] Terraform AWS + `spa aws` ([docs/Ansible_Terraform_AWS_Integration.md](docs/Ansible_Terraform_AWS_Integration.md))
 - [ ] VirtualBox spa provider (`spa provision` / `destroy` / suspend-resume via Vagrant); remove unmaintained vagrant-aws — [#56](https://github.com/splunk/splunk-platform-automator/issues/56)
 - [ ] Shared network access groups (provider-agnostic CLI; AWS first; SPA_HOME state; env destroy does not delete) — [#58](https://github.com/splunk/splunk-platform-automator/issues/58)
-- [ ] External / BYO SSH hosts (register only; mixed with managed; never terminate the real machine) — [#57](https://github.com/splunk/splunk-platform-automator/issues/57)
+- [ ] External / BYO SSH hosts (register only; mixed with managed; never terminate the real machine) — [#57](https://github.com/splunk/splunk-platform-automator/issues/57). `spa deploy --allow-unprovisioned` is the interim escape hatch until BYO hosts are first-class.
 - [ ] Splunk Operator for Kubernetes: `splunk_config.yml` → Operator CRs (IndexerCluster, SearchHeadCluster, ClusterManager, LicenseManager, MonitoringConsole, Standalone) plus namespace, storage, and image settings
 - [ ] Windows Universal Forwarder on AWS (AMI + WinRM); VirtualBox UF role exists but needs an undocumented box ([docs/Setup_Windows_Box.md](docs/Setup_Windows_Box.md))
 
