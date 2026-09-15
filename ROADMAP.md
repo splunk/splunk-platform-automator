@@ -10,13 +10,13 @@ Install the **shared** framework once (playbooks, Terraform, skills, `spa` binar
 
 **Contract:** `SPA_HOME` is the framework (`ansible/`, Terraform modules, `skills/`, `bin/`). `SPA_ENV_DIR` is the Splunk environment (`splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `saved_base_config_apps/`). Unset both → the git clone; today's `ansible-playbook` workflow is unchanged. When they differ, do not write env state into the prefix (an upgrade of `~/.local/share/spa` or `/opt/spa` would lose it).
 
-Ship M1–M3 on one integration branch, then **3.0** when M3 is in. Do not cut a minor per milestone. Pickup: the issue for that milestone (not a Cursor plan). After a milestone is done: check it here, close the issue, merge into the parent branch for further testing. Do not start the next until the prior is merged there.
+Ship M1–M3 on one integration branch, then **3.0** when that branch is ready to merge to `main`. Do not cut a minor per milestone. Pickup: the issue for that milestone (not a Cursor plan). After a milestone is done: check it here, close the issue, merge into the parent branch for further testing.
 
-**Branching:** parent `distribution` (off `main`). Each milestone is `dist/mN` branched from `distribution` and merged back. When M3 is in, PR `distribution` → `main` and tag **3.0**. Clone + `ansible-playbook` stay supported on `main` until then.
+**Branching:** parent `distribution` (off `main`). Each milestone is `dist/mN` branched from `distribution` and merged back. M1–M3 are on `distribution`. Hold the **3.0** tag (PR `distribution` → `main`) until more work lands there. Clone + `ansible-playbook` stay supported on `main` until then.
 
 - [x] **M1** Path contract + env scaffold — [#46](https://github.com/splunk/splunk-platform-automator/issues/46)
 - [x] **M2** `spa` CLI over the clone prefix — [#47](https://github.com/splunk/splunk-platform-automator/issues/47)
-- [ ] **M3** `install.sh` + framework tarball — [#48](https://github.com/splunk/splunk-platform-automator/issues/48)
+- [x] **M3** `install.sh` + framework tarball — [#48](https://github.com/splunk/splunk-platform-automator/issues/48)
 
 ### Outcomes
 
@@ -30,10 +30,10 @@ Ship M1–M3 on one integration branch, then **3.0** when M3 is in. Do not cut a
 - [x] `--hosts` on `deploy`, `run`, `suspend`, `resume`, and `hosts list` (inventory names or roles) (**M2**)
 - [x] Mutating ops confirm in `LocalSpaSession` (named human prompt; agents/GUI pass `--yes` and never `input()`) (**M2**)
 - [x] `spa suspend` / `spa resume` for AWS compute (keep Terraform state and EBS; resume refreshes inventory addresses) (**M2**)
-- [ ] Release tarball of the framework (exclude `tests/`, `.git`, lab `config/`) (**M3**)
-- [ ] `install.sh` (GitHub `releases/latest/download/install.sh` piped to bash, or `gh release download` when private): default prefix `${XDG_DATA_HOME:-~/.local/share}/spa`, launcher `~/.local/bin/spa`, or `--prefix` / `SPA_PREFIX`; creates the venv (**M3**)
-- [ ] Documented extract-anywhere: unpack the tarball, set `SPA_HOME`, run `spa` from that tree (**M3**)
-- [ ] User-level Software / baseconfig / apps pointers (`~/.config/spa/paths.yml`; `spa init --software-dir`) so prefix installs do not look next to `~/.local/share/spa` — [#73](https://github.com/splunk/splunk-platform-automator/issues/73)
+- [x] Release tarball of the framework (exclude `tests/`, `.git`, lab `config/`) (**M3**)
+- [x] `install.sh` (GitHub `releases/latest/download/install.sh` piped to bash, or `gh release download` when private): default prefix `${XDG_DATA_HOME:-~/.local/share}/spa`, launcher `~/.local/bin/spa`, or `--prefix` / `SPA_PREFIX`; creates the venv (**M3**)
+- [x] Documented extract-anywhere: unpack the tarball, set `SPA_HOME`, run `spa` from that tree (**M3**)
+- [x] User-level Software / baseconfig / apps pointers (`~/.config/spa/paths.yml`; `spa init --software-dir`) so prefix installs do not look next to `~/.local/share/spa` — [#73](https://github.com/splunk/splunk-platform-automator/issues/73)
 - [ ] `install.sh --uninstall` (prefix + launcher only; never env dirs / Terraform / AWS) — [#72](https://github.com/splunk/splunk-platform-automator/issues/72)
 - [ ] Optional later: native Linux packages (`.deb` / `.rpm`) from the same tarball, unpack to `/opt/spa`; `install.sh` prefers the distro package when it matches
 - [ ] Optional later: Homebrew tap of the same tarball (no brew Ansible/Pydantic; `spa_venv` stays the Python path)
