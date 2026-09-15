@@ -121,11 +121,13 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 **Operators:** install the shared prefix, then `spa init` for each environment. Full steps: [Install](docs/Install.md).
 
 ```bash
-gh release download --repo splunk/splunk-platform-automator --pattern install.sh -O - | sh
+/bin/bash -c "$(curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh)"
 spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env
 ```
 
-Default prefix is `~/.local/spa` (`--prefix` / `SPA_PREFIX`). Extract-anywhere: unpack the framework tarball, set `SPA_HOME`, run `bin/spa_venv.sh --create`.
+That URL is the latest published GitHub Release asset (from **3.0**), not a git branch. Private repo: `gh release download --repo splunk/splunk-platform-automator --pattern install.sh -O - | bash`. Details: [Install](docs/Install.md).
+
+Default prefix is `${XDG_DATA_HOME:-~/.local/share}/spa` (`--prefix` / `SPA_PREFIX`); the launcher is `~/.local/bin/spa`. Extract-anywhere: unpack the framework tarball, set `SPA_HOME`, run `bin/spa_venv.sh --create`.
 
 **Develop SPA:** clone this repository. That checkout is `SPA_HOME`. Do not copy `ansible/` into each environment.
 

@@ -8,7 +8,7 @@ Shipped work stays checked. Git clone remains the contributor path. Splunk insta
 
 Install the **shared** framework once (playbooks, Terraform, skills, `spa` binary). `spa init` writes **config only** for that environment. Controllers should feel the same on macOS and Linux: install the prefix, then `spa init` / `spa deploy` — no per-env git clone.
 
-**Contract:** `SPA_HOME` is the framework (`ansible/`, Terraform modules, `skills/`, `bin/`). `SPA_ENV_DIR` is the Splunk environment (`splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `saved_base_config_apps/`). Unset both → the git clone; today's `ansible-playbook` workflow is unchanged. When they differ, do not write env state into the prefix (an upgrade of `~/.local/spa` or `/opt/spa` would lose it).
+**Contract:** `SPA_HOME` is the framework (`ansible/`, Terraform modules, `skills/`, `bin/`). `SPA_ENV_DIR` is the Splunk environment (`splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `saved_base_config_apps/`). Unset both → the git clone; today's `ansible-playbook` workflow is unchanged. When they differ, do not write env state into the prefix (an upgrade of `~/.local/share/spa` or `/opt/spa` would lose it).
 
 Ship M1–M3 on one integration branch, then **3.0** when M3 is in. Do not cut a minor per milestone. Pickup: the issue for that milestone (not a Cursor plan). After a milestone is done: check it here, close the issue, merge into the parent branch for further testing. Do not start the next until the prior is merged there.
 
@@ -31,7 +31,7 @@ Ship M1–M3 on one integration branch, then **3.0** when M3 is in. Do not cut a
 - [x] Mutating ops confirm in `LocalSpaSession` (named human prompt; agents/GUI pass `--yes` and never `input()`) (**M2**)
 - [x] `spa suspend` / `spa resume` for AWS compute (keep Terraform state and EBS; resume refreshes inventory addresses) (**M2**)
 - [ ] Release tarball of the framework (exclude `tests/`, `.git`, lab `config/`) (**M3**)
-- [ ] `install.sh` (cup-style `curl | sh` or `gh release download`): default prefix `~/.local/spa`, or `--prefix` / `SPA_PREFIX`; creates the venv; puts `spa` on `PATH` (**M3**)
+- [ ] `install.sh` (GitHub `releases/latest/download/install.sh` piped to bash, or `gh release download` when private): default prefix `${XDG_DATA_HOME:-~/.local/share}/spa`, launcher `~/.local/bin/spa`, or `--prefix` / `SPA_PREFIX`; creates the venv (**M3**)
 - [ ] Documented extract-anywhere: unpack the tarball, set `SPA_HOME`, run `spa` from that tree (**M3**)
 - [ ] Optional later: native Linux packages (`.deb` / `.rpm`) from the same tarball, unpack to `/opt/spa`; `install.sh` prefers the distro package when it matches
 - [ ] Optional later: Homebrew tap of the same tarball (no brew Ansible/Pydantic; `spa_venv` stays the Python path)
@@ -46,6 +46,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [x] `spa.api` backend session (`open_session` / `LocalSpaSession`) for the CLI and a future GUI; optional remote daemon later; skills stay on `spa`. See the [controller, GUI, and remote-client architecture contract](docs/Controller_Architecture.md).
 - [x] Fold SSH/SCP into `spa hosts` (`list` / `ssh` / `copy`); `spa shell` / `spa sh` remain SSH aliases (no `spa shell -l`)
 - [x] Map top-level [ansible/](ansible/) playbooks to `spa run` (and named `provision` / `deploy` / `destroy`) — every playbook is a main entry point; do not require raw `ansible-playbook` for day-to-day use. Discover with `spa run --list`; inspect with `spa run NAME --help`.
+- [ ] Env-dir playbook/Terraform logs + compact progress (full transcript in `$SPA_ENV_DIR/logs/`; agents get a small envelope + `log` path, not the dump) — [#71](https://github.com/splunk/splunk-platform-automator/issues/71)
 - [ ] Main `spa` skill (cup-style `/spa` entry) — [#54](https://github.com/splunk/splunk-platform-automator/issues/54)
 - [ ] `spa skills install` / `spa skills remove` (Claude / Cursor / Codex) from `$SPA_HOME/skills/spa/` — [#55](https://github.com/splunk/splunk-platform-automator/issues/55)
 - [ ] Skills, agents, and runbooks pack (full operator loop; calls `spa` only) — [#67](https://github.com/splunk/splunk-platform-automator/issues/67). Blocked by [#54](https://github.com/splunk/splunk-platform-automator/issues/54) and [#55](https://github.com/splunk/splunk-platform-automator/issues/55)

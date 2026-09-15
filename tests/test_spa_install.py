@@ -1,5 +1,6 @@
 """Framework tarball and install.sh (Distribution M3)."""
 
+import os
 import subprocess
 import sys
 import tarfile
@@ -27,6 +28,29 @@ def _pack(tmp_path: Path) -> Path:
     assert result.returncode == 0, result.stderr + result.stdout
     assert out.is_file()
     return out
+
+
+def _install_env(home: Path, extra=None):
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    for name in ("SPA_PREFIX", "SPA_BINDIR", "XDG_DATA_HOME"):
+        env.pop(name, None)
+    if extra:
+        env.update(extra)
+    return env
+
+
+def _run_install(archive: Path, env, extra_args=None):
+    cmd = [
+        "bash",
+        str(INSTALL),
+        "--from",
+        str(archive),
+        "--skip-venv",
+        "--skip-doctor",
+        *(extra_args or []),
+    ]
+    return subprocess.run(cmd, capture_output=True, text=True, env=env)
 
 
 def test_pack_framework_excludes_tests_and_lab_config(tmp_path):
@@ -144,3 +168,95 @@ def test_install_refuses_existing_prefix_without_force(tmp_path):
     )
     assert result.returncode == 2
     assert (prefix / "keep.txt").read_text() == "no"
+
+
+def test_install_default_uses_xdg_data_home_and_local_bin(tmp_path):
+    archive = _pack(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    result = _run_install(archive, _install_env(home))
+    assert result.returncode == 0, result.stderr + result.stdout
+    prefix = home / ".local" / "share" / "spa"
+    bindir = home / ".local" / "bin"
+    assert (prefix / "bin" / "spa").is_file()
+    wrapper = bindir / "spa"
+    assert wrapper.is_file()
+    text = wrapper.read_text()
+    assert str(prefix) in text
+    assert "GITHUB_TOKEN" not in text
+    assert "SPA_HOME=" + str(prefix) in result.stdout
+
+
+def test_install_honors_absolute_xdg_data_home(tmp_path):
+    archive = _pack(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    data = tmp_path / "xdg-data"
+    result = _run_install(
+        archive, _install_env(home, {"XDG_DATA_HOME": str(data)})
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (data / "spa" / "bin" / "spa").is_file()
+    assert not (home / ".local" / "share" / "spa").exists()
+    assert (home / ".local" / "bin" / "spa").is_file()
+
+
+def test_install_ignores_relative_xdg_data_home(tmp_path):
+    archive = _pack(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    result = _run_install(
+        archive, _install_env(home, {"XDG_DATA_HOME": "relative-data"})
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (home / ".local" / "share" / "spa" / "bin" / "spa").is_file()
+    assert not (Path.cwd() / "relative-data" / "spa").exists()
+
+
+def test_install_prefix_and_bindir_override_xdg(tmp_path):
+    archive = _pack(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    prefix = tmp_path / "custom-prefix"
+    bindir = tmp_path / "custom-bin"
+    result = _run_install(
+        archive,
+        _install_env(home, {"XDG_DATA_HOME": str(tmp_path / "ignored")}),
+        extra_args=["--prefix", str(prefix), "--bindir", str(bindir)],
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (prefix / "bin" / "spa").is_file()
+    assert (bindir / "spa").is_file()
+    assert not (tmp_path / "ignored" / "spa").exists()
+    assert not (home / ".local" / "share" / "spa").exists()
+
+
+def test_install_from_stdin_pipe(tmp_path):
+    archive = _pack(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    prefix = tmp_path / "prefix"
+    bindir = tmp_path / "bin"
+    with INSTALL.open(encoding="utf-8") as handle:
+        result = subprocess.run(
+            [
+                "bash",
+                "-s",
+                "--",
+                "--from",
+                str(archive),
+                "--prefix",
+                str(prefix),
+                "--bindir",
+                str(bindir),
+                "--skip-venv",
+                "--skip-doctor",
+            ],
+            stdin=handle,
+            capture_output=True,
+            text=True,
+            env=_install_env(home),
+        )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (prefix / "bin" / "spa").is_file()
+    assert (bindir / "spa").is_file()

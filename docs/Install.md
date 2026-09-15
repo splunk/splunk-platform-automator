@@ -8,32 +8,44 @@ Do not copy `ansible/` into an environment directory. `SPA_HOME` is the install 
 
 Needs Python 3.9+ with the `venv` module. Terraform is only required for AWS.
 
-After a GitHub Release (`gh auth login` if the repo is private):
+From **3.0**, `install.sh` is a GitHub Release asset. `releases/latest/download/install.sh` always follows the newest published `v*` release (not `main`). Use **bash**, not `sh`.
+
+Public repo (or once release assets are public):
 
 ```bash
-gh release download --repo splunk/splunk-platform-automator --pattern install.sh -O - | sh
+/bin/bash -c "$(curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh)"
 ```
 
-Or from GitHub once `main` has `install.sh`:
+Pass installer flags after `--` when piping:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/splunk/splunk-platform-automator/main/install.sh | sh
+curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | bash -s -- --prefix /opt/spa
 ```
+
+Private repo (`gh auth login`):
+
+```bash
+gh release download --repo splunk/splunk-platform-automator --pattern install.sh -O - | bash
+```
+
+The script then downloads matching `spa-framework-*.tar.gz` from the same latest release (or `--version` / `SPA_VERSION`). That URL 404s until the first 3.0 GitHub Release exists.
 
 Defaults:
 
 | Setting | Default | Override |
 |---------|---------|----------|
-| Prefix (`SPA_HOME`) | `~/.local/spa` | `--prefix` or `SPA_PREFIX` |
+| Prefix (`SPA_HOME`) | `${XDG_DATA_HOME:-~/.local/share}/spa` | `--prefix` or `SPA_PREFIX` |
 | Wrapper on `PATH` | `~/.local/bin/spa` | `--bindir` or `SPA_BINDIR` |
 | Release | latest | `--version X.Y.Z` or `SPA_VERSION` |
+
+A relative `XDG_DATA_HOME` is ignored (XDG spec); the prefix then falls back to `~/.local/share/spa`. The installer does not create `~/.config/spa` or `~/.local/state/spa`. Env config and Terraform state stay in each `SPA_ENV_DIR`.
 
 The installer unpacks the framework tarball, runs `bin/spa_venv.sh --create`, and writes a `spa` wrapper that execs `$SPA_HOME/.venv/bin/python`. Add `~/.local/bin` to `PATH` if it is not already.
 
 From a checkout or an already extracted tarball:
 
 ```bash
-./install.sh --prefix ~/.local/spa
+./install.sh
 ./install.sh --from spa-framework-X.Y.Z.tar.gz --prefix /opt/spa --bindir ~/.local/bin
 ```
 

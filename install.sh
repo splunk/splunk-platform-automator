@@ -1,35 +1,45 @@
 #!/usr/bin/env bash
-# Install Splunk Platform Automator into a prefix (default ~/.local/spa).
+# Install Splunk Platform Automator into a prefix.
+# Default SPA_HOME: ${XDG_DATA_HOME:-$HOME/.local/share}/spa
+# Default launcher: $HOME/.local/bin/spa
 #
-# After a GitHub Release (gh auth for a private repo):
-#   gh release download --repo splunk/splunk-platform-automator --pattern install.sh -O - | sh
-#   curl -fsSL https://raw.githubusercontent.com/splunk/splunk-platform-automator/main/install.sh | sh
+# From 3.0, install.sh is a GitHub Release asset (not a git-branch URL):
+#   /bin/bash -c "$(curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh)"
+# Private repo (gh auth):
+#   gh release download --repo splunk/splunk-platform-automator --pattern install.sh -O - | bash
+# Flags when piping:  curl … | bash -s -- --prefix /opt/spa
 #
 # From a checkout or extracted tarball:
-#   ./install.sh --prefix ~/.local/spa
-#   ./install.sh --from spa-framework-X.Y.Z.tar.gz
+#   ./install.sh
+#   ./install.sh --from spa-framework-X.Y.Z.tar.gz --prefix /opt/spa
 #
-# Env: SPA_PREFIX, SPA_BINDIR, SPA_VERSION, GITHUB_TOKEN (download only; never printed).
+# Env: SPA_PREFIX, SPA_BINDIR, SPA_VERSION, XDG_DATA_HOME, GITHUB_TOKEN (download only; never printed).
 set -euo pipefail
 
 REPO="${SPA_REPO:-splunk/splunk-platform-automator}"
-PREFIX="${SPA_PREFIX:-${HOME}/.local/spa}"
-BINDIR="${SPA_BINDIR:-${HOME}/.local/bin}"
+PREFIX="${SPA_PREFIX:-}"
+BINDIR="${SPA_BINDIR:-}"
 FROM=""
 VERSION="${SPA_VERSION:-}"
 SKIP_VENV=false
 SKIP_DOCTOR=false
 FORCE=false
 
-SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+# Piped `curl | bash` has no real script path (empty BASH_SOURCE, stdin, or /dev/fd).
+_src="${BASH_SOURCE[0]:-}"
+SELF=""
+if [[ -n "$_src" && "$_src" != "-" && "$_src" != /dev/stdin && -f "$_src" ]]; then
+    SELF="$(cd "$(dirname "$_src")" && pwd)/$(basename "$_src")"
+fi
+unset _src
 
 usage() {
     cat <<EOF >&2
 Usage: $0 [--prefix DIR] [--bindir DIR] [--from FILE] [--version X.Y.Z] [--force]
           [--skip-venv] [--skip-doctor]
 
-  --prefix DIR     Install prefix / SPA_HOME (default: ~/.local/spa, or SPA_PREFIX)
-  --bindir DIR     Directory for the spa wrapper on PATH (default: ~/.local/bin)
+  --prefix DIR     Install prefix / SPA_HOME (default: \${XDG_DATA_HOME:-~/.local/share}/spa, or SPA_PREFIX)
+  --bindir DIR     Directory for the spa wrapper on PATH (default: ~/.local/bin, or SPA_BINDIR)
   --from FILE      Local spa-framework-*.tar.gz (skip GitHub download)
   --version VER    Release tag or X.Y.Z when downloading (default: latest)
   --force          Replace an existing prefix
@@ -56,8 +66,24 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-PREFIX="${PREFIX/#\~/$HOME}"
-BINDIR="${BINDIR/#\~/$HOME}"
+xdg_data_home() {
+    # XDG Base Directory Spec: ignore a relative XDG_DATA_HOME.
+    case "${XDG_DATA_HOME:-}" in
+        /*) printf '%s' "$XDG_DATA_HOME" ;;
+        *) printf '%s' "${HOME}/.local/share" ;;
+    esac
+}
+
+if [[ -z "$PREFIX" ]]; then
+    PREFIX="$(xdg_data_home)/spa"
+else
+    PREFIX="${PREFIX/#\~/$HOME}"
+fi
+if [[ -z "$BINDIR" ]]; then
+    BINDIR="${HOME}/.local/bin"
+else
+    BINDIR="${BINDIR/#\~/$HOME}"
+fi
 if [[ "$PREFIX" != /* ]]; then
     PREFIX="$(pwd)/$PREFIX"
 fi
@@ -189,7 +215,7 @@ if [[ -n "$FROM" ]]; then
     mkdir -p "$tmp/tree"
     tar -xzf "$FROM" -C "$tmp/tree"
     src="$tmp/tree"
-elif is_spa_tree "$(cd "$(dirname "$SELF")" && pwd)"; then
+elif [[ -n "$SELF" ]] && is_spa_tree "$(cd "$(dirname "$SELF")" && pwd)"; then
     src="$(cd "$(dirname "$SELF")" && pwd)"
 else
     download_release "$tmp/spa-framework.tar.gz"

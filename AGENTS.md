@@ -21,7 +21,7 @@ Splunk Platform Automator (SPA) provisions and deploys Splunk Enterprise on **AW
 | List / SSH / copy | `spa hosts list --status`, `spa hosts ssh NAME`, `spa hosts copy SRC DST` (`spa sh` / `spa shell` still SSH) |
 | Destroy managed infrastructure | `spa destroy --yes` (env-wide; later `--all` vs `--hosts` decommission) |
 | VirtualBox | Config in the **clone**; `vagrant up` from `SPA_HOME` only. Env dirs have no Vagrantfile. |
-| Install framework (operators) | [docs/Install.md](docs/Install.md); `install.sh` or extract `spa-framework-*.tar.gz` |
+| Install framework (operators) | [docs/Install.md](docs/Install.md); `install.sh` from `releases/latest/download` (default `${XDG_DATA_HOME:-~/.local/share}/spa`) or extract `spa-framework-*.tar.gz` |
 | Local tests | `./tests/run_local_tests.sh` |
 | Release | [RELEASE.md](RELEASE.md), `./scripts/release.sh --check` |
 

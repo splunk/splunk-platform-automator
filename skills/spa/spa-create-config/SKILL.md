@@ -7,7 +7,7 @@ description: >-
   SVA topology, role placement, OS/SSH, spa aws discovery, licenses,
   apps, validation. In Cursor invoke with /spa-create-config.
 license: Proprietary
-compatibility: Requires SPA_HOME (install prefix or git clone with ansible.cfg and bin/). Env dirs from spa init are valid working directories. Boto3 is required for AWS discovery and suspend/resume.
+compatibility: Requires SPA_HOME (install prefix `${XDG_DATA_HOME:-~/.local/share}/spa`, or a git clone with ansible.cfg and bin/). Env dirs from spa init are valid working directories. Boto3 is required for AWS discovery and suspend/resume.
 metadata:
   product: splunk-platform-automator
   version: "1.0.0"

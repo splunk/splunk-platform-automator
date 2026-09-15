@@ -9,7 +9,7 @@ Splunk Platform Automator is an Ansible/Terraform framework. A release is a **se
 | `VERSION` | Canonical semver (`X.Y.Z`) |
 | `CHANGELOG.md` | Keep a Changelog notes (`[Unreleased]` is promoted on bump) |
 | Git tag `vX.Y.Z` | What users check out |
-| GitHub Release | Release page + `install.sh` + `spa-framework-X.Y.Z.tar.gz` (plus GitHub’s automatic source zip/tar) |
+| GitHub Release | Release page + `install.sh` + `spa-framework-X.Y.Z.tar.gz` (plus GitHub’s automatic source zip/tar). Operators curl `https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh` (from 3.0). |
 
 ```bash
 cat VERSION
