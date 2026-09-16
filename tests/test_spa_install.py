@@ -260,3 +260,104 @@ def test_install_from_stdin_pipe(tmp_path):
     assert result.returncode == 0, result.stderr + result.stdout
     assert (prefix / "bin" / "spa").is_file()
     assert (bindir / "spa").is_file()
+
+
+def _run_uninstall(env, extra_args=None):
+    cmd = ["bash", str(INSTALL), "--uninstall", *(extra_args or [])]
+    return subprocess.run(cmd, capture_output=True, text=True, env=env)
+
+
+def test_uninstall_default_prefix_and_wrapper(tmp_path):
+    archive = _pack(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    env = _install_env(home)
+    assert _run_install(archive, env).returncode == 0
+    prefix = home / ".local" / "share" / "spa"
+    wrapper = home / ".local" / "bin" / "spa"
+    assert prefix.is_dir()
+    assert wrapper.is_file()
+    result = _run_uninstall(env, extra_args=["--yes"])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert not prefix.exists()
+    assert not wrapper.exists()
+    assert "Removed wrapper:" in result.stdout
+    assert "Removed prefix:" in result.stdout
+
+
+def test_uninstall_refuses_non_spa_directory(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    prefix = tmp_path / "not-spa"
+    prefix.mkdir()
+    keep = prefix / "keep.txt"
+    keep.write_text("stay")
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    wrapper = bindir / "spa"
+    wrapper.write_text("export SPA_HOME=%s\n" % prefix)
+    result = _run_uninstall(
+        _install_env(home),
+        extra_args=["--yes", "--prefix", str(prefix), "--bindir", str(bindir)],
+    )
+    assert result.returncode != 0
+    assert keep.read_text() == "stay"
+    assert wrapper.is_file()
+    assert "not an SPA install prefix" in result.stderr
+
+
+def test_uninstall_leaves_sibling_env_dir(tmp_path):
+    archive = _pack(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    env = _install_env(home)
+    assert _run_install(archive, env).returncode == 0
+    sibling = tmp_path / "envs" / "my-env"
+    sibling.mkdir(parents=True)
+    (sibling / "config").mkdir()
+    (sibling / "config" / "splunk_config.yml").write_text("plugin: splunk-platform-automator\n")
+    result = _run_uninstall(env, extra_args=["--yes"])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert not (home / ".local" / "share" / "spa").exists()
+    assert (sibling / "config" / "splunk_config.yml").is_file()
+
+
+def test_uninstall_leaves_unrelated_wrapper(tmp_path):
+    archive = _pack(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    prefix = tmp_path / "prefix"
+    bindir = tmp_path / "bin"
+    env = _install_env(home)
+    result = _run_install(
+        archive,
+        env,
+        extra_args=["--prefix", str(prefix), "--bindir", str(bindir)],
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    wrapper = bindir / "spa"
+    wrapper.write_text("#!/bin/sh\necho other-spa\n")
+    result = _run_uninstall(
+        env,
+        extra_args=["--yes", "--prefix", str(prefix), "--bindir", str(bindir)],
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert not prefix.exists()
+    assert wrapper.is_file()
+    assert "other-spa" in wrapper.read_text()
+    assert "Leaving" in result.stderr
+
+
+def test_uninstall_agent_without_yes_does_not_delete(tmp_path):
+    archive = _pack(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    env = _install_env(home, {"SPA_AGENT": "1"})
+    assert _run_install(archive, env).returncode == 0
+    prefix = home / ".local" / "share" / "spa"
+    wrapper = home / ".local" / "bin" / "spa"
+    result = _run_uninstall(env)
+    assert result.returncode != 0
+    assert "requires --yes" in result.stderr
+    assert prefix.is_dir()
+    assert wrapper.is_file()

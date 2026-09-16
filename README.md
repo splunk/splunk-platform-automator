@@ -123,7 +123,7 @@ spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
 
 That URL is the latest published GitHub Release asset (from **3.0**), not a git branch. Private repo: `gh release download --repo splunk/splunk-platform-automator --pattern install.sh -O - | bash`. Details: [Install](docs/Install.md).
 
-Default prefix is `${XDG_DATA_HOME:-~/.local/share}/spa` (`--prefix` / `SPA_PREFIX`); the launcher is `~/.local/bin/spa`. Extract-anywhere: unpack the framework tarball, set `SPA_HOME`, run `bin/spa_venv.sh --create`. To remove an installed prefix: `rm -f ~/.local/bin/spa` and `rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/spa"` (does not destroy env dirs or AWS).
+Default prefix is `${XDG_DATA_HOME:-~/.local/share}/spa` (`--prefix` / `SPA_PREFIX`); the launcher is `~/.local/bin/spa`. Extract-anywhere: unpack the framework tarball, set `SPA_HOME`, run `bin/spa_venv.sh --create`. To remove an installed prefix and its PATH wrapper: `./install.sh --uninstall --yes` (does not destroy env dirs or AWS).
 
 **Develop SPA:** clone this repository. That checkout is `SPA_HOME`. Do not copy `ansible/` into each environment.
 
