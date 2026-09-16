@@ -172,6 +172,7 @@ class SplunkVolumeConfig(BaseModel):
     
     path: Optional[str] = None
     maxVolumeDataSizeMB: Optional[int] = None
+    storageType: Optional[str] = None
 
 
 class SplunkVolumeDefaultsConfig(BaseModel):
@@ -181,6 +182,7 @@ class SplunkVolumeDefaultsConfig(BaseModel):
     VolumeDataSize_Free_MB: Optional[int] = None
     homePath: Optional[str] = None
     coldPath: Optional[str] = None
+    remotePath: Optional[str] = None
 
 
 class SplunkDefaultsConfig(BaseModel):
@@ -252,6 +254,9 @@ class SplunkAppDeploymentConfig(BaseModel):
     splunkbase_password: Optional[str] = None
     local_app_repo_path: Optional[str] = None
     update_mode: Optional[Literal["clean", "merge"]] = None
+    target_download: Optional[bool] = None
+    cache_downloads: Optional[bool] = None
+    backup_apps_before_update: Optional[bool] = None
     deploymentclient_check: bool = Field(
         default=True,
         description=(

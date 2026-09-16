@@ -57,7 +57,7 @@ Horizontal scale: you may run **more** peers than RF for ingest capacity; RF sti
 | Config / infra test | `2` | `2` | `2` |
 | Production-like | `3` | `2` | `3` (or more for ingest) |
 
-SPA examples: `examples/cm_2idxc_sh_uf.yml` (RF/SF `2`).
+SPA examples: `examples/topologies/cm_2idxc_sh_uf.yml` (RF/SF `2`).
 
 ## Multisite IDXC — calculate site RF / SF
 
@@ -91,7 +91,7 @@ Example: `origin:2, site1:1, site2:2` → `total ≥ 5`.
 
 Example: `origin:3, site1:1, site2:2, site3:3` → min site is `1` → substitute origin `3` → `3+2+3 = 8` minimum `total`.
 
-SPA lab pattern `origin:2, total:3` with **two data sites** and **no explicit site keys** is valid when peer layout supports it (see `examples/4idxc2site_sh.yml`).
+SPA lab pattern `origin:2, total:3` with **two data sites** and **no explicit site keys** is valid when peer layout supports it (see `examples/topologies/4idxc2site_sh.yml`).
 
 ### Minimum peers per site
 
@@ -164,4 +164,4 @@ Use `splunk_defaults.splunk_volume_defaults` / per-host `terraform.aws.root_volu
 
 - Automated RF/SF solver for arbitrary site explicit lists (use Splunk docs + PS).
 - ES / ITSI full capacity models.
-- SmartStore RF=SF constraint (see SmartStore examples; separate path).
+- SmartStore RF=SF constraint (`spa features show setting.smartstore`).

@@ -7,7 +7,7 @@ Splunk Platform Automator (SPA) provisions and deploys Splunk Enterprise on **AW
 | Task | Path / command |
 |------|----------------|
 | Main config | `$SPA_ENV_DIR/config/splunk_config.yml` (copy from `examples/` via `spa init --example`) |
-| Config keys reference | Types, allowed values, and identifier patterns live in the Pydantic schema (`ansible/plugins/inventory/schema.py`, enforced by `spa validate`). `spa features` / `examples/catalog/features.yml` is when-to-use, snippets, and merge notes (commented dump: `examples/configuration_description.yml`) |
+| Config keys reference | Types, allowed values, and identifier patterns live in the Pydantic schema (`ansible/plugins/inventory/schema.py`, enforced by `spa validate`). `spa features` / `examples/catalog/features.yml` is when-to-use, snippets, and merge notes (pointer dump: `examples/configuration_description.yml`) |
 | Guided human + agent workflow | [docs/Splunk_Config_Guided_Setup.md](docs/Splunk_Config_Guided_Setup.md) |
 | 2.x → 3.0 operator changes | [docs/Migrate_SPA_2x_to_3x.md](docs/Migrate_SPA_2x_to_3x.md) |
 | New environment (one clone, many envs) | `spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env` then `cd ~/envs/my-env` (direnv loads venv + `SPA_*`; otherwise `source "$SPA_HOME/bin/spa_venv.sh" --env DIR` and `eval "$(spa env --export)"`). Prefix install: `spa init --software-dir ~/Software --example … ENV`. Existing clone env: `spa init ~/envs/my-env` (migrates config/inventory/tfstate/`.vagrant`). |

@@ -540,7 +540,7 @@ ansible-playbook ansible/splunk_apps_deploy.yml \
 ## Next Steps
 
 1. **Review the full guide**: See `docs/App_Deployment_Guide.md`
-2. **Check Example Config**: See `examples/splunk_apps_config_example.yml`
+2. **Catalog snippets**: `spa features show setting.apps` / `setting.apps.premium.itsi` / `setting.apps.premium.itsi.content_pack` / `setting.apps.premium.itsi.content_pack.single`
 3. **Start with Phase 1**: Implement Splunkbase integration first
 4. **Test in Non-Production**: Always test in a dev environment first
 5. **Expand Gradually**: Add more apps and features as needed
@@ -550,7 +550,7 @@ ansible-playbook ansible/splunk_apps_deploy.yml \
 ## Support & Documentation
 
 - **Full Guide**: `docs/App_Deployment_Guide.md`
-- **Example Config**: `examples/splunk_apps_config_example.yml`
+- **Catalog**: `spa features show setting.apps` / `setting.apps.premium.itsi` / `setting.apps.premium.itsi.content_pack` / `setting.apps.premium.itsi.content_pack.single` / `setting.apps.customizations`
 - **Splunkbase API**: https://dev.splunk.com/enterprise/docs/releaseapps/splunkbase/
 - **Ansible Docs**: https://docs.ansible.com/
 

@@ -49,6 +49,8 @@ The `force_install` flag is a top-level app property (not under `customizations`
 |------|-----------|---------|--------|
 | **`force_install`** | ITSI premium app (`premium_app: itsi`) and ITSI content packs (`itsi_content_pack: true`) | `false` | When `true`, skips the version check and always re-extracts and re-configures the app, regardless of the currently installed version. |
 
+Catalog: `spa features show setting.apps.premium.itsi`, `setting.apps.premium.itsi.content_pack`, and `setting.apps.premium.itsi.content_pack.single`.
+
 Example — force reinstall ITSI:
 
 ```yaml

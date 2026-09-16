@@ -111,7 +111,7 @@ terraform:
 
 ## ITSI / Java 21 (search tier hosts only)
 
-**ITSI supports Java 21 maximum.** Do not use Java 22+.
+**ITSI supports Java 21 maximum.** Do not use Java 22+. Set the package on `splunk_hosts[].os.packages` for search/ITSI hosts. Do not add it to the global `os:` block (that would install Java on every host).
 
 | OS | Package |
 |----|---------|

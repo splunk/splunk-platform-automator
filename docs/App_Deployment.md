@@ -88,10 +88,15 @@ ansible-playbook ansible/splunk_apps_deploy.yml
 
 ## 📁 Examples
 
-See `examples/` directory:
+Catalog snippets (merge into `splunk_config.yml`; not `spa init --example`):
 
-- `minimal_splunk_apps_config.yml` - Minimal quick start
-- `splunk_apps_config_example.yml` - Comprehensive examples (200+ lines)
+- `spa features show setting.apps` — normal Splunkbase / local apps
+- `spa features show setting.apps.premium.itsi` — ITSI premium app (no `target_roles`)
+- `spa features show setting.apps.premium.itsi.content_pack` — ITSI Content Library (`content_pack_apps`)
+- `spa features show setting.apps.premium.itsi.content_pack.single` — single-app ITSI content pack
+- `spa features show setting.apps.customizations` — per-role `remove` / `local_configs` / playbooks
+
+Full ITSI lab (not a compose topology): [examples/single_node_itsi.yml](../examples/single_node_itsi.yml).
 
 ## 🔧 Roles
 
@@ -128,7 +133,7 @@ See the [App Deployment Guide](App_Deployment_Guide.md) for [ITSI (premium apps)
 1. **Quick answers**: Check the Quick Start guide
 2. **Troubleshooting**: See role README
 3. **Deep dive**: Read full documentation in `docs/`
-4. **Examples**: Browse `examples/` directory
+4. **Examples**: `spa features show setting.apps` (and related premium/content-pack IDs)
 
 ---
 

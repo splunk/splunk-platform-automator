@@ -48,7 +48,7 @@ To skip preflight: `ap ansible/deploy_site.yml --skip-tags preflight`. To disabl
 - [Topology selection guidance](https://help.splunk.com/en/splunk-enterprise/get-started/splunk-validated-architectures/splunk-platform-indexing-and-search)
 - [Designing a scalable architecture](https://lantern.splunk.com/Splunk_Success_Framework/Mitigate_Risk/Guarding_against_impact_to_revenue/Designing_a_scalable_architecture) (Lantern)
 - `spa features list` / `search`, `show ID`, and detailed `show ID --keys` — [examples/catalog/features.yml](../examples/catalog/features.yml)
-- [configuration_description.yml](../examples/configuration_description.yml) — commented dump (incomplete; prefer the catalog)
+- [configuration_description.yml](../examples/configuration_description.yml) — pointer only; prefer the catalog
 
 ## Deployment intent
 
@@ -139,7 +139,7 @@ capabilities.
 
 See [App Deployment](App_Deployment.md). Set `SPLUNKBASE_USERNAME` and `SPLUNKBASE_PASSWORD` on the controller (never paste values into chat or echo them in the terminal).
 
-ITSI example: [examples/single_node_itsi.yml](examples/single_node_itsi.yml).
+ITSI: `spa features show setting.apps.premium.itsi`, `setting.apps.premium.itsi.content_pack` (Content Library), and `setting.apps.premium.itsi.content_pack.single`. Full lab (not `spa init --example`): [examples/single_node_itsi.yml](../examples/single_node_itsi.yml).
 
 ## Validation
 

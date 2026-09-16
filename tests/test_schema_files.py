@@ -18,9 +18,6 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Not runnable inventories: docs, fragments, or host-less skeletons.
 SKIP_EXAMPLE_BASENAMES = {
     "configuration_description.yml",
-    "app_customizations_example.yml",
-    "minimal_splunk_apps_config.yml",
-    "splunk_apps_config_example.yml",
 }
 
 
