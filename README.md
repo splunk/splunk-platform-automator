@@ -23,10 +23,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
     - [Framework Installation](#framework-installation)
     - [Install Virtualbox support (optional)](#install-virtualbox-support-optional)
     - [Setup Windows Subsystem for Linux (WSL2)](#setup-windows-subsystem-for-linux-wsl2)
-    - [Install and configure AWS support (optional - Legacy Vagrant Plugin)](#install-and-configure-aws-support-optional---legacy-vagrant-plugin)
-      - [Example Basic AWS Security Group 'SplunkBasic'](#example-basic-aws-security-group-splunk_basic)
-        - [Inbound Rules](#inbound-rules)
-        - [Outbound Rules](#outbound-rules)
+    - [Example Basic AWS Security Group Splunk_Basic](#example-basic-aws-security-group-splunk_basic)
   - [Upgrade](#upgrade)
     - [Migrate existing Splunk Platform Automator Environments from 1.x to 2.x](#migrate-existing-splunk-platform-automator-environments-from-1x-to-2x)
     - [Migrate existing Splunk Platform Automator Environments from 2.x to 3.0](#migrate-existing-splunk-platform-automator-environments-from-2x-to-30)
@@ -40,7 +37,6 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
     - [Start the deployment](#start-the-deployment)
       - [Option A: Virtualbox (Local Virtual Machines)](#option-a-virtualbox-local-virtual-machines)
       - [Option B: AWS with Terraform (Recommended for AWS)](#option-b-aws-with-terraform-recommended-for-aws)
-      - [Option C: AWS with Vagrant Plugin (Legacy)](#option-c-aws-with-vagrant-plugin-legacy)
     - [Stop hosts](#stop-hosts)
     - [Destroy hosts](#destroy-hosts)
     - [Rerun provisioning](#rerun-provisioning)
@@ -84,7 +80,7 @@ Ever wanted to build a complex Splunk environment for testing, which looks as cl
   - Automatic inventory generation
   - Support for complex configurations (volumes, instance types, etc.)
 - Virtual hosts can be created by [Vagrant](https://www.vagrantup.com)
-  - Currently supports [Virtualbox](https://www.virtualbox.org) or [AWS Cloud](https://aws.amazon.com) (legacy).
+  - Currently supports [Virtualbox](https://www.virtualbox.org). AWS uses Terraform (`spa provision`), not Vagrant.
 - Can deploy Splunk on existing hosts (virtual or physical)
 - Developed and tested on MacOSX but should support Linux as well.
 
@@ -160,8 +156,33 @@ The `Vagrant/` parent name is traditional (VirtualBox). The clone and `Software/
 
 ### Install Virtualbox support (optional)
 
-1. Download and install [Virtualbox](https://www.virtualbox.org/wiki/Downloads).
-2. Install the Virtualbox plugin for Vagrant: `vagrant plugin install vagrant-vbguest`
+Needed only for `virtualbox:` in `splunk_config.yml`. `spa doctor --virtualbox` (or `spa doctor` from an env that uses VirtualBox) checks Vagrant, VirtualBox, the Vagrant/VirtualBox driver match, and the `vagrant-vbguest` plugin. `spa hosts ssh` / `spa hosts copy` use inventory (user and key written by Vagrant on `up`); they do not need `vagrant-ssh` or `vagrant-scp`.
+
+**macOS (Homebrew):**
+
+```bash
+brew tap hashicorp/tap
+brew install hashicorp/tap/hashicorp-vagrant
+brew install --cask virtualbox
+vagrant plugin install vagrant-vbguest
+```
+
+Use HashiCorp's Vagrant formula, not an old distro package. VirtualBox 7.2 needs a current Vagrant (2.4+); `spa doctor` fails if the installed Vagrant has no driver for your VirtualBox.
+
+**Linux:** install Vagrant from [HashiCorp's Linux packages](https://developer.hashicorp.com/vagrant/install#linux) (Debian/Ubuntu apt repo or Fedora/RHEL yum/dnf repo), then VirtualBox from the distro or [Oracle's Linux builds](https://www.virtualbox.org/wiki/Linux_Downloads):
+
+```bash
+# Debian/Ubuntu (after adding the HashiCorp apt repo)
+sudo apt-get update && sudo apt-get install -y vagrant
+sudo apt-get install -y virtualbox   # or Oracle's package for a newer VirtualBox
+vagrant plugin install vagrant-vbguest
+
+# Fedora / RHEL (after adding the HashiCorp yum repo)
+sudo dnf install -y vagrant VirtualBox
+vagrant plugin install vagrant-vbguest
+```
+
+On WSL2 also: `vagrant plugin install virtualbox_WSL2` (see below).
 
 
 
@@ -188,24 +209,7 @@ export PATH="$PATH:/mnt/c/Program Files/Oracle/VirtualBox"
 
 
 
-### Install and configure AWS support (optional - Legacy Vagrant Plugin)
-
-> ⚠️ **Note:** This section describes the legacy Vagrant AWS plugin setup. For new AWS deployments, we recommend using the [Terraform approach](#option-b-aws-with-terraform-recommended-for-aws) instead, which is more modern and easier to manage.
-
-1. Install either of the aws vagrant plugins:
-  - [vagrant-aws](https://github.com/mitchellh/vagrant-aws): This is te orig plugin but not maintained anymore and has issues with newer vagrant versions on OSX. The last working version of vagrant is 2.3.4. Install it with `vagrant plugin install vagrant-aws`
-    - [vagrant-gecko-aws](https://github.com/geckoboard/vagrant-aws): This is a clone of the orig project and does support newer versions (up to 2.3.7) of vagrant. Install it with `vagrant plugin install vagrant-gecko-aws --entry-point vagrant-aws`
-2. Download the vagrant dummy box for aws: `vagrant box add aws-dummy https://github.com/mitchellh/vagrant-aws/raw/master/dummy.box`
-3. Generate AWS ACCESS Keys, described [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html#cli-configure-quickstart-creds)
-4. Optional, but recommended:
-  - Add AWS_ACCESS_KEY_ID=your access key ID as environment variable
-    - Add AWS_SECRET_ACCESS_KEY=your secret access key as environment variable
-5. Create an ssh key pair described [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair) and store the public key on your disk for later reference in the config file
-6. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it for example 'Splunk_Basic' and add the following TCP ports
-
-
-
-#### Example Basic AWS Security Group 'Splunk_Basic'
+### Example Basic AWS Security Group Splunk_Basic
 
 
 
@@ -284,37 +288,28 @@ back and refresh changed public addresses in `inventory/hosts` with
 instances are stopped. Permanently remove the environment with
 `spa destroy --yes`. Details: [Multiple environments, one clone](#multiple-environments-one-clone) and [Option B](#option-b-aws-with-terraform-recommended-for-aws).
 
-**VirtualBox (local VMs).** Keep config in the **clone** (`config/splunk_config.yml`). Run Vagrant from the directory that contains `Vagrantfile` (`SPA_HOME`). An env dir from `spa init` does **not** get a Vagrantfile; `vagrant up` from `~/envs/...` is not supported yet.
-
-`spa provision`, `spa suspend`, `spa resume`, and `spa destroy` select their
-infrastructure provider from `splunk_config.yml`. AWS (`terraform.aws`) is
-implemented. VirtualBox lifecycle is deliberately not routed through `spa`
-yet; use `vagrant up` / `vagrant halt` from `SPA_HOME`.
+**VirtualBox (local VMs).** Same env-dir loop as AWS. Vagrantfile stays in `SPA_HOME`; machine IDs live in `$SPA_ENV_DIR/.vagrant`. Do not run `vagrant` from the env dir.
 
 ```bash
-cd /path/to/splunk-platform-automator
-cp examples/single_node.yml config/splunk_config.yml   # or another VirtualBox example
-source bin/spa_venv.sh
-spa doctor
-vagrant up
-spa deploy
+spa init --example single_node.yml ~/envs/vbox
+cd ~/envs/vbox
+# With direnv, or: eval "$(spa env --export)"
+spa validate
+spa provision --yes && spa deploy --yes
 ```
+
+`spa provision` runs Vagrant from `SPA_HOME` with `VAGRANT_DOTFILE_PATH` under the env. Direct `vagrant` from the clone is a contributor escape hatch, not the operator path.
 
 ### First start and initialization
 
-For VirtualBox only: run `vagrant` once from the clone so it can create its working directories. You must execute Vagrant inside the Splunk Platform Automator directory where `Vagrantfile` sits.
-
-```bash
-cd splunk-platform-automator
-vagrant
-```
+The first VirtualBox provision downloads an OS box (cached in `~/.vagrant.d/boxes`). You do not need to run `vagrant` by hand from the clone.
 
 ### Multiple environments, one clone
 
 Keep one git checkout as the framework (`SPA_HOME`) and put each Splunk environment in its own directory (`SPA_ENV_DIR`). Env state is the config (including generated `index.html`), `.spa.yml`, `inventory/hosts`, Terraform state, and optional `saved_base_config_apps/` (pulled-back PS baseconfig apps) — not a copy of `ansible/`.
 
 ```bash
-# Fresh AWS env from an example (not a VirtualBox example):
+# Fresh env from an example (AWS or VirtualBox):
 spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/itsi
 
 # Old clone that already has a running env (config + inventory + Terraform state):
@@ -326,7 +321,7 @@ eval "$(spa env --export)"
 spa validate
 ```
 
-If `config/splunk_config.yml` already exists in `SPA_HOME` (or `--from`), `spa init` **migrates** that state instead of copying an example. Config, `inventory/hosts`, and Terraform state/`tfvars`/`.terraform` move into the env so destroy/redeploy still sees the same AWS resources. Framework files (`ansible/`, modules) stay in the clone. Use `--keep-source` to copy instead of move. Use `--example` when you want a new config even if the clone already has one. `--force` refreshes `.spa.yml` / `.envrc` and never replaces `splunk_config.yml` unless `--example` is also given.
+If `config/splunk_config.yml` already exists in `SPA_HOME` (or `--from`), `spa init` **migrates** that state instead of copying an example. Config, `inventory/hosts`, Terraform state/`tfvars`/`.terraform`, and VirtualBox `.vagrant/` move into the env so destroy/redeploy still sees the same resources. Framework files (`ansible/`, modules, `Vagrantfile`) stay in the clone. Use `--keep-source` to copy instead of move. Use `--example` when you want a new config even if the clone already has one. `--force` refreshes `.spa.yml` / `.envrc` and never replaces `splunk_config.yml` unless `--example` is also given.
 
 If you copied a whole old checkout as the env directory, `spa init DIR` detects it and exits 2 until you pass `--force`. Then env state is kept, `ansible/` and other framework leftovers are removed, and `.spa.yml` points at the clone you ran `spa` from.
 
@@ -379,13 +374,13 @@ eval "$(spa env --export)"
 
 The test suites keep their own `tests/.venv` (pytest dependencies stay out of the venv an env uses); `tests/run_venv.sh` is a thin wrapper around the same `bin/spa_venv.sh`.
 
-Installers and PS baseconfig apps default to `../Software`. Prefix installs (`~/.local/share/spa`) do **not** look in `~/.local/share/Software`. Set them once with `spa init --software-dir ~/Software ENV` (writes `~/.config/spa/paths.yml`, not secrets) or put `software_dir` in env `.spa.yml`. Local `source: local` apps default to `../apps` (env sibling), then `$SPA_HOME/apps` (`--apps-dir` / `apps_dir`). Resolution order: `SPA_SOFTWARE_DIR` / `SPA_BASECONFIG_DIR` / `SPA_APPS_DIR`, then a **custom** path in `splunk_config.yml` (`splunk_dirs.splunk_software_dir`, `splunk_dirs.splunk_baseconfig_dir`, `splunk_app_deployment.local_app_repo_path`), then env `.spa.yml`, then `~/.config/spa/paths.yml`, then discovery. Built-in defaults such as `../Software` do not override `.spa.yml`. Unset `SPA_HOME` / `SPA_ENV_DIR` to keep today's in-repo workflow.
+Installers and PS baseconfig apps default to `../Software`. Prefix installs (`~/.local/share/spa`) do **not** look in `~/.local/share/Software`. Set them once with `spa init --software-dir ~/Software ENV` (writes `~/.config/spa/paths.yml`, not secrets) or put `software_dir` in env `.spa.yml`. Local `source: local` apps default to `../apps` (env sibling), then `$SPA_HOME/apps` (`--apps-dir` / `apps_dir`). Resolution order: `SPA_SOFTWARE_DIR` / `SPA_BASECONFIG_DIR` / `SPA_APPS_DIR`, then a **custom** path in `splunk_config.yml` (`splunk_dirs.splunk_software_dir`, `splunk_dirs.splunk_baseconfig_dir`, `splunk_app_deployment.local_app_repo_path`), then env `.spa.yml`, then `~/.config/spa/paths.yml`, then discovery. Built-in defaults such as `../Software` do not override `.spa.yml`. `spa` operator commands require an env dir (`spa init`); unset `SPA_*` still resolves paths to the clone for contributor `ansible-playbook` only.
 
 Day-to-day commands: `spa validate`, `spa provision --yes && spa deploy --yes`, `spa run NAME` (`--yes` when the catalog marks `requires_confirmation`). `spa run --list` shows playbook summaries; `spa run NAME --help` prints risk, confirmation, inputs, and examples without running Ansible. Equivalent: `ansible-playbook` from `$SPA_HOME` after `eval "$(spa env --export)"`. 2.x playbook stems are listed in [Migrate SPA 2.x to 3.0](docs/Migrate_SPA_2x_to_3x.md). The backend boundary and future daemon/GUI design are in [Controller, GUI, and remote-client architecture](docs/Controller_Architecture.md).
 
 ### Copy a configuration file
 
-There is one single configuration file, where all settings for your deployment are defined. For a **separate environment**, `spa init --example … ENV_DIR` copies an example into `$SPA_ENV_DIR/config/splunk_config.yml`. For **clone-equal** (VirtualBox, or a single env in the checkout), copy an example to `config/splunk_config.yml` in the clone. Adjust the settings to your needs. For a standard setup you should be fine with most of the default settings, but there are a lot of things you can adjust for special cases. See the [configuration description](examples/configuration_description.yml) file, where all existing values are described. For a step-by-step AWS lab workflow (SVA topology, OS/SSH, validation), see [Splunk Config Guided Setup](docs/Splunk_Config_Guided_Setup.md). For AI agent skills (`spa-create-config`, `spa-add-test-scenario`), see [AGENTS.md](AGENTS.md) and [skills/spa/](skills/spa/). To store passwords and other secrets securely (e.g. Splunk admin password, cluster secrets), see [Storing secrets in splunk_config.yml](docs/Secrets_and_Vault.md).
+There is one single configuration file, where all settings for your deployment are defined. `spa init --example … ENV_DIR` copies an example into `$SPA_ENV_DIR/config/splunk_config.yml`. Adjust the settings to your needs. For a standard setup you should be fine with most of the default settings, but there are a lot of things you can adjust for special cases. See the [configuration description](examples/configuration_description.yml) file, where all existing values are described. For a step-by-step AWS lab workflow (SVA topology, OS/SSH, validation), see [Splunk Config Guided Setup](docs/Splunk_Config_Guided_Setup.md). For AI agent skills (`spa-create-config`, `spa-add-test-scenario`), see [AGENTS.md](AGENTS.md) and [skills/spa/](skills/spa/). To store passwords and other secrets securely (e.g. Splunk admin password, cluster secrets), see [Storing secrets in splunk_config.yml](docs/Secrets_and_Vault.md).
 
 AWS: See [instruction here](#option-b-aws-with-terraform-recommended-for-aws) when deploying into Amazon Cloud. You can start with [splunk_config_terraform_aws.yml](examples/splunk_config_terraform_aws.yml) for a simple environment. Copy `splunk_idxclusters`, `splunk_shclusters` and `splunk_hosts` sections from other examples for more complex deployments.
 
@@ -395,29 +390,18 @@ Splunk Platform Automator supports multiple deployment targets. Choose the appro
 
 #### Option A: Virtualbox (Local Virtual Machines)
 
-Use this path with config in the **clone** and commands run from `SPA_HOME` (where `Vagrantfile` is). Env directories from `spa init` do not include a Vagrantfile; do not run `vagrant up` from `$SPA_ENV_DIR`.
+Use an env dir (`spa init --example single_node.yml ~/envs/vbox`). The Vagrantfile stays in `SPA_HOME`; env dirs do not include one. `spa` sets `VAGRANT_CWD` and `VAGRANT_DOTFILE_PATH` so you do not run `vagrant` from the env.
 
 When building virtual machines for Virtualbox the first time it will pull an OS image from the internet. The box images are cached here: `~/.vagrant.d/boxes`.
 
-**Create the Virtual Machines:**
+**Create the Virtual Machines and deploy Splunk:**
 
 ```bash
-vagrant up
+cd ~/envs/vbox
+spa provision --yes && spa deploy --yes
 ```
 
-**Run Ansible playbooks to deploy and configure the Splunk software:**
-
-The `vagrant up` command only creates the virtual machines. To deploy Splunk afterwards, run this command:
-
-```bash
-ansible-playbook ansible/deploy_site.yml
-```
-
-To run both steps with one command use:
-
-```bash
-vagrant up; ansible-playbook ansible/deploy_site.yml
-```
+`spa provision` runs `vagrant up` from `SPA_HOME` with per-env `.vagrant`. `spa deploy` is `deploy_site.yml`. Direct `vagrant up` / `ansible-playbook` from a checkout remains a contributor escape hatch.
 
 ---
 
@@ -435,9 +419,9 @@ vagrant up; ansible-playbook ansible/deploy_site.yml
 - AWS security group created (e.g., 'Splunk_Basic') - see [security group example](#example-basic-aws-security-group-splunk_basic)
 - EC2 key pair created
 
-Prefer an **environment directory** ([Start here](#start-here)) so Terraform state is not written into the clone. Clone-equal (`config/splunk_config.yml` in the checkout) still works.
+Prefer an **environment directory** ([Start here](#start-here)) so Terraform state is not written into the clone. `spa` does not treat the git checkout as an env dir.
 
-**Quick Start** (clone-equal). For an env dir, `cd` the env first so `ANSIBLE_INVENTORY` points at that config, then run `spa provision --yes && spa deploy --yes` (or the same playbooks with `"$SPA_HOME/ansible/..."`).
+**Quick Start.** `cd` the env so `ANSIBLE_INVENTORY` points at that config, then run `spa provision --yes && spa deploy --yes` (or the same playbooks with `"$SPA_HOME/ansible/..."` after `eval "$(spa env --export)"`).
 
 - Configure `config/splunk_config.yml` with a `terraform.aws` section:
 
@@ -497,38 +481,23 @@ ansible-playbook ansible/aws_destroy.yml
 
 
 
-#### Option C: AWS with Vagrant Plugin (Legacy)
-
-**Traditional Vagrant-based approach using the vagrant-aws plugin.**
-
-> ⚠️ **Note:** This method is considered legacy. The Terraform approach (Option B) above is recommended for new AWS deployments.
-
-To use the Vagrant AWS plugin:
-
-1. Follow the [AWS plugin installation instructions](#install-and-configure-aws-support-optional---legacy-vagrant-plugin)
-2. Configure `config/splunk_config.yml` with an `aws` section (see [splunk_config_aws.yml](examples/splunk_config_aws.yml))
-3. Run `vagrant up` to create instances
-4. Run `ansible-playbook ansible/deploy_site.yml` to deploy Splunk
-
-
-
 ### Stop hosts
 
-This will gracefully shutdown all the virtual machines.
+Gracefully stop managed VMs without destroying disks (AWS: EC2 stop; VirtualBox: `vagrant halt`):
 
 ```bash
-vagrant halt
+spa suspend --yes
 ```
-
-
 
 ### Destroy hosts
 
-You can destroy all the virtual machines with one command.
+Permanently remove managed infrastructure:
 
 ```bash
-vagrant destroy [-f] [<hostname>]
+spa destroy --yes
 ```
+
+Direct `vagrant destroy [-f] [<hostname>]` from `SPA_HOME` is a contributor escape hatch; operators use `spa destroy --yes` from an env dir.
 
 
 

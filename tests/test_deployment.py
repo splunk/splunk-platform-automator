@@ -87,6 +87,8 @@ class TestSplunkDeployment:
         
         # Verify config was created
         dest_config_path = os.path.join(self.work_dir, 'config', 'splunk_config.yml')
+        if getattr(self.manager, 'env_dir', None):
+            dest_config_path = os.path.join(self.manager.env_dir, 'config', 'splunk_config.yml')
         assert os.path.isfile(dest_config_path), "Config file was not created"
         
         # Store config data on class for later tests
@@ -115,6 +117,8 @@ class TestSplunkDeployment:
         
         # Check if terraform.tfvars was created
         tfvars_path = os.path.join(self.work_dir, 'terraform/aws/terraform.tfvars')
+        if getattr(self.manager, 'env_dir', None):
+            tfvars_path = os.path.join(self.manager.env_dir, 'terraform/aws/terraform.tfvars')
         
         if os.path.isfile(tfvars_path):
             print(f"[TERRAFORM] Created terraform.tfvars at: {tfvars_path}")

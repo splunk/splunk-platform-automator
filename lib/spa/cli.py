@@ -9,7 +9,7 @@ from typing import List, Optional, Sequence, Tuple
 from spa.agent import agent_mode, emit
 from spa.api import CommandResult, open_session
 from spa.executil import ToolNotFound, apply_paths_env
-from spa.paths import resolve_spa_paths
+from spa.paths import env_dir_required_error, resolve_spa_paths
 
 
 # Commands whose flags belong to the wrapped tool, not to spa (spa shell idx1,
@@ -409,7 +409,7 @@ def _run(argv: Sequence[str]) -> int:
         "--yes",
         action="store_true",
         default=argparse.SUPPRESS,
-        help="Auto-approve Terraform apply (same as spa -y provision)",
+        help="Confirm provision (same as spa -y provision)",
     )
     p_deploy = _add_command(sub, "deploy", aliases=["dep"], help="Deploy Splunk")
     p_deploy.add_argument(
@@ -434,10 +434,10 @@ def _run(argv: Sequence[str]) -> int:
         "--yes",
         action="store_true",
         default=argparse.SUPPRESS,
-        help="Auto-approve Terraform destroy (same as spa -y destroy)",
+        help="Confirm destroy (same as spa -y destroy)",
     )
     p_suspend = _add_command(
-        sub, "suspend", aliases=["sus"], help="Stop managed cloud instances without destroying them"
+        sub, "suspend", aliases=["sus"], help="Stop managed instances without destroying them"
     )
     p_suspend.add_argument(
         "-y", "--yes", action="store_true", default=argparse.SUPPRESS,
@@ -446,7 +446,7 @@ def _run(argv: Sequence[str]) -> int:
     p_suspend.add_argument("--no-wait", action="store_true", help="Return after requesting the stop")
     _add_hosts_option(p_suspend)
     p_resume = _add_command(
-        sub, "resume", aliases=["res"], help="Start managed cloud instances and refresh inventory"
+        sub, "resume", aliases=["res"], help="Start managed instances and refresh inventory"
     )
     p_resume.add_argument(
         "-y", "--yes", action="store_true", default=argparse.SUPPRESS,
@@ -559,6 +559,13 @@ def _run(argv: Sequence[str]) -> int:
     if args.command is None:
         parser.print_help()
         return 0
+
+    native_help_only = invoked in NATIVE_FLAG_COMMANDS and set(native) <= {"-h", "--help"}
+    if args.command not in {"init", "agent", "env", "doctor"} and not native_help_only:
+        missing = env_dir_required_error(paths)
+        if missing:
+            emit(False, error=missing, as_agent=as_agent)
+            return 2
 
     if args.command == "agent":
         result = session.schema()

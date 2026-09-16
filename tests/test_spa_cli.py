@@ -27,6 +27,25 @@ def test_spa_help():
     assert "COMMAND" in result.stdout
 
 
+@pytest.mark.no_spa_env
+def test_spa_doctor_and_agent_schema_from_clone():
+    doctor = run_spa(["--json", "doctor", "--spa-home", str(PROJECT_ROOT)])
+    assert doctor.returncode == 0, doctor.stderr
+    schema = run_spa(["agent", "schema"])
+    assert schema.returncode == 0, schema.stderr
+    listed = run_spa(["init", "--list"])
+    assert listed.returncode == 0, listed.stderr
+
+
+@pytest.mark.no_spa_env
+def test_spa_validate_from_clone_requires_env_dir():
+    result = run_spa(["validate"], extra_env={"SPA_HOME": str(PROJECT_ROOT)})
+    assert result.returncode == 2
+    combined = result.stderr + result.stdout
+    assert "environment directory" in combined
+    assert "spa init" in combined
+
+
 def test_shell_help_is_the_shell_parser():
     """spa shell -h must reach shell.py, not the spa dispatcher."""
     result = run_spa(["shell", "--help"])
@@ -203,6 +222,23 @@ def test_missing_tool_raises_actionable_error(tmp_path):
     message = str(excinfo.value)
     assert "spa-no-such-tool not found" in message
     assert "spa_venv.sh --create" in message
+    assert "spa doctor" in message
+
+
+def test_missing_host_tool_does_not_suggest_venv(monkeypatch):
+    from spa.executil import ToolNotFound, tool_path
+    import spa.executil as executil
+
+    monkeypatch.setattr(executil.shutil, "which", lambda name: None)
+    paths = resolve_spa_paths(start_dir=PROJECT_ROOT)
+    with pytest.raises(ToolNotFound) as excinfo:
+        tool_path(paths, "vagrant")
+    message = str(excinfo.value)
+    assert "vagrant is not on PATH" in message
+    assert "not part of the SPA Python venv" in message
+    assert "spa_venv.sh" not in message
+    assert "Active venv" not in message
+    assert "Install:" in message
     assert "spa doctor" in message
 
 

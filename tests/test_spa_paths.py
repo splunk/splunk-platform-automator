@@ -12,7 +12,10 @@ pytestmark = pytest.mark.local
 sys.path.insert(0, str(LIB))
 
 from spa.paths import (  # noqa: E402
+    ENV_DIR_REQUIRED_HINT,
+    env_dir_required_error,
     find_spa_yml,
+    is_framework_as_env,
     is_spa_home,
     resolve_shared_data_dir,
     resolve_spa_paths,
@@ -36,6 +39,8 @@ def test_clone_equal_when_unset(tmp_path):
     assert paths.inventory_dir == paths.spa_env_dir / "inventory"
     assert paths.config_file == paths.spa_env_dir / "config" / "splunk_config.yml"
     assert paths.spa_yml is None
+    assert is_framework_as_env(paths)
+    assert env_dir_required_error(paths) == ENV_DIR_REQUIRED_HINT
 
 
 def test_env_overrides(tmp_path):
@@ -52,6 +57,8 @@ def test_env_overrides(tmp_path):
     assert paths.terraform_modules_dir == paths.spa_home / "terraform" / "aws"
     assert paths.terraform_state_dir == dest.resolve() / "terraform" / "aws"
     assert paths.config_file == dest.resolve() / "config" / "splunk_config.yml"
+    assert not is_framework_as_env(paths)
+    assert env_dir_required_error(paths) is None
 
 
 def test_splunk_config_file_wins(tmp_path):

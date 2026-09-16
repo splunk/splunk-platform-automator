@@ -9,8 +9,9 @@ SPA_ENV_DIR
     Env root: config/splunk_config.yml, optional .spa.yml, inventory/hosts,
     Terraform state (tfvars, .terraform, tfstate).
 
-Unset both (and no .spa.yml) → git clone. Clone-equal keeps today's layout:
-state stays in terraform/aws/, inventory/ next to the checkout.
+Unset both (and no .spa.yml) still resolves to the git clone for ansible-playbook
+and path resolution. ``spa`` operator commands refuse that clone-equal layout:
+SPA_HOME is the framework only; config and state live in SPA_ENV_DIR.
 
 SPLUNK_CONFIG_FILE still wins for the YAML path.
 
@@ -55,6 +56,35 @@ def is_spa_home(path: Path) -> bool:
         and (root / "ansible").is_dir()
         and (root / "bin").is_dir()
     )
+
+
+class EnvDirRequired(RuntimeError):
+    """spa was pointed at the framework prefix instead of an env dir."""
+
+
+ENV_DIR_REQUIRED_HINT = (
+    "spa requires an environment directory, not the framework prefix (clone or install).\n"
+    "Create one:  spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env\n"
+    "Then:        cd ~/envs/my-env\n"
+    "             # direnv loads SPA_*; otherwise: eval \"$(spa env --export)\""
+)
+
+
+def is_framework_as_env(paths: SpaPaths) -> bool:
+    """True when the resolved env dir is the framework tree (clone-equal)."""
+    try:
+        home = paths.spa_home.resolve()
+        env = paths.spa_env_dir.resolve()
+    except OSError:
+        return False
+    return home == env and is_spa_home(home)
+
+
+def env_dir_required_error(paths: SpaPaths) -> Optional[str]:
+    """Message when spa must not run clone-equal; None if the env dir is OK."""
+    if is_framework_as_env(paths):
+        return ENV_DIR_REQUIRED_HINT
+    return None
 
 
 def clone_root_from_this_file() -> Path:

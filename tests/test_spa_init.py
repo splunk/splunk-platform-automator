@@ -136,6 +136,8 @@ def _write_old_env(root: Path, marker: str = "migrated-env") -> None:
     (root / "terraform" / "aws" / "terraform.tfstate").write_text('{"version": 4}\n')
     (root / "terraform" / "aws" / "terraform.tfvars").write_text("region = \"eu-central-1\"\n")
     (root / "terraform" / "aws" / "main.tf").write_text("# leftover module copy\n")
+    (root / ".vagrant" / "machines" / "idx1").mkdir(parents=True)
+    (root / ".vagrant" / "machines" / "idx1" / "id").write_text("vbox-id\n")
 
 
 def test_auto_migrate_when_spa_home_has_config(tmp_path):
@@ -168,6 +170,7 @@ def test_migrate_from_existing_env(tmp_path):
     assert (dest / "inventory" / "hosts").read_text() == "cm ansible_host=10.0.0.1\n"
     assert (dest / "terraform" / "aws" / "terraform.tfstate").is_file()
     assert (dest / "terraform" / "aws" / "terraform.tfvars").is_file()
+    assert (dest / ".vagrant" / "machines" / "idx1" / "id").read_text() == "vbox-id\n"
     assert (dest / ".spa.yml").is_file()
     assert not (dest / "ansible").exists()
     spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
@@ -180,6 +183,7 @@ def test_migrate_from_existing_env(tmp_path):
     assert not (source / "config" / "splunk_config.yml").exists()
     assert not (source / "inventory" / "hosts").exists()
     assert not (source / "terraform" / "aws" / "terraform.tfstate").exists()
+    assert not (source / ".vagrant").exists()
     assert (source / "ansible" / "deploy_site.yml").is_file()
 
 
@@ -191,6 +195,8 @@ def test_migrate_keep_source(tmp_path):
     assert result.returncode == 0, result.stderr + result.stdout
     assert (dest / "config" / "splunk_config.yml").is_file()
     assert (source / "config" / "splunk_config.yml").is_file()
+    assert (source / ".vagrant" / "machines" / "idx1" / "id").is_file()
+    assert (dest / ".vagrant" / "machines" / "idx1" / "id").read_text() == "vbox-id\n"
 
 
 def test_migrate_requires_config(tmp_path):

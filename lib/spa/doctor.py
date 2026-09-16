@@ -15,10 +15,196 @@ from spa.executil import resolve_venv_dir
 from spa.paths import resolve_spa_paths
 
 
+VAGRANT_REQUIRED_PLUGINS = ("vagrant-vbguest",)
+VAGRANT_WSL_PLUGINS = ("virtualbox_WSL2",)
+
+
 def _brew_hint(pkg: str) -> str:
     if shutil.which("brew"):
         return "brew install %s" % pkg
-    return "install %s with your OS package manager" % pkg
+    return "install %s with your OS package manager"
+
+
+def _linux_pkg_tool() -> Optional[str]:
+    for name in ("apt-get", "dnf", "yum", "zypper", "pacman"):
+        if shutil.which(name):
+            return name
+    return None
+
+
+def _is_wsl() -> bool:
+    if os.environ.get("WSL_DISTRO_NAME"):
+        return True
+    try:
+        text = Path("/proc/version").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    lower = text.lower()
+    return "microsoft" in lower or "wsl" in lower
+
+
+def _vagrant_install_hint(platform: Optional[str] = None) -> str:
+    """HashiCorp's package, not a distro Vagrant that is often too old for VirtualBox."""
+    plat = platform or sys.platform
+    if plat == "darwin":
+        if shutil.which("brew"):
+            return "brew tap hashicorp/tap && brew install hashicorp/tap/hashicorp-vagrant"
+        return "install Vagrant from https://developer.hashicorp.com/vagrant/install"
+    if plat.startswith("linux"):
+        tool = _linux_pkg_tool()
+        docs = "https://developer.hashicorp.com/vagrant/install#linux"
+        if tool == "apt-get":
+            return (
+                "add the HashiCorp apt repo (%s) then: "
+                "sudo apt-get update && sudo apt-get install -y vagrant"
+                % docs
+            )
+        if tool in {"dnf", "yum"}:
+            return (
+                "add the HashiCorp yum repo (%s) then: sudo %s install -y vagrant"
+                % (docs, tool)
+            )
+        if tool == "zypper":
+            return "sudo zypper install vagrant  (or HashiCorp packages: %s)" % docs
+        if tool == "pacman":
+            return "sudo pacman -S vagrant"
+        return "install Vagrant from %s" % docs
+    return "install Vagrant from https://developer.hashicorp.com/vagrant/install"
+
+
+def _terraform_install_hint(platform: Optional[str] = None) -> str:
+    plat = platform or sys.platform
+    docs = "https://developer.hashicorp.com/terraform/install"
+    if plat == "darwin":
+        if shutil.which("brew"):
+            return "brew tap hashicorp/tap && brew install hashicorp/tap/terraform"
+        return "install Terraform from %s" % docs
+    if plat.startswith("linux"):
+        tool = _linux_pkg_tool()
+        if tool == "apt-get":
+            return (
+                "add the HashiCorp apt repo (%s) then: "
+                "sudo apt-get update && sudo apt-get install -y terraform" % docs
+            )
+        if tool in {"dnf", "yum"}:
+            return "add the HashiCorp yum repo (%s) then: sudo %s install -y terraform" % (docs, tool)
+        if tool == "pacman":
+            return "sudo pacman -S terraform"
+        return "install Terraform from %s" % docs
+    return "install Terraform from %s" % docs
+
+
+def _virtualbox_install_hint(platform: Optional[str] = None) -> str:
+    plat = platform or sys.platform
+    downloads = "https://www.virtualbox.org/wiki/Downloads"
+    if plat == "darwin":
+        if shutil.which("brew"):
+            return "brew install --cask virtualbox"
+        return "install VirtualBox from %s" % downloads
+    if plat.startswith("linux"):
+        linux = "https://www.virtualbox.org/wiki/Linux_Downloads"
+        tool = _linux_pkg_tool()
+        if tool == "apt-get":
+            return "sudo apt-get update && sudo apt-get install -y virtualbox  (newer builds: %s)" % linux
+        if tool in {"dnf", "yum"}:
+            return "sudo %s install -y VirtualBox  (newer builds: %s)" % (tool, linux)
+        if tool == "zypper":
+            return "sudo zypper install virtualbox  (newer builds: %s)" % linux
+        if tool == "pacman":
+            return "sudo pacman -S virtualbox"
+        return "install VirtualBox from %s" % linux
+    return "install VirtualBox from %s" % downloads
+
+
+def _vagrant_plugin_names() -> Optional[List[str]]:
+    vagrant = shutil.which("vagrant")
+    if not vagrant:
+        return None
+    try:
+        proc = subprocess.run(
+            [vagrant, "plugin", "list"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode != 0:
+        return None
+    names: List[str] = []
+    for line in (proc.stdout or "").splitlines():
+        token = line.strip().split()[0] if line.strip() else ""
+        if token:
+            names.append(token)
+    return names
+
+
+def _virtualbox_version() -> Optional[str]:
+    """Installed VirtualBox as major.minor, the granularity Vagrant drivers use."""
+    import re
+
+    exe = shutil.which("VBoxManage") or shutil.which("VBoxManage.exe")
+    if not exe:
+        return None
+    try:
+        out = subprocess.run([exe, "--version"], capture_output=True, text=True).stdout
+    except OSError:
+        return None
+    match = re.match(r"\s*(\d+)\.(\d+)", out or "")
+    return "%s.%s" % (match.group(1), match.group(2)) if match else None
+
+
+def _vagrant_virtualbox_drivers() -> List[str]:
+    """VirtualBox major.minor versions the installed Vagrant ships a driver for.
+
+    Read from the gem tree instead of a hardcoded matrix: a Vagrant that cannot
+    drive the installed VirtualBox reports only "No usable default provider".
+    """
+    roots: List[Path] = []
+    vagrant = shutil.which("vagrant")
+    if vagrant:
+        real = Path(vagrant).resolve()
+        roots.append(real.parent.parent / "embedded" / "gems" / "gems")
+    roots += [
+        Path("/opt/vagrant/embedded/gems/gems"),
+        Path("/usr/share/vagrant/gems/gems"),
+    ]
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for gem in sorted(root.glob("vagrant-*"), reverse=True):
+            driver = gem / "plugins" / "providers" / "virtualbox" / "driver"
+            if not driver.is_dir():
+                continue
+            found = [
+                path.stem[len("version_") :].replace("_", ".")
+                for path in driver.glob("version_*.rb")
+            ]
+            if found:
+                return sorted(found, key=lambda ver: tuple(int(part) for part in ver.split(".")))
+    return []
+
+
+def _config_providers(text: str) -> set:
+    """Providers configured in splunk_config.yml: 'virtualbox' and/or 'aws'.
+
+    Scans top-level keys so a mention in a comment or a nested key does not
+    pull in tool checks. Doctor runs before the venv exists, so no PyYAML.
+    """
+    providers = set()
+    top = None
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        if not line[:1].isspace():
+            top = line.split(":", 1)[0].strip()
+            if top == "virtualbox":
+                providers.add("virtualbox")
+            continue
+        if top == "terraform" and line.strip().split(":", 1)[0].strip() == "aws":
+            providers.add("aws")
+    return providers
 
 
 def _direnv_hook_line() -> str:
@@ -113,17 +299,37 @@ def collect_checks(
     env_path = Path(env_dir).resolve() if env_dir else None
     require_aws = aws
     require_vbox = virtualbox
+
+    # Without --env, check the env the caller is standing in (SPA_ENV_DIR,
+    # .spa.yml, cwd) so provider tools are checked for that config. Doctor
+    # runs on broken layouts, so resolution failures must not raise here.
+    discovered = None
+    try:
+        discovered = resolve_spa_paths(
+            start_dir=env_path,
+            environ={**os.environ, "SPA_HOME": str(spa_home_path)},
+            clone_root=spa_home_path,
+        )
+    except Exception:
+        discovered = None
+    if env_path is None and discovered is not None and discovered.roots_differ:
+        env_path = discovered.spa_env_dir
+
     cfg = None
-    if env_path and (env_path / "config" / "splunk_config.yml").is_file():
-        cfg = env_path / "config" / "splunk_config.yml"
-    elif (spa_home_path / "config" / "splunk_config.yml").is_file():
-        cfg = spa_home_path / "config" / "splunk_config.yml"
+    candidates = []
+    if env_path:
+        candidates.append(env_path / "config" / "splunk_config.yml")
+    if discovered is not None:
+        candidates.append(discovered.config_file)
+    candidates.append(spa_home_path / "config" / "splunk_config.yml")
+    for candidate in candidates:
+        if candidate.is_file():
+            cfg = candidate
+            break
     if cfg:
-        text = cfg.read_text(encoding="utf-8", errors="replace")
-        if not require_aws and "terraform:" in text and "aws:" in text:
-            require_aws = True
-        if not require_vbox and (text.startswith("virtualbox:") or "\nvirtualbox:" in text):
-            require_vbox = True
+        providers = _config_providers(cfg.read_text(encoding="utf-8", errors="replace"))
+        require_aws = require_aws or "aws" in providers
+        require_vbox = require_vbox or "virtualbox" in providers
 
     ok: List[Dict[str, str]] = []
     warns: List[Dict[str, str]] = []
@@ -202,11 +408,35 @@ def collect_checks(
         else:
             rec("ok", "spa", "spa resolves to %s" % expected)
 
+    selected = [
+        name
+        for name, wanted in (("terraform.aws", require_aws), ("virtualbox", require_vbox))
+        if wanted
+    ]
+    if selected:
+        rec(
+            "ok",
+            "provider",
+            "provider tools checked for: %s (%s)"
+            % (", ".join(selected), cfg if cfg else "--aws/--virtualbox"),
+        )
+    elif cfg:
+        rec(
+            "ok",
+            "provider",
+            "no provider in %s; skipping terraform/vagrant checks" % cfg,
+        )
+
     if require_aws:
         if shutil.which("terraform"):
             rec("ok", "terraform", "terraform is on PATH")
         else:
-            rec("error", "terraform", "terraform required for AWS (not on PATH)", _brew_hint("terraform"))
+            rec(
+                "error",
+                "terraform",
+                "terraform required for terraform.aws (not on PATH)",
+                _terraform_install_hint(),
+            )
 
     if fix_direnv:
         hook_msg = _apply_hook()
@@ -250,10 +480,72 @@ def collect_checks(
         )
 
     if require_vbox:
-        if shutil.which("vagrant"):
+        has_vagrant = bool(shutil.which("vagrant"))
+        vbox = _virtualbox_version()
+        if has_vagrant:
             rec("ok", "vagrant", "vagrant is on PATH")
+            plugins = _vagrant_plugin_names()
+            if plugins is None:
+                rec(
+                    "warn",
+                    "vagrant_plugins",
+                    "could not list Vagrant plugins (`vagrant plugin list` failed)",
+                    "vagrant plugin list",
+                )
+            else:
+                missing = [name for name in VAGRANT_REQUIRED_PLUGINS if name not in plugins]
+                if missing:
+                    rec(
+                        "error",
+                        "vagrant_plugins",
+                        "missing Vagrant plugin(s): %s"
+                        % ", ".join(missing),
+                        "vagrant plugin install %s" % " ".join(missing),
+                    )
+                else:
+                    rec(
+                        "ok",
+                        "vagrant_plugins",
+                        "Vagrant plugins: %s" % ", ".join(VAGRANT_REQUIRED_PLUGINS),
+                    )
+                if _is_wsl():
+                    wsl_missing = [name for name in VAGRANT_WSL_PLUGINS if name not in plugins]
+                    if wsl_missing:
+                        rec(
+                            "warn",
+                            "vagrant_wsl_plugins",
+                            "WSL detected; missing plugin(s) so Vagrant can talk to Windows VirtualBox: %s"
+                            % ", ".join(wsl_missing),
+                            "vagrant plugin install %s" % " ".join(wsl_missing),
+                        )
         else:
-            rec("error", "vagrant", "vagrant required for VirtualBox (not on PATH)", _brew_hint("vagrant"))
+            rec(
+                "error",
+                "vagrant",
+                "vagrant required for VirtualBox (not on PATH)",
+                _vagrant_install_hint(),
+            )
+
+        drivers = _vagrant_virtualbox_drivers() if has_vagrant else []
+        if not vbox:
+            rec(
+                "error",
+                "virtualbox",
+                "VBoxManage not on PATH (VirtualBox not installed?)",
+                _virtualbox_install_hint(),
+            )
+        elif drivers and vbox not in drivers:
+            rec(
+                "error",
+                "virtualbox",
+                "VirtualBox %s has no driver in this Vagrant (supported: %s); "
+                "vagrant reports 'No usable default provider'"
+                % (vbox, ", ".join(drivers[-3:])),
+                "upgrade vagrant (%s) or install VirtualBox %s"
+                % (_vagrant_install_hint(), drivers[-1]),
+            )
+        else:
+            rec("ok", "virtualbox", "VirtualBox %s" % vbox)
 
     if shutil.which("brew"):
         rec("ok", "brew", "Homebrew available (optional; SPA uses spa_venv, not brew ansible)")

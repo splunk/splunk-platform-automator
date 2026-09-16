@@ -116,12 +116,15 @@ def check_provisioned(paths: SpaPaths) -> ProvisionState:
         ]
         if len(configured) == 1 and configured[0] in PROVIDER_MODULES:
             return get_provider(paths).provision_state()
+    if "virtualbox" in config:
+        return get_provider(paths).provision_state()
     return ProvisionState(provider="none", provisioned=True)
 
 
 # Adding GCP later is intentionally a registry change, not a CLI change.
 PROVIDER_MODULES = {
     "aws": "spa.providers.aws",
+    "virtualbox": "spa.providers.virtualbox",
 }
 
 
@@ -163,10 +166,10 @@ def detect_provider(paths: SpaPaths) -> ProviderSelection:
         return ProviderSelection(name=name, config=terraform[name])
 
     if "virtualbox" in config:
-        raise ProviderError(
-            "VirtualBox lifecycle is not managed by spa yet. "
-            "Run vagrant from SPA_HOME for now."
-        )
+        vbox = config.get("virtualbox")
+        if vbox is not None and not isinstance(vbox, dict):
+            raise ProviderError("virtualbox must be a mapping in %s" % paths.config_file)
+        return ProviderSelection(name="virtualbox", config=vbox or {})
     if "aws" in config:
         raise ProviderError(
             "The legacy top-level aws section is inventory-only. "
@@ -174,7 +177,7 @@ def detect_provider(paths: SpaPaths) -> ProviderSelection:
         )
     raise ProviderError(
         "No managed deployment provider found in %s "
-        "(expected terraform.<provider>; currently implemented: terraform.aws)."
+        "(expected terraform.<provider> or virtualbox; implemented: terraform.aws, virtualbox)."
         % paths.config_file
     )
 

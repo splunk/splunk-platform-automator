@@ -1,4 +1,7 @@
 ---
+# DEPRECATED for provisioning: this was the vagrant-aws example.
+# AWS lifecycle is terraform.aws (see examples/cm_2idxc_sh_uf_aws.yml).
+# A top-level aws: block is inventory-only; spa provision will refuse it.
 # splunk_config.yml
 plugin: splunk-platform-automator
 

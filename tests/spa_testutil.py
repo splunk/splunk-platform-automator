@@ -22,6 +22,24 @@ AGENT_ENV_VARS = (
 )
 
 
+def write_min_env(root: Path) -> Path:
+    """Empty env dir with .spa.yml pointing at this checkout (not clone-equal)."""
+    env = Path(root)
+    env.mkdir(parents=True, exist_ok=True)
+    (env / ".spa.yml").write_text("spa_home: %s\n" % PROJECT_ROOT, encoding="utf-8")
+    (env / "config").mkdir(exist_ok=True)
+    (env / "inventory").mkdir(exist_ok=True)
+    return env
+
+
+def min_env_vars(root: Path) -> dict:
+    dest = write_min_env(root)
+    return {
+        "SPA_HOME": str(PROJECT_ROOT),
+        "SPA_ENV_DIR": str(dest),
+    }
+
+
 def seed_software_dir(root: Path) -> Path:
     """Minimal PS baseconfig layout so controller-data checks pass in tests."""
     software = Path(root) / "Software"

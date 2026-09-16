@@ -12,7 +12,7 @@ Global `terraform.aws` block applies to all hosts unless overridden per host in 
 | `security_group_names` | `Splunk_Basic` | If present in account |
 | `key_name` | User key in region | Must exist |
 | `ssh_private_key_file` | Controller path | e.g. `~/.ssh/aws_key.pem` |
-| `tags.SPADirName` | `{{ spa_env_dir | basename }}` | Env dir folder name (clone folder when clone-equal) |
+| `tags.SPADirName` | `{{ spa_env_dir | basename }}` | Env dir folder name |
 
 ## Feature / app lab
 

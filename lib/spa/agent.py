@@ -72,7 +72,7 @@ COMMAND_SCHEMA = {
             "name": "provision",
             "summary": "Provision infrastructure using the provider selected by splunk_config.yml",
             "requires_confirmation": True,
-            "flags": [{"long": "--yes", "short": "-y", "help": "Confirm and auto-approve Terraform apply"}],
+            "flags": [{"long": "--yes", "short": "-y", "help": "Confirm provision"}],
             "example": "spa provision --yes && spa deploy --yes",
         },
         {
@@ -92,11 +92,11 @@ COMMAND_SCHEMA = {
             "name": "destroy",
             "summary": "Destroy infrastructure using the configured provider",
             "requires_confirmation": True,
-            "flags": [{"long": "--yes", "short": "-y", "help": "Confirm and auto-approve Terraform destroy"}],
+            "flags": [{"long": "--yes", "short": "-y", "help": "Confirm destroy"}],
         },
         {
             "name": "suspend",
-            "summary": "Stop managed cloud instances without destroying state or disks",
+            "summary": "Stop managed instances without destroying disks or provider state",
             "requires_confirmation": True,
             "flags": [
                 {"long": "--yes", "short": "-y", "help": "Confirm power change"},
@@ -106,7 +106,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "resume",
-            "summary": "Start managed cloud instances, wait for health, and refresh inventory",
+            "summary": "Start managed instances and refresh inventory if needed",
             "requires_confirmation": True,
             "flags": [
                 {"long": "--yes", "short": "-y", "help": "Confirm power change"},
