@@ -97,6 +97,10 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [ ] DNS role or Bind on one node; point lab hosts at it
 - [ ] Finish `ldap_server` (add to schema) and wire Splunk `authentication.conf`
 
+## Observability
+
+- [ ] Optional Splunk OpenTelemetry Collector on lab hosts via the [signalfx.splunk_otel_collector](https://github.com/signalfx/splunk-otel-collector/tree/main/deployments/ansible_collections/signalfx/splunk_otel_collector) Ansible collection (`signalfx.splunk_otel_collector.collector`). Pin in `requirements.yml`; wrap with a SPA playbook/`splunk_config.yml` block; skip when unset. Tokens from env / vault / `spa auth` — never print access or HEC tokens. Distinct from ITSI o11y content packs / TA-SIM (those are Splunk apps, not the host agent).
+
 ## Apps and premium apps
 
 - [x] Generic Splunkbase / local / URL apps + customizations ([docs/App_Deployment.md](docs/App_Deployment.md))
