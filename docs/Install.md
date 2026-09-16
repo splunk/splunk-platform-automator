@@ -70,14 +70,14 @@ That writes `${XDG_CONFIG_HOME:-~/.config}/spa/paths.yml` (directories only, not
 
 ## Uninstall
 
-`install.sh` does not have `--uninstall` yet ([#72](https://github.com/splunk/splunk-platform-automator/issues/72)). Remove only the prefix and launcher — not env dirs, Terraform state, or AWS (`spa destroy` is separate):
+`install.sh --uninstall --yes` removes the prefix (`SPA_HOME`) and the matching PATH wrapper (`~/.local/bin/spa` by default). It is **not** `spa destroy`: env dirs, Terraform state, and AWS stay untouched.
 
 ```bash
-rm -f ~/.local/bin/spa
-rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/spa"
+./install.sh --uninstall --yes
+./install.sh --uninstall --yes --prefix /opt/spa --bindir ~/.local/bin
 ```
 
-If you used `--prefix` / `--bindir`, delete those paths instead. Do not `rm -rf` a git clone you still need; uninstall is for an installed prefix.
+The prefix is deleted only if it looks like an SPA tree (`ansible.cfg`, `bin/spa`, `ansible/`). The wrapper is deleted only if it points at that prefix. Do not `rm -rf` a git clone you still need; uninstall is for an installed prefix. Agents must pass `--yes` (no interactive prompt).
 
 ## Extract anywhere
 

@@ -24,6 +24,8 @@ VERSION="${SPA_VERSION:-}"
 SKIP_VENV=false
 SKIP_DOCTOR=false
 FORCE=false
+UNINSTALL=false
+YES=false
 
 # Piped `curl | bash` has no real script path (empty BASH_SOURCE, stdin, or /dev/fd).
 _src="${BASH_SOURCE[0]:-}"
@@ -37,6 +39,7 @@ usage() {
     cat <<EOF >&2
 Usage: $0 [--prefix DIR] [--bindir DIR] [--from FILE] [--version X.Y.Z] [--force]
           [--skip-venv] [--skip-doctor]
+       $0 --uninstall [--yes] [--prefix DIR] [--bindir DIR]
 
   --prefix DIR     Install prefix / SPA_HOME (default: \${XDG_DATA_HOME:-~/.local/share}/spa, or SPA_PREFIX)
   --bindir DIR     Directory for the spa wrapper on PATH (default: ~/.local/bin, or SPA_BINDIR)
@@ -45,6 +48,8 @@ Usage: $0 [--prefix DIR] [--bindir DIR] [--from FILE] [--version X.Y.Z] [--force
   --force          Replace an existing prefix
   --skip-venv      Do not run spa_venv.sh --create
   --skip-doctor    Do not run spa doctor after install
+  --uninstall      Remove the prefix and matching PATH wrapper (not env dirs or AWS)
+  -y, --yes        Confirm uninstall (required in agent mode)
 EOF
 }
 
@@ -57,6 +62,8 @@ while [[ $# -gt 0 ]]; do
         --force) FORCE=true; shift ;;
         --skip-venv) SKIP_VENV=true; shift ;;
         --skip-doctor) SKIP_DOCTOR=true; shift ;;
+        --uninstall) UNINSTALL=true; shift ;;
+        -y|--yes) YES=true; shift ;;
         -h|--help) usage; exit 0 ;;
         *)
             echo "ERROR: unknown argument: $1" >&2
@@ -102,6 +109,72 @@ gh_ok() {
 is_spa_tree() {
     [[ -f "$1/ansible.cfg" && -x "$1/bin/spa" && -d "$1/ansible" ]]
 }
+
+is_agent() {
+    local name
+    for name in SPA_AGENT CLAUDECODE CLAUDE_CODE CURSOR_AGENT CURSOR_TRACE_ID CODEX_THREAD_ID; do
+        if [[ -n "${!name:-}" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+wrapper_matches_prefix() {
+    local wrap="$BINDIR/spa"
+    [[ -f "$wrap" ]] || return 1
+    grep -Fq "$PREFIX" "$wrap"
+}
+
+confirm_uninstall() {
+    if [[ "$YES" == true ]]; then
+        return 0
+    fi
+    if is_agent; then
+        echo "ERROR: uninstall requires --yes in agent mode" >&2
+        exit 1
+    fi
+    echo "uninstall will remove:" >&2
+    echo "$PREFIX" >&2
+    echo "$BINDIR/spa" >&2
+    printf 'Proceed? [y/N] ' >&2
+    local ans=""
+    read -r ans || true
+    case "$ans" in
+        y|Y|yes|YES) return 0 ;;
+        *)
+            echo "ERROR: uninstall cancelled" >&2
+            exit 1
+            ;;
+    esac
+}
+
+do_uninstall() {
+    confirm_uninstall
+    if [[ -e "$PREFIX" ]] && ! is_spa_tree "$PREFIX"; then
+        echo "ERROR: ${PREFIX} is not an SPA install prefix (need ansible.cfg, bin/spa, ansible/)." >&2
+        echo "Refusing to delete it. This is not spa destroy; env dirs and AWS are untouched." >&2
+        exit 1
+    fi
+    local wrap="$BINDIR/spa"
+    if wrapper_matches_prefix; then
+        rm -f "$wrap"
+        echo "Removed wrapper: ${wrap}"
+    elif [[ -e "$wrap" ]]; then
+        echo "Leaving ${wrap} (not the wrapper for ${PREFIX})" >&2
+    fi
+    if [[ -e "$PREFIX" ]]; then
+        rm -rf "$PREFIX"
+        echo "Removed prefix: ${PREFIX}"
+    else
+        echo "Prefix already absent: ${PREFIX}"
+    fi
+}
+
+if [[ "$UNINSTALL" == true ]]; then
+    do_uninstall
+    exit 0
+fi
 
 copy_tree() {
     local src="$1" dest="$2"
