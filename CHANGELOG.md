@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 Distribution work on the `distribution` integration branch toward **3.0** (M1–M3: path contract, `spa` CLI, `install.sh` + tarball). Linux packages and Homebrew are later, not part of 3.0.
 
+### Removed
+
+- **`setup_ansible_remote.txt`**: unused WinRM bootstrap (Ansible `devel` script + unencrypted WinRM). Not part of `spa`; Windows guests remain git-history / ROADMAP only.
+
 ### Changed
 
 - **Installer one-liners use `sh`**: `install.sh` is POSIX (`curl …/install.sh | sh`). The PATH wrapper is `/bin/sh` as well.

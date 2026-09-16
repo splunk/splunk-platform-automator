@@ -23,7 +23,6 @@ pic
 requirements.txt
 requirements.yml
 scripts
-setup_ansible_remote.txt
 skills
 template
 terraform
