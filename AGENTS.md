@@ -5,7 +5,7 @@ SPA provisions and deploys Splunk Enterprise (AWS Linux + Terraform, or VirtualB
 ## Contract
 
 - **`SPA_HOME`**: framework (prefix or clone). **`SPA_ENV_DIR`**: one environment. Operator `spa` needs `spa init` first. Path diagram: [user guide](docs/user-guide.md#understand-the-paths).
-- Call **`bin/spa`** only (`spa agent schema`, `spa --json features`, `spa --json apps`). Do not import `spa.api`. Do not start a daemon.
+- Call **`bin/spa`** only (`spa agent schema`, `spa --json features`, `spa --json apps`). Do not import `spa.api`. Do not start a daemon. Flag catalog: [docs/commands.md](docs/commands.md).
 - Mutating commands need **`--yes`**. Never auto-run provision, deploy, suspend, resume, or destroy. Never answer `Proceed?` interactively.
 - Never print secrets (Splunkbase, AWS keys, vault). Report env vars as **set / not set**. YAML: `lookup('env', ...)`.
 - Full command names (`spa hosts ssh`, `spa validate`), not `spa sh` / `spa val`.
@@ -19,6 +19,7 @@ Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 | --- | --- |
 | Config | `$SPA_ENV_DIR/config/splunk_config.yml` via `spa init --example` |
 | Schema vs catalog | Pydantic (`spa validate`); `spa features` / `examples/catalog/features.yml` |
+| CLI flags | [docs/commands.md](docs/commands.md) (`spa --no-agent agent schema --markdown`) |
 | Guided design | [docs/user-guide.md](docs/user-guide.md#configure-an-environment) · `spa features` |
 | 2.x → 3.0 | [docs/migrate.md](docs/migrate.md) |
 | New env | `spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env` then `cd` (direnv or `spa_venv.sh --env` + `spa env --export`) |
@@ -33,7 +34,7 @@ Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 | SSH / copy | `spa hosts list --status`, `spa hosts ssh NAME`, `spa hosts copy SRC DST` |
 | Destroy | `spa destroy --yes` |
 | VirtualBox | `spa init --example single_node --provider virtualbox ENV` then the same spa loop |
-| Install | [docs/install.md](docs/install.md) |
+| Install | [README](README.md#install) · [docs/install.md](docs/install.md) |
 | Tests / release | `./tests/run_local_tests.sh` · [RELEASE.md](RELEASE.md) |
 
 Provider is `terraform.aws` or `virtualbox:` in config.

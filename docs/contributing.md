@@ -1,6 +1,6 @@
 # Contributing
 
-Operators should start with the [user guide](user-guide.md). This page collects framework-development topics that should not expand the operator documentation.
+Operators should start with the [user guide](user-guide.md). The generated CLI catalog is [commands.md](commands.md) (`spa --no-agent agent schema --markdown`). This page collects framework-development topics that should not expand the operator documentation.
 
 ## Development setup
 

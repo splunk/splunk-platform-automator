@@ -42,7 +42,7 @@ def _install_env(home: Path, extra=None):
 
 def _run_install(archive: Path, env, extra_args=None):
     cmd = [
-        "bash",
+        "sh",
         str(INSTALL),
         "--from",
         str(archive),
@@ -76,7 +76,7 @@ def test_install_from_tarball_and_extract_anywhere(tmp_path):
     bindir = tmp_path / "bin"
     result = subprocess.run(
         [
-            "bash",
+            "sh",
             str(INSTALL),
             "--from",
             str(archive),
@@ -152,7 +152,7 @@ def test_install_refuses_existing_prefix_without_force(tmp_path):
     (prefix / "keep.txt").write_text("no")
     result = subprocess.run(
         [
-            "bash",
+            "sh",
             str(INSTALL),
             "--from",
             str(archive),
@@ -240,7 +240,7 @@ def test_install_from_stdin_pipe(tmp_path):
     with INSTALL.open(encoding="utf-8") as handle:
         result = subprocess.run(
             [
-                "bash",
+                "sh",
                 "-s",
                 "--",
                 "--from",
@@ -263,7 +263,7 @@ def test_install_from_stdin_pipe(tmp_path):
 
 
 def _run_uninstall(env, extra_args=None):
-    cmd = ["bash", str(INSTALL), "--uninstall", *(extra_args or [])]
+    cmd = ["sh", str(INSTALL), "--uninstall", *(extra_args or [])]
     return subprocess.run(cmd, capture_output=True, text=True, env=env)
 
 

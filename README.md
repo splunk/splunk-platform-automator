@@ -22,6 +22,16 @@ SPA provisions and configures Splunk Enterprise—clustering, apps, AWS or Virtu
 - **AWS:** Terraform from the same config (`spa provision` / `destroy`)
 - **VirtualBox:** local VMs through `spa` (Vagrant only as an implementation detail)
 
+## Install
+
+Requires **Python 3.9+** with the `venv` module (`python3` on PATH). The installer creates a virtualenv and fails if that interpreter is missing or too old.
+
+```sh
+curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh
+```
+
+That installs the latest GitHub Release into `~/.local/share/spa` and puts `spa` on `PATH` via `~/.local/bin/spa`. Add `~/.local/bin` to `PATH` if `spa` is not found. Flags, uninstall, and clone/develop: [docs/install.md](docs/install.md).
+
 ## Start here
 
 ```bash
@@ -32,13 +42,14 @@ spa validate
 spa provision --yes && spa deploy --yes
 ```
 
-VirtualBox: `--provider virtualbox` (for example `single_node`). Installer: [docs/install.md](docs/install.md). Full narrative: [user guide](docs/user-guide.md).
+VirtualBox: `--provider virtualbox` (for example `single_node`). Full narrative: [user guide](docs/user-guide.md).
 
 ## Docs
 
 | Audience | Link |
 | --- | --- |
 | Humans (and agents following examples) | [docs/user-guide.md](docs/user-guide.md) |
+| Command catalog (generated) | [docs/commands.md](docs/commands.md) · `spa agent schema --markdown` |
 | Agents | [AGENTS.md](AGENTS.md) |
 | Config keys / snippets | `spa features list` · [examples/catalog/features.yml](examples/catalog/features.yml) |
 | Roadmap | [ROADMAP.md](ROADMAP.md) |

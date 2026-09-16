@@ -6,29 +6,13 @@ Do not copy `ansible/` into an environment directory. `SPA_HOME` is the install 
 
 ## Installer (recommended)
 
-Needs Python 3.9+ with the `venv` module. Terraform is only required for AWS.
+Requires **Python 3.9+** with the `venv` module (`python3` on PATH). The installer creates a venv and `spa doctor` fails if that is missing or too old. Terraform is only required for AWS. The script always follows the newest GitHub Release (`releases/latest/download/install.sh`).
 
-From **3.0**, `install.sh` is a GitHub Release asset. `releases/latest/download/install.sh` always follows the newest published `v*` release (not `main`). Use **bash**, not `sh`.
-
-Public repo (or once release assets are public):
-
-```bash
-/bin/bash -c "$(curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh)"
+```sh
+curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh
 ```
 
-Pass installer flags after `--` when piping:
-
-```bash
-curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | bash -s -- --prefix /opt/spa
-```
-
-Private repo (`gh auth login`):
-
-```bash
-gh release download --repo splunk/splunk-platform-automator --pattern install.sh -O - | bash
-```
-
-The script then downloads matching `spa-framework-*.tar.gz` from the same latest release (or `--version` / `SPA_VERSION`). That URL 404s until the first 3.0 GitHub Release exists.
+The script then downloads matching `spa-framework-*.tar.gz` from the same latest release (or `--version` / `SPA_VERSION`).
 
 Defaults:
 

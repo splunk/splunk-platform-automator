@@ -4,6 +4,8 @@ SPA installs and configures Splunk Enterprise for testing, training, staging, an
 
 ## Start here
 
+Install the framework first ([README](../README.md#install) or the commands in [install.md](install.md)), then:
+
 ```bash
 spa doctor
 spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
@@ -114,6 +116,7 @@ Use `lookup('env', 'NAME')` or quoted Ansible Vault values; never commit plainte
 
 ## Where to go next
 
+- [Commands](commands.md): generated CLI catalog (`spa agent schema --markdown`)
 - [Install](install.md): install, uninstall, VirtualBox, WSL2
 - [Apps](apps.md): routing and app lifecycle
 - [AWS](aws.md): AWS and Terraform through `spa`

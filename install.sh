@@ -1,20 +1,18 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Install Splunk Platform Automator into a prefix.
 # Default SPA_HOME: ${XDG_DATA_HOME:-$HOME/.local/share}/spa
 # Default launcher: $HOME/.local/bin/spa
 #
 # From 3.0, install.sh is a GitHub Release asset (not a git-branch URL):
-#   /bin/bash -c "$(curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh)"
-# Private repo (gh auth):
-#   gh release download --repo splunk/splunk-platform-automator --pattern install.sh -O - | bash
-# Flags when piping:  curl … | bash -s -- --prefix /opt/spa
+#   curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh
+# Flags when piping:  curl … | sh -s -- --prefix DIR
 #
 # From a checkout or extracted tarball:
 #   ./install.sh
 #   ./install.sh --from spa-framework-X.Y.Z.tar.gz --prefix /opt/spa
 #
 # Env: SPA_PREFIX, SPA_BINDIR, SPA_VERSION, XDG_DATA_HOME, GITHUB_TOKEN (download only; never printed).
-set -euo pipefail
+set -eu
 
 REPO="${SPA_REPO:-splunk/splunk-platform-automator}"
 PREFIX="${SPA_PREFIX:-}"
@@ -27,13 +25,29 @@ FORCE=false
 UNINSTALL=false
 YES=false
 
-# Piped `curl | bash` has no real script path (empty BASH_SOURCE, stdin, or /dev/fd).
-_src="${BASH_SOURCE[0]:-}"
+# Piped `curl | sh` has no real script path ($0 is sh / -).
 SELF=""
-if [[ -n "$_src" && "$_src" != "-" && "$_src" != /dev/stdin && -f "$_src" ]]; then
-    SELF="$(cd "$(dirname "$_src")" && pwd)/$(basename "$_src")"
-fi
-unset _src
+case "$0" in
+    -|sh|dash|ash|bash|*"/sh"|*"/dash"|*"/ash"|*"/bash")
+        ;;
+    *)
+        if [ -f "$0" ]; then
+            case "$0" in
+                /*) SELF="$0" ;;
+                *) SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")" ;;
+            esac
+        fi
+        ;;
+esac
+
+expand_tilde() {
+    _p=$1
+    case "$_p" in
+        "~") printf '%s' "$HOME" ;;
+        ~/*) printf '%s' "$HOME/${_p#~/}" ;;
+        *) printf '%s' "$_p" ;;
+    esac
+}
 
 usage() {
     cat <<EOF >&2
@@ -53,7 +67,7 @@ Usage: $0 [--prefix DIR] [--bindir DIR] [--from FILE] [--version X.Y.Z] [--force
 EOF
 }
 
-while [[ $# -gt 0 ]]; do
+while [ $# -gt 0 ]; do
     case "$1" in
         --prefix) PREFIX="${2:?}"; shift 2 ;;
         --bindir) BINDIR="${2:?}"; shift 2 ;;
@@ -81,23 +95,25 @@ xdg_data_home() {
     esac
 }
 
-if [[ -z "$PREFIX" ]]; then
+if [ -z "$PREFIX" ]; then
     PREFIX="$(xdg_data_home)/spa"
 else
-    PREFIX="${PREFIX/#\~/$HOME}"
+    PREFIX="$(expand_tilde "$PREFIX")"
 fi
-if [[ -z "$BINDIR" ]]; then
+if [ -z "$BINDIR" ]; then
     BINDIR="${HOME}/.local/bin"
 else
-    BINDIR="${BINDIR/#\~/$HOME}"
+    BINDIR="$(expand_tilde "$BINDIR")"
 fi
-if [[ "$PREFIX" != /* ]]; then
-    PREFIX="$(pwd)/$PREFIX"
-fi
-if [[ "$BINDIR" != /* ]]; then
-    BINDIR="$(pwd)/$BINDIR"
-fi
-if [[ "$PREFIX" == "$HOME" || "$PREFIX" == / ]]; then
+case "$PREFIX" in
+    /*) ;;
+    *) PREFIX="$(pwd)/$PREFIX" ;;
+esac
+case "$BINDIR" in
+    /*) ;;
+    *) BINDIR="$(pwd)/$BINDIR" ;;
+esac
+if [ "$PREFIX" = "$HOME" ] || [ "$PREFIX" = / ]; then
     echo "ERROR: --prefix cannot be your home directory or /" >&2
     exit 1
 fi
@@ -107,27 +123,27 @@ gh_ok() {
 }
 
 is_spa_tree() {
-    [[ -f "$1/ansible.cfg" && -x "$1/bin/spa" && -d "$1/ansible" ]]
+    [ -f "$1/ansible.cfg" ] && [ -x "$1/bin/spa" ] && [ -d "$1/ansible" ]
 }
 
 is_agent() {
-    local name
-    for name in SPA_AGENT CLAUDECODE CLAUDE_CODE CURSOR_AGENT CURSOR_TRACE_ID CODEX_THREAD_ID; do
-        if [[ -n "${!name:-}" ]]; then
-            return 0
-        fi
-    done
+    [ -n "${SPA_AGENT:-}" ] && return 0
+    [ -n "${CLAUDECODE:-}" ] && return 0
+    [ -n "${CLAUDE_CODE:-}" ] && return 0
+    [ -n "${CURSOR_AGENT:-}" ] && return 0
+    [ -n "${CURSOR_TRACE_ID:-}" ] && return 0
+    [ -n "${CODEX_THREAD_ID:-}" ] && return 0
     return 1
 }
 
 wrapper_matches_prefix() {
-    local wrap="$BINDIR/spa"
-    [[ -f "$wrap" ]] || return 1
+    wrap="$BINDIR/spa"
+    [ -f "$wrap" ] || return 1
     grep -Fq "$PREFIX" "$wrap"
 }
 
 confirm_uninstall() {
-    if [[ "$YES" == true ]]; then
+    if [ "$YES" = true ]; then
         return 0
     fi
     if is_agent; then
@@ -138,7 +154,7 @@ confirm_uninstall() {
     echo "$PREFIX" >&2
     echo "$BINDIR/spa" >&2
     printf 'Proceed? [y/N] ' >&2
-    local ans=""
+    ans=""
     read -r ans || true
     case "$ans" in
         y|Y|yes|YES) return 0 ;;
@@ -151,19 +167,19 @@ confirm_uninstall() {
 
 do_uninstall() {
     confirm_uninstall
-    if [[ -e "$PREFIX" ]] && ! is_spa_tree "$PREFIX"; then
+    if [ -e "$PREFIX" ] && ! is_spa_tree "$PREFIX"; then
         echo "ERROR: ${PREFIX} is not an SPA install prefix (need ansible.cfg, bin/spa, ansible/)." >&2
         echo "Refusing to delete it. This is not spa destroy; env dirs and AWS are untouched." >&2
         exit 1
     fi
-    local wrap="$BINDIR/spa"
+    wrap="$BINDIR/spa"
     if wrapper_matches_prefix; then
         rm -f "$wrap"
         echo "Removed wrapper: ${wrap}"
-    elif [[ -e "$wrap" ]]; then
+    elif [ -e "$wrap" ]; then
         echo "Leaving ${wrap} (not the wrapper for ${PREFIX})" >&2
     fi
-    if [[ -e "$PREFIX" ]]; then
+    if [ -e "$PREFIX" ]; then
         rm -rf "$PREFIX"
         echo "Removed prefix: ${PREFIX}"
     else
@@ -171,19 +187,23 @@ do_uninstall() {
     fi
 }
 
-if [[ "$UNINSTALL" == true ]]; then
+if [ "$UNINSTALL" = true ]; then
     do_uninstall
     exit 0
 fi
 
 copy_tree() {
-    local src="$1" dest="$2"
-    local manifest="$src/scripts/framework-files.txt"
+    src="$1"
+    dest="$2"
+    manifest="$src/scripts/framework-files.txt"
     mkdir -p "$dest"
-    if [[ -f "$manifest" ]]; then
-        while IFS= read -r line || [[ -n "$line" ]]; do
-            [[ -z "$line" || "$line" == \#* ]] && continue
-            [[ -e "$src/$line" ]] || continue
+    if [ -f "$manifest" ]; then
+        while IFS= read -r line || [ -n "$line" ]; do
+            [ -z "$line" ] && continue
+            case "$line" in
+                \#*) continue ;;
+            esac
+            [ -e "$src/$line" ] || continue
             dest_parent="$dest/$(dirname "$line")"
             mkdir -p "$dest_parent"
             rsync -a "$src/$line" "$dest_parent/"
@@ -199,11 +219,12 @@ copy_tree() {
 
 write_wrapper() {
     mkdir -p "$BINDIR"
+    quoted=$(printf '%s' "$PREFIX" | sed "s/'/'\\\\''/g")
     cat > "$BINDIR/spa" <<EOF
-#!/usr/bin/env bash
-export SPA_HOME=$(printf '%q' "$PREFIX")
+#!/bin/sh
+export SPA_HOME='$quoted'
 venv="\$SPA_HOME/.venv/bin/python"
-if [[ -x "\$venv" ]]; then
+if [ -x "\$venv" ]; then
     exec "\$venv" "\$SPA_HOME/bin/spa" "\$@"
 fi
 exec "\$SPA_HOME/bin/spa" "\$@"
@@ -212,7 +233,7 @@ EOF
 }
 
 normalize_tag() {
-    local ver="$1"
+    ver="$1"
     case "$ver" in
         "") echo "" ;;
         v*) echo "$ver" ;;
@@ -221,13 +242,12 @@ normalize_tag() {
 }
 
 download_release() {
-    local dest="$1"
-    local tag
+    dest="$1"
     tag="$(normalize_tag "$VERSION")"
-    if [[ -z "$tag" ]]; then
+    if [ -z "$tag" ]; then
         if gh_ok; then
             tag="$(gh release view --repo "$REPO" --json tagName -q .tagName)"
-        elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        elif [ -n "${GITHUB_TOKEN:-}" ]; then
             tag="$(curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${REPO}/releases/latest" |
@@ -237,20 +257,19 @@ download_release() {
             exit 1
         fi
     fi
-    [[ -n "$tag" ]] || { echo "ERROR: could not resolve a release tag" >&2; exit 1; }
-    local ver="${tag#v}"
-    local name="spa-framework-${ver}.tar.gz"
+    [ -n "$tag" ] || { echo "ERROR: could not resolve a release tag" >&2; exit 1; }
+    ver="${tag#v}"
+    name="spa-framework-${ver}.tar.gz"
     echo "Downloading ${name} from ${REPO} ${tag}..."
     if gh_ok; then
         gh release download "$tag" --repo "$REPO" --pattern "$name" -D "$(dirname "$dest")"
         mv "$(dirname "$dest")/$name" "$dest"
         return
     fi
-    if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+    if [ -z "${GITHUB_TOKEN:-}" ]; then
         echo "ERROR: need gh auth or GITHUB_TOKEN to download from a private repo." >&2
         exit 1
     fi
-    local asset_url
     asset_url="$(curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
         -H "Accept: application/vnd.github+json" \
         "https://api.github.com/repos/${REPO}/releases/tags/${tag}" |
@@ -263,15 +282,15 @@ for asset in data.get("assets", []):
         print(asset["url"])
         break
 ' "$name")"
-    [[ -n "$asset_url" ]] || { echo "ERROR: release ${tag} has no asset ${name}" >&2; exit 1; }
+    [ -n "$asset_url" ] || { echo "ERROR: release ${tag} has no asset ${name}" >&2; exit 1; }
     curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
         -H "Accept: application/octet-stream" -L -o "$dest" "$asset_url"
 }
 
-if [[ -e "$PREFIX" && "$FORCE" == true ]]; then
+if [ -e "$PREFIX" ] && [ "$FORCE" = true ]; then
     rm -rf "$PREFIX"
-elif [[ -e "$PREFIX" ]]; then
-    if is_spa_tree "$PREFIX" || [[ -n "$(ls -A "$PREFIX" 2>/dev/null || true)" ]]; then
+elif [ -e "$PREFIX" ]; then
+    if is_spa_tree "$PREFIX" || [ -n "$(ls -A "$PREFIX" 2>/dev/null || true)" ]; then
         echo "ERROR: ${PREFIX} already exists. Pass --force to replace it." >&2
         exit 2
     fi
@@ -282,13 +301,13 @@ cleanup() { rm -rf "$tmp"; }
 trap cleanup EXIT
 
 src=""
-if [[ -n "$FROM" ]]; then
-    FROM="${FROM/#\~/$HOME}"
-    [[ -f "$FROM" ]] || { echo "ERROR: tarball not found: $FROM" >&2; exit 1; }
+if [ -n "$FROM" ]; then
+    FROM="$(expand_tilde "$FROM")"
+    [ -f "$FROM" ] || { echo "ERROR: tarball not found: $FROM" >&2; exit 1; }
     mkdir -p "$tmp/tree"
     tar -xzf "$FROM" -C "$tmp/tree"
     src="$tmp/tree"
-elif [[ -n "$SELF" ]] && is_spa_tree "$(cd "$(dirname "$SELF")" && pwd)"; then
+elif [ -n "$SELF" ] && is_spa_tree "$(cd "$(dirname "$SELF")" && pwd)"; then
     src="$(cd "$(dirname "$SELF")" && pwd)"
 else
     download_release "$tmp/spa-framework.tar.gz"
@@ -307,12 +326,12 @@ copy_tree "$src" "$PREFIX"
 chmod 0755 "$PREFIX/bin/spa" "$PREFIX/bin/spa_venv.sh" || true
 write_wrapper
 
-if [[ "$SKIP_VENV" != true ]]; then
+if [ "$SKIP_VENV" != true ]; then
     echo "Creating virtualenv at ${PREFIX}/.venv ..."
     "$PREFIX/bin/spa_venv.sh" --create
 fi
 
-if [[ "$SKIP_DOCTOR" != true ]]; then
+if [ "$SKIP_DOCTOR" != true ]; then
     "$BINDIR/spa" doctor --spa-home "$PREFIX" || \
         echo "spa doctor reported issues (install still completed)." >&2
 fi
