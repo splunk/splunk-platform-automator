@@ -1527,7 +1527,7 @@ class TestAppDeploymentConfig:
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
             "splunk_app_deployment": {
-                "target_download": "yes",
+                "target_download": "maybe",
                 "apps": [{"name": "MyApp", "source": "local", "target_roles": ["indexer"]}],
             },
         }
