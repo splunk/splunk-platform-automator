@@ -47,6 +47,7 @@ Or link into `~/.claude/skills/` for all projects.
 Point the agent at `skills/spa/<skill-name>/SKILL.md` when the user:
 
 - Designs or edits `config/splunk_config.yml`
+- Searches Splunkbase or prints `apps[]` snippets (`spa-apps`)
 - Plans SVA-aligned lab topology on AWS
 - Adds app-scope tests under `tests/configs/app_scope/`
 

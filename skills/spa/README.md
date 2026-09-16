@@ -44,13 +44,14 @@ ln -s "$(pwd)/skills/spa/spa-apps" .claude/skills/spa-apps
 
 # Or user-scoped
 ln -s /path/to/splunk-platform-automator/skills/spa/spa-create-config ~/.claude/skills/spa-create-config
+ln -s /path/to/splunk-platform-automator/skills/spa/spa-apps ~/.claude/skills/spa-apps
 ```
 
 Repeat for `spa-add-test-scenario` if needed.
 
 ## Other agents
 
-Load `skills/spa/<skill-name>/SKILL.md` when the user works on `splunk_config.yml`, SVA lab topology, or app-scope tests. Follow `references/` on demand.
+Load `skills/spa/<skill-name>/SKILL.md` when the user works on `splunk_config.yml`, Splunkbase apps, SVA lab topology, or app-scope tests. Follow `references/` on demand.
 
 ## Windows
 
@@ -62,5 +63,6 @@ If you have the Agent Skills reference tooling installed:
 
 ```bash
 skills-ref validate ./skills/spa/spa-create-config
+skills-ref validate ./skills/spa/spa-apps
 skills-ref validate ./skills/spa/spa-add-test-scenario
 ```
