@@ -9,7 +9,7 @@ from typing import List, Optional, Sequence, Tuple
 from spa.agent import agent_mode, emit
 from spa.api import CommandResult, open_session
 from spa.executil import ToolNotFound, apply_paths_env
-from spa.paths import resolve_spa_paths
+from spa.paths import env_dir_required_error, resolve_spa_paths
 
 
 # Commands whose flags belong to the wrapped tool, not to spa (spa shell idx1,
@@ -559,6 +559,13 @@ def _run(argv: Sequence[str]) -> int:
     if args.command is None:
         parser.print_help()
         return 0
+
+    native_help_only = invoked in NATIVE_FLAG_COMMANDS and set(native) <= {"-h", "--help"}
+    if args.command not in {"init", "agent", "env", "doctor"} and not native_help_only:
+        missing = env_dir_required_error(paths)
+        if missing:
+            emit(False, error=missing, as_agent=as_agent)
+            return 2
 
     if args.command == "agent":
         result = session.schema()

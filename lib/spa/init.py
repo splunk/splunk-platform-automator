@@ -58,6 +58,7 @@ KEEP_HINT = (
     "inventory/",
     "terraform/aws state, tfvars, .terraform",
     "saved_base_config_apps/",
+    ".vagrant/",
     ".vault_pass*",
 )
 
@@ -244,6 +245,9 @@ def migrate_state(
     for extra in (".vault_pass", ".vault_pass.txt"):
         if (src / extra).is_file():
             transfer_path(src / extra, dest / extra, keep_source)
+    src_vagrant = src / ".vagrant"
+    if src_vagrant.exists():
+        transfer_path(src_vagrant, dest / ".vagrant", keep_source)
     link_terraform_modules(dest, spa_home)
     write_spa_yml(dest, spa_home, **(yml_opts or {}))
 

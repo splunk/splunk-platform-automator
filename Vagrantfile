@@ -23,24 +23,29 @@ Vagrant.require_version '>= 2.2.7'
 VAGRANTFILE_API_VERSION = '2'
 
 require 'yaml'
-dir = File.dirname(File.expand_path(__FILE__))
-config_dir = File.join(dir,"config")
-defaults_dir = File.join(dir,"defaults")
-config_file = File.join(config_dir,"splunk_config.yml")
-inventory_dir = File.join(dir,"inventory")
+spa_home = File.dirname(File.expand_path(__FILE__))
+if ENV['SPA_ENV_DIR'].to_s.empty?
+  print "ERROR: SPA_ENV_DIR is not set. Run spa from an env dir (spa init), not from the framework tree.\n"
+  exit 2
+end
+env_dir = File.expand_path(ENV['SPA_ENV_DIR'])
+defaults_dir = File.join(spa_home, "defaults")
+if ENV['SPLUNK_CONFIG_FILE'].to_s.empty?
+  config_dir = File.join(env_dir, "config")
+  config_file = File.join(config_dir, "splunk_config.yml")
+else
+  config_file = File.expand_path(ENV['SPLUNK_CONFIG_FILE'])
+  config_dir = File.dirname(config_file)
+end
+inventory_dir = File.join(env_dir, "inventory")
 hosts_file = File.join(inventory_dir, "hosts")
-host_vars_dir = File.join(inventory_dir,"host_vars")
+host_vars_dir = File.join(inventory_dir, "host_vars")
 defaults = {}
 
 # Check for Ansible binary
 system("type ansible > /dev/null 2>&1")
 if $?.exitstatus != 0
   print "ERROR: Cannot find ansible binary\n"
-  exit 2
-end
-
-if !File.file?("Vagrantfile")
-  print "ERROR: Run the command from the top directory, where 'Vagrantfile' is located!\n"
   exit 2
 end
 
@@ -318,7 +323,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
           destroy_trigger.push(File.join(host_vars_dir, server['name']))
         end
         save_dir = splunk_apps['splunk_save_baseconfig_apps_dir'] || 'saved_base_config_apps'
-        save_dir = save_dir.start_with?('/') ? save_dir : File.join(dir, save_dir)
+        save_dir = save_dir.start_with?('/') ? save_dir : File.join(env_dir, save_dir)
         if File.directory?(File.join(save_dir, server['name']))
           # Remove pulled-back baseconfig apps for this host
           destroy_trigger.push(File.join(save_dir, server['name']))

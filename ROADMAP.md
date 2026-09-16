@@ -59,6 +59,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 ## Config and validation
 
 - [x] Pydantic schema + `spa validate` (idxc / role pairing; supersedes a Vagrantfile-only idxc check)
+- [ ] `spa validate` checks Splunk installers in Software for the provider and architecture in use — [#74](https://github.com/splunk/splunk-platform-automator/issues/74)
 - [x] Host ranges (`iter.numbers: "1..N"`)
 - [x] Index definitions including `datatype: metric` (`splunk_indexes`)
 - [x] First-login splash disabled ([ansible/roles/splunk_software/tasks/ui_config.yml](ansible/roles/splunk_software/tasks/ui_config.yml))

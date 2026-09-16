@@ -66,7 +66,9 @@ class WorkspaceManager:
         self.config_file = config_file
         self.worker_id = worker_id
         self.project_root = project_root
+        self._workspace_root = None
         self.work_dir = None
+        self.env_dir = None
         self.venv_bin = None
         self.splunk_env_id = None
         self.config_data = None
@@ -74,13 +76,19 @@ class WorkspaceManager:
         self.is_splunk_installed = False
         
     def setup(self) -> dict:
-        """Create isolated workspace with cloned codebase and venv."""
-        # Create temp directory
+        """Create isolated SPA_HOME clone plus a sibling env dir."""
         config_name = os.path.splitext(self.config_file)[0]
-        self.work_dir = tempfile.mkdtemp(prefix=f"spa_test_{self.worker_id}_{config_name}_")
-        print(f"\n[SETUP] Creating isolated workspace at: {self.work_dir}")
+        self._workspace_root = tempfile.mkdtemp(prefix=f"spa_test_{self.worker_id}_{config_name}_")
+        self.work_dir = os.path.join(self._workspace_root, "framework")
+        self.env_dir = os.path.join(self._workspace_root, "env")
+        os.makedirs(self.work_dir)
+        os.makedirs(os.path.join(self.env_dir, "config"))
+        os.makedirs(os.path.join(self.env_dir, "inventory"))
+        os.makedirs(os.path.join(self.env_dir, "terraform", "aws"))
+        with open(os.path.join(self.env_dir, ".spa.yml"), "w") as handle:
+            handle.write("spa_home: %s\n" % self.work_dir)
+        print(f"\n[SETUP] Creating isolated workspace at: {self._workspace_root}")
         
-        # Clone the project files
         self._clone_codebase()
         
         # Create venv and install dependencies
@@ -107,6 +115,8 @@ class WorkspaceManager:
             # Ignore inventory in project root
             if path == self.project_root and 'inventory' in names:
                 ignored.append('inventory')
+            if path == self.project_root and 'config' in names:
+                ignored.append('config')
             
             # Ignore terraform generated files
             if path.endswith('terraform/aws'):
@@ -164,6 +174,7 @@ class WorkspaceManager:
         """Return workspace environment data."""
         return {
             "work_dir": self.work_dir,
+            "env_dir": self.env_dir,
             "splunk_env_id": self.splunk_env_id,
             "project_root": self.project_root,
             "venv_bin": self.venv_bin,
@@ -173,7 +184,7 @@ class WorkspaceManager:
     def prepare_config(self) -> dict:
         """Prepare splunk_config.yml with injected settings."""
         src_config_path = os.path.join(self.project_root, 'tests/configs', self.config_file)
-        dest_config_path = os.path.join(self.work_dir, 'config', 'splunk_config.yml')
+        dest_config_path = os.path.join(self.env_dir, 'config', 'splunk_config.yml')
         
         # Ensure config dir exists
         os.makedirs(os.path.dirname(dest_config_path), exist_ok=True)
@@ -217,8 +228,10 @@ class WorkspaceManager:
     def get_ansible_env(self) -> dict:
         """Get environment variables for Ansible execution."""
         env = os.environ.copy()
+        env['SPA_HOME'] = self.work_dir
+        env['SPA_ENV_DIR'] = self.env_dir
+        env['SPLUNK_CONFIG_FILE'] = os.path.join(self.env_dir, 'config', 'splunk_config.yml')
         env['ANSIBLE_CONFIG'] = os.path.join(self.work_dir, 'ansible.cfg')
-        # Use workspace-specific fact cache to avoid conflicts between parallel workers
         env['ANSIBLE_CACHE_PLUGIN_CONNECTION'] = os.path.join(self.work_dir, '.ansible_fact_cache')
         return env
     
@@ -254,9 +267,10 @@ class WorkspaceManager:
     
     def cleanup(self):
         """Clean up workspace directory."""
-        if self.work_dir and os.path.exists(self.work_dir):
-            print(f"[TEARDOWN] Cleaning up workspace: {self.work_dir}")
-            shutil.rmtree(self.work_dir, ignore_errors=True)
+        root = self._workspace_root or self.work_dir
+        if root and os.path.exists(root):
+            print(f"[TEARDOWN] Cleaning up workspace: {root}")
+            shutil.rmtree(root, ignore_errors=True)
 
 
 class LocalWorkspaceManager:
@@ -270,6 +284,7 @@ class LocalWorkspaceManager:
     def __init__(self, project_root: str):
         self.project_root = project_root
         self.work_dir = project_root
+        self.env_dir = os.environ.get("SPA_ENV_DIR", project_root)
         self.splunk_env_id = "local"
         self.config_data = None
         self.is_provisioned = True  # Assume existing deployment
@@ -357,6 +372,21 @@ def pytest_configure(config):
         _ensure_local_test_env()
 
 
+@pytest.fixture(autouse=True)
+def _default_spa_env_dir(request, tmp_path, monkeypatch):
+    """Operator spa commands need an env dir; skip AWS workspaces and marked tests."""
+    if request.node.get_closest_marker("aws"):
+        return
+    if request.node.get_closest_marker("no_spa_env"):
+        monkeypatch.delenv("SPA_ENV_DIR", raising=False)
+        return
+    from spa_testutil import PROJECT_ROOT, write_min_env
+
+    dest = write_min_env(tmp_path / "spa-operator-env")
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(dest))
+
+
 # Global workspace storage for class-scoped fixture
 _workspaces = {}
 
@@ -370,8 +400,8 @@ def workspace_manager(request, worker_id, config_file):
     the existing local deployment without creating a temp workspace.
     
     Lifecycle (normal mode):
-    1. Create temp directory
-    2. Clone the codebase (excluding .git, .vagrant, etc.)
+    1. Create temp directory with framework clone (SPA_HOME) and sibling env
+    2. Copy the codebase into SPA_HOME (excluding .git, .vagrant, etc.)
     3. Create dedicated venv with Ansible
     4. Generate unique SplunkEnvID
     5. Yield workspace manager

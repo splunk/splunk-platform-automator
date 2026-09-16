@@ -77,7 +77,6 @@ def test_agent_confirmation_failure_is_versioned_json(monkeypatch, capsys):
         lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("agent prompted")),
     )
     monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
-    monkeypatch.setenv("SPA_ENV_DIR", str(PROJECT_ROOT))
     from spa.cli import main
 
     rc = main(["--agent", "run", "splunk_remove"])

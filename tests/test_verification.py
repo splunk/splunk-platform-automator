@@ -39,6 +39,9 @@ class TestSplunkVerification:
         # Load config data if not already loaded
         if workspace_manager.config_data is None:
             config_path = os.path.join(workspace_manager.work_dir, 'config', 'splunk_config.yml')
+            env_dir = getattr(workspace_manager, 'env_dir', None)
+            if env_dir:
+                config_path = os.path.join(env_dir, 'config', 'splunk_config.yml')
             if os.path.isfile(config_path):
                 with open(config_path, 'r') as f:
                     workspace_manager.config_data = yaml.safe_load(f)
@@ -94,6 +97,9 @@ class TestSplunkVerification:
             # Try to check if splunk is actually running by looking for indicators
             # This allows verification to run even if deployment tests were run separately
             config_path = os.path.join(self.work_dir, 'config', 'splunk_config.yml')
+            env_dir = getattr(self.manager, 'env_dir', None)
+            if env_dir:
+                config_path = os.path.join(env_dir, 'config', 'splunk_config.yml')
             if not os.path.isfile(config_path):
                 pytest.fail("Deployment not complete: splunk_config.yml not found")
     

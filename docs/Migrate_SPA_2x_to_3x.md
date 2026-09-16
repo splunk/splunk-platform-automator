@@ -1,6 +1,6 @@
 # Migrate existing Splunk Platform Automator Environments from 2.x to 3.0
 
-3.0 is not a Splunk-config rewrite. Day-to-day `ansible-playbook` from a clone still works when `SPA_HOME` and `SPA_ENV_DIR` are the same directory. What changes is the **operator surface**: one `spa` binary, a split between framework and environment directories, and AWS lifecycle through Terraform.
+3.0 is not a Splunk-config rewrite. Day-to-day `ansible-playbook` from a clone still works when `SPA_HOME` and `SPA_ENV_DIR` are the same directory (contributor escape hatch). **`spa` does not.** Operators always use an env dir (`spa init`). The git clone is `SPA_HOME` (framework) only.
 
 Keep this page as the short “what do I change?” list. Full history is in [CHANGELOG.md](../CHANGELOG.md). 1.x → 2.x inventory work is still [Migrate_SPA_1x_to_2x.md](Migrate_SPA_1x_to_2x.md).
 
@@ -32,14 +32,14 @@ Skills and agents should use full names (`spa hosts ssh`, `spa validate`), not `
 
 ## Path contract
 
-- **`SPA_HOME`** is the framework (playbooks, Terraform modules, `bin/`, skills).
-- **`SPA_ENV_DIR`** is one Splunk environment (`config/splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, optional `saved_base_config_apps/`). Do not copy `ansible/` into the env.
-- Unset both → the git clone (same layout as 2.x).
-- When they differ, Terraform **modules** stay under `$SPA_HOME/terraform/aws`; **state** stays in the env.
+- **`SPA_HOME`** is the framework (playbooks, Terraform modules, `Vagrantfile`, `bin/`, skills). A clone is develop-only for `spa`; operators use a prefix or clone as home, never as the env.
+- **`SPA_ENV_DIR`** is one Splunk environment (`config/splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `.vagrant/`, optional `saved_base_config_apps/`). Do not copy `ansible/` into the env. Do not put a Vagrantfile in the env.
+- Unset both → the git clone for path resolution and `ansible-playbook`. That clone-equal layout is **not** valid for `spa` (except `spa --help`, `spa init`, `spa agent schema`, `spa env --export`, `spa doctor`).
+- When they differ, Terraform **modules** stay under `$SPA_HOME/terraform/aws`; **state** stays in the env. VirtualBox uses `VAGRANT_CWD=$SPA_HOME` and `VAGRANT_DOTFILE_PATH=$SPA_ENV_DIR/.vagrant`.
 - `../Software` and `../apps` prefer a sibling of the **env**, then the clone.
 - Env dirs get an `.envrc`. `spa` is `$SPA_HOME/bin/spa` on `PATH`, not a per-env `bin/`.
 
-Move an existing clone env out of the checkout:
+Move an existing 2.x clone env out of the checkout:
 
 ```bash
 spa init ~/envs/my-env
@@ -49,6 +49,8 @@ cd ~/envs/my-env
 eval "$(spa env --export)"
 spa validate
 ```
+
+`spa init` migrates `config/`, `inventory/`, Terraform state, and **`.vagrant/`** (VirtualBox machine IDs). If `.vagrant` is left in the clone, `spa provision` would create a second set of VMs.
 
 If you copied a whole old checkout as the env directory, `spa init DIR` exits 2 until `--force`. Then env state is kept and framework leftovers under that dir are stripped.
 
@@ -64,11 +66,11 @@ source bin/spa_venv.sh --create
 
 ## AWS and VirtualBox
 
-- `spa provision`, `spa destroy`, `spa suspend`, and `spa resume` follow `splunk_config.yml`: **`terraform.aws`** or **`virtualbox:`**.
-- A top-level `aws:` block is inventory-only (legacy vagrant-aws). vagrant-aws is not the 3.0 path; use Terraform AWS for cloud.
-- VirtualBox: keep config in the **clone** (`$SPA_HOME/config/splunk_config.yml`) and run `spa provision --yes` from `SPA_HOME`. Env dirs have no `Vagrantfile`; `spa init` env dirs are for Terraform AWS.
+- `spa provision`, `spa destroy`, `spa suspend`, and `spa resume` follow `splunk_config.yml`: **`terraform.aws`** or **`virtualbox:`**. Same env-dir loop for both.
+- A top-level `aws:` block is inventory-only (legacy vagrant-aws). vagrant-aws is removed in 3.0; use Terraform AWS for cloud.
+- VirtualBox: `spa init --example single_node.yml ~/envs/vbox` then `spa provision --yes && spa deploy --yes`. Env dirs have no `Vagrantfile`.
 
-Recommended AWS loop:
+Recommended loop (AWS or VirtualBox):
 
 ```bash
 spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env

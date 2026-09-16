@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence, runt
 
 from spa.agent import COMMAND_SCHEMA, SCHEMA_VERSION
 from spa.executil import apply_paths_env
-from spa.paths import SpaPaths, format_export, resolve_spa_paths
+from spa.paths import SpaPaths, env_dir_required_error, format_export, resolve_spa_paths
 
 
 ProgressCallback = Callable[[Dict[str, Any]], None]
@@ -185,6 +185,12 @@ class LocalSpaSession:
             self.paths = resolve_spa_paths(start_dir=start)
         apply_paths_env(self.paths)
 
+    def _env_gate(self) -> Optional[CommandResult]:
+        message = env_dir_required_error(self.paths)
+        if message:
+            return CommandResult(ok=False, error=message, code=2)
+        return None
+
     def _progress(self, event: Dict[str, Any]) -> None:
         if self.on_progress:
             self.on_progress(jsonable(event))
@@ -204,6 +210,9 @@ class LocalSpaSession:
         )
 
     def catalog(self, extra_dir: Optional[str] = None) -> CommandResult:
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
         from spa.playbooks import MetadataError, catalog
 
         try:
@@ -213,6 +222,9 @@ class LocalSpaSession:
         return CommandResult(ok=True, data=rows)
 
     def describe_playbook(self, name: str, extra_dir: Optional[str] = None) -> CommandResult:
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
         from spa.playbooks import MetadataError, PlaybookError, describe
 
         try:
@@ -232,6 +244,9 @@ class LocalSpaSession:
         check_licenses: bool = False,
         splunk_config_aws: bool = False,
     ) -> CommandResult:
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
         from spa.validate import validate_env
 
         return validate_env(
@@ -347,11 +362,17 @@ class LocalSpaSession:
     def provision(
         self, extra: Optional[List[str]] = None, confirm: bool = False, agent: bool = False
     ) -> CommandResult:
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
         return self._lifecycle_playbook("provision", extra, confirm, agent)
 
     def destroy(
         self, extra: Optional[List[str]] = None, confirm: bool = False, agent: bool = False
     ) -> CommandResult:
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
         return self._lifecycle_playbook("destroy", extra, confirm, agent)
 
     def _lifecycle_playbook(
@@ -403,6 +424,9 @@ class LocalSpaSession:
         agent: bool = False,
         skip_provision_check: bool = False,
     ) -> CommandResult:
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
         from spa.hosts import with_ansible_limit
         from spa.playbooks import PlaybookError, resolve, run_playbook
         from spa.preflight import check_controller_data, controller_data_error
@@ -520,6 +544,9 @@ class LocalSpaSession:
         agent: bool,
         hosts: Optional[Sequence[str]] = None,
     ) -> CommandResult:
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
         from spa.confirm import LIFECYCLE_RISK
         from spa.providers import ProviderError, get_provider
 
@@ -560,6 +587,9 @@ class LocalSpaSession:
         confirm: bool = False,
         agent: bool = False,
     ) -> CommandResult:
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
         from spa.confirm import requires_confirmation
         from spa.hosts import with_ansible_limit
         from spa.playbooks import (
@@ -609,6 +639,9 @@ class LocalSpaSession:
         )
 
     def aws(self, argv: Optional[List[str]] = None) -> CommandResult:
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
         from spa import aws as aws_mod
 
         return aws_mod.execute_argv(list(argv or []))
@@ -619,6 +652,9 @@ class LocalSpaSession:
         config: Optional[str] = None,
         env_recommend: bool = True,
     ) -> CommandResult:
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
         from spa import licenses as licenses_mod
 
         project_root = licenses_mod.resolve_env_root()
@@ -641,8 +677,11 @@ class LocalSpaSession:
         return CommandResult(ok=True, data=data)
 
     def hosts_list(
-        self, status: bool = False, hosts: Optional[Sequence[str]] = None
+        self, status: bool = False,         hosts: Optional[Sequence[str]] = None
     ) -> CommandResult:
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
         from spa import shell as shell_mod
 
         try:

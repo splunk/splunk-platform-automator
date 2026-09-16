@@ -30,7 +30,10 @@ def apply_paths_env(paths: SpaPaths, overwrite: bool = False) -> Dict[str, str]:
 
 
 class ToolNotFound(RuntimeError):
-    """A venv tool (ansible-playbook, ansible-inventory, …) is not installed."""
+    """A required binary is not installed (venv tool or host tool)."""
+
+
+HOST_TOOLS = frozenset({"vagrant", "terraform", "VBoxManage"})
 
 
 def venv_is_usable(path: Path) -> bool:
@@ -65,7 +68,31 @@ def resolve_venv_dir(paths: SpaPaths) -> Optional[Path]:
     return None
 
 
+def _missing_host_tool_message(name: str) -> str:
+    """Vagrant/Terraform live on PATH, never in the SPA Python venv."""
+    lines = [
+        "%s is not on PATH." % name,
+        "It is a host program, not part of the SPA Python venv.",
+    ]
+    if name == "vagrant":
+        from spa.doctor import _vagrant_install_hint
+
+        lines.append("Install:  %s" % _vagrant_install_hint())
+    elif name == "terraform":
+        from spa.doctor import _terraform_install_hint
+
+        lines.append("Install:  %s" % _terraform_install_hint())
+    elif name == "VBoxManage":
+        from spa.doctor import _virtualbox_install_hint
+
+        lines.append("Install:  %s" % _virtualbox_install_hint())
+    lines.append("Then:     spa doctor")
+    return "\n".join(lines)
+
+
 def _missing_tool_message(paths: SpaPaths, name: str, venv: Optional[Path]) -> str:
+    if name in HOST_TOOLS:
+        return _missing_host_tool_message(name)
     lines = ["%s not found (not in a venv, not on PATH)." % name]
     if venv is not None:
         lines.append("Active venv: %s" % venv)
@@ -78,11 +105,13 @@ def _missing_tool_message(paths: SpaPaths, name: str, venv: Optional[Path]) -> s
 
 
 def tool_path(paths: SpaPaths, name: str, required: bool = True) -> str:
-    venv = resolve_venv_dir(paths)
-    if venv is not None:
-        candidate = venv / "bin" / name
-        if candidate.is_file():
-            return str(candidate)
+    venv = None
+    if name not in HOST_TOOLS:
+        venv = resolve_venv_dir(paths)
+        if venv is not None:
+            candidate = venv / "bin" / name
+            if candidate.is_file():
+                return str(candidate)
     found = shutil.which(name)
     if found:
         return found

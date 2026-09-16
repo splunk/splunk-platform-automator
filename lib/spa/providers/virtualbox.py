@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -56,32 +57,47 @@ class Provider:
         self.paths = paths
         self.config = config
 
-    def _vagrantfile(self) -> Path:
+    def _vagrantfile(self):
         return self.paths.spa_home / "Vagrantfile"
 
-    def _clone_config(self) -> Path:
-        return self.paths.spa_home / "config" / "splunk_config.yml"
+    def _vagrant_env(self) -> Dict[str, str]:
+        env = {**os.environ, **self.paths.export_env()}
+        env["VAGRANT_CWD"] = str(self.paths.spa_home)
+        env["VAGRANT_DOTFILE_PATH"] = str(self.paths.spa_env_dir / ".vagrant")
+        return env
 
-    def _require_clone_layout(self) -> None:
-        vagrantfile = self._vagrantfile()
-        if not vagrantfile.is_file():
+    def _require_vagrantfile(self) -> None:
+        if not self._vagrantfile().is_file():
             raise ProviderError(
                 "Vagrantfile not found in SPA_HOME (%s). VirtualBox lifecycle "
-                "runs Vagrant from the framework tree, not from an env dir."
+                "runs Vagrant from the framework tree."
                 % self.paths.spa_home
             )
-        try:
-            wanted = self._clone_config().resolve()
-            actual = self.paths.config_file.resolve()
-        except OSError as exc:
-            raise ProviderError("Cannot resolve VirtualBox config path: %s" % exc)
-        if actual != wanted:
-            raise ProviderError(
-                "VirtualBox lifecycle requires config in the clone "
-                "($SPA_HOME/config/splunk_config.yml). Env dirs from spa init "
-                "have no Vagrantfile; use terraform.aws for those, or copy a "
-                "VirtualBox example into the clone."
+
+    def _require_clean_machine_state(self) -> None:
+        """Vagrant reuses the provider recorded per machine, even a removed one."""
+        machines = self.paths.spa_env_dir / ".vagrant" / "machines"
+        if not machines.is_dir():
+            return
+        stale = [
+            state
+            for machine in sorted(machines.iterdir())
+            if machine.is_dir()
+            for state in sorted(machine.iterdir())
+            if state.is_dir() and state.name != self.name
+        ]
+        if not stale:
+            return
+        raise ProviderError(
+            "Vagrant state for another provider (%s) in %s. Vagrant would keep "
+            "using that provider for %s. Remove it: rm -rf %s"
+            % (
+                ", ".join(sorted({state.name for state in stale})),
+                machines,
+                ", ".join(sorted({state.parent.name for state in stale})),
+                " ".join(str(state) for state in stale),
             )
+        )
 
     def _vagrant_bin(self) -> str:
         try:
@@ -96,13 +112,15 @@ class Provider:
         capture: bool = False,
         check: bool = True,
     ) -> subprocess.CompletedProcess:
-        self._require_clone_layout()
+        self._require_vagrantfile()
+        self._require_clean_machine_state()
         cmd = [self._vagrant_bin(), *args]
         result = subprocess.run(
             cmd,
             cwd=str(self.paths.spa_home),
             capture_output=capture,
             text=True,
+            env=self._vagrant_env(),
         )
         if check and result.returncode != 0:
             detail = ""
