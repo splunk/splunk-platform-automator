@@ -11,7 +11,7 @@ For interactive agent assistance in Cursor, use the project skill at [skills/spa
 **Clone-equal:**
 
 1. `spa init --example TOPOLOGY --provider aws ENV` (see `spa init --list`).
-2. Choose extra settings from concise `spa --json features search QUERY`, inspect the snippet with `spa features show ID`, and request per-key types/constraints only when needed with `spa features show ID --keys`. Write snippets into `config/splunk_config.yml` (OS, SSL, architecture — not through init).
+2. Choose extra settings from concise `spa --json features search QUERY`, inspect the snippet with `spa features show ID`, and request per-key types/constraints only when needed with `spa features show ID --keys`. Write snippets into `config/splunk_config.yml` (OS, SSL, architecture — not through init). For Splunkbase apps, `spa --json apps search QUERY` then `spa apps snippet APP_ID`.
 3. Set **`terraform.aws.ssh_username`** to match your AMI (`ec2-user` for Amazon Linux / RHEL; `ubuntu` for Ubuntu) via catalog `setting.ssh_username`.
 4. Set global **`os:`** from catalog `setting.os` / `setting.os.ubuntu`.
 5. Validate before provision:

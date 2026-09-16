@@ -34,7 +34,7 @@ Skills and agents should use full names (`spa hosts ssh`, `spa validate`), not `
 
 - **`SPA_HOME`** is the framework (playbooks, Terraform modules, `Vagrantfile`, `bin/`, skills). A clone is develop-only for `spa`; operators use a prefix or clone as home, never as the env.
 - **`SPA_ENV_DIR`** is one Splunk environment (`config/splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `.vagrant/`, optional `saved_base_config_apps/`). Do not copy `ansible/` into the env. Do not put a Vagrantfile in the env.
-- Unset both → the git clone for path resolution and `ansible-playbook`. That clone-equal layout is **not** valid for `spa` (except `spa --help`, `spa init`, `spa agent schema`, `spa env --export`, `spa doctor`, `spa features`).
+- Unset both → the git clone for path resolution and `ansible-playbook`. That clone-equal layout is **not** valid for `spa` (except `spa --help`, `spa init`, `spa agent schema`, `spa env --export`, `spa doctor`, `spa features`, `spa apps search` / `snippet`).
 - When they differ, Terraform **modules** stay under `$SPA_HOME/terraform/aws`; **state** stays in the env. VirtualBox uses `VAGRANT_CWD=$SPA_HOME` and `VAGRANT_DOTFILE_PATH=$SPA_ENV_DIR/.vagrant`.
 - `../Software` and `../apps` prefer a sibling of the **env**, then the clone.
 - Env dirs get an `.envrc`. `spa` is `$SPA_HOME/bin/spa` on `PATH`, not a per-env `bin/`.

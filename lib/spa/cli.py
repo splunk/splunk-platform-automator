@@ -9,6 +9,7 @@ from typing import List, Optional, Sequence, Tuple
 
 from spa.agent import agent_mode, emit
 from spa.api import CommandResult, open_session
+from spa.apps import SEARCH_KINDS, SEARCH_TYPES
 from spa.executil import ToolNotFound, apply_paths_env
 from spa.paths import env_dir_required_error, resolve_spa_paths
 
@@ -435,6 +436,97 @@ def _run(argv: Sequence[str]) -> int:
         help="With show ID, include per-key types, constraints, and guidance",
     )
 
+    p_apps = _add_command(
+        sub,
+        "apps",
+        help="Search Splunkbase, print an apps[] snippet, or download an archive",
+    )
+    apps_sub = p_apps.add_subparsers(dest="apps_cmd", metavar="ACTION", required=True)
+    p_apps_search = apps_sub.add_parser("search", help="Search Splunkbase (compact rows)")
+    _add_mode_flags(p_apps_search)
+    p_apps_search.add_argument("query", nargs="+", help="Technology or app name keywords")
+    p_apps_search.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        metavar="N",
+        help="Max hits (default 10)",
+    )
+    p_apps_search.add_argument(
+        "--type",
+        dest="app_type",
+        choices=list(SEARCH_TYPES),
+        help="Filter Splunkbase type (%s)" % ", ".join(SEARCH_TYPES),
+    )
+    p_apps_search.add_argument(
+        "--kind",
+        choices=list(SEARCH_KINDS),
+        help="Filter SPA kind (%s)" % ", ".join(SEARCH_KINDS),
+    )
+    p_apps_snippet = apps_sub.add_parser(
+        "snippet",
+        help="Print a kind-specific apps[] YAML snippet (Splunkbase id or local folder name)",
+    )
+    _add_mode_flags(p_apps_snippet)
+    p_apps_snippet.add_argument(
+        "app_id",
+        metavar="APP_ID_OR_NAME",
+        help="Splunkbase numeric app id, or local custom app folder with --source local",
+    )
+    p_apps_snippet.add_argument(
+        "--version", default="latest", help="Release version (default latest)"
+    )
+    p_apps_snippet.add_argument(
+        "--roles",
+        help="Comma-separated target_roles (TA only; ignored for premium/content packs)",
+    )
+    p_apps_snippet.add_argument(
+        "--source",
+        choices=["splunkbase", "local"],
+        default="splunkbase",
+        help="Snippet source; local checks this environment's apps_dir (default splunkbase)",
+    )
+    p_apps_snippet.add_argument(
+        "--local",
+        dest="source",
+        action="store_const",
+        const="local",
+        default=argparse.SUPPRESS,
+        help="Shorthand for --source local",
+    )
+    p_apps_download = apps_sub.add_parser(
+        "download",
+        help="Download an archive into apps_dir",
+        description=(
+            "Download an archive into apps_dir (does not edit splunk_config.yml; use spa apps "
+            "snippet for YAML). Credentials come from splunk_app_deployment.splunkbase_username / "
+            "splunkbase_password in splunk_config.yml first, then SPLUNKBASE_USERNAME / "
+            "SPLUNKBASE_PASSWORD."
+        ),
+    )
+    _add_mode_flags(p_apps_download)
+    p_apps_download.add_argument("app_id", help="Splunkbase numeric app id")
+    p_apps_download.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm download (required in agent mode)",
+    )
+    p_apps_download.add_argument(
+        "--version", default="latest", help="Release version (default latest)"
+    )
+    p_apps_download.add_argument(
+        "--extract",
+        action="store_true",
+        help="Safely extract a folder-backed app into apps_dir and delete the archive (TA/ES only)",
+    )
+    p_apps_download.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="With --extract, replace an existing app folder in apps_dir",
+    )
+
     p_val = _add_command(sub, "validate", aliases=["val"], help="Validate splunk_config.yml")
     p_val.add_argument("config", nargs="?", help="Configuration file (defaults to this environment)")
     p_val.add_argument("--check-licenses", action="store_true", help="Validate configured license files")
@@ -625,7 +717,13 @@ def _run(argv: Sequence[str]) -> int:
         return 0
 
     native_help_only = invoked in NATIVE_FLAG_COMMANDS and set(native) <= {"-h", "--help"}
-    if args.command not in {"init", "agent", "env", "doctor", "features"} and not native_help_only:
+    apps_cmd = getattr(args, "apps_cmd", None)
+    apps_without_env = args.command == "apps" and apps_cmd in {"search", "snippet"}
+    if (
+        args.command not in {"init", "agent", "env", "doctor", "features"}
+        and not native_help_only
+        and not apps_without_env
+    ):
         missing = env_dir_required_error(paths)
         if missing:
             emit(False, error=missing, as_agent=as_agent)
@@ -732,6 +830,48 @@ def _run(argv: Sequence[str]) -> int:
             for key in missing_detail:
                 print("missing detail: %s" % key)
             return 0 if not missing and not missing_detail else 1
+        return 0
+
+    if args.command == "apps":
+        def _roles():
+            raw = getattr(args, "roles", None) or ""
+            return [part.strip() for part in raw.split(",") if part.strip()] or None
+
+        action = args.apps_cmd
+        result = session.apps(
+            action=action,
+            query=" ".join(getattr(args, "query", None) or []),
+            app_id=getattr(args, "app_id", None),
+            limit=int(getattr(args, "limit", 10) or 10),
+            app_type=getattr(args, "app_type", None),
+            kind=getattr(args, "kind", None),
+            version=getattr(args, "version", None) or "latest",
+            roles=_roles(),
+            source=getattr(args, "source", "splunkbase"),
+            extract=bool(getattr(args, "extract", False)),
+            overwrite=bool(getattr(args, "overwrite", False)),
+            confirm=args.yes,
+            agent=as_agent,
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        if not result.ok:
+            print(result.error or "apps failed", file=sys.stderr)
+            return result.code
+        data = result.data or {}
+        if action == "search":
+            from spa.apps import format_search_text
+
+            sys.stdout.write(format_search_text(data.get("query") or "", data.get("apps") or []))
+            return 0
+        if action == "download":
+            if data.get("extracted_path"):
+                print("Extracted: %s" % data["extracted_path"])
+                print("Removed archive after extract")
+            else:
+                print("Downloaded: %s" % (data.get("path") or ""))
+            return 0
+        sys.stdout.write(data.get("snippet") or "")
         return 0
 
     if args.command == "validate":

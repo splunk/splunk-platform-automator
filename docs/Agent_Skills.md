@@ -9,6 +9,7 @@ All skill content lives under **`skills/spa/`**. Each skill is a directory with 
 | Skill | Directory |
 |-------|-----------|
 | Guided `splunk_config.yml` setup | `skills/spa/spa-create-config/` |
+| Splunkbase search / snippets | `skills/spa/spa-apps/` |
 | App-scope test scenarios | `skills/spa/spa-add-test-scenario/` |
 
 Index: [skills/spa/README.md](../skills/spa/README.md). Repo overview: [AGENTS.md](../AGENTS.md).
@@ -19,10 +20,11 @@ The repo includes symlinks so Cursor discovers skills automatically:
 
 ```text
 .cursor/skills/spa-create-config → ../../skills/spa/spa-create-config
+.cursor/skills/spa-apps → ../../skills/spa/spa-apps
 .cursor/skills/spa-add-test-scenario → ../../skills/spa/spa-add-test-scenario
 ```
 
-Use `/spa-create-config` or `/spa-add-test-scenario` in chat.
+Use `/spa-create-config`, `/spa-apps`, or `/spa-add-test-scenario` in chat.
 
 If skills do not appear after clone, recreate symlinks (see [skills/spa/README.md](../skills/spa/README.md#cursor)).
 
@@ -34,6 +36,7 @@ No `.claude/skills/` adapters are committed. Install manually:
 # From SPA repo root — project-scoped
 mkdir -p .claude/skills
 ln -s "$(pwd)/skills/spa/spa-create-config" .claude/skills/spa-create-config
+ln -s "$(pwd)/skills/spa/spa-apps" .claude/skills/spa-apps
 ln -s "$(pwd)/skills/spa/spa-add-test-scenario" .claude/skills/spa-add-test-scenario
 ```
 
@@ -55,6 +58,7 @@ With [skills-ref](https://agentskills.io/specification.md) installed:
 
 ```bash
 skills-ref validate ./skills/spa/spa-create-config
+skills-ref validate ./skills/spa/spa-apps
 skills-ref validate ./skills/spa/spa-add-test-scenario
 ```
 
