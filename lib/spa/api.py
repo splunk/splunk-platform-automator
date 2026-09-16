@@ -200,6 +200,26 @@ class LocalSpaSession:
             return CommandResult(ok=False, error=message, code=2)
         return None
 
+    def _provision_state(self):
+        """Shared provision gate used by deploy, hosts list --status, ssh, and copy."""
+        from spa.providers import lookup_provision_state
+
+        return lookup_provision_state(self.paths)
+
+    def _require_provisioned(
+        self, extra_line: Optional[str] = None
+    ) -> Optional[CommandResult]:
+        """Return a failure when check_provisioned says hosts are not up yet."""
+        state = self._provision_state()
+        if state is None or state.provisioned:
+            return None
+        return CommandResult(
+            ok=False,
+            code=1,
+            error=state.message(extra_line),
+            data=state.payload(),
+        )
+
     def _progress(self, event: Dict[str, Any]) -> None:
         if self.on_progress:
             self.on_progress(jsonable(event))
@@ -507,7 +527,6 @@ class LocalSpaSession:
         from spa.hosts import with_ansible_limit
         from spa.playbooks import PlaybookError, resolve, run_playbook
         from spa.preflight import check_controller_data, controller_data_error
-        from spa.providers import ProviderError, check_provisioned
 
         controller = check_controller_data(self.paths)
         if not controller.ok:
@@ -523,39 +542,13 @@ class LocalSpaSession:
                 },
             )
 
-        provision = None
-        try:
-            provision = check_provisioned(self.paths)
-        except ProviderError:
-            provision = None
-        if (
-            provision is not None
-            and not provision.provisioned
-            and not skip_provision_check
-        ):
-            error = "%s\nRun: %s\nOr: spa deploy --yes --allow-unprovisioned" % (
-                provision.reason,
-                provision.hint,
+        provision = self._provision_state()
+        if not skip_provision_check:
+            blocked = self._require_provisioned(
+                "Or: spa deploy --yes --allow-unprovisioned"
             )
-            if provision.missing:
-                shown = list(provision.missing)
-                extra = ""
-                if len(shown) > 12:
-                    extra = ", +%d more" % (len(shown) - 12)
-                    shown = shown[:12]
-                error = "Missing hosts: %s%s\n%s" % (", ".join(shown), extra, error)
-            return CommandResult(
-                ok=False,
-                code=1,
-                error=error,
-                data={
-                    "provider": provision.provider,
-                    "provisioned": False,
-                    "reason": provision.reason,
-                    "hint": provision.hint,
-                    "missing": list(provision.missing),
-                },
-            )
+            if blocked:
+                return blocked
 
         try:
             resolved = self._resolve_hosts(hosts)
@@ -622,6 +615,9 @@ class LocalSpaSession:
         hosts: Optional[Sequence[str]] = None,
     ) -> CommandResult:
         blocked = self._env_gate()
+        if blocked:
+            return blocked
+        blocked = self._require_provisioned()
         if blocked:
             return blocked
         from spa.confirm import LIFECYCLE_RISK
@@ -701,6 +697,10 @@ class LocalSpaSession:
             )
             if blocked:
                 return blocked
+        if meta and meta.get("requires_provisioned"):
+            blocked = self._require_provisioned()
+            if blocked:
+                return blocked
         rc = run_playbook(playbook, self.paths, args, on_progress=self.on_progress)
         data: Dict[str, Any] = {"playbook": canonical, "path": str(playbook)}
         if renamed_from:
@@ -754,7 +754,7 @@ class LocalSpaSession:
         return CommandResult(ok=True, data=data)
 
     def hosts_list(
-        self, status: bool = False,         hosts: Optional[Sequence[str]] = None
+        self, status: bool = False, hosts: Optional[Sequence[str]] = None
     ) -> CommandResult:
         blocked = self._env_gate()
         if blocked:
@@ -762,12 +762,27 @@ class LocalSpaSession:
         from spa import shell as shell_mod
 
         try:
+            provision = self._provision_state()
+            runtime = not (
+                status and provision is not None and not provision.provisioned
+            )
             resolved = self._resolve_hosts(hosts)
             inventory = shell_mod.get_inventory_data()
             report = shell_mod.filter_report(
-                shell_mod.host_report(inventory, verbose=status, paths=self.paths),
+                shell_mod.host_report(
+                    inventory,
+                    verbose=status,
+                    paths=self.paths,
+                    runtime=runtime,
+                ),
                 resolved,
             )
+            if status and not runtime and provision is not None:
+                report.update(provision.payload())
+                for row in report.get("hosts") or []:
+                    row["provider"] = provision.provider
+                    row["provider_status"] = "unprovisioned"
+                    row["ansible"] = "unprovisioned"
         except HostLookupError as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
         except shell_mod.ShellError as exc:

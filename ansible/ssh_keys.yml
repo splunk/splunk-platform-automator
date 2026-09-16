@@ -5,6 +5,7 @@
 #   description: Copies configured SSH keys onto inventory hosts.
 #   category: operations
 #   risk: mutating
+#   requires_provisioned: true
 #   examples:
 #     - spa run ssh_keys
 # This playbook installs SSH public keys on all managed hosts.

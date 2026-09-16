@@ -5,6 +5,7 @@
 #   description: Writes Splunk configuration as part of deploy_site. Prefer spa deploy for a full site.
 #   category: deployment
 #   risk: mutating
+#   requires_provisioned: true
 #   examples:
 #     - spa run splunk_setup_conf
 # This playbook add/updates splunk config file settings

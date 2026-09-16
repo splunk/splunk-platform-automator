@@ -5,6 +5,7 @@
 #   description: Upgrades Splunk Enterprise packages on the selected hosts.
 #   category: upgrade
 #   risk: mutating
+#   requires_provisioned: true
 #   examples:
 #     - spa run upgrade_splunk --hosts indexer
 # This playbook upgrades the splunk software

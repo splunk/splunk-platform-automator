@@ -5,6 +5,7 @@
 #   description: Confirms app presence, absence, and version on targeted hosts.
 #   category: verification
 #   risk: read-only
+#   requires_provisioned: true
 #   examples:
 #     - spa run verification/verify_app_deployment
 # Verify App Deployment

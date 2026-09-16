@@ -5,6 +5,7 @@
 #   description: Removes the Splunk installation from targeted hosts.
 #   category: operations
 #   risk: destructive
+#   requires_provisioned: true
 #   examples:
 #     - spa run splunk_remove --hosts uf1
 # remove the splunk installation

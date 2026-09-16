@@ -5,6 +5,7 @@
 #   description: Installs, updates, or removes apps according to app deployment config.
 #   category: deployment
 #   risk: mutating
+#   requires_provisioned: true
 #   examples:
 #     - spa run splunk_apps_deploy
 # Deploy Splunk Apps - Orchestrator Playbook

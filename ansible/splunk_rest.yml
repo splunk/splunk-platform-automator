@@ -5,6 +5,7 @@
 #   description: Issues an authenticated REST request against splunkd on the targeted hosts.
 #   category: operations
 #   risk: mutating
+#   requires_provisioned: true
 #   requires:
 #     - At least one host via --hosts
 #   inputs:

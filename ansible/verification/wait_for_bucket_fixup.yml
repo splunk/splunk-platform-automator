@@ -5,6 +5,7 @@
 #   description: Waits until indexer cluster bucket fixup completes.
 #   category: verification
 #   risk: read-only
+#   requires_provisioned: true
 #   examples:
 #     - spa run verification/wait_for_bucket_fixup
 # Wait for bucket fixup tasks to complete on the indexer cluster

@@ -5,6 +5,7 @@
 #   description: Tears down terraform.aws infrastructure. Prefer spa destroy --yes.
 #   category: infrastructure
 #   risk: destructive
+#   requires_provisioned: false
 #   examples:
 #     - spa destroy --yes
 # Destroy AWS infrastructure managed by Terraform

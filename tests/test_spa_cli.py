@@ -187,6 +187,12 @@ def test_lifecycle_commands_dispatch_to_provider(monkeypatch, command):
             return {"instances": []}
 
     monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    from spa.providers import ProvisionState
+
+    monkeypatch.setattr(
+        "spa.providers.check_provisioned",
+        lambda paths: ProvisionState(provider="test", provisioned=True),
+    )
     from spa.cli import main
 
     rc = main(["--no-agent", command, "--yes"])
@@ -280,6 +286,10 @@ def test_run_list_json():
     assert deploy.get("summary")
     assert deploy.get("risk") == "mutating"
     assert deploy.get("requires_confirmation") is True
+    ping = next(row for row in payload["data"] if row["name"] == "verification/ping_hosts")
+    assert ping.get("requires_provisioned") is True
+    aws = next(row for row in payload["data"] if row["name"] == "aws_provision")
+    assert aws.get("requires_provisioned") is False
     ping = next(row for row in payload["data"] if row["name"] == "verification/ping_hosts")
     assert ping.get("requires_confirmation") is False
     names = {row["name"] for row in payload["data"]}
@@ -466,6 +476,12 @@ def _fake_run_playbook(monkeypatch):
         return 0
 
     monkeypatch.setattr("spa.playbooks.run_playbook", fake_run)
+    from spa.providers import ProvisionState
+
+    monkeypatch.setattr(
+        "spa.providers.check_provisioned",
+        lambda paths: ProvisionState(provider="aws", provisioned=True),
+    )
     return called
 
 

@@ -376,7 +376,7 @@ The test suites keep their own `tests/.venv` (pytest dependencies stay out of th
 
 Installers and PS baseconfig apps default to `../Software`. Prefix installs (`~/.local/share/spa`) do **not** look in `~/.local/share/Software`. Set them once with `spa init --software-dir ~/Software ENV` (writes `~/.config/spa/paths.yml`, not secrets) or put `software_dir` in env `.spa.yml`. Local `source: local` apps default to `../apps` (env sibling), then `$SPA_HOME/apps` (`--apps-dir` / `apps_dir`). Resolution order: `SPA_SOFTWARE_DIR` / `SPA_BASECONFIG_DIR` / `SPA_APPS_DIR`, then a **custom** path in `splunk_config.yml` (`splunk_dirs.splunk_software_dir`, `splunk_dirs.splunk_baseconfig_dir`, `splunk_app_deployment.local_app_repo_path`), then env `.spa.yml`, then `~/.config/spa/paths.yml`, then discovery. Built-in defaults such as `../Software` do not override `.spa.yml`. `spa` operator commands require an env dir (`spa init`); unset `SPA_*` still resolves paths to the clone for contributor `ansible-playbook` only.
 
-Day-to-day commands: `spa validate`, `spa provision --yes && spa deploy --yes`, `spa run NAME` (`--yes` when the catalog marks `requires_confirmation`). `spa run --list` shows playbook summaries; `spa run NAME --help` prints risk, confirmation, inputs, and examples without running Ansible. Equivalent: `ansible-playbook` from `$SPA_HOME` after `eval "$(spa env --export)"`. 2.x playbook stems are listed in [Migrate SPA 2.x to 3.0](docs/Migrate_SPA_2x_to_3x.md). The backend boundary and future daemon/GUI design are in [Controller, GUI, and remote-client architecture](docs/Controller_Architecture.md).
+Day-to-day commands: `spa validate`, `spa provision --yes && spa deploy --yes`, `spa run NAME` (`--yes` when the catalog marks `requires_confirmation`; playbooks with `requires_provisioned` need hosts from `spa provision`). `spa run --list` shows playbook summaries; `spa run NAME --help` prints risk, confirmation, inputs, and examples without running Ansible. Equivalent: `ansible-playbook` from `$SPA_HOME` after `eval "$(spa env --export)"`. 2.x playbook stems are listed in [Migrate SPA 2.x to 3.0](docs/Migrate_SPA_2x_to_3x.md). The backend boundary and future daemon/GUI design are in [Controller, GUI, and remote-client architecture](docs/Controller_Architecture.md).
 
 ### Copy a configuration file
 
@@ -537,7 +537,7 @@ spa run create_linkpage
 spa hosts ssh <hostname>
 spa sh <hostname>
 
-# List hosts (add --status for runtime power and connectivity)
+# List hosts (add --status for runtime power and connectivity; skipped until provisioned)
 spa hosts list
 spa hosts list --status
 

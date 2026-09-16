@@ -5,6 +5,7 @@
 #   description: Removes apps with state absent without running a full deploy.
 #   category: operations
 #   risk: destructive
+#   requires_provisioned: true
 #   examples:
 #     - spa run splunk_apps_remove
 # Remove Splunk Apps (processes apps with state: absent from config)

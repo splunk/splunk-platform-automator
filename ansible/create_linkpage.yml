@@ -5,6 +5,7 @@
 #   description: Generates index.html with links to Splunk Web and SSH targets.
 #   category: operations
 #   risk: mutating
+#   requires_provisioned: false
 #   examples:
 #     - spa run create_linkpage
 # This playbook configures navigation page

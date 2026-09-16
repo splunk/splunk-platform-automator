@@ -5,6 +5,7 @@
 #   description: Performs a rolling Splunk upgrade across indexer cluster peers.
 #   category: upgrade
 #   risk: mutating
+#   requires_provisioned: true
 #   examples:
 #     - spa run upgrade_idxc_rolling
 # This playbook does a rolling upgrade of indexer cluster members

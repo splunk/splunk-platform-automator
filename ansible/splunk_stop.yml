@@ -5,6 +5,7 @@
 #   description: Stops the Splunk service on the targeted inventory hosts.
 #   category: operations
 #   risk: mutating
+#   requires_provisioned: true
 #   examples:
 #     - spa run splunk_stop --hosts idx1
 - name: Stop splunk

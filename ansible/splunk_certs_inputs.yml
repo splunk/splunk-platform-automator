@@ -5,6 +5,7 @@
 #   description: Installs or refreshes certificates used by Splunk data inputs.
 #   category: operations
 #   risk: mutating
+#   requires_provisioned: true
 #   examples:
 #     - spa run splunk_certs_inputs --hosts indexer
 # add a splunk web certs if not existing

@@ -217,7 +217,15 @@ def _validate_metadata(data: Dict[str, Any], path: Path) -> Dict[str, Any]:
         "description": description.strip(),
         "category": category,
         "risk": risk,
+        "requires_provisioned": False,
     }
+    provisioned = data.get("requires_provisioned")
+    if provisioned is not None:
+        if provisioned not in (True, False):
+            raise MetadataError(
+                "%s: spa-run.requires_provisioned must be a boolean" % path
+            )
+        out["requires_provisioned"] = provisioned
     requires = data.get("requires")
     if requires is not None:
         if not isinstance(requires, list) or not all(isinstance(item, str) for item in requires):
@@ -245,6 +253,7 @@ def _row_from_stem(stem: str, source: str, path: Path, require_meta: bool) -> Di
         row["metadata"] = None
         row["missing"] = True
         row["requires_confirmation"] = True
+        row["requires_provisioned"] = False
         if require_meta:
             raise MetadataError("Missing # spa-run: metadata in %s" % path)
         return row
@@ -256,6 +265,7 @@ def _row_from_stem(stem: str, source: str, path: Path, require_meta: bool) -> Di
     row["requires_confirmation"] = requires_confirmation(
         risk=meta["risk"], missing_metadata=False
     )
+    row["requires_provisioned"] = bool(meta.get("requires_provisioned"))
     return row
 
 

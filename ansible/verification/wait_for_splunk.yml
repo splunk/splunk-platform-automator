@@ -5,6 +5,7 @@
 #   description: Polls Splunk until the service answers on targeted hosts.
 #   category: verification
 #   risk: read-only
+#   requires_provisioned: true
 #   examples:
 #     - spa run verification/wait_for_splunk
 # Wait for Splunk to be fully running on all hosts

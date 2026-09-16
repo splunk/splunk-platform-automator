@@ -84,6 +84,13 @@ def test_no_tfstate_is_not_provisioned(tmp_path):
     assert state.provider == "aws"
     assert "spa provision" in state.hint
     assert set(state.missing) == {"idx1", "idx2"}
+    text = state.message()
+    assert text.startswith("hosts not provisioned: idx1, idx2")
+    assert "provider: aws" in text
+    assert "Run: spa provision --yes" in text
+    assert "Missing hosts:" not in text
+    assert "terraform.tfstate" not in text
+    assert "Terraform" not in text
 
 
 def test_empty_resources_is_not_provisioned(tmp_path):
@@ -246,6 +253,9 @@ def test_cli_unprovisioned_aws_names_provision(tmp_path):
     assert result.returncode != 0
     assert "spa provision" in result.stderr
     assert "idx1" in result.stderr
+    assert "hosts not provisioned:" in result.stderr
+    assert "provider: aws" in result.stderr
+    assert "terraform.tfstate" not in result.stderr
     assert "Traceback" not in result.stderr
 
 

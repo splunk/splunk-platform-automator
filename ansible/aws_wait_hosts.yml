@@ -5,6 +5,7 @@
 #   description: Checks Terraform inventory hosts for SSH, then runs preflight_deploy.
 #   category: infrastructure
 #   risk: read-only
+#   requires_provisioned: true
 #   examples:
 #     - spa run aws_wait_hosts
 # Wait for AWS hosts to be ready for Ansible provisioning

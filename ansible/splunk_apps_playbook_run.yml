@@ -5,6 +5,7 @@
 #   description: Executes a single app customization playbook without a full app deploy.
 #   category: operations
 #   risk: mutating
+#   requires_provisioned: true
 #   inputs:
 #     - name: apps_playbook
 #       kind: extra-var

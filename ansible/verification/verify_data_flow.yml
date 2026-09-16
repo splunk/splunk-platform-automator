@@ -5,6 +5,7 @@
 #   description: Checks that expected data reaches indexers or search heads.
 #   category: verification
 #   risk: read-only
+#   requires_provisioned: true
 #   examples:
 #     - spa run verification/verify_data_flow
 - name: Verify Data Flow (SPL Search)

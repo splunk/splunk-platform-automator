@@ -5,6 +5,7 @@
 #   description: Prints how apps would be routed without changing hosts.
 #   category: verification
 #   risk: read-only
+#   requires_provisioned: true
 #   examples:
 #     - spa run verification/debug_app_scope
 # Debug App Scope – compute direct, deployment server, deployer, and cluster manager scope and dump to file

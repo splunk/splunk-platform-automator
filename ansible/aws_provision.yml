@@ -5,6 +5,7 @@
 #   description: Generates tfvars and applies terraform.aws. Prefer spa provision --yes.
 #   category: infrastructure
 #   risk: mutating
+#   requires_provisioned: false
 #   examples:
 #     - spa provision --yes
 # Provision AWS infrastructure using Terraform

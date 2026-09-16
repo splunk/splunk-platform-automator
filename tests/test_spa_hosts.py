@@ -209,6 +209,12 @@ def test_cli_copy_recursive_flag_reaches_scp(monkeypatch):
     captured = {}
     monkeypatch.setattr(shell_mod, "run_scp", lambda paths: captured.update(paths=paths))
     monkeypatch.setattr(shell_mod, "apply_spa_env", lambda: None)
+    from spa.providers import ProvisionState
+
+    monkeypatch.setattr(
+        "spa.providers.check_provisioned",
+        lambda paths: ProvisionState(provider="aws", provisioned=True),
+    )
     from spa.cli import main
 
     rc = main(["--no-agent", "hosts", "copy", "-r", "./myapp", "idx1:/tmp/"])
@@ -232,9 +238,164 @@ def test_cli_suspend_passes_hosts(monkeypatch):
 
     monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
     monkeypatch.setattr("spa.shell.get_inventory_data", lambda: INVENTORY)
+    from spa.providers import ProvisionState
+
+    monkeypatch.setattr(
+        "spa.providers.check_provisioned",
+        lambda paths: ProvisionState(provider="test", provisioned=True),
+    )
     from spa.cli import main
 
     rc = main(["--no-agent", "suspend", "--yes", "--hosts", "idx1"])
     assert rc == 0
     assert called["hosts"] == ["idx1"]
     assert called["yes"] is True
+
+
+def _hosts_list_session(tmp_path):
+    from dataclasses import replace
+
+    from spa.api import LocalSpaSession
+    from spa.paths import resolve_spa_paths
+    from spa_testutil import write_min_env
+
+    env = write_min_env(tmp_path)
+    config_path = env / "config" / "splunk_config.yml"
+    config_path.write_text(
+        "terraform:\n  aws:\n    region: eu-central-1\n"
+        "splunk_hosts:\n  - name: idx1\n  - name: idx2\n"
+    )
+    base = resolve_spa_paths(start_dir=PROJECT_ROOT)
+    paths = replace(
+        base,
+        spa_env_dir=env,
+        config_file=config_path,
+        inventory_dir=env / "inventory",
+        terraform_state_dir=env / "terraform" / "aws",
+        roots_differ=True,
+    )
+    return paths, LocalSpaSession(paths=paths)
+
+
+def test_hosts_list_status_skips_runtime_when_unprovisioned(tmp_path, monkeypatch):
+    from spa.shell import format_host_status
+
+    pinged = []
+
+    def boom_ping(hosts):
+        pinged.append(list(hosts))
+        raise AssertionError("ansible ping must not run when unprovisioned")
+
+    _paths, session = _hosts_list_session(tmp_path)
+    monkeypatch.setattr("spa.shell.get_inventory_data", lambda: INVENTORY)
+    monkeypatch.setattr("spa.shell.check_ansible_status", boom_ping)
+    monkeypatch.setattr(
+        "spa.shell.get_provider_status",
+        lambda paths=None: (_ for _ in ()).throw(
+            AssertionError("provider status must not run")
+        ),
+    )
+    result = session.hosts_list(status=True)
+    assert result.ok
+    assert pinged == []
+    assert result.data["provisioned"] is False
+    assert "spa provision" in result.data["hint"]
+    rows = {row["name"]: row for row in result.data["hosts"]}
+    assert rows["idx1"]["ansible"] == "unprovisioned"
+    assert rows["idx1"]["provider_status"] == "unprovisioned"
+    assert format_host_status(rows["idx1"]) == " - unprovisioned"
+
+
+def test_hosts_list_status_pings_when_provisioned(tmp_path, monkeypatch):
+    paths, session = _hosts_list_session(tmp_path)
+    paths.terraform_state_dir.mkdir(parents=True, exist_ok=True)
+    (paths.terraform_state_dir / "terraform.tfstate").write_text(
+        '{"resources": [{"type": "aws_instance"}]}'
+    )
+    paths.inventory_dir.mkdir(parents=True, exist_ok=True)
+    (paths.inventory_dir / "hosts").write_text(
+        'idx1 ansible_host="example.invalid"\nidx2 ansible_host="example.invalid"\n'
+    )
+    pinged = []
+    monkeypatch.setattr("spa.shell.get_inventory_data", lambda: INVENTORY)
+    monkeypatch.setattr(
+        "spa.shell.get_provider_status",
+        lambda paths=None: {"name": "aws", "hosts": {}, "error": None},
+    )
+    monkeypatch.setattr(
+        "spa.shell.check_ansible_status",
+        lambda hosts: pinged.extend(hosts) or {host: "Success" for host in hosts},
+    )
+    result = session.hosts_list(status=True)
+    assert result.ok
+    assert "idx1" in pinged
+    assert result.data.get("provisioned") is not False
+    rows = {row["name"]: row for row in result.data["hosts"]}
+    assert rows["idx1"]["ansible"] == "Success"
+
+
+def test_require_provisioned_is_the_shared_gate(tmp_path):
+    paths, session = _hosts_list_session(tmp_path)
+    blocked = session._require_provisioned()
+    assert blocked is not None
+    assert blocked.ok is False
+    assert blocked.data["provisioned"] is False
+    assert "spa provision" in blocked.error
+    assert "idx1" in blocked.error
+    assert "hosts not provisioned:" in blocked.error
+    assert "provider: aws" in blocked.error
+    assert "terraform.tfstate" not in blocked.error
+    assert "Missing hosts:" not in blocked.error
+
+    paths.terraform_state_dir.mkdir(parents=True, exist_ok=True)
+    (paths.terraform_state_dir / "terraform.tfstate").write_text(
+        '{"resources": [{"type": "aws_instance"}]}'
+    )
+    paths.inventory_dir.mkdir(parents=True, exist_ok=True)
+    (paths.inventory_dir / "hosts").write_text(
+        'idx1 ansible_host="example.invalid"\nidx2 ansible_host="example.invalid"\n'
+    )
+    assert session._require_provisioned() is None
+
+
+def test_suspend_and_run_use_the_provision_gate(tmp_path, monkeypatch):
+    _paths, session = _hosts_list_session(tmp_path)
+    called = []
+    monkeypatch.setattr(
+        "spa.playbooks.run_playbook",
+        lambda *a, **k: called.append(True) or 0,
+    )
+    suspend = session.suspend(confirm=True)
+    assert suspend.ok is False
+    assert "spa provision" in suspend.error
+    ping = session.run("verification/ping_hosts")
+    assert ping.ok is False
+    assert "spa provision" in ping.error
+    assert not called
+    provision = session.run("aws_provision", confirm=True)
+    assert called == [True]
+    assert provision.ok
+
+
+def test_cli_ssh_copy_and_sh_refuse_when_unprovisioned(tmp_path):
+    paths, _session = _hosts_list_session(tmp_path)
+    extra = {
+        "SPA_HOME": str(PROJECT_ROOT),
+        "SPA_ENV_DIR": str(paths.spa_env_dir),
+        "SPLUNK_CONFIG_FILE": str(paths.config_file),
+    }
+    for argv in (
+        ["hosts", "ssh", "idx1"],
+        ["hosts", "copy", "app.tgz", "idx1:/tmp/"],
+        ["sh", "idx1"],
+        ["suspend", "--yes"],
+        ["resume", "--yes"],
+        ["run", "verification/ping_hosts"],
+    ):
+        result = run_spa(["--no-agent", *argv], extra_env=extra, cwd=str(paths.spa_env_dir))
+        assert result.returncode != 0, argv
+        assert "spa provision" in result.stderr, argv
+        assert "hosts not provisioned:" in result.stderr, argv
+        assert "provider: aws" in result.stderr, argv
+        assert "spa run --list" not in result.stderr, argv
+        assert "Traceback" not in result.stderr

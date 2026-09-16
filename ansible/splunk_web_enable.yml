@@ -5,6 +5,7 @@
 #   description: Enables the Splunk Web UI on targeted hosts.
 #   category: operations
 #   risk: mutating
+#   requires_provisioned: true
 #   examples:
 #     - spa run splunk_web_enable --hosts sh1
 - name: Enable splunkweb

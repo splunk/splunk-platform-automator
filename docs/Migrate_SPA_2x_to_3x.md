@@ -123,7 +123,7 @@ Do not delete a live host from `splunk_config.yml` and run `spa provision`. Terr
 
 Unchanged: `deploy_site`, `preflight_deploy`, `setup_common`, `create_linkpage`, `setup_other_roles`, `update_hosts_file`, `upgrade_splunk`.
 
-First-party playbooks carry a `# spa-run:` comment. `spa run NAME --help` prints it; `spa --json run --list` includes `summary` / `risk` / `category`.
+First-party playbooks carry a `# spa-run:` comment. `spa run NAME --help` prints it; `spa --json run --list` includes `summary` / `risk` / `category` / `requires_provisioned`. Set `requires_provisioned: true` when the playbook needs live hosts; omit it (or `false`) for controller-only stems such as `aws_provision`.
 
 ## Already in 2.5.x
 

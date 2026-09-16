@@ -175,6 +175,8 @@ def _print_playbook_help(data: dict) -> None:
         extras.append("confirmation: required")
     elif meta.get("risk") == "read-only":
         extras.append("confirmation: none")
+    if meta.get("requires_provisioned") or data.get("requires_provisioned"):
+        extras.append("provisioned hosts: required")
     if extras:
         print("  %s" % "  |  ".join(extras))
     if data.get("path"):
@@ -263,6 +265,12 @@ def _paths(start_dir: Optional[str] = None):
 
 def _emit_result(result: CommandResult, as_agent: bool) -> int:
     emit(result.ok, data=result.data, error=result.error, as_agent=as_agent)
+    return result.code
+
+
+def _print_command_error(result: CommandResult) -> int:
+    if result.error:
+        print(result.error, file=sys.stderr)
     return result.code
 
 
@@ -522,7 +530,7 @@ def _run(argv: Sequence[str]) -> int:
     p_hosts.add_argument(
         "--status",
         action="store_true",
-        help="Include runtime power state and connectivity",
+        help="Include runtime power state and connectivity (skipped until hosts are provisioned)",
     )
     _add_hosts_option(p_hosts)
     hosts_sub = p_hosts.add_subparsers(dest="hosts_cmd", metavar="ACTION")
@@ -531,7 +539,7 @@ def _run(argv: Sequence[str]) -> int:
     p_hosts_list.add_argument(
         "--status",
         action="store_true",
-        help="Include runtime power state and connectivity",
+        help="Include runtime power state and connectivity (skipped until hosts are provisioned)",
     )
     _add_hosts_option(p_hosts_list)
     p_hosts_ssh = hosts_sub.add_parser("ssh", help="SSH to one host")
@@ -855,7 +863,8 @@ def _run(argv: Sequence[str]) -> int:
             )
         if result.error:
             print(result.error, file=sys.stderr)
-            print("spa run --list for the catalog", file=sys.stderr)
+            if (result.data or {}).get("provisioned") is not False:
+                print("spa run --list for the catalog", file=sys.stderr)
         return result.code
 
     if args.command == "hosts":
@@ -871,31 +880,30 @@ def _run(argv: Sequence[str]) -> int:
                 print(result.error, file=sys.stderr)
                 return result.code
             data = result.data or {}
-            if data.get("provider") and getattr(args, "status", False):
+            show_status = bool(getattr(args, "status", False) or args.verbose)
+            if (
+                data.get("provider")
+                and show_status
+                and data.get("provisioned") is not False
+            ):
                 print("Checking %s status..." % str(data["provider"]).upper(), file=sys.stderr)
             if data.get("provider_error"):
                 print("Warning: %s" % data["provider_error"], file=sys.stderr)
+            from spa.shell import format_host_status
+
             for row in data.get("hosts") or []:
                 roles_str = ""
                 if row.get("roles"):
                     roles_str = " (%s)" % ", ".join(row["roles"])
-                extra_info = ""
-                if row.get("ansible") or row.get("provider_status"):
-                    provider_status = ""
-                    if row.get("provider_status"):
-                        provider_status = ", %s: %s" % (
-                            str(row.get("provider") or "provider").upper(),
-                            row["provider_status"],
-                        )
-                    extra_info = " - Ansible: %s%s" % (
-                        row.get("ansible", "N/A"),
-                        provider_status,
-                    )
+                extra_info = format_host_status(row) if show_status else ""
                 print("%s%s%s" % (row["name"], roles_str, extra_info))
             return 0
         from spa import shell as shell_mod
 
         if hosts_cmd == "ssh":
+            blocked = session._require_provisioned()
+            if blocked:
+                return _print_command_error(blocked)
             try:
                 shell_mod.main([args.name, *list(getattr(args, "ssh_args", []) or []), *extra])
             except SystemExit as exc:
@@ -912,6 +920,9 @@ def _run(argv: Sequence[str]) -> int:
                     file=sys.stderr,
                 )
                 return 1
+            blocked = session._require_provisioned()
+            if blocked:
+                return _print_command_error(blocked)
             try:
                 shell_mod.apply_spa_env()
                 shell_mod.run_scp(paths_args)
@@ -928,6 +939,9 @@ def _run(argv: Sequence[str]) -> int:
         from spa import shell as shell_mod
 
         # SSH/SCP is interactive: no JSON envelope even in agent mode.
+        blocked = session._require_provisioned()
+        if blocked:
+            return _print_command_error(blocked)
         try:
             shell_mod.main([*native, *extra])
         except SystemExit as exc:

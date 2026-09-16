@@ -5,6 +5,7 @@
 #   description: Installs Splunk software from the configured package. Used by deploy_site.
 #   category: deployment
 #   risk: mutating
+#   requires_provisioned: true
 #   examples:
 #     - spa run splunk_install --hosts uf1
 # This playbook installs the splunk software
