@@ -33,7 +33,7 @@ The script then downloads matching `spa-framework-*.tar.gz` from the same latest
 Defaults:
 
 | Setting | Default | Override |
-|---------|---------|----------|
+| --- | --- | --- |
 | Prefix (`SPA_HOME`) | `${XDG_DATA_HOME:-~/.local/share}/spa` | `--prefix` or `SPA_PREFIX` |
 | Wrapper on `PATH` | `~/.local/bin/spa` | `--bindir` or `SPA_BINDIR` |
 | Release | latest | `--version X.Y.Z` or `SPA_VERSION` |
@@ -51,14 +51,7 @@ From a checkout or an already extracted tarball:
 
 `--force` replaces an existing prefix. `--skip-venv` / `--skip-doctor` skip those steps.
 
-Then:
-
-```bash
-spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
-cd ~/envs/my-env
-spa validate
-spa provision --yes && spa deploy --yes
-```
+Then follow the [user-guide start](user-guide.md#start-here). Keep each environment outside the replaceable install prefix.
 
 Splunk installers and PS baseconfig apps stay **out of** `SPA_HOME` (`install.sh --force` deletes the prefix). Point at them once:
 
@@ -110,4 +103,49 @@ source bin/spa_venv.sh --create
 spa doctor
 ```
 
-Put Splunk installers and Professional Services baseconfig apps in a `Software/` directory as a sibling of the env (preferred) or of `SPA_HOME`. See the [README](../README.md#framework-installation).
+Put Splunk installers and Professional Services baseconfig apps in a `Software/` directory as a sibling of the env (preferred) or of `SPA_HOME`. The full path contract is in the [user guide](user-guide.md#understand-the-paths).
+
+## VirtualBox
+
+Needed only when `virtualbox:` is in `splunk_config.yml`. `spa doctor --virtualbox` (or `spa doctor` from a VirtualBox env) checks Vagrant, VirtualBox, the driver match, and `vagrant-vbguest`. `spa hosts ssh` / `copy` use inventory.
+
+**macOS (Homebrew):**
+
+```bash
+brew tap hashicorp/tap
+brew install hashicorp/tap/hashicorp-vagrant
+brew install --cask virtualbox
+vagrant plugin install vagrant-vbguest
+```
+
+Use HashiCorp's Vagrant formula. VirtualBox 7.2 needs Vagrant 2.4+; `spa doctor` fails if there is no driver for your VirtualBox. `vagrant-vbguest` is required so guests get Additions (clock skew without them). If a guest never comes up, destroy that host and run `spa provision --yes` / `spa deploy --yes` again.
+
+**Linux:** [HashiCorp Linux packages](https://developer.hashicorp.com/vagrant/install#linux), then VirtualBox from the distro or [Oracle](https://www.virtualbox.org/wiki/Linux_Downloads):
+
+```bash
+# Debian/Ubuntu (after adding the HashiCorp apt repo)
+sudo apt-get update && sudo apt-get install -y vagrant
+sudo apt-get install -y virtualbox
+vagrant plugin install vagrant-vbguest
+
+# Fedora / RHEL (after adding the HashiCorp yum repo)
+sudo dnf install -y vagrant VirtualBox
+vagrant plugin install vagrant-vbguest
+```
+
+## WSL2
+
+[Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/install) can run SPA and drive VirtualBox on the Windows host.
+
+1. Add this to `/etc/wsl.conf`, then run `wsl --shutdown` from Windows:
+
+   ```ini
+   [automount]
+   options = "metadata"
+   ```
+
+2. Install the `virtualbox_WSL2` Vagrant plugin. This is a host prerequisite reported by `spa doctor`, not a daily operator command.
+3. Export `VAGRANT_WSL_ENABLE_WINDOWS_ACCESS=1` and add the Windows VirtualBox directory (commonly `/mnt/c/Program Files/Oracle/VirtualBox`) to WSL `PATH`.
+
+Day-to-day operation remains `spa provision`, `spa hosts ssh`, and the other commands in the [user guide](user-guide.md). Custom Python or Ansible pins for contributors: [contributing](contributing.md). Ansible comes from `spa_venv`, not a system install.
+

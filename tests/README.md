@@ -286,7 +286,7 @@ Use `-k` with test names to run only specific steps:
 
 ### App deployment
 
-Step **test_11** runs `ansible/splunk_apps_deploy.yml`; **test_17** runs app deployment verification. For manual scenarios (DS vs direct, ITSI, cache cleanup), see [App Deployment Testing](../docs/App_Deployment_Testing.md).
+Step **test_11** runs `ansible/splunk_apps_deploy.yml`; **test_17** runs app deployment verification. Operator behavior and routing are summarized in [Apps](../docs/apps.md); this test guide owns manual DS, direct, ITSI, and cache-cleanup scenarios.
 
 ## Adding New Test Configurations
 

@@ -91,5 +91,5 @@ Use lookup templates from examples — never substitute live env values into sni
 
 ## If credentials missing
 
-- Splunkbase: [docs/App_Deployment.md](docs/App_Deployment.md) — user exports locally; do not ask them to paste passwords in chat.
+- Splunkbase: [docs/apps.md](../../../../docs/apps.md) — user exports locally; do not ask them to paste passwords in chat.
 - AWS: [aws-without-credentials.md](aws-without-credentials.md) — static AMI fallback; user configures profile or env before provision.

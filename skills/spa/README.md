@@ -10,7 +10,7 @@ Framework-neutral [Agent Skills](https://agentskills.io/specification.md) packag
 | [spa-apps](spa-apps/) | Splunkbase search, kind-aware apps[] snippets, optional download |
 | [spa-add-test-scenario](spa-add-test-scenario/) | Distill app-scope scenario tests under `tests/configs/app_scope/` |
 
-Human guide: [docs/Splunk_Config_Guided_Setup.md](../docs/Splunk_Config_Guided_Setup.md). Repo index: [AGENTS.md](../AGENTS.md).
+Human guide: [docs/user-guide.md](../../docs/user-guide.md). Repo index: [AGENTS.md](../../AGENTS.md).
 
 ## Cursor
 

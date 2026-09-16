@@ -1,12 +1,12 @@
 # Migrate existing Splunk Platform Automator Environments from 2.x to 3.0
 
-3.0 is not a Splunk-config rewrite. Day-to-day `ansible-playbook` from a clone still works when `SPA_HOME` and `SPA_ENV_DIR` are the same directory (contributor escape hatch). **`spa` does not.** Operators always use an env dir (`spa init`). The git clone is `SPA_HOME` (framework) only.
+3.0 is not a Splunk-config rewrite. Operators always use an env dir (`spa init`) and the **`spa`** CLI. The git clone is `SPA_HOME` (framework) only; clone-equal `SPA_HOME`/`SPA_ENV_DIR` is not valid for operator `spa`.
 
-Keep this page as the short “what do I change?” list. Full history is in [CHANGELOG.md](../CHANGELOG.md). 1.x → 2.x inventory work is still [Migrate_SPA_1x_to_2x.md](Migrate_SPA_1x_to_2x.md).
+This is the short “what do I change?” list. Full release history is in [CHANGELOG.md](../CHANGELOG.md).
 
 ## Commands and `bin/`
 
-Only `bin/spa` and `bin/spa_venv.sh` remain in a clone. Operators can install a prefix with `install.sh` instead of cloning ([docs/Install.md](Install.md)). Source the venv script; do not invoke the old wrappers.
+Only `bin/spa` and `bin/spa_venv.sh` remain in a clone. Operators can install a prefix with `install.sh` instead of cloning ([Install](install.md)). Source the venv script; do not invoke the old wrappers.
 
 | 2.x | 3.0 |
 | --- | --- |
@@ -34,7 +34,7 @@ Skills and agents should use full names (`spa hosts ssh`, `spa validate`), not `
 
 - **`SPA_HOME`** is the framework (playbooks, Terraform modules, `Vagrantfile`, `bin/`, skills). A clone is develop-only for `spa`; operators use a prefix or clone as home, never as the env.
 - **`SPA_ENV_DIR`** is one Splunk environment (`config/splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `.vagrant/`, optional `saved_base_config_apps/`). Do not copy `ansible/` into the env. Do not put a Vagrantfile in the env.
-- Unset both → the git clone for path resolution and `ansible-playbook`. That clone-equal layout is **not** valid for `spa` (except `spa --help`, `spa init`, `spa agent schema`, `spa env --export`, `spa doctor`, `spa features`, `spa apps search` / `snippet`).
+- Unset both → the git clone for path resolution. That clone-equal layout is **not** valid for `spa` (except `spa --help`, `spa init`, `spa agent schema`, `spa env --export`, `spa doctor`, `spa features`, `spa apps search` / `snippet`).
 - When they differ, Terraform **modules** stay under `$SPA_HOME/terraform/aws`; **state** stays in the env. VirtualBox uses `VAGRANT_CWD=$SPA_HOME` and `VAGRANT_DOTFILE_PATH=$SPA_ENV_DIR/.vagrant`.
 - `../Software` and `../apps` prefer a sibling of the **env**, then the clone.
 - Env dirs get an `.envrc`. `spa` is `$SPA_HOME/bin/spa` on `PATH`, not a per-env `bin/`.
@@ -68,18 +68,9 @@ source bin/spa_venv.sh --create
 
 - `spa provision`, `spa destroy`, `spa suspend`, and `spa resume` follow `splunk_config.yml`: **`terraform.aws`** or **`virtualbox:`**. Same env-dir loop for both.
 - A top-level `aws:` block is inventory-only (legacy vagrant-aws). vagrant-aws is removed in 3.0; use Terraform AWS for cloud.
-- VirtualBox: `spa init --example single_node --provider virtualbox ~/envs/vbox` then `spa provision --yes && spa deploy --yes`. Env dirs have no `Vagrantfile`.
+- VirtualBox env dirs have no `Vagrantfile`; provision and deploy through `spa`.
 
-Recommended loop (AWS or VirtualBox):
-
-```bash
-spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
-cd ~/envs/my-env
-spa validate
-spa provision --yes && spa deploy --yes
-```
-
-`ansible-playbook ansible/deploy_site.yml` still works from a clone after `eval "$(spa env --export)"`. Default docs and agents use `spa`.
+Playbooks are invoked with `spa run NAME` (discover: `spa run --list`). Site deploy is `spa deploy --yes`.
 
 ## Host targeting
 
@@ -131,3 +122,23 @@ If you jump from an older 2.x (before 2.5) to 3.0:
 
 - `splunk_license_file` and a `license_manager` host are both required (and the reverse).
 - Deploy runs a fact-cache preflight (`spa_preflight_deploy`, default on).
+
+## Coming from 1.x
+
+SPA 2.0 introduced a dynamic Ansible inventory plugin and moved topology into `splunk_config.yml`. Before going to 3.0, first ensure the old config includes `plugin: splunk-platform-automator` and that values formerly held in static `inventory/group*` files are represented in config.
+
+For VirtualBox, `start_ip` moved from `general` to `virtualbox`. For old Ansible-only environments, export the effective inventory before migration and compare it with `spa hosts list` afterwards.
+
+The 1.x AWS path depended on vagrant-aws tags and is no longer an operator path. Do not reproduce the old tagging/Vagrant procedure on 3.0. Inventory-only AWS leftovers must be redesigned as `terraform.aws` or registered as external hosts; see [AWS](aws.md).
+
+## Splunk 9 terminology
+
+Update old config and local apps to current Splunk terminology:
+
+- role `cluster_master` → `cluster_manager`
+- role `license_master` → `license_manager`
+- clustering mode `master`/`slave` → `manager`/`peer`
+- `master_uri` → `manager_uri`
+- `clustermaster` stanzas → `clustermanager`
+
+SPA applies current terms in generated configuration for Splunk 9+, but custom/local apps remain your responsibility.

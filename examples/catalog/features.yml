@@ -1099,7 +1099,7 @@ features:
       After deploy, remove files from the app, write local/ conf (local_configs, same shape
       as splunk_conf), or run a playbook/role (run_playbook, run_playbook_after_restart,
       run_role). List the same app twice with different target_roles to vary customizations
-      per role. Spec: docs/App_Deployment_Customizations.md.
+      per role. Guide: docs/apps.md#customize-an-app.
     when_not_to_use: >-
       ITSI content-pack API install uses content_pack_apps customizations, not this record
       alone. Do not invent playbook paths.

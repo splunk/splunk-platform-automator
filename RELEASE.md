@@ -66,7 +66,7 @@ Merged PR head branches are deleted automatically (`delete_branch_on_merge` on t
 
 ## Manual lab / AWS (not in CI)
 
-Run these when the delta warrants it (app routing, ITSI, Terraform), not for every patch. See [docs/App_Deployment_Testing.md](docs/App_Deployment_Testing.md).
+Run these when the delta warrants it (app routing, ITSI, Terraform), not for every patch. See [tests/README.md](tests/README.md).
 
 ```bash
 ansible-playbook ansible/splunk_apps_deploy.yml -v
