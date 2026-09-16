@@ -353,7 +353,18 @@ def collect_checks(
             text=True,
         ).stdout.strip()
         venv_ok = subprocess.run([py, "-c", "import venv"], capture_output=True).returncode == 0
-        if venv_ok:
+        try:
+            major, minor = (int(p) for p in ver.split(".")[:2])
+        except ValueError:
+            major, minor = (0, 0)
+        if (major, minor) < (3, 9):
+            rec(
+                "error",
+                "python",
+                "python3 is %s; SPA needs 3.9+ with the venv module" % (ver or "unknown"),
+                _brew_hint("python3"),
+            )
+        elif venv_ok:
             rec("ok", "python", "python3 (%s) with venv module" % ver)
         else:
             rec("error", "python", "python3 found but venv module missing", _brew_hint("python3"))

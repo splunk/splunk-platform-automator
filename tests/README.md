@@ -58,6 +58,7 @@ tests/
 ├── test_spa_venv.py               # bin/spa_venv.sh resolution + env .envrc
 ├── test_spa_install.py            # framework tarball + install.sh
 ├── test_changelog_notes.py    # CHANGELOG section extractor for releases
+├── test_docs.py               # Canonical docs filenames, relative links, commands.md drift
 ├── test_verification.py       # Phase 2: Health verification tests
 ├── run_deployment_tests.sh    # Helper script for deployment tests
 ├── run_app_deployment_tests.sh # Helper script for app deployment tests
@@ -286,7 +287,7 @@ Use `-k` with test names to run only specific steps:
 
 ### App deployment
 
-Step **test_11** runs `ansible/splunk_apps_deploy.yml`; **test_17** runs app deployment verification. For manual scenarios (DS vs direct, ITSI, cache cleanup), see [App Deployment Testing](../docs/App_Deployment_Testing.md).
+Step **test_11** runs `ansible/splunk_apps_deploy.yml`; **test_17** runs app deployment verification. Operator behavior and routing are summarized in [Apps](../docs/apps.md); this test guide owns manual DS, direct, ITSI, and cache-cleanup scenarios.
 
 ## Adding New Test Configurations
 

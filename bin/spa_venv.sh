@@ -154,6 +154,10 @@ if [[ $_spa_venv_rc -eq 0 && "$_spa_venv_mode" != "done" && "$_spa_venv_mode" !=
             _spa_venv_mode="done"
         elif ! command -v "$_spa_venv_python" >/dev/null 2>&1; then
             _spa_venv_fail "spa_venv: interpreter not found: ${_spa_venv_python}"
+        elif ! "$_spa_venv_python" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)'; then
+            _spa_venv_fail "spa_venv: ${_spa_venv_python} must be Python 3.9+ with the venv module"
+        elif ! "$_spa_venv_python" -c 'import venv'; then
+            _spa_venv_fail "spa_venv: ${_spa_venv_python} has no venv module (install python3-venv / python3)"
         else
             echo "Creating virtual environment: ${_spa_venv_dir}"
             if ! "$_spa_venv_python" -m venv "$_spa_venv_dir"; then

@@ -31,7 +31,7 @@ Ship M1–M3 on one integration branch, then **3.0** when that branch is ready t
 - [x] Mutating ops confirm in `LocalSpaSession` (named human prompt; agents/GUI pass `--yes` and never `input()`) (**M2**)
 - [x] `spa suspend` / `spa resume` for AWS compute (keep Terraform state and EBS; resume refreshes inventory addresses) (**M2**)
 - [x] Release tarball of the framework (exclude `tests/`, `.git`, lab `config/`) (**M3**)
-- [x] `install.sh` (GitHub `releases/latest/download/install.sh` piped to bash, or `gh release download` when private): default prefix `${XDG_DATA_HOME:-~/.local/share}/spa`, launcher `~/.local/bin/spa`, or `--prefix` / `SPA_PREFIX`; creates the venv (**M3**)
+- [x] `install.sh` (GitHub `releases/latest/download/install.sh` piped to sh): default prefix `${XDG_DATA_HOME:-~/.local/share}/spa`, launcher `~/.local/bin/spa`, or `--prefix` / `SPA_PREFIX`; creates the venv (**M3**)
 - [x] Documented extract-anywhere: unpack the tarball, set `SPA_HOME`, run `spa` from that tree (**M3**)
 - [x] User-level Software / baseconfig / apps pointers (`~/.config/spa/paths.yml`; `spa init --software-dir`) so prefix installs do not look next to `~/.local/share/spa` — [#73](https://github.com/splunk/splunk-platform-automator/issues/73)
 - [x] `install.sh --uninstall` (prefix + launcher only; never env dirs / Terraform / AWS) — [#72](https://github.com/splunk/splunk-platform-automator/issues/72)
@@ -43,9 +43,9 @@ Ship M1–M3 on one integration branch, then **3.0** when that branch is ready t
 
 Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JSON envelope, `agent schema`, `-y`).
 
-- [x] Portable skills under [skills/spa/](skills/spa/) + Cursor `/spa-create-config` ([docs/Agent_Skills.md](docs/Agent_Skills.md))
+- [x] Portable skills under [skills/spa/](skills/spa/) + Cursor `/spa-create-config` ([docs/contributing.md](docs/contributing.md#agent-skills))
 - [x] Agent-mode `spa`: auto-detect agent env, JSON envelope with `schema_version`, `spa agent schema`, `--agent` / `--no-agent`, `-y` for destructive ops, parse-error JSON
-- [x] `spa.api` backend session (`open_session` / `LocalSpaSession`) for the CLI and a future GUI; optional remote daemon later; skills stay on `spa`. See the [controller, GUI, and remote-client architecture contract](docs/Controller_Architecture.md).
+- [x] `spa.api` backend session (`open_session` / `LocalSpaSession`) for the CLI and a future GUI; optional remote daemon later; skills stay on `spa`. See the [controller architecture](docs/contributing.md#controller-architecture).
 - [x] Fold SSH/SCP into `spa hosts` (`list` / `ssh` / `copy`); `spa shell` / `spa sh` remain SSH aliases (no `spa shell -l`)
 - [x] Map top-level [ansible/](ansible/) playbooks to `spa run` (and named `provision` / `deploy` / `destroy`) — every playbook is a main entry point; do not require raw `ansible-playbook` for day-to-day use. Discover with `spa run --list`; inspect with `spa run NAME --help`.
 - [ ] Env-dir playbook/Terraform logs + compact progress (full transcript in `$SPA_ENV_DIR/logs/`; agents get a small envelope + `log` path, not the dump) — [#71](https://github.com/splunk/splunk-platform-automator/issues/71)
@@ -76,15 +76,18 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 ## Docs
 
 - [ ] Slim README + structured user guide + rewrite [AGENTS.md](AGENTS.md) — [#61](https://github.com/splunk/splunk-platform-automator/issues/61)
+- [ ] Production-ready setup: document must-settings (vs lab defaults); teach them in a skill/catalog; enforce with `spa validate` profile or schema (`deployment_intent: production`). Lab validate stays permissive. Not capacity planning. Secrets/TLS/RF-SF/licenses/network — never print secrets. — [#80](https://github.com/splunk/splunk-platform-automator/issues/80)
+- [ ] Docs / operator CLI follow-ups (not in #61): VirtualBox snapshots / reload after Vagrantfile changes (`spa snapshot` / `spa reload`); extra forwarded ports, `ssh-config`, VirtualBox GUI; Windows guests through `spa` (operator path is Linux AWS/VirtualBox; historical box notes are in [contributing](docs/contributing.md#windows-box-maintenance)). Do not document raw `vagrant` / `terraform` / `ansible-playbook` as the operator interface.
+- [ ] `spa apps versions` (list Splunkbase versions); `spa apps download --version` already exists
 
 ## Provisioning
 
-- [x] Terraform AWS + `spa aws` ([docs/Ansible_Terraform_AWS_Integration.md](docs/Ansible_Terraform_AWS_Integration.md))
+- [x] Terraform AWS + `spa aws` ([docs/aws.md](docs/aws.md))
 - [x] VirtualBox spa provider (`spa provision` / `destroy` / suspend-resume via Vagrant); remove unmaintained vagrant-aws — [#56](https://github.com/splunk/splunk-platform-automator/issues/56)
 - [ ] Shared network access groups (provider-agnostic CLI; AWS first; SPA_HOME state; env destroy does not delete) — [#58](https://github.com/splunk/splunk-platform-automator/issues/58)
 - [ ] External / BYO SSH hosts (register only; mixed with managed; never terminate the real machine) — [#57](https://github.com/splunk/splunk-platform-automator/issues/57). `spa deploy --allow-unprovisioned` is the interim escape hatch until BYO hosts are first-class.
 - [ ] Splunk Operator for Kubernetes: `splunk_config.yml` → Operator CRs (IndexerCluster, SearchHeadCluster, ClusterManager, LicenseManager, MonitoringConsole, Standalone) plus namespace, storage, and image settings
-- [ ] Windows Universal Forwarder on AWS (AMI + WinRM); VirtualBox UF role exists but needs an undocumented box ([docs/Setup_Windows_Box.md](docs/Setup_Windows_Box.md))
+- [ ] Windows Universal Forwarder on AWS (AMI + WinRM); VirtualBox UF role exists but needs a supported SPA workflow (background in [docs/contributing.md](docs/contributing.md#windows-box-maintenance))
 
 ## Splunk topology
 
@@ -103,7 +106,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 
 ## Apps and premium apps
 
-- [x] Generic Splunkbase / local / URL apps + customizations ([docs/App_Deployment.md](docs/App_Deployment.md))
+- [x] Generic Splunkbase / local / URL apps + customizations ([docs/apps.md](docs/apps.md))
 - [x] ITSI premium app + content packs (`premium_app: itsi`)
 - [ ] `premium_app: es` (Enterprise Security + CIM / TA layout) — [#60](https://github.com/splunk/splunk-platform-automator/issues/60)
 - [ ] More curated app playbooks (add `# spa-app:` under `ansible/apps_playbooks/`; snippet/`spa run splunk_apps_playbook_run --help` pick them up)

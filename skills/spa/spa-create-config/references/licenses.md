@@ -2,7 +2,7 @@
 
 Splunk license files live on the **Ansible controller** in `splunk_software_dir` (default `../Software` relative to the repo). The config references **basename only** — files are not copied by path from arbitrary locations.
 
-See [README.md](README.md) Framework Installation — link or copy `Splunk_Enterprise.lic` into `Software`.
+See [Install](../../../../docs/install.md) — link or copy `Splunk_Enterprise.lic` into `Software`.
 
 ## Discover available licenses
 

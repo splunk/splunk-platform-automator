@@ -20,7 +20,7 @@ Edit `config/splunk_config.yml` and add/update the `terraform.aws` section (see 
 ## Step 2: Preview Infrastructure Changes
 
 ```bash
-spa provision -- --tags plan
+spa provision --yes -- --tags plan
 ```
 
 This generates `terraform/aws/terraform.tfvars`, runs `terraform init` / `plan`, and does **not** apply.
@@ -28,7 +28,7 @@ This generates `terraform/aws/terraform.tfvars`, runs `terraform init` / `plan`,
 ## Step 3: Provision Infrastructure
 
 ```bash
-spa provision
+spa provision --yes
 ```
 
 Non-interactive (agents / CI): `spa provision --yes && spa deploy --yes`. `--yes` after the subcommand confirms the action (`-y` is the short form; `spa -y provision` also works). Agents must pass `--yes`; they never answer the human `Proceed? [y/N]` prompt.
@@ -42,7 +42,7 @@ This will:
 5. Create EC2 instances and `inventory/hosts`
 6. Wait for SSH by default
 
-Skip SSH wait: `spa provision -- -e wait_for_ssh=false`.
+Skip SSH wait: `spa provision --yes -- -e wait_for_ssh=false`.
 
 ## Step 4: Verify Host Readiness (optional)
 
@@ -106,9 +106,9 @@ In agent mode, destroy requires `-y` / `--yes`. This permanently deletes EC2 ins
 |---------|---------|
 | `spa doctor` | Host prerequisites |
 | `spa aws --check-auth --json` | Credential probe (no secret values) |
-| `spa provision -- --tags plan` | Preview changes |
+| `spa provision --yes -- --tags plan` | Preview changes |
 | `spa provision --yes && spa deploy --yes` | Provision then deploy (stop if provision fails) |
-| `spa provision` / `spa provision --yes` | Provision infrastructure only |
+| `spa provision --yes` | Provision infrastructure only |
 | `spa run aws_wait_hosts` | Verify host readiness |
 | `spa deploy` | Deploy Splunk (hosts already provisioned); `--hosts` for a subset |
 | `spa suspend --yes` | Stop EC2 instances; keep state and disks; optional `--hosts` |

@@ -2,7 +2,7 @@
 
 Load [spa-apps](../../spa-apps/SKILL.md) for this phase. Search Splunkbase with `spa --json apps search QUERY` (technology keywords), then **one** `spa --json apps snippet APP_ID` without `--customize`. If `playbooks` is set, ask before `snippet --customize`. Merge the printed snippet into `splunk_config.yml` (until `spa config`, #76). Do not guess `app_id`. Do not open splunkbase.com first.
 
-Deep customization: [docs/App_Deployment_Customizations.md](../../../../docs/App_Deployment_Customizations.md) and `spa --json features show setting.apps.customizations`.
+Deep customization: [docs/apps.md](../../../../docs/apps.md#customize-an-app) and `spa --json features show setting.apps.customizations`.
 
 ## 1. Deploy apps?
 
@@ -22,7 +22,7 @@ splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
 splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
 ```
 
-See [docs/App_Deployment.md](../../../../docs/App_Deployment.md). Optional vault in config. Do not verify with `echo $SPLUNKBASE_*`.
+See [docs/apps.md](../../../../docs/apps.md). Optional vault in config. Do not verify with `echo $SPLUNKBASE_*`.
 
 ## 3. App sources
 

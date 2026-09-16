@@ -189,6 +189,8 @@ HELP_CONTRACTS = [
             "spa agent schema",
             "requires_confirmation",
             "spa --json run --list",
+            "--markdown",
+            "docs/commands.md",
         ],
     ),
 ]
@@ -294,3 +296,4 @@ def test_agent_schema_is_complete_and_documented():
     assert "--customize" in {flag["long"] for flag in by_name["apps snippet"]["flags"]}
     search_flags = {flag["long"] for flag in by_name["apps search"]["flags"]}
     assert {"--limit", "--type", "--kind"} <= search_flags
+    assert "--markdown" in {flag["long"] for flag in by_name["agent schema"]["flags"]}

@@ -17,16 +17,16 @@ Curated links for the `spa-create-config` workflow. Use for user handoff and hea
 ## Performance (guidance only — not auto-sizing)
 
 - [Summary of performance recommendations](https://help.splunk.com/en/splunk-enterprise/get-started/deployment-capacity-manual/10.2/performance-reference/summary-of-performance-recommendations) — ingest and concurrent search bands; defer production sizing to PS / capacity planning.
-- RF / SF calculation rules: [rf-sf-sizing.md](references/rf-sf-sizing.md) in this skill.
+- RF / SF calculation rules: [rf-sf-sizing.md](rf-sf-sizing.md) in this skill.
 
 ## Splunk Platform Automator (SPA)
 
 - `spa --json features list|show|search` — [examples/catalog/features.yml](../../../../examples/catalog/features.yml)
 - [configuration_description.yml](../../../../examples/configuration_description.yml) — pointer dump (prefer the catalog)
-- [Splunk Config Guided Setup](docs/Splunk_Config_Guided_Setup.md) — human-readable mirror of this skill
-- [Ansible-Terraform AWS Integration](docs/Ansible_Terraform_AWS_Integration.md) — provision and deploy on AWS
-- [App Deployment](docs/App_Deployment.md) — Splunkbase credentials and app blocks
-- [App Deployment Guide](docs/App_Deployment_Guide.md) — deep app customization (out of scope for basic app phase)
+- [User guide](../../../../docs/user-guide.md) — human operator journey
+- [AWS](../../../../docs/aws.md) — provision and deploy on AWS
+- [Apps](../../../../docs/apps.md) — routing, Splunkbase, premium apps, and customization
+- [Secrets](../../../../docs/secrets.md) — environment and vault handling
 
 ## Post-deploy reminders (handoff only)
 

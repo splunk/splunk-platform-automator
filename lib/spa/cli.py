@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
-from spa.agent import agent_mode, emit
+from spa.agent import agent_mode, emit, format_schema_markdown
 from spa.api import CommandResult, open_session
 from spa.apps import SEARCH_KINDS, SEARCH_TYPES
 from spa.executil import ToolNotFound, apply_paths_env
@@ -23,6 +23,7 @@ HOSTS_FLAG_HELP = "only these hosts (names or roles from this env)"
 AGENT_EXAMPLES = """examples:
   spa agent schema       command schema (name, summary, flags, requires_confirmation)
   spa agent              same as spa agent schema
+  spa --no-agent agent schema --markdown  regenerate docs/commands.md
   spa --json run --list  playbook catalog, incl. per-playbook requires_confirmation
 
 Commands whose schema entry sets requires_confirmation need -y/--yes in agent
@@ -697,8 +698,9 @@ def _run(argv: Sequence[str]) -> int:
         description="Machine-readable contract for agents and skills: every command with\n"
         "its summary, flags, and whether it requires -y/--yes.\n"
         "\n"
-        "Always prints the JSON envelope, with or without --json, because only agents\n"
-        "read it. Playbooks are not in this schema; list them with spa --json run --list.",
+        "JSON envelope by default (with or without --json). Human --markdown prints the\n"
+        "catalog used for docs/commands.md; --json / agent mode still JSON.\n"
+        "Playbooks are not in this schema; list them with spa --json run --list.",
         epilog=AGENT_EXAMPLES,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -709,6 +711,11 @@ def _run(argv: Sequence[str]) -> int:
         choices=["schema"],
         metavar="ACTION",
         help="schema (the default and only action today)",
+    )
+    p_agent.add_argument(
+        "--markdown",
+        action="store_true",
+        help="Print GitHub-flavored markdown instead of JSON (human stdout; regenerate docs/commands.md)",
     )
 
     args = parser.parse_args(head)
@@ -748,6 +755,9 @@ def _run(argv: Sequence[str]) -> int:
 
     if args.command == "agent":
         result = session.schema()
+        if getattr(args, "markdown", False) and not as_agent:
+            sys.stdout.write(format_schema_markdown(result.data))
+            return 0
         emit(True, data=result.data, as_agent=True)
         return 0
 
