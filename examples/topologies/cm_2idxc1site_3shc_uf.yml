@@ -1,10 +1,10 @@
 ---
-# splunk_config.yml
+# Topology only — compose with: spa init --example cm_2idxc1site_3shc_uf --provider aws|virtualbox ENV
+# SVA: C3 / C13
+# Lab: CM + IDXC + SHC (3) + deployer/DS + UF.
+# Do not add virtualbox:, terraform:, os:, or apps here.
 plugin: splunk-platform-automator
 
-virtualbox:
-#  box: "centos/7" # Default
-#  box: "ubuntu/xenial64"
 
 # Splunk default settings
 splunk_defaults:

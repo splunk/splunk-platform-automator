@@ -41,5 +41,5 @@ If intent is **playbook/inventory validation only**:
 
 - SVA code (or explicit lab compromise) chosen
 - RF/SF and min indexer counts checked ([sva-topology-map.md](sva-topology-map.md) checklist)
-- Closest `examples/*.yml` identified for copy baseline
+- Closest `examples/topologies/*.yml` identified for copy baseline
 - Known SVA gaps listed for header comment

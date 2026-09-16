@@ -1,10 +1,10 @@
 ---
-# splunk_config.yml
+# Topology only — compose with: spa init --example idx_sh_uf --provider aws|virtualbox ENV
+# SVA: D1
+# Lab: Standalone indexer + search head + UF.
+# Do not add virtualbox:, terraform:, os:, or apps here.
 plugin: splunk-platform-automator
 
-virtualbox:
-#  box: "centos/7" # Default
-#  box: "ubuntu/xenial64"
 
 # Splunk default settings
 splunk_defaults:

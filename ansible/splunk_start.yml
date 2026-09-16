@@ -5,6 +5,7 @@
 #   description: Starts the Splunk service using inventory connection settings.
 #   category: operations
 #   risk: mutating
+#   requires_provisioned: true
 #   examples:
 #     - spa run splunk_start --hosts indexer
 - name: Start splunk

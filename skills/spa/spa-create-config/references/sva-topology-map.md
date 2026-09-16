@@ -2,19 +2,19 @@
 
 SVA codes describe **topology**, not sizing. Lab configs may diverge from full SVA DR (flag gaps in header).
 
-| SVA code | SPA example | Pattern |
+| SVA code | SPA topology | Pattern |
 |----------|-------------|---------|
-| S1 | `examples/single_node.yml` | Single host: indexer + search_head (+ optional LM) |
-| D1 | `examples/idx_sh_uf.yml` | Standalone indexers + SH |
-| C1 / C11 | `examples/cm_2idxc_sh_uf.yml` (VirtualBox); `examples/cm_2idxc_sh_uf_aws.yml` (AWS) | CM + indexers + standalone SH |
-| C3 / C13 | `examples/cm_2idxc1site_3shc_uf.yml` | CM + indexers + SHC + deployer |
-| M2 / M12 | `examples/4idxc2site_sh.yml` | Multisite IDXC + SH (standalone) |
-| M3 / M13 | `examples/cm_4idxc2site_3shc_ds_uf.yml` | Multisite IDXC + SHC per site |
+| S1 | `examples/topologies/single_node.yml` | Single host: indexer + search_head (+ optional LM) |
+| D1 | `examples/topologies/idx_sh_uf.yml` | Standalone indexers + SH |
+| C1 / C11 | `examples/topologies/cm_2idxc_sh_uf.yml` | CM + indexers + standalone SH. Compose: `spa init --example cm_2idxc_sh_uf --provider aws\|virtualbox` |
+| C3 / C13 | `examples/topologies/cm_2idxc1site_3shc_uf.yml` | CM + indexers + SHC + deployer |
+| M2 / M12 | `examples/topologies/4idxc2site_sh.yml` | Multisite IDXC + SH (standalone) |
+| M3 / M13 | `examples/topologies/cm_4idxc2site_3shc_ds_uf.yml` | Multisite IDXC + SHC per site |
 | M4 / M14 | SVA documentation | Stretched SHC — escalate to SVA + PS |
 
 ## Multisite IDXC defaults (lab)
 
-Typical from `examples/4idxc2site_sh.yml`:
+Typical from `examples/topologies/4idxc2site_sh.yml`:
 
 ```yaml
 splunk_idxclusters:
@@ -37,8 +37,8 @@ Use integer factors on `splunk_idxclusters` (not `idxc_site_*`).
 
 | SVA code | Lab RF | Lab SF | Min indexer peers | Copy from |
 |----------|--------|--------|-------------------|-----------|
-| C1 / C11 | `2` | `2` | **2** (`idxc_rf` ≤ peer count) | `examples/cm_2idxc_sh_uf.yml` |
-| C3 / C13 | `2` | `2` | **2** (add SHC separately) | `examples/cm_2idxc1site_3shc_uf.yml` |
+| C1 / C11 | `2` | `2` | **2** (`idxc_rf` ≤ peer count) | `examples/topologies/cm_2idxc_sh_uf.yml` |
+| C3 / C13 | `2` | `2` | **2** (add SHC separately) | `examples/topologies/cm_2idxc1site_3shc_uf.yml` |
 
 ```yaml
 splunk_idxclusters:
@@ -60,8 +60,8 @@ Use string factors: `'origin:N, total:M'` (comma-separated pairs).
 
 | SVA code | Lab site RF | Lab site SF | Min indexers per data site | Min sites with indexers | Copy from |
 |----------|-------------|-------------|----------------------------|-------------------------|-----------|
-| M2 / M12 | `origin:2, total:3` | `origin:1, total:2` | **2** per site (supports `origin:2`) | **2** (typical lab) | `examples/4idxc2site_sh.yml` |
-| M3 / M13 | `origin:2, total:3` | `origin:1, total:2` | **2** per site | **2** (+ SHC per site in full SVA) | `examples/cm_4idxc2site_3shc_ds_uf.yml` |
+| M2 / M12 | `origin:2, total:3` | `origin:1, total:2` | **2** per site (supports `origin:2`) | **2** (typical lab) | `examples/topologies/4idxc2site_sh.yml` |
+| M3 / M13 | `origin:2, total:3` | `origin:1, total:2` | **2** per site | **2** (+ SHC per site in full SVA) | `examples/topologies/cm_4idxc2site_3shc_ds_uf.yml` |
 | M4 / M14 | Escalate | Escalate | Stretched SHC — not a lab copy-paste | SVA + PS | — |
 
 ```yaml

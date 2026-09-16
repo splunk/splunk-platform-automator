@@ -5,6 +5,7 @@
 #   description: Verifies SHC status from a search head.
 #   category: verification
 #   risk: read-only
+#   requires_provisioned: true
 #   examples:
 #     - spa run verification/check_shc_health
 - name: Find Search Head Cluster Member

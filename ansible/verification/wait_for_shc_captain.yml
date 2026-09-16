@@ -5,6 +5,7 @@
 #   description: Waits until the search head cluster elects a captain.
 #   category: verification
 #   risk: read-only
+#   requires_provisioned: true
 #   examples:
 #     - spa run verification/wait_for_shc_captain
 - name: Find Search Head Cluster Member

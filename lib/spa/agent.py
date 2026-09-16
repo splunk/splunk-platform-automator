@@ -61,7 +61,12 @@ COMMAND_SCHEMA = {
     "name": "spa",
     "schema_version": SCHEMA_VERSION,
     "commands": [
-        {"name": "init", "summary": "Scaffold or migrate an env dir"},
+        {"name": "init", "summary": "Scaffold or migrate an env dir (spa init --example TOPOLOGY --provider aws|virtualbox ENV)"},
+        {
+            "name": "features",
+            "summary": "Choose from concise topology/provider/setting records; use show ID --keys only for per-key types and constraints",
+            "example": "spa --json features show setting.ssl --keys",
+        },
         {
             "name": "validate",
             "summary": "Validate splunk_config.yml (schema, Software/baseconfig/local apps, inventory)",

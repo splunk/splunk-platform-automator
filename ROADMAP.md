@@ -68,7 +68,8 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [ ] Deploy dry-run / plan (stale-fact preflight already in Unreleased)
 - [ ] Documented `splunk_user` (and local VirtualBox SSH user) in `splunk_defaults`
 - [ ] Disable remaining UI tours and info wizards after login
-- [ ] Feature catalog + provider-independent topology examples; separate provider examples; spa merges on select — [#53](https://github.com/splunk/splunk-platform-automator/issues/53)
+- [ ] Feature catalog + provider-independent topology examples; separate provider examples; spa init composes on select — [#53](https://github.com/splunk/splunk-platform-automator/issues/53)
+- [ ] `spa config` applies catalog settings into `splunk_config.yml` without a skill — [#76](https://github.com/splunk/splunk-platform-automator/issues/76). Blocked by [#53](https://github.com/splunk/splunk-platform-automator/issues/53)
 - [ ] Certificate add/rotate + SPA vault for certs/keys (closes [#30](https://github.com/splunk/splunk-platform-automator/issues/30)) — [#69](https://github.com/splunk/splunk-platform-automator/issues/69). Blocked by [#52](https://github.com/splunk/splunk-platform-automator/issues/52)
 - [ ] Credentials / `spa auth` (profiles, Splunkbase, vault password; macOS Keychain; backwards compatible) — [#52](https://github.com/splunk/splunk-platform-automator/issues/52)
 
@@ -95,6 +96,10 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [ ] Per-tier DS `outputs.conf` / serverclasses (HF vs cluster vs standalone indexer)
 - [ ] DNS role or Bind on one node; point lab hosts at it
 - [ ] Finish `ldap_server` (add to schema) and wire Splunk `authentication.conf`
+
+## Observability
+
+- [ ] Optional Splunk OpenTelemetry Collector on lab hosts via the [signalfx.splunk_otel_collector](https://github.com/signalfx/splunk-otel-collector/tree/main/deployments/ansible_collections/signalfx/splunk_otel_collector) Ansible collection (`signalfx.splunk_otel_collector.collector`). Pin in `requirements.yml`; wrap with a SPA playbook/`splunk_config.yml` block; skip when unset. Tokens from env / vault / `spa auth` — never print access or HEC tokens. Distinct from ITSI o11y content packs / TA-SIM (those are Splunk apps, not the host agent).
 
 ## Apps and premium apps
 

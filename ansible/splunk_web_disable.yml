@@ -5,6 +5,7 @@
 #   description: Disables Splunk Web on targeted hosts (stops the web UI).
 #   category: operations
 #   risk: mutating
+#   requires_provisioned: true
 #   examples:
 #     - spa run splunk_web_disable --hosts indexer
 - name: Disable splunkweb

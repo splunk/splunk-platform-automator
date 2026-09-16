@@ -49,6 +49,7 @@ def test_parse_metadata_happy(tmp_path):
     meta = parse_playbook_metadata(path)
     assert meta["summary"] == "One line."
     assert meta["risk"] == "read-only"
+    assert meta["requires_provisioned"] is False
 
 
 def test_parse_metadata_malformed(tmp_path):
@@ -89,6 +90,36 @@ def test_parse_metadata_missing_summary(tmp_path):
         parse_playbook_metadata(path)
 
 
+def test_parse_metadata_requires_provisioned(tmp_path):
+    path = tmp_path / "hosts.yml"
+    path.write_text(
+        "---\n"
+        "# spa-run:\n"
+        "#   schema: 1\n"
+        "#   summary: Ping.\n"
+        "#   description: Remote.\n"
+        "#   category: operations\n"
+        "#   risk: read-only\n"
+        "#   requires_provisioned: true\n"
+        "- hosts: all\n"
+    )
+    assert parse_playbook_metadata(path)["requires_provisioned"] is True
+    bad = tmp_path / "badflag.yml"
+    bad.write_text(
+        "---\n"
+        "# spa-run:\n"
+        "#   schema: 1\n"
+        "#   summary: x\n"
+        "#   description: y\n"
+        "#   category: operations\n"
+        "#   risk: read-only\n"
+        "#   requires_provisioned: maybe\n"
+        "- hosts: localhost\n"
+    )
+    with pytest.raises(MetadataError, match="requires_provisioned"):
+        parse_playbook_metadata(bad)
+
+
 def test_first_party_catalog_has_valid_metadata():
     paths = resolve_spa_paths(start_dir=str(PROJECT_ROOT))
     rows = catalog(paths)
@@ -100,6 +131,10 @@ def test_first_party_catalog_has_valid_metadata():
         assert row["metadata"]["schema"] == 1
         want = row["risk"] != "read-only"
         assert row.get("requires_confirmation") is want, row["name"]
+        controller_only = {"aws_provision", "aws_destroy", "create_linkpage"}
+        assert row.get("requires_provisioned") is (row["name"] not in controller_only), row[
+            "name"
+        ]
 
 
 def test_session_describe_does_not_run(monkeypatch):

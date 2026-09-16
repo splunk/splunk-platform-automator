@@ -5,6 +5,7 @@
 #   description: Verifies local Ansible and Python requirements before a deploy.
 #   category: operations
 #   risk: read-only
+#   requires_provisioned: true
 #   examples:
 #     - spa run ansible_check
 # This playbook test the needed capabilities for ansible

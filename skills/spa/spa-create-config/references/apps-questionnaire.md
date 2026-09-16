@@ -1,8 +1,8 @@
 # Basic apps questionnaire
 
-**No Splunkbase catalog search** — user supplies `app_id` and folder `name` from Splunkbase or copies from examples.
+**No Splunkbase catalog search** — user supplies `app_id` and folder `name` from Splunkbase. Merge YAML from `spa --json features show ID`.
 
-Deep customization: [docs/App_Deployment_Guide.md](docs/App_Deployment_Guide.md).
+Deep customization: [docs/App_Deployment_Customizations.md](docs/App_Deployment_Customizations.md) and `spa --json features show setting.apps.customizations`.
 
 ## 1. Deploy apps?
 
@@ -27,30 +27,35 @@ See [docs/App_Deployment.md](docs/App_Deployment.md). Optional vault in config. 
 ## 3. App sources
 
 - `splunkbase` — requires credentials and `app_id`
-- `local` — `path` to tarball/spl on controller software dir
+- `local` — `path` to tarball/spl on controller apps dir
 
 ## 4. Target roles
 
-`target_roles`: `search_head`, `indexer`, `universal_forwarder`, `heavy_forwarder` (maps to deployer/CM/DS/direct per SPA).
+For **normal** apps, `target_roles`: `search_head`, `indexer`, `universal_forwarder`, `heavy_forwarder` (maps to deployer/CM/DS/direct per SPA).
+
+Do **not** set `target_roles` on `premium_app: itsi` or `itsi_content_pack: true` entries.
 
 ## 5. Premium ITSI?
 
-If yes:
+If yes: merge `spa --json features show setting.apps.premium.itsi` (no `target_roles`).
 
 - Main app: `name`, `source: splunkbase`, `app_id: 1841`, `premium_app: itsi`
 - Licenses: run `spa licenses --config …` after adding ITSI — proposes `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` from `../Software`; see [licenses.md](licenses.md)
-- **Java 21 max** on SH/SHC via `os.packages` — see [aws-os-matrix.md](aws-os-matrix.md)
-- Reference: `examples/single_node_itsi.yml` (after Java 21 correction)
+- **Java 21 max** on the search/ITSI host `splunk_hosts[].os.packages` (not the global `os:` block) — see [aws-os-matrix.md](aws-os-matrix.md)
+- Full lab (not `spa init --example`): `examples/single_node_itsi.yml`
 
 ## 6. ITSI content packs?
 
-- Bundle CP (`itsi_content_pack: true` + `content_pack_apps:`) vs single CP app
+Merge `spa --json features show setting.apps.premium.itsi.content_pack` for DA-ITSI-ContentLibrary. Per pack in `content_pack_apps`: `content_pack_install`, `content_pack_api` (`install_all`, `enabled`, `saved_search_action`, `backfill`, `resolution`, `prefix`), and `customizations.run_playbook_after_restart` / `force_run_playbook_after_restart`. Merge `spa --json features show setting.apps.premium.itsi.content_pack.single` for one pack that is its own folder (those API keys at top level; no `content_pack_apps`).
+
+- Requires a sibling `premium_app: itsi` entry with the same `state`
+- Do not set `premium_app` or `target_roles` on the pack entry
 - **Folder `name` must match on-disk app name** inside the spl/tgz
-- Copy `app_id` lists from examples; do not invent IDs
+- Do not invent Splunkbase IDs
 
 ## 7. Other Splunkbase apps
 
-Per app: `name` (folder name), `app_id`, optional `version: latest`, `target_roles`.
+Merge `spa --json features show setting.apps`. Per app: `name` (folder name), `app_id`, optional `version: latest`, `target_roles`.
 
 ## 8. Local org apps
 
@@ -58,21 +63,25 @@ Per app: `name` (folder name), `app_id`, optional `version: latest`, `target_rol
 
 ## Minimal block sketch
 
+Normal TA (not ITSI):
+
 ```yaml
 splunk_app_deployment:
   splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
   splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
   apps:
-    - name: "Splunk IT Service Intelligence"
+    - name: Splunk_TA_nix
       source: splunkbase
-      app_id: 1841
-      premium_app: itsi
+      app_id: 833
       target_roles:
         - search_head
+        - indexer
 ```
+
+ITSI premium (no `target_roles`): use the `setting.apps.premium.itsi` snippet.
 
 ## Out of scope
 
-- ES full prerequisite matrix
-- Splunkbase search CLI (future)
-- Custom `run_playbook` graphs unless user explicitly needs them
+- ES full prerequisite matrix (`premium_app: es` is not valid)
+- Splunkbase search CLI (future #59/#68)
+- Custom `run_playbook` graphs unless user explicitly needs them (`setting.apps.customizations`)

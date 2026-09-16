@@ -6,14 +6,14 @@ For interactive agent assistance in Cursor, use the project skill at [skills/spa
 
 ## Quick path
 
-**Separate environment directory (recommended):** from the clone, `spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env`, then `cd ~/envs/my-env` (direnv or `eval "$(spa env --export)"`). Then `spa validate && spa provision --yes && spa deploy --yes`. See [README — Start here](../README.md#start-here).
+**Separate environment directory (recommended):** from the clone, `spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env`, then `cd ~/envs/my-env` (direnv or `eval "$(spa env --export)"`). Then `spa validate && spa provision --yes && spa deploy --yes`. See [README — Start here](../README.md#start-here).
 
 **Clone-equal:**
 
-1. Copy [examples/aws_lab_baseline.yml](../examples/aws_lab_baseline.yml) or start from [examples/splunk_config_terraform_aws.yml](../examples/splunk_config_terraform_aws.yml) to `config/splunk_config.yml`.
-2. Add topology from an SVA-aligned example (e.g. [examples/4idxc2site_sh.yml](../examples/4idxc2site_sh.yml) for multisite IDXC + SH).
-3. Set **`terraform.aws.ssh_username`** to match your AMI (`ec2-user` for Amazon Linux / RHEL; `ubuntu` for Ubuntu).
-4. Set global **`os:`** block per OS — include **polkit** (`policykit-1` on Ubuntu). See [OS and SSH matrix](#os-and-ssh-matrix) below.
+1. `spa init --example TOPOLOGY --provider aws ENV` (see `spa init --list`).
+2. Choose extra settings from concise `spa --json features search QUERY`, inspect the snippet with `spa features show ID`, and request per-key types/constraints only when needed with `spa features show ID --keys`. Write snippets into `config/splunk_config.yml` (OS, SSL, architecture — not through init).
+3. Set **`terraform.aws.ssh_username`** to match your AMI (`ec2-user` for Amazon Linux / RHEL; `ubuntu` for Ubuntu) via catalog `setting.ssh_username`.
+4. Set global **`os:`** from catalog `setting.os` / `setting.os.ubuntu`.
 5. Validate before provision:
 
 ```bash
@@ -33,7 +33,7 @@ Terraform state or EBS volumes. `spa resume --yes` starts them, waits for AWS
 health, and refreshes `inventory/hosts` because public addresses may change.
 Pass `--hosts idx1` or `--hosts indexer` to limit suspend, resume, or `spa deploy`
 to some hosts. `spa hosts list --status` shows names and runtime state; `spa sh idx1`
-(or `spa hosts ssh idx1`) opens SSH. Human aliases include `spa val`, `spa dep`, and `spa des`;
+(or `spa hosts ssh idx1`) opens SSH. Human aliases include `spa val`, `spa dep`, `spa des`, and `spa feat`;
 skills should keep full names.
 
 Retained resources continue to incur charges. Use `spa destroy --yes` only for
@@ -47,7 +47,8 @@ To skip preflight: `ap ansible/deploy_site.yml --skip-tags preflight`. To disabl
 - [About Splunk Validated Architectures](https://help.splunk.com/en/splunk-cloud-platform/splunk-validated-architectures/introduction-to-splunk-validated-architectures/about-splunk-validated-architectures)
 - [Topology selection guidance](https://help.splunk.com/en/splunk-enterprise/get-started/splunk-validated-architectures/splunk-platform-indexing-and-search)
 - [Designing a scalable architecture](https://lantern.splunk.com/Splunk_Success_Framework/Mitigate_Risk/Guarding_against_impact_to_revenue/Designing_a_scalable_architecture) (Lantern)
-- [configuration_description.yml](examples/configuration_description.yml) — all config keys
+- `spa features list` / `search`, `show ID`, and detailed `show ID --keys` — [examples/catalog/features.yml](../examples/catalog/features.yml)
+- [configuration_description.yml](../examples/configuration_description.yml) — pointer only; prefer the catalog
 
 ## Deployment intent
 
@@ -90,7 +91,7 @@ SVAs favor separated management tiers. Lab configs often co-locate roles on fewe
 |---------|---------|----------|
 | CM only | `config/splunk_config.yml` | OK for IDXC config tests |
 | CM + MC + DS + deployer | `tests/configs/2site-idxc_shc_mc_ds_sh_hf_uf.yml` | Closer to production |
-| All-in-one | `examples/single_node.yml` | S1 only |
+| All-in-one | `examples/topologies/single_node.yml` | S1 only |
 
 Hard rules: `cluster_manager` needs `idxcluster:`; `deployer` needs `shcluster:`; `license_manager` needs `splunk_license_file`.
 
@@ -138,7 +139,7 @@ capabilities.
 
 See [App Deployment](App_Deployment.md). Set `SPLUNKBASE_USERNAME` and `SPLUNKBASE_PASSWORD` on the controller (never paste values into chat or echo them in the terminal).
 
-ITSI example: [examples/single_node_itsi.yml](examples/single_node_itsi.yml).
+ITSI: `spa features show setting.apps.premium.itsi`, `setting.apps.premium.itsi.content_pack` (Content Library), and `setting.apps.premium.itsi.content_pack.single`. Full lab (not `spa init --example`): [examples/single_node_itsi.yml](../examples/single_node_itsi.yml).
 
 ## Validation
 

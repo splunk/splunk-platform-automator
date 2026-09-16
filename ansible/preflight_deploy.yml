@@ -5,6 +5,7 @@
 #   description: Validates host readiness and fact cache before Splunk install. Used by deploy_site.
 #   category: deployment
 #   risk: read-only
+#   requires_provisioned: true
 #   examples:
 #     - spa run preflight_deploy
 # Preflight checks before deploy_site.yml.

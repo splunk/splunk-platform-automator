@@ -21,7 +21,8 @@ Curated links for the `spa-create-config` workflow. Use for user handoff and hea
 
 ## Splunk Platform Automator (SPA)
 
-- [configuration_description.yml](examples/configuration_description.yml) — all config keys
+- `spa --json features list|show|search` — [examples/catalog/features.yml](../../../../examples/catalog/features.yml)
+- [configuration_description.yml](../../../../examples/configuration_description.yml) — pointer dump (prefer the catalog)
 - [Splunk Config Guided Setup](docs/Splunk_Config_Guided_Setup.md) — human-readable mirror of this skill
 - [Ansible-Terraform AWS Integration](docs/Ansible_Terraform_AWS_Integration.md) — provision and deploy on AWS
 - [App Deployment](docs/App_Deployment.md) — Splunkbase credentials and app blocks

@@ -5,6 +5,7 @@
 #   description: Waits until Ansible can connect to every host.
 #   category: verification
 #   risk: read-only
+#   requires_provisioned: true
 #   examples:
 #     - spa run verification/ping_hosts
 # Simple connectivity check for Ansible hosts

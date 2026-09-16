@@ -5,6 +5,7 @@
 #   description: Runs the requested Splunk command through the configured inventory.
 #   category: operations
 #   risk: mutating
+#   requires_provisioned: true
 #   requires:
 #     - At least one host via --hosts
 #   inputs:

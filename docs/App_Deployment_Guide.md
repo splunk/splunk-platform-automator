@@ -12,6 +12,8 @@ This guide covers the complete Splunk app deployment system, including:
 
 **Related docs:** [App Deployment Quick Start](App_Deployment_Quick_Start.md) · [App Deployment Verification](App_Deployment_Verification.md) · [App Deployment Testing](App_Deployment_Testing.md)
 
+Catalog: `spa features show setting.apps`, `setting.apps.premium.itsi`, `setting.apps.premium.itsi.content_pack`, `setting.apps.premium.itsi.content_pack.single`, `setting.apps.customizations`. Full ITSI lab: [examples/single_node_itsi.yml](../examples/single_node_itsi.yml).
+
 ## Table of Contents
 
 1. [Deployment Methods](#deployment-methods)

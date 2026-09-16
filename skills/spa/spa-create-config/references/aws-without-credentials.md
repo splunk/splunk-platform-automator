@@ -45,7 +45,7 @@ Provision/deploy (`ap ansible/aws_provision.yml`) **requires** working AWS crede
 
 1. **Region** — user states org default (e.g. `eu-central-1`); do not call `--list-regions`.
 2. **OS + SSH** — [aws-os-matrix.md](aws-os-matrix.md) templates (`ec2-user` / `ubuntu` / `admin`).
-3. **AMI** — copy from closest `examples/*.yml` or [examples/aws_lab_baseline.yml](../../../examples/aws_lab_baseline.yml); add comment `# verify AMI in console or re-run spa aws when creds available`.
+3. **AMI** — copy from `examples/providers/aws.yml` or catalog `provider.aws`; add comment `# verify AMI in console or re-run spa aws when creds available`.
 4. **Instance type** — lab default `t3.medium` ([aws-baseline.md](aws-baseline.md)).
 5. **Key pair / security groups** — user supplies names that exist in their account (cannot list via API).
 6. **Local paths** — `ssh_private_key_file`, tags, volume size from baseline.

@@ -89,7 +89,8 @@ The controller must enforce the same confirmation policy as
 - A GUI displays its own approval dialog and sends `confirm=True`.
 - Lifecycle operations always require confirmation.
 - `spa run` uses the playbook catalog's `requires_confirmation`, failing closed
-  when metadata is missing.
+  when metadata is missing. `requires_provisioned: true` applies the same host-up
+  gate as `spa deploy` before Ansible runs.
 
 Approval is scoped to one request. It must not become a reusable controller
 setting.

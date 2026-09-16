@@ -18,14 +18,12 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Not runnable inventories: docs, fragments, or host-less skeletons.
 SKIP_EXAMPLE_BASENAMES = {
     "configuration_description.yml",
-    "app_customizations_example.yml",
-    "minimal_splunk_apps_config.yml",
-    "splunk_apps_config_example.yml",
-    "aws_lab_baseline.yml",
 }
 
+
 def _example_paths():
-    paths = sorted(glob.glob(os.path.join(PROJECT_ROOT, "examples", "*.yml")))
+    paths = sorted(glob.glob(os.path.join(PROJECT_ROOT, "examples", "topologies", "*.yml")))
+    paths += sorted(glob.glob(os.path.join(PROJECT_ROOT, "examples", "*.yml")))
     return [p for p in paths if os.path.basename(p) not in SKIP_EXAMPLE_BASENAMES]
 
 

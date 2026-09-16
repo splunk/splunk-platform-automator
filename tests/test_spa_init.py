@@ -19,8 +19,13 @@ def test_init_help():
 def test_init_list_examples():
     result = run_spa(["init", "--list"])
     assert result.returncode == 0
-    assert "single_node.yml" in result.stdout
-    assert "cm_2idxc_sh_uf_aws.yml" in result.stdout
+    out = result.stdout
+    assert "single_node" in out
+    assert "cm_2idxc_sh_uf" in out
+    assert "virtualbox" in out
+    assert "aws" in out
+    assert "cm_2idxc_sh_uf_aws.yml" not in out
+    assert "--provider" in out
 
 
 def test_scaffold_creates_env_without_ansible(tmp_path):
@@ -60,6 +65,31 @@ def test_example_flag(tmp_path):
     cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
     names = [h.get("name") for h in cfg["splunk_hosts"] if "name" in h]
     assert "cm" in names
+    assert "virtualbox" in cfg
+    assert "terraform" not in cfg
+    assert "os" not in cfg
+
+
+def test_example_with_aws_provider(tmp_path):
+    dest = tmp_path / "c1-aws"
+    result = run_spa_init(["--example", "cm_2idxc_sh_uf", "--provider", "aws", str(dest)])
+    assert result.returncode == 0, result.stderr
+    cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
+    assert "terraform" in cfg
+    assert cfg["terraform"]["aws"]["region"]
+    assert "virtualbox" not in cfg
+    assert "os" not in cfg
+    names = [h.get("name") for h in cfg["splunk_hosts"] if "name" in h]
+    assert "cm" in names
+
+
+def test_legacy_aws_example_alias(tmp_path):
+    dest = tmp_path / "legacy"
+    result = run_spa_init(["--example", "cm_2idxc_sh_uf_aws.yml", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
+    assert "terraform" in cfg
+    assert "Alias" in result.stdout or "cm_2idxc_sh_uf_aws" in result.stdout
 
 
 def test_refuse_overwrite(tmp_path):
@@ -118,8 +148,29 @@ def test_refuse_spa_home():
     assert "SPA_HOME" in (result.stderr + result.stdout)
 
 
+def test_init_list_json_has_no_addons():
+    import json
+
+    result = run_spa(["--json", "init", "--list"])
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    data = payload.get("data") or {}
+    assert "topologies" in data
+    assert "providers" in data
+    assert "addons" not in data
+    ids = [item["id"] for item in data["topologies"]] + [item["id"] for item in data["providers"]]
+    joined = " ".join(ids)
+    assert "single_node" in joined
+    assert "aws" in joined
+    assert "itsi" not in joined
+    assert "SmartStore" not in joined
+    assert "apps" not in joined
+
+
 def test_missing_example(tmp_path):
-    result = run_spa_init(["--example", "does-not-exist.yml", str(tmp_path / "x")])
+    result = run_spa_init(
+        ["--example", "does-not-exist.yml", "--provider", "virtualbox", str(tmp_path / "x")]
+    )
     assert result.returncode != 0
     assert "not found" in (result.stderr + result.stdout).lower()
 

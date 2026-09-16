@@ -13,7 +13,9 @@ metadata:
   version: "1.0.0"
 paths:
   - "config/splunk_config.yml"
-  - "examples/**/*.yml"
+  - "examples/topologies/*.yml"
+  - "examples/providers/*.yml"
+  - "examples/catalog/features.yml"
   - "examples/configuration_description.yml"
 ---
 
@@ -47,6 +49,22 @@ Follow [secrets-handling.md](references/secrets-handling.md) for the full list.
 - **Safe checks:** set/not-set loops in [secrets-handling.md](references/secrets-handling.md).
 - Never paste resolved lookup values, private key contents, or credential file contents into chat or plan files.
 
+## Add / change a setting (existing env)
+
+**Entry:** User already has `$SPA_ENV_DIR/config/splunk_config.yml` and asks to add or change something (SmartStore, ITSI, a TA, SSL, licenses, a host knob).
+
+**Do not** restart Phases 0a–5. Skip greenfield SVA unless they also asked to change topology.
+
+**Actions:**
+
+1. `spa --json features search QUERY` (words from the request: `itsi`, `smartstore`, `apps`, `ssl`, `volumes`).
+2. `spa --json features show ID` for the matching record; `show ID --keys` only when types, allowed values, or notes are needed.
+3. Merge the record `snippet` into the existing config using the catalog `merge` field (`deep` vs `replace`). Honor `when_not_to_use`.
+4. Do not invent YAML from leftover mixed example files. ITSI full lab: copy or merge `examples/single_node_itsi.yml` when they want the whole env, not only the snippet.
+5. `spa validate` (Phase 8). Do not auto-run provision/deploy.
+
+Out of scope: Splunkbase catalog search (#59/#68); user supplies `app_id`.
+
 ## Reference files (load on demand)
 
 | Topic | File |
@@ -67,7 +85,7 @@ Follow [secrets-handling.md](references/secrets-handling.md) for the full list.
 | Architecture plan | [assets/architecture-plan-template.md](assets/architecture-plan-template.md) |
 | Secrets / env vars | [references/secrets-handling.md](references/secrets-handling.md) |
 
-Repo keys: [examples/configuration_description.yml](examples/configuration_description.yml), [examples/aws_lab_baseline.yml](examples/aws_lab_baseline.yml).
+Repo keys: choose from concise `spa --json features list` / `search`, inspect with `show ID`, and request schema types/constraints plus catalog notes only when needed with `show ID --keys`. Types live in Pydantic (`spa validate`); [examples/catalog/features.yml](../../../examples/catalog/features.yml) is when-to-use and snippets. Pointer dump: [examples/configuration_description.yml](../../../examples/configuration_description.yml).
 
 ## Step 0 — Environment setup
 
@@ -118,11 +136,11 @@ Ask scale-out vs scale-up; default **scale out** for Splunk.
 
 | Path | Action |
 |------|--------|
-| User knows SVA code | Confirm code → [sva-topology-map.md](references/sva-topology-map.md) |
-| Needs help | [sva-questionnaire.md](references/sva-questionnaire.md) |
-| Config test only | Minimal topology (e.g. CM + 2 idx + SH) |
+| User knows SVA code | Confirm code → [sva-topology-map.md](references/sva-topology-map.md) then `spa init --example TOPOLOGY --provider aws\|virtualbox ENV` |
+| Needs help | [sva-questionnaire.md](references/sva-questionnaire.md) then catalog `spa --json features search` |
+| Config test only | Minimal topology (`single_node` or `cm_2idxc_sh_uf`) |
 
-**Exit:** SVA code or lab compromise; closest `examples/*.yml` chosen.
+**Exit:** SVA code or lab compromise; topology id from `spa init --list` (not a mixed `_aws` file).
 
 ## Phase 2 — Sizing tier
 
@@ -136,7 +154,7 @@ Ask scale-out vs scale-up; default **scale out** for Splunk.
 
 ## Phase 3 — Linux OS
 
-Pick OS → [aws-os-matrix.md](references/aws-os-matrix.md).
+Pick OS via `spa --json features search os` (`setting.os`, `setting.os.ubuntu`, `setting.ssh_username`). Write the snippet into `splunk_config.yml` yourself; do not pass OS through `spa init`.
 
 **Recommended:** Amazon Linux 2023, RHEL 10, or Ubuntu 24.04 LTS (latest AMI in region).
 
@@ -212,7 +230,7 @@ spa licenses --config config/splunk_config.yml --json
 8. **Trial-only labs** → omit both `splunk_license_file` and `license_manager`; do not add license file from Software scan alone.
 9. No usable files in Software → warn (trial only or add licenses before deploy).
 
-Use `yaml_snippet` from JSON under `splunk_defaults` in Phase 7.
+Use `spa --json features show setting.license` (or the licenses JSON `yaml_snippet`) under `splunk_defaults` in Phase 7.
 
 **Exit:** License list decided or explicitly skipped; LM + ITSI/ES warnings addressed.
 
@@ -238,12 +256,13 @@ Use `yaml_snippet` from JSON under `splunk_defaults` in Phase 7.
 
 **Do not enter** while plan mode is active and plan is still draft.
 
-1. `plugin: splunk-platform-automator`
+1. Scaffold with `spa init --example TOPOLOGY --provider aws|virtualbox ENV` (topology + provider only). Do not invent `--addon` or OS flags on init.
 2. Header from [assets/config-header-template.md](assets/config-header-template.md)
-3. Global `terraform.aws` with **`ssh_username`** and AMI comment
-4. Matching global `os:` block
-5. `splunk_defaults` (include `splunk_license_file` from Phase 6b when chosen), clusters, `splunk_hosts` from closest example
-6. Cross-check [configuration_description.yml](examples/configuration_description.yml)
+3. For OS, SSL, licenses, RF/SF, apps keys, and other settings: choose with `spa --json features search QUERY`, inspect with `show ID`, and use `show ID --keys` only when per-key types, constraints, placeholders, or notes are needed. Merge each record's `snippet` into `$SPA_ENV_DIR/config/splunk_config.yml` yourself. Do not pass those through init.
+4. Global `terraform.aws` already comes from `--provider aws`; add **`ssh_username`** / AMI from catalog + discovery.
+5. Matching global `os:` from `setting.os` (not from the topology file).
+6. `splunk_defaults` (include `splunk_license_file` from Phase 6b when chosen).
+7. Cross-check snippets against `spa --json features show`; [configuration_description.yml](../../../examples/configuration_description.yml) is a pointer only.
 
 **Exit:** File written at target path.
 
@@ -306,3 +325,4 @@ Use consistently: `cluster_manager`, `terraform.aws`, `splunk_hosts`, `plugin: s
 - [ ] Step 0 and phase exit criteria followed
 - [ ] `bin/*` invoked from project root
 - [ ] Secrets: Splunkbase and AWS credential env values never shown in chat or terminal output
+- [ ] Incremental add uses `spa --json features search` / `show` / merge / `spa validate` (does not restart SVA for a single setting)

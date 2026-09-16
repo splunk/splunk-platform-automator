@@ -5,6 +5,7 @@
 #   description: Performs a rolling Splunk upgrade across SHC members.
 #   category: upgrade
 #   risk: mutating
+#   requires_provisioned: true
 #   examples:
 #     - spa run upgrade_shc_rolling
 # This playbook does a rolling upgrade of a search head cluster

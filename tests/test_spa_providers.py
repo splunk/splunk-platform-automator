@@ -74,6 +74,12 @@ def test_virtualbox_cli_accepts_env_dir(tmp_path, monkeypatch):
             return {"instances": []}
 
     monkeypatch.setattr("spa.providers.get_provider", lambda _paths: FakeProvider())
+    from spa.providers import ProvisionState
+
+    monkeypatch.setattr(
+        "spa.providers.check_provisioned",
+        lambda paths: ProvisionState(provider="virtualbox", provisioned=True),
+    )
     from spa.cli import main
 
     rc = main(["--no-agent", "suspend", "--yes"])
@@ -213,6 +219,30 @@ def test_shell_host_report_uses_provider_snapshot(monkeypatch):
     assert rows["idx2"]["provider_status"] == "stopped"
     assert rows["idx2"]["ansible"] == "N/A"
     assert checked["hosts"] == ["idx1"]
+
+
+def test_shell_host_report_runtime_false_skips_checks(monkeypatch):
+    from spa import shell
+
+    inventory = {
+        "_meta": {"hostvars": {"idx1": {}}},
+        "role_indexer": {"hosts": ["idx1"]},
+    }
+    monkeypatch.setattr(
+        shell,
+        "check_ansible_status",
+        lambda hosts: (_ for _ in ()).throw(AssertionError("ping")),
+    )
+    monkeypatch.setattr(
+        shell,
+        "get_provider_status",
+        lambda paths=None: (_ for _ in ()).throw(AssertionError("provider")),
+    )
+    report = shell.host_report(inventory, verbose=True, runtime=False)
+    rows = {row["name"]: row for row in report["hosts"]}
+    assert rows["idx1"]["ansible"] == "unprovisioned"
+    assert rows["idx1"]["provider_status"] == "unprovisioned"
+    assert report["provider"] is None
 
 
 def test_resume_starts_waits_and_refreshes_inventory(tmp_path):

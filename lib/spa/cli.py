@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
@@ -174,6 +175,8 @@ def _print_playbook_help(data: dict) -> None:
         extras.append("confirmation: required")
     elif meta.get("risk") == "read-only":
         extras.append("confirmation: none")
+    if meta.get("requires_provisioned") or data.get("requires_provisioned"):
+        extras.append("provisioned hosts: required")
     if extras:
         print("  %s" % "  |  ".join(extras))
     if data.get("path"):
@@ -207,9 +210,33 @@ def _print_playbook_help(data: dict) -> None:
             print("  %s" % item)
 
 
-def _add_command(sub, name, aliases=(), **kwargs):
+def _add_mode_flags(parser) -> None:
+    """Accept --json/--agent/--no-agent after the subcommand (parent flags stay first)."""
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="JSON output / agent envelope",
+    )
+    parser.add_argument(
+        "--agent",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Force agent mode (JSON envelope, never prompt); auto-detected otherwise",
+    )
+    parser.add_argument(
+        "--no-agent",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Force human mode (text output, may prompt) even inside an agent",
+    )
+
+
+def _add_command(sub, name, aliases=(), accept_mode_flags=True, **kwargs):
     parser = sub.add_parser(name, aliases=list(aliases), **kwargs)
     parser.set_defaults(canonical=name)
+    if accept_mode_flags:
+        _add_mode_flags(parser)
     return parser
 
 
@@ -238,6 +265,12 @@ def _paths(start_dir: Optional[str] = None):
 
 def _emit_result(result: CommandResult, as_agent: bool) -> int:
     emit(result.ok, data=result.data, error=result.error, as_agent=as_agent)
+    return result.code
+
+
+def _print_command_error(result: CommandResult) -> int:
+    if result.error:
+        print(result.error, file=sys.stderr)
     return result.code
 
 
@@ -303,8 +336,6 @@ def _run(argv: Sequence[str]) -> int:
         return 0
     head, native = _split_native(head)
 
-    import argparse
-
     parse_as_agent = agent_mode(
         force_agent="--agent" in head or "--json" in head,
         force_human="--no-agent" in head,
@@ -346,8 +377,13 @@ def _run(argv: Sequence[str]) -> int:
 
     p_init = _add_command(sub, "init", help="Scaffold or migrate an env dir")
     p_init.add_argument("env_dir", nargs="?", help="Environment directory to create or migrate")
-    p_init.add_argument("--example", metavar="NAME", help="Copy a bundled example configuration")
-    p_init.add_argument("--list", action="store_true", help="List example YAML names")
+    p_init.add_argument("--example", metavar="NAME", help="Topology example id (see spa init --list)")
+    p_init.add_argument(
+        "--provider",
+        metavar="NAME",
+        help="Provider example: aws or virtualbox (required with --example unless using a legacy alias)",
+    )
+    p_init.add_argument("--list", action="store_true", help="List topology and provider examples")
     p_init.add_argument("--from", dest="from_dir", metavar="DIR", help="Migrate an existing SPA environment")
     p_init.add_argument("--migrate", action="store_true", help="Migrate the source environment into ENV_DIR")
     p_init.add_argument("--keep-source", action="store_true", help="Keep state files in the migration source")
@@ -379,6 +415,26 @@ def _run(argv: Sequence[str]) -> int:
         help="Local source: local apps directory (saved in ~/.config/spa/paths.yml)",
     )
 
+    p_feat = _add_command(
+        sub,
+        "features",
+        aliases=["feat"],
+        help="Look up config features (spa features list|show ID|search QUERY|keys)",
+    )
+    p_feat.add_argument(
+        "features_cmd",
+        nargs="?",
+        default="list",
+        choices=["list", "show", "search", "keys"],
+        help="list (default), show, search, or keys",
+    )
+    p_feat.add_argument("features_arg", nargs="?", help="Feature id (show) or query (search)")
+    p_feat.add_argument(
+        "--keys",
+        action="store_true",
+        help="With show ID, include per-key types, constraints, and guidance",
+    )
+
     p_val = _add_command(sub, "validate", aliases=["val"], help="Validate splunk_config.yml")
     p_val.add_argument("config", nargs="?", help="Configuration file (defaults to this environment)")
     p_val.add_argument("--check-licenses", action="store_true", help="Validate configured license files")
@@ -394,7 +450,6 @@ def _run(argv: Sequence[str]) -> int:
     p_doc.add_argument("--aws", action="store_true", help="Check AWS prerequisites")
     p_doc.add_argument("--virtualbox", action="store_true", help="Check VirtualBox prerequisites")
     p_doc.add_argument("--strict", action="store_true", help="Treat optional-tool warnings as failures")
-    p_doc.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p_doc.add_argument("--fix-direnv", action="store_true", help="Install the direnv shell hook when possible")
 
     p_env = _add_command(sub, "env", help="Print export statements")
@@ -475,18 +530,20 @@ def _run(argv: Sequence[str]) -> int:
     p_hosts.add_argument(
         "--status",
         action="store_true",
-        help="Include runtime power state and connectivity",
+        help="Include runtime power state and connectivity (skipped until hosts are provisioned)",
     )
     _add_hosts_option(p_hosts)
     hosts_sub = p_hosts.add_subparsers(dest="hosts_cmd", metavar="ACTION")
     p_hosts_list = hosts_sub.add_parser("list", aliases=["ls"], help="List hosts in this env")
+    _add_mode_flags(p_hosts_list)
     p_hosts_list.add_argument(
         "--status",
         action="store_true",
-        help="Include runtime power state and connectivity",
+        help="Include runtime power state and connectivity (skipped until hosts are provisioned)",
     )
     _add_hosts_option(p_hosts_list)
     p_hosts_ssh = hosts_sub.add_parser("ssh", help="SSH to one host")
+    _add_mode_flags(p_hosts_ssh)
     p_hosts_ssh.add_argument("name", help="Inventory hostname")
     p_hosts_ssh.add_argument("ssh_args", nargs=argparse.REMAINDER, help="Additional arguments passed to ssh")
     p_hosts_copy = hosts_sub.add_parser(
@@ -498,6 +555,7 @@ def _run(argv: Sequence[str]) -> int:
         epilog=shell_copy_examples(),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    _add_mode_flags(p_hosts_copy)
     p_hosts_copy.add_argument(
         "-r",
         "--recursive",
@@ -512,9 +570,15 @@ def _run(argv: Sequence[str]) -> int:
     )
 
     # Flags for these are parsed by the wrapped tool (see _split_native).
-    _add_command(sub, "shell", aliases=["sh"], help="SSH via inventory (alias of spa hosts ssh)", add_help=False)
-    _add_command(sub, "aws", help="AWS discovery (spa aws --help)", add_help=False)
-    _add_command(sub, "licenses", aliases=["lic"], help="License discovery (spa licenses --help)", add_help=False)
+    _add_command(
+        sub, "shell", aliases=["sh"], help="SSH via inventory (alias of spa hosts ssh)",
+        add_help=False, accept_mode_flags=False,
+    )
+    _add_command(sub, "aws", help="AWS discovery (spa aws --help)", add_help=False, accept_mode_flags=False)
+    _add_command(
+        sub, "licenses", aliases=["lic"], help="License discovery (spa licenses --help)",
+        add_help=False, accept_mode_flags=False,
+    )
 
     p_agent = _add_command(
         sub,
@@ -561,7 +625,7 @@ def _run(argv: Sequence[str]) -> int:
         return 0
 
     native_help_only = invoked in NATIVE_FLAG_COMMANDS and set(native) <= {"-h", "--help"}
-    if args.command not in {"init", "agent", "env", "doctor"} and not native_help_only:
+    if args.command not in {"init", "agent", "env", "doctor", "features"} and not native_help_only:
         missing = env_dir_required_error(paths)
         if missing:
             emit(False, error=missing, as_agent=as_agent)
@@ -587,7 +651,9 @@ def _run(argv: Sequence[str]) -> int:
             result = session.list_examples()
             if as_agent:
                 return _emit_result(result, True)
-            print("\n".join(result.data or []))
+            from spa.init import format_example_list
+
+            print(format_example_list(result.data or {}))
             return 0
         if not args.env_dir:
             print("spa init: env dir is required", file=sys.stderr)
@@ -610,6 +676,7 @@ def _run(argv: Sequence[str]) -> int:
             software_dir=args.software_dir,
             baseconfig_dir=args.baseconfig_dir,
             apps_dir=args.apps_dir,
+            provider=args.provider,
         )
         if as_agent:
             emit(
@@ -623,6 +690,49 @@ def _run(argv: Sequence[str]) -> int:
         if result.error:
             print(result.error, file=sys.stderr)
         return result.code
+
+    if args.command == "features":
+        action = args.features_cmd or "list"
+        ident = args.features_arg if action == "show" else None
+        query = args.features_arg if action == "search" else None
+        result = session.features(
+            action=action,
+            ident=ident,
+            query=query,
+            include_keys=bool(args.keys),
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        if not result.ok:
+            print(result.error or "features failed", file=sys.stderr)
+            return result.code
+        data = result.data or {}
+        if action in {"list", "search"}:
+            from spa.catalog import format_feature_rows
+
+            rows = data.get("features") or []
+            if not rows and action == "search":
+                print("No features matched %r" % query)
+                return 0
+            print(format_feature_rows(rows))
+            return 0
+        if action == "show":
+            print(data.get("text") or "")
+            return 0
+        if action == "keys":
+            missing = data.get("missing_from_catalog") or []
+            missing_detail = data.get("missing_key_detail") or []
+            print(
+                "%s catalog features, %s schema keys missing from catalog, "
+                "%s catalog keys missing details"
+                % (data.get("features"), len(missing), len(missing_detail))
+            )
+            for key in missing:
+                print("missing: %s" % key)
+            for key in missing_detail:
+                print("missing detail: %s" % key)
+            return 0 if not missing and not missing_detail else 1
+        return 0
 
     if args.command == "validate":
         from spa.validate import format_validate_text
@@ -753,7 +863,8 @@ def _run(argv: Sequence[str]) -> int:
             )
         if result.error:
             print(result.error, file=sys.stderr)
-            print("spa run --list for the catalog", file=sys.stderr)
+            if (result.data or {}).get("provisioned") is not False:
+                print("spa run --list for the catalog", file=sys.stderr)
         return result.code
 
     if args.command == "hosts":
@@ -769,31 +880,30 @@ def _run(argv: Sequence[str]) -> int:
                 print(result.error, file=sys.stderr)
                 return result.code
             data = result.data or {}
-            if data.get("provider") and getattr(args, "status", False):
+            show_status = bool(getattr(args, "status", False) or args.verbose)
+            if (
+                data.get("provider")
+                and show_status
+                and data.get("provisioned") is not False
+            ):
                 print("Checking %s status..." % str(data["provider"]).upper(), file=sys.stderr)
             if data.get("provider_error"):
                 print("Warning: %s" % data["provider_error"], file=sys.stderr)
+            from spa.shell import format_host_status
+
             for row in data.get("hosts") or []:
                 roles_str = ""
                 if row.get("roles"):
                     roles_str = " (%s)" % ", ".join(row["roles"])
-                extra_info = ""
-                if row.get("ansible") or row.get("provider_status"):
-                    provider_status = ""
-                    if row.get("provider_status"):
-                        provider_status = ", %s: %s" % (
-                            str(row.get("provider") or "provider").upper(),
-                            row["provider_status"],
-                        )
-                    extra_info = " - Ansible: %s%s" % (
-                        row.get("ansible", "N/A"),
-                        provider_status,
-                    )
+                extra_info = format_host_status(row) if show_status else ""
                 print("%s%s%s" % (row["name"], roles_str, extra_info))
             return 0
         from spa import shell as shell_mod
 
         if hosts_cmd == "ssh":
+            blocked = session._require_provisioned()
+            if blocked:
+                return _print_command_error(blocked)
             try:
                 shell_mod.main([args.name, *list(getattr(args, "ssh_args", []) or []), *extra])
             except SystemExit as exc:
@@ -810,6 +920,9 @@ def _run(argv: Sequence[str]) -> int:
                     file=sys.stderr,
                 )
                 return 1
+            blocked = session._require_provisioned()
+            if blocked:
+                return _print_command_error(blocked)
             try:
                 shell_mod.apply_spa_env()
                 shell_mod.run_scp(paths_args)
@@ -826,6 +939,9 @@ def _run(argv: Sequence[str]) -> int:
         from spa import shell as shell_mod
 
         # SSH/SCP is interactive: no JSON envelope even in agent mode.
+        blocked = session._require_provisioned()
+        if blocked:
+            return _print_command_error(blocked)
         try:
             shell_mod.main([*native, *extra])
         except SystemExit as exc:

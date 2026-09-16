@@ -1,6 +1,6 @@
 # App Deployment Customizations
 
-Per-app, per-role customizations: remove files from the app, add config files under the app’s `local/` folder, and run custom Ansible playbooks or roles. You can list the **same app multiple times** with different `target_roles` and different `customizations`.
+Per-app, per-role customizations: remove files from the app, add config files under the app’s `local/` folder, and run custom Ansible playbooks or roles. You can list the **same app multiple times** with different `target_roles` and different `customizations`. Catalog snippet: `spa features show setting.apps.customizations`.
 
 ## Overview
 

@@ -1,10 +1,10 @@
 ---
-# splunk_config.yml
+# Topology only — compose with: spa init --example 4idxc2site_sh --provider aws|virtualbox ENV
+# SVA: M2 / M12
+# Lab: Multisite IDXC (2 sites x 2 idx) + shared SH. Lab compromise: not per-site search.
+# Do not add virtualbox:, terraform:, os:, or apps here.
 plugin: splunk-platform-automator
 
-virtualbox:
-#  box: "centos/7" # Default
-#  box: "ubuntu/xenial64"
 
 # Splunk default settings
 splunk_defaults:
@@ -21,49 +21,45 @@ splunk_defaults:
 # Indexer Cluster settings
 splunk_idxclusters:
   - idxc_name: idxc1
-    idxc_password: splunkidxc1
+    idxc_password: splunkidxc
     idxc_replication_port: 9887
-    idxc_site_rf: 'origin:2, total:2'
-    idxc_site_sf: 'origin:1, total:1'
+    idxc_site_rf: 'origin:2, total:3'
+    idxc_site_sf: 'origin:1, total:2'
 
 # Splunk hosts with its settings
 splunk_hosts:
-
-  # Deployment Server
-  - name: ds
-    roles:
-      - deployment_server
-
   # Cluster Manager
   - name: cm
     roles:
       - cluster_manager
       - monitoring_console
+      - deployment_server
       #- license_manager
     idxcluster: idxc1
     site: site0
 
-  # Cluster Indexers
-  - list:
-      - idx1
-      - idx2
+  # Cluster Indexers (site1)
+  - iter:
+      prefix: idx
+      numbers: 1..2
+      #postfix: _server
     roles:
       - indexer
-    # Name the indexer cluster to be a member of
     idxcluster: idxc1
     site: site1
 
-  # Search Head
+  # Cluster Indexers (site2)
+  - iter:
+      prefix: idx
+      numbers: 3..4
+      #postfix: _server
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site2
+
+  # Single Search Head
   - name: sh
     roles:
       - search_head
-
-  # Search Head
-  - name: hf
-    roles:
-      - heavy_forwarder
-
-   # Universal Forwarder
-  - name: uf
-    roles:
-      - universal_forwarder
+    idxcluster: idxc1

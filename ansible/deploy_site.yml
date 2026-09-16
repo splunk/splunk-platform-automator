@@ -5,6 +5,7 @@
 #   description: Imports preflight, OS setup, install, roles, conf, and apps. Prefer spa deploy.
 #   category: deployment
 #   risk: mutating
+#   requires_provisioned: true
 #   examples:
 #     - spa deploy
 # This playbook deploys a full splunk site

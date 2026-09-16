@@ -5,6 +5,7 @@
 #   description: Copies Splunk etc configuration to the configured backup location.
 #   category: operations
 #   risk: mutating
+#   requires_provisioned: true
 #   examples:
 #     - spa run splunk_backup_etc --hosts sh1
 - name: Backup splunk config

@@ -54,7 +54,7 @@ From a checkout or an already extracted tarball:
 Then:
 
 ```bash
-spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env
+spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
 cd ~/envs/my-env
 spa validate
 spa provision --yes && spa deploy --yes
@@ -63,7 +63,7 @@ spa provision --yes && spa deploy --yes
 Splunk installers and PS baseconfig apps stay **out of** `SPA_HOME` (`install.sh --force` deletes the prefix). Point at them once:
 
 ```bash
-spa init --software-dir ~/Software --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env
+spa init --software-dir ~/Software --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
 ```
 
 That writes `${XDG_CONFIG_HOME:-~/.config}/spa/paths.yml` (directories only, not secrets) and copies `software_dir` / `baseconfig_dir` into the env `.spa.yml`. Later `spa init` calls reuse `paths.yml`. Optional: `--baseconfig-dir`, `--apps-dir`. The installer does not create `~/.config/spa`. `spa validate` and `spa deploy` fail if those directories (and, for local apps, each named source) are still missing.
@@ -88,7 +88,7 @@ mkdir -p ~/src/spa && tar -xzf spa-framework-X.Y.Z.tar.gz -C ~/src/spa
 export SPA_HOME=~/src/spa
 "$SPA_HOME/bin/spa_venv.sh" --create
 export PATH="$SPA_HOME/bin:$PATH"
-spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env
+spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
 ```
 
 `bin/spa` resolves the framework from its own path, so a symlink to `$SPA_HOME/bin/spa` is enough if that tree stays put. The installer wrapper also sets `SPA_HOME` and prefers the prefix venv.

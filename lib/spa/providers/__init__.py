@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 from dataclasses import dataclass
-from typing import Any, Dict, List, Protocol, Tuple
+from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
 
 import yaml
 
@@ -41,6 +41,30 @@ class ProvisionState:
     hint: str = ""
     missing: Tuple[str, ...] = ()
 
+    def payload(self) -> Dict[str, Any]:
+        return {
+            "provider": self.provider,
+            "provisioned": self.provisioned,
+            "reason": self.reason,
+            "hint": self.hint,
+            "missing": list(self.missing),
+        }
+
+    def message(self, extra_line: Optional[str] = None) -> str:
+        """Human error for commands that cannot run until hosts are provisioned."""
+        lines = []
+        if self.missing:
+            lines.append("hosts not provisioned: %s" % format_host_names(self.missing))
+        else:
+            lines.append("hosts not provisioned")
+        if self.provider and self.provider not in {"unknown", "none"}:
+            lines.append("provider: %s" % self.provider)
+        if self.hint:
+            lines.append("Run: %s" % self.hint)
+        if extra_line:
+            lines.append(extra_line)
+        return "\n".join(lines)
+
 
 class ProvisionStateProvider(Protocol):
     """Optional provider capability consumed by `spa deploy`."""
@@ -50,6 +74,15 @@ class ProvisionStateProvider(Protocol):
     def provision_state(self) -> ProvisionState:
         """Return whether this env has been provisioned for every config host."""
         ...
+
+
+def format_host_names(names: Sequence[str], cap: int = 12) -> str:
+    shown = list(names)
+    extra = ""
+    if len(shown) > cap:
+        extra = ", +%d more" % (len(shown) - cap)
+        shown = shown[:cap]
+    return "%s%s" % (", ".join(shown), extra)
 
 
 def expected_hostnames(config: Dict[str, Any]) -> List[str]:
@@ -100,6 +133,14 @@ def inventory_hostnames_from_file(paths: SpaPaths) -> List[str]:
             continue
         names.append(stripped.split()[0])
     return names
+
+
+def lookup_provision_state(paths: SpaPaths) -> Optional[ProvisionState]:
+    """Return provision state, or None when the provider lookup itself fails."""
+    try:
+        return check_provisioned(paths)
+    except ProviderError:
+        return None
 
 
 def check_provisioned(paths: SpaPaths) -> ProvisionState:

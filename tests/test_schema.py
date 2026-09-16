@@ -1527,7 +1527,7 @@ class TestAppDeploymentConfig:
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
             "splunk_app_deployment": {
-                "target_download": "yes",
+                "target_download": "maybe",
                 "apps": [{"name": "MyApp", "source": "local", "target_roles": ["indexer"]}],
             },
         }
@@ -2425,6 +2425,82 @@ class TestRunPlaybookAfterRestart:
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(config)
         assert "run_playbook_after_restart" in str(exc_info.value).lower()
+
+
+class TestSchemaOwnedTypes:
+    """SPA/Splunk-owned closed sets and identifier syntax; cloud offerings stay open."""
+
+    def _host(self, **overrides):
+        host = {"name": "idx1", "roles": ["indexer"]}
+        host.update(overrides)
+        return {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [host],
+        }
+
+    def test_declared_orphans_and_future_volume_type_accepted(self):
+        config = self._host()
+        config["splunk_defaults"] = {
+            "splunk_user": "splunksvc",
+            "splunk_group": "splunksvc",
+        }
+        config["terraform"] = {
+            "aws": {
+                "ssh_username": "ubuntu",
+                "root_volume_type": "io2",
+            }
+        }
+        result = validate_config(config)
+        assert result.splunk_defaults.splunk_user == "splunksvc"
+        assert result.splunk_defaults.splunk_group == "splunksvc"
+        assert result.terraform.aws.ssh_username == "ubuntu"
+        assert result.terraform.aws.root_volume_type == "io2"
+
+        config["terraform"]["aws"]["root_volume_type"] = "gp99-future"
+        result = validate_config(config)
+        assert result.terraform.aws.root_volume_type == "gp99-future"
+
+    def test_invalid_update_mode_rejected(self):
+        config = self._host()
+        config["splunk_app_deployment"] = {"update_mode": "overwrite"}
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        text = str(exc_info.value).lower()
+        assert "update_mode" in text
+        assert "clean" in text or "merge" in text
+
+    def test_invalid_idxc_site_rf_rejected(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_idxclusters": [
+                {"idxc_name": "idxc1", "idxc_site_rf": "2"}
+            ],
+            "splunk_hosts": [
+                {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+                {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"name": "idx2", "roles": ["indexer"], "idxcluster": "idxc1"},
+            ],
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_config(config)
+
+        config["splunk_idxclusters"][0]["idxc_site_rf"] = "origin:2, total:3"
+        result = validate_config(config)
+        assert result.splunk_idxclusters[0].idxc_site_rf == "origin:2, total:3"
+
+    def test_invalid_host_site_rejected(self):
+        config = self._host(site="east")
+        with pytest.raises(ConfigValidationError):
+            validate_config(config)
+        result = validate_config(self._host(site="site1"))
+        assert result.splunk_hosts[0].site == "site1"
+
+    def test_invalid_host_architecture_rejected(self):
+        config = self._host(splunk_architecture="ppc64")
+        with pytest.raises(ConfigValidationError):
+            validate_config(config)
+        result = validate_config(self._host(splunk_architecture="arm64"))
+        assert result.splunk_hosts[0].splunk_architecture == "arm64"
 
 
 if __name__ == "__main__":

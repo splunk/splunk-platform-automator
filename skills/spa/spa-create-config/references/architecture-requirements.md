@@ -35,7 +35,7 @@ Distilled from Lantern scalable architecture and related SF paths. See [referenc
 | Question | Why | Config touchpoint |
 |----------|-----|-------------------|
 | Retention (days per index class) | Disk sizing | `splunk_defaults.splunk_indexes` |
-| SmartStore | Object storage for indexes | See `examples/cm_4idxc2site_3shc_ds_uf_SmartStore.yml`; optional advanced path |
+| SmartStore | Object storage for indexes | `spa features show setting.smartstore`; optional advanced path |
 
 ## Non-functional (document in header; do not over-build lab)
 

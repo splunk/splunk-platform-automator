@@ -5,6 +5,7 @@
 #   description: Installs the configured license file on the license manager host.
 #   category: operations
 #   risk: mutating
+#   requires_provisioned: true
 #   examples:
 #     - spa run splunk_license
 # add a splunk license if not existing

@@ -151,7 +151,9 @@ def _provider_record(host, inventory, provider_hosts):
     return None
 
 
-def host_report(inventory, verbose=False, paths=None, provider_snapshot=None):
+def host_report(
+    inventory, verbose=False, paths=None, provider_snapshot=None, runtime=True
+):
     """Return hosts plus optional provider and Ansible runtime status."""
     hosts = set()
     if "_meta" in inventory and "hostvars" in inventory["_meta"]:
@@ -166,7 +168,7 @@ def host_report(inventory, verbose=False, paths=None, provider_snapshot=None):
     hosts_sorted = sorted(list(hosts))
     ansible_status = {}
     provider = {"name": None, "hosts": {}, "error": None}
-    if verbose:
+    if verbose and runtime:
         provider = provider_snapshot or get_provider_status(paths)
         provider_hosts = provider.get("hosts") or {}
         hosts_to_ping = []
@@ -179,6 +181,8 @@ def host_report(inventory, verbose=False, paths=None, provider_snapshot=None):
         if hosts_to_ping:
             ping_results = check_ansible_status(hosts_to_ping)
             ansible_status.update(ping_results)
+    elif verbose:
+        ansible_status = {host: "unprovisioned" for host in hosts_sorted}
 
     rows = []
     for host in hosts_sorted:
@@ -192,10 +196,13 @@ def host_report(inventory, verbose=False, paths=None, provider_snapshot=None):
         row = {"name": host, "roles": roles}
         if verbose:
             row["ansible"] = ansible_status.get(host, "N/A")
-            record = _provider_record(host, inventory, provider.get("hosts") or {})
-            if record:
-                row["provider"] = provider.get("name")
-                row["provider_status"] = record.get("state")
+            if not runtime:
+                row["provider_status"] = "unprovisioned"
+            else:
+                record = _provider_record(host, inventory, provider.get("hosts") or {})
+                if record:
+                    row["provider"] = provider.get("name")
+                    row["provider_status"] = record.get("state")
         rows.append(row)
     return {
         "provider": provider.get("name"),
@@ -225,6 +232,21 @@ def filter_report(report, names):
     return filtered
 
 
+def format_host_status(row):
+    """Human suffix for spa hosts list --status."""
+    if row.get("ansible") == "unprovisioned" or row.get("provider_status") == "unprovisioned":
+        return " - unprovisioned"
+    provider_status = ""
+    if row.get("provider_status"):
+        provider_status = ", %s: %s" % (
+            str(row.get("provider") or "provider").upper(),
+            row["provider_status"],
+        )
+    if row.get("ansible") or row.get("provider_status"):
+        return " - Ansible: %s%s" % (row.get("ansible", "N/A"), provider_status)
+    return ""
+
+
 def list_hosts(inventory, verbose=False, paths=None, names=None):
     """Lists all hosts in the inventory with their roles."""
     report = filter_report(
@@ -241,16 +263,7 @@ def list_hosts(inventory, verbose=False, paths=None, names=None):
             roles_str = " (%s)" % ", ".join(row["roles"])
         extra_info = ""
         if verbose:
-            provider_status = ""
-            if row.get("provider_status"):
-                provider_status = ", %s: %s" % (
-                    str(row.get("provider") or "provider").upper(),
-                    row["provider_status"],
-                )
-            extra_info = " - Ansible: %s%s" % (
-                row.get("ansible", "N/A"),
-                provider_status,
-            )
+            extra_info = format_host_status(row)
         print("%s%s%s" % (row["name"], roles_str, extra_info))
 
 def resolve_connection_details(target_host, inventory):

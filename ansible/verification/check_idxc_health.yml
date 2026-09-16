@@ -5,6 +5,7 @@
 #   description: Verifies indexer cluster status from the cluster manager.
 #   category: verification
 #   risk: read-only
+#   requires_provisioned: true
 #   examples:
 #     - spa run verification/check_idxc_health
 - name: Check Indexer Cluster Health

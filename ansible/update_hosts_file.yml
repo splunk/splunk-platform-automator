@@ -5,6 +5,7 @@
 #   description: Writes host file entries for Splunk cluster communication.
 #   category: operations
 #   risk: mutating
+#   requires_provisioned: true
 #   examples:
 #     - spa run update_hosts_file
 # update the hosts entires on all hosts
