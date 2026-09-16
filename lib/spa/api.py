@@ -115,9 +115,18 @@ class SpaSession(Protocol):
         software_dir: Optional[str] = None,
         baseconfig_dir: Optional[str] = None,
         apps_dir: Optional[str] = None,
+        provider: Optional[str] = None,
     ) -> CommandResult: ...
 
     def list_examples(self) -> CommandResult: ...
+
+    def features(
+        self,
+        action: str = "list",
+        ident: Optional[str] = None,
+        query: Optional[str] = None,
+        include_keys: bool = False,
+    ) -> CommandResult: ...
 
     def provision(
         self, extra: Optional[List[str]] = None, confirm: bool = False, agent: bool = False
@@ -238,6 +247,72 @@ class LocalSpaSession:
 
         return CommandResult(ok=True, data=list_examples(self.paths.spa_home))
 
+    def features(
+        self,
+        action: str = "list",
+        ident: Optional[str] = None,
+        query: Optional[str] = None,
+        include_keys: bool = False,
+    ) -> CommandResult:
+        from spa.catalog import (
+            feature_key_details,
+            format_feature_text,
+            get_feature,
+            key_inventory,
+            list_payload,
+            load_features,
+            search_features,
+            summarize_feature,
+        )
+
+        spa_home = self.paths.spa_home
+        if include_keys and action != "show":
+            return CommandResult(
+                ok=False,
+                error="spa features --keys requires: spa features show ID --keys",
+                code=2,
+            )
+        try:
+            if action == "keys":
+                return CommandResult(ok=True, data=key_inventory(spa_home))
+            features = load_features(spa_home)
+        except (OSError, ValueError) as exc:
+            return CommandResult(ok=False, error=str(exc), code=1)
+        if action == "list":
+            return CommandResult(ok=True, data=list_payload(spa_home))
+        if action == "search":
+            if not (query or "").strip():
+                return CommandResult(ok=False, error="spa features search QUERY", code=2)
+            found = search_features(features, query or "")
+            return CommandResult(
+                ok=True,
+                data={
+                    "query": query,
+                    "features": [summarize_feature(item) for item in found],
+                },
+            )
+        if action == "show":
+            if not (ident or "").strip():
+                return CommandResult(ok=False, error="spa features show ID", code=2)
+            item = get_feature(features, ident or "")
+            if item is None:
+                return CommandResult(
+                    ok=False, error="Unknown feature: %s" % ident, code=1
+                )
+            feature = dict(item)
+            feature.pop("keys", None)
+            details = feature_key_details(item) if include_keys else None
+            if details is not None:
+                feature["key_details"] = details
+            return CommandResult(
+                ok=True,
+                data={
+                    "feature": feature,
+                    "text": format_feature_text(item, key_details=details),
+                },
+            )
+        return CommandResult(ok=False, error="Unknown spa features action: %s" % action, code=2)
+
     def validate(
         self,
         config: Optional[str] = None,
@@ -296,6 +371,7 @@ class LocalSpaSession:
         software_dir: Optional[str] = None,
         baseconfig_dir: Optional[str] = None,
         apps_dir: Optional[str] = None,
+        provider: Optional[str] = None,
     ) -> CommandResult:
         from spa.init import InitError, init_env
 
@@ -317,10 +393,11 @@ class LocalSpaSession:
                 write_envrc_file=write_envrc_file,
                 skip_doctor=skip_doctor,
                 rebuild_venv=rebuild_venv,
+                log=messages,
                 software_dir=software_dir,
                 baseconfig_dir=baseconfig_dir,
                 apps_dir=apps_dir,
-                log=messages,
+                provider=provider,
             )
         except InitError as exc:
             return CommandResult(ok=False, error=str(exc), code=exc.code, data={"messages": messages})

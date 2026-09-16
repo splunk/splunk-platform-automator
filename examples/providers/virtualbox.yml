@@ -1,0 +1,10 @@
+---
+# Provider only — compose with: spa init --example TOPOLOGY --provider virtualbox ENV
+# Box, CPU, and memory defaults. OS packages and SSH users are catalog settings, not here.
+plugin: splunk-platform-automator
+virtualbox:
+  start_ip: 192.168.60.100
+  box: "almalinux/8"
+  memory: 512
+  cpus: 1
+  install_vbox_additions: false

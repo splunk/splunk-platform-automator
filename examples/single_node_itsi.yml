@@ -1,4 +1,5 @@
 ---
+# Not for spa init --list. Premium/ITSI settings: catalog + later apps CLI (#59/#68).
 # splunk_config.yml
 plugin: splunk-platform-automator
 

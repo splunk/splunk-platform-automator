@@ -1,10 +1,10 @@
 ---
-# splunk_config.yml
+# Topology only — compose with: spa init --example cm_2idxc_sh_uf --provider aws|virtualbox ENV
+# SVA: C1 / C11
+# Lab: CM + 2 IDXC peers + standalone SH + UF. Lab RF/SF 2/2.
+# Do not add virtualbox:, terraform:, os:, or apps here.
 plugin: splunk-platform-automator
 
-virtualbox:
-#  box: "centos/7" # Default
-#  box: "ubuntu/xenial64"
 
 # Splunk default settings
 splunk_defaults:
@@ -23,8 +23,8 @@ splunk_idxclusters:
   - idxc_name: idxc1
     idxc_password: splunkidxc
     idxc_replication_port: 9887
-    idxc_site_rf: 'origin:2, total:3'
-    idxc_site_sf: 'origin:1, total:2'
+    idxc_rf: 2
+    idxc_sf: 2
 
 # Splunk hosts with its settings
 splunk_hosts:
@@ -32,34 +32,25 @@ splunk_hosts:
   - name: cm
     roles:
       - cluster_manager
-      - monitoring_console
       - deployment_server
+      - monitoring_console
       #- license_manager
     idxcluster: idxc1
-    site: site0
 
-  # Cluster Indexers (site1)
+  # Cluster Indexers
   - iter:
       prefix: idx
       numbers: 1..2
-      #postfix: _server
     roles:
       - indexer
     idxcluster: idxc1
-    site: site1
-
-  # Cluster Indexers (site2)
-  - iter:
-      prefix: idx
-      numbers: 3..4
-      #postfix: _server
-    roles:
-      - indexer
-    idxcluster: idxc1
-    site: site2
 
   # Single Search Head
   - name: sh
     roles:
       - search_head
-    idxcluster: idxc1
+
+  # Universal Forwarder
+  - name: uf
+    roles:
+      - universal_forwarder

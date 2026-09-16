@@ -49,8 +49,10 @@ SESSION_API_PARAMETERS = {
         "software_dir",
         "baseconfig_dir",
         "apps_dir",
+        "provider",
     ),
     "list_examples": (),
+    "features": ("action", "ident", "query", "include_keys"),
     "provision": ("extra", "confirm", "agent"),
     "destroy": ("extra", "confirm", "agent"),
     "deploy": ("extra", "verbose", "hosts", "confirm", "agent", "skip_provision_check"),
@@ -136,7 +138,12 @@ def test_session_list_examples_no_stdout(capsys):
     session = open_session(start_dir=str(PROJECT_ROOT))
     result = session.list_examples()
     assert result.ok
-    assert "single_node.yml" in result.data
+    ids = [item["id"] for item in result.data["topologies"]]
+    assert "single_node" in ids
+    assert "cm_2idxc_sh_uf" in ids
+    providers = [item["id"] for item in result.data["providers"]]
+    assert "aws" in providers
+    assert "virtualbox" in providers
     json.dumps(result.data)
     assert capsys.readouterr().out == ""
 

@@ -1,4 +1,5 @@
 ---
+# Not for spa init --list. SmartStore settings belong in the catalog, not compose files.
 # splunk_config.yml
 plugin: splunk-platform-automator
 

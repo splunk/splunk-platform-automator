@@ -383,12 +383,14 @@ def test_agent_json_envelope():
     result = run_spa(["--agent", "init", "--list"])
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
-    assert "single_node.yml" in payload["data"]
+    ids = [item["id"] for item in payload["data"]["topologies"]]
+    assert "single_node" in ids
 
 
 def test_no_agent_text_list():
     result = run_spa(["--no-agent", "init", "--list"])
-    assert result.stdout.strip().startswith("single_node.yml") or "single_node.yml" in result.stdout
+    assert "Topologies:" in result.stdout
+    assert "single_node" in result.stdout
     assert not result.stdout.strip().startswith("{")
 
 
@@ -398,6 +400,7 @@ def test_agent_schema():
     assert payload["ok"] is True
     names = {c["name"] for c in payload["data"]["commands"]}
     assert "run" in names
+    assert "features" in names
     assert "shell" in names
     run = next(c for c in payload["data"]["commands"] if c["name"] == "run")
     flags = [item["long"] for item in run.get("flags") or []]

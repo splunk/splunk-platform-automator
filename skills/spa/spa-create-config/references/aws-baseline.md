@@ -75,4 +75,4 @@ spa aws --survey --region eu-central-1 --json
 
 ## Static fallback (no AWS API)
 
-If `--check-auth` fails or boto3 is missing, follow [aws-without-credentials.md](aws-without-credentials.md). Copy `terraform.aws` from examples; use [aws-os-matrix.md](aws-os-matrix.md) for `ssh_username` and `os.packages`. **Verify AMI IDs in the AWS console** before provision, or re-run discovery when credentials are available.
+If `--check-auth` fails or boto3 is missing, follow [aws-without-credentials.md](aws-without-credentials.md). Copy `terraform.aws` from `examples/providers/aws.yml` or `spa --json features show provider.aws`; use [aws-os-matrix.md](aws-os-matrix.md) for `ssh_username` and `os.packages`. **Verify AMI IDs in the AWS console** before provision, or re-run discovery when credentials are available.

@@ -118,7 +118,7 @@ The Framework is currently tested on Mac OSX and Linux, but any other Unix, whic
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh)"
-spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env
+spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
 ```
 
 That URL is the latest published GitHub Release asset (from **3.0**), not a git branch. Private repo: `gh release download --repo splunk/splunk-platform-automator --pattern install.sh -O - | bash`. Details: [Install](docs/Install.md).
@@ -271,7 +271,7 @@ Pick one path. Ansible always comes from `bin/spa_venv.sh` (created by `install.
 
 ```bash
 # After install.sh, or from a clone / extracted tarball:
-spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env
+spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
 cd ~/envs/my-env
 # With direnv: venv + SPA_HOME / SPA_ENV_DIR / ANSIBLE_* load on cd (init ran direnv allow).
 # Without direnv:
@@ -291,7 +291,7 @@ instances are stopped. Permanently remove the environment with
 **VirtualBox (local VMs).** Same env-dir loop as AWS. Vagrantfile stays in `SPA_HOME`; machine IDs live in `$SPA_ENV_DIR/.vagrant`. Do not run `vagrant` from the env dir.
 
 ```bash
-spa init --example single_node.yml ~/envs/vbox
+spa init --example single_node --provider virtualbox ~/envs/vbox
 cd ~/envs/vbox
 # With direnv, or: eval "$(spa env --export)"
 spa validate
@@ -310,7 +310,7 @@ Keep one git checkout as the framework (`SPA_HOME`) and put each Splunk environm
 
 ```bash
 # Fresh env from an example (AWS or VirtualBox):
-spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/itsi
+spa init --example cm_2idxc_sh_uf --provider aws ~/envs/itsi
 
 # Old clone that already has a running env (config + inventory + Terraform state):
 spa init ~/envs/itsi
@@ -342,8 +342,8 @@ The venv used is the first match of `SPA_VENV_DIR` (or `--dir`), then `$SPA_ENV_
 Give one environment its own Python or Ansible version with an env-local venv:
 
 ```bash
-spa init --example single_node.yml --venv ~/envs/py311
-spa init --example single_node.yml --venv --python python3.11 ~/envs/py311
+spa init --example single_node --provider virtualbox --venv ~/envs/py311
+spa init --example single_node --provider virtualbox --venv --python python3.11 ~/envs/py311
 spa init --force --venv --ansible 2.17.8 ~/envs/py311   # keeps splunk_config.yml
 # existing env:
 ./bin/spa_venv.sh --create --dir ~/envs/py311/.venv --python python3.11
@@ -380,9 +380,9 @@ Day-to-day commands: `spa validate`, `spa provision --yes && spa deploy --yes`, 
 
 ### Copy a configuration file
 
-There is one single configuration file, where all settings for your deployment are defined. `spa init --example … ENV_DIR` copies an example into `$SPA_ENV_DIR/config/splunk_config.yml`. Adjust the settings to your needs. For a standard setup you should be fine with most of the default settings, but there are a lot of things you can adjust for special cases. See the [configuration description](examples/configuration_description.yml) file, where all existing values are described. For a step-by-step AWS lab workflow (SVA topology, OS/SSH, validation), see [Splunk Config Guided Setup](docs/Splunk_Config_Guided_Setup.md). For AI agent skills (`spa-create-config`, `spa-add-test-scenario`), see [AGENTS.md](AGENTS.md) and [skills/spa/](skills/spa/). To store passwords and other secrets securely (e.g. Splunk admin password, cluster secrets), see [Storing secrets in splunk_config.yml](docs/Secrets_and_Vault.md).
+There is one single configuration file, where all settings for your deployment are defined. `spa init --example TOPOLOGY --provider aws|virtualbox ENV_DIR` composes a topology file from `examples/topologies/` with a provider file from `examples/providers/` into `$SPA_ENV_DIR/config/splunk_config.yml`. OS, SSL, and other knobs are not in those files. Use the concise `spa features list` / `search QUERY` output to choose a feature, `spa features show ID` for its snippet, and `spa features show ID --keys` only when you need schema types, constraints, allowed values, and catalog notes ([examples/catalog/features.yml](examples/catalog/features.yml)). Types and allowed values are defined in the Pydantic schema (`spa validate`); the catalog is when-to-use and snippets. A commented dump remains at [configuration_description.yml](examples/configuration_description.yml). For a step-by-step AWS lab workflow (SVA topology, OS/SSH, validation), see [Splunk Config Guided Setup](docs/Splunk_Config_Guided_Setup.md). For AI agent skills (`spa-create-config`, `spa-add-test-scenario`), see [AGENTS.md](AGENTS.md) and [skills/spa/README.md](skills/spa/README.md). To store passwords and other secrets securely (e.g. Splunk admin password, cluster secrets), see [Storing secrets in splunk_config.yml](docs/Secrets_and_Vault.md).
 
-AWS: See [instruction here](#option-b-aws-with-terraform-recommended-for-aws) when deploying into Amazon Cloud. You can start with [splunk_config_terraform_aws.yml](examples/splunk_config_terraform_aws.yml) for a simple environment. Copy `splunk_idxclusters`, `splunk_shclusters` and `splunk_hosts` sections from other examples for more complex deployments.
+AWS: See [instruction here](#option-b-aws-with-terraform-recommended-for-aws) when deploying into Amazon Cloud. Compose C1 with AWS: `spa init --example cm_2idxc_sh_uf --provider aws ENV`. List topologies and providers with `spa init --list`.
 
 ### Start the deployment
 
@@ -390,7 +390,7 @@ Splunk Platform Automator supports multiple deployment targets. Choose the appro
 
 #### Option A: Virtualbox (Local Virtual Machines)
 
-Use an env dir (`spa init --example single_node.yml ~/envs/vbox`). The Vagrantfile stays in `SPA_HOME`; env dirs do not include one. `spa` sets `VAGRANT_CWD` and `VAGRANT_DOTFILE_PATH` so you do not run `vagrant` from the env.
+Use an env dir (`spa init --example single_node --provider virtualbox ~/envs/vbox`). The Vagrantfile stays in `SPA_HOME`; env dirs do not include one. `spa` sets `VAGRANT_CWD` and `VAGRANT_DOTFILE_PATH` so you do not run `vagrant` from the env.
 
 When building virtual machines for Virtualbox the first time it will pull an OS image from the internet. The box images are cached here: `~/.vagrant.d/boxes`.
 

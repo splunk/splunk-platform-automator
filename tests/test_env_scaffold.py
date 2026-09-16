@@ -64,6 +64,9 @@ def test_separate_env_inventory_does_not_write_clone(tmp_path):
     before = _clone_snapshots()
 
     env = spa_env()
+    venv_bin = PROJECT_ROOT / "tests" / ".venv" / "bin"
+    if venv_bin.is_dir():
+        env["PATH"] = str(venv_bin) + os.pathsep + env.get("PATH", "")
     env["SPA_HOME"] = str(PROJECT_ROOT)
     env["SPA_ENV_DIR"] = str(dest)
     env["SPA_SOFTWARE_DIR"] = str(stub)
@@ -135,6 +138,9 @@ def test_clone_equal_inventory_still_parses(tmp_path):
     stub = PROJECT_ROOT / "tests" / "fixtures" / "baseconfig"
     _ensure_software_stubs(stub)
     env = spa_env()
+    venv_bin = PROJECT_ROOT / "tests" / ".venv" / "bin"
+    if venv_bin.is_dir():
+        env["PATH"] = str(venv_bin) + os.pathsep + env.get("PATH", "")
     env.pop("SPA_HOME", None)
     env.pop("SPA_ENV_DIR", None)
     env["SPA_SOFTWARE_DIR"] = str(stub)
@@ -144,7 +150,7 @@ def test_clone_equal_inventory_still_parses(tmp_path):
     os.makedirs(env["ANSIBLE_LOCAL_TEMP"], exist_ok=True)
 
     cfg = tmp_path / "splunk_config.yml"
-    cfg.write_text((PROJECT_ROOT / "examples" / "single_node.yml").read_text())
+    cfg.write_text((PROJECT_ROOT / "examples" / "topologies" / "single_node.yml").read_text())
     parsed = subprocess.run(
         ["ansible-inventory", "--list", "-i", str(cfg)],
         cwd=PROJECT_ROOT,
@@ -169,6 +175,9 @@ def test_create_linkpage_writes_env_not_clone(tmp_path):
     before = _clone_snapshots()
 
     env = spa_env()
+    venv_bin = PROJECT_ROOT / "tests" / ".venv" / "bin"
+    if venv_bin.is_dir():
+        env["PATH"] = str(venv_bin) + os.pathsep + env.get("PATH", "")
     env["SPA_HOME"] = str(PROJECT_ROOT)
     env["SPA_ENV_DIR"] = str(dest)
     env["SPA_SOFTWARE_DIR"] = str(stub)

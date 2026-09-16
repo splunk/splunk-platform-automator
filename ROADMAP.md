@@ -68,7 +68,8 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [ ] Deploy dry-run / plan (stale-fact preflight already in Unreleased)
 - [ ] Documented `splunk_user` (and local VirtualBox SSH user) in `splunk_defaults`
 - [ ] Disable remaining UI tours and info wizards after login
-- [ ] Feature catalog + provider-independent topology examples; separate provider examples; spa merges on select — [#53](https://github.com/splunk/splunk-platform-automator/issues/53)
+- [ ] Feature catalog + provider-independent topology examples; separate provider examples; spa init composes on select — [#53](https://github.com/splunk/splunk-platform-automator/issues/53)
+- [ ] `spa config` applies catalog settings into `splunk_config.yml` without a skill — [#76](https://github.com/splunk/splunk-platform-automator/issues/76). Blocked by [#53](https://github.com/splunk/splunk-platform-automator/issues/53)
 - [ ] Certificate add/rotate + SPA vault for certs/keys (closes [#30](https://github.com/splunk/splunk-platform-automator/issues/30)) — [#69](https://github.com/splunk/splunk-platform-automator/issues/69). Blocked by [#52](https://github.com/splunk/splunk-platform-automator/issues/52)
 - [ ] Credentials / `spa auth` (profiles, Splunkbase, vault password; macOS Keychain; backwards compatible) — [#52](https://github.com/splunk/splunk-platform-automator/issues/52)
 

@@ -1,4 +1,5 @@
 ---
+# Not for spa init --list. Windows UF is not a compose topology; catalog settings only if needed.
 # splunk_config.yml
 plugin: splunk-platform-automator
 

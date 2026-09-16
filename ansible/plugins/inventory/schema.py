@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
 
@@ -33,6 +33,20 @@ class AllowedRole(str, Enum):
 
 # Roles that are allowed to have a 'site' variable
 ROLES_WITH_SITE = {AllowedRole.indexer, AllowedRole.search_head, AllowedRole.cluster_manager}
+
+# Version: "latest" or dotted numeric (e.g. 1.0, 4.21.1, 10.1.0)
+VERSION_NUMBER_PATTERN = re.compile(r"^\d+(\.\d+)*$")
+SPLUNK_VERSION_PATTERN = r"^(latest|\d+(\.\d+)*)$"
+SPLUNK_ARCHITECTURE_PATTERN = r"^(amd64|x86_64|arm64)$"
+SPLUNK_SITE_PATTERN = r"^site\d+$"
+# Splunk site factor tokens: origin:N, total:N, optional siteN:N
+IDXC_SITE_FACTOR_PATTERN = (
+    r"^(origin:\d+|total:\d+|site\d+:\d+)(, ?(origin:\d+|total:\d+|site\d+:\d+))*$"
+)
+IPV4_PATTERN = (
+    r"^(?:(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d?\d)$"
+)
+AMI_ID_PATTERN = r"^ami-[0-9a-fA-F]+$"
 
 
 # =============================================================================
@@ -60,7 +74,11 @@ class VirtualBoxConfig(BaseModel):
     """VirtualBox virtualization settings."""
     model_config = ConfigDict(extra='allow')
     
-    start_ip: Optional[str] = Field(None, description="Starting IP address (192.68.56.0/21 range)")
+    start_ip: Optional[str] = Field(
+        None,
+        pattern=IPV4_PATTERN,
+        description="Starting IPv4 address for VirtualBox guests",
+    )
     box: Optional[str] = Field(None, description="Vagrant box name")
     memory: Optional[int] = Field(None, ge=256, description="Memory in MB (min 256)")
     cpus: Optional[int] = Field(None, ge=1, description="Number of CPUs (min 1)")
@@ -73,12 +91,24 @@ class AwsTerraformConfig(BaseModel):
     model_config = ConfigDict(extra='allow')
     
     region: Optional[str] = Field(None, description="AWS region")
-    ami_id: Optional[str] = Field(None, description="AMI ID")
+    ami_id: Optional[str] = Field(
+        None,
+        pattern=AMI_ID_PATTERN,
+        description="AMI identifier; pick a live AMI with spa aws, not a hardcoded catalog",
+    )
     key_name: Optional[str] = Field(None, description="SSH key name")
     ssh_private_key_file: Optional[str] = Field(None, description="Path to SSH private key")
     security_group_names: Optional[List[str]] = Field(None, description="Security group names")
     instance_type: Optional[str] = Field(None, description="EC2 instance type")
     root_volume_size: Optional[int] = Field(None, ge=8, description="Root volume size in GB")
+    root_volume_type: Optional[str] = Field(
+        None,
+        description="EBS root volume type (AWS-defined; lab often uses gp3). Not a closed SPA list.",
+    )
+    ssh_username: Optional[str] = Field(
+        None,
+        description="SSH login user for the AMI (ec2-user, ubuntu, admin). Match with spa aws --describe-ami.",
+    )
     tags: Optional[Dict[str, str]] = Field(None, description="AWS resource tags")
     subnet_id: Optional[str] = Field(None, description="AWS VPC subnet ID")
 
@@ -158,8 +188,16 @@ class SplunkDefaultsConfig(BaseModel):
     model_config = ConfigDict(extra='allow')
     
     splunk_env_name: Optional[str] = None
-    splunk_version: Optional[str] = None
-    splunk_architecture: Optional[str] = Field(None, pattern=r'^(amd64|x86_64|arm64)$')
+    splunk_version: Optional[str] = Field(None, pattern=SPLUNK_VERSION_PATTERN)
+    splunk_architecture: Optional[str] = Field(None, pattern=SPLUNK_ARCHITECTURE_PATTERN)
+    splunk_user: Optional[str] = Field(
+        None,
+        description="OS account used to run Splunk; Ansible roles default to splunk if unset",
+    )
+    splunk_group: Optional[str] = Field(
+        None,
+        description="Primary OS group for the Splunk account; Ansible roles default to splunk if unset",
+    )
     splunk_fips: Optional[bool] = None
     splunk_download: Optional[SplunkDownloadConfig] = None
     splunk_admin_password: Optional[str] = None
@@ -204,8 +242,6 @@ ALLOWED_DEPLOYMENT_TARGETS = ("direct", "auto")
 ALLOWED_APP_STATES = ("installed", "absent")
 ALLOWED_UPDATE_MODES = ("clean", "merge")
 ALLOWED_PREMIUM_APPS = ("itsi",)  # Premium apps: target_roles not required; deployment is role-based
-# Version: "latest" or dotted numeric (e.g. 1.0, 4.21.1, 10.1.0)
-VERSION_NUMBER_PATTERN = re.compile(r"^\d+(\.\d+)*$")
 
 
 class SplunkAppDeploymentConfig(BaseModel):
@@ -215,7 +251,7 @@ class SplunkAppDeploymentConfig(BaseModel):
     splunkbase_username: Optional[str] = None
     splunkbase_password: Optional[str] = None
     local_app_repo_path: Optional[str] = None
-    update_mode: Optional[str] = None
+    update_mode: Optional[Literal["clean", "merge"]] = None
     deploymentclient_check: bool = Field(
         default=True,
         description=(
@@ -795,7 +831,7 @@ class SplunkEnvironment(BaseModel):
     model_config = ConfigDict(extra='allow')
     
     splunk_env_name: str
-    splunk_version: Optional[str] = None
+    splunk_version: Optional[str] = Field(None, pattern=SPLUNK_VERSION_PATTERN)
     splunk_admin_password: Optional[str] = None
     splunk_license_file: Optional[str] = None
     splunk_indexes: Optional[Dict[str, Any]] = None
@@ -808,8 +844,8 @@ class IdxClusterConfig(BaseModel):
     idxc_name: str
     idxc_password: Optional[str] = None
     idxc_replication_port: Optional[int] = Field(None, ge=1, le=65535)
-    idxc_site_rf: Optional[str] = None
-    idxc_site_sf: Optional[str] = None
+    idxc_site_rf: Optional[str] = Field(None, pattern=IDXC_SITE_FACTOR_PATTERN)
+    idxc_site_sf: Optional[str] = Field(None, pattern=IDXC_SITE_FACTOR_PATTERN)
     idxc_rf: Optional[int] = Field(None, ge=1)
     idxc_sf: Optional[int] = Field(None, ge=1)
     idxc_discovery_password: Optional[str] = None
@@ -820,7 +856,7 @@ class ShClusterConfig(BaseModel):
     model_config = ConfigDict(extra='allow')
     
     shc_name: str
-    shc_site: Optional[str] = None
+    shc_site: Optional[str] = Field(None, pattern=SPLUNK_SITE_PATTERN)
     shc_password: Optional[str] = None
     shc_replication_port: Optional[int] = Field(None, ge=1, le=65535)
 
@@ -851,15 +887,15 @@ class SplunkHost(BaseModel):
     
     # Optional settings
     splunk_env: Optional[str] = None
-    site: Optional[str] = None
+    site: Optional[str] = Field(None, pattern=SPLUNK_SITE_PATTERN)
     cname: Optional[str] = None
     idxcluster: Optional[str] = None
     shcluster: Optional[str] = None
     ip_addr: Optional[str] = None
     
     # Host-level overrides
-    splunk_version: Optional[str] = None
-    splunk_architecture: Optional[str] = None
+    splunk_version: Optional[str] = Field(None, pattern=SPLUNK_VERSION_PATTERN)
+    splunk_architecture: Optional[str] = Field(None, pattern=SPLUNK_ARCHITECTURE_PATTERN)
     splunk_admin_password: Optional[str] = None
     splunk_license_file: Optional[str] = None
     splunk_outputs: Optional[str] = None

@@ -8,9 +8,14 @@ import subprocess
 import sys
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from spa.paths import _expand, is_spa_home, load_user_paths, save_user_paths
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover
+    yaml = None  # type: ignore
 
 _LOG: ContextVar[Optional[List[str]]] = ContextVar("spa_init_log", default=None)
 
@@ -61,6 +66,39 @@ KEEP_HINT = (
     ".vagrant/",
     ".vault_pass*",
 )
+
+TOPOLOGY_FORBIDDEN = ("virtualbox", "terraform", "os", "splunk_app_deployment", "aws")
+PROVIDER_FORBIDDEN = (
+    "splunk_hosts",
+    "splunk_idxclusters",
+    "splunk_shclusters",
+    "splunk_environments",
+    "os",
+)
+
+# Old single-file names → topology id + implied provider.
+EXAMPLE_ALIASES = {
+    "single_node.yml": ("single_node", "virtualbox"),
+    "idx_sh_uf.yml": ("idx_sh_uf", "virtualbox"),
+    "cm_2idxc_sh_uf.yml": ("cm_2idxc_sh_uf", "virtualbox"),
+    "cm_2idxc_sh_uf_aws.yml": ("cm_2idxc_sh_uf", "aws"),
+    "cm_2idxc1site_3shc_uf.yml": ("cm_2idxc1site_3shc_uf", "virtualbox"),
+    "4idxc2site_sh.yml": ("4idxc2site_sh", "virtualbox"),
+    "cm_4idxc2site_3shc_ds_uf.yml": ("cm_4idxc2site_3shc_ds_uf", "virtualbox"),
+    "two_envs_each_cm_2idxc1site_ds_sh_uf.yml": (
+        "two_envs_each_cm_2idxc1site_ds_sh_uf",
+        "virtualbox",
+    ),
+    "cm1_2idxc1site_cm2_2idxc1site_ds_3shc_smc_uf.yml": (
+        "cm1_2idxc1site_cm2_2idxc1site_ds_3shc_smc_uf",
+        "virtualbox",
+    ),
+    "ds_cm_2idxc1site_sh_hf_uf.yml": ("ds_cm_2idxc1site_sh_hf_uf", "virtualbox"),
+    "idx_3shc_uf.yml": ("idx_3shc_uf", "virtualbox"),
+    "aws_lab_baseline.yml": ("single_node", "aws"),
+    "splunk_config_terraform_aws.yml": ("cm_2idxc_sh_uf", "aws"),
+    "splunk_config_aws.yml": ("cm_2idxc_sh_uf", "aws"),
+}
 
 
 class InitError(Exception):
@@ -393,13 +431,124 @@ def run_doctor(dest: Path, spa_home: Path, skip: bool) -> None:
         )
 
 
-def list_examples(spa_home: Path) -> List[str]:
-    names = []
-    examples = spa_home / "examples"
-    if examples.is_dir():
-        for path in sorted(examples.glob("*.yml")):
-            names.append(path.name)
-    return names
+def list_examples(spa_home: Path) -> Dict[str, Any]:
+    topologies = []
+    providers = []
+    topo_dir = spa_home / "examples" / "topologies"
+    if topo_dir.is_dir():
+        for path in sorted(topo_dir.glob("*.yml")):
+            topologies.append({"id": path.stem, "file": str(path.relative_to(spa_home))})
+    prov_dir = spa_home / "examples" / "providers"
+    if prov_dir.is_dir():
+        for path in sorted(prov_dir.glob("*.yml")):
+            providers.append({"id": path.stem, "file": str(path.relative_to(spa_home))})
+    return {"topologies": topologies, "providers": providers}
+
+
+def format_example_list(data: Dict[str, Any]) -> str:
+    lines = ["Topologies:"]
+    for item in data.get("topologies") or []:
+        lines.append("  %s" % item["id"])
+    lines.append("Providers:")
+    for item in data.get("providers") or []:
+        lines.append("  %s" % item["id"])
+    lines.append("Compose: spa init --example TOPOLOGY --provider aws|virtualbox ENV")
+    return "\n".join(lines)
+
+
+def _normalize_example_name(name: str) -> str:
+    name = (name or "").replace("examples/", "").replace("topologies/", "").strip()
+    if name.endswith(".yaml"):
+        name = name[: -len(".yaml")] + ".yml"
+    if not name.endswith(".yml"):
+        name = name + ".yml"
+    return name
+
+
+def resolve_example_pair(
+    spa_home: Path, example: Optional[str], provider: Optional[str]
+) -> Tuple[str, str, Optional[str]]:
+    """Return (topology_id, provider_id, alias_hint)."""
+    provider_id = (provider or "").strip().lower() or None
+    if provider_id in {"terraform.aws", "terraform"}:
+        provider_id = "aws"
+    raw = _normalize_example_name(example or "single_node.yml")
+    hint = None
+    topology_id = Path(raw).stem
+    alias = EXAMPLE_ALIASES.get(raw)
+    if alias:
+        topology_id, implied = alias
+        hint = (
+            "Alias %s → --example %s --provider %s"
+            % (raw, topology_id, implied)
+        )
+        if provider_id is None:
+            provider_id = implied
+    if provider_id is None:
+        raise InitError(
+            "spa init --example requires --provider aws or virtualbox.\n"
+            "List: spa init --list"
+        )
+    topo = spa_home / "examples" / "topologies" / ("%s.yml" % topology_id)
+    prov = spa_home / "examples" / "providers" / ("%s.yml" % provider_id)
+    if not topo.is_file():
+        raise InitError("Topology example not found: %s" % topo)
+    if not prov.is_file():
+        raise InitError("Provider example not found: %s (use aws or virtualbox)" % prov)
+    return topology_id, provider_id, hint
+
+
+def _load_yaml_mapping(path: Path) -> Dict[str, Any]:
+    if yaml is None:
+        raise InitError("PyYAML is required to compose examples")
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict):
+        raise InitError("Example is not a mapping: %s" % path)
+    return data
+
+
+def compose_example_config(spa_home: Path, topology_id: str, provider_id: str) -> Dict[str, Any]:
+    topo_path = spa_home / "examples" / "topologies" / ("%s.yml" % topology_id)
+    prov_path = spa_home / "examples" / "providers" / ("%s.yml" % provider_id)
+    topology = _load_yaml_mapping(topo_path)
+    provider = _load_yaml_mapping(prov_path)
+    bad_topo = [key for key in TOPOLOGY_FORBIDDEN if topology.get(key)]
+    if bad_topo:
+        raise InitError(
+            "Topology %s must not contain %s" % (topo_path.name, ", ".join(bad_topo))
+        )
+    bad_prov = [key for key in PROVIDER_FORBIDDEN if provider.get(key)]
+    if bad_prov:
+        raise InitError(
+            "Provider %s must not contain %s" % (prov_path.name, ", ".join(bad_prov))
+        )
+    plugin = topology.get("plugin") or provider.get("plugin") or "splunk-platform-automator"
+    composed: Dict[str, Any] = {"plugin": plugin}
+    for key, value in provider.items():
+        if key == "plugin":
+            continue
+        composed[key] = value
+    for key, value in topology.items():
+        if key == "plugin":
+            continue
+        composed[key] = value
+    return composed
+
+
+def dump_splunk_config(data: Dict[str, Any]) -> str:
+    if yaml is None:
+        raise InitError("PyYAML is required to compose examples")
+    return yaml.safe_dump(data, sort_keys=False, default_flow_style=False)
+
+
+def write_composed_config(
+    dest_config: Path, spa_home: Path, example: Optional[str], provider: Optional[str]
+) -> Tuple[str, str, Optional[str]]:
+    topology_id, provider_id, hint = resolve_example_pair(spa_home, example, provider)
+    composed = compose_example_config(spa_home, topology_id, provider_id)
+    dest_config.parent.mkdir(parents=True, exist_ok=True)
+    dest_config.write_text(dump_splunk_config(composed), encoding="utf-8")
+    return topology_id, provider_id, hint
 
 
 def init_env(
@@ -423,6 +572,7 @@ def init_env(
     software_dir: Optional[str] = None,
     baseconfig_dir: Optional[str] = None,
     apps_dir: Optional[str] = None,
+    provider: Optional[str] = None,
 ) -> int:
     token = _LOG.set(log) if log is not None else None
     try:
@@ -445,6 +595,7 @@ def init_env(
             software_dir=software_dir,
             baseconfig_dir=baseconfig_dir,
             apps_dir=apps_dir,
+            provider=provider,
         )
     finally:
         if token is not None:
@@ -471,6 +622,7 @@ def _init_env(
     software_dir: Optional[str] = None,
     baseconfig_dir: Optional[str] = None,
     apps_dir: Optional[str] = None,
+    provider: Optional[str] = None,
 ) -> int:
     pip_pkgs = list(pip_pkgs or [])
     dest = dest.resolve()
@@ -552,15 +704,10 @@ def _init_env(
         raise InitError("Env already exists (%s). Use --force to refresh .spa.yml/.envrc." % dest)
 
     if example_set:
-        name = example or "single_node.yml"
-        name = name.replace("examples/", "")
-        if not name.endswith((".yml", ".yaml")):
-            name = name + ".yml"
-        source_example = spa_home / "examples" / name
-        if not source_example.is_file():
-            raise InitError("Example not found: %s" % source_example)
         ensure_env_dirs(dest)
-        shutil.copy2(source_example, config_dest)
+        topology_id, provider_id, hint = write_composed_config(
+            config_dest, spa_home, example, provider
+        )
         _write()
         if write_envrc_file:
             write_envrc(dest, spa_home)
@@ -568,7 +715,9 @@ def _init_env(
         allow_direnv(dest)
         run_doctor(dest, spa_home, skip_doctor)
         _say("Env scaffolded at %s" % dest)
-        _say("  example:   %s" % name)
+        _say("  example:   %s --provider %s" % (topology_id, provider_id))
+        if hint:
+            _say("  note:      %s" % hint)
         _say("  config:    %s" % config_dest)
         return 0
 
@@ -585,15 +734,13 @@ def _init_env(
         _say("Refreshed env at %s (splunk_config.yml kept)" % dest)
         return 0
 
-    # Fresh env, default example
-    name = "single_node.yml"
-    source_example = spa_home / "examples" / name
-    if not source_example.is_file():
-        raise InitError("Example not found: %s" % source_example)
+    # Fresh env, default topology + VirtualBox (same as former single_node.yml)
     if config_dest.exists() or (dest / ".spa.yml").exists():
         raise InitError("Env already exists (%s). Use --force to refresh .spa.yml/.envrc." % dest)
     ensure_env_dirs(dest)
-    shutil.copy2(source_example, config_dest)
+    topology_id, provider_id, hint = write_composed_config(
+        config_dest, spa_home, "single_node", "virtualbox"
+    )
     _write()
     if write_envrc_file:
         write_envrc(dest, spa_home)
@@ -601,6 +748,8 @@ def _init_env(
     allow_direnv(dest)
     run_doctor(dest, spa_home, skip_doctor)
     _say("Env scaffolded at %s" % dest)
-    _say("  example:   %s" % name)
+    _say("  example:   %s --provider %s" % (topology_id, provider_id))
+    if hint:
+        _say("  note:      %s" % hint)
     _say("  config:    %s" % config_dest)
     return 0

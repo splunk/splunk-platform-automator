@@ -1,4 +1,5 @@
 ---
+# Not for spa init --list. App layouts are later (#59/#68). See catalog setting.apps.
 # Example Splunk App Deployment Configuration
 # Add this section to your config/splunk_config.yml file
 

@@ -34,7 +34,7 @@ Skills and agents should use full names (`spa hosts ssh`, `spa validate`), not `
 
 - **`SPA_HOME`** is the framework (playbooks, Terraform modules, `Vagrantfile`, `bin/`, skills). A clone is develop-only for `spa`; operators use a prefix or clone as home, never as the env.
 - **`SPA_ENV_DIR`** is one Splunk environment (`config/splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `.vagrant/`, optional `saved_base_config_apps/`). Do not copy `ansible/` into the env. Do not put a Vagrantfile in the env.
-- Unset both → the git clone for path resolution and `ansible-playbook`. That clone-equal layout is **not** valid for `spa` (except `spa --help`, `spa init`, `spa agent schema`, `spa env --export`, `spa doctor`).
+- Unset both → the git clone for path resolution and `ansible-playbook`. That clone-equal layout is **not** valid for `spa` (except `spa --help`, `spa init`, `spa agent schema`, `spa env --export`, `spa doctor`, `spa features`).
 - When they differ, Terraform **modules** stay under `$SPA_HOME/terraform/aws`; **state** stays in the env. VirtualBox uses `VAGRANT_CWD=$SPA_HOME` and `VAGRANT_DOTFILE_PATH=$SPA_ENV_DIR/.vagrant`.
 - `../Software` and `../apps` prefer a sibling of the **env**, then the clone.
 - Env dirs get an `.envrc`. `spa` is `$SPA_HOME/bin/spa` on `PATH`, not a per-env `bin/`.
@@ -68,12 +68,12 @@ source bin/spa_venv.sh --create
 
 - `spa provision`, `spa destroy`, `spa suspend`, and `spa resume` follow `splunk_config.yml`: **`terraform.aws`** or **`virtualbox:`**. Same env-dir loop for both.
 - A top-level `aws:` block is inventory-only (legacy vagrant-aws). vagrant-aws is removed in 3.0; use Terraform AWS for cloud.
-- VirtualBox: `spa init --example single_node.yml ~/envs/vbox` then `spa provision --yes && spa deploy --yes`. Env dirs have no `Vagrantfile`.
+- VirtualBox: `spa init --example single_node --provider virtualbox ~/envs/vbox` then `spa provision --yes && spa deploy --yes`. Env dirs have no `Vagrantfile`.
 
 Recommended loop (AWS or VirtualBox):
 
 ```bash
-spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env
+spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
 cd ~/envs/my-env
 spa validate
 spa provision --yes && spa deploy --yes

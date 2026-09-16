@@ -6,7 +6,9 @@ plugin: splunk-platform-automator
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #
 # This is not a working example
-# This file documents all the possible config settings
+# This file documents many config settings (incomplete).
+# Operator/skill lookup: spa features list|show|search
+# (examples/catalog/features.yml). Not for spa init --example.
 #
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ######################################################################

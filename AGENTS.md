@@ -7,10 +7,11 @@ Splunk Platform Automator (SPA) provisions and deploys Splunk Enterprise on **AW
 | Task | Path / command |
 |------|----------------|
 | Main config | `$SPA_ENV_DIR/config/splunk_config.yml` (copy from `examples/` via `spa init --example`) |
-| Config keys reference | `examples/configuration_description.yml` |
+| Config keys reference | Types, allowed values, and identifier patterns live in the Pydantic schema (`ansible/plugins/inventory/schema.py`, enforced by `spa validate`). `spa features` / `examples/catalog/features.yml` is when-to-use, snippets, and merge notes (commented dump: `examples/configuration_description.yml`) |
 | Guided human + agent workflow | [docs/Splunk_Config_Guided_Setup.md](docs/Splunk_Config_Guided_Setup.md) |
 | 2.x → 3.0 operator changes | [docs/Migrate_SPA_2x_to_3x.md](docs/Migrate_SPA_2x_to_3x.md) |
-| New environment (one clone, many envs) | `spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env` then `cd ~/envs/my-env` (direnv loads venv + `SPA_*`; otherwise `source "$SPA_HOME/bin/spa_venv.sh" --env DIR` and `eval "$(spa env --export)"`). Prefix install: `spa init --software-dir ~/Software --example … ENV`. Existing clone env: `spa init ~/envs/my-env` (migrates config/inventory/tfstate/`.vagrant`). |
+| New environment (one clone, many envs) | `spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env` then `cd ~/envs/my-env` (direnv loads venv + `SPA_*`; otherwise `source "$SPA_HOME/bin/spa_venv.sh" --env DIR` and `eval "$(spa env --export)"`). Prefix install: `spa init --software-dir ~/Software --example … ENV`. Existing clone env: `spa init ~/envs/my-env` (migrates config/inventory/tfstate/`.vagrant`). |
+| Config settings lookup | `spa features list` / `search QUERY` (concise decision guidance), `show ID`, then `show ID --keys` for schema types/constraints plus catalog notes (JSON: `spa --json features …`). Live AWS region/AMI/instance values come from `spa aws --json`, not schema enums. Skill writes snippets into `splunk_config.yml`; init only composes topology + provider. |
 | Python env (Ansible, Pydantic) | `source bin/spa_venv.sh` (shared `SPA_HOME/.venv`; env `.venv` wins when present). Env dirs get an `.envrc` for direnv; `spa init` creates the venv if missing and runs `direnv allow` when direnv is installed. |
 | Host tools (terraform, direnv, …) | `spa doctor` (also run at end of `spa init`; `--skip-doctor` to skip). Terraform only for AWS; VirtualBox checks Vagrant, VirtualBox, the driver match, and `vagrant-vbguest` (`virtualbox:` in config). Not brew ansible/pydantic — use `spa_venv`. |
 | Validate before provision | `spa validate` (schema, Software/baseconfig/local apps, inventory, licenses pairing, playbook syntax) |
@@ -20,7 +21,7 @@ Splunk Platform Automator (SPA) provisions and deploys Splunk Enterprise on **AW
 | Pause/resume compute | `spa suspend --yes` / `spa resume --yes` (optional `--hosts`; AWS keeps Terraform state and EBS; VirtualBox is `vagrant halt` / `vagrant up`) |
 | List / SSH / copy | `spa hosts list --status`, `spa hosts ssh NAME`, `spa hosts copy SRC DST` (`spa sh` / `spa shell` still SSH) |
 | Destroy managed infrastructure | `spa destroy --yes` (env-wide; later `--all` vs `--hosts` decommission) |
-| VirtualBox | Same loop as AWS after `spa init --example single_node.yml ENV`. Vagrantfile in `SPA_HOME`; `.vagrant` in the env. |
+| VirtualBox | Same loop as AWS after `spa init --example single_node --provider virtualbox ENV`. Vagrantfile in `SPA_HOME`; `.vagrant` in the env. |
 | Install framework (operators) | [docs/Install.md](docs/Install.md); `install.sh` from `releases/latest/download` (default `${XDG_DATA_HOME:-~/.local/share}/spa`) or extract `spa-framework-*.tar.gz` |
 | Local tests | `./tests/run_local_tests.sh` |
 | Release | [RELEASE.md](RELEASE.md), `./scripts/release.sh --check` |

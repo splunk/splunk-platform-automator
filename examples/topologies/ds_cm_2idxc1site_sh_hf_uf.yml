@@ -1,10 +1,9 @@
 ---
-# splunk_config.yml
+# Topology only — compose with: spa init --example ds_cm_2idxc1site_sh_hf_uf --provider aws|virtualbox ENV
+# Lab: DS + CM + IDXC + SH + HF + UF.
+# Do not add virtualbox:, terraform:, os:, or apps here.
 plugin: splunk-platform-automator
 
-virtualbox:
-#  box: "centos/7" # Default
-#  box: "ubuntu/xenial64"
 
 # Splunk default settings
 splunk_defaults:
@@ -21,26 +20,18 @@ splunk_defaults:
 # Indexer Cluster settings
 splunk_idxclusters:
   - idxc_name: idxc1
-    idxc_password: splunkidxc
+    idxc_password: splunkidxc1
     idxc_replication_port: 9887
-    idxc_site_rf: 'origin:2, total:3'
-    idxc_site_sf: 'origin:1, total:2'
-
-# Search Head Cluster settings
-splunk_shclusters:
-  - shc_name: shc1
-    shc_site: site0
-    shc_password: splunkshc
-    shc_replication_port: 9887
+    idxc_site_rf: 'origin:2, total:2'
+    idxc_site_sf: 'origin:1, total:1'
 
 # Splunk hosts with its settings
 splunk_hosts:
+
   # Deployment Server
   - name: ds
     roles:
       - deployment_server
-      - deployer
-    shcluster: shc1
 
   # Cluster Manager
   - name: cm
@@ -51,33 +42,27 @@ splunk_hosts:
     idxcluster: idxc1
     site: site0
 
-  # Cluster Indexers (site1)
-  - iter:
-      prefix: idx
-      numbers: 1..2
+  # Cluster Indexers
+  - list:
+      - idx1
+      - idx2
     roles:
       - indexer
+    # Name the indexer cluster to be a member of
     idxcluster: idxc1
     site: site1
 
-  # Cluster Indexers (site2)
-  - iter:
-      prefix: idx
-      numbers: 3..4
-    roles:
-      - indexer
-    idxcluster: idxc1
-    site: site2
-
-  # Search Heads
-  - iter:
-      prefix: sh
-      numbers: 1..3
+  # Search Head
+  - name: sh
     roles:
       - search_head
-    shcluster: shc1
 
-  # Universal Forwarder
+  # Search Head
+  - name: hf
+    roles:
+      - heavy_forwarder
+
+   # Universal Forwarder
   - name: uf
     roles:
       - universal_forwarder

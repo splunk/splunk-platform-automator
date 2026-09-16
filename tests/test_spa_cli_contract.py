@@ -33,6 +33,7 @@ HELP_CONTRACTS = [
             "shell (sh)",
             "aws",
             "licenses (lic)",
+            "features (feat)",
             "agent",
             "--json",
             "--agent",
@@ -48,6 +49,7 @@ HELP_CONTRACTS = [
             "usage: spa init",
             "env_dir",
             "--example",
+            "--provider",
             "--list",
             "--from",
             "--migrate",
@@ -83,6 +85,10 @@ HELP_CONTRACTS = [
         ],
     ),
     (["env", "--help"], ["usage: spa env", "--export", "--start-dir"]),
+    (
+        ["features", "--help"],
+        ["usage: spa features", "list", "show", "search", "keys", "--keys", "--json", "--agent"],
+    ),
     (["provision", "--help"], ["usage: spa provision", "-y", "--yes", "Confirm provision"]),
     (
         ["deploy", "--help"],
@@ -185,6 +191,7 @@ def test_complete_help_contract(argv, required):
 
 
 ALIASES = {
+    "feat": "usage: spa features",
     "val": "usage: spa validate",
     "doc": "usage: spa doctor",
     "prov": "usage: spa provision",
@@ -227,6 +234,7 @@ def test_agent_schema_is_complete_and_documented():
 
     assert {row["name"] for row in commands} == {
         "init",
+        "features",
         "validate",
         "doctor",
         "env",
