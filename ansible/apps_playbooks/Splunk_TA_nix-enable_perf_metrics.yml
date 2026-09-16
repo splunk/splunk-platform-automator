@@ -1,10 +1,17 @@
 ---
-# Enable Splunk_TA_nix script inputs (performance metrics) in the app's local/inputs.conf.
-#
-# Use from app customizations: run_playbook: "ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml"
+# spa-app:
+#   schema: 1
+#   name: Splunk_TA_nix
+#   app_id: 833
+#   kind: ta
+#   hook: run_playbook
+#   summary: Enable TA-nix script inputs for IM metrics
+#   extra_vars:
+#     - name: ta_nix_script_index
+#       required: false
+#       default: itsi_im_metrics
 #
 # Framework vars: app_path, app_name
-# Optional extra_vars: ta_nix_script_index (default: itsi_im_metrics)
 
 - name: "Set script input stanzas (same as UF in config/splunk_config.yml)"
   ansible.builtin.set_fact:

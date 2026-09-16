@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from spa_testutil import LIB, PROJECT_ROOT
+from spa_testutil import LIB, PROJECT_ROOT, run_spa
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -207,3 +207,92 @@ def test_ensure_confirmed_prints_hosts_not_extra_vars(monkeypatch, capsys):
     assert "hosts: idx1, sh1" in captured.err
     assert "extra-var" not in captured.err
     assert "password" not in captured.err.lower()
+
+
+def test_describe_apps_playbook_run_lists_curated_files():
+    paths = resolve_spa_paths(start_dir=str(PROJECT_ROOT))
+    data = describe("splunk_apps_playbook_run", paths)
+    assert data["metadata"]["related_dir"] == "apps_playbooks"
+    stems = {row["stem"] for row in data["related_playbooks"]}
+    assert "Splunk_TA_nix-enable_perf_metrics" in stems
+    assert "DA-ITSI-CP-monitoring-alerting_configure" in stems
+    kinds = {row["kind"] for row in data["related_playbooks"]}
+    assert "ta" in kinds
+    assert "itsi_content_pack_single" in kinds
+
+
+def test_resolve_apps_playbook_fills_extra_vars():
+    from spa.app_playbooks import AppPlaybookError, list_app_playbooks, resolve_apps_playbook, run_extra_vars
+
+    rows = list_app_playbooks(PROJECT_ROOT)
+    assert len(rows) == 7
+    names = {row["name"] for row in catalog(resolve_spa_paths(start_dir=str(PROJECT_ROOT)))}
+    assert "splunk_apps_playbook_run" in names
+    assert "Splunk_TA_nix-enable_perf_metrics" not in names
+
+    row = resolve_apps_playbook(PROJECT_ROOT, "Splunk_TA_nix-enable_perf_metrics.yml")
+    assert row["name"] == "Splunk_TA_nix"
+    assert run_extra_vars(row) == [
+        "-e",
+        "apps_playbook=apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml",
+        "-e",
+        "app_name=Splunk_TA_nix",
+    ]
+    with pytest.raises(AppPlaybookError, match="Unknown apps playbook"):
+        resolve_apps_playbook(PROJECT_ROOT, "not-a-playbook")
+    with pytest.raises(AppPlaybookError, match="Path escape"):
+        resolve_apps_playbook(PROJECT_ROOT, "ancustom/../secrets", spa_env_dir=PROJECT_ROOT)
+
+
+def test_resolve_apps_playbook_allows_env_relative_path(tmp_path):
+    from spa.app_playbooks import AppPlaybookError, resolve_apps_playbook, run_extra_vars
+
+    custom = tmp_path / "ancustom"
+    custom.mkdir()
+    playbook = custom / "my_custom_playbook.yml"
+    playbook.write_text("- name: noop\n  debug:\n    msg: ok\n")
+    row = resolve_apps_playbook(
+        PROJECT_ROOT, "ancustom/my_custom_playbook", spa_env_dir=tmp_path
+    )
+    assert row["name"] == "my_custom_playbook"
+    assert row["relpath"] == str(playbook.resolve())
+    extras = run_extra_vars(row)
+    assert extras[1] == "apps_playbook=%s" % playbook.resolve()
+    assert extras[3] == "app_name=my_custom_playbook"
+    named = tmp_path / "ancustom" / "with_meta.yml"
+    named.write_text(
+        "---\n"
+        "# spa-app:\n"
+        "#   schema: 1\n"
+        "#   name: Splunk_TA_nix\n"
+        "#   kind: ta\n"
+        "#   hook: run_playbook\n"
+        "#   summary: Custom TA-nix tasks\n"
+        "- name: noop\n"
+        "  debug:\n"
+        "    msg: ok\n"
+    )
+    meta_row = resolve_apps_playbook(
+        PROJECT_ROOT, "ancustom/with_meta", spa_env_dir=tmp_path
+    )
+    assert meta_row["name"] == "Splunk_TA_nix"
+    with pytest.raises(AppPlaybookError, match="Unknown apps playbook"):
+        resolve_apps_playbook(PROJECT_ROOT, "ancustom/missing", spa_env_dir=tmp_path)
+
+
+def test_cli_run_help_lists_curated_apps_playbooks():
+    result = run_spa(["--no-agent", "run", "splunk_apps_playbook_run", "--help"])
+    assert result.returncode == 0, result.stderr
+    assert "Curated apps playbooks" in result.stdout
+    for stem in (
+        "Splunk_TA_nix-enable_perf_metrics",
+        "Splunk_ML_Toolkit-configure",
+        "Splunk_TA_snow-configure",
+        "splunk_ta_sim-configure",
+        "DA-ITSI-CP-monitoring-alerting_configure",
+        "DA-ITSI-CP-windows_configure",
+        "DA-ITSI-CP-nix_configure",
+    ):
+        assert stem in result.stdout
+    assert "--apps-playbook" in result.stdout
+    assert "ancustom/my_custom_playbook" in result.stdout

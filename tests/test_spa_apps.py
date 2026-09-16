@@ -642,8 +642,8 @@ def test_session_search_and_agent_download_requires_yes(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "spa.apps.search",
-        lambda query, limit=10, client=None, app_type=None, kind=None: search(
-            query, limit=limit, client=fake, app_type=app_type, kind=kind
+        lambda query, limit=10, client=None, app_type=None, kind=None, spa_home=None: search(
+            query, limit=limit, client=fake, app_type=app_type, kind=kind, spa_home=spa_home
         ),
     )
     result = session.apps(action="search", query="unix")
@@ -677,6 +677,7 @@ def test_cli_help_and_schema():
     assert snippet_help.returncode == 0, snippet_help.stderr
     assert "--source {splunkbase,local}" in snippet_help.stdout
     assert "--local" in snippet_help.stdout
+    assert "--customize" in snippet_help.stdout
 
 
 def test_cli_local_flag_is_shorthand_for_source_local(tmp_path, monkeypatch, capsys):
@@ -704,8 +705,8 @@ def test_cli_search_without_env(monkeypatch, capsys):
     fake = FakeClient(apps=[_ta()])
     monkeypatch.setattr(
         "spa.apps.search",
-        lambda query, limit=10, client=None, app_type=None, kind=None: search(
-            query, limit=limit, client=fake, app_type=app_type, kind=kind
+        lambda query, limit=10, client=None, app_type=None, kind=None, spa_home=None: search(
+            query, limit=limit, client=fake, app_type=app_type, kind=kind, spa_home=spa_home
         ),
     )
     from spa.cli import _run
@@ -716,3 +717,99 @@ def test_cli_search_without_env(monkeypatch, capsys):
     assert "833" in out
     assert "Splunk_TA_nix" in out
     assert "password" not in out.lower()
+
+
+def test_snippet_advertises_curated_playbook_without_attaching(tmp_path):
+    data = snippet(
+        833,
+        roles=["indexer"],
+        spa_home=PROJECT_ROOT,
+        client=FakeClient(by_id={833: _ta()}),
+    )
+    assert "pass --customize" in data["snippet"]
+    assert "  customizations:" not in data["snippet"]
+    assert data["playbooks"][0]["kind"] == "ta"
+    assert data["playbooks"][0]["hook"] == "run_playbook"
+    assert "Splunk_TA_nix-enable_perf_metrics.yml" in data["playbooks"][0]["path"]
+
+
+def test_snippet_customize_adds_run_playbook():
+    data = snippet(
+        833,
+        roles=["indexer"],
+        spa_home=PROJECT_ROOT,
+        customize=True,
+        client=FakeClient(by_id={833: _ta()}),
+    )
+    assert "  customizations:" in data["snippet"]
+    assert "    run_playbook: ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml" in data["snippet"]
+    assert "ta_nix_script_index: itsi_im_metrics" in data["snippet"]
+    assert "pass --customize" not in data["snippet"]
+
+
+def test_snippet_content_pack_playbook_does_not_match_ta():
+    data = snippet(833, spa_home=PROJECT_ROOT, client=FakeClient(by_id={833: _ta()}))
+    paths = [row["path"] for row in data.get("playbooks") or []]
+    assert all("DA-ITSI-CP" not in path for path in paths)
+
+
+def test_snippet_customize_snow_uses_env_lookup_not_password():
+    snow = {
+        "uid": 1928,
+        "appid": "Splunk_TA_snow",
+        "title": "Splunk Add-on for ServiceNow",
+        "type": "addon",
+        "release": {"title": "1.0.0", "path": "https://splunkbase.splunk.com/app/1928/release/1.0.0/download"},
+    }
+    data = snippet(
+        1928,
+        spa_home=PROJECT_ROOT,
+        customize=True,
+        client=FakeClient(by_id={1928: snow}),
+    )
+    assert "lookup('env', 'SNOW_PASSWORD')" in data["snippet"]
+    assert "not-a-real-password" not in data["snippet"]
+    assert "snow_password:" in data["snippet"]
+
+
+def test_search_marks_playbook_on_matching_hit():
+    result = search("unix", spa_home=PROJECT_ROOT, client=FakeClient(apps=[_ta()]))
+    assert result["apps"][0]["playbook"] is True
+    text = format_search_text("unix", result["apps"])
+    assert "playbook" in text.splitlines()[0]
+
+
+def test_snippet_customize_sim_uses_env_lookup_not_token():
+    sim = {
+        "uid": 5247,
+        "appid": "splunk_ta_sim",
+        "title": "Splunk Infrastructure Monitoring Add-on",
+        "type": "addon",
+        "release": {"title": "1.0.0", "path": "https://splunkbase.splunk.com/app/5247/release/1.0.0/download"},
+    }
+    data = snippet(
+        5247,
+        spa_home=PROJECT_ROOT,
+        customize=True,
+        client=FakeClient(by_id={5247: sim}),
+    )
+    assert "run_playbook_after_restart: ansible/apps_playbooks/splunk_ta_sim-configure.yml" in data["snippet"]
+    assert "lookup('env', 'O11Y_API_TOKEN')" in data["snippet"]
+    assert "not-a-real-token" not in data["snippet"]
+    extra = data["playbooks"][0]["extra_vars"]
+    assert {"name": "o11y_api_token", "required": True} in extra
+    assert all("env" not in item for item in extra)
+
+
+def test_search_library_does_not_mark_content_pack_playbooks():
+    library = {
+        "uid": 5391,
+        "appid": "DA-ITSI-ContentLibrary",
+        "title": "Splunk ITSI Content Pack Library",
+        "type": "app",
+        "description": "library",
+        "release": {"title": "1.0.0", "path": "https://splunkbase.splunk.com/app/5391/release/1.0.0/download"},
+    }
+    result = search("itsi", spa_home=PROJECT_ROOT, client=FakeClient(apps=[library]))
+    assert result["apps"][0]["app_id"] == 5391
+    assert "playbook" not in result["apps"][0]

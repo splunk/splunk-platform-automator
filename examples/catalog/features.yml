@@ -1333,7 +1333,8 @@ features:
       An itsi query pins app_id 1841 first; es pins 263. Each hit is compact (app_id, folder name, title,
       type, SPA kind, version, short summary).
       spa apps snippet APP_ID prints a kind-specific apps[] YAML block (TA, premium ITSI 1841,
-      content library 5391, single packs). spa apps download APP_ID --yes stores the archive;
+      content library 5391, single packs). Matching curated ansible/apps_playbooks files are
+      advertised until --customize adds customizations. spa apps download APP_ID --yes stores the archive;
       --extract safely expands normal folder-backed apps and removes the archive;
       --overwrite replaces an existing extracted folder.
       spa apps snippet APP_ID --local

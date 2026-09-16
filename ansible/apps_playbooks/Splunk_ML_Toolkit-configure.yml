@@ -1,12 +1,26 @@
 ---
-# Configure Splunk ML Toolkit (Splunk_ML_Toolkit): scale settings (mlspl.conf) and admin capabilities (authorize.conf).
-#
-# Use from app customizations: run_playbook: "ansible/apps_playbooks/Splunk_ML_Toolkit-configure.yml"
+# spa-app:
+#   schema: 1
+#   name: Splunk_ML_Toolkit
+#   app_id: 2890
+#   kind: ta
+#   hook: run_playbook
+#   summary: Configure MLTK scale limits and admin capabilities
+#   extra_vars:
+#     - name: mltk_max_inputs
+#       required: false
+#       default: 1000000
+#     - name: mltk_max_memory_usage_mb
+#       required: false
+#       default: 2000
+#     - name: mltk_max_model_size_mb
+#       required: false
+#       default: 30
+#     - name: mltk_max_fit_time
+#       required: false
+#       default: 2400
 #
 # Framework vars: app_path, app_name
-# Optional extra_vars:
-#   mltk_max_inputs (default: 1000000), mltk_max_memory_usage_mb (default: 2000),
-#   mltk_max_model_size_mb (default: 30), mltk_max_fit_time (default: 2400)
 
 - name: "Resolve MLTK extra_vars"
   ansible.builtin.set_fact:

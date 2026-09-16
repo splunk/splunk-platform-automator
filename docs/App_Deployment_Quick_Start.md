@@ -9,7 +9,7 @@ spa --json apps search unix
 spa apps snippet 833 --roles search_head,indexer
 ```
 
-Merge the snippet under `splunk_app_deployment.apps`. Config apply from the CLI is later (`spa config`, #76).
+If the snippet (or JSON `playbooks`) mentions a curated playbook, opt in with `--customize`. Merge the snippet under `splunk_app_deployment.apps`. Config apply from the CLI is later (`spa config`, #76).
 
 ### Step 2: Add Configuration to `splunk_config.yml`
 

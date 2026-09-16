@@ -100,7 +100,7 @@ HELP_CONTRACTS = [
     ),
     (
         ["apps", "snippet", "--help"],
-        ["usage: spa apps snippet", "--version", "--roles", "--source", "APP_ID_OR_NAME"],
+        ["usage: spa apps snippet", "--version", "--roles", "--source", "--customize", "APP_ID_OR_NAME"],
     ),
     (
         ["apps", "download", "--help"],
@@ -128,6 +128,7 @@ HELP_CONTRACTS = [
             "--dir",
             "--hosts",
             "--yes",
+            "--apps-playbook",
             "requires_confirmation",
             "spa run NAME --help",
         ],
@@ -284,11 +285,12 @@ def test_agent_schema_is_complete_and_documented():
         assert "--yes" in {flag["long"] for flag in by_name[name]["flags"]}
 
     run_flags = {flag["long"] for flag in by_name["run"]["flags"]}
-    assert {"--list", "--hosts", "--yes"} <= run_flags
+    assert {"--list", "--hosts", "--yes", "--apps-playbook"} <= run_flags
     assert by_name["apps download"]["requires_confirmation"] is True
     assert "--yes" in {flag["long"] for flag in by_name["apps download"]["flags"]}
     assert "--extract" in {flag["long"] for flag in by_name["apps download"]["flags"]}
     assert "--overwrite" in {flag["long"] for flag in by_name["apps download"]["flags"]}
     assert "--source" in {flag["long"] for flag in by_name["apps snippet"]["flags"]}
+    assert "--customize" in {flag["long"] for flag in by_name["apps snippet"]["flags"]}
     search_flags = {flag["long"] for flag in by_name["apps search"]["flags"]}
     assert {"--limit", "--type", "--kind"} <= search_flags

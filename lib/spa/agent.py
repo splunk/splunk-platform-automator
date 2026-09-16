@@ -142,6 +142,10 @@ COMMAND_SCHEMA = {
                 {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
                 {"long": "--list", "help": "Catalog playbooks with summaries"},
                 {"long": "--yes", "short": "-y", "help": "Confirm a mutating playbook (required in agent mode)"},
+                {
+                    "long": "--apps-playbook",
+                    "help": "For splunk_apps_playbook_run: curated stem or env-relative path (sets apps_playbook and app_name)",
+                },
             ],
             "example": "spa run --list",
         },
@@ -172,6 +176,10 @@ COMMAND_SCHEMA = {
                     "help": "Snippet source: splunkbase or local; local checks apps_dir",
                 },
                 {"long": "--local", "help": "Shorthand for --source local"},
+                {
+                    "long": "--customize",
+                    "help": "Include matching curated apps_playbooks customizations in the YAML",
+                },
             ],
             "example": "spa --json apps snippet 833",
         },

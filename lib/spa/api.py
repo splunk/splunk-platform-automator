@@ -141,6 +141,7 @@ class SpaSession(Protocol):
         source: str = "splunkbase",
         extract: bool = False,
         overwrite: bool = False,
+        customize: bool = False,
         confirm: bool = False,
         agent: bool = False,
     ) -> CommandResult: ...
@@ -176,6 +177,7 @@ class SpaSession(Protocol):
         hosts: Optional[Sequence[str]] = None,
         confirm: bool = False,
         agent: bool = False,
+        apps_playbook: Optional[str] = None,
     ) -> CommandResult: ...
 
     def aws(self, argv: Optional[List[str]] = None) -> CommandResult: ...
@@ -372,6 +374,7 @@ class LocalSpaSession:
         source: str = "splunkbase",
         extract: bool = False,
         overwrite: bool = False,
+        customize: bool = False,
         confirm: bool = False,
         agent: bool = False,
     ) -> CommandResult:
@@ -380,7 +383,13 @@ class LocalSpaSession:
 
         try:
             if action == "search":
-                data = search(query or "", limit=limit, app_type=app_type, kind=kind)
+                data = search(
+                    query or "",
+                    limit=limit,
+                    app_type=app_type,
+                    kind=kind,
+                    spa_home=self.paths.spa_home,
+                )
                 return CommandResult(ok=True, data=data)
             if action == "snippet":
                 if source == "local":
@@ -393,6 +402,8 @@ class LocalSpaSession:
                     roles=roles,
                     source=source,
                     apps_dir=self.paths.apps_dir if source == "local" else None,
+                    spa_home=self.paths.spa_home,
+                    customize=customize,
                 )
                 return CommandResult(ok=True, data=data)
             if action == "download":
@@ -757,6 +768,7 @@ class LocalSpaSession:
         hosts: Optional[Sequence[str]] = None,
         confirm: bool = False,
         agent: bool = False,
+        apps_playbook: Optional[str] = None,
     ) -> CommandResult:
         blocked = self._env_gate()
         if blocked:
@@ -775,7 +787,20 @@ class LocalSpaSession:
             resolved = self._resolve_hosts(hosts)
         except HostLookupError as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
-        args = with_ansible_limit(extra, resolved)
+        args = list(extra or [])
+        if apps_playbook:
+            from spa.app_playbooks import AppPlaybookError, resolve_apps_playbook, run_extra_vars
+
+            try:
+                row = resolve_apps_playbook(
+                    self.paths.spa_home,
+                    apps_playbook,
+                    spa_env_dir=self.paths.spa_env_dir,
+                )
+            except AppPlaybookError as exc:
+                return CommandResult(ok=False, error=str(exc), code=2)
+            args = run_extra_vars(row) + args
+        args = with_ansible_limit(args, resolved)
         if verbose:
             args = ["-v", *args]
         try:

@@ -1,10 +1,14 @@
 ---
-# Configure DA-ITSI-CP-nix content pack after app is deployed and content pack API install has run.
-#
-# Use from app customizations: run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml"
+# spa-app:
+#   schema: 1
+#   name: DA-ITSI-CP-nix
+#   kind: itsi_content_pack_single
+#   hook: run_playbook_after_restart
+#   summary: Wire Unix content pack services after API install
 #
 # Framework vars: app_path, app_name (from post-restart context)
 # Prerequisites: Splunk_TA_nix
+# Standalone: spa run splunk_apps_playbook_run --apps-playbook DA-ITSI-CP-nix_configure --hosts ROLE --yes
 
 
 - name: "Get Service Content"

@@ -122,7 +122,7 @@ def _run_help_target(head: Sequence[str]) -> Optional[str]:
     if not any(item in help_flags for item in rest):
         return None
     names: List[str] = []
-    skip_run_value = {"--dir", "--hosts"}
+    skip_run_value = {"--dir", "--hosts", "--apps-playbook"}
     cursor = 0
     while cursor < len(rest):
         token = rest[cursor]
@@ -143,13 +143,14 @@ def _run_help_target(head: Sequence[str]) -> Optional[str]:
 
 
 def _print_run_usage() -> None:
-    print("usage: spa run [-h] [--list] [--dir DIR] [--hosts NAME] [-y] [NAME]")
+    print("usage: spa run [-h] [--list] [--dir DIR] [--hosts NAME] [--apps-playbook STEM] [-y] [NAME]")
     print()
     print("Run a playbook by stem, or list/describe playbooks without executing Ansible.")
     print()
     print("  spa run --list              catalog (name — summary)")
     print("  spa run NAME --help         description, risk, inputs, examples")
     print("  spa run NAME [-y] [--hosts NAME] [-- ansible-playbook args]")
+    print("  spa run splunk_apps_playbook_run --apps-playbook STEM|PATH --hosts ROLE --yes")
     print()
     print("Mutating playbooks need --yes in agent mode (see requires_confirmation).")
     print("Discover first with spa --json run --list, then spa run NAME --help.")
@@ -209,6 +210,13 @@ def _print_playbook_help(data: dict) -> None:
         print("Examples:")
         for item in examples:
             print("  %s" % item)
+    related = data.get("related_playbooks") or []
+    if related:
+        from spa.app_playbooks import format_related_help
+
+        print()
+        for line in format_related_help(related):
+            print(line)
 
 
 def _add_mode_flags(parser) -> None:
@@ -494,6 +502,11 @@ def _run(argv: Sequence[str]) -> int:
         default=argparse.SUPPRESS,
         help="Shorthand for --source local",
     )
+    p_apps_snippet.add_argument(
+        "--customize",
+        action="store_true",
+        help="Include matching curated apps_playbooks customizations in the YAML",
+    )
     p_apps_download = apps_sub.add_parser(
         "download",
         help="Download an archive into apps_dir",
@@ -617,6 +630,10 @@ def _run(argv: Sequence[str]) -> int:
         help="Confirm a mutating playbook (required in agent mode)",
     )
     _add_hosts_option(p_run)
+    p_run.add_argument(
+        "--apps-playbook",
+        help="For splunk_apps_playbook_run: curated stem, or env-relative path (e.g. ancustom/my_custom_playbook)",
+    )
 
     p_hosts = _add_command(sub, "hosts", aliases=["h"], help="List, SSH, or copy using inventory hosts")
     p_hosts.add_argument(
@@ -850,6 +867,7 @@ def _run(argv: Sequence[str]) -> int:
             source=getattr(args, "source", "splunkbase"),
             extract=bool(getattr(args, "extract", False)),
             overwrite=bool(getattr(args, "overwrite", False)),
+            customize=bool(getattr(args, "customize", False)),
             confirm=args.yes,
             agent=as_agent,
         )
@@ -993,6 +1011,7 @@ def _run(argv: Sequence[str]) -> int:
             hosts=getattr(args, "hosts", None),
             confirm=args.yes,
             agent=as_agent,
+            apps_playbook=getattr(args, "apps_playbook", None),
         )
         if as_agent:
             return _emit_result(result, True)

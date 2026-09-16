@@ -1,23 +1,17 @@
 ---
-# Configure DA-ITSI-CP-monitoring-alerting content pack after app is deployed and content pack API install has run.
-#
-# Use from app customizations: run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml"
+# spa-app:
+#   schema: 1
+#   name: DA-ITSI-CP-monitoring-alerting
+#   kind: itsi_content_pack_single
+#   hook: run_playbook_after_restart
+#   summary: Enable monitoring-alerting lookups and generic alerts index
+#   extra_vars:
+#     - name: generic_alerts_index
+#       required: false
+#       default: generic_alerts
 #
 # Framework vars: app_path, app_name (from post-restart context)
-# Optional extra_vars: generic_alerts_index (default: generic_alerts)
-#
-# Can also be tested standalone via splunk_apps_playbook_run.yml:
-#   ansible-playbook ansible/splunk_apps_playbook_run.yml \
-#     -e "apps_playbook=apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml" \
-#     -e "app_name=DA-ITSI-CP-monitoring-alerting" \
-#     -l sh
-#
-#   With extra_vars:
-#   ansible-playbook ansible/splunk_apps_playbook_run.yml \
-#     -e "apps_playbook=apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml" \
-#     -e "app_name=DA-ITSI-CP-monitoring-alerting" \
-#     -e 'playbook_extra_vars={"generic_alerts_index":"generic_alerts"}' \
-#     -l sh
+# Standalone: spa run splunk_apps_playbook_run --apps-playbook DA-ITSI-CP-monitoring-alerting_configure --hosts ROLE --yes
 
 - name: "Resolve DA-ITSI-CP-monitoring-alerting extra_vars"
   ansible.builtin.set_fact:

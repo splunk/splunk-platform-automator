@@ -268,6 +268,7 @@ def format_snippet_yaml(
     path: Optional[str] = None,
     roles_ignored: bool = False,
     notes: Sequence[str] = (),
+    customization_lines: Sequence[str] = (),
 ) -> str:
     title = str(app.get("title") or "").strip()
     extra: List[str] = [str(note) for note in notes if str(note).strip()]
@@ -321,6 +322,7 @@ def format_snippet_yaml(
         body = _ta_keys(name, app_id, version, roles, source=source, path=path)
     else:
         body = _ta_keys(name, app_id, version, roles, source=source, path=path)
+    body = list(body) + [str(line) for line in customization_lines if str(line).strip()]
     return "\n".join(_comment_block(title, extra) + body) + "\n"
 
 
@@ -360,6 +362,8 @@ def format_search_text(query: str, hits: Sequence[Dict[str, Any]]) -> str:
             row.get("title") or "",
         ]
         first = " | ".join(fields)
+        if row.get("playbook"):
+            first = "%s | playbook" % first
         lines.append(first)
         summary = row.get("summary") or ""
         if summary:
@@ -374,6 +378,7 @@ def search(
     limit: int = 10,
     app_type: Optional[str] = None,
     kind: Optional[str] = None,
+    spa_home: Optional[Path] = None,
     client=None,
 ) -> Dict[str, Any]:
     wanted_type = parse_search_filter(app_type, SEARCH_TYPES, "--type")
@@ -408,7 +413,19 @@ def search(
             seen.add(app_id)
     if pins:
         hits = _pin_ids(hits, pins)
-    return {"query": query, "apps": hits[:limit]}
+    hits = hits[:limit]
+    if spa_home is not None:
+        from spa.app_playbooks import has_app_playbook
+
+        for row in hits:
+            if has_app_playbook(
+                spa_home,
+                kind=str(row.get("kind") or ""),
+                name=str(row.get("name") or ""),
+                app_id=row.get("app_id"),
+            ):
+                row["playbook"] = True
+    return {"query": query, "apps": hits}
 
 
 def _refuse_ite_work(app_id: int) -> None:
@@ -423,6 +440,8 @@ def snippet(
     roles: Optional[Sequence[str]] = None,
     source: str = "splunkbase",
     apps_dir: Optional[Path] = None,
+    spa_home: Optional[Path] = None,
+    customize: bool = False,
     client=None,
 ) -> Dict[str, Any]:
     if source not in {"splunkbase", "local"}:
@@ -459,6 +478,23 @@ def snippet(
                 else "unpack it in apps_dir"
             )
             notes.append("Archive found; normal apps deploy from a folder — %s." % hint)
+    related = []
+    customization_lines: List[str] = []
+    if spa_home is not None:
+        from spa.app_playbooks import (
+            advertise_notes,
+            compact_playbooks,
+            customization_yaml_lines,
+            match_app_playbooks,
+        )
+
+        related = match_app_playbooks(
+            spa_home, kind=kind, name=name, app_id=app_id
+        )
+        if related and customize:
+            customization_lines = customization_yaml_lines(related)
+        elif related:
+            notes.extend(advertise_notes(related))
     yaml_text = format_snippet_yaml(
         app,
         app_id=int(app_id or 0),
@@ -469,6 +505,7 @@ def snippet(
         path=local_path,
         roles_ignored=roles_ignored,
         notes=notes,
+        customization_lines=customization_lines,
     )
     data: Dict[str, Any] = {
         "kind": kind,
@@ -482,6 +519,8 @@ def snippet(
         data["app_id"] = app_id
     if local_path:
         data["path"] = local_path
+    if related:
+        data["playbooks"] = compact_playbooks(related)
     return data
 
 

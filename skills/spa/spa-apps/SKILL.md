@@ -37,10 +37,11 @@ Follow [secrets-handling.md](../spa-create-config/references/secrets-handling.md
 
 1. `spa --json apps search QUERY` with technology keywords. Optional `--type app|addon` and `--kind ta|premium_itsi|itsi_content_library|itsi_content_pack_single|es_not_premium`. An `itsi` query pins **1841** first; `es` pins **263**. Do **not** open splunkbase.com first.
 2. Pick one `app_id` from the compact rows (`app_id`, `name`, `title`, `type`, `kind`, `version`, `summary`). No full description on search. Default 10 hits; tighten QUERY if the page is wrong.
-3. `spa --json apps snippet APP_ID` once. Merge that YAML under `splunk_app_deployment.apps`.
-4. Local source: `spa apps snippet APP_ID --local --roles ...` (`--local` is short for `--source local`). It looks up the app folder or archive in `apps_dir` and uses whichever it finds, folder first. Nothing there → download first (`spa apps download APP_ID --extract --yes` for a normal folder-backed app; `--extract` removes the archive once unpacked. Add `--overwrite` to replace an existing folder. ITSI/content packs deploy from the archive, so omit `--extract`). Download never prints YAML.
-5. Custom local app (not Splunkbase): put its folder or archive in `apps_dir`, then `spa apps snippet FOLDER_NAME --local --roles ...`. This does not contact Splunkbase.
-6. `spa validate`. Deploy only if the operator asked (`spa deploy --yes`).
+3. `spa --json apps snippet APP_ID` **without** `--customize`. Merge that YAML under `splunk_app_deployment.apps`.
+4. If `playbooks` is non-empty (or the snippet comment says “pass --customize”), **ask** whether to add the curated playbook. Do not assume yes. If they agree: `spa --json apps snippet APP_ID --customize` and merge that YAML. Required extra_vars secrets: report env vars as **set / not set** only.
+5. Local source: `spa apps snippet APP_ID --local --roles ...` (`--local` is short for `--source local`). It looks up the app folder or archive in `apps_dir` and uses whichever it finds, folder first. Nothing there → download first (`spa apps download APP_ID --extract --yes` for a normal folder-backed app; `--extract` removes the archive once unpacked. Add `--overwrite` to replace an existing folder. ITSI/content packs deploy from the archive, so omit `--extract`). Download never prints YAML.
+6. Custom local app (not Splunkbase): put its folder or archive in `apps_dir`, then `spa apps snippet FOLDER_NAME --local --roles ...`. This does not contact Splunkbase.
+7. `spa validate`. Deploy only if the operator asked (`spa deploy --yes`). Standalone configure: `spa run splunk_apps_playbook_run --help` then `--apps-playbook STEM --hosts ROLE --yes`. Env-dir custom files: `--apps-playbook ancustom/my_custom_playbook` (not listed).
 
 ITSI / ITE Work → **app_id 1841** (`premium_app: itsi`). Do not use 5403.
 
