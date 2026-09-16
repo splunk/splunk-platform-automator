@@ -75,7 +75,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 
 ## Docs
 
-- [ ] Slim README + structured user guide + rewrite [AGENTS.md](AGENTS.md) — [#61](https://github.com/splunk/splunk-platform-automator/issues/61)
+- [x] Slim README + structured user guide + rewrite [AGENTS.md](AGENTS.md) — [#61](https://github.com/splunk/splunk-platform-automator/issues/61)
 - [ ] Production-ready setup: document must-settings (vs lab defaults); teach them in a skill/catalog; enforce with `spa validate` profile or schema (`deployment_intent: production`). Lab validate stays permissive. Not capacity planning. Secrets/TLS/RF-SF/licenses/network — never print secrets. — [#80](https://github.com/splunk/splunk-platform-automator/issues/80)
 - [ ] Docs / operator CLI follow-ups (not in #61): VirtualBox snapshots / reload after Vagrantfile changes (`spa snapshot` / `spa reload`); extra forwarded ports, `ssh-config`, VirtualBox GUI; Windows guests through `spa` (operator path is Linux AWS/VirtualBox; historical box notes are in [contributing](docs/contributing.md#windows-box-maintenance)). Do not document raw `vagrant` / `terraform` / `ansible-playbook` as the operator interface.
 - [ ] `spa apps versions` (list Splunkbase versions); `spa apps download --version` already exists
