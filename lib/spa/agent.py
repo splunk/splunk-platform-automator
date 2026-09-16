@@ -142,8 +142,64 @@ COMMAND_SCHEMA = {
                 {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
                 {"long": "--list", "help": "Catalog playbooks with summaries"},
                 {"long": "--yes", "short": "-y", "help": "Confirm a mutating playbook (required in agent mode)"},
+                {
+                    "long": "--apps-playbook",
+                    "help": "For splunk_apps_playbook_run: curated stem or env-relative path (sets apps_playbook and app_name)",
+                },
             ],
             "example": "spa run --list",
+        },
+        {
+            "name": "apps search",
+            "summary": "Search Splunkbase (compact rows: app_id, name, title, type, kind, version, summary)",
+            "flags": [
+                {"long": "--limit", "help": "Max hits (default 10)"},
+                {
+                    "long": "--type",
+                    "help": "Filter Splunkbase type (app, addon)",
+                },
+                {
+                    "long": "--kind",
+                    "help": "Filter SPA kind (ta, premium_itsi, itsi_content_library, itsi_content_pack_single, es_not_premium)",
+                },
+            ],
+            "example": "spa --json apps search unix",
+        },
+        {
+            "name": "apps snippet",
+            "summary": "Print apps[] YAML for a Splunkbase app_id or local custom app folder",
+            "flags": [
+                {"long": "--version", "help": "Release version (default latest)"},
+                {"long": "--roles", "help": "Comma-separated target_roles (TA only)"},
+                {
+                    "long": "--source",
+                    "help": "Snippet source: splunkbase or local; local checks apps_dir",
+                },
+                {"long": "--local", "help": "Shorthand for --source local"},
+                {
+                    "long": "--customize",
+                    "help": "Include matching curated apps_playbooks customizations in the YAML",
+                },
+            ],
+            "example": "spa --json apps snippet 833",
+        },
+        {
+            "name": "apps download",
+            "summary": "Download a Splunkbase archive into apps_dir (does not edit config or print a snippet)",
+            "requires_confirmation": True,
+            "flags": [
+                {"long": "--yes", "short": "-y", "help": "Confirm download (required in agent mode)"},
+                {"long": "--version", "help": "Release version (default latest)"},
+                {
+                    "long": "--extract",
+                    "help": "Safely extract a folder-backed app into apps_dir and delete the archive (TA/ES only)",
+                },
+                {
+                    "long": "--overwrite",
+                    "help": "With --extract, replace an existing app folder in apps_dir",
+                },
+            ],
+            "example": "spa apps download 833 --yes",
         },
         {"name": "agent schema", "summary": "This schema"},
     ],

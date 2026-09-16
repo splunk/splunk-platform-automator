@@ -1,22 +1,23 @@
 ---
-# Configure Splunk Infrastructure Monitoring (SIM) Add-on (splunk_ta_sim) via REST API.
-# API-only approach -- no filesystem writes, no restart required. SHC-compatible.
-#
-# Use from app customizations: run_playbook_after_restart: "ansible/apps_playbooks/splunk_ta_sim-configure.yml"
-# App deployment installs the app and triggers Restart splunk; this task file runs in a follow-up play after the handler.
-#
-# Can also be tested standalone via splunk_apps_playbook_run.yml:
-#   ansible-playbook ansible/splunk_apps_playbook_run.yml \
-#     -e "apps_playbook=apps_playbooks/splunk_ta_sim-configure.yml" \
-#     -e "app_name=splunk_ta_sim" \
-#     -e 'playbook_extra_vars={"o11y_realm":"us1","o11y_api_token":"your-api-token"}' \
-#     -l sh
+# spa-app:
+#   schema: 1
+#   name: splunk_ta_sim
+#   app_id: 5247
+#   kind: ta
+#   hook: run_playbook_after_restart
+#   summary: Configure SIM add-on with Observability realm and API token
+#   extra_vars:
+#     - name: o11y_realm
+#       required: true
+#     - name: o11y_api_token
+#       required: true
+#       secret: true
+#       env: O11Y_API_TOKEN
+#     - name: o11y_org_id
+#       required: false
 #
 # Framework vars: app_path, app_name (from post-restart context)
-# extra_vars (from customizations.extra_vars):
-#   o11y_realm     (required) - Splunk Observability Cloud realm (e.g. us1, eu0)
-#   o11y_api_token (required) - Splunk Observability Cloud API token
-#   o11y_org_id    (optional) - Organization ID; derived from API if not provided
+# Standalone: spa run splunk_apps_playbook_run --apps-playbook splunk_ta_sim-configure --hosts ROLE --yes
 
 - name: "Resolve SIM extra_vars (avoids template recursion)"
   ansible.builtin.set_fact:

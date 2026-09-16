@@ -11,7 +11,7 @@ Splunk Platform Automator (SPA) provisions and deploys Splunk Enterprise on **AW
 | Guided human + agent workflow | [docs/Splunk_Config_Guided_Setup.md](docs/Splunk_Config_Guided_Setup.md) |
 | 2.x → 3.0 operator changes | [docs/Migrate_SPA_2x_to_3x.md](docs/Migrate_SPA_2x_to_3x.md) |
 | New environment (one clone, many envs) | `spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env` then `cd ~/envs/my-env` (direnv loads venv + `SPA_*`; otherwise `source "$SPA_HOME/bin/spa_venv.sh" --env DIR` and `eval "$(spa env --export)"`). Prefix install: `spa init --software-dir ~/Software --example … ENV`. Existing clone env: `spa init ~/envs/my-env` (migrates config/inventory/tfstate/`.vagrant`). |
-| Config settings lookup | `spa features list` / `search QUERY` (concise decision guidance), `show ID`, then `show ID --keys` for schema types/constraints plus catalog notes (JSON: `spa --json features …`). Live AWS region/AMI/instance values come from `spa aws --json`, not schema enums. Skill writes snippets into `splunk_config.yml`; init only composes topology + provider. |
+| Config settings lookup | `spa features list` / `search QUERY` (concise decision guidance), `show ID`, then `show ID --keys` for schema types/constraints plus catalog notes (JSON: `spa --json features …`). Splunkbase apps: `spa --json apps search QUERY` then `spa apps snippet APP_ID` (create-config loads spa-apps). Live AWS region/AMI/instance values come from `spa aws --json`, not schema enums. Skill writes snippets into `splunk_config.yml`; init only composes topology + provider. |
 | Python env (Ansible, Pydantic) | `source bin/spa_venv.sh` (shared `SPA_HOME/.venv`; env `.venv` wins when present). Env dirs get an `.envrc` for direnv; `spa init` creates the venv if missing and runs `direnv allow` when direnv is installed. |
 | Host tools (terraform, direnv, …) | `spa doctor` (also run at end of `spa init`; `--skip-doctor` to skip). Terraform only for AWS; VirtualBox checks Vagrant, VirtualBox, the driver match, and `vagrant-vbguest` (`virtualbox:` in config). Not brew ansible/pydantic — use `spa_venv`. |
 | Validate before provision | `spa validate` (schema, Software/baseconfig/local apps, inventory, licenses pairing, playbook syntax) |
@@ -35,9 +35,10 @@ Canonical location: `skills/spa/` ([Agent Skills spec](https://agentskills.io/sp
 | Skill | When to load |
 |-------|----------------|
 | [skills/spa/spa-create-config/SKILL.md](skills/spa/spa-create-config/SKILL.md) | Creating/updating `splunk_config.yml`, architecture planning, SVA topology, AWS `terraform.aws`, licenses, apps |
+| [skills/spa/spa-apps/SKILL.md](skills/spa/spa-apps/SKILL.md) | Splunkbase search, kind-aware `apps[]` snippets, optional download (`spa apps`) |
 | [skills/spa/spa-add-test-scenario/SKILL.md](skills/spa/spa-add-test-scenario/SKILL.md) | App-scope routing tests in `tests/configs/app_scope/` |
 
-**Cursor:** skills are symlinked under `.cursor/skills/` — use `/spa-create-config` and `/spa-add-test-scenario`.
+**Cursor:** skills are symlinked under `.cursor/skills/` — use `/spa-create-config`, `/spa-apps`, and `/spa-add-test-scenario`.
 
 **Other tools:** see [docs/Agent_Skills.md](docs/Agent_Skills.md) and [skills/spa/README.md](skills/spa/README.md).
 

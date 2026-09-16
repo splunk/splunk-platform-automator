@@ -34,8 +34,8 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 ## When NOT to Use
 
 - App-scope test distillation → [spa-add-test-scenario](../spa-add-test-scenario/SKILL.md)
+- Splunkbase search / TA lookup → load [spa-apps](../spa-apps/SKILL.md) (`spa --json apps search` then one `snippet`)
 - Flat deployment test configs under `tests/configs/*.yml` only
-- Splunkbase catalog search (user supplies `app_id` manually)
 - Production sizing / PS engagement (guidance only; no auto-sizing)
 - Auto-running provision/deploy (user runs `spa provision` / `spa deploy` after validation)
 
@@ -60,10 +60,10 @@ Follow [secrets-handling.md](references/secrets-handling.md) for the full list.
 1. `spa --json features search QUERY` (words from the request: `itsi`, `smartstore`, `apps`, `ssl`, `volumes`).
 2. `spa --json features show ID` for the matching record; `show ID --keys` only when types, allowed values, or notes are needed.
 3. Merge the record `snippet` into the existing config using the catalog `merge` field (`deep` vs `replace`). Honor `when_not_to_use`.
-4. Do not invent YAML from leftover mixed example files. ITSI full lab: copy or merge `examples/single_node_itsi.yml` when they want the whole env, not only the snippet.
+4. Do not invent YAML from leftover mixed example files. ITSI full lab: copy or merge `examples/single_node_itsi.yml` when they want the whole env, not only the snippet. For Splunkbase TAs and packs, follow [spa-apps](../spa-apps/SKILL.md): `spa --json apps search QUERY` then one `snippet`; merge the snippet (do not guess `app_id`).
 5. `spa validate` (Phase 8). Do not auto-run provision/deploy.
 
-Out of scope: Splunkbase catalog search (#59/#68); user supplies `app_id`.
+Out of scope: writing `splunk_config.yml` via `spa config` (#76); single-app deploy (#68).
 
 ## Reference files (load on demand)
 
@@ -258,7 +258,7 @@ Use `spa --json features show setting.license` (or the licenses JSON `yaml_snipp
 
 1. Scaffold with `spa init --example TOPOLOGY --provider aws|virtualbox ENV` (topology + provider only). Do not invent `--addon` or OS flags on init.
 2. Header from [assets/config-header-template.md](assets/config-header-template.md)
-3. For OS, SSL, licenses, RF/SF, apps keys, and other settings: choose with `spa --json features search QUERY`, inspect with `show ID`, and use `show ID --keys` only when per-key types, constraints, placeholders, or notes are needed. Merge each record's `snippet` into `$SPA_ENV_DIR/config/splunk_config.yml` yourself. Do not pass those through init.
+3. For OS, SSL, licenses, RF/SF, and other settings: choose with `spa --json features search QUERY`, inspect with `show ID`, and use `show ID --keys` only when per-key types, constraints, placeholders, or notes are needed. Merge each record's `snippet` into `$SPA_ENV_DIR/config/splunk_config.yml` yourself. Do not pass those through init. For **apps**, load [spa-apps](../spa-apps/SKILL.md): `spa --json apps search QUERY` then `spa --json apps snippet APP_ID`; merge that snippet. ITSI is app_id 1841, not 5403.
 4. Global `terraform.aws` already comes from `--provider aws`; add **`ssh_username`** / AMI from catalog + discovery.
 5. Matching global `os:` from `setting.os` (not from the topology file).
 6. `splunk_defaults` (include `splunk_license_file` from Phase 6b when chosen).
@@ -325,4 +325,4 @@ Use consistently: `cluster_manager`, `terraform.aws`, `splunk_hosts`, `plugin: s
 - [ ] Step 0 and phase exit criteria followed
 - [ ] `bin/*` invoked from project root
 - [ ] Secrets: Splunkbase and AWS credential env values never shown in chat or terminal output
-- [ ] Incremental add uses `spa --json features search` / `show` / merge / `spa validate` (does not restart SVA for a single setting)
+- [ ] Incremental add uses `spa --json features search` / `show` / merge, or [spa-apps](../spa-apps/SKILL.md) for Splunkbase, then `spa validate` (does not restart SVA for a single setting)

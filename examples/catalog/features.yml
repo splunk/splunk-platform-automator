@@ -722,7 +722,7 @@ features:
     kind: setting
     when_to_use: >-
       Install or remove normal Splunk apps during deploy from Splunkbase (source splunkbase
-      plus numeric app_id) or from a local folder/tarball (source local plus path under
+      plus numeric app_id) or from an extracted local folder (source local plus path under
       apps_dir). Each apps[] entry needs name and target_roles (which Splunk roles receive
       it). SPA then picks the target_path: SHC deployer, cluster manager, deployment server,
       or the host etc/apps. Optional version (latest or dotted), state (installed or absent),
@@ -733,8 +733,8 @@ features:
       spa init does not compose app lists. Premium ITSI is setting.apps.premium.itsi; content
       packs are setting.apps.premium.itsi.content_pack (library) or
       setting.apps.premium.itsi.content_pack.single. host_specific_apps is reserved and
-      unimplemented; use target_roles and whitelist filters. A later spa apps CLI (#59/#68)
-      will search Splunkbase; until then the user supplies app_id. Do not paste Splunkbase
+      unimplemented; use target_roles and whitelist filters. Use spa apps search / snippet
+      (#59) to find Splunkbase app_id values; spa config apply is #76. Do not paste Splunkbase
       passwords.
     keys:
       - splunk_app_deployment
@@ -773,7 +773,7 @@ features:
         note: auto (default) or direct. direct skips the deployment server; do not set sc_* filters.
       - path: "splunk_app_deployment.apps[].path"
         type: string
-        note: For source local, folder or archive under apps_dir when it differs from name.
+        note: For a normal source local app, extracted folder under apps_dir when it differs from name. Premium ITSI/content-pack entries may use archives.
       - path: "splunk_app_deployment.apps[].serverclass"
         type: string
         note: Deployment-server class name when the same app is staged more than once (for example UF vs SH).
@@ -1327,14 +1327,34 @@ features:
   - id: setting.apps_cli
     title: Apps management CLI
     kind: setting
+    when_to_use: >-
+      Find Splunkbase apps with spa apps search QUERY (technology keywords: unix, cisco asa).
+      Optional --type app|addon and --kind ta|premium_itsi|itsi_content_library|itsi_content_pack_single|es_not_premium.
+      An itsi query pins app_id 1841 first; es pins 263. Each hit is compact (app_id, folder name, title,
+      type, SPA kind, version, short summary).
+      spa apps snippet APP_ID prints a kind-specific apps[] YAML block (TA, premium ITSI 1841,
+      content library 5391, single packs). Matching curated ansible/apps_playbooks files are
+      advertised until --customize adds customizations. spa apps download APP_ID --yes stores the archive;
+      --extract safely expands normal folder-backed apps and removes the archive;
+      --overwrite replaces an existing extracted folder.
+      spa apps snippet APP_ID --local
+      (or --source local) resolves the folder or archive already in apps_dir, folder first.
+      For custom local apps, pass FOLDER_NAME instead of
+      APP_ID. Download credentials come from splunk_app_deployment.splunkbase_username /
+      splunkbase_password (lookup('env', 'NAME') is resolved) before SPLUNKBASE_USERNAME /
+      SPLUNKBASE_PASSWORD. Search and Splunkbase-source snippet work without an env dir. Merge
+      snippets by hand until spa config (#76).
     when_not_to_use: >-
-      There is no spa apps command yet (#59, #68). Search Splunkbase and write YAML by hand
-      using setting.apps. Do not pass app lists through spa init.
+      Do not pass app lists through spa init. Do not use ITE Work 5403 (same binary as ITSI;
+      use 1841). spa apps does not write splunk_config.yml or deploy. premium_app: es is #60.
     suggest: false
     keys: []
     related: ["setting.apps", "setting.apps.premium.itsi"]
     merge: deep
     snippet: |
-      # spa apps CLI is later (#59, #68). Do not add app example layouts to spa init.
+      # spa apps search QUERY
+      # spa apps snippet APP_ID
+      # spa apps download APP_ID --yes
+      # Merge the printed apps[] item; spa config apply is #76.
 
 

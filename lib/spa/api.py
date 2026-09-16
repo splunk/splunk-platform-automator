@@ -128,6 +128,24 @@ class SpaSession(Protocol):
         include_keys: bool = False,
     ) -> CommandResult: ...
 
+    def apps(
+        self,
+        action: str,
+        query: Optional[str] = None,
+        app_id: Optional[str] = None,
+        limit: int = 10,
+        app_type: Optional[str] = None,
+        kind: Optional[str] = None,
+        version: Optional[str] = None,
+        roles: Optional[Sequence[str]] = None,
+        source: str = "splunkbase",
+        extract: bool = False,
+        overwrite: bool = False,
+        customize: bool = False,
+        confirm: bool = False,
+        agent: bool = False,
+    ) -> CommandResult: ...
+
     def provision(
         self, extra: Optional[List[str]] = None, confirm: bool = False, agent: bool = False
     ) -> CommandResult: ...
@@ -159,6 +177,7 @@ class SpaSession(Protocol):
         hosts: Optional[Sequence[str]] = None,
         confirm: bool = False,
         agent: bool = False,
+        apps_playbook: Optional[str] = None,
     ) -> CommandResult: ...
 
     def aws(self, argv: Optional[List[str]] = None) -> CommandResult: ...
@@ -199,6 +218,15 @@ class LocalSpaSession:
         if message:
             return CommandResult(ok=False, error=message, code=2)
         return None
+
+    def _app_deployment_config(self) -> Dict[str, Any]:
+        """splunk_config.yml mapping so Splunkbase creds can come from config."""
+        from spa.preflight import load_config_mapping
+
+        try:
+            return load_config_mapping(self.paths.config_file)
+        except Exception:  # unreadable or invalid YAML: spa validate reports it
+            return {}
 
     def _provision_state(self):
         """Shared provision gate used by deploy, hosts list --status, ssh, and copy."""
@@ -332,6 +360,87 @@ class LocalSpaSession:
                 },
             )
         return CommandResult(ok=False, error="Unknown spa features action: %s" % action, code=2)
+
+    def apps(
+        self,
+        action: str,
+        query: Optional[str] = None,
+        app_id: Optional[str] = None,
+        limit: int = 10,
+        app_type: Optional[str] = None,
+        kind: Optional[str] = None,
+        version: Optional[str] = None,
+        roles: Optional[Sequence[str]] = None,
+        source: str = "splunkbase",
+        extract: bool = False,
+        overwrite: bool = False,
+        customize: bool = False,
+        confirm: bool = False,
+        agent: bool = False,
+    ) -> CommandResult:
+        from spa.apps import AppsError, download, search, snippet
+        from spa.splunkbase import SplunkbaseError
+
+        try:
+            if action == "search":
+                data = search(
+                    query or "",
+                    limit=limit,
+                    app_type=app_type,
+                    kind=kind,
+                    spa_home=self.paths.spa_home,
+                )
+                return CommandResult(ok=True, data=data)
+            if action == "snippet":
+                if source == "local":
+                    blocked = self._env_gate()
+                    if blocked:
+                        return blocked
+                data = snippet(
+                    app_id,
+                    version=version or "latest",
+                    roles=roles,
+                    source=source,
+                    apps_dir=self.paths.apps_dir if source == "local" else None,
+                    spa_home=self.paths.spa_home,
+                    customize=customize,
+                )
+                return CommandResult(ok=True, data=data)
+            if action == "download":
+                blocked = self._env_gate()
+                if blocked:
+                    return blocked
+                blocked = self._confirm_gate(
+                    "apps download",
+                    confirm=confirm,
+                    agent=agent,
+                    details=[
+                        "apps_dir: %s" % self.paths.apps_dir,
+                        "extract: %s" % bool(extract),
+                        "overwrite: %s" % bool(overwrite),
+                    ],
+                    risk="mutating",
+                )
+                if blocked:
+                    return blocked
+                data = download(
+                    app_id,
+                    self.paths.apps_dir,
+                    version=version or "latest",
+                    extract=extract,
+                    overwrite=overwrite,
+                    config=self._app_deployment_config(),
+                )
+                return CommandResult(ok=True, data=data)
+        except AppsError as exc:
+            message = str(exc)
+            code = 2 if "must be an integer" in message or message.startswith("spa apps search") else 1
+            return CommandResult(ok=False, error=message, code=code)
+        except SplunkbaseError as exc:
+            message = str(exc)
+            code = 2 if message == "spa apps search QUERY" else 1
+            return CommandResult(ok=False, error=message, code=code)
+        return CommandResult(ok=False, error="Unknown spa apps action: %s" % action, code=2)
 
     def validate(
         self,
@@ -659,6 +768,7 @@ class LocalSpaSession:
         hosts: Optional[Sequence[str]] = None,
         confirm: bool = False,
         agent: bool = False,
+        apps_playbook: Optional[str] = None,
     ) -> CommandResult:
         blocked = self._env_gate()
         if blocked:
@@ -677,7 +787,20 @@ class LocalSpaSession:
             resolved = self._resolve_hosts(hosts)
         except HostLookupError as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
-        args = with_ansible_limit(extra, resolved)
+        args = list(extra or [])
+        if apps_playbook:
+            from spa.app_playbooks import AppPlaybookError, resolve_apps_playbook, run_extra_vars
+
+            try:
+                row = resolve_apps_playbook(
+                    self.paths.spa_home,
+                    apps_playbook,
+                    spa_env_dir=self.paths.spa_env_dir,
+                )
+            except AppPlaybookError as exc:
+                return CommandResult(ok=False, error=str(exc), code=2)
+            args = run_extra_vars(row) + args
+        args = with_ansible_limit(args, resolved)
         if verbose:
             args = ["-v", *args]
         try:

@@ -2,7 +2,16 @@
 
 ## TL;DR - Get Started in 5 Minutes
 
-### Step 1: Add Configuration to `splunk_config.yml`
+### Step 1: Find an app (optional)
+
+```bash
+spa --json apps search unix
+spa apps snippet 833 --roles search_head,indexer
+```
+
+If the snippet (or JSON `playbooks`) mentions a curated playbook, opt in with `--customize`. Merge the snippet under `splunk_app_deployment.apps`. Config apply from the CLI is later (`spa config`, #76).
+
+### Step 2: Add Configuration to `splunk_config.yml`
 
 Add this section to your `config/splunk_config.yml`:
 
@@ -22,14 +31,14 @@ splunk_app_deployment:
       # target_path / deployment target automatically calculated based on environment
 ```
 
-### Step 2: Set Your Splunkbase Credentials
+### Step 3: Set Your Splunkbase Credentials
 
 ```bash
 export SPLUNKBASE_USERNAME='your_email@example.com'
 export SPLUNKBASE_PASSWORD='your_password'
 ```
 
-### Step 3: Run the Playbook
+### Step 4: Run the Playbook
 
 ```bash
 ansible-playbook ansible/splunk_apps_deploy.yml

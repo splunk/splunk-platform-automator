@@ -1,12 +1,30 @@
 ---
-# Configure Splunk Add-on for ServiceNow (Splunk_TA_snow): account, settings, alert action, incident input.
-#
-# Use from app customizations: run_playbook: "ansible/apps_playbooks/Splunk_TA_snow-configure.yml"
+# spa-app:
+#   schema: 1
+#   name: Splunk_TA_snow
+#   app_id: 1928
+#   kind: ta
+#   hook: run_playbook
+#   summary: Configure ServiceNow account, alert action, and incident input
+#   extra_vars:
+#     - name: snow_url
+#       required: true
+#     - name: snow_user
+#       required: true
+#     - name: snow_password
+#       required: true
+#       secret: true
+#       env: SNOW_PASSWORD
+#     - name: snow_connection
+#       required: false
+#       default: ServiceNow
+#     - name: snow_index
+#       required: false
+#       default: snow_incidents
+#     - name: dns_name
+#       required: false
 #
 # Framework vars: app_path, app_name
-# extra_vars (required): snow_connection, snow_url, snow_user, snow_password, snow_index
-# extra_vars (optional): dns_name (for alert action splunk_url), since_when (default: 7 days ago),
-#   disable_ssl_certificate_validation (default: '0'), record_count (default: '3000')
 
 - name: "Resolve ServiceNow extra_vars (avoids template recursion)"
   ansible.builtin.set_fact:

@@ -90,6 +90,7 @@ ansible-playbook ansible/splunk_apps_deploy.yml
 
 Catalog snippets (merge into `splunk_config.yml`; not `spa init --example`):
 
+- `spa apps search QUERY` — Splunkbase lookup (compact rows). Then `spa apps snippet APP_ID` for YAML (curated playbooks advertised until `--customize`)
 - `spa features show setting.apps` — normal Splunkbase / local apps
 - `spa features show setting.apps.premium.itsi` — ITSI premium app (no `target_roles`)
 - `spa features show setting.apps.premium.itsi.content_pack` — ITSI Content Library (`content_pack_apps`)

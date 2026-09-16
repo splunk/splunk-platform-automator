@@ -2,6 +2,23 @@
 
 This document describes how to run **apps playbooks** (e.g. `*_configure.yml` under `ansible/apps_playbooks/`) in isolation using the wrapper playbook `splunk_apps_playbook_run.yml`. The same wrapper works for both **`run_playbook`** and **`run_playbook_after_restart`** playbooks.
 
+Each curated file has a `# spa-app:` header (`name`, `kind`, `hook`, optional `app_id`, `extra_vars`). `spa apps snippet` matches on **kind** plus folder name or `app_id` and advertises the playbook until you pass `--customize`. List and run them with:
+
+```bash
+spa run splunk_apps_playbook_run --help
+spa run splunk_apps_playbook_run --apps-playbook Splunk_TA_nix-enable_perf_metrics --hosts indexer --yes
+```
+
+Add a new curated playbook by dropping a task file in `ansible/apps_playbooks/` with a valid `# spa-app:` block (same `kind` values as `spa apps search --kind`).
+
+Env-dir task files (any folder, for example `ancustom/`) are allowed for standalone runs. They are **not** listed in `--help`. Pass a path relative to `SPA_ENV_DIR`:
+
+```bash
+spa run splunk_apps_playbook_run --apps-playbook ancustom/my_custom_playbook --hosts indexer --yes
+```
+
+`app_name` comes from `# spa-app: name` when present, otherwise the file stem. Override with `-e app_name=Splunk_TA_nix`. Required secrets still go in `-e playbook_extra_vars=...`. Deploy `customizations.run_playbook` stays a path from `SPA_HOME` (typically `ansible/apps_playbooks/...`).
+
 ## When playbooks run in the full deployment
 
 | Customization | When it runs | Typical use |
@@ -91,7 +108,7 @@ It works for **both**:
 
 Required extra vars:
 
-- **`apps_playbook`** – Path to the task file **under** `ansible/` (e.g. `apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml`).
+- **`apps_playbook`** – Path to the task file **under** `ansible/` (e.g. `apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml`), or an absolute path (what `spa run --apps-playbook ancustom/my_custom_playbook` sets).
 - **`app_name`** – App name (e.g. `DA-ITSI-CP-monitoring-alerting`).
 
 Optional:

@@ -241,6 +241,11 @@ def _validate_metadata(data: Dict[str, Any], path: Path) -> Dict[str, Any]:
         if not isinstance(examples, list) or not all(isinstance(item, str) for item in examples):
             raise MetadataError("%s: spa-run.examples must be a list of strings" % path)
         out["examples"] = examples
+    related_dir = data.get("related_dir")
+    if related_dir is not None:
+        if not isinstance(related_dir, str) or not related_dir.strip():
+            raise MetadataError("%s: spa-run.related_dir must be a non-empty string" % path)
+        out["related_dir"] = related_dir.strip()
     return out
 
 
@@ -302,6 +307,11 @@ def describe(
     if renamed_from:
         row["renamed_from"] = renamed_from
         row["use"] = canonical
+    related_dir = ((row.get("metadata") or {}).get("related_dir") or "").strip()
+    if related_dir == "apps_playbooks":
+        from spa.app_playbooks import list_app_playbooks
+
+        row["related_playbooks"] = list_app_playbooks(paths.spa_home)
     return row
 
 

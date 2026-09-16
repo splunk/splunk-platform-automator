@@ -1,8 +1,8 @@
 # Basic apps questionnaire
 
-**No Splunkbase catalog search** — user supplies `app_id` and folder `name` from Splunkbase. Merge YAML from `spa --json features show ID`.
+Load [spa-apps](../../spa-apps/SKILL.md) for this phase. Search Splunkbase with `spa --json apps search QUERY` (technology keywords), then **one** `spa --json apps snippet APP_ID` without `--customize`. If `playbooks` is set, ask before `snippet --customize`. Merge the printed snippet into `splunk_config.yml` (until `spa config`, #76). Do not guess `app_id`. Do not open splunkbase.com first.
 
-Deep customization: [docs/App_Deployment_Customizations.md](docs/App_Deployment_Customizations.md) and `spa --json features show setting.apps.customizations`.
+Deep customization: [docs/App_Deployment_Customizations.md](../../../../docs/App_Deployment_Customizations.md) and `spa --json features show setting.apps.customizations`.
 
 ## 1. Deploy apps?
 
@@ -22,66 +22,47 @@ splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
 splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
 ```
 
-See [docs/App_Deployment.md](docs/App_Deployment.md). Optional vault in config. Do not verify with `echo $SPLUNKBASE_*`.
+See [docs/App_Deployment.md](../../../../docs/App_Deployment.md). Optional vault in config. Do not verify with `echo $SPLUNKBASE_*`.
 
 ## 3. App sources
 
-- `splunkbase` — requires credentials and `app_id`
-- `local` — `path` to tarball/spl on controller apps dir
+- `splunkbase` — snippet from `spa apps snippet`; requires credentials at deploy
+- `local` — `spa apps snippet APP_ID --local` (short for `--source local`) resolves the folder or archive already in `apps_dir`. Nothing there → `spa apps download APP_ID --extract --yes` first (`--extract` deletes the archive after unpacking; `--overwrite` replaces an existing folder; ITSI/content packs deploy from the archive, so omit `--extract`). For a custom app, use `spa apps snippet FOLDER_NAME --local`. Download does not print YAML.
 
 ## 4. Target roles
 
-For **normal** apps, `target_roles`: `search_head`, `indexer`, `universal_forwarder`, `heavy_forwarder` (maps to deployer/CM/DS/direct per SPA).
+For **normal** apps, `target_roles`: `search_head`, `indexer`, `universal_forwarder`, `heavy_forwarder` (maps to deployer/CM/DS/direct per SPA). Pass `--roles` on `snippet` for TAs.
 
 Do **not** set `target_roles` on `premium_app: itsi` or `itsi_content_pack: true` entries.
 
 ## 5. Premium ITSI?
 
-If yes: merge `spa --json features show setting.apps.premium.itsi` (no `target_roles`).
+ITSI / ITE Work → Splunkbase **1841** only (`spa apps snippet 1841`). Not 5403.
 
-- Main app: `name`, `source: splunkbase`, `app_id: 1841`, `premium_app: itsi`
+Merge `spa --json features show setting.apps.premium.itsi` for Java 21 and license files; the apps[] slice also comes from `spa apps snippet 1841`.
+
+- Main app: `premium_app: itsi`, no `target_roles`
 - Licenses: run `spa licenses --config …` after adding ITSI — proposes `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` from `../Software`; see [licenses.md](licenses.md)
 - **Java 21 max** on the search/ITSI host `splunk_hosts[].os.packages` (not the global `os:` block) — see [aws-os-matrix.md](aws-os-matrix.md)
 - Full lab (not `spa init --example`): `examples/single_node_itsi.yml`
 
 ## 6. ITSI content packs?
 
-Merge `spa --json features show setting.apps.premium.itsi.content_pack` for DA-ITSI-ContentLibrary. Per pack in `content_pack_apps`: `content_pack_install`, `content_pack_api` (`install_all`, `enabled`, `saved_search_action`, `backfill`, `resolution`, `prefix`), and `customizations.run_playbook_after_restart` / `force_run_playbook_after_restart`. Merge `spa --json features show setting.apps.premium.itsi.content_pack.single` for one pack that is its own folder (those API keys at top level; no `content_pack_apps`).
+`spa apps search "content pack"` / `snippet` 5391 (library) or a single-pack id. Sibling **1841** is required. See catalog `setting.apps.premium.itsi.content_pack` and `.single`.
 
-- Requires a sibling `premium_app: itsi` entry with the same `state`
 - Do not set `premium_app` or `target_roles` on the pack entry
 - **Folder `name` must match on-disk app name** inside the spl/tgz
-- Do not invent Splunkbase IDs
 
 ## 7. Other Splunkbase apps
 
-Merge `spa --json features show setting.apps`. Per app: `name` (folder name), `app_id`, optional `version: latest`, `target_roles`.
+`spa --json apps search QUERY` then `snippet APP_ID`. Fill `target_roles`.
 
 ## 8. Local org apps
 
 `source: local`, `path` under the shared apps dir (`.spa.yml` `apps_dir` / `SPA_APPS_DIR` / `$SPA_HOME/apps`). Override per lab with `splunk_app_deployment.local_app_repo_path`.
 
-## Minimal block sketch
-
-Normal TA (not ITSI):
-
-```yaml
-splunk_app_deployment:
-  splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
-  splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
-  apps:
-    - name: Splunk_TA_nix
-      source: splunkbase
-      app_id: 833
-      target_roles:
-        - search_head
-        - indexer
-```
-
-ITSI premium (no `target_roles`): use the `setting.apps.premium.itsi` snippet.
-
 ## Out of scope
 
 - ES full prerequisite matrix (`premium_app: es` is not valid)
-- Splunkbase search CLI (future #59/#68)
-- Custom `run_playbook` graphs unless user explicitly needs them (`setting.apps.customizations`)
+- Auto-deploy without approval
+- `spa apps add` / `remove` (that is #76 / #68)

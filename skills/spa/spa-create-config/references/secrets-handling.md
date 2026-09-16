@@ -13,6 +13,8 @@ Applies to the full `spa-create-config` workflow (plan and write modes).
 
 Do **not** paste resolved lookup results if a command or playbook prints them.
 
+`spa apps download` resolves credentials from `splunk_config.yml` first (`splunk_app_deployment.splunkbase_username` / `splunkbase_password`; a `lookup('env', 'NAME')` value reads that env var, a vault ref falls back), then `SPLUNKBASE_USERNAME` / `SPLUNKBASE_PASSWORD`. Keep literal credentials out of the config — use the env lookup or vault form.
+
 ## AWS API credentials (Phase 4 / validate)
 
 Used by `spa aws`, Terraform provision, and optional `--splunk-config-aws`.

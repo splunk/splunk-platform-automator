@@ -15,14 +15,18 @@
 #       kind: extra-var
 #       required: true
 #       description: Splunk app folder name.
+#   related_dir: apps_playbooks
 #   examples:
+#     - spa run splunk_apps_playbook_run --apps-playbook DA-ITSI-CP-monitoring-alerting_configure --hosts sh1 --yes
+#     - spa run splunk_apps_playbook_run --apps-playbook ancustom/my_custom_playbook --hosts sh1 --yes
 #     - spa run splunk_apps_playbook_run --hosts sh1 -- -e apps_playbook=apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml -e app_name=DA-ITSI-CP-monitoring-alerting
 # Run an apps_playbook in isolation (no full app deployment).
 # Target hosts with spa run ... --hosts (names or roles).
 # Use the same inventory and group_vars/host_vars as full deploy so splunk_home, splunk_admin_password, etc. are set.
 #
 # Required extra vars (-e):
-#   apps_playbook: path to the task file under ansible/ (e.g. apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml)
+#   apps_playbook: path to the task file under ansible/ (e.g. apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml),
+#     or an absolute path to an env-dir file (spa run --apps-playbook ancustom/my_custom_playbook)
 #   app_name: app name (e.g. DA-ITSI-CP-monitoring-alerting)
 #
 # Optional extra vars (-e):
@@ -51,7 +55,7 @@
 
     # Set app_path in task vars so it is defined in included playbook scope (with splunk_home fallback for standalone runs).
     - name: "Run apps playbook {{ apps_playbook | basename }}"
-      ansible.builtin.include_tasks: "{{ playbook_dir }}/{{ apps_playbook }}"
+      ansible.builtin.include_tasks: "{{ apps_playbook if apps_playbook.startswith('/') else (playbook_dir + '/' + apps_playbook) }}"
       vars:
         app_path: "{{ app_path_override | default((splunk_home | default('/opt/splunk')) + '/etc/apps/' + app_name) }}"
         app_name: "{{ app_name }}"
