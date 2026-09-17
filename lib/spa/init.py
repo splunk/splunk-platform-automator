@@ -5,12 +5,11 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import sys
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from spa.paths import _expand, is_spa_home, load_user_paths, save_user_paths
+from spa.paths import _expand, is_spa_home, load_spa_yml, load_user_paths, save_user_paths
 
 try:
     import yaml
@@ -141,25 +140,25 @@ def write_spa_yml(
     software_dir: Optional[str] = None,
     baseconfig_dir: Optional[str] = None,
     apps_dir: Optional[str] = None,
-    persist_user: bool = False,
     environ: Optional[dict] = None,
 ) -> tuple:
     env = environ if environ is not None else os.environ
     start = dest.resolve()
-    if persist_user and (software_dir or baseconfig_dir or apps_dir):
-        saved = save_user_paths(
-            software_dir=software_dir,
-            baseconfig_dir=baseconfig_dir,
-            apps_dir=apps_dir,
-            environ=env,
-            relative_to=start,
-        )
-        _say("  paths:     %s" % saved)
-
     user = load_user_paths(env)
+    existing: Dict[str, Any] = {}
+    spa_yml = dest / ".spa.yml"
+    if spa_yml.is_file():
+        try:
+            loaded = load_spa_yml(spa_yml)
+            if isinstance(loaded, dict):
+                existing = loaded
+        except (OSError, ValueError):
+            existing = {}
     sw = ""
     if software_dir:
         sw = str(_expand(software_dir, start))
+    elif existing.get("software_dir"):
+        sw = str(_expand(str(existing["software_dir"]), start))
     elif user.get("software_dir"):
         sw = str(_expand(str(user["software_dir"]), start))
     else:
@@ -168,6 +167,8 @@ def write_spa_yml(
     bc = ""
     if baseconfig_dir:
         bc = str(_expand(baseconfig_dir, start))
+    elif existing.get("baseconfig_dir"):
+        bc = str(_expand(str(existing["baseconfig_dir"]), start))
     elif user.get("baseconfig_dir"):
         bc = str(_expand(str(user["baseconfig_dir"]), start))
     elif sw:
@@ -178,10 +179,29 @@ def write_spa_yml(
     apps = ""
     if apps_dir:
         apps = str(_expand(apps_dir, start))
+    elif existing.get("apps_dir"):
+        apps = str(_expand(str(existing["apps_dir"]), start))
     elif user.get("apps_dir"):
         apps = str(_expand(str(user["apps_dir"]), start))
     else:
         apps = _first_existing(dest / "../apps", spa_home / "../apps", spa_home / "apps")
+
+    # Seed controller-wide paths from the first env that can supply or discover
+    # them. Never let a later one-off init option replace an established global.
+    missing = {
+        "software_dir": sw if sw and not user.get("software_dir") else None,
+        "baseconfig_dir": bc if bc and not user.get("baseconfig_dir") else None,
+        "apps_dir": apps if apps and not user.get("apps_dir") else None,
+    }
+    if any(missing.values()):
+        saved = save_user_paths(
+            software_dir=missing["software_dir"],
+            baseconfig_dir=missing["baseconfig_dir"],
+            apps_dir=missing["apps_dir"],
+            environ=env,
+            relative_to=start,
+        )
+        _say("  paths:     %s" % saved)
 
     lines = [
         "# Splunk Platform Automator env pointer.",
@@ -200,24 +220,6 @@ def write_spa_yml(
             % dest
         )
     return sw, apps
-
-
-def write_envrc(dest: Path, spa_home: Path) -> None:
-    body = """# Splunk Platform Automator env (direnv). Enable with: direnv allow
-# Activates the venv (env .venv when present, else SPA_HOME/.venv) and exports
-# SPA_HOME / SPA_ENV_DIR / ANSIBLE_* so ansible-playbook uses this env.
-export SPA_HOME="%s"
-export SPA_ENV_DIR="$(pwd)"
-unset SPLUNK_CONFIG_FILE
-if declare -f PATH_add >/dev/null 2>&1; then
-    PATH_add "${SPA_HOME}/bin"
-else
-    export PATH="${SPA_HOME}/bin:${PATH}"
-fi
-source "${SPA_HOME}/bin/spa_venv.sh" --no-create --env "${SPA_ENV_DIR}"
-eval "$("${SPA_HOME}/bin/spa" env --export)"
-""" % spa_home
-    (dest / ".envrc").write_text(body, encoding="utf-8")
 
 
 def link_terraform_modules(dest: Path, spa_home: Path) -> None:
@@ -403,16 +405,6 @@ def create_venv(
     subprocess.check_call(cmd)
 
 
-def allow_direnv(dest: Path) -> None:
-    if shutil.which("direnv") is None:
-        return
-    result = subprocess.run(["direnv", "allow"], cwd=str(dest), capture_output=True, text=True)
-    if result.returncode == 0:
-        _say("direnv: approved %s/.envrc (cd into the env to load venv + SPA_*)" % dest)
-    else:
-        _say("direnv: could not approve .envrc (run: cd %s && direnv allow)" % dest)
-
-
 def run_doctor(dest: Path, spa_home: Path, skip: bool) -> None:
     if skip:
         return
@@ -421,7 +413,6 @@ def run_doctor(dest: Path, spa_home: Path, skip: bool) -> None:
     result = collect_checks(
         spa_home=str(spa_home),
         env_dir=str(dest),
-        fix_direnv=sys.stdout.isatty(),
     )
     for line in format_doctor_text(result).rstrip().splitlines():
         _say(line)
@@ -452,7 +443,7 @@ def format_example_list(data: Dict[str, Any]) -> str:
     lines.append("Providers:")
     for item in data.get("providers") or []:
         lines.append("  %s" % item["id"])
-    lines.append("Compose: spa init --example TOPOLOGY --provider aws|virtualbox ENV")
+    lines.append("Compose: spa init --example TOPOLOGY [--provider aws|virtualbox] NAME")
     return "\n".join(lines)
 
 
@@ -472,7 +463,9 @@ def resolve_example_pair(
     provider_id = (provider or "").strip().lower() or None
     if provider_id in {"terraform.aws", "terraform"}:
         provider_id = "aws"
-    raw = _normalize_example_name(example or "single_node.yml")
+    raw_example = (example or "single_node.yml").strip()
+    passed_filename = raw_example.endswith((".yml", ".yaml"))
+    raw = _normalize_example_name(raw_example)
     hint = None
     topology_id = Path(raw).stem
     alias = EXAMPLE_ALIASES.get(raw)
@@ -482,13 +475,14 @@ def resolve_example_pair(
             "Alias %s → --example %s --provider %s"
             % (raw, topology_id, implied)
         )
-        if provider_id is None:
+        if provider_id is None and passed_filename:
             provider_id = implied
     if provider_id is None:
-        raise InitError(
-            "spa init --example requires --provider aws or virtualbox.\n"
-            "List: spa init --list"
-        )
+        from spa.registry import load_default_provider
+
+        provider_id = load_default_provider()
+    if provider_id in {"vbox", "vb"}:
+        provider_id = "virtualbox"
     topo = spa_home / "examples" / "topologies" / ("%s.yml" % topology_id)
     prov = spa_home / "examples" / "providers" / ("%s.yml" % provider_id)
     if not topo.is_file():
@@ -565,7 +559,6 @@ def init_env(
     python: Optional[str] = None,
     ansible: Optional[str] = None,
     pip_pkgs: Optional[Sequence[str]] = None,
-    write_envrc_file: bool = True,
     skip_doctor: bool = False,
     rebuild_venv: bool = False,
     log: Optional[List[str]] = None,
@@ -573,10 +566,11 @@ def init_env(
     baseconfig_dir: Optional[str] = None,
     apps_dir: Optional[str] = None,
     provider: Optional[str] = None,
+    registry_name: Optional[str] = None,
 ) -> int:
     token = _LOG.set(log) if log is not None else None
     try:
-        return _init_env(
+        rc = _init_env(
             dest,
             spa_home,
             example=example,
@@ -589,7 +583,6 @@ def init_env(
             python=python,
             ansible=ansible,
             pip_pkgs=pip_pkgs,
-            write_envrc_file=write_envrc_file,
             skip_doctor=skip_doctor,
             rebuild_venv=rebuild_venv,
             software_dir=software_dir,
@@ -597,6 +590,16 @@ def init_env(
             apps_dir=apps_dir,
             provider=provider,
         )
+        if rc == 0:
+            from spa.registry import RegistryError, register_environment
+
+            try:
+                register_environment(
+                    registry_name or dest.name, dest, replace=force
+                )
+            except RegistryError as exc:
+                raise InitError(str(exc), exc.code)
+        return rc
     finally:
         if token is not None:
             _LOG.reset(token)
@@ -616,7 +619,6 @@ def _init_env(
     python: Optional[str] = None,
     ansible: Optional[str] = None,
     pip_pkgs: Optional[Sequence[str]] = None,
-    write_envrc_file: bool = True,
     skip_doctor: bool = False,
     rebuild_venv: bool = False,
     software_dir: Optional[str] = None,
@@ -634,7 +636,6 @@ def _init_env(
         "software_dir": software_dir,
         "baseconfig_dir": baseconfig_dir,
         "apps_dir": apps_dir,
-        "persist_user": bool(software_dir or baseconfig_dir or apps_dir),
     }
 
     def _write() -> tuple:
@@ -660,10 +661,7 @@ def _init_env(
         strip_framework(dest, spa_home)
         ensure_env_dirs(dest)
         _write()
-        if write_envrc_file:
-            write_envrc(dest, spa_home)
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
-        allow_direnv(dest)
         run_doctor(dest, spa_home, skip_doctor)
         _say("Converted to an env dir at %s" % dest)
         _say("  config:    %s" % config_dest)
@@ -675,33 +673,27 @@ def _init_env(
             raise InitError("No config/splunk_config.yml in %s. Nothing to migrate." % source)
         if has_config(dest) and not force:
             raise InitError(
-                "Env already has a config (%s). Use --force to refresh .spa.yml/.envrc "
+                "Env already has a config (%s). Use --force to refresh .spa.yml "
                 "(config is kept unless --example)." % config_dest
             )
         if has_config(dest) and force and not example_set:
             # refresh pointer files only; do not copy config from source over dest
             ensure_env_dirs(dest)
             _write()
-            if write_envrc_file:
-                write_envrc(dest, spa_home)
             link_terraform_modules(dest, spa_home)
             create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
-            allow_direnv(dest)
             run_doctor(dest, spa_home, skip_doctor)
             _say("Refreshed env pointer files at %s (splunk_config.yml kept)" % dest)
             return 0
         _say("Migrating existing env from %s" % source)
         migrate_state(source, dest, spa_home, keep_source, yml_opts=yml_opts)
-        if write_envrc_file:
-            write_envrc(dest, spa_home)
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
-        allow_direnv(dest)
         run_doctor(dest, spa_home, skip_doctor)
         _say("Env migrated to %s" % dest)
         return 0
 
     if is_spa_env(dest) and not force:
-        raise InitError("Env already exists (%s). Use --force to refresh .spa.yml/.envrc." % dest)
+        raise InitError("Env already exists (%s). Use --force to refresh .spa.yml." % dest)
 
     if example_set:
         ensure_env_dirs(dest)
@@ -709,10 +701,7 @@ def _init_env(
             config_dest, spa_home, example, provider
         )
         _write()
-        if write_envrc_file:
-            write_envrc(dest, spa_home)
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
-        allow_direnv(dest)
         run_doctor(dest, spa_home, skip_doctor)
         _say("Env scaffolded at %s" % dest)
         _say("  example:   %s --provider %s" % (topology_id, provider_id))
@@ -725,27 +714,21 @@ def _init_env(
     if force and (has_config(dest) or is_spa_env(dest)):
         ensure_env_dirs(dest)
         _write()
-        if write_envrc_file:
-            write_envrc(dest, spa_home)
         link_terraform_modules(dest, spa_home)
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
-        allow_direnv(dest)
         run_doctor(dest, spa_home, skip_doctor)
         _say("Refreshed env at %s (splunk_config.yml kept)" % dest)
         return 0
 
     # Fresh env, default topology + VirtualBox (same as former single_node.yml)
     if config_dest.exists() or (dest / ".spa.yml").exists():
-        raise InitError("Env already exists (%s). Use --force to refresh .spa.yml/.envrc." % dest)
+        raise InitError("Env already exists (%s). Use --force to refresh .spa.yml." % dest)
     ensure_env_dirs(dest)
     topology_id, provider_id, hint = write_composed_config(
         config_dest, spa_home, "single_node", "virtualbox"
     )
     _write()
-    if write_envrc_file:
-        write_envrc(dest, spa_home)
     create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
-    allow_direnv(dest)
     run_doctor(dest, spa_home, skip_doctor)
     _say("Env scaffolded at %s" % dest)
     _say("  example:   %s --provider %s" % (topology_id, provider_id))

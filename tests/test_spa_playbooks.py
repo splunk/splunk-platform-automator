@@ -186,6 +186,17 @@ def test_prompt_text_names_command_and_risk():
     assert "no playbook metadata" in unknown
 
 
+def test_prompt_text_for_local_risks_never_mentions_hosts():
+    """A venv is this machine's toolchain; it cannot touch a Splunk host."""
+    local = prompt_text("upgrade the shared SPA venv", risk="local")
+    assert "will change the Python environment for this framework" in local
+    assert "host" not in local
+
+    rebuild = prompt_text("rebuild the shared SPA venv", risk="local_destructive")
+    assert "will delete and recreate the Python environment for this framework" in rebuild
+    assert "host" not in rebuild
+
+
 def test_ensure_confirmed_human_prompt_uses_risk(monkeypatch):
     seen = []
     monkeypatch.setattr("builtins.input", lambda prompt="": seen.append(prompt) or "n")

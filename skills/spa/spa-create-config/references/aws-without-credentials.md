@@ -26,7 +26,7 @@ Record in config header comment when API was not used:
 | Step | Works without AWS? |
 |------|-------------------|
 | Phases 0a–3, 5–7 (topology, OS matrix, RF/SF, write YAML) | Yes |
-| `spa licenses` | Yes (local `../Software` scan) |
+| `spa licenses` | Yes (local Software scan) |
 | `spa validate` (default) | Yes — schema, inventory, license pairing, playbook syntax |
 | `./tests/run_schema_tests.sh` | Yes |
 | `spa aws` | **No** (needs boto3 + credentials for all operations except none) |

@@ -13,14 +13,14 @@ Default path: `config/splunk_config.yml`.
 ### What it runs
 
 1. **Pydantic schema** — `ansible/plugins/inventory/schema.py` `validate_config_file`
-2. **Controller paths** — Software dir, PS baseconfig apps (`org_ds_secure_server`, `org_cluster_manager_base`), and each `source: local` app under `apps_dir`
+2. **Controller paths** — Software dir, PS baseconfig apps, and each `source: local` app under `apps_dir` (see [Prepare Software](../../../../docs/user-guide.md#prepare-software))
 3. **Inventory plugin** — `ansible-inventory --list` with config as inventory source
 4. **License / role pairing** — `splunk_license_file` requires `license_manager` role (and vice versa); ITSI requires LM
 5. **Playbook syntax** — included in `spa validate` (`--syntax-check` on provision and deploy)
 
 ### Optional license content and entitlement check
 
-Parses configured licenses from `../Software` and fails when a file is missing,
+Parses configured licenses from the Software directory and fails when a file is missing,
 invalid XML, expired, or lacks an Enterprise / ITSI / ES capability required by
 the selected apps. It warns when expiration is within 30 days or cannot be
 determined:

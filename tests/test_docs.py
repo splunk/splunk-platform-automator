@@ -120,3 +120,15 @@ class TestCommandsMarkdown:
         result = run_spa(["--no-agent", "agent", "schema", "--markdown"])
         assert result.returncode == 0, result.stderr
         assert result.stdout == committed
+
+
+class TestSpaSkill:
+    def test_entry_skill_frontmatter_name(self):
+        path = PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md"
+        assert path.is_file()
+        text = path.read_text(encoding="utf-8")
+        assert text.startswith("---\n")
+        assert "\nname: spa\n" in text.split("---", 2)[1]
+        cursor = PROJECT_ROOT / ".cursor" / "skills" / "spa"
+        assert cursor.is_symlink()
+        assert cursor.resolve() == path.parent.resolve()

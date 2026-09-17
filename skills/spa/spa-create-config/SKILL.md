@@ -104,7 +104,7 @@ Repo keys: choose from concise `spa --json features list` / `search`, inspect wi
    - **Available** → Phase 4 uses API discovery; optional `--splunk-config-aws` at validate.
    - **Unavailable** → follow [aws-without-credentials.md](references/aws-without-credentials.md); do not block the workflow.
 6. Read existing config if merging or revising an existing plan from prior config.
-7. Optional inventory: `spa licenses --json` — note what exists in `../Software`.
+7. Optional inventory: `spa licenses --json` — note what exists in the shared Software directory ([Prepare Software](../../../docs/user-guide.md#prepare-software)).
 
 **Exit:** **Mode recorded**; target path known; merge policy clear when applicable; **AWS API status recorded**; Software licenses noted if scanned.
 
@@ -218,7 +218,7 @@ Summarize hosts before YAML write.
 spa licenses --config config/splunk_config.yml --json
 ```
 
-1. Scan `../Software` for `*.lic` / `*.License` and inspect sanitized parsed
+1. Scan the Software directory for `*.lic` / `*.License` and inspect sanitized parsed
    metadata: `license_type`, `group_id`, `addons`, `capabilities`, `expires_at`,
    and `status`. Never expose raw license XML, signatures, or GUIDs.
 2. If `proposed_splunk_license_file` is non-empty, ask (AskQuestion if available): add to `splunk_defaults`? (especially for lab / app lab intent).

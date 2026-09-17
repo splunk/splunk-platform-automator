@@ -227,7 +227,7 @@ def test_missing_tool_raises_actionable_error(tmp_path):
         tool_path(paths, "spa-no-such-tool")
     message = str(excinfo.value)
     assert "spa-no-such-tool not found" in message
-    assert "spa_venv.sh --create" in message
+    assert "spa venv --shared --create --yes" in message
     assert "spa doctor" in message
 
 

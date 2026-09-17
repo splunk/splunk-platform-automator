@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import sys
 from pathlib import Path
 
 import pytest
@@ -50,7 +51,10 @@ def test_doctor_aws_strict_fails_without_terraform():
 
 def test_init_runs_doctor_by_default(tmp_path):
     dest = tmp_path / "env"
-    result = run_spa(["init", "--example", "cm_2idxc_sh_uf_aws.yml", str(dest)])
+    result = run_spa(
+        ["init", "--example", "cm_2idxc_sh_uf_aws.yml", str(dest)],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    )
     out = result.stderr + result.stdout
     assert "SPA host prerequisites" in out
     if result.returncode != 0:
@@ -188,70 +192,42 @@ def test_doctor_reports_incomplete_venv_for_the_env_under_test(tmp_path):
     assert str(other / ".venv") not in out
 
 
-def test_doctor_warns_when_hook_missing(tmp_path):
-    env = spa_env()
-    env["HOME"] = str(tmp_path)
-    env["SHELL"] = "/bin/zsh"
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
-    out = result.stdout + result.stderr
-    assert "direnv" in out.lower()
-    if shutil.which("direnv"):
-        assert "fix-direnv" in out or "shell" in out.lower()
+def test_doctor_warns_when_spa_venv_dir_points_outside_checkout(tmp_path, monkeypatch):
+    stale = tmp_path / "old-checkout" / ".venv"
+    (stale / "bin").mkdir(parents=True)
+    (stale / "bin" / "activate").write_text("", encoding="utf-8")
+    (stale / "bin" / "python").symlink_to(sys.executable)
+    monkeypatch.setenv("SPA_VENV_DIR", str(stale))
+
+    from spa import doctor as doctor_mod
+
+    result = doctor_mod.collect_checks(spa_home=str(PROJECT_ROOT))
+    by_id = {row["id"]: row for row in result.data["checks"]}
+    assert by_id["spa_venv_pin"]["level"] == "warn"
+    assert "outside this SPA_HOME/environment" in by_id["spa_venv_pin"]["message"]
+    assert "unset SPA_VENV_DIR" in by_id["spa_venv_pin"]["fix"]
 
 
-def test_doctor_fix_direnv_writes_zshrc(tmp_path):
-    env = spa_env()
-    env["HOME"] = str(tmp_path)
-    env["SHELL"] = "/bin/zsh"
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT), "--fix-direnv"], env=env)
-    assert result.returncode == 0, result.stderr + result.stdout
-    zshrc = tmp_path / ".zshrc"
-    assert zshrc.is_file()
-    assert "direnv hook zsh" in zshrc.read_text()
+def test_doctor_warns_when_venv_cannot_import_requirements(tmp_path, monkeypatch):
+    """An activatable venv with a half-finished install must not look healthy."""
+    stale = tmp_path / "old-checkout" / ".venv"
+    (stale / "bin").mkdir(parents=True)
+    (stale / "bin" / "activate").write_text("", encoding="utf-8")
+    (stale / "bin" / "python3").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    (stale / "bin" / "python3").chmod(0o755)
+    monkeypatch.setenv("SPA_VENV_DIR", str(stale))
 
+    from spa import doctor as doctor_mod
 
-def test_doctor_ok_when_hook_in_sourced_zshrc(tmp_path):
-    env = spa_env()
-    env["HOME"] = str(tmp_path)
-    env["SHELL"] = "/bin/zsh"
-    nested = tmp_path / ".config" / "zsh" / "extra.zsh"
-    nested.parent.mkdir(parents=True)
-    nested.write_text('eval "$(direnv hook zsh)"\n')
-    (tmp_path / ".zshrc").write_text('source "$HOME/.config/zsh/extra.zsh"\n')
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
-    out = result.stdout + result.stderr
-    if not shutil.which("direnv"):
-        pytest.skip("direnv not installed")
-    assert "set up in your shell" in out or "environment is loaded" in out
-    assert "does not load it yet" not in out
-
-
-def test_doctor_fix_direnv_skips_when_nested_hook_exists(tmp_path):
-    env = spa_env()
-    env["HOME"] = str(tmp_path)
-    env["SHELL"] = "/bin/zsh"
-    nested = tmp_path / ".zsh" / "direnv.zsh"
-    nested.parent.mkdir(parents=True)
-    nested.write_text('eval "$(direnv hook zsh)"\n')
-    zshrc = tmp_path / ".zshrc"
-    zshrc.write_text("source ~/.zsh/direnv.zsh\n")
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT), "--fix-direnv"], env=env)
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert "direnv hook" not in zshrc.read_text()
-    assert "Added direnv" not in (result.stdout + result.stderr)
-
-
-def test_doctor_ok_when_hook_present(tmp_path):
-    env = spa_env()
-    env["HOME"] = str(tmp_path)
-    env["SHELL"] = "/bin/zsh"
-    (tmp_path / ".zshrc").write_text('eval "$(direnv hook zsh)"\n')
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
-    out = result.stdout + result.stderr
-    if not shutil.which("direnv"):
-        pytest.skip("direnv not installed")
-    assert "set up in your shell" in out or "environment is loaded" in out
-    assert "does not load it yet" not in out
+    result = doctor_mod.collect_checks(spa_home=str(PROJECT_ROOT))
+    packages = next(row for row in result.data["checks"] if row["id"] == "spa_venv_packages")
+    assert packages["level"] == "warn"
+    assert str(stale) in packages["message"]
+    assert "cannot import yaml / pydantic" in packages["message"]
+    assert packages["fix"] == "spa venv --shared --reinstall --yes"
+    # The broken pin must not be selected as the venv spa runs tools from.
+    selected = next(row for row in result.data["checks"] if row["id"] == "spa_venv")
+    assert str(stale) not in selected["message"]
 
 
 def test_doctor_virtualbox_requires_vagrant(tmp_path):

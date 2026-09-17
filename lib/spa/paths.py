@@ -66,7 +66,7 @@ ENV_DIR_REQUIRED_HINT = (
     "spa requires an environment directory, not the framework prefix (clone or install).\n"
     "Create one:  spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env\n"
     "Then:        cd ~/envs/my-env\n"
-    "             # direnv loads SPA_*; otherwise: eval \"$(spa env --export)\""
+    "Or run:      spa --env my-env COMMAND"
 )
 
 
@@ -196,6 +196,7 @@ def save_user_paths(
     software_dir: Optional[str] = None,
     baseconfig_dir: Optional[str] = None,
     apps_dir: Optional[str] = None,
+    env_dir: Optional[str] = None,
     environ: Optional[Dict[str, str]] = None,
     relative_to: Optional[Path] = None,
 ) -> Path:
@@ -211,13 +212,15 @@ def save_user_paths(
         data["baseconfig_dir"] = str(_expand(baseconfig_dir, start))
     if apps_dir:
         data["apps_dir"] = str(_expand(apps_dir, start))
+    if env_dir:
+        data["env_dir"] = str(_expand(env_dir, start))
     path = user_paths_yml(env)
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [
         "# Splunk Platform Automator controller paths (not secrets).",
         "# Installers and PS baseconfig stay out of SPA_HOME so install.sh --force cannot delete them.",
     ]
-    for key in ("software_dir", "baseconfig_dir", "apps_dir"):
+    for key in ("software_dir", "baseconfig_dir", "apps_dir", "env_dir"):
         value = data.get(key)
         if value:
             lines.append("%s: %s" % (key, value))
@@ -345,8 +348,13 @@ def resolve_spa_paths(
     start_dir: Optional[Path] = None,
     environ: Optional[Dict[str, str]] = None,
     clone_root: Optional[Path] = None,
+    env_selector: Optional[str] = None,
 ) -> SpaPaths:
-    """Resolve the path contract. ``environ`` defaults to os.environ."""
+    """Resolve the path contract. ``environ`` defaults to os.environ.
+
+    Precedence for the env dir: ``env_selector`` (``--env``) > ``SPA_ENV_DIR``
+    > ``.spa.yml`` walk > registered default in ``environments.yml``.
+    """
     env = environ if environ is not None else os.environ
     start = Path(start_dir) if start_dir is not None else Path.cwd()
     start = start.resolve()
@@ -356,6 +364,11 @@ def resolve_spa_paths(
     env_home = (env.get("SPA_HOME") or "").strip()
     env_dir = (env.get("SPA_ENV_DIR") or "").strip()
     env_config = (env.get("SPLUNK_CONFIG_FILE") or "").strip()
+    selector = (env_selector or "").strip()
+    if selector:
+        from spa.registry import lookup_env_path
+
+        env_dir = str(lookup_env_path(selector, environ=env, relative_to=start))
 
     spa_yml_path = None
     spa_yml_data: Dict[str, Any] = {}
@@ -381,7 +394,10 @@ def resolve_spa_paths(
     elif spa_yml_path is not None:
         spa_env_dir = spa_yml_path.parent.resolve()
     else:
-        spa_env_dir = spa_home
+        from spa.registry import registry_default_path
+
+        registered = registry_default_path(env)
+        spa_env_dir = registered if registered is not None else spa_home
 
     if env_config:
         config_file = _expand(env_config, start)

@@ -716,7 +716,7 @@ class InventoryModule(BaseInventoryPlugin):
             if parsed == clone_config and parsed != self.spa_paths.config_file.resolve():
                 raise AnsibleParserError(
                     "SPA_ENV_DIR (%s) differs from SPA_HOME. Refusing clone config %s. "
-                    "Set ANSIBLE_INVENTORY to the env (eval \"$(spa env --export)\") or pass "
+                    "Run through spa, set ANSIBLE_INVENTORY for this external command, or pass "
                     "-i %s." % (self.spa_paths.spa_env_dir, path, self.spa_paths.config_file)
                 )
 

@@ -40,10 +40,13 @@ Then follow the [user-guide start](user-guide.md#start-here). Keep each environm
 Splunk installers and PS baseconfig apps stay **out of** `SPA_HOME` (`install.sh --force` deletes the prefix). Point at them once:
 
 ```bash
-spa init --software-dir ~/Software --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
+spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
+spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
 ```
 
-That writes `${XDG_CONFIG_HOME:-~/.config}/spa/paths.yml` (directories only, not secrets) and copies `software_dir` / `baseconfig_dir` into the env `.spa.yml`. Later `spa init` calls reuse `paths.yml`. Optional: `--baseconfig-dir`, `--apps-dir`. The installer does not create `~/.config/spa`. `spa validate` and `spa deploy` fail if those directories (and, for local apps, each named source) are still missing.
+That writes `${XDG_CONFIG_HOME:-~/.config}/spa/paths.yml` (directories only, not secrets). `spa init --software-dir` does the same and also copies `software_dir` / `baseconfig_dir` into the env `.spa.yml`. When a shared-path key is still unset, init stores the first explicit or discovered directory; it never replaces an established global with a later one-off init option. Optional: `--baseconfig-dir` (defaults to `--software-dir`). The installer does not create `~/.config/spa`. `spa validate` and `spa deploy` fail if those directories (and, for local apps, each named source) are still missing.
+
+What to put in `Software/`: [Prepare Software](user-guide.md#prepare-software) (Linux tgz installers, PS baseconfig apps, optional `Splunk_Enterprise.lic`). Splunk / Cisco employees can download baseconfig apps from [https://go2.cisco.com/baseconfigs](https://go2.cisco.com/baseconfigs).
 
 ## Uninstall
 
@@ -63,7 +66,7 @@ Build or download `spa-framework-X.Y.Z.tar.gz` (no wrapping directory). Unpack w
 ```bash
 mkdir -p ~/src/spa && tar -xzf spa-framework-X.Y.Z.tar.gz -C ~/src/spa
 export SPA_HOME=~/src/spa
-"$SPA_HOME/bin/spa_venv.sh" --create
+"$SPA_HOME/bin/spa" venv --shared --create --yes
 export PATH="$SPA_HOME/bin:$PATH"
 spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
 ```
@@ -83,11 +86,16 @@ The archive excludes `tests/`, `.git`, GitHub workflows, and lab `config/` / `in
 ```bash
 git clone https://github.com/splunk/splunk-platform-automator.git
 cd splunk-platform-automator
-source bin/spa_venv.sh --create
+bin/spa venv --shared --create --yes
 spa doctor
 ```
 
-Put Splunk installers and Professional Services baseconfig apps in a `Software/` directory as a sibling of the env (preferred) or of `SPA_HOME`. The full path contract is in the [user guide](user-guide.md#understand-the-paths).
+Repair an existing shared venv with `spa venv --shared --reinstall --yes`, bump
+packages and Ansible collections with `spa venv --shared --upgrade --yes`, or
+delete and recreate it with `spa venv --shared --rebuild --yes`. These commands
+target this `SPA_HOME` explicitly, even if the shell has a stale `SPA_VENV_DIR`.
+
+Put Splunk installers and Professional Services baseconfig apps in a `Software/` directory as a sibling of the env (preferred) or of `SPA_HOME`. Checklist: [Prepare Software](user-guide.md#prepare-software). The full path contract is in the [user guide](user-guide.md#understand-the-paths).
 
 ## VirtualBox
 

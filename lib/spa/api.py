@@ -93,7 +93,16 @@ class SpaSession(Protocol):
         aws: bool = False,
         virtualbox: bool = False,
         strict: bool = False,
-        fix_direnv: bool = False,
+    ) -> CommandResult: ...
+
+    def venv(
+        self,
+        action: str = "path",
+        environment: bool = False,
+        python: Optional[str] = None,
+        no_install: bool = False,
+        confirm: bool = False,
+        agent: bool = False,
     ) -> CommandResult: ...
 
     def init(
@@ -109,16 +118,32 @@ class SpaSession(Protocol):
         python: Optional[str] = None,
         ansible: Optional[str] = None,
         pip_pkgs: Optional[Sequence[str]] = None,
-        write_envrc_file: bool = True,
         skip_doctor: bool = False,
         rebuild_venv: bool = False,
         software_dir: Optional[str] = None,
         baseconfig_dir: Optional[str] = None,
         apps_dir: Optional[str] = None,
         provider: Optional[str] = None,
+        registry_name: Optional[str] = None,
     ) -> CommandResult: ...
 
     def list_examples(self) -> CommandResult: ...
+
+    def environment_list(self) -> CommandResult: ...
+
+    def environment_set(
+        self,
+        env_dir: Optional[str] = None,
+        provider: Optional[str] = None,
+        software_dir: Optional[str] = None,
+        baseconfig_dir: Optional[str] = None,
+        apps_dir: Optional[str] = None,
+        default: Optional[str] = None,
+    ) -> CommandResult: ...
+
+    def environment_remove(
+        self, name: str, confirm: bool = False, force: bool = False
+    ) -> CommandResult: ...
 
     def features(
         self,
@@ -215,6 +240,15 @@ class LocalSpaSession:
 
     def _env_gate(self) -> Optional[CommandResult]:
         message = env_dir_required_error(self.paths)
+        if message:
+            return CommandResult(ok=False, error=message, code=2)
+        return None
+
+    def _venv_gate(self) -> Optional[CommandResult]:
+        """Ansible/provider work needs the venv; say so instead of ImportError."""
+        from spa.executil import venv_required_error
+
+        message = venv_required_error(self.paths)
         if message:
             return CommandResult(ok=False, error=message, code=2)
         return None
@@ -468,7 +502,6 @@ class LocalSpaSession:
         aws: bool = False,
         virtualbox: bool = False,
         strict: bool = False,
-        fix_direnv: bool = False,
     ) -> CommandResult:
         from spa.doctor import collect_checks
 
@@ -478,7 +511,66 @@ class LocalSpaSession:
             aws=aws,
             virtualbox=virtualbox,
             strict=strict,
-            fix_direnv=fix_direnv,
+        )
+
+    def venv(
+        self,
+        action: str = "path",
+        environment: bool = False,
+        python: Optional[str] = None,
+        no_install: bool = False,
+        confirm: bool = False,
+        agent: bool = False,
+    ) -> CommandResult:
+        if action not in {"path", "create", "reinstall", "upgrade", "rebuild"}:
+            return CommandResult(ok=False, error="Unknown spa venv action: %s" % action, code=2)
+        if environment:
+            blocked = self._env_gate()
+            if blocked:
+                return blocked
+            target = self.paths.spa_env_dir / ".venv"
+        else:
+            target = self.paths.spa_home / ".venv"
+        if action != "path":
+            blocked = self._confirm_gate(
+                "%s the %s SPA venv"
+                % (action, "environment" if environment else "shared"),
+                confirm=confirm,
+                agent=agent,
+                details=["venv: %s" % target],
+                risk="local_destructive" if action == "rebuild" else "local",
+            )
+            if blocked:
+                return blocked
+        script = self.paths.spa_home / "bin" / "spa_venv.sh"
+        if not script.is_file():
+            return CommandResult(ok=False, error="Missing %s" % script, code=1)
+        flag = "--path" if action == "path" else "--%s" % action
+        cmd = ["bash", str(script), flag, "--dir", str(target)]
+        if python:
+            cmd.extend(["--python", python])
+        if no_install:
+            cmd.append("--no-install")
+        from spa.executil import run_venv_script
+
+        def _step(label: str) -> None:
+            if self.on_progress:
+                self.on_progress({"step": label})
+
+        code, stdout, log, progress = run_venv_script(cmd, on_step=_step)
+        data: Dict[str, Any] = {
+            "action": action,
+            "scope": "environment" if environment else "shared",
+            "path": str(target),
+            "progress": progress,
+            "stdout": stdout,
+            "log": log,
+        }
+        return CommandResult(
+            ok=code == 0,
+            code=code,
+            data=data,
+            error=None if code == 0 else (log.strip() or "spa venv failed"),
         )
 
     def init(
@@ -494,13 +586,13 @@ class LocalSpaSession:
         python: Optional[str] = None,
         ansible: Optional[str] = None,
         pip_pkgs: Optional[Sequence[str]] = None,
-        write_envrc_file: bool = True,
         skip_doctor: bool = False,
         rebuild_venv: bool = False,
         software_dir: Optional[str] = None,
         baseconfig_dir: Optional[str] = None,
         apps_dir: Optional[str] = None,
         provider: Optional[str] = None,
+        registry_name: Optional[str] = None,
     ) -> CommandResult:
         from spa.init import InitError, init_env
 
@@ -519,7 +611,6 @@ class LocalSpaSession:
                 python=python,
                 ansible=ansible,
                 pip_pkgs=pip_pkgs,
-                write_envrc_file=write_envrc_file,
                 skip_doctor=skip_doctor,
                 rebuild_venv=rebuild_venv,
                 log=messages,
@@ -527,6 +618,7 @@ class LocalSpaSession:
                 baseconfig_dir=baseconfig_dir,
                 apps_dir=apps_dir,
                 provider=provider,
+                registry_name=registry_name,
             )
         except InitError as exc:
             return CommandResult(ok=False, error=str(exc), code=exc.code, data={"messages": messages})
@@ -534,9 +626,86 @@ class LocalSpaSession:
         return CommandResult(
             ok=rc == 0,
             code=rc,
-            data={"env_dir": dest, "messages": messages},
+            data={"env_dir": dest, "name": registry_name or Path(env_dir).name, "messages": messages},
             error=None if rc == 0 else "init failed",
         )
+
+    def environment_list(self) -> CommandResult:
+        from spa.registry import RegistryError, list_environments
+
+        try:
+            rows = list_environments()
+        except RegistryError as exc:
+            return CommandResult(ok=False, error=str(exc), code=exc.code)
+        return CommandResult(ok=True, data={"environments": rows})
+
+    def environment_set(
+        self,
+        env_dir: Optional[str] = None,
+        provider: Optional[str] = None,
+        software_dir: Optional[str] = None,
+        baseconfig_dir: Optional[str] = None,
+        apps_dir: Optional[str] = None,
+        default: Optional[str] = None,
+    ) -> CommandResult:
+        from spa.paths import save_user_paths, user_paths_yml
+        from spa.registry import (
+            RegistryError,
+            set_default_env_dir,
+            set_default_environment,
+            set_default_provider,
+        )
+
+        if not any((env_dir, provider, software_dir, baseconfig_dir, apps_dir, default)):
+            return CommandResult(
+                ok=False,
+                error=(
+                    "spa environment set: pass --env-dir, --software-dir, "
+                    "--baseconfig-dir, --apps-dir, --default, and/or --provider"
+                ),
+                code=2,
+            )
+        data: Dict[str, Any] = {}
+        try:
+            if software_dir or baseconfig_dir or apps_dir:
+                save_user_paths(
+                    software_dir=software_dir,
+                    baseconfig_dir=baseconfig_dir,
+                    apps_dir=apps_dir,
+                )
+                data["paths_yml"] = str(user_paths_yml())
+                if software_dir:
+                    data["software_dir"] = software_dir
+                if baseconfig_dir:
+                    data["baseconfig_dir"] = baseconfig_dir
+                if apps_dir:
+                    data["apps_dir"] = apps_dir
+            if env_dir:
+                path = set_default_env_dir(env_dir)
+                data["env_dir"] = str(path)
+                data["paths_yml"] = str(path)
+            if default:
+                registry_path = set_default_environment(default)
+                data["default"] = default
+                data["environments_yml"] = str(registry_path)
+            if provider:
+                prov_path = set_default_provider(provider)
+                data["provider"] = provider
+                data["providers_yml"] = str(prov_path) if prov_path else None
+        except RegistryError as exc:
+            return CommandResult(ok=False, error=str(exc), code=exc.code)
+        return CommandResult(ok=True, data=data)
+
+    def environment_remove(
+        self, name: str, confirm: bool = False, force: bool = False
+    ) -> CommandResult:
+        from spa.registry import RegistryError, remove_environment
+
+        try:
+            payload = remove_environment(name, confirm=confirm, force=force)
+        except RegistryError as exc:
+            return CommandResult(ok=False, error=str(exc), code=exc.code)
+        return CommandResult(ok=True, data=payload)
 
     def _confirm_gate(
         self,
@@ -585,6 +754,10 @@ class LocalSpaSession:
         self, action: str, extra: Optional[List[str]], confirm: bool, agent: bool
     ) -> CommandResult:
         from spa.confirm import LIFECYCLE_RISK
+
+        blocked = self._venv_gate()
+        if blocked:
+            return blocked
         from spa.providers import ProviderError, get_provider
 
         blocked = self._confirm_gate(

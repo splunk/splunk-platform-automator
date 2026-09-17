@@ -1,13 +1,67 @@
 #!/usr/bin/env python3
 """spa — Splunk Platform Automator CLI."""
 
+import os
+import subprocess
 import sys
+from importlib.util import find_spec
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
 _LIB = _ROOT / "lib"
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
+
+# Requirements live in the SPA venv. The installer wrapper execs the prefix
+# interpreter, but a symlinked or PATH-resolved bin/spa runs whatever python3
+# comes first, which fails on the first `import yaml`. Re-exec into a venv that
+# can actually run SPA instead; the guard keeps that to one hop.
+_REEXEC_GUARD = "SPA_VENV_REEXEC"
+_REQUIRED_MODULES = ("yaml", "pydantic")
+
+
+def _interpreter_is_complete() -> bool:
+    try:
+        return all(find_spec(name) is not None for name in _REQUIRED_MODULES)
+    except (ImportError, ValueError):
+        return False
+
+
+def _venv_interpreters():
+    """Same order spa uses for tools: SPA_VENV_DIR, env venv, then SPA_HOME."""
+    roots = [os.environ.get("SPA_VENV_DIR")]
+    env_dir = os.environ.get("SPA_ENV_DIR")
+    if env_dir:
+        roots.append(os.path.join(env_dir, ".venv"))
+    roots.append(str(_ROOT / ".venv"))
+    # Compare venv roots, not interpreters: bin/python3 in every venv is a
+    # symlink to the same base python, so realpath() would call them equal.
+    current_root = os.path.realpath(sys.prefix)
+    for root in roots:
+        if not root or not root.strip():
+            continue
+        resolved = Path(root.strip()).expanduser()
+        if os.path.realpath(resolved) == current_root:
+            continue
+        for name in ("python3", "python"):
+            candidate = resolved / "bin" / name
+            if candidate.is_file():
+                yield candidate
+                break
+
+
+def _reexec_into_venv() -> None:
+    if os.environ.get(_REEXEC_GUARD) or _interpreter_is_complete():
+        return
+    probe = "import %s" % ", ".join(_REQUIRED_MODULES)
+    for python in _venv_interpreters():
+        if subprocess.run([str(python), "-c", probe], capture_output=True).returncode != 0:
+            continue
+        os.environ[_REEXEC_GUARD] = "1"
+        os.execv(str(python), [str(python), str(Path(__file__).resolve()), *sys.argv[1:]])
+
+
+_reexec_into_venv()
 
 from spa.cli import main  # noqa: E402
 

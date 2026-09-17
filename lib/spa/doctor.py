@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from spa.api import CommandResult
-from spa.executil import resolve_venv_dir
+from spa.executil import SPA_VENV_MODULES, resolve_venv_dir, venv_has_requirements
 from spa.paths import resolve_spa_paths
 
 
@@ -207,85 +207,6 @@ def _config_providers(text: str) -> set:
     return providers
 
 
-def _direnv_hook_line() -> str:
-    shell = os.path.basename(os.environ.get("SHELL") or "zsh")
-    if shell == "bash":
-        return 'eval "$(direnv hook bash)"'
-    if shell == "fish":
-        return "direnv hook fish | source"
-    return 'eval "$(direnv hook zsh)"'
-
-
-def _rc_files() -> List[Path]:
-    home = Path.home()
-    return [home / ".zshrc", home / ".bashrc", home / ".zprofile"]
-
-
-def _hook_in_rc() -> bool:
-    """Follow source / . from usual rc files so a nested hook still counts."""
-    import re
-
-    home = Path.home()
-    roots = [
-        home / ".zshrc",
-        home / ".zprofile",
-        home / ".zshenv",
-        home / ".bashrc",
-        home / ".bash_profile",
-        home / ".config" / "fish" / "config.fish",
-    ]
-    source_re = re.compile(r"^\s*(?:source|\.)\s+(.+)$", re.MULTILINE)
-    hook_re = re.compile(r"direnv\s+hook")
-    seen = set()
-
-    def first_path(rest: str) -> str:
-        rest = rest.split("#", 1)[0].strip()
-        if not rest:
-            return ""
-        if rest[0] in "'\"":
-            quote = rest[0]
-            end = rest.find(quote, 1)
-            return rest[1:end] if end > 0 else rest[1:]
-        return rest.split()[0]
-
-    def scan(path: Path, depth: int = 0) -> bool:
-        if depth > 20:
-            return False
-        try:
-            resolved = Path(os.path.expandvars(os.path.expanduser(str(path)))).resolve()
-        except Exception:
-            return False
-        if str(resolved) in seen or not resolved.is_file():
-            return False
-        seen.add(str(resolved))
-        try:
-            text = resolved.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            return False
-        if hook_re.search(text):
-            return True
-        for match in source_re.finditer(text):
-            nxt = first_path(match.group(1))
-            if nxt and scan(Path(nxt), depth + 1):
-                return True
-        return False
-
-    return any(root.is_file() and scan(root) for root in roots)
-
-
-def _apply_hook() -> Optional[str]:
-    line = _direnv_hook_line()
-    if _hook_in_rc():
-        return None
-    rc = Path.home() / (".zshrc" if os.path.basename(os.environ.get("SHELL") or "zsh") != "bash" else ".bashrc")
-    with rc.open("a", encoding="utf-8") as handle:
-        handle.write("\n# direnv (spa doctor --fix-direnv)\n%s\n" % line)
-    msg = "Added direnv hook to %s" % rc
-    if not shutil.which("direnv"):
-        return "%s (direnv is not installed yet)" % msg
-    return msg
-
-
 def collect_checks(
     *,
     spa_home: Optional[str] = None,
@@ -293,7 +214,6 @@ def collect_checks(
     aws: bool = False,
     virtualbox: bool = False,
     strict: bool = False,
-    fix_direnv: bool = False,
 ) -> CommandResult:
     spa_home_path = Path(spa_home).resolve() if spa_home else resolve_spa_paths().spa_home
     env_path = Path(env_dir).resolve() if env_dir else None
@@ -372,49 +292,89 @@ def collect_checks(
         rec("error", "python", "python3 not on PATH", _brew_hint("python3"))
 
     paths = resolve_spa_paths(start_dir=env_path or spa_home_path)
-    venv = resolve_venv_dir(paths) if env_path else (
-        spa_home_path / ".venv" if (spa_home_path / ".venv" / "bin" / "activate").is_file() else None
-    )
     if env_path:
-        venv = resolve_venv_dir(
-            resolve_spa_paths(
-                start_dir=env_path,
-                environ={**os.environ, "SPA_ENV_DIR": str(env_path), "SPA_HOME": str(spa_home_path)},
-            )
+        paths = resolve_spa_paths(
+            start_dir=env_path,
+            environ={**os.environ, "SPA_ENV_DIR": str(env_path), "SPA_HOME": str(spa_home_path)},
         )
+    venv = resolve_venv_dir(paths)
     shared = spa_home_path / ".venv"
-    checked = [env_path / ".venv"] if env_path else []
+
+    def _venv_scope(candidate: Path) -> str:
+        if env_path and candidate.resolve() == (env_path / ".venv").resolve():
+            return "--environment"
+        return "--shared"
+
+    explicit_raw = (os.environ.get("SPA_VENV_DIR") or "").strip()
+    explicit = Path(explicit_raw).expanduser().resolve() if explicit_raw else None
+    expected_venvs = {shared.resolve()}
+    if env_path:
+        expected_venvs.add((env_path / ".venv").resolve())
+    if explicit and explicit not in expected_venvs:
+        rec(
+            "warn",
+            "spa_venv_pin",
+            "SPA_VENV_DIR points outside this SPA_HOME/environment: %s" % explicit,
+            "unset SPA_VENV_DIR; then run spa venv --shared --rebuild --yes",
+        )
+    checked = [explicit] if explicit else []
+    if env_path:
+        checked.append(env_path / ".venv")
     checked.append(shared)
+    seen = set()
     for candidate in checked:
-        if candidate.is_dir() and not (candidate / "bin" / "activate").is_file():
+        resolved = candidate.resolve()
+        if resolved in seen or not candidate.is_dir():
+            continue
+        seen.add(resolved)
+        if not (candidate / "bin" / "activate").is_file():
             rec(
                 "warn",
                 "spa_venv",
                 "incomplete venv at %s (no bin/activate)" % candidate,
-                "%s --create" % (spa_home_path / "bin" / "spa_venv.sh"),
+                "spa venv %s --rebuild --yes" % _venv_scope(candidate),
             )
-    if venv and (venv / "bin" / "activate").is_file():
+        elif not venv_has_requirements(candidate):
+            rec(
+                "warn",
+                "spa_venv_packages",
+                "venv at %s cannot import %s" % (candidate, " / ".join(SPA_VENV_MODULES)),
+                "spa venv %s --reinstall --yes" % _venv_scope(candidate),
+            )
+    if venv is not None:
         rec("ok", "spa_venv", "venv at %s" % venv)
         ansible = venv / "bin" / "ansible"
         if ansible.is_file():
             ver = subprocess.run([str(ansible), "--version"], capture_output=True, text=True).stdout.splitlines()
             rec("ok", "ansible", ver[0] if ver else str(ansible))
-    elif (shared / "bin" / "activate").is_file():
-        rec("ok", "spa_venv", "shared venv at %s" % shared)
+        else:
+            rec(
+                "warn",
+                "ansible",
+                "ansible is not installed in %s" % venv,
+                "spa venv %s --reinstall --yes" % _venv_scope(venv),
+            )
+    elif shared.is_dir():
+        rec(
+            "warn",
+            "spa_venv",
+            "no usable venv yet (%s exists but cannot run spa)" % shared,
+            "spa venv --shared --rebuild --yes",
+        )
     else:
-        rec("warn", "spa_venv", "shared venv not created yet", "spa init or source bin/spa_venv.sh --create")
+        rec("warn", "spa_venv", "shared venv not created yet", "spa venv --shared --create --yes")
 
     spa_bin = shutil.which("spa")
     expected = str(spa_home_path / "bin" / "spa")
     if not spa_bin:
-        rec("warn", "spa", "spa is not on PATH", "cd the env (direnv), or run %s directly" % expected)
+        rec("warn", "spa", "spa is not on PATH", "install the spa launcher, or run %s directly" % expected)
     else:
         if Path(spa_bin).parent.resolve() != (spa_home_path / "bin").resolve():
             rec(
                 "warn",
                 "spa",
                 "spa on PATH is %s, not %s (another checkout wins)" % (spa_bin, expected),
-                "reload direnv so $SPA_HOME/bin is first",
+                "put %s first on PATH" % (spa_home_path / "bin"),
             )
         else:
             rec("ok", "spa", "spa resolves to %s" % expected)
@@ -448,23 +408,6 @@ def collect_checks(
                 "terraform required for terraform.aws (not on PATH)",
                 _terraform_install_hint(),
             )
-
-    if fix_direnv:
-        hook_msg = _apply_hook()
-        if hook_msg:
-            notes.append(hook_msg)
-    if shutil.which("direnv"):
-        if _hook_in_rc() or os.environ.get("DIRENV_DIR"):
-            rec("ok", "direnv", "direnv is installed and set up in your shell")
-        else:
-            rec(
-                "warn",
-                "direnv",
-                "direnv is installed, but your shell does not load it yet",
-                "spa doctor --fix-direnv",
-            )
-    else:
-        rec("warn", "direnv", "direnv is not installed", _brew_hint("direnv") + "; then spa doctor --fix-direnv")
 
     software = None
     env_overlay = {**os.environ, "SPA_HOME": str(spa_home_path)}
@@ -613,7 +556,6 @@ def run(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--virtualbox", action="store_true")
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--json", action="store_true")
-    parser.add_argument("--fix-direnv", action="store_true")
     args = parser.parse_args(argv)
     result = collect_checks(
         spa_home=args.spa_home,
@@ -621,7 +563,6 @@ def run(argv: Optional[List[str]] = None) -> int:
         aws=args.aws,
         virtualbox=args.virtualbox,
         strict=args.strict,
-        fix_direnv=args.fix_direnv,
     )
     if args.json:
         print(json.dumps(result.data, indent=2, default=str))

@@ -1,4 +1,5 @@
 ansible >= 3.4.0 # this is ansible-core 2.10.0
+PyYAML   # imported directly by spa (config, providers, registry), not only via ansible-core
 jmespath # required for json_query calls
 lxml     # required for license file checks
 pydantic >= 2.4.0 # required for config schema validation

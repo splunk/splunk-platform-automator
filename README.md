@@ -30,7 +30,7 @@ Requires **Python 3.9+** with the `venv` module (`python3` on PATH). The install
 curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh
 ```
 
-That installs the latest GitHub Release into `~/.local/share/spa` and puts `spa` on `PATH` via `~/.local/bin/spa`. Add `~/.local/bin` to `PATH` if `spa` is not found. Flags, uninstall, and clone/develop: [docs/install.md](docs/install.md).
+That installs the latest GitHub Release into `~/.local/share/spa` and puts `spa` on `PATH` via `~/.local/bin/spa`. Add `~/.local/bin` to `PATH` if `spa` is not found. Flags, uninstall, and clone/develop: [docs/install.md](docs/install.md). Put Splunk installers and PS baseconfig apps in a shared `Software/` directory ([Prepare Software](docs/user-guide.md#prepare-software)).
 
 ## Start here
 

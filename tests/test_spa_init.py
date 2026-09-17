@@ -65,8 +65,8 @@ def test_example_flag(tmp_path):
     cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
     names = [h.get("name") for h in cfg["splunk_hosts"] if "name" in h]
     assert "cm" in names
-    assert "virtualbox" in cfg
-    assert "terraform" not in cfg
+    assert "terraform" in cfg
+    assert "virtualbox" not in cfg
     assert "os" not in cfg
 
 
@@ -335,8 +335,8 @@ def test_ansible_pin_passed_to_venv(tmp_path, monkeypatch):
         return 0
 
     monkeypatch.setattr("spa.init.subprocess.check_call", fake_call)
-    monkeypatch.setattr("spa.init.allow_direnv", lambda dest: None)
     monkeypatch.setattr("spa.init.run_doctor", lambda *a, **k: None)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     from spa.init import init_env
 
     dest = tmp_path / "pinned"
@@ -348,7 +348,6 @@ def test_ansible_pin_passed_to_venv(tmp_path, monkeypatch):
         env_venv=True,
         ansible="2.17.8",
         skip_doctor=True,
-        write_envrc_file=False,
         rebuild_venv=True,
     )
     assert rc == 0

@@ -30,7 +30,8 @@ SESSION_API_PARAMETERS = {
     "catalog": ("extra_dir",),
     "describe_playbook": ("name", "extra_dir"),
     "validate": ("config", "check_licenses", "splunk_config_aws"),
-    "doctor": ("spa_home", "env_dir", "aws", "virtualbox", "strict", "fix_direnv"),
+    "doctor": ("spa_home", "env_dir", "aws", "virtualbox", "strict"),
+    "venv": ("action", "environment", "python", "no_install", "confirm", "agent"),
     "init": (
         "env_dir",
         "example",
@@ -43,15 +44,25 @@ SESSION_API_PARAMETERS = {
         "python",
         "ansible",
         "pip_pkgs",
-        "write_envrc_file",
         "skip_doctor",
         "rebuild_venv",
         "software_dir",
         "baseconfig_dir",
         "apps_dir",
         "provider",
+        "registry_name",
     ),
     "list_examples": (),
+    "environment_list": (),
+    "environment_set": (
+        "env_dir",
+        "provider",
+        "software_dir",
+        "baseconfig_dir",
+        "apps_dir",
+        "default",
+    ),
+    "environment_remove": ("name", "confirm", "force"),
     "features": ("action", "ident", "query", "include_keys"),
     "apps": (
         "action",
@@ -221,7 +232,8 @@ def test_cli_agent_schema_version():
     assert payload["data"]["schema_version"] == SCHEMA_VERSION
 
 
-def test_session_init_messages(tmp_path, capsys):
+def test_session_init_messages(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     dest = tmp_path / "env"
     session = open_session(start_dir=str(PROJECT_ROOT))
     result = session.init(

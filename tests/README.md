@@ -55,7 +55,7 @@ tests/
 ├── test_spa_api.py                # stable SpaSession backend/transport contract
 ├── test_spa_cli.py                # spa run catalog, agent JSON
 ├── test_spa_cli_contract.py       # complete public help/schema release contract
-├── test_spa_venv.py               # bin/spa_venv.sh resolution + env .envrc
+├── test_spa_venv.py               # bin/spa_venv.sh resolution + env venv selection
 ├── test_spa_install.py            # framework tarball + install.sh
 ├── test_changelog_notes.py    # CHANGELOG section extractor for releases
 ├── test_docs.py               # Canonical docs filenames, relative links, commands.md drift
