@@ -140,4 +140,3 @@ vagrant plugin install vagrant-vbguest
 3. Export `VAGRANT_WSL_ENABLE_WINDOWS_ACCESS=1` and add the Windows VirtualBox directory (commonly `/mnt/c/Program Files/Oracle/VirtualBox`) to WSL `PATH`.
 
 Day-to-day operation remains `spa provision`, `spa hosts ssh`, and the other commands in the [user guide](user-guide.md). Custom Python or Ansible pins for contributors: [contributing](contributing.md). Ansible comes from `spa_venv`, not a system install.
-
