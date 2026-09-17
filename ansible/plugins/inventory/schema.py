@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Union
-from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 
 # =============================================================================
@@ -254,10 +254,10 @@ class SplunkAppDeploymentConfig(BaseModel):
     splunkbase_password: Optional[str] = None
     local_app_repo_path: Optional[str] = None
     update_mode: Optional[Literal["clean", "merge"]] = None
-    target_download: Optional[bool] = None
-    cache_downloads: Optional[bool] = None
-    backup_apps_before_update: Optional[bool] = None
-    deploymentclient_check: bool = Field(
+    target_download: Optional[StrictBool] = None
+    cache_downloads: Optional[StrictBool] = None
+    backup_apps_before_update: Optional[StrictBool] = None
+    deploymentclient_check: StrictBool = Field(
         default=True,
         description=(
             "When true (default), app deployment runs splunk btool deploymentclient on hosts (with a deployment server "
