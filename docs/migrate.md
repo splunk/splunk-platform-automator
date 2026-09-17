@@ -6,7 +6,7 @@ This is the short “what do I change?” list. Full release history is in [CHAN
 
 ## Commands and `bin/`
 
-Only `bin/spa` and `bin/spa_venv.sh` remain in a clone. Operators can install a prefix with `install.sh` instead of cloning ([Install](install.md)). Source the venv script; do not invoke the old wrappers.
+Only `bin/spa` and `bin/spa_venv.sh` remain in a clone. Operators can install a prefix with `install.sh` instead of cloning ([Install](install.md)). Use `spa venv` for the Python environment; do not invoke the old wrappers.
 
 | 2.x | 3.0 |
 | --- | --- |
@@ -37,7 +37,7 @@ Skills and agents should use full names (`spa hosts ssh`, `spa validate`), not `
 - Unset both → cwd discovery and then the registered default select the env. A clone-equal layout is **not** valid for operator commands.
 - When they differ, Terraform **modules** stay under `$SPA_HOME/terraform/aws`; **state** stays in the env. VirtualBox uses `VAGRANT_CWD=$SPA_HOME` and `VAGRANT_DOTFILE_PATH=$SPA_ENV_DIR/.vagrant`.
 - `../Software` and `../apps` prefer a sibling of the **env**, then the clone.
-- Env dirs do not get an `.envrc`. Install the `spa` launcher once; each command resolves cwd or `--env NAME` and applies its own environment.
+- Install the `spa` launcher once. Each command resolves cwd, `--env NAME`, or the registered default.
 
 Move an existing 2.x clone env out of the checkout:
 

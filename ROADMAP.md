@@ -24,7 +24,7 @@ Ship M1–M3 on one integration branch, then **3.0** when that branch is ready t
 - [x] `SPA_HOME` / `SPA_ENV_DIR` path contract; clone defaults keep today's layout (**M1**)
 - [x] `spa init` scaffolds an env dir (example config, `.spa.yml`; no copy of `ansible/`) and migrates an existing clone env (config, inventory, Terraform state) (**M1** / **M2**)
 - [x] Separate env dirs against one clone `SPA_HOME` (**M1**)
-- [x] `bin/spa_venv.sh` shared venv (framework, envs, tests); `spa` resolves cwd / `--env` without direnv; no Homebrew Ansible/Pydantic requirement (**M1**)
+- [x] `bin/spa_venv.sh` shared venv (framework, envs, tests); `spa` resolves cwd / `--env` / the registered default; no Homebrew Ansible/Pydantic requirement (**M1**)
 - [x] `spa` commands use the shared prefix (`init`, `validate`, `provision`, `deploy`, `suspend`, `resume`, `destroy`, `hosts`, `shell`, `run`, `aws`, `licenses`) (**M2**)
 - [x] `spa run --list` / `NAME --help` from `# spa-run:` metadata; 3.0 operator stems (2.x names still resolve with a hint) (**M2**)
 - [x] `--hosts` on `deploy`, `run`, `suspend`, `resume`, and `hosts list` (inventory names or roles) (**M2**)

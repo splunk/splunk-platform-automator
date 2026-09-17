@@ -4,14 +4,15 @@ Operators should start with the [user guide](user-guide.md). The generated CLI c
 
 ## Development setup
 
-Clone the repository as `SPA_HOME`, then use the shared environment:
+Clone the repository as `SPA_HOME`, then create or activate the shared environment:
 
 ```bash
+bin/spa venv --shared --create --yes
 source bin/spa_venv.sh
 ./tests/run_local_tests.sh
 ```
 
-`spa_venv.sh` installs the pinned Python and Ansible dependencies plus collections. Do not rely on Homebrew/system Ansible. If the host Python is too old, install Python 3.9+ with pyenv or a private prefix and pass that interpreter to `spa_venv.sh --python` or `spa init --python`.
+`spa venv` installs the pinned Python and Ansible dependencies plus collections (`bin/spa_venv.sh` is the implementation). Do not rely on Homebrew/system Ansible. If the host Python is too old, install Python 3.9+ with pyenv or a private prefix and pass that interpreter to `spa venv --python` or `spa init --python`.
 
 Use `tests/README.md` for suites and app-scope scenarios. Release steps are in [RELEASE.md](../RELEASE.md).
 

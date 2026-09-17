@@ -24,7 +24,7 @@ Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 | 2.x → 3.0 | [docs/migrate.md](docs/migrate.md) |
 | New env | `spa environment init --example cm_2idxc_sh_uf NAME` then `spa --env NAME …`, `spa environment set --default NAME`, or `cd` into it |
 | Features / apps | `spa --json features search QUERY`; `spa --json apps search QUERY` then `snippet APP_ID`. AWS live values: `spa aws --json` |
-| Python | `source bin/spa_venv.sh` (`spa init` creates it) |
+| Python | `spa venv --shared --create --yes` (`spa init` creates it when missing) |
 | Repair Python venv | `spa venv --shared --reinstall --yes` (or `--rebuild`) |
 | Upgrade Python/Ansible in the venv | `spa venv --shared --upgrade --yes` |
 | Host tools | `spa doctor` |

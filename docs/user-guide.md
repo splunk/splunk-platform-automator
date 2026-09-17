@@ -29,7 +29,7 @@ flowchart LR
 
 `SPA_HOME` is the installed framework or clone: `bin/spa`, playbooks, Terraform modules, and skills. `SPA_ENV_DIR` is one environment created by `spa init`: config, inventory, provider state, and optional `.spa.yml`. Keep Splunk installers and PS baseconfig apps in `Software/`; point local app storage at `apps_dir`.
 
-`spa` resolves an environment by `--env NAME`, `SPA_ENV_DIR`, walking up from cwd to `.spa.yml`, then the registered default. It applies the required variables to each command itself; direnv and `.envrc` are not used. Many environments can share one framework install. `spa environment list` shows registered names; use `spa environment set --default NAME` for commands run outside an env, or pass `spa --env NAME`. An older lab that already has `config/splunk_config.yml` or `.spa.yml` is registered with `spa env init NAME --force` from that directory or its parent (config is kept unless you also pass `--example`).
+`spa` resolves an environment by `--env NAME`, `SPA_ENV_DIR`, walking up from cwd to `.spa.yml`, then the registered default, and applies that environment to the command. Many environments can share one framework install. `spa environment list` shows registered names; use `spa environment set --default NAME` for commands run outside an env, or pass `spa --env NAME`. An older lab that already has `config/splunk_config.yml` or `.spa.yml` is registered with `spa env init NAME --force` from that directory or its parent (config is kept unless you also pass `--example`).
 
 For existing servers, describe the hosts and SSH settings in `splunk_config.yml`, then use `spa deploy --yes --allow-unprovisioned`. Use that bypass only when you intentionally did not provision those hosts with SPA.
 
@@ -104,6 +104,7 @@ flowchart TD
 | Remove managed infrastructure | `spa destroy --yes` |
 | Discover other playbooks | `spa run --list` |
 | Inspect a playbook | `spa run NAME --help` |
+| Create or repair the Python venv | `spa venv --shared --create --yes` (see [install](install.md) for `--upgrade` / `--rebuild`) |
 
 Provider selection comes from `terraform.aws` or `virtualbox:` in config. Do not remove a live host from config and run `spa provision`; the current Terraform flow can terminate it. See [AWS](aws.md) for cloud decisions and [Upgrade](upgrade.md) for the ordered distributed-upgrade workflow.
 
