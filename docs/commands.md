@@ -10,7 +10,7 @@ and `spa run NAME --help`.
 
 ## `init`
 
-Scaffold or migrate an env dir (spa init --example TOPOLOGY --provider aws|virtualbox ENV)
+Alias of spa environment init (spa init --example TOPOLOGY [--provider aws|virtualbox] NAME)
 
 ## `features`
 
@@ -30,9 +30,103 @@ Validate splunk_config.yml (schema, Software/baseconfig/local apps, inventory)
 
 Host prerequisite checks
 
-## `env`
+## `venv`
 
-Print export statements for direnv
+Inspect or manage the shared SPA_HOME/.venv (default) or this environment's .venv
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `--path` | Print the target venv path (default; no confirmation) |
+| `--create` | Create the venv when missing |
+| `--reinstall` | Install requirements into the existing venv |
+| `--upgrade` | Upgrade packages and Ansible collections in the existing venv |
+| `--rebuild` | Delete, recreate, and install the venv |
+| `--shared` | Target SPA_HOME/.venv (default) |
+| `--environment` | Target this environment's .venv |
+| `--python` | Python interpreter used to create the venv |
+| `--no-install` | Create/rebuild without package or collection installs |
+| `-y`, `--yes` | Confirm creating or changing the venv |
+
+Example:
+
+```bash
+spa venv --shared --rebuild --yes
+```
+
+## `environment list`
+
+List registered environments (alias: spa env list)
+
+Example:
+
+```bash
+spa environment list
+```
+
+## `environment init`
+
+Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Platform-Automator or paths.yml env_dir)
+
+| Flag | Description |
+| --- | --- |
+| `--example` | Topology example id |
+| `--provider` | aws or virtualbox (default aws, or providers.yml) |
+| `--env-dir` | One-off parent (requires --name); does not change the default parent |
+| `--name` | Registry name (default: folder basename) |
+| `--force` | Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example) |
+| `--software-dir` | Shared installers directory (saved in paths.yml) |
+
+Example:
+
+```bash
+spa environment init --example cm_2idxc_sh_uf my-lab
+```
+
+## `environment set`
+
+User-level defaults in paths.yml (env parent, Software, baseconfig, apps) and providers.yml (only when not aws)
+
+| Flag | Description |
+| --- | --- |
+| `--env-dir` | Default parent for name-only init |
+| `--software-dir` | Shared installers directory (also sets baseconfig_dir if unset) |
+| `--baseconfig-dir` | PS baseconfig apps directory |
+| `--apps-dir` | Local apps directory |
+| `--default` | Registered environment used when cwd does not select one |
+| `--provider` | Default provider (aws\|virtualbox) |
+
+Example:
+
+```bash
+spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
+```
+
+## `environment remove`
+
+Unregister and delete the env directory (not spa destroy)
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `-y`, `--yes` | Confirm deleting the env directory |
+| `--force` | Allow deleting a dir that looks deployed (local only) |
+
+## `environment`
+
+Environment family (alias: env). spa resolves cwd or --env itself; --export is for external tools
+
+| Flag | Description |
+| --- | --- |
+| `--export` | Print shell exports for external tools |
+
+Example:
+
+```bash
+spa env --export
+```
 
 ## `provision`
 

@@ -31,14 +31,19 @@ def requires_confirmation(*, risk: Optional[str] = None, missing_metadata: bool 
     return risk != "read-only"
 
 
+# Playbook metadata only uses read-only / mutating / destructive. The local_*
+# risks are for commands that touch this machine's toolchain, never a host.
+CONSEQUENCE = {
+    "destructive": "will permanently remove or uninstall resources",
+    "mutating": "will change hosts or configuration",
+    "local": "will change the Python environment for this framework",
+    "local_destructive": "will delete and recreate the Python environment for this framework",
+}
+
+
 def prompt_text(label: str, *, risk: Optional[str] = None) -> str:
     """Human confirmation question. Default is no ([y/N])."""
-    if risk == "destructive":
-        consequence = "will permanently remove or uninstall resources"
-    elif risk == "mutating":
-        consequence = "will change hosts or configuration"
-    else:
-        consequence = "may change hosts (no playbook metadata)"
+    consequence = CONSEQUENCE.get(risk or "", "may change hosts (no playbook metadata)")
     return "%s %s. Proceed? [y/N] " % (label, consequence)
 
 

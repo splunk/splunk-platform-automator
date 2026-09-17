@@ -6,7 +6,10 @@
 # Usage:
 #   source bin/spa_venv.sh                  # activate (create when missing)
 #   source bin/spa_venv.sh --no-create      # activate only if it already exists
-#   ./bin/spa_venv.sh --create              # create/update, then exit
+#   ./bin/spa_venv.sh --create              # create when missing, then exit
+#   ./bin/spa_venv.sh --reinstall           # install requirements into existing venv
+#   ./bin/spa_venv.sh --upgrade             # upgrade packages and collections in place
+#   ./bin/spa_venv.sh --rebuild             # recreate and install requirements
 #   ./bin/spa_venv.sh --path                # print the resolved venv directory
 #
 # Venv resolution (first match wins):
@@ -33,6 +36,9 @@ _spa_venv_python="${SPA_VENV_PYTHON:-python3}"
 _spa_venv_mode="activate"
 _spa_venv_create=true
 _spa_venv_install=true
+_spa_venv_reinstall=false
+_spa_venv_upgrade=false
+_spa_venv_rebuild=false
 _spa_venv_reqs=()
 _spa_venv_pkgs=()
 _spa_venv_rc=0
@@ -46,6 +52,9 @@ Usage: spa_venv.sh [options] [pip-package ...]
   --python PATH        Interpreter used when creating (default: python3)
   --requirements FILE  Requirements file (repeatable; default SPA_HOME/requirements.txt)
   --create             Create/update the venv and exit
+  --reinstall          Create if missing; reinstall requirements, then exit
+  --upgrade            Create if missing; upgrade packages and collections, then exit
+  --rebuild            Delete/recreate the venv and install requirements
   --no-create          Activate only when the venv already exists
   --no-install         Create the venv without pip/galaxy installs
   --path               Print the resolved venv directory and exit
@@ -57,6 +66,11 @@ EOF
 _spa_venv_fail() {
     echo "$1" >&2
     _spa_venv_rc=1
+}
+
+# Progress on stderr so spa can show steps while pip stays quiet on stdout.
+_spa_venv_progress() {
+    echo "$1" >&2
 }
 
 while [[ $# -gt 0 ]]; do
@@ -83,6 +97,23 @@ while [[ $# -gt 0 ]]; do
             ;;
         --create)
             _spa_venv_mode="create"
+            shift
+            ;;
+        --reinstall)
+            _spa_venv_mode="create"
+            _spa_venv_reinstall=true
+            shift
+            ;;
+        --upgrade)
+            _spa_venv_mode="create"
+            _spa_venv_reinstall=true
+            _spa_venv_upgrade=true
+            shift
+            ;;
+        --rebuild)
+            _spa_venv_mode="create"
+            _spa_venv_reinstall=true
+            _spa_venv_rebuild=true
             shift
             ;;
         --no-create)
@@ -139,11 +170,16 @@ if [[ $_spa_venv_rc -eq 0 && "$_spa_venv_mode" == "path" ]]; then
 fi
 
 if [[ $_spa_venv_rc -eq 0 && "$_spa_venv_mode" != "done" && "$_spa_venv_mode" != "help" ]]; then
+    if [[ "$_spa_venv_rebuild" == true && -d "$_spa_venv_dir" ]]; then
+        _spa_venv_progress "Rebuilding virtual environment..."
+        rm -rf "$_spa_venv_dir"
+    fi
+
     # A directory without bin/activate is a half-created venv (interrupted or
     # failed install); rebuild it rather than sourcing something broken.
     if [[ -d "$_spa_venv_dir" && ! -f "${_spa_venv_dir}/bin/activate" ]]; then
         if [[ "$_spa_venv_create" == true ]]; then
-            echo "spa_venv: incomplete venv at ${_spa_venv_dir}, recreating"
+            _spa_venv_progress "Recreating incomplete virtual environment..."
             rm -rf "$_spa_venv_dir"
         fi
     fi
@@ -159,7 +195,7 @@ if [[ $_spa_venv_rc -eq 0 && "$_spa_venv_mode" != "done" && "$_spa_venv_mode" !=
         elif ! "$_spa_venv_python" -c 'import venv'; then
             _spa_venv_fail "spa_venv: ${_spa_venv_python} has no venv module (install python3-venv / python3)"
         else
-            echo "Creating virtual environment: ${_spa_venv_dir}"
+            _spa_venv_progress "Creating virtual environment..."
             if ! "$_spa_venv_python" -m venv "$_spa_venv_dir"; then
                 _spa_venv_fail "spa_venv: could not create ${_spa_venv_dir}"
             else
@@ -179,15 +215,26 @@ if [[ $_spa_venv_rc -eq 0 && "$_spa_venv_mode" != "done" && "$_spa_venv_mode" !=
 fi
 
 if [[ $_spa_venv_rc -eq 0 && "$_spa_venv_mode" != "done" && "$_spa_venv_mode" != "help" && "$_spa_venv_install" == true ]]; then
-    if [[ "${_spa_venv_fresh:-false}" == true ]]; then
-        pip install --upgrade pip
+    if [[ "${_spa_venv_fresh:-false}" == true || "$_spa_venv_reinstall" == true ]]; then
+        _spa_venv_progress "Installing pip..."
+        pip install -q --upgrade pip
         for _spa_venv_req in "${_spa_venv_reqs[@]}"; do
             [[ -f "$_spa_venv_req" ]] || continue
-            pip install -r "$_spa_venv_req"
+            if [[ "$_spa_venv_upgrade" == true ]]; then
+                _spa_venv_progress "Upgrading packages..."
+                pip install -q --upgrade -r "$_spa_venv_req"
+            else
+                _spa_venv_progress "Installing packages..."
+                pip install -q -r "$_spa_venv_req"
+            fi
         done
     fi
     if [[ ${#_spa_venv_pkgs[@]} -gt 0 ]]; then
-        pip install -q "${_spa_venv_pkgs[@]}"
+        if [[ "$_spa_venv_upgrade" == true ]]; then
+            pip install -q --upgrade "${_spa_venv_pkgs[@]}"
+        else
+            pip install -q "${_spa_venv_pkgs[@]}"
+        fi
     fi
 
     # ansible-core ships no collection filters (e.g. json_query). Keep them beside
@@ -205,12 +252,22 @@ if [[ $_spa_venv_rc -eq 0 && "$_spa_venv_mode" != "done" && "$_spa_venv_mode" !=
                 _spa_venv_need_collections=true
             fi
         done < <(awk '/^[[:space:]]*-[[:space:]]*name:/ {print $3}' "${_spa_venv_home}/requirements.yml")
-        if [[ "$_spa_venv_need_collections" == true ]]; then
+        if [[ "$_spa_venv_upgrade" == true ]]; then
+            # --upgrade: bump every collection that has a newer Galaxy release.
+            # Do not --force; that rewrites the same version instead of updating.
+            _spa_venv_progress "Updating Ansible collections..."
+            ansible-galaxy collection install --upgrade \
+                -r "${_spa_venv_home}/requirements.yml" -p "$_spa_venv_collections"
+        elif [[ "$_spa_venv_need_collections" == true ]]; then
             # --force: galaxy reports "nothing to do" when a collection exists in
             # ~/.ansible, which would leave ANSIBLE_COLLECTIONS_PATH empty here.
-            echo "Installing Ansible collections from requirements.yml..."
+            _spa_venv_progress "Installing Ansible collections..."
             ansible-galaxy collection install --force \
                 -r "${_spa_venv_home}/requirements.yml" -p "$_spa_venv_collections"
+        else
+            # .collections sits beside the venv, so it outlives a --rebuild. Say
+            # so rather than skipping the step without a word.
+            _spa_venv_progress "Ansible collections already installed"
         fi
         unset _spa_venv_collections _spa_venv_name _spa_venv_ns _spa_venv_need_collections
     fi
@@ -230,9 +287,10 @@ else
 fi
 
 _spa_venv_exit=$_spa_venv_rc
-unset -f _spa_venv_usage _spa_venv_fail
+unset -f _spa_venv_usage _spa_venv_fail _spa_venv_progress
 unset _spa_venv_self _spa_venv_bin_dir _spa_venv_home _spa_venv_env \
     _spa_venv_python _spa_venv_mode _spa_venv_create _spa_venv_install \
+    _spa_venv_reinstall _spa_venv_upgrade _spa_venv_rebuild \
     _spa_venv_reqs _spa_venv_pkgs _spa_venv_req _spa_venv_fresh \
     _spa_venv_dir _spa_venv_rc
 

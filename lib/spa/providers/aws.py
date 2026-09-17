@@ -160,7 +160,7 @@ class Provider:
         except ImportError:
             raise ProviderError(
                 "AWS lifecycle commands require boto3. Recreate the venv "
-                "(source bin/spa_venv.sh --create) so requirements.txt is installed."
+                "(spa venv --shared --rebuild --yes) so requirements.txt is installed."
             )
         config = self._resolved_config()
         kwargs: Dict[str, Any] = {"region_name": config.get("region")}

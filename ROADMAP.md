@@ -24,7 +24,7 @@ Ship M1–M3 on one integration branch, then **3.0** when that branch is ready t
 - [x] `SPA_HOME` / `SPA_ENV_DIR` path contract; clone defaults keep today's layout (**M1**)
 - [x] `spa init` scaffolds an env dir (example config, `.spa.yml`; no copy of `ansible/`) and migrates an existing clone env (config, inventory, Terraform state) (**M1** / **M2**)
 - [x] Separate env dirs against one clone `SPA_HOME` (**M1**)
-- [x] `bin/spa_venv.sh` shared venv (framework, envs, tests) + env `.envrc` for direnv; no Homebrew Ansible/Pydantic requirement (**M1**)
+- [x] `bin/spa_venv.sh` shared venv (framework, envs, tests); `spa` resolves cwd / `--env` without direnv; no Homebrew Ansible/Pydantic requirement (**M1**)
 - [x] `spa` commands use the shared prefix (`init`, `validate`, `provision`, `deploy`, `suspend`, `resume`, `destroy`, `hosts`, `shell`, `run`, `aws`, `licenses`) (**M2**)
 - [x] `spa run --list` / `NAME --help` from `# spa-run:` metadata; 3.0 operator stems (2.x names still resolve with a hint) (**M2**)
 - [x] `--hosts` on `deploy`, `run`, `suspend`, `resume`, and `hosts list` (inventory names or roles) (**M2**)
@@ -37,6 +37,7 @@ Ship M1–M3 on one integration branch, then **3.0** when that branch is ready t
 - [x] `install.sh --uninstall` (prefix + launcher only; never env dirs / Terraform / AWS) — [#72](https://github.com/splunk/splunk-platform-automator/issues/72)
 - [ ] Optional later: native Linux packages (`.deb` / `.rpm`) from the same tarball, unpack to `/opt/spa`; `install.sh` prefers the distro package when it matches
 - [ ] Optional later: Homebrew tap of the same tarball (no brew Ansible/Pydantic; `spa_venv` stays the Python path)
+- [ ] Use uv **inside** `spa_venv.sh` / `install.sh` (pinned binary; keep `spa venv` and `.venv`). Not an operator `uv` install. Galaxy collections unchanged. Optional lockfile / `uv python install` when the host has no usable Python. — [#83](https://github.com/splunk/splunk-platform-automator/issues/83)
 - [ ] Optional later: Ansible collection extract of roles/plugins — not the primary install
 
 ## Agent platform and CLI
@@ -49,7 +50,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [x] Fold SSH/SCP into `spa hosts` (`list` / `ssh` / `copy`); `spa shell` / `spa sh` remain SSH aliases (no `spa shell -l`)
 - [x] Map top-level [ansible/](ansible/) playbooks to `spa run` (and named `provision` / `deploy` / `destroy`) — every playbook is a main entry point; do not require raw `ansible-playbook` for day-to-day use. Discover with `spa run --list`; inspect with `spa run NAME --help`.
 - [ ] Env-dir playbook/Terraform logs + compact progress (full transcript in `$SPA_ENV_DIR/logs/`; agents get a small envelope + `log` path, not the dump) — [#71](https://github.com/splunk/splunk-platform-automator/issues/71)
-- [ ] Main `spa` skill (cup-style `/spa` entry) — [#54](https://github.com/splunk/splunk-platform-automator/issues/54)
+- [x] Main `spa` skill (cup-style `/spa` entry) plus `spa environment` registry — [#54](https://github.com/splunk/splunk-platform-automator/issues/54)
 - [ ] `spa skills install` / `spa skills remove` (Claude / Cursor / Codex) from `$SPA_HOME/skills/spa/` — [#55](https://github.com/splunk/splunk-platform-automator/issues/55)
 - [ ] Skills, agents, and runbooks pack (full operator loop; calls `spa` only) — [#67](https://github.com/splunk/splunk-platform-automator/issues/67). Blocked by [#54](https://github.com/splunk/splunk-platform-automator/issues/54) and [#55](https://github.com/splunk/splunk-platform-automator/issues/55)
 - [x] Splunkbase search / snippet / download (`spa apps`; app-management skill; never display Splunkbase passwords — [secrets-handling.md](skills/spa/spa-create-config/references/secrets-handling.md)) — [#59](https://github.com/splunk/splunk-platform-automator/issues/59). Config add/remove is [#76](https://github.com/splunk/splunk-platform-automator/issues/76).

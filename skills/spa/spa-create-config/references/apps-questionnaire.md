@@ -42,7 +42,7 @@ ITSI / ITE Work → Splunkbase **1841** only (`spa apps snippet 1841`). Not 5403
 Merge `spa --json features show setting.apps.premium.itsi` for Java 21 and license files; the apps[] slice also comes from `spa apps snippet 1841`.
 
 - Main app: `premium_app: itsi`, no `target_roles`
-- Licenses: run `spa licenses --config …` after adding ITSI — proposes `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` from `../Software`; see [licenses.md](licenses.md)
+- Licenses: run `spa licenses --config …` after adding ITSI — proposes `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` from Software; see [licenses.md](licenses.md)
 - **Java 21 max** on the search/ITSI host `splunk_hosts[].os.packages` (not the global `os:` block) — see [aws-os-matrix.md](aws-os-matrix.md)
 - Full lab (not `spa init --example`): `examples/single_node_itsi.yml`
 

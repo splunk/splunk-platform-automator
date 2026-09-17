@@ -14,7 +14,7 @@ Only `bin/spa` and `bin/spa_venv.sh` remain in a clone. Operators can install a 
 | `bin/spash -l` | `spa hosts list` (optional `--status`) |
 | `bin/spash -c` | `spa hosts copy SRC DST` (`spa shell -c` still copies) |
 | `bin/init_spa_dir.sh` | `spa init` |
-| `bin/spa_env.sh` | `spa env --export` |
+| `bin/spa_env.sh` | Not needed by `spa`; `spa env --export` remains for external tools |
 | `bin/spa_doctor.sh` | `spa doctor` |
 | `bin/validate_splunk_config.sh` | `spa validate` |
 | `bin/splunk_config_aws.py` | `spa aws` |
@@ -26,7 +26,7 @@ Skills and agents should use full names (`spa hosts ssh`, `spa validate`), not `
 
 ## Names and flags
 
-- `--lab` is `--env` (for example `spa doctor --env DIR`).
+- `--lab` is `--env` (for example `spa doctor --env NAME` or a dest path). `spa environment` is the env family; `spa env` is its alias.
 - `SPA_LAB_DIR` is gone. Use `SPA_ENV_DIR`. There is no alias.
 - Jinja `SPADirName` is `spa_env_dir | basename`.
 
@@ -34,10 +34,10 @@ Skills and agents should use full names (`spa hosts ssh`, `spa validate`), not `
 
 - **`SPA_HOME`** is the framework (playbooks, Terraform modules, `Vagrantfile`, `bin/`, skills). A clone is develop-only for `spa`; operators use a prefix or clone as home, never as the env.
 - **`SPA_ENV_DIR`** is one Splunk environment (`config/splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `.vagrant/`, optional `saved_base_config_apps/`). Do not copy `ansible/` into the env. Do not put a Vagrantfile in the env.
-- Unset both → the git clone for path resolution. That clone-equal layout is **not** valid for `spa` (except `spa --help`, `spa init`, `spa agent schema`, `spa env --export`, `spa doctor`, `spa features`, `spa apps search` / `snippet`).
+- Unset both → cwd discovery and then the registered default select the env. A clone-equal layout is **not** valid for operator commands.
 - When they differ, Terraform **modules** stay under `$SPA_HOME/terraform/aws`; **state** stays in the env. VirtualBox uses `VAGRANT_CWD=$SPA_HOME` and `VAGRANT_DOTFILE_PATH=$SPA_ENV_DIR/.vagrant`.
 - `../Software` and `../apps` prefer a sibling of the **env**, then the clone.
-- Env dirs get an `.envrc`. `spa` is `$SPA_HOME/bin/spa` on `PATH`, not a per-env `bin/`.
+- Env dirs do not get an `.envrc`. Install the `spa` launcher once; each command resolves cwd or `--env NAME` and applies its own environment.
 
 Move an existing 2.x clone env out of the checkout:
 
@@ -46,23 +46,25 @@ spa init ~/envs/my-env
 # or from a new framework tree:
 spa init --from /path/to/old-clone ~/envs/my-env
 cd ~/envs/my-env
-eval "$(spa env --export)"
 spa validate
 ```
 
 `spa init` migrates `config/`, `inventory/`, Terraform state, and **`.vagrant/`** (VirtualBox machine IDs). If `.vagrant` is left in the clone, `spa provision` would create a second set of VMs.
 
-If you copied a whole old checkout as the env directory, `spa init DIR` exits 2 until `--force`. Then env state is kept and framework leftovers under that dir are stripped.
+If you copied a whole old checkout as the env directory, `spa init DIR` exits 2 until `--force`. Then env state is kept and framework leftovers under that dir are stripped. After conversion (or for any older lab that already has config), `spa env init NAME --force` registers that directory so it appears in `spa environment list`.
 
 ## Python / Ansible
 
-Do not use Homebrew Ansible or Pydantic. Create or refresh the venv:
+Do not use Homebrew Ansible or Pydantic. Recreate the shared venv:
 
 ```bash
-source bin/spa_venv.sh --create
+spa venv --shared --rebuild --yes
 ```
 
-`boto3` is in `requirements.txt`. Recreate older venvs so `spa aws`, suspend/resume, and `spa hosts list --status` work.
+Use `spa venv --shared --reinstall --yes` when the venv itself is sound and
+only missing packages need filling in. Use `spa venv --shared --upgrade --yes`
+to bump Ansible and other requirements in place (`pip install --upgrade` plus
+`ansible-galaxy collection install --upgrade`). `boto3` is in `requirements.txt`.
 
 ## AWS and VirtualBox
 

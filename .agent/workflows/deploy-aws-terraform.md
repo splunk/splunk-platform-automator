@@ -8,7 +8,7 @@ This workflow provisions AWS infrastructure using Terraform and deploys Splunk. 
 
 ## Prerequisites
 
-1. **direnv / PATH:** `cd` the env dir so `spa` is on `PATH` (`$SPA_HOME/bin`), or run `$SPA_HOME/bin/spa`.
+1. **Environment selection:** use `spa --env NAME`, set a registered default, or `cd` into the env. The installed `spa` launcher is on `PATH`.
 2. **Host tools:** `spa doctor` (Terraform for AWS). Ansible collections come from `spa_venv` — do not run `ansible-galaxy` in this workflow.
 3. **AWS credentials:** `spa aws --check-auth --json`. Report set/not-set only; never print secret values.
 4. **Config:** `config/splunk_config.yml` with `terraform.aws` (security group, key pair, AMI in the target region).

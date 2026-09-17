@@ -10,7 +10,13 @@ from typing import List, Optional, Sequence, Tuple
 from spa.agent import agent_mode, emit, format_schema_markdown
 from spa.api import CommandResult, open_session
 from spa.apps import SEARCH_KINDS, SEARCH_TYPES
-from spa.executil import ToolNotFound, apply_paths_env
+from spa.executil import (
+    REQUIREMENT_DISTRIBUTIONS,
+    ToolNotFound,
+    apply_paths_env,
+    venv_required_error,
+    venv_setup_message,
+)
 from spa.paths import env_dir_required_error, resolve_spa_paths
 
 
@@ -18,7 +24,10 @@ from spa.paths import env_dir_required_error, resolve_spa_paths
 # spa aws --check-auth). argparse.REMAINDER drops a leading option, so these are
 # split off before the spa parser runs.
 NATIVE_FLAG_COMMANDS = ("shell", "sh", "aws", "licenses", "lic")
-GLOBAL_OPTS_WITH_VALUE = ("--start-dir",)
+# These must keep working without a venv: they are how an operator inspects or
+# builds one. Every other command reads YAML or runs Ansible, so it is gated.
+VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment"})
+GLOBAL_OPTS_WITH_VALUE = ("--start-dir", "--env")
 HOSTS_FLAG_HELP = "only these hosts (names or roles from this env)"
 AGENT_EXAMPLES = """examples:
   spa agent schema       command schema (name, summary, flags, requires_confirmation)
@@ -256,6 +265,70 @@ def shell_copy_examples() -> str:
     return COPY_EXAMPLES
 
 
+def _add_env_selector(parser) -> None:
+    parser.add_argument(
+        "--env",
+        dest="env_selector",
+        metavar="NAME",
+        help="Registered environment name or dest path",
+    )
+
+
+def _add_init_arguments(parser) -> None:
+    parser.add_argument(
+        "env_dir",
+        nargs="?",
+        help="Environment dest path, or a bare name under the default env parent",
+    )
+    parser.add_argument(
+        "--name",
+        metavar="NAME",
+        help="Registry name (default: folder basename). With --env-dir, also the child folder",
+    )
+    parser.add_argument(
+        "--env-dir",
+        dest="init_env_dir",
+        metavar="DIR",
+        help="Parent directory for this init only (requires --name). Does not change the default parent",
+    )
+    parser.add_argument("--example", metavar="NAME", help="Topology example id (see spa init --list)")
+    parser.add_argument(
+        "--provider",
+        metavar="NAME",
+        help="Provider example: aws or virtualbox (default: aws, or providers.yml)",
+    )
+    parser.add_argument("--list", action="store_true", help="List topology and provider examples")
+    parser.add_argument("--from", dest="from_dir", metavar="DIR", help="Migrate an existing SPA environment")
+    parser.add_argument("--migrate", action="store_true", help="Migrate the source environment into ENV_DIR")
+    parser.add_argument("--keep-source", action="store_true", help="Keep state files in the migration source")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite .spa.yml (and strip old clone leftovers). "
+        "Does not replace splunk_config.yml unless --example is also given.",
+    )
+    parser.add_argument("--venv", action="store_true", help="Create the environment Python virtualenv")
+    parser.add_argument("--python", metavar="PATH", help="Python interpreter used to create the virtualenv")
+    parser.add_argument("--ansible", help="Pin ansible==VER in the env venv")
+    parser.add_argument("--pip", action="append", default=[], help="Extra pip spec (repeatable)")
+    parser.add_argument("--skip-doctor", action="store_true", help="Skip prerequisite checks after init")
+    parser.add_argument(
+        "--software-dir",
+        metavar="DIR",
+        help="Shared Splunk installers directory (saved in ~/.config/spa/paths.yml)",
+    )
+    parser.add_argument(
+        "--baseconfig-dir",
+        metavar="DIR",
+        help="PS baseconfig apps directory (default: same as --software-dir)",
+    )
+    parser.add_argument(
+        "--apps-dir",
+        metavar="DIR",
+        help="Local source: local apps directory (saved in ~/.config/spa/paths.yml)",
+    )
+
+
 def _add_hosts_option(parser) -> None:
     parser.add_argument(
         "--hosts",
@@ -266,9 +339,9 @@ def _add_hosts_option(parser) -> None:
     )
 
 
-def _paths(start_dir: Optional[str] = None):
+def _paths(start_dir: Optional[str] = None, env_selector: Optional[str] = None):
     start = Path(start_dir).resolve() if start_dir else None
-    paths = resolve_spa_paths(start_dir=start)
+    paths = resolve_spa_paths(start_dir=start, env_selector=env_selector)
     apply_paths_env(paths)
     return paths
 
@@ -290,6 +363,141 @@ def _print_init_messages(result: CommandResult) -> None:
         print("\n".join(messages))
 
 
+def _doctor_env_dir(selector: Optional[str], start_dir: Optional[str]) -> Optional[str]:
+    if not selector:
+        return None
+    from spa.registry import lookup_env_path
+
+    start = Path(start_dir).resolve() if start_dir else Path.cwd()
+    return str(lookup_env_path(selector, relative_to=start))
+
+
+def _run_init(args, session, as_agent: bool) -> int:
+    if args.list:
+        result = session.list_examples()
+        if as_agent:
+            return _emit_result(result, True)
+        from spa.init import format_example_list
+
+        print(format_example_list(result.data or {}))
+        return 0
+    from spa.registry import RegistryError, resolve_init_dest
+
+    try:
+        dest, registry_name, _ = resolve_init_dest(
+            getattr(args, "env_dir", None),
+            env_dir_flag=getattr(args, "init_env_dir", None),
+            name=getattr(args, "name", None),
+            force=bool(getattr(args, "force", False)),
+        )
+    except RegistryError as exc:
+        emit(False, error=str(exc), as_agent=as_agent)
+        return exc.code
+    result = session.init(
+        str(dest),
+        example=args.example,
+        example_set=args.example is not None,
+        from_dir=args.from_dir,
+        migrate_set=args.migrate or args.from_dir is not None,
+        keep_source=args.keep_source,
+        force=args.force,
+        env_venv=args.venv or bool(args.python) or bool(args.ansible) or bool(args.pip),
+        python=args.python,
+        ansible=args.ansible,
+        pip_pkgs=args.pip,
+        skip_doctor=args.skip_doctor,
+        rebuild_venv=bool(args.ansible or args.pip) and args.force,
+        software_dir=args.software_dir,
+        baseconfig_dir=args.baseconfig_dir,
+        apps_dir=args.apps_dir,
+        provider=args.provider,
+        registry_name=registry_name,
+    )
+    if as_agent:
+        payload = dict(result.data or {})
+        payload["env_dir"] = str(dest.resolve())
+        payload["name"] = registry_name
+        emit(result.ok, data=payload, error=result.error, as_agent=True)
+        return result.code
+    _print_init_messages(result)
+    if result.error:
+        print(result.error, file=sys.stderr)
+    return result.code
+
+
+def _run_environment(args, session, paths, as_agent: bool, env_parser) -> int:
+    from spa.paths import format_export
+
+    action = getattr(args, "environment_cmd", None)
+    if getattr(args, "export", False) and not action:
+        if args.json:
+            emit(True, data=paths.export_env(), as_agent=True)
+        else:
+            sys.stdout.write(format_export(paths))
+        return 0
+    if not action:
+        env_parser.print_help()
+        return 0
+    if action == "list":
+        result = session.environment_list()
+        if as_agent:
+            return _emit_result(result, True)
+        if not result.ok:
+            print(result.error or "environment list failed", file=sys.stderr)
+            return result.code
+        rows = (result.data or {}).get("environments") or []
+        if not rows:
+            print("No registered environments. Create one with spa environment init NAME")
+            return 0
+        for row in rows:
+            mark = "*" if row.get("default") else " "
+            missing = "" if row.get("exists") else "  (missing)"
+            print("%s %s  %s%s" % (mark, row.get("name"), row.get("path"), missing))
+        return 0
+    if action == "init":
+        return _run_init(args, session, as_agent)
+    if action == "set":
+        result = session.environment_set(
+            env_dir=getattr(args, "set_env_dir", None),
+            provider=getattr(args, "set_provider", None),
+            software_dir=getattr(args, "set_software_dir", None),
+            baseconfig_dir=getattr(args, "set_baseconfig_dir", None),
+            apps_dir=getattr(args, "set_apps_dir", None),
+            default=getattr(args, "set_default", None),
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+            return result.code
+        data = result.data or {}
+        if data.get("paths_yml"):
+            print("Updated %s" % data["paths_yml"])
+        if data.get("environments_yml"):
+            print("Default environment is %s" % data["default"])
+        if "providers_yml" in data:
+            if data.get("providers_yml"):
+                print("Updated %s" % data["providers_yml"])
+            else:
+                print("Default provider is aws (providers.yml removed)")
+        return result.code
+    if action == "remove":
+        result = session.environment_remove(
+            args.name,
+            confirm=bool(getattr(args, "yes", False)),
+            force=bool(getattr(args, "force", False)),
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+            return result.code
+        print("Removed %s (%s)" % (result.data.get("name"), result.data.get("path")))
+        return 0
+    env_parser.print_help()
+    return 0
+
+
 def _error_agent_mode(argv: List[str]) -> bool:
     """Agent mode for a failure raised outside normal command dispatch."""
     head, _ = _split_passthrough(argv)
@@ -309,6 +517,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except ToolNotFound as exc:
         emit(False, error=str(exc), as_agent=_error_agent_mode(raw))
         return 1
+    except ModuleNotFoundError as exc:
+        # A requirement spa imports lazily (boto3, lxml, jmespath, ...). Report
+        # the venv to build instead of a traceback from deep in a subcommand.
+        if (exc.name or "") not in REQUIREMENT_DISTRIBUTIONS:
+            raise
+        paths = resolve_spa_paths(start_dir=None)
+        emit(
+            False,
+            error=venv_setup_message(paths, [exc.name]),
+            as_agent=_error_agent_mode(raw),
+        )
+        return 2
 
 
 def _run(argv: Sequence[str]) -> int:
@@ -362,7 +582,10 @@ def _run(argv: Sequence[str]) -> int:
 
     parser = AgentAwareArgumentParser(
         prog="spa",
-        description="Splunk Platform Automator — env dirs against one SPA_HOME prefix.",
+        description=(
+            "Splunk Enterprise deployment CLI — clustering, apps, licenses, hosts, "
+            "and verification on AWS or VirtualBox. Agent-ready."
+        ),
     )
     parser.add_argument("--json", action="store_true", help="JSON output / agent envelope")
     parser.add_argument(
@@ -383,47 +606,16 @@ def _run(argv: Sequence[str]) -> int:
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Show verbose command output")
     parser.add_argument("--start-dir", help="Directory to resolve .spa.yml from")
+    parser.add_argument(
+        "--env",
+        dest="env_selector",
+        metavar="NAME",
+        help="Registered environment name or dest path",
+    )
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    p_init = _add_command(sub, "init", help="Scaffold or migrate an env dir")
-    p_init.add_argument("env_dir", nargs="?", help="Environment directory to create or migrate")
-    p_init.add_argument("--example", metavar="NAME", help="Topology example id (see spa init --list)")
-    p_init.add_argument(
-        "--provider",
-        metavar="NAME",
-        help="Provider example: aws or virtualbox (required with --example unless using a legacy alias)",
-    )
-    p_init.add_argument("--list", action="store_true", help="List topology and provider examples")
-    p_init.add_argument("--from", dest="from_dir", metavar="DIR", help="Migrate an existing SPA environment")
-    p_init.add_argument("--migrate", action="store_true", help="Migrate the source environment into ENV_DIR")
-    p_init.add_argument("--keep-source", action="store_true", help="Keep state files in the migration source")
-    p_init.add_argument(
-        "--force",
-        action="store_true",
-        help="Overwrite .spa.yml / .envrc (and strip old clone leftovers). "
-        "Does not replace splunk_config.yml unless --example is also given.",
-    )
-    p_init.add_argument("--venv", action="store_true", help="Create the environment Python virtualenv")
-    p_init.add_argument("--python", metavar="PATH", help="Python interpreter used to create the virtualenv")
-    p_init.add_argument("--ansible", help="Pin ansible==VER in the env venv")
-    p_init.add_argument("--pip", action="append", default=[], help="Extra pip spec (repeatable)")
-    p_init.add_argument("--no-envrc", action="store_true", help="Do not create a direnv .envrc file")
-    p_init.add_argument("--skip-doctor", action="store_true", help="Skip prerequisite checks after init")
-    p_init.add_argument(
-        "--software-dir",
-        metavar="DIR",
-        help="Shared Splunk installers directory (saved in ~/.config/spa/paths.yml)",
-    )
-    p_init.add_argument(
-        "--baseconfig-dir",
-        metavar="DIR",
-        help="PS baseconfig apps directory (default: same as --software-dir)",
-    )
-    p_init.add_argument(
-        "--apps-dir",
-        metavar="DIR",
-        help="Local source: local apps directory (saved in ~/.config/spa/paths.yml)",
-    )
+    p_init = _add_command(sub, "init", help="Scaffold or migrate an env dir (alias of spa environment init)")
+    _add_init_arguments(p_init)
 
     p_feat = _add_command(
         sub,
@@ -450,6 +642,7 @@ def _run(argv: Sequence[str]) -> int:
         "apps",
         help="Search Splunkbase, print an apps[] snippet, or download an archive",
     )
+    _add_env_selector(p_apps)
     apps_sub = p_apps.add_subparsers(dest="apps_cmd", metavar="ACTION", required=True)
     p_apps_search = apps_sub.add_parser("search", help="Search Splunkbase (compact rows)")
     _add_mode_flags(p_apps_search)
@@ -549,22 +742,123 @@ def _run(argv: Sequence[str]) -> int:
         action="store_true",
         help="Include legacy splunk_config_aws compatibility checks",
     )
+    _add_env_selector(p_val)
 
     p_doc = _add_command(sub, "doctor", aliases=["doc"], help="Host prerequisite checks")
     p_doc.add_argument("--spa-home", metavar="DIR", help="Framework directory to inspect")
-    p_doc.add_argument("--env", metavar="DIR", help="Environment directory to inspect")
     p_doc.add_argument("--aws", action="store_true", help="Check AWS prerequisites")
     p_doc.add_argument("--virtualbox", action="store_true", help="Check VirtualBox prerequisites")
     p_doc.add_argument("--strict", action="store_true", help="Treat optional-tool warnings as failures")
-    p_doc.add_argument("--fix-direnv", action="store_true", help="Install the direnv shell hook when possible")
+    _add_env_selector(p_doc)
 
-    p_env = _add_command(sub, "env", help="Print export statements")
-    p_env.add_argument("--export", action="store_true", default=True, help="Print shell export statements")
-    p_env.add_argument("--start-dir", metavar="DIR", help="Directory used to resolve .spa.yml")
+    p_venv = _add_command(
+        sub,
+        "venv",
+        help="Inspect, create, reinstall, upgrade, or rebuild the SPA Python virtualenv",
+    )
+    venv_action = p_venv.add_mutually_exclusive_group()
+    venv_action.add_argument("--path", action="store_const", const="path", dest="venv_action", help="Print the target venv path (default)")
+    venv_action.add_argument("--create", action="store_const", const="create", dest="venv_action", help="Create the venv when missing")
+    venv_action.add_argument("--reinstall", action="store_const", const="reinstall", dest="venv_action", help="Install requirements into the existing venv")
+    venv_action.add_argument("--upgrade", action="store_const", const="upgrade", dest="venv_action", help="Upgrade packages and Ansible collections in the existing venv")
+    venv_action.add_argument("--rebuild", action="store_const", const="rebuild", dest="venv_action", help="Delete, recreate, and install the venv")
+    venv_scope = p_venv.add_mutually_exclusive_group()
+    venv_scope.add_argument("--shared", action="store_true", help="Use SPA_HOME/.venv (default)")
+    venv_scope.add_argument("--environment", action="store_true", help="Use this environment's .venv")
+    p_venv.add_argument("--python", metavar="PATH", help="Python interpreter used to create the venv")
+    p_venv.add_argument("--no-install", action="store_true", help="Create/rebuild without pip or Ansible collection installs")
+    p_venv.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm creating or changing the venv (required in agent mode)",
+    )
+    _add_env_selector(p_venv)
+
+    p_environment = _add_command(
+        sub,
+        "environment",
+        aliases=["env"],
+        help="List, init, set, or remove registered environments (alias: env)",
+    )
+    p_environment.add_argument(
+        "--export",
+        action="store_true",
+        default=False,
+        help="Print shell exports for external tools (spa commands resolve the env themselves)",
+    )
+    env_sub = p_environment.add_subparsers(dest="environment_cmd", metavar="ACTION")
+    p_env_list = env_sub.add_parser("list", aliases=["ls"], help="List registered environments")
+    _add_mode_flags(p_env_list)
+    p_env_init = env_sub.add_parser("init", help="Scaffold or migrate an env dir")
+    _add_mode_flags(p_env_init)
+    _add_init_arguments(p_env_init)
+    p_env_set = env_sub.add_parser(
+        "set",
+        help="Set user-level defaults in paths.yml / providers.yml (not per-env .spa.yml)",
+    )
+    _add_mode_flags(p_env_set)
+    p_env_set.add_argument(
+        "--env-dir",
+        dest="set_env_dir",
+        metavar="DIR",
+        help="Default parent for name-only init (saved in paths.yml; omit when ~/Splunk-Platform-Automator)",
+    )
+    p_env_set.add_argument(
+        "--software-dir",
+        dest="set_software_dir",
+        metavar="DIR",
+        help="Shared Splunk installers directory (saved in paths.yml; also sets baseconfig_dir if unset)",
+    )
+    p_env_set.add_argument(
+        "--baseconfig-dir",
+        dest="set_baseconfig_dir",
+        metavar="DIR",
+        help="PS baseconfig apps directory (saved in paths.yml; default: same as --software-dir)",
+    )
+    p_env_set.add_argument(
+        "--apps-dir",
+        dest="set_apps_dir",
+        metavar="DIR",
+        help="Local source: local apps directory (saved in paths.yml)",
+    )
+    p_env_set.add_argument(
+        "--default",
+        dest="set_default",
+        metavar="NAME",
+        help="Registered environment used when cwd and SPA_ENV_DIR do not select one",
+    )
+    p_env_set.add_argument(
+        "--provider",
+        dest="set_provider",
+        metavar="NAME",
+        help="Default provider for init (aws is implicit; virtualbox writes providers.yml)",
+    )
+    p_env_remove = env_sub.add_parser(
+        "remove",
+        aliases=["rm"],
+        help="Unregister and delete an env directory (not spa destroy)",
+    )
+    _add_mode_flags(p_env_remove)
+    p_env_remove.add_argument("name", help="Registered environment name")
+    p_env_remove.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm deleting the env directory",
+    )
+    p_env_remove.add_argument(
+        "--force",
+        action="store_true",
+        help="Allow deleting a dir that looks deployed (local tree only; does not destroy cloud/VMs)",
+    )
 
     p_prov = _add_command(
         sub, "provision", aliases=["prov"], help="Provision infrastructure for the configured provider"
     )
+    _add_env_selector(p_prov)
     p_prov.add_argument(
         "-y",
         "--yes",
@@ -587,6 +881,7 @@ def _run(argv: Sequence[str]) -> int:
         "(e.g. spa deploy --yes --hosts idx1 --allow-unprovisioned)",
     )
     _add_hosts_option(p_deploy)
+    _add_env_selector(p_deploy)
     p_destroy = _add_command(
         sub, "destroy", aliases=["des"], help="Destroy infrastructure for the configured provider"
     )
@@ -597,6 +892,7 @@ def _run(argv: Sequence[str]) -> int:
         default=argparse.SUPPRESS,
         help="Confirm destroy (same as spa -y destroy)",
     )
+    _add_env_selector(p_destroy)
     p_suspend = _add_command(
         sub, "suspend", aliases=["sus"], help="Stop managed instances without destroying them"
     )
@@ -606,6 +902,7 @@ def _run(argv: Sequence[str]) -> int:
     )
     p_suspend.add_argument("--no-wait", action="store_true", help="Return after requesting the stop")
     _add_hosts_option(p_suspend)
+    _add_env_selector(p_suspend)
     p_resume = _add_command(
         sub, "resume", aliases=["res"], help="Start managed instances and refresh inventory"
     )
@@ -614,6 +911,7 @@ def _run(argv: Sequence[str]) -> int:
         help="Confirm power change (required in agent mode)",
     )
     _add_hosts_option(p_resume)
+    _add_env_selector(p_resume)
 
     p_run = _add_command(
         sub,
@@ -631,12 +929,14 @@ def _run(argv: Sequence[str]) -> int:
         help="Confirm a mutating playbook (required in agent mode)",
     )
     _add_hosts_option(p_run)
+    _add_env_selector(p_run)
     p_run.add_argument(
         "--apps-playbook",
         help="For splunk_apps_playbook_run: curated stem, or env-relative path (e.g. ancustom/my_custom_playbook)",
     )
 
     p_hosts = _add_command(sub, "hosts", aliases=["h"], help="List, SSH, or copy using inventory hosts")
+    _add_env_selector(p_hosts)
     p_hosts.add_argument(
         "--status",
         action="store_true",
@@ -729,7 +1029,7 @@ def _run(argv: Sequence[str]) -> int:
         as_agent = agent_mode(force_agent=False, force_human=args.no_agent)
 
     try:
-        paths = _paths(args.start_dir)
+        paths = _paths(args.start_dir, getattr(args, "env_selector", None))
     except Exception as exc:
         emit(False, error=str(exc), as_agent=as_agent)
         return 1
@@ -744,13 +1044,19 @@ def _run(argv: Sequence[str]) -> int:
     apps_cmd = getattr(args, "apps_cmd", None)
     apps_without_env = args.command == "apps" and apps_cmd in {"search", "snippet"}
     if (
-        args.command not in {"init", "agent", "env", "doctor", "features"}
+        args.command not in {"init", "agent", "environment", "doctor", "features", "venv"}
         and not native_help_only
         and not apps_without_env
     ):
         missing = env_dir_required_error(paths)
         if missing:
             emit(False, error=missing, as_agent=as_agent)
+            return 2
+
+    if args.command not in VENV_OPTIONAL_COMMANDS and not native_help_only:
+        not_ready = venv_required_error(paths)
+        if not_ready:
+            emit(False, error=not_ready, as_agent=as_agent)
             return 2
 
     if args.command == "agent":
@@ -761,60 +1067,11 @@ def _run(argv: Sequence[str]) -> int:
         emit(True, data=result.data, as_agent=True)
         return 0
 
-    if args.command == "env":
-        from spa.paths import format_export
-
-        # direnv does eval "$(spa env --export)" — never wrap that in JSON.
-        if args.json:
-            emit(True, data=paths.export_env(), as_agent=True)
-        else:
-            sys.stdout.write(format_export(paths))
-        return 0
+    if args.command == "environment":
+        return _run_environment(args, session, paths, as_agent, p_environment)
 
     if args.command == "init":
-        if args.list:
-            result = session.list_examples()
-            if as_agent:
-                return _emit_result(result, True)
-            from spa.init import format_example_list
-
-            print(format_example_list(result.data or {}))
-            return 0
-        if not args.env_dir:
-            print("spa init: env dir is required", file=sys.stderr)
-            return 1
-        result = session.init(
-            args.env_dir,
-            example=args.example,
-            example_set=args.example is not None,
-            from_dir=args.from_dir,
-            migrate_set=args.migrate or args.from_dir is not None,
-            keep_source=args.keep_source,
-            force=args.force,
-            env_venv=args.venv or bool(args.python) or bool(args.ansible) or bool(args.pip),
-            python=args.python,
-            ansible=args.ansible,
-            pip_pkgs=args.pip,
-            write_envrc_file=not args.no_envrc,
-            skip_doctor=args.skip_doctor,
-            rebuild_venv=bool(args.ansible or args.pip) and args.force,
-            software_dir=args.software_dir,
-            baseconfig_dir=args.baseconfig_dir,
-            apps_dir=args.apps_dir,
-            provider=args.provider,
-        )
-        if as_agent:
-            emit(
-                result.ok,
-                data={"env_dir": str(Path(args.env_dir).resolve())},
-                error=result.error,
-                as_agent=True,
-            )
-            return result.code
-        _print_init_messages(result)
-        if result.error:
-            print(result.error, file=sys.stderr)
-        return result.code
+        return _run_init(args, session, as_agent)
 
     if args.command == "features":
         action = args.features_cmd or "list"
@@ -925,16 +1182,52 @@ def _run(argv: Sequence[str]) -> int:
 
         result = session.doctor(
             spa_home=args.spa_home,
-            env_dir=args.env,
+            env_dir=_doctor_env_dir(getattr(args, "env_selector", None), args.start_dir),
             aws=args.aws,
             virtualbox=args.virtualbox,
             strict=args.strict,
-            fix_direnv=args.fix_direnv,
         )
         want_json = as_agent or bool(getattr(args, "json", False))
         if want_json:
             return _emit_result(result, True)
         sys.stdout.write(format_doctor_text(result))
+        return result.code
+
+    if args.command == "venv":
+        if not as_agent:
+            def _venv_step(event):
+                step = (event or {}).get("step")
+                if step:
+                    print(step, flush=True)
+
+            session.on_progress = _venv_step
+        result = session.venv(
+            action=getattr(args, "venv_action", None) or "path",
+            environment=bool(args.environment),
+            python=args.python,
+            no_install=bool(args.no_install),
+            confirm=args.yes,
+            agent=as_agent,
+        )
+        if as_agent:
+            payload = dict(result.data or {})
+            if result.ok:
+                payload.pop("log", None)
+            emit(result.ok, data=payload, error=result.error, as_agent=True)
+            return result.code
+        data = result.data or {}
+        action = getattr(args, "venv_action", None) or "path"
+        if not result.ok:
+            log = data.get("log") or ""
+            if log:
+                sys.stderr.write(log if log.endswith("\n") else log + "\n")
+            if result.error and result.error not in log:
+                print(result.error, file=sys.stderr)
+            return result.code
+        if args.verbose and data.get("log"):
+            sys.stderr.write(data["log"])
+        if action == "path":
+            print((data.get("stdout") or data.get("path") or "").strip())
         return result.code
 
     if args.command in {"provision", "destroy"}:

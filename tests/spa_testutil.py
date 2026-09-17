@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
@@ -20,6 +21,17 @@ AGENT_ENV_VARS = (
     "CURSOR_TRACE_ID",
     "CODEX_THREAD_ID",
 )
+
+
+_THROWAWAY_XDG: Optional[str] = None
+
+
+def _throwaway_xdg_config_home() -> str:
+    """Fallback user config dir when the caller did not isolate one."""
+    global _THROWAWAY_XDG
+    if _THROWAWAY_XDG is None:
+        _THROWAWAY_XDG = tempfile.mkdtemp(prefix="spa-test-xdg-")
+    return _THROWAWAY_XDG
 
 
 def write_min_env(root: Path) -> Path:
@@ -53,7 +65,8 @@ def spa_env(extra: Optional[Mapping[str, str]] = None) -> dict:
     for name in AGENT_ENV_VARS:
         env.pop(name, None)
     env["PYTHONPATH"] = str(LIB) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
-    env.setdefault("XDG_CONFIG_HOME", str(PROJECT_ROOT / "tests" / ".xdg-config-empty"))
+    # Never let spa write the operator's ~/.config/spa (paths.yml, environments.yml).
+    env.setdefault("XDG_CONFIG_HOME", _throwaway_xdg_config_home())
     if extra:
         env.update(extra)
     return env
@@ -72,8 +85,8 @@ def run_spa(args: Sequence[str], env=None, cwd=None, extra_env=None):
     )
 
 
-def run_spa_init(args: Sequence[str], env=None, cwd=None):
+def run_spa_init(args: Sequence[str], env=None, cwd=None, extra_env=None):
     argv = list(args)
     if "--skip-doctor" not in argv:
         argv.insert(0, "--skip-doctor")
-    return run_spa(["init", *argv], env=env, cwd=cwd)
+    return run_spa(["init", *argv], env=env, cwd=cwd, extra_env=extra_env)

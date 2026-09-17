@@ -21,6 +21,7 @@ Canonical skills live only under `skills/spa/`:
 
 | Task | Skill |
 | --- | --- |
+| Load SPA first (Software, envs, operator loop) | `spa` (`/spa`) |
 | Design `splunk_config.yml` | `spa-create-config` |
 | Find and configure Splunkbase apps | `spa-apps` |
 | Add app-scope test scenarios | `spa-add-test-scenario` |

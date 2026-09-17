@@ -53,7 +53,7 @@ Replace `<...>` with phase outcomes. Delete unused sections.
 ## Apps & licenses
 
 - **Apps:** <list or “none”>
-- **Licenses:** <files from ../Software or trial-only>
+- **Licenses:** <files from Software or trial-only>
 - **License manager host:** <host or “none”>
 - **Splunkbase creds:** <both set | username missing | password missing | both missing> — never paste values
 

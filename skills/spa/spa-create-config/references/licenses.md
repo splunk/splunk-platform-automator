@@ -1,8 +1,6 @@
 # License files questionnaire
 
-Splunk license files live on the **Ansible controller** in `splunk_software_dir` (default `../Software` relative to the repo). The config references **basename only** — files are not copied by path from arbitrary locations.
-
-See [Install](../../../../docs/install.md) — link or copy `Splunk_Enterprise.lic` into `Software`.
+Splunk license files live on the **Ansible controller** in the shared Software directory (`spa init --software-dir`; see [Prepare Software](../../../../docs/user-guide.md#prepare-software)). Default discovery is still `../Software` relative to the **env**, not the git clone. The config references **basename only**.
 
 ## Discover available licenses
 

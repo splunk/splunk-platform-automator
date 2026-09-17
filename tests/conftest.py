@@ -373,6 +373,14 @@ def pytest_configure(config):
 
 
 @pytest.fixture(autouse=True)
+def _isolated_user_spa_config(request, tmp_path, monkeypatch):
+    """Tests must never write the operator's ~/.config/spa (paths.yml, environments.yml)."""
+    if request.node.get_closest_marker("aws"):
+        return
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+
+
+@pytest.fixture(autouse=True)
 def _default_spa_env_dir(request, tmp_path, monkeypatch):
     """Operator spa commands need an env dir; skip AWS workspaces and marked tests."""
     if request.node.get_closest_marker("aws"):

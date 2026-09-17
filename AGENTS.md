@@ -5,7 +5,7 @@ SPA provisions and deploys Splunk Enterprise (AWS Linux + Terraform, or VirtualB
 ## Contract
 
 - **`SPA_HOME`**: framework (prefix or clone). **`SPA_ENV_DIR`**: one environment. Operator `spa` needs `spa init` first. Path diagram: [user guide](docs/user-guide.md#understand-the-paths).
-- Call **`bin/spa`** only (`spa agent schema`, `spa --json features`, `spa --json apps`). Do not import `spa.api`. Do not start a daemon. Flag catalog: [docs/commands.md](docs/commands.md).
+- Call **`bin/spa`** only (`spa agent schema`, `spa --json features`, `spa --json apps`). Load **`/spa`** first ([skills/spa/spa/SKILL.md](skills/spa/spa/SKILL.md)). Do not import `spa.api`. Do not start a daemon. Flag catalog: [docs/commands.md](docs/commands.md).
 - Mutating commands need **`--yes`**. Never auto-run provision, deploy, suspend, resume, or destroy. Never answer `Proceed?` interactively.
 - Never print secrets (Splunkbase, AWS keys, vault). Report env vars as **set / not set**. YAML: `lookup('env', ...)`.
 - Full command names (`spa hosts ssh`, `spa validate`), not `spa sh` / `spa val`.
@@ -22,9 +22,11 @@ Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 | CLI flags | [docs/commands.md](docs/commands.md) (`spa --no-agent agent schema --markdown`) |
 | Guided design | [docs/user-guide.md](docs/user-guide.md#configure-an-environment) · `spa features` |
 | 2.x → 3.0 | [docs/migrate.md](docs/migrate.md) |
-| New env | `spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env` then `cd` (direnv or `spa_venv.sh --env` + `spa env --export`) |
+| New env | `spa environment init --example cm_2idxc_sh_uf NAME` then `spa --env NAME …`, `spa environment set --default NAME`, or `cd` into it |
 | Features / apps | `spa --json features search QUERY`; `spa --json apps search QUERY` then `snippet APP_ID`. AWS live values: `spa aws --json` |
 | Python | `source bin/spa_venv.sh` (`spa init` creates it) |
+| Repair Python venv | `spa venv --shared --reinstall --yes` (or `--rebuild`) |
+| Upgrade Python/Ansible in the venv | `spa venv --shared --upgrade --yes` |
 | Host tools | `spa doctor` |
 | Validate | `spa validate` |
 | Provision + deploy | `spa provision --yes && spa deploy --yes` |
@@ -47,10 +49,11 @@ Canonical: `skills/spa/`. When to load:
 
 | Skill | When |
 | --- | --- |
-| [spa-create-config](skills/spa/spa-create-config/SKILL.md) | `splunk_config.yml`, SVA, AWS block |
+| [spa](skills/spa/spa/SKILL.md) (`/spa`) | Load first: Software, env lifecycle, operator loop |
+| [spa-create-config](skills/spa/spa-create-config/SKILL.md) | `splunk_config.yml` in an existing env |
 | [spa-apps](skills/spa/spa-apps/SKILL.md) | Splunkbase search / snippet / download |
 | [spa-add-test-scenario](skills/spa/spa-add-test-scenario/SKILL.md) | App-scope tests |
 
-Cursor: `/spa-create-config`, `/spa-apps`, `/spa-add-test-scenario`. See [docs/contributing.md](docs/contributing.md#agent-skills).
+Cursor: `/spa`, `/spa-create-config`, `/spa-apps`, `/spa-add-test-scenario`. See [docs/contributing.md](docs/contributing.md#agent-skills).
 
 Backend vs GUI: [docs/contributing.md](docs/contributing.md#controller-architecture).

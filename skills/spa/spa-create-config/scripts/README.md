@@ -5,7 +5,7 @@ Canonical scripts live in the **repository** `bin/` directory. Run from project 
 | Script | Purpose |
 |--------|---------|
 | `spa aws` | AWS discovery: `--check-auth`, `--latest-ami`, `--survey`, `--validate` |
-| `spa licenses` | Scan `../Software` for `.lic` files; propose `splunk_license_file` (ITSI-aware with `--config`) |
+| `spa licenses` | Scan Software for `.lic` files; propose `splunk_license_file` (ITSI-aware with `--config`) |
 | `spa validate` | Schema + inventory + playbook syntax-check; optional `--check-licenses` |
 
 Do not duplicate logic in this skill folder. See [references/aws-baseline.md](../references/aws-baseline.md) and [references/validation.md](../references/validation.md).
