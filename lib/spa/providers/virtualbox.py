@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import subprocess
+import threading
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 from spa.executil import ToolNotFound, tool_path
@@ -15,6 +17,7 @@ from spa.providers import (
     inventory_hostnames_from_file,
     load_deployment_config,
 )
+from spa.runlog import PROVIDER_SOURCE, VAGRANT_GROUP
 
 _RUNNING = frozenset({"running"})
 _ABSENT = frozenset({"not_created", "not created"})
@@ -60,10 +63,25 @@ class Provider:
     def _vagrantfile(self):
         return self.paths.spa_home / "Vagrantfile"
 
+    def _ansible_dir(self, required: bool) -> Optional[str]:
+        """Directory holding ansible, usually the SPA venv and not on PATH."""
+        try:
+            return str(Path(tool_path(self.paths, "ansible")).parent)
+        except ToolNotFound as exc:
+            if required:
+                raise ProviderError(str(exc)) from exc
+            return None
+
     def _vagrant_env(self) -> Dict[str, str]:
         env = {**os.environ, **self.paths.export_env()}
         env["VAGRANT_CWD"] = str(self.paths.spa_home)
         env["VAGRANT_DOTFILE_PATH"] = str(self.paths.spa_env_dir / ".vagrant")
+        # The Vagrantfile looks for ansible on PATH; spa keeps it in the venv.
+        ansible_dir = self._ansible_dir(required=False)
+        if ansible_dir:
+            path = env.get("PATH", "")
+            if ansible_dir not in path.split(os.pathsep):
+                env["PATH"] = ansible_dir + (os.pathsep + path if path else "")
         return env
 
     def _require_vagrantfile(self) -> None:
@@ -111,10 +129,72 @@ class Provider:
         *,
         capture: bool = False,
         check: bool = True,
+        run_log: Any = None,
     ) -> subprocess.CompletedProcess:
         self._require_vagrantfile()
         self._require_clean_machine_state()
         cmd = [self._vagrant_bin(), *args]
+        if run_log is not None and not capture:
+            run_log.emit(
+                {
+                    "status": "ok",
+                    "source": PROVIDER_SOURCE,
+                    "phase": VAGRANT_GROUP,
+                    "task": " ".join(["vagrant", *args[:1]]),
+                }
+            )
+            run_log.start_heartbeat()
+            proc = subprocess.Popen(
+                cmd,
+                cwd=str(self.paths.spa_home),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=self._vagrant_env(),
+            )
+            assert proc.stdout is not None
+            assert proc.stderr is not None
+            chunks: List[str] = []
+            errors: List[str] = []
+
+            def _consume(line: str, from_stderr: bool) -> None:
+                (errors if from_stderr else chunks).append(line)
+                if getattr(run_log, "native_output", False):
+                    run_log.emit_native_output(line)
+                run_log.consume_provider_line(line)
+
+            def _read_stderr() -> None:
+                for line in proc.stderr:  # type: ignore[union-attr]
+                    _consume(line, True)
+
+            err_thread = threading.Thread(
+                target=_read_stderr, name="spa-vagrant-stderr", daemon=True
+            )
+            err_thread.start()
+            for line in proc.stdout:
+                _consume(line, False)
+            rc = proc.wait()
+            err_thread.join(timeout=5)
+            if rc != 0 and not getattr(run_log, "saw_failure", False):
+                # Vagrant reports errors on stderr, and its first line is the
+                # headline; fall back to the last thing printed at all.
+                detail = next((text.strip() for text in errors if text.strip()), "")
+                if not detail:
+                    detail = next((text.strip() for text in reversed(chunks) if text.strip()), "")
+                run_log.emit(
+                    {
+                        "status": "failed",
+                        "source": PROVIDER_SOURCE,
+                        "phase": VAGRANT_GROUP,
+                        "task": " ".join(["vagrant", *args[:1]]),
+                        "msg": detail or ("vagrant exited %s" % rc),
+                    }
+                )
+            if check and rc != 0:
+                raise ProviderError("vagrant %s failed (exit %s)" % (" ".join(args), rc))
+            return subprocess.CompletedProcess(
+                cmd, rc, stdout="".join(chunks), stderr="".join(errors)
+            )
         result = subprocess.run(
             cmd,
             cwd=str(self.paths.spa_home),
@@ -144,15 +224,29 @@ class Provider:
             )
         return parse_machine_readable_status(result.stdout or "")
 
-    def provision(self, extra: List[str]) -> int:
+    def provision(self, extra: List[str], **kwargs: Any) -> int:
+        # The Vagrantfile exits 2 when ansible is missing; say so with the
+        # venv hint instead of letting Vagrant print it as a bare error.
+        self._ansible_dir(required=True)
         leftover = drop_ansible_extra(extra)
-        result = self._run(["up", *leftover], capture=False, check=False)
+        result = self._run(
+            ["up", *leftover],
+            capture=False,
+            check=False,
+            run_log=kwargs.get("run_log"),
+        )
         return result.returncode
 
-    def destroy(self, extra: List[str]) -> int:
+    def destroy(self, extra: List[str], **kwargs: Any) -> int:
+        self._ansible_dir(required=True)
         leftover = drop_ansible_extra(extra)
         args = ["destroy", "-f", *leftover]
-        result = self._run(args, capture=False, check=False)
+        result = self._run(
+            args,
+            capture=False,
+            check=False,
+            run_log=kwargs.get("run_log"),
+        )
         return result.returncode
 
     def provision_state(self) -> ProvisionState:
@@ -212,12 +306,13 @@ class Provider:
         agent: bool = False,
         wait: bool = True,
         hosts: Optional[Sequence[str]] = None,
+        run_log: Any = None,
     ) -> Dict[str, Any]:
         del wait
         if not yes and agent:
             raise ProviderError("suspend requires -y/--yes in agent mode.")
         names = self._select_hosts(hosts)
-        self._run(["halt", *names], capture=False, check=True)
+        self._run(["halt", *names], capture=False, check=True, run_log=run_log)
         states = self._machine_states()
         selected = names or list(states)
         return {
@@ -234,12 +329,13 @@ class Provider:
         agent: bool = False,
         wait: bool = True,
         hosts: Optional[Sequence[str]] = None,
+        run_log: Any = None,
     ) -> Dict[str, Any]:
         del wait
         if not yes and agent:
             raise ProviderError("resume requires -y/--yes in agent mode.")
         names = self._select_hosts(hosts)
-        self._run(["up", *names], capture=False, check=True)
+        self._run(["up", *names], capture=False, check=True, run_log=run_log)
         states = self._machine_states()
         selected = names or list(states)
         return {

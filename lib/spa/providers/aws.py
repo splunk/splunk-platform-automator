@@ -28,12 +28,21 @@ class Provider:
         self.config = config
         self.state_dir = paths.spa_env_dir / "terraform" / "aws"
 
-    def provision(self, extra: List[str]) -> int:
-        return run_playbook(
+    def provision(self, extra: List[str], **kwargs: Any) -> int:
+        run_log = kwargs.get("run_log")
+        rc = run_playbook(
             resolve("aws_provision", self.paths),
             self.paths,
             extra,
+            command=str(kwargs.get("command") or "provision"),
+            agent=bool(kwargs.get("agent")),
+            ansible_output=bool(kwargs.get("ansible_output")),
+            native_output=bool(kwargs.get("native_output")),
+            run_log=run_log,
         )
+        if run_log is not None:
+            run_log.attach_tf_plan()
+        return rc
 
     def provision_state(self) -> ProvisionState:
         """Offline: Terraform state plus every config hostname in inventory/hosts."""
@@ -86,11 +95,16 @@ class Provider:
             )
         return ProvisionState(provider=self.name, provisioned=True)
 
-    def destroy(self, extra: List[str]) -> int:
+    def destroy(self, extra: List[str], **kwargs: Any) -> int:
         return run_playbook(
             resolve("aws_destroy", self.paths),
             self.paths,
             extra,
+            command=str(kwargs.get("command") or "destroy"),
+            agent=bool(kwargs.get("agent")),
+            ansible_output=bool(kwargs.get("ansible_output")),
+            native_output=bool(kwargs.get("native_output")),
+            run_log=kwargs.get("run_log"),
         )
 
     def _terraform_output(self, name: str) -> Any:
@@ -271,7 +285,14 @@ class Provider:
                     status[str(identifier)] = record
         return status
 
-    def suspend(self, yes: bool, agent: bool, wait: bool = True, hosts: Optional[List[str]] = None) -> Dict[str, Any]:
+    def suspend(
+        self,
+        yes: bool,
+        agent: bool,
+        wait: bool = True,
+        hosts: Optional[List[str]] = None,
+        run_log: Any = None,
+    ) -> Dict[str, Any]:
         targets = self._select_targets(hosts)
         self._confirm("suspend", targets, yes, agent)
         ids = [target["id"] for target in targets.values()]
@@ -385,7 +406,14 @@ class Provider:
             entries[name] = rest.strip()
         return entries
 
-    def resume(self, yes: bool, agent: bool, wait: bool = True, hosts: Optional[List[str]] = None) -> Dict[str, Any]:
+    def resume(
+        self,
+        yes: bool,
+        agent: bool,
+        wait: bool = True,
+        hosts: Optional[List[str]] = None,
+        run_log: Any = None,
+    ) -> Dict[str, Any]:
         targets = self._select_targets(hosts)
         self._confirm("resume", targets, yes, agent)
         ids = [target["id"] for target in targets.values()]

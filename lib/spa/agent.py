@@ -10,6 +10,17 @@ from typing import Any, Dict, Optional
 
 SCHEMA_VERSION = 1
 
+# Human playbook output. Agents stay on compact progress / spa logs JSONL.
+_FLAG_ANSIBLE_OUTPUT = {
+    "long": "--ansible-output",
+    "help": "Show redacted Ansible-style output rebuilt from JSONL (not in agent output)",
+}
+_FLAG_VERBOSE_NATIVE = {
+    "long": "--verbose",
+    "short": "-v",
+    "help": "Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv)",
+}
+
 
 AGENT_ENV_VARS = (
     "SPA_AGENT",
@@ -46,8 +57,15 @@ def envelope(ok: bool, data: Any = None, error: Optional[str] = None) -> Dict[st
 
 
 def emit(ok: bool, data: Any = None, error: Optional[str] = None, as_agent: bool = False) -> None:
+    if error:
+        from spa.runlog import redact
+
+        error = str(redact(error))
     if as_agent:
-        sys.stdout.write(json.dumps(envelope(ok, data, error), indent=2, default=str) + "\n")
+        # Compact: agents parse it, and indentation is a third of the payload.
+        sys.stdout.write(
+            json.dumps(envelope(ok, data, error), separators=(",", ":"), default=str) + "\n"
+        )
         return
     if error:
         print(error, file=sys.stderr)
@@ -140,7 +158,11 @@ COMMAND_SCHEMA = {
             "name": "provision",
             "summary": "Provision infrastructure using the provider selected by splunk_config.yml",
             "requires_confirmation": True,
-            "flags": [{"long": "--yes", "short": "-y", "help": "Confirm provision"}],
+            "flags": [
+                {"long": "--yes", "short": "-y", "help": "Confirm provision"},
+                _FLAG_ANSIBLE_OUTPUT,
+                _FLAG_VERBOSE_NATIVE,
+            ],
             "example": "spa provision --yes && spa deploy --yes",
         },
         {
@@ -154,13 +176,19 @@ COMMAND_SCHEMA = {
                     "long": "--allow-unprovisioned",
                     "help": "Skip the check that every config host is in inventory",
                 },
+                _FLAG_ANSIBLE_OUTPUT,
+                _FLAG_VERBOSE_NATIVE,
             ],
         },
         {
             "name": "destroy",
             "summary": "Destroy infrastructure using the configured provider",
             "requires_confirmation": True,
-            "flags": [{"long": "--yes", "short": "-y", "help": "Confirm destroy"}],
+            "flags": [
+                {"long": "--yes", "short": "-y", "help": "Confirm destroy"},
+                _FLAG_ANSIBLE_OUTPUT,
+                _FLAG_VERBOSE_NATIVE,
+            ],
         },
         {
             "name": "suspend",
@@ -170,6 +198,8 @@ COMMAND_SCHEMA = {
                 {"long": "--yes", "short": "-y", "help": "Confirm power change"},
                 {"long": "--no-wait", "help": "Return after requesting stop"},
                 {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
+                _FLAG_ANSIBLE_OUTPUT,
+                _FLAG_VERBOSE_NATIVE,
             ],
         },
         {
@@ -179,13 +209,15 @@ COMMAND_SCHEMA = {
             "flags": [
                 {"long": "--yes", "short": "-y", "help": "Confirm power change"},
                 {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
+                _FLAG_ANSIBLE_OUTPUT,
+                _FLAG_VERBOSE_NATIVE,
             ],
         },
         {
             "name": "hosts list",
             "summary": "List inventory hosts and roles",
             "flags": [
-                {"long": "--status", "help": "Include runtime power state and connectivity"},
+                {"long": "--status", "short": "-s", "help": "Include runtime power state and connectivity"},
                 {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
             ],
             "example": "spa hosts list --status",
@@ -209,8 +241,25 @@ COMMAND_SCHEMA = {
                     "long": "--apps-playbook",
                     "help": "For splunk_apps_playbook_run: curated stem or env-relative path (sets apps_playbook and app_name)",
                 },
+                _FLAG_ANSIBLE_OUTPUT,
+                _FLAG_VERBOSE_NATIVE,
             ],
             "example": "spa run --list",
+        },
+        {
+            "name": "logs",
+            "summary": "List or show per-environment run transcripts under $SPA_ENV_DIR/logs (newest first)",
+            "flags": [
+                {"long": "--last", "help": "Show the most recent run"},
+                {"long": "--follow", "help": "Follow the latest jsonl file"},
+                _FLAG_ANSIBLE_OUTPUT,
+                {
+                    "long": "--verbose",
+                    "short": "-v",
+                    "help": "Same reconstruction as --ansible-output (stored runs have no native stream)",
+                },
+            ],
+            "example": "spa logs --last",
         },
         {
             "name": "apps search",

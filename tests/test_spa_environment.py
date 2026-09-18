@@ -389,6 +389,41 @@ def test_stale_default_is_ignored_and_marked_missing(tmp_path):
     assert registry_default_path(env) is None
 
 
+def test_pre3_cwd_does_not_silently_use_registered_default(tmp_path):
+    extra = _xdg(tmp_path)
+    extra["SPA_ENV_DIR"] = ""
+    extra["SPLUNK_CONFIG_FILE"] = ""
+    default = write_min_env(tmp_path / "my-lab")
+    spa_config = tmp_path / "xdg" / "spa"
+    spa_config.mkdir(parents=True)
+    (spa_config / "environments.yml").write_text(
+        yaml.safe_dump(
+            {
+                "default": "my-lab",
+                "environments": {"my-lab": {"path": str(default)}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    old = tmp_path / "old-spa"
+    (old / "config").mkdir(parents=True)
+    (old / "config" / "splunk_config.yml").write_text(
+        "plugin: splunk-platform-automator\n", encoding="utf-8"
+    )
+    plugin = old / "ansible" / "plugins" / "inventory"
+    plugin.mkdir(parents=True)
+    (plugin / "splunk-platform-automator.py").write_text(
+        "# old plugin\n", encoding="utf-8"
+    )
+
+    result = run_spa(["--no-agent", "hosts", "-s"], extra_env=extra, cwd=old)
+    assert result.returncode == 2
+    combined = result.stderr + result.stdout
+    assert "pre-3.0 SPA environment" in combined
+    assert "Refusing to use the registered default" in combined
+    assert "spa init --force" in combined
+
+
 def test_force_init_adopts_unregistered_env(tmp_path):
     extra = _xdg(tmp_path)
     extra["HOME"] = str(tmp_path / "home")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -15,6 +17,9 @@ from spa.paths import SpaPaths, load_spa_yml, resolve_spa_paths
 METADATA_SCHEMA = 1
 CATEGORIES = frozenset({"deployment", "operations", "upgrade", "verification", "infrastructure"})
 RISKS = frozenset({"read-only", "mutating", "destructive"})
+
+# Custom playbooks in $SPA_ENV_DIR/ancustom need no .spa.yml entry.
+DEFAULT_ENV_PLAYBOOK_DIR = "ancustom"
 
 # 2.x / pre-3.0 stems → 3.0 names. Catalog lists the new stem only.
 LEGACY_STEMS = {
@@ -88,23 +93,53 @@ def list_framework_stems(home: Path) -> List[Tuple[str, str, Path]]:
     return items
 
 
-def list_env_stems(env_dir: Path, extra_dirs: Optional[List[str]] = None) -> List[Tuple[str, str, Path]]:
-    items: List[Tuple[str, str, Path]] = []
-    dirs = extra_dirs or []
+def configured_playbook_dirs(
+    env_dir: Path, extra_dirs: Optional[List[str]] = None
+) -> List[Tuple[str, Path]]:
+    """(name, folder) for the default folder, every `.spa.yml` entry, plus extras."""
+    dirs = list(extra_dirs or [])
+    if (env_dir / DEFAULT_ENV_PLAYBOOK_DIR).is_dir():
+        dirs.append(DEFAULT_ENV_PLAYBOOK_DIR)
     yml = env_dir / ".spa.yml"
     if yml.is_file():
-        data = load_spa_yml(yml)
-        configured = data.get("playbook_dirs") or []
+        configured = load_spa_yml(yml).get("playbook_dirs") or []
         if isinstance(configured, str):
             configured = [configured]
-        dirs = list(dirs) + [str(d) for d in configured]
+        dirs += [str(item) for item in configured]
+    resolved: List[Tuple[str, Path]] = []
     seen = set()
     for name in dirs:
         name = name.strip().strip("/")
         if not name or name in seen:
             continue
         seen.add(name)
-        folder = (env_dir / name).resolve()
+        resolved.append((name, (env_dir / name).resolve()))
+    return resolved
+
+
+def custom_playbook_dir_state(env_dir: Path) -> List[Dict[str, Any]]:
+    """Report each configured custom playbook folder, usable or not.
+
+    `spa run --list` skips an unusable folder silently, so `spa validate` is
+    where a typo in `playbook_dirs` has to become visible.
+    """
+    rows: List[Dict[str, Any]] = []
+    for name, folder in configured_playbook_dirs(env_dir):
+        row: Dict[str, Any] = {"dir": name, "path": str(folder), "ok": False}
+        if not _safe_under(env_dir, folder):
+            row["reason"] = "outside the environment directory"
+        elif not folder.is_dir():
+            row["reason"] = "directory not found"
+        else:
+            row["ok"] = True
+            row["playbooks"] = len(list(folder.glob("*.yml")))
+        rows.append(row)
+    return rows
+
+
+def list_env_stems(env_dir: Path, extra_dirs: Optional[List[str]] = None) -> List[Tuple[str, str, Path]]:
+    items: List[Tuple[str, str, Path]] = []
+    for name, folder in configured_playbook_dirs(env_dir, extra_dirs):
         if not _safe_under(env_dir, folder) or not folder.is_dir():
             continue
         for path in sorted(folder.glob("*.yml")):
@@ -400,21 +435,86 @@ def run_playbook(
     paths: SpaPaths,
     extra: Optional[List[str]] = None,
     on_progress: Optional[Callable[[Dict[str, str]], None]] = None,
+    command: str = "run",
+    agent: bool = False,
+    ansible_output: bool = False,
+    native_output: bool = False,
+    run_log: Optional[Any] = None,
 ) -> int:
     apply_paths_env(paths)
+    from spa.runlog import CALLBACK_EVENT_PREFIX, RunLog
+
     cmd = [tool_path(paths, "ansible-playbook"), str(playbook)]
     if extra:
         cmd.extend(extra)
-    if on_progress is None:
-        return subprocess.run(cmd, cwd=str(paths.spa_home)).returncode
+    log = run_log or RunLog(
+        paths,
+        command=command,
+        playbook=str(playbook),
+        agent=agent,
+        ansible_output=ansible_output,
+        native_output=native_output,
+    )
+    native = bool(native_output) and not agent
+    log.native_output = native
+    env = os.environ.copy()
+    # Keep structured events in the aggregate spa_jsonl callback.  The default
+    # stdout callback remains available for a human-requested native live view.
+    env["ANSIBLE_STDOUT_CALLBACK"] = "default"
+    enabled_callbacks = [
+        item.strip()
+        for item in env.get("ANSIBLE_CALLBACKS_ENABLED", "").split(",")
+        if item.strip()
+    ]
+    if "spa_jsonl" not in enabled_callbacks:
+        enabled_callbacks.append("spa_jsonl")
+    env["ANSIBLE_CALLBACKS_ENABLED"] = ",".join(enabled_callbacks)
+    # Ansible writes into a pipe, so it only colors when told to. Keep its color for
+    # the native human stream and off when only JSONL/compact progress consume it.
+    env["ANSIBLE_FORCE_COLOR"] = (
+        "1" if native and getattr(log, "wants_color", False) else "0"
+    )
+    if not ansible_output:
+        env["ANSIBLE_DISPLAY_SKIPPED_HOSTS"] = "false"
+    callback_dir = str(paths.spa_home / "ansible" / "plugins" / "callback")
+    existing = env.get("ANSIBLE_CALLBACK_PLUGINS", "")
+    if callback_dir not in existing.split(os.pathsep):
+        env["ANSIBLE_CALLBACK_PLUGINS"] = (
+            callback_dir + (os.pathsep + existing if existing else "")
+        )
+    log.start_heartbeat()
     proc = subprocess.Popen(
         cmd,
         cwd=str(paths.spa_home),
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE,
         text=True,
+        env=env,
     )
     assert proc.stdout is not None
+    assert proc.stderr is not None
+
+    def _stderr() -> None:
+        for line in proc.stderr:
+            if line.startswith(CALLBACK_EVENT_PREFIX):
+                callback_line = line[len(CALLBACK_EVENT_PREFIX) :]
+                log.consume_callback_line(callback_line)
+                if on_progress:
+                    on_progress(
+                        {"type": "line", "stream": "stderr", "line": callback_line.rstrip("\n")}
+                    )
+            else:
+                log.consume_callback_line(line)
+                if native:
+                    log.emit_native_output(line)
+
+    err_thread = threading.Thread(target=_stderr, name="spa-ansible-stderr", daemon=True)
+    err_thread.start()
     for line in proc.stdout:
-        on_progress({"type": "line", "stream": "stdout", "line": line.rstrip("\n")})
-    return proc.wait()
+        if native:
+            log.emit_native_output(line)
+    rc = proc.wait()
+    err_thread.join(timeout=5)
+    if run_log is None:
+        log.finish(rc)
+    return rc

@@ -30,6 +30,7 @@ HELP_CONTRACTS = [
             "suspend (sus)",
             "resume (res)",
             "run",
+            "logs",
             "hosts (h)",
             "shell (sh)",
             "aws",
@@ -134,12 +135,21 @@ HELP_CONTRACTS = [
         ["apps", "download", "--help"],
         ["usage: spa apps download", "--yes", "--version", "--extract", "--overwrite", "apps_dir"],
     ),
-    (["provision", "--help"], ["usage: spa provision", "-y", "--yes", "Confirm provision"]),
+    (["provision", "--help"], ["usage: spa provision", "-y", "--yes", "--ansible-output", "-v", "Confirm provision"]),
     (
         ["deploy", "--help"],
-        ["usage: spa deploy", "-y", "--yes", "--hosts", "--allow-unprovisioned", "required in agent mode"],
+        [
+            "usage: spa deploy",
+            "-y",
+            "--yes",
+            "--hosts",
+            "--allow-unprovisioned",
+            "--ansible-output",
+            "-v",
+            "required in agent mode",
+        ],
     ),
-    (["destroy", "--help"], ["usage: spa destroy", "-y", "--yes", "Confirm destroy"]),
+    (["destroy", "--help"], ["usage: spa destroy", "-y", "--yes", "--ansible-output", "-v", "Confirm destroy"]),
     (
         ["suspend", "--help"],
         ["usage: spa suspend", "-y", "--yes", "--no-wait", "--hosts", "power change"],
@@ -157,17 +167,23 @@ HELP_CONTRACTS = [
             "--hosts",
             "--yes",
             "--apps-playbook",
+            "--ansible-output",
+            "-v",
             "requires_confirmation",
             "spa run NAME --help",
         ],
     ),
     (
+        ["logs", "--help"],
+        ["usage: spa logs", "--last", "--follow", "run_id", "--ansible-output", "-v"],
+    ),
+    (
         ["hosts", "--help"],
-        ["usage: spa hosts", "ACTION", "list (ls)", "ssh", "copy (cp)", "--status", "--hosts"],
+        ["usage: spa hosts", "ACTION", "list (ls)", "ssh", "copy (cp)", "--status", "-s", "--hosts"],
     ),
     (
         ["hosts", "list", "--help"],
-        ["usage: spa hosts list", "--status", "--hosts", "runtime power state"],
+        ["usage: spa hosts list", "--status", "-s", "--hosts", "runtime power state"],
     ),
     (
         ["hosts", "ssh", "--help"],
@@ -262,6 +278,56 @@ def test_every_top_level_alias_routes_to_canonical_help(alias, usage):
 
 
 @pytest.mark.parametrize(
+    "argv",
+    [
+        ["deploy", "--ansible-output", "-v"],
+        ["dep", "-v", "--ansible-output"],
+        ["provision", "-v"],
+        ["destroy", "-v"],
+        ["suspend", "-v"],
+        ["resume", "-v"],
+        ["run", "-v"],
+        ["logs", "-v"],
+        ["hosts", "list", "-s"],
+    ],
+)
+def test_verbose_is_accepted_after_the_subcommand(argv):
+    result = run_spa(["--no-agent", *argv, "--help"])
+    assert result.returncode == 0, result.stderr
+    assert "unrecognized arguments" not in result.stderr
+
+
+def test_hosts_list_status_short_flag_is_s_not_v():
+    help_out = run_spa(["--no-agent", "hosts", "list", "--help"])
+    assert help_out.returncode == 0, help_out.stderr
+    assert "-s, --status" in help_out.stdout
+    assert "Same as --status" not in help_out.stdout
+    rejected = run_spa(["--no-agent", "hosts", "list", "-v"])
+    assert rejected.returncode != 0
+    assert "unrecognized arguments" in rejected.stderr
+
+
+def test_verbose_is_listed_next_to_ansible_output():
+    result = run_spa(["--no-agent", "deploy", "--help"])
+    assert result.returncode == 0, result.stderr
+    usage, options = result.stdout.split("options:", 1)
+    compact = " ".join(usage.split())
+    assert "[--ansible-output] [-v]" in compact
+    idx_ao = options.index("--ansible-output")
+    idx_v = options.index("-v, --verbose")
+    assert idx_ao < idx_v
+    between = options[idx_ao:idx_v]
+    assert "--agent" not in between
+    assert "--json" not in between
+    compact_opts = " ".join(options.split())
+    # -v is the unredacted native stream, not a synonym for --ansible-output.
+    assert "Stream Ansible's own output unredacted" in compact_opts
+    # Ansible's own verbosity stays a pass-through, not a -v level.
+    assert "-- -vv" in compact_opts
+    assert "Same as --ansible-output" not in compact_opts
+
+
+@pytest.mark.parametrize(
     ("argv", "usage"),
     [
         (["hosts", "ls", "--help"], "usage: spa hosts list"),
@@ -304,6 +370,7 @@ def test_agent_schema_is_complete_and_documented():
         "aws",
         "licenses",
         "run",
+        "logs",
         "apps search",
         "apps snippet",
         "apps download",

@@ -61,6 +61,64 @@ def test_env_overrides(tmp_path):
     assert env_dir_required_error(paths) is None
 
 
+def test_pre3_cwd_blocks_registered_default_fallback(tmp_path):
+    old = tmp_path / "old-spa"
+    nested = old / "work" / "here"
+    nested.mkdir(parents=True)
+    (old / "config").mkdir()
+    (old / "config" / "splunk_config.yml").write_text(
+        "plugin: splunk-platform-automator\n"
+    )
+    plugin = old / "ansible" / "plugins" / "inventory"
+    plugin.mkdir(parents=True)
+    (plugin / "splunk-platform-automator.py").write_text("# old plugin\n")
+
+    default = tmp_path / "my-lab"
+    default.mkdir()
+    config_home = tmp_path / "xdg"
+    registry = config_home / "spa"
+    registry.mkdir(parents=True)
+    (registry / "environments.yml").write_text(
+        "default: my-lab\n"
+        "environments:\n"
+        "  my-lab:\n"
+        "    path: %s\n" % default
+    )
+    env = {"XDG_CONFIG_HOME": str(config_home), "HOME": str(tmp_path)}
+
+    paths = resolve_spa_paths(start_dir=nested, environ=env, clone_root=PROJECT_ROOT)
+    assert paths.spa_env_dir == old.resolve()
+    assert paths.spa_env_dir != default.resolve()
+    assert paths.pre3_cwd == old.resolve()
+    message = env_dir_required_error(paths)
+    assert message is not None
+    assert "pre-3.0 SPA environment" in message
+    assert str(old) in message
+    assert "Refusing to use the registered default" in message
+
+
+def test_explicit_env_wins_even_inside_pre3_cwd(tmp_path):
+    old = tmp_path / "old-spa"
+    (old / "config").mkdir(parents=True)
+    (old / "config" / "splunk_config.yml").write_text(
+        "plugin: splunk-platform-automator\n"
+    )
+    plugin = old / "ansible" / "plugins" / "inventory"
+    plugin.mkdir(parents=True)
+    (plugin / "splunk-platform-automator.py").write_text("# old plugin\n")
+    selected = tmp_path / "selected"
+    selected.mkdir()
+
+    paths = resolve_spa_paths(
+        start_dir=old,
+        environ={"SPA_ENV_DIR": str(selected)},
+        clone_root=PROJECT_ROOT,
+    )
+    assert paths.spa_env_dir == selected.resolve()
+    assert paths.pre3_cwd is None
+    assert env_dir_required_error(paths) is None
+
+
 def test_splunk_config_file_wins(tmp_path):
     cfg = tmp_path / "custom.yml"
     cfg.write_text("plugin: splunk-platform-automator\n")
@@ -113,6 +171,7 @@ def test_export_sets_ansible_inventory_to_env(tmp_path):
     assert "SPA_SOFTWARE_DIR" in exported
     assert "SPA_BASECONFIG_DIR" in exported
     assert "SPA_APPS_DIR" in exported
+    assert exported["ANSIBLE_VARS_PLUGINS"] == str(paths.spa_home / "ansible" / "plugins" / "vars")
 
 
 def test_software_prefers_env_sibling(tmp_path):

@@ -49,10 +49,11 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [x] `spa.api` backend session (`open_session` / `LocalSpaSession`) for the CLI and a future GUI; optional remote daemon later; skills stay on `spa`. See the [controller architecture](docs/contributing.md#controller-architecture).
 - [x] Fold SSH/SCP into `spa hosts` (`list` / `ssh` / `copy`); `spa shell` / `spa sh` remain SSH aliases (no `spa shell -l`)
 - [x] Map top-level [ansible/](ansible/) playbooks to `spa run` (and named `provision` / `deploy` / `destroy`) — every playbook is a main entry point; do not require raw `ansible-playbook` for day-to-day use. Discover with `spa run --list`; inspect with `spa run NAME --help`.
-- [ ] Env-dir playbook/Terraform logs + compact progress (full transcript in `$SPA_ENV_DIR/logs/`; agents get a small envelope + `log` path, not the dump) — [#71](https://github.com/splunk/splunk-platform-automator/issues/71)
+- [x] Env-dir playbook/Terraform logs + compact progress (full transcript in `$SPA_ENV_DIR/logs/`; agents get a small envelope + `log` path, not the dump) — [#71](https://github.com/splunk/splunk-platform-automator/issues/71)
+- [ ] Hide credentials in Ansible output (`no_log`, stop putting secrets on `command:` argv) so `-v` can stay native debug without leaking admin/Splunkbase/SHC/API secrets; keep agents off the transcript — [#88](https://github.com/splunk/splunk-platform-automator/issues/88)
 - [x] Main `spa` skill (cup-style `/spa` entry) plus `spa environment` registry — [#54](https://github.com/splunk/splunk-platform-automator/issues/54)
 - [ ] `spa skills install` / `spa skills remove` (Claude / Cursor / Codex) from `$SPA_HOME/skills/spa/` — [#55](https://github.com/splunk/splunk-platform-automator/issues/55)
-- [ ] Skills, agents, and runbooks pack (full operator loop; calls `spa` only) — [#67](https://github.com/splunk/splunk-platform-automator/issues/67). Blocked by [#54](https://github.com/splunk/splunk-platform-automator/issues/54) and [#55](https://github.com/splunk/splunk-platform-automator/issues/55)
+- [ ] Skills, agents, and runbooks pack (full operator loop; calls `spa` only). Add-app skills use Splunkbase/vendor **install docs** (when linked) to set `target_roles` / `splunk_config.yml`, e.g. [Unix TA Install](https://splunk.github.io/splunk-add-on-for-unix-and-linux/Install/) — [#67](https://github.com/splunk/splunk-platform-automator/issues/67). Blocked by [#55](https://github.com/splunk/splunk-platform-automator/issues/55)
 - [x] Splunkbase search / snippet / download (`spa apps`; app-management skill; never display Splunkbase passwords — [secrets-handling.md](skills/spa/spa-create-config/references/secrets-handling.md)) — [#59](https://github.com/splunk/splunk-platform-automator/issues/59). Config add/remove is [#76](https://github.com/splunk/splunk-platform-automator/issues/76).
 - [ ] Optional [cup](https://github.com/splunk/cup) integration (plugin; spa works without cup; cup uses `spa hosts copy` / `ssh` for file transfer) — [#62](https://github.com/splunk/splunk-platform-automator/issues/62)
 - [ ] Single-app deploy/remove, list, optional app groups (from config only) — [#68](https://github.com/splunk/splunk-platform-automator/issues/68). Blocked by [#76](https://github.com/splunk/splunk-platform-automator/issues/76)
@@ -120,6 +121,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [ ] Remove a host: `spa destroy --hosts NAME` runs decommission (IDXC peer / SHC member, DS serverclass), then tears down only those instances and drops them from config/state. `spa destroy --all` is whole-env teardown. Omitting both `--hosts` and `--all` is an error (do not treat “no hosts” as destroy-everything). No separate `decommission` command. Until this exists, `spa destroy --yes` remains whole-env.
 - [ ] `spa provision` must abort if the Terraform plan would **destroy or replace** an instance (host removed from `splunk_config.yml`, or AMI / instance-type replacement). Tell the operator to restore the host or use `spa destroy --hosts`. Creates and in-place updates still apply. Today, deleting a host from config and running provision **terminates that VM** with no Splunk decommission.
 - [ ] Cluster topology changes on a live site (RF/SF, add a site, move a host between clusters) — not just re-run bootstrap
+- [ ] Make `spa deploy` idempotent after a successful run (second pass green/`ok`, no restart/reload without a real change) — [#87](https://github.com/splunk/splunk-platform-automator/issues/87)
 - [ ] Git for env configs and local apps; pluggable SCM/CI (GitHub first); promote along user-named stages — [#63](https://github.com/splunk/splunk-platform-automator/issues/63)
 - [ ] Baseconfig: render/generate locally or standalone (no env) + placement markdown/JSON; ship via app deployment when using SPA (replaces optional public baseconfig-substitute download) — [#64](https://github.com/splunk/splunk-platform-automator/issues/64)
 - [ ] Splunk binary/version management (download to Software or register remote; AWS stub/touch) — [#65](https://github.com/splunk/splunk-platform-automator/issues/65)
@@ -128,5 +130,6 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 ## Testing
 
 - [x] Local pytest + GitHub Actions CI ([tests/README.md](tests/README.md))
+- [ ] Hermetic CLI argv contract: isolate inherited `SPA_*` / `ANSIBLE_*` from `run_spa`, table-driven flags/aliases/`--` extras from `spa agent schema` — [#89](https://github.com/splunk/splunk-platform-automator/issues/89)
 - [ ] Broader schema / example sweep
 - [ ] Optional nightly AWS job — not required on every PR

@@ -7,7 +7,7 @@ SPA provisions and deploys Splunk Enterprise (AWS Linux + Terraform, or VirtualB
 - **`SPA_HOME`**: framework (prefix or clone). **`SPA_ENV_DIR`**: one environment. Operator `spa` needs `spa init` first. Path diagram: [user guide](docs/user-guide.md#understand-the-paths).
 - Call **`bin/spa`** only (`spa agent schema`, `spa --json features`, `spa --json apps`). Load **`/spa`** first ([skills/spa/spa/SKILL.md](skills/spa/spa/SKILL.md)). Do not import `spa.api`. Do not start a daemon. Flag catalog: [docs/commands.md](docs/commands.md).
 - Mutating commands need **`--yes`**. Never auto-run provision, deploy, suspend, resume, or destroy. Never answer `Proceed?` interactively.
-- Never print secrets (Splunkbase, AWS keys, vault). Report env vars as **set / not set**. YAML: `lookup('env', ...)`.
+- Never print secrets (Splunkbase, AWS keys, vault). Report env vars as **set / not set**. YAML: `lookup('env', ...)`. Do not pass `-v` on provision/deploy/run (unredacted Ansible stdout).
 - Full command names (`spa hosts ssh`, `spa validate`), not `spa sh` / `spa val`.
 - Playbooks: `spa --json run --list` then `spa run NAME --help`. Confirmation: `--yes`. Extra Ansible args: `spa run NAME -- …`.
 
@@ -32,6 +32,7 @@ Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 | Provision + deploy | `spa provision --yes && spa deploy --yes` |
 | Deploy only | `spa deploy --yes` (`--hosts`; `--allow-unprovisioned` only if the operator asked) |
 | Run a playbook | `spa run --list` / `NAME --help` / `--yes` |
+| Run logs | `spa logs` / `spa logs --last` (open `data.log` only when debugging a failure). Do not pass `-v` (unredacted Ansible stdout). |
 | Power | `spa suspend --yes` / `spa resume --yes` |
 | SSH / copy | `spa hosts list --status`, `spa hosts ssh NAME`, `spa hosts copy SRC DST` |
 | Destroy | `spa destroy --yes` |

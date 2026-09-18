@@ -137,6 +137,8 @@ Requires confirmation: yes (`--yes`).
 | Flag | Description |
 | --- | --- |
 | `-y`, `--yes` | Confirm provision |
+| `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
+| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
 
 Example:
 
@@ -155,6 +157,8 @@ Requires confirmation: yes (`--yes`).
 | `-y`, `--yes` | Confirm deploy (required in agent mode) |
 | `--hosts` | only these hosts (names or roles from this env) |
 | `--allow-unprovisioned` | Skip the check that every config host is in inventory |
+| `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
+| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
 
 ## `destroy`
 
@@ -165,6 +169,8 @@ Requires confirmation: yes (`--yes`).
 | Flag | Description |
 | --- | --- |
 | `-y`, `--yes` | Confirm destroy |
+| `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
+| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
 
 ## `suspend`
 
@@ -177,6 +183,8 @@ Requires confirmation: yes (`--yes`).
 | `-y`, `--yes` | Confirm power change |
 | `--no-wait` | Return after requesting stop |
 | `--hosts` | only these hosts (names or roles from this env) |
+| `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
+| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
 
 ## `resume`
 
@@ -188,6 +196,8 @@ Requires confirmation: yes (`--yes`).
 | --- | --- |
 | `-y`, `--yes` | Confirm power change |
 | `--hosts` | only these hosts (names or roles from this env) |
+| `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
+| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
 
 ## `hosts list`
 
@@ -195,7 +205,7 @@ List inventory hosts and roles
 
 | Flag | Description |
 | --- | --- |
-| `--status` | Include runtime power state and connectivity |
+| `-s`, `--status` | Include runtime power state and connectivity |
 | `--hosts` | only these hosts (names or roles from this env) |
 
 Example:
@@ -246,11 +256,30 @@ Run a playbook by stem. Discover: spa --json run --list then spa run NAME --help
 | `--list` | Catalog playbooks with summaries |
 | `-y`, `--yes` | Confirm a mutating playbook (required in agent mode) |
 | `--apps-playbook` | For splunk_apps_playbook_run: curated stem or env-relative path (sets apps_playbook and app_name) |
+| `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
+| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
 
 Example:
 
 ```bash
 spa run --list
+```
+
+## `logs`
+
+List or show per-environment run transcripts under $SPA_ENV_DIR/logs (newest first)
+
+| Flag | Description |
+| --- | --- |
+| `--last` | Show the most recent run |
+| `--follow` | Follow the latest jsonl file |
+| `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
+| `-v`, `--verbose` | Same reconstruction as --ansible-output (stored runs have no native stream) |
+
+Example:
+
+```bash
+spa logs --last
 ```
 
 ## `apps search`

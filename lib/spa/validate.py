@@ -17,9 +17,83 @@ from spa.paths import SpaPaths, resolve_spa_paths
 ProgressCallback = Callable[[Dict[str, Any]], None]
 
 
-def _note(on_progress: Optional[ProgressCallback], message: str, stream: str = "stdout") -> None:
+VALIDATE_STEPS = (
+    ("schema", "Schema validation (Pydantic)"),
+    ("controller_data", "Controller directories (Software / baseconfig / apps / playbooks)"),
+    ("inventory", "Inventory plugin (ansible-inventory)"),
+    ("license_role", "License and license_manager role check"),
+    ("syntax", "Playbook syntax-check"),
+)
+
+
+def _note(
+    on_progress: Optional[ProgressCallback],
+    message: str,
+    stream: str = "stdout",
+    *,
+    agent: bool = False,
+    phase: Optional[str] = None,
+    index: Optional[int] = None,
+) -> None:
     if on_progress:
         on_progress({"type": "line", "stream": stream, "line": message})
+    if agent and phase:
+        sys.stderr.write(
+            json.dumps(
+                {
+                    "type": "progress",
+                    "phase": phase,
+                    "phase_title": message,
+                    "phase_index": index,
+                    "phase_count": 5,
+                    "status": "running",
+                }
+            )
+            + "\n"
+        )
+        sys.stderr.flush()
+
+
+def controller_data_message(state: Any, playbook_dirs: Optional[List[Dict[str, Any]]] = None) -> str:
+    """One `OK` line per controller directory, like the other validate steps."""
+    lines = [
+        "Software OK: %s" % state.software_dir,
+        "Baseconfig OK: %s" % state.baseconfig_dir,
+    ]
+    if state.apps_checked:
+        lines.append("Local apps OK: %s" % state.apps_dir)
+    else:
+        lines.append("Local apps OK: none configured")
+    if not playbook_dirs:
+        lines.append("Custom playbooks OK: none configured")
+    else:
+        for row in playbook_dirs:
+            count = row.get("playbooks", 0)
+            detail = "empty" if not count else "%d playbook%s" % (count, "" if count == 1 else "s")
+            lines.append("Custom playbooks OK: %s (%s)" % (row["path"], detail))
+    return "\n".join(lines)
+
+
+def license_summary(scan: Dict[str, Any]) -> Dict[str, Any]:
+    """What the license_role step asserts. Full per-file scan: `spa licenses --json`."""
+    return {
+        "configured_splunk_license_file": scan.get("configured_splunk_license_file"),
+        "license_manager_in_config": scan.get("license_manager_in_config"),
+        "itsi_in_config": scan.get("itsi_in_config"),
+        "es_in_config": scan.get("es_in_config"),
+        "files_found": len(scan.get("discovered_files") or []),
+    }
+
+
+def custom_playbook_dirs_error(playbook_dirs: List[Dict[str, Any]], env_dir: Any) -> str:
+    """Name every unusable `playbook_dirs` entry and where to fix it."""
+    lines = [
+        "Custom playbooks failed: %s %s (%s)" % (row["dir"], row["reason"], row["path"])
+        for row in playbook_dirs
+        if not row["ok"]
+    ]
+    lines.append("Fix playbook_dirs in %s/.spa.yml or create the directory." % env_dir)
+    return "\n".join(lines)
 
 
 def validate_env(
@@ -29,6 +103,7 @@ def validate_env(
     check_licenses: bool = False,
     splunk_config_aws: bool = False,
     on_progress: Optional[ProgressCallback] = None,
+    agent: bool = False,
 ) -> CommandResult:
     """Run validation steps and return structured results (no printing)."""
     if config:
@@ -74,7 +149,13 @@ except ConfigValidationError as e:
     print(e, file=sys.stderr)
     sys.exit(1)
 """
-    _note(on_progress, "[1/5] Schema validation (Pydantic)...")
+    _note(
+        on_progress,
+        "[1/5] Schema validation (Pydantic)...",
+        agent=agent,
+        phase="schema",
+        index=1,
+    )
     rc = subprocess.run(
         [tool_path(paths, "python3"), "-c", schema_py, str(config_path)],
         cwd=str(paths.spa_home),
@@ -90,30 +171,52 @@ except ConfigValidationError as e:
         err = (rc.stderr or rc.stdout or "Schema validation failed").strip()
         return CommandResult(ok=False, error=err, data=data, code=rc.returncode)
 
-    _note(on_progress, "[2/5] Controller Software / baseconfig / local apps...")
+    _note(
+        on_progress,
+        "[2/5] Controller directories (Software / baseconfig / apps / playbooks)...",
+        agent=agent,
+        phase="controller_data",
+        index=2,
+    )
+    from spa.playbooks import custom_playbook_dir_state
     from spa.preflight import check_controller_data, controller_data_error
 
     controller = check_controller_data(paths)
-    data["controller_data"] = {
+    playbook_dirs = custom_playbook_dir_state(Path(paths.spa_env_dir))
+    # Only on failure: the step message already names every directory on success.
+    detail = {
         "software_dir": controller.software_dir,
         "baseconfig_dir": controller.baseconfig_dir,
         "apps_dir": controller.apps_dir,
+        "apps_checked": controller.apps_checked,
         "missing": list(controller.missing),
+        "playbook_dirs": playbook_dirs,
     }
     if not controller.ok:
         msg = controller_data_error(controller)
+        data["controller_data"] = detail
+        steps.append({"id": "controller_data", "ok": False, "message": msg})
+        return CommandResult(ok=False, error=msg, data=data, code=1)
+    if any(not row["ok"] for row in playbook_dirs):
+        msg = custom_playbook_dirs_error(playbook_dirs, paths.spa_env_dir)
+        data["controller_data"] = detail
         steps.append({"id": "controller_data", "ok": False, "message": msg})
         return CommandResult(ok=False, error=msg, data=data, code=1)
     steps.append(
         {
             "id": "controller_data",
             "ok": True,
-            "message": "Software %s; baseconfig %s"
-            % (controller.software_dir, controller.baseconfig_dir),
+            "message": controller_data_message(controller, playbook_dirs),
         }
     )
 
-    _note(on_progress, "[3/5] Inventory plugin (ansible-inventory)...")
+    _note(
+        on_progress,
+        "[3/5] Inventory plugin (ansible-inventory)...",
+        agent=agent,
+        phase="inventory",
+        index=3,
+    )
     rc = subprocess.run(
         [tool_path(paths, "ansible-inventory"), "--list"],
         cwd=str(paths.spa_home),
@@ -138,11 +241,19 @@ except ConfigValidationError as e:
             code=rc.returncode,
         )
 
-    _note(on_progress, "[4/5] License and license_manager role check...")
+    _note(
+        on_progress,
+        "[4/5] License and license_manager role check...",
+        agent=agent,
+        phase="license_role",
+        index=4,
+    )
     from spa import licenses as licenses_mod
 
     license_scan = licenses_mod.scan_licenses(paths.spa_env_dir, config_path=config_path)
-    data["license_scan"] = license_scan
+    data["licenses"] = license_summary(license_scan)
+    if check_licenses:
+        data["license_scan"] = license_scan
     configured = license_scan.get("configured_splunk_license_file")
     has_lm = license_scan.get("license_manager_in_config")
     if configured and not has_lm:
@@ -159,7 +270,13 @@ except ConfigValidationError as e:
         return CommandResult(ok=False, error=msg, data=data, code=1)
     steps.append({"id": "license_role", "ok": True, "message": "License role pairing OK"})
 
-    _note(on_progress, "[5/5] Playbook syntax-check...")
+    _note(
+        on_progress,
+        "[5/5] Playbook syntax-check...",
+        agent=agent,
+        phase="syntax",
+        index=5,
+    )
     for pb in ("ansible/aws_provision.yml", "ansible/deploy_site.yml"):
         rc = subprocess.run(
             [tool_path(paths, "ansible-playbook"), pb, "--syntax-check"],
@@ -239,7 +356,7 @@ def format_validate_text(result: CommandResult) -> str:
     lines = ["=== Validating %s ===" % data.get("config_file", "")]
     labels = {
         "schema": "[1/5] Schema validation (Pydantic)...",
-        "controller_data": "[2/5] Controller Software / baseconfig / local apps...",
+        "controller_data": "[2/5] Controller directories (Software / baseconfig / apps / playbooks)...",
         "inventory": "[3/5] Inventory plugin (ansible-inventory)...",
         "license_role": "[4/5] License and license_manager role check...",
         "syntax": "[5/5] Playbook syntax-check...",

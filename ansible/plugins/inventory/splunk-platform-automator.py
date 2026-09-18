@@ -242,25 +242,6 @@ class InventoryModule(BaseInventoryPlugin):
             except Exception as e:
                 raise AnsibleParserError('Cannot create inventory/hosts file. Error: {}'.format(e))
 
-        # inventory/group_vars -> $SPA_HOME/ansible/group_vars
-        group_vars_source = os.path.join(str(self.spa_paths.spa_home), "ansible", "group_vars")
-        group_vars_link = os.path.join(inventory_dir, "group_vars")
-        if self.spa_paths.roots_differ:
-            link_target = group_vars_source
-        else:
-            link_target = "../ansible/group_vars"
-
-        try:
-            if os.path.islink(group_vars_link) or os.path.exists(group_vars_link):
-                if os.path.islink(group_vars_link) and os.readlink(group_vars_link) != link_target:
-                    os.remove(group_vars_link)
-                elif not os.path.islink(group_vars_link):
-                    link_target = None
-            if link_target and not os.path.exists(group_vars_link):
-                os.symlink(link_target, group_vars_link)
-        except Exception:
-            pass
-
     def _set_virtualization(self, resolved_config):
         '''Set virtualization type based on the definition in the config (resolved dict).'''
         setattr(self, 'virtualization', None)

@@ -1,5 +1,6 @@
 """Provider selection and AWS lifecycle tests (no cloud calls)."""
 
+import json
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -203,7 +204,7 @@ def test_shell_host_report_uses_provider_snapshot(monkeypatch):
     }
     checked = {}
 
-    def fake_ansible(hosts):
+    def fake_ansible(hosts, paths=None):
         checked["hosts"] = hosts
         return {host: "Success" for host in hosts}
 
@@ -231,7 +232,7 @@ def test_shell_host_report_runtime_false_skips_checks(monkeypatch):
     monkeypatch.setattr(
         shell,
         "check_ansible_status",
-        lambda hosts: (_ for _ in ()).throw(AssertionError("ping")),
+        lambda hosts, paths=None: (_ for _ in ()).throw(AssertionError("ping")),
     )
     monkeypatch.setattr(
         shell,
@@ -445,3 +446,118 @@ def test_virtualbox_provision_drops_ansible_flags(tmp_path, monkeypatch):
     assert seen[0][0] == ["up"]
     assert seen[0][1]["VAGRANT_CWD"] == str(paths.spa_home)
     assert seen[0][1]["VAGRANT_DOTFILE_PATH"] == str(paths.spa_env_dir / ".vagrant")
+
+
+def _fake_vagrant(tmp_path, body, rc=0):
+    script = tmp_path / "vagrant"
+    lines = "".join("print(%r)\n" % line for line in body)
+    script.write_text(
+        "#!/usr/bin/env python3\nimport sys\n" + lines + "sys.exit(%d)\n" % rc,
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    return script
+
+
+def _vbox_run_log(tmp_path, paths):
+    from io import StringIO
+
+    from spa.runlog import RunLog
+
+    stderr = StringIO()
+    log = RunLog(
+        paths,
+        "provision",
+        "vagrant_up",
+        agent=False,
+        heartbeat_seconds=0,
+        stream=stderr,
+        provider="virtualbox",
+    )
+    return log, stderr
+
+
+def test_virtualbox_provision_logs_vagrant_groups(tmp_path, monkeypatch):
+    from spa.providers.virtualbox import Provider as VboxProvider
+
+    paths = _vbox_paths(tmp_path)
+    provider = VboxProvider(paths, {})
+    vagrant = _fake_vagrant(
+        tmp_path,
+        [
+            "Bringing machine 'idx1' up with 'virtualbox' provider...",
+            "==> idx1: Importing base box 'net9/ubuntu-24.04'...",
+            "\x1b[K    idx1: Progress: 40% (Rate: 3247k/s, Estimated time remaining: 0:00:24)",
+            "\x1b[K==> idx1: Booting VM...",
+            "    idx1: SSH address: 127.0.0.1:2222",
+            "==> idx1: Machine booted and ready!",
+        ],
+    )
+    monkeypatch.setattr(
+        "spa.providers.virtualbox.tool_path",
+        lambda _paths, name: str(vagrant) if name == "vagrant" else "/venv/bin/ansible",
+    )
+    log, stderr = _vbox_run_log(tmp_path, paths)
+    rc = provider.provision([], run_log=log)
+    log.finish(rc)
+    assert rc == 0
+    events = [json.loads(line) for line in log.jsonl_path.read_text(encoding="utf-8").splitlines()]
+    phases = {row.get("phase") for row in events}
+    assert phases == {"vagrant", "vm:idx1"}
+    assert not any("Terraform" in str(row.get("phase_title")) for row in events)
+    messages = [row.get("msg") for row in events if row.get("msg")]
+    assert "Booting VM..." in messages
+    assert "SSH address: 127.0.0.1:2222" in messages
+    assert not any("Progress:" in str(msg) or "\x1b" in str(msg) for msg in messages)
+    text = stderr.getvalue()
+    assert "Provision  VM idx1" in text
+    assert "Terraform" not in text
+
+
+def test_virtualbox_provision_failure_is_reported(tmp_path, monkeypatch):
+    from spa.providers.virtualbox import Provider as VboxProvider
+
+    paths = _vbox_paths(tmp_path)
+    provider = VboxProvider(paths, {})
+    vagrant = _fake_vagrant(
+        tmp_path,
+        [
+            "==> idx1: Booting VM...",
+            "There was an error while executing `VBoxManage`",
+        ],
+        rc=1,
+    )
+    monkeypatch.setattr(
+        "spa.providers.virtualbox.tool_path",
+        lambda _paths, name: str(vagrant) if name == "vagrant" else "/venv/bin/ansible",
+    )
+    log, stderr = _vbox_run_log(tmp_path, paths)
+    rc = provider.provision([], run_log=log)
+    log.finish(rc)
+    assert rc == 1
+    text = stderr.getvalue()
+    assert "There was an error while executing" in text
+    assert text.rstrip().endswith("failed")
+    assert log.saw_failure is True
+
+
+def test_virtualbox_provision_without_ansible_names_the_venv(tmp_path, monkeypatch):
+    from spa.executil import ToolNotFound
+    from spa.providers.virtualbox import Provider as VboxProvider
+
+    paths = _vbox_paths(tmp_path)
+    provider = VboxProvider(paths, {})
+
+    def fake_tool_path(_paths, name, required=True):
+        if name == "ansible":
+            raise ToolNotFound("ansible not found (not in a venv, not on PATH).")
+        return "vagrant"
+
+    monkeypatch.setattr("spa.providers.virtualbox.tool_path", fake_tool_path)
+    monkeypatch.setattr(
+        "spa.providers.virtualbox.subprocess.run",
+        lambda *a, **k: pytest.fail("vagrant must not run without ansible"),
+    )
+    with pytest.raises(ProviderError) as excinfo:
+        provider.provision([])
+    assert "ansible not found" in str(excinfo.value)

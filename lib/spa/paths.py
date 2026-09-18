@@ -70,6 +70,25 @@ ENV_DIR_REQUIRED_HINT = (
 )
 
 
+def find_pre3_clone(start: Path) -> Optional[Path]:
+    """Nearest 2.x clone-style env containing both config and framework code."""
+    current = Path(start).resolve()
+    for candidate in (current, *current.parents):
+        if (
+            (candidate / "config" / "splunk_config.yml").is_file()
+            and (
+                candidate
+                / "ansible"
+                / "plugins"
+                / "inventory"
+                / "splunk-platform-automator.py"
+            ).is_file()
+            and not (candidate / SPA_YML_NAME).is_file()
+        ):
+            return candidate
+    return None
+
+
 def is_framework_as_env(paths: SpaPaths) -> bool:
     """True when the resolved env dir is the framework tree (clone-equal)."""
     try:
@@ -82,6 +101,15 @@ def is_framework_as_env(paths: SpaPaths) -> bool:
 
 def env_dir_required_error(paths: SpaPaths) -> Optional[str]:
     """Message when spa must not run clone-equal; None if the env dir is OK."""
+    if paths.pre3_cwd is not None:
+        old = paths.pre3_cwd
+        return (
+            "This looks like a pre-3.0 SPA environment: %s\n"
+            "Refusing to use the registered default environment from inside it.\n"
+            "Convert in place:  spa init --force %s\n"
+            "Or migrate:       spa init --from %s DEST"
+            % (old, old, old)
+        )
     if is_framework_as_env(paths):
         return ENV_DIR_REQUIRED_HINT
     return None
@@ -308,9 +336,12 @@ class SpaPaths:
     software_dir: Path
     baseconfig_dir: Path
     apps_dir: Path
+    pre3_cwd: Optional[Path] = None
 
     def as_dict(self) -> Dict[str, Any]:
         data = asdict(self)
+        # Internal safety marker, not part of the public path contract.
+        data.pop("pre3_cwd", None)
         for key, value in list(data.items()):
             if isinstance(value, Path):
                 data[key] = str(value)
@@ -338,6 +369,7 @@ class SpaPaths:
             "ANSIBLE_ROLES_PATH": str(self.spa_home / "ansible" / "roles"),
             "ANSIBLE_INVENTORY_PLUGINS": str(self.spa_home / "ansible" / "plugins" / "inventory"),
             "ANSIBLE_LOOKUP_PLUGINS": str(self.spa_home / "ansible" / "plugins" / "lookup"),
+            "ANSIBLE_VARS_PLUGINS": str(self.spa_home / "ansible" / "plugins" / "vars"),
             "SPA_SOFTWARE_DIR": str(self.software_dir),
             "SPA_BASECONFIG_DIR": str(self.baseconfig_dir),
             "SPA_APPS_DIR": str(self.apps_dir),
@@ -354,6 +386,8 @@ def resolve_spa_paths(
 
     Precedence for the env dir: ``env_selector`` (``--env``) > ``SPA_ENV_DIR``
     > ``.spa.yml`` walk > registered default in ``environments.yml``.
+    Before the registered-default fallback, record a recognizable 2.x clone
+    under cwd so operator commands can fail closed instead of targeting it.
     """
     env = environ if environ is not None else os.environ
     start = Path(start_dir) if start_dir is not None else Path.cwd()
@@ -381,6 +415,9 @@ def resolve_spa_paths(
         spa_yml_path = find_spa_yml(start)
     if spa_yml_path is not None:
         spa_yml_data = load_spa_yml(spa_yml_path)
+    pre3_cwd = None
+    if not selector and not env_dir and spa_yml_path is None:
+        pre3_cwd = find_pre3_clone(start)
 
     if env_home:
         spa_home = _expand(env_home, start)
@@ -393,6 +430,10 @@ def resolve_spa_paths(
         spa_env_dir = _expand(env_dir, start)
     elif spa_yml_path is not None:
         spa_env_dir = spa_yml_path.parent.resolve()
+    elif pre3_cwd is not None:
+        # Fail closed in env_dir_required_error instead of resolving the user's
+        # registered default while cwd clearly belongs to another SPA env.
+        spa_env_dir = pre3_cwd
     else:
         from spa.registry import registry_default_path
 
@@ -453,6 +494,7 @@ def resolve_spa_paths(
         software_dir=software_dir,
         baseconfig_dir=baseconfig_dir,
         apps_dir=apps_dir,
+        pre3_cwd=pre3_cwd,
     )
 
 

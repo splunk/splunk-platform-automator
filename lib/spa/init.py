@@ -289,7 +289,20 @@ def migrate_state(
     if src_vagrant.exists():
         transfer_path(src_vagrant, dest / ".vagrant", keep_source)
     link_terraform_modules(dest, spa_home)
+    drop_inventory_group_vars_link(dest)
     write_spa_yml(dest, spa_home, **(yml_opts or {}))
+
+
+def drop_inventory_group_vars_link(dest: Path) -> None:
+    """Remove a pre-3.0 inventory/group_vars symlink. Keep a real directory."""
+    link = dest / "inventory" / "group_vars"
+    if not link.is_symlink():
+        return
+    try:
+        link.unlink()
+        _say("  inventory: removed group_vars symlink (vars stay in SPA_HOME)")
+    except OSError:
+        pass
 
 
 def leftover_present(root: Path) -> List[str]:
@@ -340,6 +353,7 @@ def strip_framework(dest: Path, spa_home: Path) -> None:
         if readme.is_file():
             readme.unlink()
     link_terraform_modules(dest, spa_home)
+    drop_inventory_group_vars_link(dest)
 
 
 def prune_incomplete_venv(dest: Path) -> None:
@@ -652,6 +666,7 @@ def _init_env(
         raise InitError("Use --example or --migrate/--from, not both.")
     if force:
         prune_incomplete_venv(dest)
+        drop_inventory_group_vars_link(dest)
 
     if is_old_clone_tree(dest) and not example_set and from_dir is None:
         if not force:
