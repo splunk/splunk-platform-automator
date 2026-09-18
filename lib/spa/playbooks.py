@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -400,21 +402,86 @@ def run_playbook(
     paths: SpaPaths,
     extra: Optional[List[str]] = None,
     on_progress: Optional[Callable[[Dict[str, str]], None]] = None,
+    command: str = "run",
+    agent: bool = False,
+    ansible_output: bool = False,
+    native_output: bool = False,
+    run_log: Optional[Any] = None,
 ) -> int:
     apply_paths_env(paths)
+    from spa.runlog import CALLBACK_EVENT_PREFIX, RunLog
+
     cmd = [tool_path(paths, "ansible-playbook"), str(playbook)]
     if extra:
         cmd.extend(extra)
-    if on_progress is None:
-        return subprocess.run(cmd, cwd=str(paths.spa_home)).returncode
+    log = run_log or RunLog(
+        paths,
+        command=command,
+        playbook=str(playbook),
+        agent=agent,
+        ansible_output=ansible_output,
+        native_output=native_output,
+    )
+    native = bool(native_output) and not agent
+    log.native_output = native
+    env = os.environ.copy()
+    # Keep structured events in the aggregate spa_jsonl callback.  The default
+    # stdout callback remains available for a human-requested native live view.
+    env["ANSIBLE_STDOUT_CALLBACK"] = "default"
+    enabled_callbacks = [
+        item.strip()
+        for item in env.get("ANSIBLE_CALLBACKS_ENABLED", "").split(",")
+        if item.strip()
+    ]
+    if "spa_jsonl" not in enabled_callbacks:
+        enabled_callbacks.append("spa_jsonl")
+    env["ANSIBLE_CALLBACKS_ENABLED"] = ",".join(enabled_callbacks)
+    # Ansible writes into a pipe, so it only colors when told to. Keep its color for
+    # the native human stream and off when only JSONL/compact progress consume it.
+    env["ANSIBLE_FORCE_COLOR"] = (
+        "1" if native and getattr(log, "wants_color", False) else "0"
+    )
+    if not ansible_output:
+        env["ANSIBLE_DISPLAY_SKIPPED_HOSTS"] = "false"
+    callback_dir = str(paths.spa_home / "ansible" / "plugins" / "callback")
+    existing = env.get("ANSIBLE_CALLBACK_PLUGINS", "")
+    if callback_dir not in existing.split(os.pathsep):
+        env["ANSIBLE_CALLBACK_PLUGINS"] = (
+            callback_dir + (os.pathsep + existing if existing else "")
+        )
+    log.start_heartbeat()
     proc = subprocess.Popen(
         cmd,
         cwd=str(paths.spa_home),
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE,
         text=True,
+        env=env,
     )
     assert proc.stdout is not None
+    assert proc.stderr is not None
+
+    def _stderr() -> None:
+        for line in proc.stderr:
+            if line.startswith(CALLBACK_EVENT_PREFIX):
+                callback_line = line[len(CALLBACK_EVENT_PREFIX) :]
+                log.consume_callback_line(callback_line)
+                if on_progress:
+                    on_progress(
+                        {"type": "line", "stream": "stderr", "line": callback_line.rstrip("\n")}
+                    )
+            else:
+                log.consume_callback_line(line)
+                if native:
+                    log.emit_native_output(line)
+
+    err_thread = threading.Thread(target=_stderr, name="spa-ansible-stderr", daemon=True)
+    err_thread.start()
     for line in proc.stdout:
-        on_progress({"type": "line", "stream": "stdout", "line": line.rstrip("\n")})
-    return proc.wait()
+        if native:
+            log.emit_native_output(line)
+    rc = proc.wait()
+    err_thread.join(timeout=5)
+    if run_log is None:
+        log.finish(rc)
+    return rc

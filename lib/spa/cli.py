@@ -26,7 +26,7 @@ from spa.paths import env_dir_required_error, resolve_spa_paths
 NATIVE_FLAG_COMMANDS = ("shell", "sh", "aws", "licenses", "lic")
 # These must keep working without a venv: they are how an operator inspects or
 # builds one. Every other command reads YAML or runs Ansible, so it is gated.
-VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment"})
+VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs"})
 GLOBAL_OPTS_WITH_VALUE = ("--start-dir", "--env")
 HOSTS_FLAG_HELP = "only these hosts (names or roles from this env)"
 AGENT_EXAMPLES = """examples:
@@ -153,13 +153,13 @@ def _run_help_target(head: Sequence[str]) -> Optional[str]:
 
 
 def _print_run_usage() -> None:
-    print("usage: spa run [-h] [--list] [--dir DIR] [--hosts NAME] [--apps-playbook STEM] [-y] [NAME]")
+    print("usage: spa run [-h] [--list] [--dir DIR] [--hosts NAME] [--apps-playbook STEM] [--ansible-output] [-v] [-y] [NAME]")
     print()
     print("Run a playbook by stem, or list/describe playbooks without executing Ansible.")
     print()
     print("  spa run --list              catalog (name — summary)")
     print("  spa run NAME --help         description, risk, inputs, examples")
-    print("  spa run NAME [-y] [--hosts NAME] [-- ansible-playbook args]")
+    print("  spa run NAME [-y] [--hosts NAME] [--ansible-output] [-v] [-- ansible-playbook args]")
     print("  spa run splunk_apps_playbook_run --apps-playbook STEM|PATH --hosts ROLE --yes")
     print()
     print("Mutating playbooks need --yes in agent mode (see requires_confirmation).")
@@ -263,6 +263,37 @@ def shell_copy_examples() -> str:
     from spa.shell import COPY_EXAMPLES
 
     return COPY_EXAMPLES
+
+
+def _add_verbose(parser, help_text: str) -> None:
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help=help_text,
+    )
+
+
+def _add_ansible_output(parser) -> None:
+    parser.add_argument(
+        "--ansible-output",
+        action="store_true",
+        help="Show redacted Ansible-style output (live and from stored logs; not in agent output)",
+    )
+    _add_verbose(
+        parser,
+        "Stream Ansible's own output unredacted; may print secrets (Ansible verbosity: -- -vv)",
+    )
+
+
+def _want_ansible_output(args) -> bool:
+    return bool(getattr(args, "verbose", False) or getattr(args, "ansible_output", False))
+
+
+def _want_native_output(args) -> bool:
+    """-v gives Ansible's own stdout; --ansible-output alone stays redacted."""
+    return bool(getattr(args, "verbose", False))
 
 
 def _add_env_selector(parser) -> None:
@@ -604,7 +635,13 @@ def _run(argv: Sequence[str]) -> int:
         action="store_true",
         help="Confirm a mutating command without prompting (required in agent mode)",
     )
-    parser.add_argument("-v", "--verbose", action="store_true", help="Show verbose command output")
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Verbose command output; on provision/deploy/destroy/run streams Ansible's own "
+        "unredacted output (Ansible's own verbosity: -- -vv)",
+    )
     parser.add_argument("--start-dir", help="Directory to resolve .spa.yml from")
     parser.add_argument(
         "--env",
@@ -866,6 +903,7 @@ def _run(argv: Sequence[str]) -> int:
         default=argparse.SUPPRESS,
         help="Confirm provision (same as spa -y provision)",
     )
+    _add_ansible_output(p_prov)
     p_deploy = _add_command(sub, "deploy", aliases=["dep"], help="Deploy Splunk")
     p_deploy.add_argument(
         "-y",
@@ -882,6 +920,7 @@ def _run(argv: Sequence[str]) -> int:
     )
     _add_hosts_option(p_deploy)
     _add_env_selector(p_deploy)
+    _add_ansible_output(p_deploy)
     p_destroy = _add_command(
         sub, "destroy", aliases=["des"], help="Destroy infrastructure for the configured provider"
     )
@@ -893,6 +932,7 @@ def _run(argv: Sequence[str]) -> int:
         help="Confirm destroy (same as spa -y destroy)",
     )
     _add_env_selector(p_destroy)
+    _add_ansible_output(p_destroy)
     p_suspend = _add_command(
         sub, "suspend", aliases=["sus"], help="Stop managed instances without destroying them"
     )
@@ -903,6 +943,7 @@ def _run(argv: Sequence[str]) -> int:
     p_suspend.add_argument("--no-wait", action="store_true", help="Return after requesting the stop")
     _add_hosts_option(p_suspend)
     _add_env_selector(p_suspend)
+    _add_ansible_output(p_suspend)
     p_resume = _add_command(
         sub, "resume", aliases=["res"], help="Start managed instances and refresh inventory"
     )
@@ -912,6 +953,7 @@ def _run(argv: Sequence[str]) -> int:
     )
     _add_hosts_option(p_resume)
     _add_env_selector(p_resume)
+    _add_ansible_output(p_resume)
 
     p_run = _add_command(
         sub,
@@ -930,14 +972,27 @@ def _run(argv: Sequence[str]) -> int:
     )
     _add_hosts_option(p_run)
     _add_env_selector(p_run)
+    _add_ansible_output(p_run)
     p_run.add_argument(
         "--apps-playbook",
         help="For splunk_apps_playbook_run: curated stem, or env-relative path (e.g. ancustom/my_custom_playbook)",
     )
 
+    p_logs = _add_command(
+        sub,
+        "logs",
+        help="List or show per-environment run transcripts ($SPA_ENV_DIR/logs)",
+    )
+    p_logs.add_argument("run_id", nargs="?", help="Run id (filename stem)")
+    p_logs.add_argument("--last", action="store_true", help="Show the most recent run")
+    p_logs.add_argument("--follow", action="store_true", help="Follow the latest jsonl file")
+    _add_ansible_output(p_logs)
+    _add_env_selector(p_logs)
+
     p_hosts = _add_command(sub, "hosts", aliases=["h"], help="List, SSH, or copy using inventory hosts")
     _add_env_selector(p_hosts)
     p_hosts.add_argument(
+        "-s",
         "--status",
         action="store_true",
         help="Include runtime power state and connectivity (skipped until hosts are provisioned)",
@@ -947,6 +1002,7 @@ def _run(argv: Sequence[str]) -> int:
     p_hosts_list = hosts_sub.add_parser("list", aliases=["ls"], help="List hosts in this env")
     _add_mode_flags(p_hosts_list)
     p_hosts_list.add_argument(
+        "-s",
         "--status",
         action="store_true",
         help="Include runtime power state and connectivity (skipped until hosts are provisioned)",
@@ -1166,6 +1222,7 @@ def _run(argv: Sequence[str]) -> int:
             config=args.config,
             check_licenses=args.check_licenses,
             splunk_config_aws=args.splunk_config_aws,
+            agent=as_agent,
         )
         if as_agent:
             return _emit_result(result, True)
@@ -1230,9 +1287,51 @@ def _run(argv: Sequence[str]) -> int:
             print((data.get("stdout") or data.get("path") or "").strip())
         return result.code
 
+    if args.command == "logs":
+        result = session.logs(
+            run_id=getattr(args, "run_id", None),
+            last=bool(getattr(args, "last", False)),
+            follow=bool(getattr(args, "follow", False)) and not as_agent,
+            ansible_output=_want_ansible_output(args),
+        )
+        if as_agent:
+            payload = dict(result.data or {})
+            payload.pop("transcript", None)
+            payload.pop("replay", None)
+            emit(result.ok, data=payload or None, error=result.error, as_agent=True)
+            return result.code
+        if not result.ok:
+            print(result.error or "logs failed", file=sys.stderr)
+            return result.code
+        data = result.data or {}
+        if args.follow:
+            return 0
+        if "runs" in data and not args.last and not args.run_id:
+            rows = data.get("runs") or []
+            if not rows:
+                print("No runs in %s/logs" % paths.spa_env_dir)
+                return 0
+            for row in rows:
+                print(
+                    "%s  rc=%s  %s"
+                    % (row.get("run_id"), row.get("rc"), row.get("command"))
+                )
+            return 0
+        if _want_ansible_output(args):
+            sys.stdout.write(data.get("replay") or "")
+        else:
+            sys.stdout.write(data.get("transcript") or "")
+        return 0
+
     if args.command in {"provision", "destroy"}:
         extra = list(extra)
-        result = getattr(session, args.command)(extra, confirm=args.yes, agent=as_agent)
+        result = getattr(session, args.command)(
+            extra,
+            confirm=args.yes,
+            agent=as_agent,
+            ansible_output=_want_ansible_output(args),
+            native_output=_want_native_output(args),
+        )
         if as_agent:
             return _emit_result(result, True)
         if result.error:
@@ -1243,11 +1342,13 @@ def _run(argv: Sequence[str]) -> int:
         extra = list(extra)
         result = session.deploy(
             extra,
-            verbose=args.verbose,
+            verbose=_want_ansible_output(args),
             hosts=getattr(args, "hosts", None),
             confirm=args.yes,
             agent=as_agent,
             skip_provision_check=bool(getattr(args, "allow_unprovisioned", False)),
+            ansible_output=_want_ansible_output(args),
+            native_output=_want_native_output(args),
         )
         if as_agent:
             return _emit_result(result, True)
@@ -1268,6 +1369,7 @@ def _run(argv: Sequence[str]) -> int:
             wait=not getattr(args, "no_wait", False),
             agent=as_agent,
             hosts=getattr(args, "hosts", None),
+            ansible_output=_want_ansible_output(args),
         )
         if as_agent:
             return _emit_result(result, True)
@@ -1310,11 +1412,13 @@ def _run(argv: Sequence[str]) -> int:
             args.name,
             extra=extra_args,
             extra_dir=args.playbook_dir,
-            verbose=args.verbose,
+            verbose=_want_ansible_output(args),
             hosts=getattr(args, "hosts", None),
             confirm=args.yes,
             agent=as_agent,
             apps_playbook=getattr(args, "apps_playbook", None),
+            ansible_output=_want_ansible_output(args),
+            native_output=_want_native_output(args),
         )
         if as_agent:
             return _emit_result(result, True)
@@ -1333,7 +1437,7 @@ def _run(argv: Sequence[str]) -> int:
         hosts_cmd = args.hosts_cmd or "list"
         if hosts_cmd in {"list", "ls"}:
             result = session.hosts_list(
-                status=bool(getattr(args, "status", False) or args.verbose),
+                status=bool(getattr(args, "status", False)),
                 hosts=getattr(args, "hosts", None),
             )
             if as_agent:
@@ -1342,7 +1446,7 @@ def _run(argv: Sequence[str]) -> int:
                 print(result.error, file=sys.stderr)
                 return result.code
             data = result.data or {}
-            show_status = bool(getattr(args, "status", False) or args.verbose)
+            show_status = bool(getattr(args, "status", False))
             if (
                 data.get("provider")
                 and show_status

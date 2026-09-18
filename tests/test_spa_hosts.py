@@ -83,6 +83,7 @@ def test_hosts_list_help_has_hosts_flag_not_limit():
     assert result.returncode == 0, result.stderr
     assert "--hosts" in result.stdout
     assert "--status" in result.stdout
+    assert "-s" in result.stdout
     assert "--limit" not in result.stdout
 
 
@@ -116,7 +117,7 @@ def test_session_deploy_injects_limit(monkeypatch):
 
     captured = {}
 
-    def fake_run(playbook, paths, args, on_progress=None):
+    def fake_run(playbook, paths, args, on_progress=None, **_kwargs):
         captured["args"] = args
         return 0
 
@@ -282,7 +283,7 @@ def test_hosts_list_status_skips_runtime_when_unprovisioned(tmp_path, monkeypatc
 
     pinged = []
 
-    def boom_ping(hosts):
+    def boom_ping(hosts, paths=None):
         pinged.append(list(hosts))
         raise AssertionError("ansible ping must not run when unprovisioned")
 
@@ -306,6 +307,45 @@ def test_hosts_list_status_skips_runtime_when_unprovisioned(tmp_path, monkeypatc
     assert format_host_status(rows["idx1"]) == " - unprovisioned"
 
 
+def test_ansible_ping_uses_the_venv_binary(tmp_path, monkeypatch):
+    from spa import shell as shell_mod
+
+    paths, _session = _hosts_list_session(tmp_path)
+    calls = {}
+
+    def fake_tool_path(_paths, name, required=True):
+        calls["name"] = name
+        return "/venv/bin/ansible"
+
+    def fake_run(cmd, **_kwargs):
+        calls["cmd"] = list(cmd)
+        raise FileNotFoundError(2, "No such file or directory", "/venv/bin/ansible")
+
+    monkeypatch.setattr("spa.executil.tool_path", fake_tool_path)
+    monkeypatch.setattr(shell_mod.subprocess, "run", fake_run)
+    status = shell_mod.check_ansible_status(["idx1"], paths=paths)
+    assert status == {}
+    assert calls["name"] == "ansible"
+    assert calls["cmd"][0] == "/venv/bin/ansible"
+
+
+def test_ansible_ping_reports_venv_repair_when_missing(tmp_path, monkeypatch, capsys):
+    from spa import shell as shell_mod
+    from spa.executil import ToolNotFound
+
+    paths, _session = _hosts_list_session(tmp_path)
+
+    def missing(_paths, name, required=True):
+        raise ToolNotFound("%s not found (not in a venv, not on PATH).\nspa venv" % name)
+
+    monkeypatch.setattr("spa.executil.tool_path", missing)
+    assert shell_mod.check_ansible_status(["idx1"], paths=paths) == {}
+    err = capsys.readouterr().err
+    assert "ansible not found" in err
+    assert "spa venv" in err
+    assert "'ansible' command not found" not in err
+
+
 def test_hosts_list_status_pings_when_provisioned(tmp_path, monkeypatch):
     paths, session = _hosts_list_session(tmp_path)
     paths.terraform_state_dir.mkdir(parents=True, exist_ok=True)
@@ -324,7 +364,8 @@ def test_hosts_list_status_pings_when_provisioned(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         "spa.shell.check_ansible_status",
-        lambda hosts: pinged.extend(hosts) or {host: "Success" for host in hosts},
+        lambda hosts, paths=None: pinged.extend(hosts)
+        or {host: "Success" for host in hosts},
     )
     result = session.hosts_list(status=True)
     assert result.ok

@@ -50,7 +50,11 @@ class CommandResult:
     code: int = 0
 
     def __post_init__(self) -> None:
+        from spa.runlog import redact
+
         self.data = jsonable(self.data)
+        if self.error:
+            self.error = str(redact(self.error))
         if self.code == 0 and not self.ok:
             self.code = 1
         if self.ok and self.code != 0:
@@ -84,6 +88,7 @@ class SpaSession(Protocol):
         config: Optional[str] = None,
         check_licenses: bool = False,
         splunk_config_aws: bool = False,
+        agent: bool = False,
     ) -> CommandResult: ...
 
     def doctor(
@@ -172,11 +177,21 @@ class SpaSession(Protocol):
     ) -> CommandResult: ...
 
     def provision(
-        self, extra: Optional[List[str]] = None, confirm: bool = False, agent: bool = False
+        self,
+        extra: Optional[List[str]] = None,
+        confirm: bool = False,
+        agent: bool = False,
+        ansible_output: bool = False,
+        native_output: bool = False,
     ) -> CommandResult: ...
 
     def destroy(
-        self, extra: Optional[List[str]] = None, confirm: bool = False, agent: bool = False
+        self,
+        extra: Optional[List[str]] = None,
+        confirm: bool = False,
+        agent: bool = False,
+        ansible_output: bool = False,
+        native_output: bool = False,
     ) -> CommandResult: ...
 
     def deploy(
@@ -187,11 +202,27 @@ class SpaSession(Protocol):
         confirm: bool = False,
         agent: bool = False,
         skip_provision_check: bool = False,
+        ansible_output: bool = False,
+        native_output: bool = False,
     ) -> CommandResult: ...
 
-    def suspend(self, confirm: bool = False, wait: bool = True, agent: bool = False, hosts: Optional[Sequence[str]] = None) -> CommandResult: ...
+    def suspend(
+        self,
+        confirm: bool = False,
+        wait: bool = True,
+        agent: bool = False,
+        hosts: Optional[Sequence[str]] = None,
+        ansible_output: bool = False,
+    ) -> CommandResult: ...
 
-    def resume(self, confirm: bool = False, wait: bool = True, agent: bool = False, hosts: Optional[Sequence[str]] = None) -> CommandResult: ...
+    def resume(
+        self,
+        confirm: bool = False,
+        wait: bool = True,
+        agent: bool = False,
+        hosts: Optional[Sequence[str]] = None,
+        ansible_output: bool = False,
+    ) -> CommandResult: ...
 
     def run(
         self,
@@ -203,6 +234,16 @@ class SpaSession(Protocol):
         confirm: bool = False,
         agent: bool = False,
         apps_playbook: Optional[str] = None,
+        ansible_output: bool = False,
+        native_output: bool = False,
+    ) -> CommandResult: ...
+
+    def logs(
+        self,
+        run_id: Optional[str] = None,
+        last: bool = False,
+        follow: bool = False,
+        ansible_output: bool = False,
     ) -> CommandResult: ...
 
     def aws(self, argv: Optional[List[str]] = None) -> CommandResult: ...
@@ -285,6 +326,25 @@ class LocalSpaSession:
     def _progress(self, event: Dict[str, Any]) -> None:
         if self.on_progress:
             self.on_progress(jsonable(event))
+
+    def _run_log(
+        self,
+        command: str,
+        playbook: str,
+        agent: bool,
+        ansible_output: bool,
+        native_output: bool = False,
+    ):
+        from spa.runlog import RunLog
+
+        return RunLog(
+            self.paths,
+            command=command,
+            playbook=playbook,
+            agent=agent,
+            ansible_output=ansible_output,
+            native_output=native_output,
+        )
 
     def schema(self) -> CommandResult:
         data = dict(COMMAND_SCHEMA)
@@ -481,6 +541,7 @@ class LocalSpaSession:
         config: Optional[str] = None,
         check_licenses: bool = False,
         splunk_config_aws: bool = False,
+        agent: bool = False,
     ) -> CommandResult:
         blocked = self._env_gate()
         if blocked:
@@ -493,6 +554,7 @@ class LocalSpaSession:
             check_licenses=check_licenses,
             splunk_config_aws=splunk_config_aws,
             on_progress=self.on_progress,
+            agent=agent,
         )
 
     def doctor(
@@ -735,23 +797,53 @@ class LocalSpaSession:
         return ["hosts: %s" % format_names(hosts)]
 
     def provision(
-        self, extra: Optional[List[str]] = None, confirm: bool = False, agent: bool = False
+        self,
+        extra: Optional[List[str]] = None,
+        confirm: bool = False,
+        agent: bool = False,
+        ansible_output: bool = False,
+        native_output: bool = False,
     ) -> CommandResult:
         blocked = self._env_gate()
         if blocked:
             return blocked
-        return self._lifecycle_playbook("provision", extra, confirm, agent)
+        return self._lifecycle_playbook(
+            "provision",
+            extra,
+            confirm,
+            agent,
+            ansible_output=ansible_output,
+            native_output=native_output,
+        )
 
     def destroy(
-        self, extra: Optional[List[str]] = None, confirm: bool = False, agent: bool = False
+        self,
+        extra: Optional[List[str]] = None,
+        confirm: bool = False,
+        agent: bool = False,
+        ansible_output: bool = False,
+        native_output: bool = False,
     ) -> CommandResult:
         blocked = self._env_gate()
         if blocked:
             return blocked
-        return self._lifecycle_playbook("destroy", extra, confirm, agent)
+        return self._lifecycle_playbook(
+            "destroy",
+            extra,
+            confirm,
+            agent,
+            ansible_output=ansible_output,
+            native_output=native_output,
+        )
 
     def _lifecycle_playbook(
-        self, action: str, extra: Optional[List[str]], confirm: bool, agent: bool
+        self,
+        action: str,
+        extra: Optional[List[str]],
+        confirm: bool,
+        agent: bool,
+        ansible_output: bool = False,
+        native_output: bool = False,
     ) -> CommandResult:
         from spa.confirm import LIFECYCLE_RISK
 
@@ -769,15 +861,35 @@ class LocalSpaSession:
         if blocked:
             return blocked
         args = ["-e", "auto_approve=true", *list(extra or [])]
+        log = None
+        rc = 1
         try:
             provider = get_provider(self.paths)
-            rc = getattr(provider, action)(args)
+            if provider.name == "aws":
+                playbook = "aws_provision" if action == "provision" else "aws_destroy"
+            else:
+                playbook = "vagrant_up" if action == "provision" else "vagrant_destroy"
+            log = self._run_log(action, playbook, agent, ansible_output, native_output)
+            rc = getattr(provider, action)(
+                args,
+                run_log=log,
+                agent=agent,
+                ansible_output=ansible_output,
+                native_output=native_output,
+                command=action,
+            )
         except ProviderError as exc:
-            return CommandResult(ok=False, error=str(exc), code=1)
+            data = log.envelope_fields() if log is not None else None
+            if log is not None:
+                log.finish(1)
+            return CommandResult(ok=False, error=str(exc), code=1, data=data)
+        log.finish(rc)
+        data = {"provider": provider.name, "action": action}
+        data.update(log.envelope_fields())
         return CommandResult(
             ok=rc == 0,
             code=rc,
-            data={"provider": provider.name, "action": action},
+            data=data,
             error=None if rc == 0 else "%s failed" % action,
         )
 
@@ -802,6 +914,8 @@ class LocalSpaSession:
         confirm: bool = False,
         agent: bool = False,
         skip_provision_check: bool = False,
+        ansible_output: bool = False,
+        native_output: bool = False,
     ) -> CommandResult:
         blocked = self._env_gate()
         if blocked:
@@ -846,14 +960,27 @@ class LocalSpaSession:
         if blocked:
             return blocked
         args = with_ansible_limit(extra, resolved)
-        if verbose:
-            args = ["-v", *args]
         try:
             playbook = resolve("deploy_site", self.paths)
         except PlaybookError as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
-        rc = run_playbook(playbook, self.paths, args, on_progress=self.on_progress)
+        log = self._run_log(
+            "deploy", str(playbook), agent, ansible_output or verbose, native_output
+        )
+        rc = run_playbook(
+            playbook,
+            self.paths,
+            args,
+            on_progress=self.on_progress,
+            command="deploy",
+            agent=agent,
+            ansible_output=ansible_output or verbose,
+            native_output=native_output,
+            run_log=log,
+        )
+        log.finish(rc)
         data: Dict[str, Any] = {"playbook": "deploy_site"}
+        data.update(log.envelope_fields())
         if resolved:
             data["hosts"] = resolved
         if skip_provision_check:
@@ -876,8 +1003,16 @@ class LocalSpaSession:
         wait: bool = True,
         agent: bool = False,
         hosts: Optional[Sequence[str]] = None,
+        ansible_output: bool = False,
     ) -> CommandResult:
-        return self._power("suspend", confirm=confirm, wait=wait, agent=agent, hosts=hosts)
+        return self._power(
+            "suspend",
+            confirm=confirm,
+            wait=wait,
+            agent=agent,
+            hosts=hosts,
+            ansible_output=ansible_output,
+        )
 
     def resume(
         self,
@@ -885,8 +1020,16 @@ class LocalSpaSession:
         wait: bool = True,
         agent: bool = False,
         hosts: Optional[Sequence[str]] = None,
+        ansible_output: bool = False,
     ) -> CommandResult:
-        return self._power("resume", confirm=confirm, wait=wait, agent=agent, hosts=hosts)
+        return self._power(
+            "resume",
+            confirm=confirm,
+            wait=wait,
+            agent=agent,
+            hosts=hosts,
+            ansible_output=ansible_output,
+        )
 
     def _power(
         self,
@@ -895,6 +1038,7 @@ class LocalSpaSession:
         wait: bool,
         agent: bool,
         hosts: Optional[Sequence[str]] = None,
+        ansible_output: bool = False,
     ) -> CommandResult:
         blocked = self._env_gate()
         if blocked:
@@ -918,16 +1062,22 @@ class LocalSpaSession:
         )
         if blocked:
             return blocked
+        log = self._run_log(action, action, agent, ansible_output)
+        log.emit({"status": "ok", "phase": "power", "task": action})
         try:
             provider = get_provider(self.paths)
             data = getattr(provider, action)(
                 yes=True, agent=agent, wait=wait, hosts=resolved
             )
         except ProviderError as exc:
-            return CommandResult(ok=False, error=str(exc), code=1)
+            log.finish(1)
+            payload = log.envelope_fields()
+            return CommandResult(ok=False, error=str(exc), code=1, data=payload)
+        log.finish(0)
         payload = dict(data or {})
         payload["provider"] = provider.name
         payload["action"] = action
+        payload.update(log.envelope_fields())
         if resolved:
             payload["hosts"] = resolved
         return CommandResult(ok=True, data=payload)
@@ -942,6 +1092,8 @@ class LocalSpaSession:
         confirm: bool = False,
         agent: bool = False,
         apps_playbook: Optional[str] = None,
+        ansible_output: bool = False,
+        native_output: bool = False,
     ) -> CommandResult:
         blocked = self._env_gate()
         if blocked:
@@ -974,8 +1126,6 @@ class LocalSpaSession:
                 return CommandResult(ok=False, error=str(exc), code=2)
             args = run_extra_vars(row) + args
         args = with_ansible_limit(args, resolved)
-        if verbose:
-            args = ["-v", *args]
         try:
             playbook, renamed_from, canonical = resolve_named(name, self.paths, extra_dir=extra_dir)
             meta = parse_playbook_metadata(playbook)
@@ -997,8 +1147,23 @@ class LocalSpaSession:
             blocked = self._require_provisioned()
             if blocked:
                 return blocked
-        rc = run_playbook(playbook, self.paths, args, on_progress=self.on_progress)
+        log = self._run_log(
+            "run", str(playbook), agent, ansible_output or verbose, native_output
+        )
+        rc = run_playbook(
+            playbook,
+            self.paths,
+            args,
+            on_progress=self.on_progress,
+            command="run",
+            agent=agent,
+            ansible_output=ansible_output or verbose,
+            native_output=native_output,
+            run_log=log,
+        )
+        log.finish(rc)
         data: Dict[str, Any] = {"playbook": canonical, "path": str(playbook)}
+        data.update(log.envelope_fields())
         if renamed_from:
             data["renamed_from"] = renamed_from
             data["use"] = canonical
@@ -1084,6 +1249,43 @@ class LocalSpaSession:
         except shell_mod.ShellError as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
         return CommandResult(ok=True, data=report)
+
+    def logs(
+        self,
+        run_id: Optional[str] = None,
+        last: bool = False,
+        follow: bool = False,
+        ansible_output: bool = False,
+    ) -> CommandResult:
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
+        from spa.runlog import follow_jsonl, list_runs, load_run, read_jsonl, replay_jsonl
+
+        rows = list_runs(self.paths)
+        if not last and not follow and not run_id:
+            return CommandResult(ok=True, data={"runs": rows})
+        target = None
+        if run_id:
+            target = load_run(self.paths, run_id)
+            if target is None:
+                return CommandResult(ok=False, error="Unknown run: %s" % run_id, code=1)
+        elif rows:
+            target = rows[0]
+        if target is None:
+            return CommandResult(ok=False, error="No runs in %s/logs" % self.paths.spa_env_dir, code=1)
+        from pathlib import Path
+
+        log_path = Path(str(target.get("log") or ""))
+        if follow:
+            follow_jsonl(log_path, idle_passes=-1, ansible_output=ansible_output)
+            return CommandResult(ok=True, data=target)
+        target = dict(target)
+        if ansible_output:
+            target["replay"] = replay_jsonl(log_path)
+        else:
+            target["transcript"] = read_jsonl(log_path)
+        return CommandResult(ok=True, data=target)
 
     def shell_list(
         self, verbose: bool = False, hosts: Optional[Sequence[str]] = None

@@ -15,7 +15,7 @@ Anything SPA: shared Software, registered environments, validate / provision / d
 
 - **`SPA_HOME`**: framework. **`SPA_ENV_DIR`**: one environment. Call **`bin/spa` only**. Do not import `spa.api`. Do not start a daemon.
 - Mutating commands need **`--yes`**. Never auto-run provision, deploy, suspend, resume, or destroy. Never answer `Proceed?`.
-- Never print secrets. Report env vars as set / not set. YAML: `lookup('env', ...)`.
+- Never print secrets. Report env vars as set / not set. YAML: `lookup('env', ...)`. Do not pass `spa -v` (unredacted Ansible stdout).
 - Full command names (`spa environment list`, `spa hosts ssh`, `spa validate`). Humans may type `spa env`.
 - No `ansible-playbook` / raw Vagrant for operators.
 
@@ -63,10 +63,11 @@ spa doctor
 spa validate
 spa provision --yes && spa deploy --yes
 spa hosts list --status
+spa logs --last
 ```
 
 ## Anti-patterns
 
-Import `spa.api`; answer `Proceed?`; invent playbook names; dump full Ansible logs ([#71](https://github.com/splunk/splunk-platform-automator/issues/71) exists — do not implement); put installers inside `SPA_HOME`.
+Import `spa.api`; answer `Proceed?`; invent playbook names; dump full Ansible logs into the model context (use `spa logs` / `data.log` only when the user asked to debug); put installers inside `SPA_HOME`.
 
 Human journey: [docs/user-guide.md](../../../docs/user-guide.md). Install: README curl `| sh`.

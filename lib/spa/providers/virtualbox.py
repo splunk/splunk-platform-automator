@@ -111,10 +111,29 @@ class Provider:
         *,
         capture: bool = False,
         check: bool = True,
+        run_log: Any = None,
+        phase: str = "tf_apply",
     ) -> subprocess.CompletedProcess:
         self._require_vagrantfile()
         self._require_clean_machine_state()
         cmd = [self._vagrant_bin(), *args]
+        if run_log is not None and not capture:
+            run_log.emit({"status": "ok", "phase": phase, "task": " ".join(cmd[:3])})
+            proc = subprocess.Popen(
+                cmd,
+                cwd=str(self.paths.spa_home),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                env=self._vagrant_env(),
+            )
+            assert proc.stdout is not None
+            chunks: List[str] = []
+            for line in proc.stdout:
+                chunks.append(line)
+                run_log.consume_callback_line(line)
+            rc = proc.wait()
+            return subprocess.CompletedProcess(cmd, rc, stdout="".join(chunks), stderr="")
         result = subprocess.run(
             cmd,
             cwd=str(self.paths.spa_home),
@@ -144,15 +163,27 @@ class Provider:
             )
         return parse_machine_readable_status(result.stdout or "")
 
-    def provision(self, extra: List[str]) -> int:
+    def provision(self, extra: List[str], **kwargs: Any) -> int:
         leftover = drop_ansible_extra(extra)
-        result = self._run(["up", *leftover], capture=False, check=False)
+        result = self._run(
+            ["up", *leftover],
+            capture=False,
+            check=False,
+            run_log=kwargs.get("run_log"),
+            phase="tf_apply",
+        )
         return result.returncode
 
-    def destroy(self, extra: List[str]) -> int:
+    def destroy(self, extra: List[str], **kwargs: Any) -> int:
         leftover = drop_ansible_extra(extra)
         args = ["destroy", "-f", *leftover]
-        result = self._run(args, capture=False, check=False)
+        result = self._run(
+            args,
+            capture=False,
+            check=False,
+            run_log=kwargs.get("run_log"),
+            phase="tf_apply",
+        )
         return result.returncode
 
     def provision_state(self) -> ProvisionState:

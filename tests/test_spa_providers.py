@@ -203,7 +203,7 @@ def test_shell_host_report_uses_provider_snapshot(monkeypatch):
     }
     checked = {}
 
-    def fake_ansible(hosts):
+    def fake_ansible(hosts, paths=None):
         checked["hosts"] = hosts
         return {host: "Success" for host in hosts}
 
@@ -231,7 +231,7 @@ def test_shell_host_report_runtime_false_skips_checks(monkeypatch):
     monkeypatch.setattr(
         shell,
         "check_ansible_status",
-        lambda hosts: (_ for _ in ()).throw(AssertionError("ping")),
+        lambda hosts, paths=None: (_ for _ in ()).throw(AssertionError("ping")),
     )
     monkeypatch.setattr(
         shell,

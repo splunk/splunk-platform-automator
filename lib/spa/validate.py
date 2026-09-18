@@ -17,9 +17,41 @@ from spa.paths import SpaPaths, resolve_spa_paths
 ProgressCallback = Callable[[Dict[str, Any]], None]
 
 
-def _note(on_progress: Optional[ProgressCallback], message: str, stream: str = "stdout") -> None:
+VALIDATE_STEPS = (
+    ("schema", "Schema validation (Pydantic)"),
+    ("controller_data", "Controller Software / baseconfig / local apps"),
+    ("inventory", "Inventory plugin (ansible-inventory)"),
+    ("license_role", "License and license_manager role check"),
+    ("syntax", "Playbook syntax-check"),
+)
+
+
+def _note(
+    on_progress: Optional[ProgressCallback],
+    message: str,
+    stream: str = "stdout",
+    *,
+    agent: bool = False,
+    phase: Optional[str] = None,
+    index: Optional[int] = None,
+) -> None:
     if on_progress:
         on_progress({"type": "line", "stream": stream, "line": message})
+    if agent and phase:
+        sys.stderr.write(
+            json.dumps(
+                {
+                    "type": "progress",
+                    "phase": phase,
+                    "phase_title": message,
+                    "phase_index": index,
+                    "phase_count": 5,
+                    "status": "running",
+                }
+            )
+            + "\n"
+        )
+        sys.stderr.flush()
 
 
 def validate_env(
@@ -29,6 +61,7 @@ def validate_env(
     check_licenses: bool = False,
     splunk_config_aws: bool = False,
     on_progress: Optional[ProgressCallback] = None,
+    agent: bool = False,
 ) -> CommandResult:
     """Run validation steps and return structured results (no printing)."""
     if config:
@@ -74,7 +107,13 @@ except ConfigValidationError as e:
     print(e, file=sys.stderr)
     sys.exit(1)
 """
-    _note(on_progress, "[1/5] Schema validation (Pydantic)...")
+    _note(
+        on_progress,
+        "[1/5] Schema validation (Pydantic)...",
+        agent=agent,
+        phase="schema",
+        index=1,
+    )
     rc = subprocess.run(
         [tool_path(paths, "python3"), "-c", schema_py, str(config_path)],
         cwd=str(paths.spa_home),
@@ -90,7 +129,13 @@ except ConfigValidationError as e:
         err = (rc.stderr or rc.stdout or "Schema validation failed").strip()
         return CommandResult(ok=False, error=err, data=data, code=rc.returncode)
 
-    _note(on_progress, "[2/5] Controller Software / baseconfig / local apps...")
+    _note(
+        on_progress,
+        "[2/5] Controller Software / baseconfig / local apps...",
+        agent=agent,
+        phase="controller_data",
+        index=2,
+    )
     from spa.preflight import check_controller_data, controller_data_error
 
     controller = check_controller_data(paths)
@@ -113,7 +158,13 @@ except ConfigValidationError as e:
         }
     )
 
-    _note(on_progress, "[3/5] Inventory plugin (ansible-inventory)...")
+    _note(
+        on_progress,
+        "[3/5] Inventory plugin (ansible-inventory)...",
+        agent=agent,
+        phase="inventory",
+        index=3,
+    )
     rc = subprocess.run(
         [tool_path(paths, "ansible-inventory"), "--list"],
         cwd=str(paths.spa_home),
@@ -138,7 +189,13 @@ except ConfigValidationError as e:
             code=rc.returncode,
         )
 
-    _note(on_progress, "[4/5] License and license_manager role check...")
+    _note(
+        on_progress,
+        "[4/5] License and license_manager role check...",
+        agent=agent,
+        phase="license_role",
+        index=4,
+    )
     from spa import licenses as licenses_mod
 
     license_scan = licenses_mod.scan_licenses(paths.spa_env_dir, config_path=config_path)
@@ -159,7 +216,13 @@ except ConfigValidationError as e:
         return CommandResult(ok=False, error=msg, data=data, code=1)
     steps.append({"id": "license_role", "ok": True, "message": "License role pairing OK"})
 
-    _note(on_progress, "[5/5] Playbook syntax-check...")
+    _note(
+        on_progress,
+        "[5/5] Playbook syntax-check...",
+        agent=agent,
+        phase="syntax",
+        index=5,
+    )
     for pb in ("ansible/aws_provision.yml", "ansible/deploy_site.yml"):
         rc = subprocess.run(
             [tool_path(paths, "ansible-playbook"), pb, "--syntax-check"],

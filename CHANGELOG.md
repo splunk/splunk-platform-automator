@@ -19,6 +19,14 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **`spa hosts list --status` finds `ansible` in the spa venv**: the ping check used a bare `ansible` on PATH, so every row showed `Ansible: N/A` with `Warning: 'ansible' command not found.` even on a working install. It now resolves the binary like `ansible-inventory` / `ansible-playbook` and, when it is really missing, prints the venv state plus the `spa venv` repair command.
+
+- **`spa hosts list -s`**: short for `--status`. `-v` is not a status alias on hosts.
+
+- **`spa logs` lists newest first**: the run table and JSON `runs` array are newest-to-oldest. `--last` / `--follow` still open the most recent run.
+
+- **`--ansible-output` vs `-v`**: `--ansible-output` is the redacted Ansible-style view rebuilt from JSONL (live and `spa logs`). `-v` / `--verbose` is accepted after the subcommand (same as `--yes`) and, on provision/deploy/destroy/run, streams Ansible's own stdout **unredacted** (credentials can appear in the terminal until [#88](https://github.com/splunk/splunk-platform-automator/issues/88)), with Ansible color on a TTY (`NO_COLOR` / `TERM=dumb` / agent mode still win). Stored transcripts stay redacted and escape-free. Agents never receive the native stream. Ansible's own verbosity is `-- -vv`. On `spa logs`, `-v` is the same reconstruction as `--ansible-output`.
+
 - **Installer one-liners use `sh`**: `install.sh` is POSIX (`curl …/install.sh | sh`). The PATH wrapper is `/bin/sh` as well.
 
 - **Python 3.9+ is a hard requirement**: `spa venv` / `spa doctor` fail when `python3` is missing, older than 3.9, or lacks the `venv` module.
@@ -28,6 +36,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 - **Docs** ([#61](https://github.com/splunk/splunk-platform-automator/issues/61)): eight lowercase, task-oriented pages plus a generated command catalog. [README.md](README.md) is the front door, [docs/user-guide.md](docs/user-guide.md) is the operator journey, and [AGENTS.md](AGENTS.md) is the spa-only agent contract. App, AWS, install, secrets, upgrade, migration, and contributor pages delegate flags and schemas to `spa --help`, `spa features`, `spa apps`, and `spa run`. Ansible comes from `spa venv`. Operator examples use `spa`, not raw Vagrant, Terraform, or `ansible-playbook`.
 
 ### Added
+
+- **Env-dir run logs and compact progress** ([#71](https://github.com/splunk/splunk-platform-automator/issues/71)): mutating `spa` commands write redacted JSONL under `$SPA_ENV_DIR/logs/` (local timestamps with a numeric offset). Humans see one colored live line per **named group that actually runs** (imported playbook, role, app channel, ITSI/content-pack overlay, or upgrade step) with counters in place; `NO_COLOR` supported. There is no `[n/m]` index. `spa run` of first-party playbooks uses the same titles. The line ends with `ok` (green), `changed` (yellow), or `failed` (red), and counts task-host results as `changed N/M` plus `skipped N` next to the distinct `tasks N`. Agents keep a small stdout envelope plus `data.log` and sparse stderr heartbeats with task/host counts. `spa logs` / `--last` / `--follow` dump a run. `--ansible-output` on `spa logs` reconstructs PLAY/TASK/recap text and Terraform host diffs (`instance_type`, disk) from JSONL without storing a raw sidecar.
 
 - **`spa venv`**: `spa venv --path` prints the target; `--create`, `--reinstall`, `--upgrade`, and `--rebuild` manage the shared `SPA_HOME/.venv` (default) or `--environment` venv and require `--yes`. `--upgrade` runs `pip install --upgrade -r requirements.txt` and `ansible-galaxy collection install --upgrade`. `--shared` / `--environment` ignore a stale exported `SPA_VENV_DIR`. Progress streams (`Creating virtual environment...`, `Installing packages...` / `Upgrading packages...`, `Installing Ansible collections...` / `Updating Ansible collections...`); pip/galaxy logs stay hidden unless the command fails or `spa -v venv` is used. Confirmation is local (`will change the Python environment for this framework`; `--rebuild` deletes and recreates it). `bin/spa` re-execs into a venv that can import `yaml` / `pydantic`. Commands that need those packages fail with the state of each candidate and the matching `spa venv` repair (`--create` / `--reinstall` / `--rebuild`); `spa venv`, `doctor`, `init`, and `environment` stay available without a complete venv. `PyYAML` and `boto3` are in `requirements.txt`.
 

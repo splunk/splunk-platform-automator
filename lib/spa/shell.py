@@ -52,14 +52,25 @@ def get_host_vars(inventory, hostname):
     
     return {}
 
-def check_ansible_status(hosts):
+def check_ansible_status(hosts, paths=None):
     """Checks Ansible connectivity for a list of hosts using ping."""
     status_map = {}
     if not hosts:
         return status_map
-        
+
     import tempfile
     import shutil
+
+    from spa.executil import ToolNotFound, tool_path
+    from spa.paths import resolve_spa_paths
+
+    # ansible lives in the spa venv, not necessarily on PATH (same as
+    # ansible-inventory / ansible-playbook).
+    try:
+        ansible_bin = tool_path(paths or resolve_spa_paths(), "ansible")
+    except ToolNotFound as exc:
+        print("Warning: %s" % exc, file=sys.stderr)
+        return status_map
 
     temp_dir = tempfile.mkdtemp(prefix='spash_ansible_')
     
@@ -71,7 +82,7 @@ def check_ansible_status(hosts):
         # If list is too long, we might hit CLI limits, but for typical use reasonable.
         # Fallback to 'all' if empty or issues? No, if empty we returned above.
         
-        cmd = ['ansible', 'all', '--limit', limit_pattern, '-m', 'ping', '--tree', temp_dir]
+        cmd = [ansible_bin, 'all', '--limit', limit_pattern, '-m', 'ping', '--tree', temp_dir]
         
         print("Checking Ansible connectivity...", file=sys.stderr)
         # We don't care about stdout/stderr much, but capture to keep clean
@@ -103,7 +114,10 @@ def check_ansible_status(hosts):
                     status_map[host] = 'Error'
                     
     except FileNotFoundError:
-        print("Warning: 'ansible' command not found.", file=sys.stderr)
+        print(
+            "Warning: %s not found. Repair it: spa venv --shared --rebuild --yes" % ansible_bin,
+            file=sys.stderr,
+        )
     except Exception as e:
         print(f"Error running ansible ping: {e}", file=sys.stderr)
     finally:
@@ -179,7 +193,7 @@ def host_report(
             else:
                 hosts_to_ping.append(host)
         if hosts_to_ping:
-            ping_results = check_ansible_status(hosts_to_ping)
+            ping_results = check_ansible_status(hosts_to_ping, paths=paths)
             ansible_status.update(ping_results)
     elif verbose:
         ansible_status = {host: "unprovisioned" for host in hosts_sorted}

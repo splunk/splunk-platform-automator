@@ -122,7 +122,7 @@ def test_provision_yes_after_subcommand_auto_approves(monkeypatch):
     class FakeProvider:
         name = "test"
 
-        def provision(self, extra):
+        def provision(self, extra, **_kwargs):
             captured["extra"] = extra
             return 0
 
@@ -141,7 +141,7 @@ def test_provision_yes_works_before_or_after_subcommand(monkeypatch, argv):
     class FakeProvider:
         name = "test"
 
-        def provision(self, extra):
+        def provision(self, extra, **_kwargs):
             captured.extend(extra)
             return 0
 
@@ -159,7 +159,7 @@ def test_destroy_yes_after_subcommand_auto_approves(monkeypatch):
     class FakeProvider:
         name = "test"
 
-        def destroy(self, extra):
+        def destroy(self, extra, **_kwargs):
             captured["extra"] = extra
             return 0
 
@@ -339,7 +339,7 @@ def test_run_legacy_stem_help():
 def test_run_help_passthrough_after_dashdash(monkeypatch):
     captured = {}
 
-    def fake_run(playbook, paths, extra, on_progress=None):
+    def fake_run(playbook, paths, extra, on_progress=None, **_kwargs):
         captured["extra"] = extra
         captured["playbook"] = str(playbook)
         return 0
@@ -568,11 +568,11 @@ def test_human_lifecycle_prompt_names_command_and_risk(monkeypatch, command, ris
     class FakeProvider:
         name = "test"
 
-        def provision(self, extra):
+        def provision(self, extra, **_kwargs):
             called.append("provision")
             return 0
 
-        def destroy(self, extra):
+        def destroy(self, extra, **_kwargs):
             called.append("destroy")
             return 0
 
@@ -607,11 +607,11 @@ def test_agent_lifecycle_requires_yes(monkeypatch, command):
     class FakeProvider:
         name = "test"
 
-        def provision(self, extra):
+        def provision(self, extra, **_kwargs):
             called.append("provision")
             return 0
 
-        def destroy(self, extra):
+        def destroy(self, extra, **_kwargs):
             called.append("destroy")
             return 0
 
