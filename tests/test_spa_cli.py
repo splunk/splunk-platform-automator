@@ -197,6 +197,7 @@ def test_lifecycle_commands_dispatch_to_provider(monkeypatch, command):
 
     rc = main(["--no-agent", command, "--yes"])
     assert rc == 0
+    assert called.pop("run_log") is not None
     assert called == {"yes": True, "agent": False, "wait": True, "hosts": None}
 
 

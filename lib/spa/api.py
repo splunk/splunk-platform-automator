@@ -334,6 +334,7 @@ class LocalSpaSession:
         agent: bool,
         ansible_output: bool,
         native_output: bool = False,
+        provider: str = "",
     ):
         from spa.runlog import RunLog
 
@@ -344,6 +345,7 @@ class LocalSpaSession:
             agent=agent,
             ansible_output=ansible_output,
             native_output=native_output,
+            provider=provider,
         )
 
     def schema(self) -> CommandResult:
@@ -869,7 +871,14 @@ class LocalSpaSession:
                 playbook = "aws_provision" if action == "provision" else "aws_destroy"
             else:
                 playbook = "vagrant_up" if action == "provision" else "vagrant_destroy"
-            log = self._run_log(action, playbook, agent, ansible_output, native_output)
+            log = self._run_log(
+                action,
+                playbook,
+                agent,
+                ansible_output,
+                native_output,
+                provider=provider.name,
+            )
             rc = getattr(provider, action)(
                 args,
                 run_log=log,
@@ -1062,12 +1071,15 @@ class LocalSpaSession:
         )
         if blocked:
             return blocked
-        log = self._run_log(action, action, agent, ansible_output)
-        log.emit({"status": "ok", "phase": "power", "task": action})
         try:
             provider = get_provider(self.paths)
+        except ProviderError as exc:
+            return CommandResult(ok=False, error=str(exc), code=1)
+        log = self._run_log(action, action, agent, ansible_output, provider=provider.name)
+        log.emit({"status": "ok", "phase": "power", "task": action})
+        try:
             data = getattr(provider, action)(
-                yes=True, agent=agent, wait=wait, hosts=resolved
+                yes=True, agent=agent, wait=wait, hosts=resolved, run_log=log
             )
         except ProviderError as exc:
             log.finish(1)

@@ -285,7 +285,14 @@ class Provider:
                     status[str(identifier)] = record
         return status
 
-    def suspend(self, yes: bool, agent: bool, wait: bool = True, hosts: Optional[List[str]] = None) -> Dict[str, Any]:
+    def suspend(
+        self,
+        yes: bool,
+        agent: bool,
+        wait: bool = True,
+        hosts: Optional[List[str]] = None,
+        run_log: Any = None,
+    ) -> Dict[str, Any]:
         targets = self._select_targets(hosts)
         self._confirm("suspend", targets, yes, agent)
         ids = [target["id"] for target in targets.values()]
@@ -399,7 +406,14 @@ class Provider:
             entries[name] = rest.strip()
         return entries
 
-    def resume(self, yes: bool, agent: bool, wait: bool = True, hosts: Optional[List[str]] = None) -> Dict[str, Any]:
+    def resume(
+        self,
+        yes: bool,
+        agent: bool,
+        wait: bool = True,
+        hosts: Optional[List[str]] = None,
+        run_log: Any = None,
+    ) -> Dict[str, Any]:
         targets = self._select_targets(hosts)
         self._confirm("resume", targets, yes, agent)
         ids = [target["id"] for target in targets.values()]

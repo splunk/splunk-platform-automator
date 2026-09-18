@@ -40,6 +40,14 @@ POWER_PHASES: List[Dict[str, str]] = [
     {"id": "power", "title": "Instance power"},
 ]
 
+# Vagrant walks one machine at a time and prints no fixed step list, so its
+# groups are event-driven per machine instead of an ordered catalog.
+VAGRANT_GROUP = "vagrant"
+VAGRANT_HOST_GROUP_PREFIX = "vm:"
+
+# Events replayed as the provider's own text instead of Ansible play/task banners.
+PROVIDER_SOURCE = "provider"
+
 GROUP_TITLES: Dict[str, str] = {
     "preflight": "Preflight / readiness",
     "os": "OS and host prep",
@@ -84,6 +92,7 @@ GROUP_TITLES: Dict[str, str] = {
     "tf_apply": "Terraform apply",
     "wait_ssh": "Wait for SSH",
     "power": "Instance power",
+    VAGRANT_GROUP: "Vagrant",
 }
 
 PLAYBOOK_GROUP = {
@@ -275,12 +284,17 @@ def group_title(phase_id: Optional[str]) -> str:
         return GROUP_TITLES[phase_id]
     if phase_id.startswith("play:"):
         return phase_id[5:]
+    if phase_id.startswith(VAGRANT_HOST_GROUP_PREFIX):
+        return "VM " + phase_id[len(VAGRANT_HOST_GROUP_PREFIX) :]
     text = str(phase_id).replace("_", " ").replace("-", " ")
     return text[:1].upper() + text[1:] if text else str(phase_id)
 
 
-def phases_for_command(command: str) -> List[Dict[str, str]]:
+def phases_for_command(command: str, provider: str = "") -> List[Dict[str, str]]:
     if command in {"provision", "destroy"}:
+        # Terraform runs a known sequence; Vagrant does not.
+        if provider == "virtualbox":
+            return []
         return list(PROVISION_PHASES)
     if command in {"suspend", "resume"}:
         return list(POWER_PHASES)
@@ -299,6 +313,7 @@ def map_phase(
     play_file: str = "",
     task_file: str = "",
     role_path: str = "",
+    provider: str = "",
 ) -> Optional[str]:
     """Map Ansible (or provider) context to a stable named group id."""
     origin = _stem(play_file) or _stem(playbook)
@@ -311,6 +326,9 @@ def map_phase(
     tagset = {str(item).lower() for item in (tags or [])}
 
     if command in {"provision", "destroy"}:
+        if provider == "virtualbox":
+            # Vagrant lines already carry the machine group they belong to.
+            return None
         mapped = PLAYBOOK_GROUP.get(origin) or PLAYBOOK_GROUP.get(entry)
         return _provision_phase_from_task(task or play, mapped)
     if command in {"suspend", "resume"}:
@@ -447,8 +465,84 @@ def _provision_phase_from_task(task: str, fallback: Optional[str] = None) -> str
     return fallback or "tf_init"
 
 
-def _phase_catalog(command: str, playbook: str) -> List[Dict[str, str]]:
-    return phases_for_command(command)
+def _phase_catalog(command: str, playbook: str, provider: str = "") -> List[Dict[str, str]]:
+    return phases_for_command(command, provider)
+
+
+# Vagrant prefixes machine output with "==> name:" and indents continuation
+# lines ("    name: SSH address: ..."). Anything else is a run-wide message.
+_VAGRANT_MACHINE_LINE = re.compile(r"^(?:==>|\s{2,})\s*(?P<host>[^\s:]+):\s*(?P<text>.*)$")
+_VAGRANT_BRINGING_UP = re.compile(r"^Bringing machine '(?P<host>[^']+)' up\b")
+# Plugins such as vagrant-vbguest label their own lines "[machine] ...".
+_VAGRANT_PLUGIN_LINE = re.compile(r"^\[(?P<host>[^\]\s]+)\]\s*(?P<text>.*)$")
+# Box downloads rewrite a percentage line with \r; each rewrite reaches us as
+# its own line, and keeping them would count download ticks as steps.
+_VAGRANT_TRANSIENT_LINE = re.compile(r"^progress:\s*\d+%", re.IGNORECASE)
+# Vagrant's own notices use these names where a machine name would be.
+_VAGRANT_PSEUDO_HOSTS = frozenset({"vagrant", "default"})
+_VAGRANT_FAILURE_PATTERNS = (
+    re.compile(r"^error\b", re.IGNORECASE),
+    re.compile(r"^fatal\b", re.IGNORECASE),
+    re.compile(r"there was an error", re.IGNORECASE),
+    re.compile(r"vagrant failed to", re.IGNORECASE),
+    re.compile(r"could not be found", re.IGNORECASE),
+    re.compile(r"timed out", re.IGNORECASE),
+    re.compile(r"non-zero exit status", re.IGNORECASE),
+    re.compile(r"^stderr:", re.IGNORECASE),
+)
+
+
+def vagrant_failure_line(text: str) -> bool:
+    return any(pattern.search(text) for pattern in _VAGRANT_FAILURE_PATTERNS)
+
+
+def vagrant_event(line: str) -> Optional[Dict[str, Any]]:
+    """Turn one ``vagrant up``/``destroy`` output line into a run event.
+
+    Machine-prefixed lines open a group per machine; run-wide lines (box
+    downloads, plugin notices) fold into whichever group is already open.
+    """
+    raw = line.rstrip("\n")
+    if not raw.strip():
+        return None
+    host = ""
+    text = raw.strip()
+    machine = _VAGRANT_MACHINE_LINE.match(raw) or _VAGRANT_PLUGIN_LINE.match(text)
+    if machine:
+        host = machine.group("host")
+        text = machine.group("text").strip()
+    else:
+        bringing = _VAGRANT_BRINGING_UP.match(text)
+        if bringing:
+            host = bringing.group("host")
+    if host in _VAGRANT_PSEUDO_HOSTS:
+        host = ""
+    if not text or _VAGRANT_TRANSIENT_LINE.match(text):
+        return None
+    failed = vagrant_failure_line(text)
+    event: Dict[str, Any] = {
+        "source": PROVIDER_SOURCE,
+        "task": text,
+        "msg": text,
+        "status": "failed" if failed else "ok",
+        # Counting every Vagrant line as a host result would report a result
+        # per printed line; steps are tasks, and only failures name a host.
+        "kind": "host_result" if failed else "task_start",
+    }
+    if host:
+        event["phase"] = VAGRANT_HOST_GROUP_PREFIX + host
+        if failed:
+            event["host"] = host
+    return event
+
+
+# Providers that stream their own CLI output instead of Ansible callback JSONL.
+PROVIDER_LINE_EVENTS: Dict[str, Callable[[str], Optional[Dict[str, Any]]]] = {
+    "virtualbox": vagrant_event,
+}
+
+# Group for provider output printed before (or outside of) any machine.
+PROVIDER_BASE_GROUP: Dict[str, str] = {"virtualbox": VAGRANT_GROUP}
 
 
 _ANSI = {
@@ -487,7 +581,9 @@ def _paint(text: str, color: str, enabled: bool) -> str:
     return "%s%s%s" % (_ANSI.get(color, ""), text, _ANSI["reset"])
 
 
-_ANSI_RE = re.compile(r"\033\[[0-9;]*m")
+# Colors plus cursor/erase controls: Vagrant clears the line while it rewrites
+# download progress, and a bare "\033[K" would otherwise land in the log.
+_ANSI_RE = re.compile(r"\033\[[0-9;?]*[a-zA-Z]")
 
 
 def _strip_ansi(text: str) -> str:
@@ -522,6 +618,12 @@ def render_replay_text(events: Sequence[Dict[str, Any]]) -> str:
     last_task = None
     for event in events:
         kind = str(event.get("kind") or _infer_kind(event, str(event.get("status") or "")))
+        if event.get("source") == PROVIDER_SOURCE:
+            # Vagrant already prints readable lines; banners would bury them.
+            text = str(event.get("msg") or event.get("task") or "").strip()
+            if text:
+                chunks.append(text)
+            continue
         if kind == "tf_changes":
             summary = event.get("tf_summary") or {
                 "hosts": event.get("hosts") or [],
@@ -609,6 +711,7 @@ class RunLog:
         agent: bool = False,
         ansible_output: bool = False,
         native_output: bool = False,
+        provider: str = "",
         clock: Optional[Callable[[], datetime]] = None,
         stream: Optional[TextIO] = None,
         heartbeat_seconds: int = HEARTBEAT_SECONDS,
@@ -617,6 +720,7 @@ class RunLog:
         self.command = command
         self.playbook = playbook
         self.agent = agent
+        self.provider = provider
         self.ansible_output = ansible_output
         self._clock = clock
         self._stream = stream if stream is not None else sys.stderr
@@ -630,7 +734,7 @@ class RunLog:
         self.jsonl_path = folder / (self.run_id + JSONL_SUFFIX)
         self.meta_path = folder / (self.run_id + META_SUFFIX)
         self._handle = self.jsonl_path.open("a", encoding="utf-8")
-        self.catalog = _phase_catalog(command, playbook)
+        self.catalog = _phase_catalog(command, playbook, provider)
         self._current_phase: Optional[str] = None
         self._phase_index: Optional[int] = None
         self._phase_title: Optional[str] = None
@@ -665,6 +769,11 @@ class RunLog:
     def wants_color(self) -> bool:
         """True when the human stream can take ANSI (drives Ansible's own color)."""
         return self._color
+
+    @property
+    def saw_failure(self) -> bool:
+        """True once any event in this run was reported as failed."""
+        return self._failed > 0
 
     def envelope_fields(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -743,6 +852,21 @@ class RunLog:
         self.emit(payload)
         if self._looks_like_tf_plan_done(payload):
             self.attach_tf_plan()
+
+    def consume_provider_line(self, line: str) -> None:
+        """Feed one provider CLI line (Vagrant today) through its own dialect.
+
+        Providers that drive Ansible keep emitting callback JSONL, so anything
+        without a dialect falls back to the callback reader.
+        """
+        dialect = PROVIDER_LINE_EVENTS.get(self.provider)
+        if dialect is None:
+            self.consume_callback_line(line)
+            return
+        event = dialect(_strip_ansi(line.rstrip("\n")))
+        if event is None:
+            return
+        self.emit(event)
 
     def emit_native_output(self, line: str) -> None:
         """Write one raw native Ansible line to the human stream only.
@@ -899,9 +1023,13 @@ class RunLog:
                 play_file=str(raw.get("play_file") or ""),
                 task_file=str(raw.get("task_file") or ""),
                 role_path=str(raw.get("role_path") or ""),
+                provider=self.provider,
             )
             if mapped:
                 phase = mapped
+        if not phase:
+            # Provider output without a group of its own belongs to the open one.
+            phase = self._current_phase or PROVIDER_BASE_GROUP.get(self.provider)
         if status not in {"heartbeat", "phase_end"}:
             self._maybe_phase_change(str(phase) if phase else None, stamp)
         if kind == "task_start" and task:
@@ -916,8 +1044,10 @@ class RunLog:
                 self._changed += 1
             if status == "skipped":
                 self._skipped += 1
-            if status in {"failed", "unreachable"}:
-                self._failed += 1
+        # A provider CLI can fail without naming a host (bad Vagrantfile,
+        # missing plugin), and that still has to show up as a failed phase.
+        if status in {"failed", "unreachable"}:
+            self._failed += 1
         title = group_title(str(phase)) if phase else None
         index = None
         count = len(self.catalog) or None
@@ -936,11 +1066,13 @@ class RunLog:
             "play_file": _stem(str(raw.get("play_file") or "")) or None,
             "task_file": str(raw.get("task_file") or "") or None,
             "kind": kind,
+            "source": raw.get("source") or None,
             "phase": phase,
             "phase_id": phase,
             "phase_title": title,
             "phase_index": index if index is not None else self._phase_index,
             "phase_count": count,
+            "ok": raw.get("ok"),
             "play": play or None,
             "task": task or None,
             "role": role or None,
@@ -1218,21 +1350,22 @@ class RunLog:
             if self._live_cr:
                 self._emit_phase_line(final=False)
             return
+        if status in {"failed", "unreachable"}:
+            self._break_live()
+            # A provider line is its own task and message; print it once.
+            parts: List[str] = []
+            for part in (event.get("host"), event.get("task"), event.get("msg")):
+                text = str(part or "").strip()
+                if text and text not in parts:
+                    parts.append(text)
+            self._write_stderr(_paint("  ".join(["failed", *parts]), "red", self._color))
+            if self._current_phase and self._live_cr:
+                self._emit_phase_line(final=False)
+            return
         if kind in {"task_start", "play_start", "recap"} or event.get("handler"):
             return
         if status == "skipped":
             if self._live_cr:
-                self._emit_phase_line(final=False)
-            return
-        if status in {"failed", "unreachable"}:
-            self._break_live()
-            fail = "failed  %s  %s  %s" % (
-                event.get("host") or "-",
-                event.get("task") or "",
-                event.get("msg") or "",
-            )
-            self._write_stderr(_paint(fail, "red", self._color))
-            if self._current_phase and self._live_cr:
                 self._emit_phase_line(final=False)
             return
         if kind == "host_result" and self._live_cr:

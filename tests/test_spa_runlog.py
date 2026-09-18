@@ -185,6 +185,91 @@ def test_map_phase_app_overlays_and_upgrade():
     assert map_phase(command="run", playbook="custom_lab.yml", play="Do a thing") == "play:Do a thing"
 
 
+def test_provision_groups_follow_the_provider():
+    from spa.runlog import group_title, phases_for_command
+
+    assert [row["id"] for row in phases_for_command("provision")][0] == "tf_init"
+    assert phases_for_command("provision", provider="virtualbox") == []
+    assert map_phase(command="provision", task="Run Terraform Plan", provider="virtualbox") is None
+    assert group_title("vm:idx1") == "VM idx1"
+
+
+def test_vagrant_lines_map_to_machines_and_failures():
+    from spa.runlog import vagrant_event
+
+    assert vagrant_event("==> idx1: Booting VM...") == {
+        "source": "provider",
+        "phase": "vm:idx1",
+        "task": "Booting VM...",
+        "msg": "Booting VM...",
+        "status": "ok",
+        "kind": "task_start",
+    }
+    assert vagrant_event("    idx1: SSH address: 127.0.0.1:2222")["phase"] == "vm:idx1"
+    assert vagrant_event("[idx1] GuestAdditions seems to be installed")["phase"] == "vm:idx1"
+    assert vagrant_event("Bringing machine 'idx1' up with 'virtualbox' provider...")["phase"] == "vm:idx1"
+    # Vagrant's own notices and box download ticks are not machine steps.
+    assert "phase" not in vagrant_event("==> vagrant: A new version of Vagrant is available")
+    assert vagrant_event("    box: Progress: 40% (Rate: 3247k/s)") is None
+    assert vagrant_event("") is None
+    failure = vagrant_event("==> idx1: There was an error while executing `VBoxManage`")
+    assert failure["status"] == "failed"
+    assert failure["host"] == "idx1"
+    assert vagrant_event("ERROR: Cannot find ansible binary")["status"] == "failed"
+
+
+def test_runlog_vagrant_run_wide_lines_stay_in_the_open_group(tmp_path):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+    stderr = StringIO()
+    log = RunLog(
+        paths,
+        "provision",
+        "vagrant_up",
+        agent=False,
+        heartbeat_seconds=0,
+        stream=stderr,
+        provider="virtualbox",
+        clock=lambda: datetime(2026, 9, 17, 17, 2, 0, tzinfo=timezone(timedelta(hours=2))),
+    )
+    log.consume_provider_line("==> idx1: Booting VM...\n")
+    log.consume_provider_line("\x1b[KGuestAdditions versions do not match.\n")
+    log.consume_provider_line("==> idx1: Machine booted and ready!\n")
+    log.finish(0)
+    events = [json.loads(line) for line in log.jsonl_path.read_text(encoding="utf-8").splitlines()]
+    assert {row.get("phase") for row in events} == {"vm:idx1"}
+    from spa.runlog import render_replay_text
+
+    replay = render_replay_text(events)
+    assert "Booting VM..." in replay
+    assert "TASK [" not in replay
+    assert [row.get("status") for row in events].count("phase_start") == 1
+    assert "\x1b" not in log.jsonl_path.read_text(encoding="utf-8")
+    text = stderr.getvalue()
+    assert "Provision  VM idx1  tasks 3" in text
+    assert text.rstrip().endswith("ok")
+
+
+def test_runlog_marks_the_phase_failed_without_a_host(tmp_path):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+    stderr = StringIO()
+    log = RunLog(
+        paths,
+        "provision",
+        "vagrant_up",
+        agent=False,
+        heartbeat_seconds=0,
+        stream=stderr,
+        provider="virtualbox",
+    )
+    log.consume_provider_line("ERROR: Cannot find ansible binary\n")
+    log.finish(2)
+    text = stderr.getvalue()
+    assert "Cannot find ansible binary" in text
+    assert text.rstrip().endswith("failed")
+
+
 def test_runlog_agent_stderr_is_sparse(tmp_path):
     extra = min_env_vars(tmp_path)
     paths = resolve_spa_paths(environ={**extra})
