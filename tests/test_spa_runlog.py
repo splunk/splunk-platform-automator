@@ -250,6 +250,64 @@ def test_runlog_vagrant_run_wide_lines_stay_in_the_open_group(tmp_path):
     assert text.rstrip().endswith("ok")
 
 
+def test_ansible_warnings_do_not_open_a_group(tmp_path):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+    stderr = StringIO()
+    log = RunLog(
+        paths,
+        "deploy",
+        "ansible/deploy_site.yml",
+        agent=False,
+        heartbeat_seconds=0,
+        stream=stderr,
+    )
+    log.consume_callback_line(
+        "[WARNING]: Could not match supplied host pattern, ignoring: role_deployer\n"
+    )
+    log.emit(
+        {
+            "playbook": "splunk_install.yml",
+            "play": "Install the splunk software",
+            "task": "Install package",
+            "host": "idx1",
+            "status": "changed",
+        }
+    )
+    log.consume_callback_line("[WARNING]: SELinux state temporarily changed\n")
+    log.finish(0)
+    text = stderr.getvalue()
+    assert "Deploy site" not in text
+    assert "[WARNING]" not in text
+    assert "Deploy  Splunk install" in text
+    events = [json.loads(line) for line in log.jsonl_path.read_text(encoding="utf-8").splitlines()]
+    # The warnings stay in the transcript and in the Ansible-style replay.
+    notes = [row for row in events if row.get("kind") == "note"]
+    assert len(notes) == 2
+    assert all("phase" not in row or row["phase"] == "binary" for row in notes)
+    from spa.runlog import render_replay_text
+
+    assert "[WARNING]: SELinux state temporarily changed" in render_replay_text(events)
+
+
+def test_ansible_hard_error_on_stderr_is_shown(tmp_path):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+    stderr = StringIO()
+    log = RunLog(
+        paths,
+        "deploy",
+        "ansible/deploy_site.yml",
+        agent=False,
+        heartbeat_seconds=0,
+        stream=stderr,
+    )
+    log.consume_callback_line("ERROR! the playbook: missing.yml could not be found\n")
+    log.finish(1)
+    assert "missing.yml could not be found" in stderr.getvalue()
+    assert log.saw_failure is True
+
+
 def test_runlog_marks_the_phase_failed_without_a_host(tmp_path):
     extra = min_env_vars(tmp_path)
     paths = resolve_spa_paths(environ={**extra})

@@ -14,10 +14,12 @@ DOCUMENTATION = r"""
     options: {}
 """
 
+import inspect
 import os
 
 from ansible.errors import AnsibleParserError
 from ansible.inventory.group import InventoryObjectType
+from ansible.parsing.dataloader import DataLoader
 from ansible.plugins.vars import BaseVarsPlugin
 from ansible.utils.vars import combine_vars
 
@@ -26,6 +28,13 @@ _PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 _FRAMEWORK_GROUP_VARS = os.path.realpath(os.path.join(_PLUGIN_DIR, "..", "..", "group_vars"))
 # Resolved by the inventory plugin; loading the jinja file here would replace them.
 _SKIP_BASENAMES = frozenset({"spa_paths.yml"})
+# ansible-core 2.19+ only templates values loaded as trusted, exactly as the
+# builtin host_group_vars does. Without it, group_vars jinja stays literal text.
+_TRUST_KWARGS = (
+    {"trusted_as_template": True}
+    if "trusted_as_template" in inspect.signature(DataLoader.load_from_file).parameters
+    else {}
+)
 
 
 class VarsModule(BaseVarsPlugin):
@@ -53,7 +62,9 @@ class VarsModule(BaseVarsPlugin):
             for found_file in found:
                 if os.path.basename(found_file) in _SKIP_BASENAMES:
                     continue
-                new_data = loader.load_from_file(found_file)
+                new_data = loader.load_from_file(
+                    found_file, cache="all", unsafe=True, **_TRUST_KWARGS
+                )
                 if new_data:
                     data = combine_vars(data, new_data)
         return data

@@ -48,6 +48,9 @@ VAGRANT_HOST_GROUP_PREFIX = "vm:"
 # Events replayed as the provider's own text instead of Ansible play/task banners.
 PROVIDER_SOURCE = "provider"
 
+# Ansible's own stderr notes ("[WARNING]: ...") belong to no play or group.
+NOTE_KIND = "note"
+
 GROUP_TITLES: Dict[str, str] = {
     "preflight": "Preflight / readiness",
     "os": "OS and host prep",
@@ -618,8 +621,8 @@ def render_replay_text(events: Sequence[Dict[str, Any]]) -> str:
     last_task = None
     for event in events:
         kind = str(event.get("kind") or _infer_kind(event, str(event.get("status") or "")))
-        if event.get("source") == PROVIDER_SOURCE:
-            # Vagrant already prints readable lines; banners would bury them.
+        if event.get("source") == PROVIDER_SOURCE or kind == NOTE_KIND:
+            # Vagrant lines and Ansible warnings are already readable text.
             text = str(event.get("msg") or event.get("task") or "").strip()
             if text:
                 chunks.append(text)
@@ -844,14 +847,27 @@ class RunLog:
             try:
                 loaded = json.loads(text)
             except json.JSONDecodeError:
-                payload = {"status": "ok", "msg": text, "raw": True}
+                payload = self._note_payload(text)
             else:
                 payload = loaded if isinstance(loaded, dict) else {"status": "ok", "msg": text}
         else:
-            payload = {"status": "ok", "msg": text, "raw": True}
+            payload = self._note_payload(text)
         self.emit(payload)
         if self._looks_like_tf_plan_done(payload):
             self.attach_tf_plan()
+
+    @staticmethod
+    def _note_payload(text: str) -> Dict[str, Any]:
+        """Ansible text on stderr: a warning to keep, or a hard error to show."""
+        payload: Dict[str, Any] = {
+            "status": "ok",
+            "kind": NOTE_KIND,
+            "msg": text,
+            "raw": True,
+        }
+        if text.startswith("ERROR!"):
+            payload["status"] = "failed"
+        return payload
 
     def consume_provider_line(self, line: str) -> None:
         """Feed one provider CLI line (Vagrant today) through its own dialect.
@@ -1010,8 +1026,12 @@ class RunLog:
             tags = [tags]
         status = str(raw.get("status") or "ok")
         kind = _infer_kind(raw, status)
+        note = kind == NOTE_KIND
         phase = raw.get("phase") or raw.get("phase_id")
-        if not phase or status not in {"heartbeat", "phase_end"}:
+        if note:
+            # A warning is not a step: it must not open or close a group.
+            phase = phase or self._current_phase
+        elif not phase or status not in {"heartbeat", "phase_end"}:
             mapped = map_phase(
                 command=self.command,
                 playbook=playbook,
@@ -1027,10 +1047,10 @@ class RunLog:
             )
             if mapped:
                 phase = mapped
-        if not phase:
+        if not phase and not note:
             # Provider output without a group of its own belongs to the open one.
             phase = self._current_phase or PROVIDER_BASE_GROUP.get(self.provider)
-        if status not in {"heartbeat", "phase_end"}:
+        if not note and status not in {"heartbeat", "phase_end"}:
             self._maybe_phase_change(str(phase) if phase else None, stamp)
         if kind == "task_start" and task:
             self._tasks.add(task)
@@ -1361,6 +1381,9 @@ class RunLog:
             self._write_stderr(_paint("  ".join(["failed", *parts]), "red", self._color))
             if self._current_phase and self._live_cr:
                 self._emit_phase_line(final=False)
+            return
+        if kind == NOTE_KIND:
+            # Kept in the transcript; Ansible warnings are noise on the live line.
             return
         if kind in {"task_start", "play_start", "recap"} or event.get("handler"):
             return
