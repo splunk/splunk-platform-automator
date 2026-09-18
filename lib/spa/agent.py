@@ -62,7 +62,10 @@ def emit(ok: bool, data: Any = None, error: Optional[str] = None, as_agent: bool
 
         error = str(redact(error))
     if as_agent:
-        sys.stdout.write(json.dumps(envelope(ok, data, error), indent=2, default=str) + "\n")
+        # Compact: agents parse it, and indentation is a third of the payload.
+        sys.stdout.write(
+            json.dumps(envelope(ok, data, error), separators=(",", ":"), default=str) + "\n"
+        )
         return
     if error:
         print(error, file=sys.stderr)

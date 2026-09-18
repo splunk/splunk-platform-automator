@@ -19,7 +19,7 @@ ProgressCallback = Callable[[Dict[str, Any]], None]
 
 VALIDATE_STEPS = (
     ("schema", "Schema validation (Pydantic)"),
-    ("controller_data", "Controller Software / baseconfig / local apps"),
+    ("controller_data", "Controller directories (Software / baseconfig / apps / playbooks)"),
     ("inventory", "Inventory plugin (ansible-inventory)"),
     ("license_role", "License and license_manager role check"),
     ("syntax", "Playbook syntax-check"),
@@ -52,6 +52,48 @@ def _note(
             + "\n"
         )
         sys.stderr.flush()
+
+
+def controller_data_message(state: Any, playbook_dirs: Optional[List[Dict[str, Any]]] = None) -> str:
+    """One `OK` line per controller directory, like the other validate steps."""
+    lines = [
+        "Software OK: %s" % state.software_dir,
+        "Baseconfig OK: %s" % state.baseconfig_dir,
+    ]
+    if state.apps_checked:
+        lines.append("Local apps OK: %s" % state.apps_dir)
+    else:
+        lines.append("Local apps OK: none configured")
+    if not playbook_dirs:
+        lines.append("Custom playbooks OK: none configured")
+    else:
+        for row in playbook_dirs:
+            count = row.get("playbooks", 0)
+            detail = "empty" if not count else "%d playbook%s" % (count, "" if count == 1 else "s")
+            lines.append("Custom playbooks OK: %s (%s)" % (row["path"], detail))
+    return "\n".join(lines)
+
+
+def license_summary(scan: Dict[str, Any]) -> Dict[str, Any]:
+    """What the license_role step asserts. Full per-file scan: `spa licenses --json`."""
+    return {
+        "configured_splunk_license_file": scan.get("configured_splunk_license_file"),
+        "license_manager_in_config": scan.get("license_manager_in_config"),
+        "itsi_in_config": scan.get("itsi_in_config"),
+        "es_in_config": scan.get("es_in_config"),
+        "files_found": len(scan.get("discovered_files") or []),
+    }
+
+
+def custom_playbook_dirs_error(playbook_dirs: List[Dict[str, Any]], env_dir: Any) -> str:
+    """Name every unusable `playbook_dirs` entry and where to fix it."""
+    lines = [
+        "Custom playbooks failed: %s %s (%s)" % (row["dir"], row["reason"], row["path"])
+        for row in playbook_dirs
+        if not row["ok"]
+    ]
+    lines.append("Fix playbook_dirs in %s/.spa.yml or create the directory." % env_dir)
+    return "\n".join(lines)
 
 
 def validate_env(
@@ -131,30 +173,40 @@ except ConfigValidationError as e:
 
     _note(
         on_progress,
-        "[2/5] Controller Software / baseconfig / local apps...",
+        "[2/5] Controller directories (Software / baseconfig / apps / playbooks)...",
         agent=agent,
         phase="controller_data",
         index=2,
     )
+    from spa.playbooks import custom_playbook_dir_state
     from spa.preflight import check_controller_data, controller_data_error
 
     controller = check_controller_data(paths)
-    data["controller_data"] = {
+    playbook_dirs = custom_playbook_dir_state(Path(paths.spa_env_dir))
+    # Only on failure: the step message already names every directory on success.
+    detail = {
         "software_dir": controller.software_dir,
         "baseconfig_dir": controller.baseconfig_dir,
         "apps_dir": controller.apps_dir,
+        "apps_checked": controller.apps_checked,
         "missing": list(controller.missing),
+        "playbook_dirs": playbook_dirs,
     }
     if not controller.ok:
         msg = controller_data_error(controller)
+        data["controller_data"] = detail
+        steps.append({"id": "controller_data", "ok": False, "message": msg})
+        return CommandResult(ok=False, error=msg, data=data, code=1)
+    if any(not row["ok"] for row in playbook_dirs):
+        msg = custom_playbook_dirs_error(playbook_dirs, paths.spa_env_dir)
+        data["controller_data"] = detail
         steps.append({"id": "controller_data", "ok": False, "message": msg})
         return CommandResult(ok=False, error=msg, data=data, code=1)
     steps.append(
         {
             "id": "controller_data",
             "ok": True,
-            "message": "Software %s; baseconfig %s"
-            % (controller.software_dir, controller.baseconfig_dir),
+            "message": controller_data_message(controller, playbook_dirs),
         }
     )
 
@@ -199,7 +251,9 @@ except ConfigValidationError as e:
     from spa import licenses as licenses_mod
 
     license_scan = licenses_mod.scan_licenses(paths.spa_env_dir, config_path=config_path)
-    data["license_scan"] = license_scan
+    data["licenses"] = license_summary(license_scan)
+    if check_licenses:
+        data["license_scan"] = license_scan
     configured = license_scan.get("configured_splunk_license_file")
     has_lm = license_scan.get("license_manager_in_config")
     if configured and not has_lm:
@@ -302,7 +356,7 @@ def format_validate_text(result: CommandResult) -> str:
     lines = ["=== Validating %s ===" % data.get("config_file", "")]
     labels = {
         "schema": "[1/5] Schema validation (Pydantic)...",
-        "controller_data": "[2/5] Controller Software / baseconfig / local apps...",
+        "controller_data": "[2/5] Controller directories (Software / baseconfig / apps / playbooks)...",
         "inventory": "[3/5] Inventory plugin (ansible-inventory)...",
         "license_role": "[4/5] License and license_manager role check...",
         "syntax": "[5/5] Playbook syntax-check...",

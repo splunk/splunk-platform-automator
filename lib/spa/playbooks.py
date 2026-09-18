@@ -18,6 +18,9 @@ METADATA_SCHEMA = 1
 CATEGORIES = frozenset({"deployment", "operations", "upgrade", "verification", "infrastructure"})
 RISKS = frozenset({"read-only", "mutating", "destructive"})
 
+# Custom playbooks in $SPA_ENV_DIR/ancustom need no .spa.yml entry.
+DEFAULT_ENV_PLAYBOOK_DIR = "ancustom"
+
 # 2.x / pre-3.0 stems → 3.0 names. Catalog lists the new stem only.
 LEGACY_STEMS = {
     "start_splunk": "splunk_start",
@@ -90,23 +93,53 @@ def list_framework_stems(home: Path) -> List[Tuple[str, str, Path]]:
     return items
 
 
-def list_env_stems(env_dir: Path, extra_dirs: Optional[List[str]] = None) -> List[Tuple[str, str, Path]]:
-    items: List[Tuple[str, str, Path]] = []
-    dirs = extra_dirs or []
+def configured_playbook_dirs(
+    env_dir: Path, extra_dirs: Optional[List[str]] = None
+) -> List[Tuple[str, Path]]:
+    """(name, folder) for the default folder, every `.spa.yml` entry, plus extras."""
+    dirs = list(extra_dirs or [])
+    if (env_dir / DEFAULT_ENV_PLAYBOOK_DIR).is_dir():
+        dirs.append(DEFAULT_ENV_PLAYBOOK_DIR)
     yml = env_dir / ".spa.yml"
     if yml.is_file():
-        data = load_spa_yml(yml)
-        configured = data.get("playbook_dirs") or []
+        configured = load_spa_yml(yml).get("playbook_dirs") or []
         if isinstance(configured, str):
             configured = [configured]
-        dirs = list(dirs) + [str(d) for d in configured]
+        dirs += [str(item) for item in configured]
+    resolved: List[Tuple[str, Path]] = []
     seen = set()
     for name in dirs:
         name = name.strip().strip("/")
         if not name or name in seen:
             continue
         seen.add(name)
-        folder = (env_dir / name).resolve()
+        resolved.append((name, (env_dir / name).resolve()))
+    return resolved
+
+
+def custom_playbook_dir_state(env_dir: Path) -> List[Dict[str, Any]]:
+    """Report each configured custom playbook folder, usable or not.
+
+    `spa run --list` skips an unusable folder silently, so `spa validate` is
+    where a typo in `playbook_dirs` has to become visible.
+    """
+    rows: List[Dict[str, Any]] = []
+    for name, folder in configured_playbook_dirs(env_dir):
+        row: Dict[str, Any] = {"dir": name, "path": str(folder), "ok": False}
+        if not _safe_under(env_dir, folder):
+            row["reason"] = "outside the environment directory"
+        elif not folder.is_dir():
+            row["reason"] = "directory not found"
+        else:
+            row["ok"] = True
+            row["playbooks"] = len(list(folder.glob("*.yml")))
+        rows.append(row)
+    return rows
+
+
+def list_env_stems(env_dir: Path, extra_dirs: Optional[List[str]] = None) -> List[Tuple[str, str, Path]]:
+    items: List[Tuple[str, str, Path]] = []
+    for name, folder in configured_playbook_dirs(env_dir, extra_dirs):
         if not _safe_under(env_dir, folder) or not folder.is_dir():
             continue
         for path in sorted(folder.glob("*.yml")):

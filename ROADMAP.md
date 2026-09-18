@@ -130,5 +130,6 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 ## Testing
 
 - [x] Local pytest + GitHub Actions CI ([tests/README.md](tests/README.md))
+- [ ] Hermetic CLI argv contract: isolate inherited `SPA_*` / `ANSIBLE_*` from `run_spa`, table-driven flags/aliases/`--` extras from `spa agent schema` — [#89](https://github.com/splunk/splunk-platform-automator/issues/89)
 - [ ] Broader schema / example sweep
 - [ ] Optional nightly AWS job — not required on every PR

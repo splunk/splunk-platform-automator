@@ -54,6 +54,86 @@ def test_seeded_software_without_local_apps_ok(tmp_path):
     paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software)
     state = check_controller_data(paths)
     assert state.ok is True
+    # No source: local apps, so apps_dir was never inspected.
+    assert state.apps_checked is False
+
+
+def test_validate_reports_one_ok_line_per_directory(tmp_path):
+    from spa.validate import controller_data_message
+
+    software = seed_software_dir(tmp_path)
+    apps = tmp_path / "apps"
+    (apps / "org_some_local_app").mkdir(parents=True)
+    config = """
+splunk_app_deployment:
+  apps:
+    - name: org_some_local_app
+      source: local
+      target_roles: [search_head]
+"""
+    paths = _paths(tmp_path, config, software=software, apps_dir=apps)
+    state = check_controller_data(paths)
+    assert state.apps_checked is True
+    assert controller_data_message(state).splitlines() == [
+        "Software OK: %s" % software,
+        "Baseconfig OK: %s" % software,
+        "Local apps OK: %s" % apps,
+        "Custom playbooks OK: none configured",
+    ]
+
+    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software)
+    without_apps = controller_data_message(check_controller_data(paths)).splitlines()
+    assert without_apps[2] == "Local apps OK: none configured"
+
+
+def test_validate_reports_the_default_custom_playbook_dir(tmp_path):
+    from spa.playbooks import DEFAULT_ENV_PLAYBOOK_DIR, custom_playbook_dir_state
+    from spa.validate import controller_data_message
+
+    software = seed_software_dir(tmp_path)
+    playbooks = tmp_path / DEFAULT_ENV_PLAYBOOK_DIR
+    playbooks.mkdir()
+    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software)
+
+    # No .spa.yml entry needed, and an empty folder is not an error.
+    rows = custom_playbook_dir_state(tmp_path)
+    assert [(row["dir"], row["ok"], row["playbooks"]) for row in rows] == [
+        (DEFAULT_ENV_PLAYBOOK_DIR, True, 0)
+    ]
+    message = controller_data_message(check_controller_data(paths), rows)
+    assert message.splitlines()[-1] == "Custom playbooks OK: %s (empty)" % playbooks
+
+    (playbooks / "my_playbook.yml").write_text("---\n- hosts: all\n")
+    rows = custom_playbook_dir_state(tmp_path)
+    message = controller_data_message(check_controller_data(paths), rows)
+    assert message.splitlines()[-1] == "Custom playbooks OK: %s (1 playbook)" % playbooks
+
+
+def test_validate_reports_configured_custom_playbook_dirs(tmp_path):
+    from spa.playbooks import custom_playbook_dir_state, list_env_stems
+
+    extra = tmp_path / "playbooks"
+    extra.mkdir()
+    (extra / "my_playbook.yml").write_text("---\n- hosts: all\n")
+    (tmp_path / ".spa.yml").write_text("playbook_dirs:\n  - playbooks\n")
+
+    rows = custom_playbook_dir_state(tmp_path)
+    assert [(row["dir"], row["ok"], row["playbooks"]) for row in rows] == [("playbooks", True, 1)]
+    assert [stem for stem, _, _ in list_env_stems(tmp_path)] == ["playbooks/my_playbook"]
+
+
+def test_validate_flags_a_missing_custom_playbook_dir(tmp_path):
+    from spa.playbooks import custom_playbook_dir_state
+    from spa.validate import custom_playbook_dirs_error
+
+    (tmp_path / ".spa.yml").write_text("playbook_dirs:\n  - typo\n  - ../escape\n")
+    rows = custom_playbook_dir_state(tmp_path)
+    assert [(row["dir"], row["ok"]) for row in rows] == [("typo", False), ("../escape", False)]
+
+    message = custom_playbook_dirs_error(rows, tmp_path)
+    assert "typo directory not found" in message
+    assert "outside the environment directory" in message
+    assert "playbook_dirs in %s/.spa.yml" % tmp_path in message
 
 
 def test_local_apps_need_apps_dir(tmp_path):

@@ -29,6 +29,8 @@ class ControllerDataState:
     software_dir: str = ""
     baseconfig_dir: str = ""
     apps_dir: str = ""
+    # apps_dir is only inspected when the config has source: local apps.
+    apps_checked: bool = False
 
 
 def _defaultish(configured: Any, env_var: str) -> bool:
@@ -212,6 +214,7 @@ def check_controller_data(
         software_dir=str(software_dir),
         baseconfig_dir=str(baseconfig_dir),
         apps_dir=str(apps_dir),
+        apps_checked=True,
     )
 
 
