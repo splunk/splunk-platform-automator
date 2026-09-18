@@ -117,6 +117,12 @@ def test_force_without_example_keeps_config(tmp_path):
     result = run_spa_init(["--force", str(dest)])
     assert result.returncode == 0, result.stderr + result.stdout
     assert marker in cfg.read_text()
+    leftover = dest / "inventory" / "group_vars"
+    leftover.symlink_to(PROJECT_ROOT / "ansible" / "group_vars")
+    again = run_spa_init(["--force", str(dest)])
+    assert again.returncode == 0, again.stderr + again.stdout
+    assert marker in cfg.read_text()
+    assert not leftover.exists() and not leftover.is_symlink()
 
 
 def test_force_removes_incomplete_env_venv(tmp_path):
@@ -184,6 +190,7 @@ def _write_old_env(root: Path, marker: str = "migrated-env") -> None:
     )
     (root / "config" / "index.html").write_text("<html>hosts</html>\n")
     (root / "inventory" / "hosts").write_text("cm ansible_host=10.0.0.1\n")
+    (root / "inventory" / "group_vars").symlink_to(PROJECT_ROOT / "ansible" / "group_vars")
     (root / "terraform" / "aws" / "terraform.tfstate").write_text('{"version": 4}\n')
     (root / "terraform" / "aws" / "terraform.tfvars").write_text("region = \"eu-central-1\"\n")
     (root / "terraform" / "aws" / "main.tf").write_text("# leftover module copy\n")
@@ -219,6 +226,8 @@ def test_migrate_from_existing_env(tmp_path):
     assert "migrated-env" in (dest / "config" / "splunk_config.yml").read_text()
     assert (dest / "config" / "index.html").is_file()
     assert (dest / "inventory" / "hosts").read_text() == "cm ansible_host=10.0.0.1\n"
+    assert not (dest / "inventory" / "group_vars").is_symlink()
+    assert not (dest / "inventory" / "group_vars").exists()
     assert (dest / "terraform" / "aws" / "terraform.tfstate").is_file()
     assert (dest / "terraform" / "aws" / "terraform.tfvars").is_file()
     assert (dest / ".vagrant" / "machines" / "idx1" / "id").read_text() == "vbox-id\n"
@@ -289,6 +298,7 @@ def test_old_clone_force_strips_keeps_config(tmp_path):
     assert (dest / "config" / "splunk_config.yml").is_file()
     assert "migrated-env" in (dest / "config" / "splunk_config.yml").read_text()
     assert (dest / "inventory" / "hosts").is_file()
+    assert not (dest / "inventory" / "group_vars").exists()
     assert (dest / "terraform" / "aws" / "terraform.tfstate").is_file()
     assert (dest / ".spa.yml").is_file()
     assert not (dest / "ansible").exists()

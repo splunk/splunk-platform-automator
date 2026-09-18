@@ -39,6 +39,10 @@ A future GUI or remote controller may reuse the session protocol. Remote transpo
 
 Confirmation belongs in the session boundary, not a UI renderer. Mutating operations require explicit confirmation; agent/GUI clients never answer an interactive prompt.
 
+## Framework group_vars
+
+Ansible group and host vars for SPA live in `$SPA_HOME/ansible/group_vars`, next to the playbooks. The env inventory directory only holds generated `hosts`. A vars plugin (`spa_group_vars`) loads the framework files so a separate env does not need `inventory/group_vars` as a symlink into the repo. `spa init --force` and migrate remove a leftover 2.x `inventory/group_vars` symlink; a real directory is left alone.
+
 ## Env-dir run logs
 
 Mutating `spa` commands write `$SPA_ENV_DIR/logs/{run_id}.jsonl` plus a `.meta.json` sidecar. This is per-environment output, not XDG `~/.local/state`.

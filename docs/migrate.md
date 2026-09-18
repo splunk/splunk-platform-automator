@@ -51,7 +51,9 @@ spa validate
 
 `spa init` migrates `config/`, `inventory/`, Terraform state, and **`.vagrant/`** (VirtualBox machine IDs). If `.vagrant` is left in the clone, `spa provision` would create a second set of VMs.
 
-If you copied a whole old checkout as the env directory, `spa init DIR` exits 2 until `--force`. Then env state is kept and framework leftovers under that dir are stripped. After conversion (or for any older lab that already has config), `spa env init NAME --force` registers that directory so it appears in `spa environment list`.
+If you copied a whole old checkout as the env directory, `spa init DIR` exits 2 until `--force`. Then env state is kept and framework leftovers under that dir are stripped (including an `inventory/group_vars` symlink into the old clone; framework vars stay in `$SPA_HOME/ansible/group_vars`). After conversion (or for any older lab that already has config), `spa env init NAME --force` registers that directory so it appears in `spa environment list`.
+
+When run from a recognizable 2.x checkout, operator commands fail instead of silently selecting the registered default environment. Use `spa init --force DIR` to convert that copied tree, `spa init --from OLD DEST` to move it, or an explicit `spa --env NAME COMMAND` when targeting another environment intentionally.
 
 ## Python / Ansible
 

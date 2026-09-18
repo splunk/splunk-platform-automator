@@ -131,7 +131,53 @@ def test_validate_separate_env(tmp_path):
     assert "License role pairing OK" in out, out
     if validated.returncode != 0:
         assert "win_stat" in out, out
+    group_vars = dest / "inventory" / "group_vars"
+    assert not group_vars.exists() and not group_vars.is_symlink()
     _assert_clone_untouched(before)
+
+
+def test_leftover_group_vars_symlink_does_not_block_inventory(tmp_path):
+    dest = tmp_path / "env"
+    result = run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    assert result.returncode == 0, result.stderr
+
+    stub = PROJECT_ROOT / "tests" / "fixtures" / "baseconfig"
+    _ensure_software_stubs(stub)
+
+    inv = dest / "inventory"
+    inv.mkdir(parents=True, exist_ok=True)
+    leftover = inv / "group_vars"
+    leftover.symlink_to(PROJECT_ROOT / "ansible" / "group_vars")
+    assert leftover.is_symlink()
+
+    env = spa_env()
+    venv_bin = PROJECT_ROOT / "tests" / ".venv" / "bin"
+    if venv_bin.is_dir():
+        env["PATH"] = str(venv_bin) + os.pathsep + env.get("PATH", "")
+    env["SPA_HOME"] = str(PROJECT_ROOT)
+    env["SPA_ENV_DIR"] = str(dest)
+    env["SPA_SOFTWARE_DIR"] = str(stub)
+    env["SPA_BASECONFIG_DIR"] = str(stub)
+    env["ANSIBLE_CONFIG"] = str(PROJECT_ROOT / "ansible.cfg")
+    env["ANSIBLE_INVENTORY"] = str(dest / "config" / "splunk_config.yml")
+    env["ANSIBLE_VARS_PLUGINS"] = str(PROJECT_ROOT / "ansible" / "plugins" / "vars")
+    env["ANSIBLE_LOCAL_TEMP"] = str(tmp_path / "ansible_tmp")
+    os.makedirs(env["ANSIBLE_LOCAL_TEMP"], exist_ok=True)
+    collections = PROJECT_ROOT / "tests" / ".collections"
+    if collections.is_dir():
+        env["ANSIBLE_COLLECTIONS_PATH"] = str(collections)
+
+    listed = subprocess.run(
+        ["ansible-inventory", "--host", "shidx", "-i", str(dest / "config" / "splunk_config.yml")],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert listed.returncode == 0, listed.stderr + listed.stdout
+    assert "spa_preflight_deploy" in listed.stdout
+    # Inventory parse does not migrate the 2.x symlink; spa init --force does.
+    assert leftover.is_symlink()
 
 
 def test_clone_equal_inventory_still_parses(tmp_path):

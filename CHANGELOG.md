@@ -19,6 +19,10 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **Recognizable 2.x repos fail closed before default-env fallback**: when cwd (or an ancestor) contains both `config/splunk_config.yml` and the legacy SPA inventory plugin but no `.spa.yml`, operator commands refuse to use the registered default environment and point to `spa init --force` / `spa init --from`. Explicit `--env` / `SPA_ENV_DIR` still win.
+
+- **Env inventory no longer symlinks `group_vars` into the repo**: framework vars stay in `$SPA_HOME/ansible/group_vars` and load through the `spa_group_vars` vars plugin. A leftover `$SPA_ENV_DIR/inventory/group_vars` symlink from a 2.x clone is removed by `spa init --force` / migrate, not at inventory parse time.
+
 - **`spa hosts list --status` finds `ansible` in the spa venv**: the ping check used a bare `ansible` on PATH, so every row showed `Ansible: N/A` with `Warning: 'ansible' command not found.` even on a working install. It now resolves the binary like `ansible-inventory` / `ansible-playbook` and, when it is really missing, prints the venv state plus the `spa venv` repair command.
 
 - **`spa hosts list -s`**: short for `--status`. `-v` is not a status alias on hosts.
