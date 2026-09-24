@@ -60,6 +60,9 @@ __pycache__/
 .vscode
 # Cursor local plans (keep .cursor/skills in the tree)
 .cursor/plans/
+# Graphify is optional; keep generated graph and the Cursor rule local
+graphify-out/
+.cursor/rules/graphify.mdc
 # Terraform
 .terraform/
 .terraform.*
