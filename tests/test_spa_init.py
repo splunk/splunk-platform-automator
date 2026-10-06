@@ -1,5 +1,6 @@
 """Tests for spa init (env scaffold, migrate, --force vs config)."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -37,7 +38,7 @@ def test_scaffold_creates_env_without_ansible(tmp_path):
     assert (dest / "inventory").is_dir()
     assert (dest / "inventory" / "hosts").is_file()
     assert (dest / "terraform" / "aws").is_dir()
-    assert (dest / "saved_base_config_apps").is_dir()
+    assert not (dest / "saved_base_config_apps").exists()
     assert not (dest / "ansible").exists()
 
     spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
@@ -274,13 +275,16 @@ def test_old_clone_without_force_exits_2(tmp_path):
     (dest / "bin").mkdir()
     (dest / "README.md").write_text("# old clone\n")
     (dest / "ansible.cfg").write_text("[defaults]\n")
+    (dest / "pic").mkdir()
+    (dest / ".gitignore").write_text("*.log\n")
     cfg_before = (dest / "config" / "splunk_config.yml").read_text()
 
     result = run_spa_init([str(dest)])
     assert result.returncode == 2
-    assert "old clone-style" in (result.stderr + result.stdout).lower() or "clone-style" in (
-        result.stderr + result.stdout
-    ).lower()
+    report = result.stderr + result.stdout
+    assert "old clone-style" in report.lower() or "clone-style" in report.lower()
+    assert "pic" in report
+    assert ".gitignore" in report
     assert (dest / "ansible").is_dir()
     assert (dest / "config" / "splunk_config.yml").read_text() == cfg_before
 
@@ -306,6 +310,333 @@ def test_old_clone_force_strips_keeps_config(tmp_path):
     assert not (dest / "README.md").exists()
     assert not (dest / "ansible.cfg").exists()
     assert (dest / "terraform" / "aws" / "main.tf").is_symlink()
+
+
+# Shipped paths spa init --force must strip, plus checkout-only leftovers.
+# Synthetic names only: no vault contents, keys, certificates, or tokens.
+_STRIP_FILES = (
+    ".gitignore",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md",
+    "RELEASE.md",
+    "ROADMAP.md",
+    "VERSION",
+    "Vagrantfile",
+    "ansible.cfg",
+    "install.sh",
+    "requirements.txt",
+    "requirements.yml",
+)
+_STRIP_DIRS = (
+    ".agent",
+    "ansible",
+    "bin",
+    "defaults",
+    "docs",
+    "examples",
+    "lib",
+    "pic",
+    "scripts",
+    "skills",
+    "template",
+)
+_CHECKOUT_FILES = (
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    ".gitattributes",
+    ".gitmodules",
+    "setup_ansible_remote.txt",
+)
+_CHECKOUT_DIRS = (".git", ".github", "tests", ".ansible")
+_FRAMEWORK_BODY = "FRAMEWORK-README-BODY\n"
+
+
+def _section_paths(text: str, heading: str) -> list:
+    paths = []
+    capturing = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped == heading:
+            capturing = True
+            continue
+        if not capturing:
+            continue
+        if stripped.endswith(":") and not line.startswith((" ", "\t")):
+            break
+        if not line.startswith((" ", "\t")):
+            if stripped:
+                break
+            continue
+        if stripped.startswith("- "):
+            stripped = stripped[2:].strip()
+        if stripped:
+            paths.append(stripped)
+    return paths
+
+
+def _plant_file(root: Path, rel: str, body: str = "framework\n") -> None:
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+
+
+def _plant_dir(root: Path, rel: str) -> None:
+    path = root / rel
+    path.mkdir(parents=True, exist_ok=True)
+    (path / ".keep").write_text("framework\n", encoding="utf-8")
+
+
+def _plant_full_checkout(root: Path) -> None:
+    """Old clone shape: every shipped path, checkout leftovers, and env state."""
+    _write_old_env(root)
+    for rel in _STRIP_FILES:
+        body = _FRAMEWORK_BODY if rel == "README.md" else "framework\n"
+        _plant_file(root, rel, body)
+    for rel in _STRIP_DIRS:
+        _plant_dir(root, rel)
+    _plant_dir(root, ".cursor/skills")
+    _plant_file(root, ".cursor/plans/note.txt", "local-plan\n")
+    for rel in _CHECKOUT_FILES:
+        _plant_file(root, rel)
+    for rel in _CHECKOUT_DIRS:
+        _plant_dir(root, rel)
+    (root / "saved_base_config_apps").mkdir(parents=True, exist_ok=True)
+    (root / "saved_base_config_apps" / "kept.txt").write_text("kept-app\n", encoding="utf-8")
+    (root / ".vault_pass").write_text("", encoding="utf-8")
+    (root / ".vault_pass.txt").write_text("", encoding="utf-8")
+    activate = root / ".venv" / "bin" / "activate"
+    activate.parent.mkdir(parents=True, exist_ok=True)
+    activate.write_text("old-activate\n", encoding="utf-8")
+    tf = root / "terraform" / "aws"
+    (tf / "README.md").write_text(_FRAMEWORK_BODY, encoding="utf-8")
+    (tf / "custom.tf").write_text("# local copy\n", encoding="utf-8")
+    (tf / "terraform.tfstate.backup").write_text("{}\n", encoding="utf-8")
+    (tf / "tfplan").write_text("plan\n", encoding="utf-8")
+    (tf / ".terraform.lock.hcl").write_text("# lock\n", encoding="utf-8")
+    (tf / ".terraform").mkdir(exist_ok=True)
+    (tf / ".terraform" / "providers").write_text("provider\n", encoding="utf-8")
+
+
+def _tree_snapshot(root: Path) -> dict:
+    snap = {}
+    for path in sorted(root.rglob("*")):
+        rel = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            snap[rel] = ("link", os.readlink(path))
+        elif path.is_file():
+            snap[rel] = ("file", path.read_bytes())
+        elif path.is_dir():
+            snap[rel] = ("dir",)
+    return snap
+
+
+def test_force_strips_manifest_and_lists_retained(tmp_path):
+    dest = tmp_path / "copied-clone"
+    _plant_full_checkout(dest)
+
+    result = run_spa_init(["--force", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    out = result.stdout + result.stderr
+    assert _FRAMEWORK_BODY not in out
+    assert "migrated-env" not in out
+    assert "kept-app" not in out
+
+    removed = _section_paths(out, "Removed:")
+    retained = _section_paths(out, "Retained:")
+    for rel in _STRIP_FILES + _STRIP_DIRS + _CHECKOUT_FILES + _CHECKOUT_DIRS:
+        assert not (dest / rel).exists(), rel
+        assert rel in removed, rel
+    assert not (dest / ".cursor" / "skills").exists()
+    assert ".cursor/skills" in removed
+    assert ".cursor" not in removed
+    assert (dest / ".cursor" / "plans" / "note.txt").read_text() == "local-plan\n"
+    assert ".cursor/plans" in retained
+
+    assert "migrated-env" in (dest / "config" / "splunk_config.yml").read_text()
+    assert (dest / "inventory" / "hosts").read_text() == "cm ansible_host=10.0.0.1\n"
+    assert not (dest / "inventory" / "group_vars").exists()
+    assert "inventory/group_vars" in removed
+    for name in (
+        "config",
+        "inventory",
+        "saved_base_config_apps",
+        ".vagrant",
+        ".vault_pass",
+        ".vault_pass.txt",
+        ".venv",
+        "terraform/aws/terraform.tfstate",
+        "terraform/aws/terraform.tfvars",
+        "terraform/aws/terraform.tfstate.backup",
+        "terraform/aws/tfplan",
+        "terraform/aws/.terraform.lock.hcl",
+        "terraform/aws/.terraform",
+    ):
+        assert (dest / name).exists(), name
+        assert name in retained, name
+    assert (dest / "saved_base_config_apps" / "kept.txt").read_text() == "kept-app\n"
+    assert (dest / ".vault_pass").read_text() == ""
+    assert (dest / ".venv" / "bin" / "activate").read_text() == "old-activate\n"
+    assert not (dest / "terraform" / "aws" / "README.md").exists()
+    assert not (dest / "terraform" / "aws" / "custom.tf").exists()
+    assert "terraform/aws/README.md" in removed
+    assert "terraform/aws/custom.tf" in removed
+    for tf in (PROJECT_ROOT / "terraform" / "aws").glob("*.tf"):
+        link = dest / "terraform" / "aws" / tf.name
+        assert link.is_symlink(), tf.name
+        assert link.resolve() == tf.resolve()
+    assert (dest / ".spa.yml").is_file()
+
+
+def test_force_refresh_keeps_files_after_ansible_is_gone(tmp_path):
+    """A converted env (no ansible/) is refreshed, not stripped, by a later --force."""
+    dest = tmp_path / "env"
+    _write_old_env(dest)
+    (dest / ".spa.yml").write_text("spa_home: %s\n" % PROJECT_ROOT, encoding="utf-8")
+    (dest / "pic").mkdir()
+    (dest / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+    (dest / ".gitignore").write_text("*.log\n", encoding="utf-8")
+    (dest / "setup_ansible_remote.txt").write_text("retired\n", encoding="utf-8")
+    (dest / ".ansible" / "roles").mkdir(parents=True)
+    (dest / "requirements.txt").write_text("env-local-reqs\n", encoding="utf-8")
+
+    result = run_spa_init(["--force", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (dest / "pic").is_dir()
+    assert (dest / "VERSION").read_text() == "9.9.9\n"
+    assert (dest / ".gitignore").read_text() == "*.log\n"
+    assert (dest / "setup_ansible_remote.txt").read_text() == "retired\n"
+    assert (dest / ".ansible" / "roles").is_dir()
+    assert (dest / "requirements.txt").read_text() == "env-local-reqs\n"
+    assert "migrated-env" in (dest / "config" / "splunk_config.yml").read_text()
+
+
+def test_force_rerun_keeps_converted_tree(tmp_path):
+    dest = tmp_path / "copied-clone"
+    _plant_full_checkout(dest)
+    first = run_spa_init(["--force", str(dest)])
+    assert first.returncode == 0, first.stderr + first.stdout
+    assert not (dest / "pic").exists()
+    (dest / "requirements.txt").write_text("env-local-reqs\n", encoding="utf-8")
+    before = _tree_snapshot(dest)
+
+    second = run_spa_init(["--force", str(dest)])
+    assert second.returncode == 0, second.stderr + second.stdout
+    assert _tree_snapshot(dest) == before
+    assert (dest / "requirements.txt").read_text() == "env-local-reqs\n"
+
+
+def test_from_moves_state_and_leaves_framework(tmp_path):
+    source = tmp_path / "old-clone"
+    dest = tmp_path / "env"
+    _plant_full_checkout(source)
+
+    result = run_spa_init(["--from", str(source), str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "migrated-env" in (dest / "config" / "splunk_config.yml").read_text()
+    assert (dest / "inventory" / "hosts").is_file()
+    assert (dest / "terraform" / "aws" / "terraform.tfstate").is_file()
+    assert (dest / ".vagrant" / "machines" / "idx1" / "id").is_file()
+    for rel in ("ansible", "pic", ".gitignore", "VERSION", "install.sh", "tests", ".git"):
+        assert not (dest / rel).exists(), rel
+        assert (source / rel).exists(), rel
+    assert not (source / "config" / "splunk_config.yml").exists()
+    assert not (source / "inventory" / "hosts").exists()
+    assert not (source / "terraform" / "aws" / "terraform.tfstate").exists()
+    assert not (source / ".vagrant").exists()
+    assert (source / "saved_base_config_apps" / "kept.txt").read_text() == "kept-app\n"
+    assert not (dest / "saved_base_config_apps").exists()
+    assert (source / ".venv" / "bin" / "activate").read_text() == "old-activate\n"
+    dest_activate = dest / ".venv" / "bin" / "activate"
+    if dest_activate.is_file():
+        assert dest_activate.read_text() != "old-activate\n"
+
+
+def test_from_keep_source_leaves_old_unchanged(tmp_path):
+    source = tmp_path / "old-clone"
+    dest = tmp_path / "env"
+    _plant_full_checkout(source)
+    before = _tree_snapshot(source)
+
+    result = run_spa_init(["--from", str(source), "--keep-source", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert _tree_snapshot(source) == before
+    assert "migrated-env" in (dest / "config" / "splunk_config.yml").read_text()
+    assert not (dest / "pic").exists()
+    assert not (dest / "ansible").exists()
+
+
+def test_force_unlinks_framework_symlink(tmp_path):
+    dest = tmp_path / "copied-clone"
+    outside = tmp_path / "outside-pic"
+    outside.mkdir()
+    (outside / "stay.txt").write_text("outside\n", encoding="utf-8")
+    _write_old_env(dest)
+    (dest / "ansible").mkdir()
+    (dest / "pic").symlink_to(outside)
+
+    result = run_spa_init(["--force", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert not (dest / "pic").exists()
+    assert not (dest / "pic").is_symlink()
+    assert (outside / "stay.txt").read_text() == "outside\n"
+
+
+def test_framework_manifest_matches_actions():
+    from spa.framework_paths import (
+        CHECKOUT_ONLY_LEFTOVERS,
+        framework_actions,
+        load_framework_manifest,
+    )
+
+    manifest = set(load_framework_manifest(PROJECT_ROOT))
+    assert manifest == set(framework_actions())
+    assert set(CHECKOUT_ONLY_LEFTOVERS).isdisjoint(manifest)
+
+
+def test_removal_plan_does_not_mutate(tmp_path):
+    from spa.framework_paths import removal_plan
+
+    dest = tmp_path / "copied-clone"
+    _plant_full_checkout(dest)
+    before = _tree_snapshot(dest)
+    plan = removal_plan(dest, PROJECT_ROOT)
+    assert _tree_snapshot(dest) == before
+    assert "pic" in plan.remove
+    assert ".cursor/skills" in plan.remove
+    assert ".cursor" not in plan.remove
+    assert plan.relink is True
+    assert "config" in plan.retain
+
+
+def test_strip_missing_manifest_leaves_tree(tmp_path):
+    from spa.init import InitError, strip_framework
+
+    dest = tmp_path / "copied-clone"
+    home = tmp_path / "home"
+    dest.mkdir()
+    home.mkdir()
+    (dest / "ansible").mkdir()
+    (dest / "ansible" / "keep.yml").write_text("keep\n", encoding="utf-8")
+    with pytest.raises(InitError, match="manifest"):
+        strip_framework(dest, home)
+    assert (dest / "ansible" / "keep.yml").read_text() == "keep\n"
+
+
+def test_strip_refuses_spa_home(tmp_path):
+    from spa.init import InitError, strip_framework
+
+    home = tmp_path / "home"
+    (home / "scripts").mkdir(parents=True)
+    (home / "scripts" / "framework-files.txt").write_text("ansible\npic\n", encoding="utf-8")
+    (home / "ansible").mkdir()
+    (home / "ansible" / "keep.yml").write_text("keep\n", encoding="utf-8")
+    (home / "pic").mkdir()
+    with pytest.raises(InitError, match="SPA_HOME"):
+        strip_framework(home, home)
+    assert (home / "ansible" / "keep.yml").read_text() == "keep\n"
+    assert (home / "pic").is_dir()
 
 
 def test_example_and_migrate_conflict(tmp_path):

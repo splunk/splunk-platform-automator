@@ -9,6 +9,12 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from spa.framework_paths import (
+    CHECKOUT_ONLY_LEFTOVERS,
+    FrameworkPathError,
+    framework_actions,
+    removal_plan,
+)
 from spa.paths import _expand, is_spa_home, load_spa_yml, load_user_paths, save_user_paths
 
 try:
@@ -26,36 +32,6 @@ def _say(message: str) -> None:
         return
     print(message)
 
-FRAMEWORK_LEFTOVERS = (
-    "ansible",
-    "bin",
-    "tests",
-    "skills",
-    "examples",
-    "docs",
-    "defaults",
-    "template",
-    "scripts",
-    "lib",
-    ".github",
-    ".cursor",
-    ".agent",
-    ".git",
-    "Vagrantfile",
-    "ansible.cfg",
-    "requirements.txt",
-    "requirements.yml",
-    "CHANGELOG.md",
-    "README.md",
-    "ROADMAP.md",
-    "AGENTS.md",
-    "RELEASE.md",
-    "LICENSE",
-    "CONTRIBUTING.md",
-    "SECURITY.md",
-    ".gitattributes",
-    ".gitmodules",
-)
 
 KEEP_HINT = (
     "config/ (including splunk_config.yml)",
@@ -119,7 +95,7 @@ def is_old_clone_tree(root: Path) -> bool:
 
 
 def ensure_env_dirs(dest: Path) -> None:
-    for rel in ("config", "inventory", "terraform/aws", "saved_base_config_apps"):
+    for rel in ("config", "inventory", "terraform/aws"):
         (dest / rel).mkdir(parents=True, exist_ok=True)
     hosts = dest / "inventory" / "hosts"
     if not hosts.exists():
@@ -305,13 +281,19 @@ def drop_inventory_group_vars_link(dest: Path) -> None:
         pass
 
 
+def _strip_names() -> List[str]:
+    names = [name for name, action in framework_actions().items() if action != "relink"]
+    names.extend(CHECKOUT_ONLY_LEFTOVERS)
+    return names
+
+
 def leftover_present(root: Path) -> List[str]:
     found = []
-    for name in FRAMEWORK_LEFTOVERS:
-        if (root / name).exists():
+    for name in _strip_names():
+        if (root / name).exists() or (root / name).is_symlink():
             found.append(name)
     tf = root / "terraform" / "aws"
-    if tf.is_dir():
+    if tf.is_dir() and not tf.is_symlink():
         for path in tf.glob("*.tf"):
             if path.is_file() and not path.is_symlink():
                 found.append("terraform/aws/" + path.name)
@@ -327,7 +309,7 @@ def _say_old_clone_report(dest: Path) -> None:
         _say("  - %s" % item)
     _say("")
     _say("Remove with --force:")
-    leftovers = leftover_present(dest) or list(FRAMEWORK_LEFTOVERS[:8]) + ["…"]
+    leftovers = leftover_present(dest) or _strip_names()[:8] + ["…"]
     for item in leftovers:
         _say("  - %s" % item)
     _say("")
@@ -335,25 +317,64 @@ def _say_old_clone_report(dest: Path) -> None:
     _say("Config (splunk_config.yml) is left alone unless you also pass --example.")
 
 
+def _remove_framework_path(path: Path) -> bool:
+    """Unlink a symlink or file. Remove a real directory. Never follow a symlink."""
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+        return True
+    if path.is_dir():
+        shutil.rmtree(path)
+        return True
+    return False
+
+
+def _say_path_section(heading: str, paths: Sequence[str]) -> None:
+    _say(heading)
+    for rel in paths:
+        _say("  %s" % rel)
+
+
 def strip_framework(dest: Path, spa_home: Path) -> None:
-    for name in FRAMEWORK_LEFTOVERS:
-        path = dest / name
-        if path.is_dir() and not path.is_symlink():
-            shutil.rmtree(path)
-        elif path.exists() or path.is_symlink():
-            path.unlink()
+    """Delete framework leftovers in an old clone and relink Terraform modules.
+
+    A missing manifest raises ``InitError`` before any deletion. Refuses when
+    ``dest`` is ``spa_home`` so a framework checkout cannot strip itself.
+    """
+    try:
+        plan = removal_plan(dest, spa_home)
+    except FrameworkPathError as exc:
+        raise InitError(str(exc)) from exc
+    dest_resolved = dest.resolve()
+    home_resolved = spa_home.resolve()
+    if dest_resolved == home_resolved:
+        raise InitError(
+            "Refusing to strip framework files from SPA_HOME (%s)." % home_resolved
+        )
+
+    removed = []
+    for rel in sorted(plan.remove, key=lambda item: (-item.count("/"), item)):
+        if _remove_framework_path(dest / rel):
+            removed.append(rel)
+
     tf = dest / "terraform" / "aws"
-    if tf.is_dir():
-        for path in tf.glob("*.tf"):
-            if path.is_symlink():
+    if plan.relink and tf.is_dir() and not tf.is_symlink():
+        for path in sorted(tf.glob("*.tf")):
+            if path.is_symlink() or not path.is_file():
                 continue
-            if path.is_file():
-                path.unlink()
+            path.unlink()
+            removed.append("terraform/aws/" + path.name)
         readme = tf / "README.md"
-        if readme.is_file():
+        if readme.is_file() and not readme.is_symlink():
             readme.unlink()
-    link_terraform_modules(dest, spa_home)
+            removed.append("terraform/aws/README.md")
+        link_terraform_modules(dest, spa_home)
+
+    group_vars = dest / "inventory" / "group_vars"
+    if group_vars.is_symlink():
+        removed.append("inventory/group_vars")
     drop_inventory_group_vars_link(dest)
+    _say_path_section("Removed:", removed)
+    _say_path_section("Retained:", plan.retain)
 
 
 def prune_incomplete_venv(dest: Path) -> None:
@@ -664,11 +685,15 @@ def _init_env(
         raise InitError("Source and dest are the same path (%s)." % dest)
     if example_set and migrate_set:
         raise InitError("Use --example or --migrate/--from, not both.")
+    converting = is_old_clone_tree(dest) and not example_set and from_dir is None
     if force:
         prune_incomplete_venv(dest)
-        drop_inventory_group_vars_link(dest)
+        # The conversion strip lists this symlink under Removed. Other --force
+        # paths still drop it here.
+        if not converting:
+            drop_inventory_group_vars_link(dest)
 
-    if is_old_clone_tree(dest) and not example_set and from_dir is None:
+    if converting:
         if not force:
             _say_old_clone_report(dest)
             raise InitError("Refusing to strip framework files without --force.", code=2)
@@ -725,7 +750,8 @@ def _init_env(
         _say("  config:    %s" % config_dest)
         return 0
 
-    # --force without --example on an existing env: refresh metadata, keep config
+    # --force without --example on an existing env: refresh metadata, keep config.
+    # ansible/ is already gone, so this is not a conversion and does not strip.
     if force and (has_config(dest) or is_spa_env(dest)):
         ensure_env_dirs(dest)
         _write()
