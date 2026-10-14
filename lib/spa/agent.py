@@ -18,7 +18,10 @@ _FLAG_ANSIBLE_OUTPUT = {
 _FLAG_VERBOSE_NATIVE = {
     "long": "--verbose",
     "short": "-v",
-    "help": "Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv)",
+    "help": (
+        "Stream Ansible's own output; first-party credential tasks are censored or use an auth file "
+        "(verbosity: -- -vv). Agents do not receive this stream"
+    ),
 }
 
 

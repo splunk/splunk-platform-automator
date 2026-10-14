@@ -18,6 +18,7 @@
   run_once: true
 
 - name: "Authenticate with Splunkbase (controller)"
+  no_log: true
   tags:
     - splunk
     - splunk_apps
@@ -36,6 +37,7 @@
   run_once: true
 
 - name: "Set Splunkbase auth token (controller)"
+  no_log: true
   tags:
     - splunk
     - splunk_apps
@@ -45,6 +47,7 @@
   run_once: true
 
 - name: "Download app from Splunkbase (controller)"
+  no_log: true
   tags:
     - splunk
     - splunk_apps

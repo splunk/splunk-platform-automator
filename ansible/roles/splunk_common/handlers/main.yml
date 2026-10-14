@@ -8,15 +8,18 @@
     - splunk_common
     - search_head
     - shcluster
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk show shcluster-status -auth admin:{{ splunk_admin_password }}"
-  become: true
-  become_user: "{{ splunk_user }}"
-  register: shcluster_ready
-  until: "shcluster_ready.stdout.find('service_ready_flag : 1') != -1 and shcluster_ready.stdout.find('status : Down') != 0"
-  retries: 15
-  delay: 10
-  delegate_to: "{{ splunk_shc_host_list|first }}"
-  notify: Push shcluster bundle
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/run_splunk_cli.yml"
+  vars:
+    spa_splunk_cli_args:
+      - show
+      - shcluster-status
+    spa_splunk_cli_mode: until_shc_ready
+    spa_splunk_cli_retries: 15
+    spa_splunk_cli_delay: 10
+    spa_splunk_cli_delegate_to: "{{ splunk_shc_host_list|first }}"
+    spa_splunk_cli_register_as: shcluster_ready
+    spa_splunk_cli_notify: Push shcluster bundle
 
 # SHC captain may return 503 (e.g. kvstore-upgrade in progress) if not ready; retry with delay
 - name: Push shcluster bundle
@@ -26,14 +29,20 @@
     - search_head
     - shcluster
     - deployer
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk apply shcluster-bundle -target https://{{ splunk_shc_host_list | first }}:8089 -auth admin:{{ splunk_admin_password }} --answer-yes"
-  become: true
-  become_user: "{{ splunk_user }}"
-  delegate_to: "{{ splunk_shc_deployer }}"
-  register: shcluster_bundle_result
-  until: shcluster_bundle_result.rc == 0
-  retries: 120
-  delay: 15
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/run_splunk_cli.yml"
+  vars:
+    spa_splunk_cli_args:
+      - apply
+      - shcluster-bundle
+      - -target
+      - "https://{{ splunk_shc_host_list | first }}:8089"
+      - --answer-yes
+    spa_splunk_cli_mode: until_rc
+    spa_splunk_cli_retries: 120
+    spa_splunk_cli_delay: 15
+    spa_splunk_cli_delegate_to: "{{ splunk_shc_deployer }}"
+    spa_splunk_cli_register_as: shcluster_bundle_result
 
 - name: Initiate SHC rolling restart
   tags:
@@ -42,10 +51,15 @@
     - search_head
     - shcluster
     - deployer
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk rolling-restart shcluster-members -searchable false -auth admin:{{ splunk_admin_password }}"
-  become: true
-  become_user: "{{ splunk_user }}"
-  delegate_to: "{{ splunk_shc_host_list | first }}"
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/run_splunk_cli.yml"
+  vars:
+    spa_splunk_cli_args:
+      - rolling-restart
+      - shcluster-members
+      - -searchable
+      - "false"
+    spa_splunk_cli_delegate_to: "{{ splunk_shc_host_list | first }}"
   when: splunk_shc_host_list is defined and (splunk_shc_host_list | length) > 0
 
 - name: Apply indexer cluster bundle
@@ -55,10 +69,14 @@
     - indexer
     - idxcluster
     - cluster_manager
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk apply cluster-bundle -auth admin:{{ splunk_admin_password }} --answer-yes"
-  become: true
-  become_user: "{{ splunk_user }}"
-  delegate_to: "{{ splunk_idxc_cm }}"
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/run_splunk_cli.yml"
+  vars:
+    spa_splunk_cli_args:
+      - apply
+      - cluster-bundle
+      - --answer-yes
+    spa_splunk_cli_delegate_to: "{{ splunk_idxc_cm }}"
 
 # Deploy-server REST reload can time out when splunkd is busy (CLI rc 22); retry with delay like shcluster-bundle.
 - name: Reload deploy-server
@@ -66,14 +84,17 @@
     - splunk
     - splunk_common
     - deployment_server
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk reload deploy-server -auth admin:{{ splunk_admin_password }}"
-  become: true
-  become_user: "{{ splunk_user }}"
-  delegate_to: "{{ splunk_deployment_server | first }}"
-  register: splunk_reload_deploy_server_result
-  until: splunk_reload_deploy_server_result.rc == 0
-  retries: "{{ splunk_reload_deploy_server_retries | default(8) | int }}"
-  delay: "{{ splunk_reload_deploy_server_delay | default(20) | int }}"
+  ansible.builtin.include_tasks:
+    file: "{{ role_path }}/tasks/run_splunk_cli.yml"
+  vars:
+    spa_splunk_cli_args:
+      - reload
+      - deploy-server
+    spa_splunk_cli_mode: until_rc
+    spa_splunk_cli_retries: "{{ splunk_reload_deploy_server_retries | default(8) | int }}"
+    spa_splunk_cli_delay: "{{ splunk_reload_deploy_server_delay | default(20) | int }}"
+    spa_splunk_cli_delegate_to: "{{ splunk_deployment_server | first }}"
+    spa_splunk_cli_register_as: splunk_reload_deploy_server_result
 
 - name: Restart splunk
   tags:

@@ -371,6 +371,7 @@
       when: run_cp_api_on_this_host and (group_names | select('match', '^shcluster_') | list | length) > 0
       block:
         - name: "Poll SHC status until service_ready_flag"
+          no_log: true
           ansible.builtin.uri:
             url: "https://{{ ansible_host | default(inventory_hostname) }}:8089/services/shcluster/status?output_mode=json"
             user: admin

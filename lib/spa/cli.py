@@ -275,16 +275,20 @@ def _add_verbose(parser, help_text: str) -> None:
     )
 
 
-def _add_ansible_output(parser) -> None:
+_VERBOSE_PLAYBOOK_HELP = (
+    "Stream Ansible's own output; first-party credential tasks are censored or use an auth file "
+    "(Ansible verbosity: -- -vv). Agents do not receive this stream"
+)
+_VERBOSE_LOGS_HELP = "Same reconstruction as --ansible-output (stored runs have no native stream)"
+
+
+def _add_ansible_output(parser, verbose_help: str = _VERBOSE_PLAYBOOK_HELP) -> None:
     parser.add_argument(
         "--ansible-output",
         action="store_true",
         help="Show redacted Ansible-style output (live and from stored logs; not in agent output)",
     )
-    _add_verbose(
-        parser,
-        "Stream Ansible's own output unredacted; may print secrets (Ansible verbosity: -- -vv)",
-    )
+    _add_verbose(parser, verbose_help)
 
 
 def _want_ansible_output(args) -> bool:
@@ -640,7 +644,8 @@ def _run(argv: Sequence[str]) -> int:
         "--verbose",
         action="store_true",
         help="Verbose command output; on provision/deploy/destroy/run streams Ansible's own "
-        "unredacted output (Ansible's own verbosity: -- -vv)",
+        "output. First-party credential tasks are censored or use an auth file "
+        "(Ansible verbosity: -- -vv). Agents do not receive this stream",
     )
     parser.add_argument("--start-dir", help="Directory to resolve .spa.yml from")
     parser.add_argument(
@@ -986,7 +991,7 @@ def _run(argv: Sequence[str]) -> int:
     p_logs.add_argument("run_id", nargs="?", help="Run id (filename stem)")
     p_logs.add_argument("--last", action="store_true", help="Show the most recent run")
     p_logs.add_argument("--follow", action="store_true", help="Follow the latest jsonl file")
-    _add_ansible_output(p_logs)
+    _add_ansible_output(p_logs, verbose_help=_VERBOSE_LOGS_HELP)
     _add_env_selector(p_logs)
 
     p_hosts = _add_command(sub, "hosts", aliases=["h"], help="List, SSH, or copy using inventory hosts")

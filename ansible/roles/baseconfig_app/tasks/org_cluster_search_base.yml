@@ -73,6 +73,7 @@
   notify: Restart splunk
 
 - name: "({{ app_name }}) setting pass4SymmKey for hashing on {{splunk_clustermanager_var}} stanza"
+  no_log: true
   tags:
     - splunk
     - splunk_baseconfig
@@ -90,6 +91,7 @@
   when: not app_local.stat.exists and app_path == splunk_home + '/etc/apps'
 
 - name: "({{ app_name }}) setting static unhashed pass4SymmKey on {{splunk_clustermanager_var}} stanza"
+  no_log: true
   tags:
     - splunk
     - splunk_baseconfig

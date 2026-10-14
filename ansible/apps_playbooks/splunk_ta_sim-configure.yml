@@ -37,6 +37,7 @@
 # --- Connection: retrieve org_id and org_name from Splunk Observability API ---
 
 - name: "Retrieve organization details from Splunk Observability API"
+  no_log: true
   ansible.builtin.uri:
     url: "https://api.{{ _sim_o11y_realm }}.signalfx.com/v2/organization"
     method: GET
@@ -56,6 +57,7 @@
 # --- Connection: create or update KV store record (matches GUI behavior) ---
 
 - name: "Check for existing KV store connection record"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/storage/collections/data/sim_api_config?query=%7B%22org_id%22%3A%22{{ _sim_o11y_org_id }}%22%7D&output_mode=json"
     user: admin
@@ -68,6 +70,7 @@
   register: _sim_kv_check
 
 - name: "Create connection in KV store (new record)"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/storage/collections/data/sim_api_config"
     user: admin
@@ -86,6 +89,7 @@
   when: (_sim_kv_check.content | from_json) | length == 0
 
 - name: "Update connection in KV store (existing record)"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/storage/collections/data/sim_api_config/{{ ((_sim_kv_check.content | from_json)[0])._key }}"
     user: admin
@@ -106,6 +110,7 @@
 # --- Credential management via storage/passwords REST API ---
 
 - name: "Check if SIM credential exists"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/storage/passwords/splunk_ta_sim%3A{{ _sim_o11y_org_id }}%3A"
     user: admin
@@ -117,6 +122,7 @@
   register: _sim_cred_check
 
 - name: "Create SIM credential via API"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/storage/passwords"
     user: admin
@@ -133,6 +139,7 @@
   when: _sim_cred_check.status == 404
 
 - name: "Update SIM credential via API"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/storage/passwords/splunk_ta_sim%3A{{ _sim_o11y_org_id }}%3A"
     user: admin
@@ -149,6 +156,7 @@
 # --- Modular inputs: skip on SHC (inputs must run on a single SH or heavy forwarder only) ---
 
 - name: "Check if this instance is an SHC member"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/services/shcluster/member/info?output_mode=json"
     user: admin
@@ -171,6 +179,7 @@
 # --- Modular inputs: list and enable existing (standalone SH / HF only) ---
 
 - name: "Get all Modular Inputs from API"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/data/inputs/sim_modular_input?output_mode=json"
     user: admin
@@ -189,6 +198,7 @@
   when: not _sim_is_shc_member | bool
 
 - name: "Set org_id on SIM modular inputs"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/data/inputs/sim_modular_input/{{ item | urlencode | regex_replace('/', '%2F') }}"
     user: admin
@@ -206,6 +216,7 @@
   when: not _sim_is_shc_member | bool
 
 - name: "Enable SIM modular inputs"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/data/inputs/sim_modular_input/{{ item | urlencode | regex_replace('/', '%2F') }}/enable"
     user: admin
@@ -267,6 +278,7 @@
           signal_flow_programs: "\"data('*', filter=filter('sf_product', 'synthetics') and filter('test_type', '*')).publish()\""
 
 - name: "Create custom SIM modular input stanzas (skip existing)"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/configs/conf-inputs"
     user: admin
@@ -284,6 +296,7 @@
   when: not _sim_is_shc_member | bool
 
 - name: "Update existing custom SIM modular input stanzas"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/configs/conf-inputs/{{ ('sim_modular_input://' + item.item.name) | urlencode | regex_replace('/', '%2F') }}"
     user: admin
@@ -302,6 +315,7 @@
     - item.status == 409
 
 - name: "Enable custom SIM modular inputs"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/{{ app_name }}/data/inputs/sim_modular_input/{{ item.name | urlencode | regex_replace('/', '%2F') }}/enable"
     user: admin

@@ -39,6 +39,7 @@
 
   tasks:
     - name: Wait for SHC to be ready
+      no_log: true
       ansible.builtin.uri:
         url: "https://localhost:8089/services/shcluster/status"
         method: GET

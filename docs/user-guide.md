@@ -107,7 +107,7 @@ flowchart TD
 | Show a run transcript | `spa logs` / `spa logs --last` / `spa logs --follow` |
 | Ansible/Terraform-style replay (redacted) | `spa logs --last --ansible-output` |
 | Redacted Ansible-style output during a run | `spa deploy --yes --ansible-output` |
-| Ansible's own output for debugging (unredacted, may show credentials) | `spa deploy --yes -v` (Ansible verbosity: `-- -vv`) |
+| Ansible's own output for debugging (credential tasks censored or auth-file) | `spa deploy --yes -v` (Ansible verbosity: `-- -vv`) |
 | Create or repair the Python venv | `spa venv --shared --create --yes` (see [install](install.md) for `--upgrade` / `--rebuild`) |
 
 Provider selection comes from `terraform.aws` or `virtualbox:` in config. Do not remove a live host from config and run `spa provision`; the current Terraform flow can terminate it. See [AWS](aws.md) for cloud decisions and [Upgrade](upgrade.md) for the ordered distributed-upgrade workflow.

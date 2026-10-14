@@ -21,6 +21,7 @@
   changed_when: "grep_result.rc == 1"
 
 - name: "setting pass4SymmKey"
+  no_log: true
   tags:
     - splunk
     - deployer

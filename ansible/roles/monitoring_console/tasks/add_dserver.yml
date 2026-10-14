@@ -24,8 +24,14 @@
     - splunk_baseconfig
     - monitoring_console
     - dserver
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk add search-server {{ dserver_name }}:8089 -remoteUsername admin -remotePassword {{splunk_admin_password}} -auth admin:{{splunk_admin_password}}"
-  delegate_to: '{{splunk_monitoring_console|first}}'
-  become: true
-  become_user: "{{ splunk_user }}"
+  ansible.builtin.include_role:
+    name: splunk_common
+    tasks_from: run_splunk_cli.yml
+  vars:
+    spa_splunk_cli_remote_password: true
+    spa_splunk_cli_delegate_to: "{{ splunk_monitoring_console|first }}"
+    spa_splunk_cli_args:
+      - add
+      - search-server
+      - "{{ dserver_name }}:8089"
   when: dserver_check.state is defined and dserver_check.state == 'started'

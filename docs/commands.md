@@ -138,7 +138,7 @@ Requires confirmation: yes (`--yes`).
 | --- | --- |
 | `-y`, `--yes` | Confirm provision |
 | `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
-| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
+| `-v`, `--verbose` | Stream Ansible's own output; first-party credential tasks are censored or use an auth file (verbosity: -- -vv). Agents do not receive this stream |
 
 Example:
 
@@ -158,7 +158,7 @@ Requires confirmation: yes (`--yes`).
 | `--hosts` | only these hosts (names or roles from this env) |
 | `--allow-unprovisioned` | Skip the check that every config host is in inventory |
 | `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
-| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
+| `-v`, `--verbose` | Stream Ansible's own output; first-party credential tasks are censored or use an auth file (verbosity: -- -vv). Agents do not receive this stream |
 
 ## `destroy`
 
@@ -170,7 +170,7 @@ Requires confirmation: yes (`--yes`).
 | --- | --- |
 | `-y`, `--yes` | Confirm destroy |
 | `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
-| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
+| `-v`, `--verbose` | Stream Ansible's own output; first-party credential tasks are censored or use an auth file (verbosity: -- -vv). Agents do not receive this stream |
 
 ## `suspend`
 
@@ -184,7 +184,7 @@ Requires confirmation: yes (`--yes`).
 | `--no-wait` | Return after requesting stop |
 | `--hosts` | only these hosts (names or roles from this env) |
 | `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
-| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
+| `-v`, `--verbose` | Stream Ansible's own output; first-party credential tasks are censored or use an auth file (verbosity: -- -vv). Agents do not receive this stream |
 
 ## `resume`
 
@@ -197,7 +197,7 @@ Requires confirmation: yes (`--yes`).
 | `-y`, `--yes` | Confirm power change |
 | `--hosts` | only these hosts (names or roles from this env) |
 | `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
-| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
+| `-v`, `--verbose` | Stream Ansible's own output; first-party credential tasks are censored or use an auth file (verbosity: -- -vv). Agents do not receive this stream |
 
 ## `hosts list`
 
@@ -257,7 +257,7 @@ Run a playbook by stem. Discover: spa --json run --list then spa run NAME --help
 | `-y`, `--yes` | Confirm a mutating playbook (required in agent mode) |
 | `--apps-playbook` | For splunk_apps_playbook_run: curated stem or env-relative path (sets apps_playbook and app_name) |
 | `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
-| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
+| `-v`, `--verbose` | Stream Ansible's own output; first-party credential tasks are censored or use an auth file (verbosity: -- -vv). Agents do not receive this stream |
 
 Example:
 

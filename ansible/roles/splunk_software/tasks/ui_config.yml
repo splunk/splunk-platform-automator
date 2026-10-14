@@ -27,6 +27,7 @@
   when: splunk_install_app == "splunk" and not splunk_first_login.stat.exists
 
 - name: Set user/passwd info to login page
+  no_log: true
   tags:
     - splunk
     - splunk_software
@@ -57,6 +58,7 @@
   when: splunk_loginpage_print_hostname|default(true)
 
 - name: Add user and roles info to login page
+  no_log: true
   tags:
     - splunk
     - splunk_software

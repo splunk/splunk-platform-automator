@@ -5,6 +5,7 @@
   tags:
     - splunk
     - license_manager
+  no_log: true
   xml:
     path: "{{ splunk_software }}/{{ splunk_license_file_name }}"
     xpath: /license/payload/guid
@@ -17,12 +18,17 @@
   tags:
     - splunk
     - license_manager
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk list license -auth admin:{{splunk_admin_password}}"
-  become: true
-  become_user: "{{ splunk_user }}"
-  register: grep_result
-  check_mode: no
-  changed_when: false
+  ansible.builtin.include_role:
+    name: splunk_common
+    tasks_from: run_splunk_cli.yml
+  vars:
+    spa_splunk_cli_args:
+      - list
+      - license
+    spa_splunk_cli_no_log: true
+    spa_splunk_cli_changed: never
+    spa_splunk_cli_run_in_check: true
+    spa_splunk_cli_register_as: grep_result
 
 - name: Copy license file to tmp location
   tags:
@@ -33,15 +39,22 @@
     dest: "/tmp/{{ splunk_license_file_name }}"
     owner: "{{ splunk_user }}"
     group: "{{ splunk_group }}"
+  no_log: true
   when: grep_result.stdout is not search(lic_guid_src.matches[0].guid)
 
 - name: Add license file to splunk
   tags:
     - splunk
     - license_manager
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk add license /tmp/{{ splunk_license_file_name }} -auth admin:{{splunk_admin_password}}"
-  become: true
-  become_user: "{{ splunk_user }}"
+  ansible.builtin.include_role:
+    name: splunk_common
+    tasks_from: run_splunk_cli.yml
+  vars:
+    spa_splunk_cli_args:
+      - add
+      - license
+      - "/tmp/{{ splunk_license_file_name }}"
+    spa_splunk_cli_no_log: true
   when: grep_result.stdout is not search(lic_guid_src.matches[0].guid)
   notify: Restart splunk
 

@@ -27,6 +27,7 @@
 # Framework vars: app_path, app_name
 
 - name: "Resolve ServiceNow extra_vars (avoids template recursion)"
+  no_log: true
   ansible.builtin.set_fact:
     _snow_connection: "{{ (customization_extra_vars | default({})).get('snow_connection', 'ServiceNow') }}"
     _snow_url: "{{ (customization_extra_vars | default({})).get('snow_url') }}"
@@ -50,6 +51,7 @@
   when: app_path is defined
 
 - name: "Set ServiceNow account in {{ app_name }}"
+  no_log: true
   community.general.ini_file:
     path: "{{ app_path }}/local/splunk_ta_snow_account.conf"
     section: "{{ _snow_connection }}"

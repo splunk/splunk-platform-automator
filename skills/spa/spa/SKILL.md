@@ -15,7 +15,7 @@ Anything SPA: shared Software, registered environments, validate / provision / d
 
 - **`SPA_HOME`**: framework. **`SPA_ENV_DIR`**: one environment. Call **`bin/spa` only**. Do not import `spa.api`. Do not start a daemon.
 - Mutating commands need **`--yes`**. Never auto-run provision, deploy, suspend, resume, or destroy. Never answer `Proceed?`.
-- Never print secrets. Report env vars as set / not set. YAML: `lookup('env', ...)`. Do not pass `spa -v` (unredacted Ansible stdout).
+- Never print secrets. Report env vars as set / not set. YAML: `lookup('env', ...)`. Do not pass `spa -v` (Ansible's own stdout stays out of the agent envelope; first-party credential tasks are censored or use an auth file).
 - Full command names (`spa environment list`, `spa hosts ssh`, `spa validate`). Humans may type `spa env`.
 - No `ansible-playbook` / raw Vagrant for operators.
 

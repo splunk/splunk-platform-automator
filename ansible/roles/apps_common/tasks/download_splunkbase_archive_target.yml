@@ -15,6 +15,7 @@
     mode: '0755'
 
 - name: "Authenticate with Splunkbase (target)"
+  no_log: true
   tags:
     - splunk
     - splunk_apps
@@ -30,6 +31,7 @@
   register: splunkbase_auth
 
 - name: "Set Splunkbase auth token (target)"
+  no_log: true
   tags:
     - splunk
     - splunk_apps
@@ -37,6 +39,7 @@
     splunkbase_token: "{{ splunkbase_auth.content | regex_search('<id>([^<]+)</id>', '\\1') | first }}"
 
 - name: "Download app from Splunkbase (target)"
+  no_log: true
   tags:
     - splunk
     - splunk_apps
