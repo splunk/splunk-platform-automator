@@ -1,0 +1,89 @@
+---
+# Run splunk with auth (and optional payload secrets) read from mode-0600 files.
+# Callers pass spa_splunk_cli_args (a list). They do not put secrets on the command line.
+#
+# Optional vars:
+#   spa_splunk_cli_mode: once (default) | until_rc | until_shc_ready | until_find
+#   spa_splunk_cli_retries / spa_splunk_cli_delay
+#   spa_splunk_cli_until_find: substring for until_find
+#   spa_splunk_cli_ok_rcs: return codes that are success (default [0])
+#   spa_splunk_cli_changed: keep (default) | never | absent
+#   spa_splunk_cli_changed_absent: substring; changed when stdout lacks it
+#   spa_splunk_cli_use_secret: write splunk_shc_pass and pass -secret
+#   spa_splunk_cli_use_password_file: write splunk_admin_password and pass -password
+#   spa_splunk_cli_auth_literal: auth file contents instead of splunk_admin_password
+#   spa_splunk_cli_remote_password: also pass -remotePassword from the auth file
+#   spa_splunk_cli_password_as_arg / spa_splunk_cli_no_auth: hash-passwd style
+#   spa_splunk_cli_no_log: hide the command result (hash-passwd stdout, license XML)
+#   spa_splunk_cli_register_as: fact name that receives the command result
+#   spa_splunk_cli_notify: handler name to notify when this run changes
+#   spa_splunk_cli_delegate_to / spa_splunk_cli_run_in_check
+#   spa_splunk_cli_become: default true
+#   spa_splunk_cli_auth_user: empty uses the script default (admin)
+
+- name: Choose splunk CLI runtime paths
+  tags: [always]
+  ansible.builtin.set_fact:
+    spa_cli_auth_file: "{{ splunk_home }}/var/run/spa-cli-auth-{{ 100000000 | random }}"
+    spa_cli_secret_file: "{{ splunk_home }}/var/run/spa-cli-secret-{{ 100000000 | random }}"
+    spa_cli_password_file: "{{ splunk_home }}/var/run/spa-cli-password-{{ 100000000 | random }}"
+    spa_cli_script: "{{ splunk_home }}/var/run/spa-cli-{{ 100000000 | random }}.sh"
+
+- name: Record splunk CLI argv
+  tags: [always]
+  ansible.builtin.set_fact:
+    spa_cli_argv: "{{ spa_cli_prefix + spa_splunk_cli_args }}"
+  vars:
+    spa_cli_prefix: >-
+      {{
+        [spa_cli_script, '--splunk-home', splunk_home, '--auth-file', spa_cli_auth_file]
+        + (['--auth-user', spa_splunk_cli_auth_user] if (spa_splunk_cli_auth_user | default('') | length > 0) else [])
+        + (['--secret-file', spa_cli_secret_file] if (spa_splunk_cli_use_secret | default(false) | bool) else [])
+        + (['--password-file', spa_cli_password_file] if (spa_splunk_cli_use_password_file | default(false) | bool) else [])
+        + (['--remote-password-file', spa_cli_auth_file] if (spa_splunk_cli_remote_password | default(false) | bool) else [])
+        + (['--no-auth'] if (spa_splunk_cli_no_auth | default(false) | bool) else [])
+        + (['--password-as-arg'] if (spa_splunk_cli_password_as_arg | default(false) | bool) else [])
+        + ['--']
+      }}
+
+- name: Run splunk CLI with auth files
+  tags: [always]
+  ansible.builtin.include_tasks:
+    file: run_splunk_cli_exec.yml
+    apply:
+      become: "{{ spa_splunk_cli_become | default(true) | bool }}"
+      become_user: "{{ splunk_user }}"
+      delegate_to: "{{ spa_splunk_cli_delegate_to | default(omit) }}"
+      tags: [always]
+  when: not (spa_splunk_cli_run_in_check | default(false) | bool)
+
+- name: Run splunk CLI with auth files during check mode
+  tags: [always]
+  ansible.builtin.include_tasks:
+    file: run_splunk_cli_exec.yml
+    apply:
+      become: "{{ spa_splunk_cli_become | default(true) | bool }}"
+      become_user: "{{ splunk_user }}"
+      delegate_to: "{{ spa_splunk_cli_delegate_to | default(omit) }}"
+      check_mode: false
+      tags: [always]
+  when: spa_splunk_cli_run_in_check | default(false) | bool
+
+- name: Publish splunk CLI result
+  tags: [always]
+  ansible.builtin.set_fact:
+    spa_splunk_cli_result: "{{ spa_cli_ran }}"
+    "{{ spa_splunk_cli_register_as | default('spa_splunk_cli_published') }}": "{{ spa_cli_ran }}"
+  vars:
+    spa_cli_ran: >-
+      {{
+        {
+          'once': spa_cli_once | default({}),
+          'until_rc': spa_cli_until_rc | default({}),
+          'until_shc_ready': spa_cli_until_shc | default({}),
+          'until_find': spa_cli_until_find | default({}),
+        }[spa_splunk_cli_mode | default('once')]
+      }}
+  no_log: true
+  changed_when: false
+  when: spa_splunk_cli_register_as | default('') | length > 0

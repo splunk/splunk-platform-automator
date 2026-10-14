@@ -41,6 +41,7 @@
   notify: Restart splunk
 
 - name: "({{ app_name }}) setting unhashed pass4SymmKey"
+  no_log: true
   tags:
     - splunk
     - splunk_baseconfig

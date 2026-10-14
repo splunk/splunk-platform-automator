@@ -209,6 +209,7 @@
   notify: Restart splunk
 
 - name: "({{ app_name }}) setting unhashed clustering pass4SymmKey"
+  no_log: true
   tags:
     - splunk
     - splunk_baseconfig
@@ -225,6 +226,7 @@
   when: not app_local.stat.exists
 
 - name: "({{ app_name }}) setting unhashed indexer discovery pass4SymmKey"
+  no_log: true
   tags:
     - splunk
     - splunk_baseconfig

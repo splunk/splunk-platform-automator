@@ -31,7 +31,9 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 - **`spa logs` lists newest first**: the run table and JSON `runs` array are newest-to-oldest. `--last` / `--follow` still open the most recent run.
 
-- **`--ansible-output` vs `-v`**: `--ansible-output` is the redacted Ansible-style view rebuilt from JSONL (live and `spa logs`). `-v` / `--verbose` is accepted after the subcommand (same as `--yes`) and, on provision/deploy/destroy/run, streams Ansible's own stdout **unredacted** (credentials can appear in the terminal until [#88](https://github.com/splunk/splunk-platform-automator/issues/88)), with Ansible color on a TTY (`NO_COLOR` / `TERM=dumb` / agent mode still win). Stored transcripts stay redacted and escape-free. Agents never receive the native stream. Ansible's own verbosity is `-- -vv`. On `spa logs`, `-v` is the same reconstruction as `--ansible-output`.
+- **Ansible credential output** ([#88](https://github.com/splunk/splunk-platform-automator/issues/88)): first-party tasks no longer place Splunk, Splunkbase, or cluster secrets on module arguments. Splunk CLI auth is read from a mode-0600 file that is removed when the task finishes, so a failed `show` / `apply` / `reload` can still print stdout and stderr. Tasks whose arguments or results are the secret use `no_log`. `spa -v` still streams Ansible's own output and does not filter it. Agents still do not receive that stream.
+
+- **`--ansible-output` vs `-v`**: `--ansible-output` is the redacted Ansible-style view rebuilt from JSONL (live and `spa logs`). `-v` / `--verbose` is accepted after the subcommand (same as `--yes`) and, on provision/deploy/destroy/run, streams Ansible's own stdout. First-party credential tasks are censored or use an auth file, with Ansible color on a TTY (`NO_COLOR` / `TERM=dumb` / agent mode still win). Stored transcripts stay redacted and escape-free. Agents never receive the native stream. Ansible's own verbosity is `-- -vv`. On `spa logs`, `-v` is the same reconstruction as `--ansible-output`.
 
 - **Installer one-liners use `sh`**: `install.sh` is POSIX (`curl …/install.sh | sh`). The PATH wrapper is `/bin/sh` as well.
 

@@ -33,8 +33,14 @@
     - splunk_baseconfig
     - search_head
     - search_peer
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk add search-server {{ item }}:8089 -remoteUsername admin -remotePassword {{splunk_admin_password}} -auth admin:{{splunk_admin_password}}"
+  ansible.builtin.include_role:
+    name: splunk_common
+    tasks_from: run_splunk_cli.yml
+  vars:
+    spa_splunk_cli_remote_password: true
+    spa_splunk_cli_args:
+      - add
+      - search-server
+      - "{{ item }}:8089"
   loop: "{{ (splunk_search_peer_idx_list if (splunk_search_peer_idx_list | type_debug == 'list') else (splunk_search_peer_idx_list | from_yaml)) | difference(current_dservers) }}"
-  become: true
-  become_user: "{{ splunk_user }}"
   when: "splunk_search_peer_idx_list|difference(current_dservers)|length > 0"

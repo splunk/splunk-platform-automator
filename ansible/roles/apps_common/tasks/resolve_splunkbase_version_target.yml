@@ -3,6 +3,7 @@
 # Expects: splunkbase_app_id, splunkbase_cache_dir, splunkbase_dest_slug. Optional: splunkbase_version (default 'latest'), splunkbase_fail_msg_app_name.
 
 - name: "Get app info from Splunkbase (target)"
+  no_log: true
   tags:
     - splunk
     - splunk_apps

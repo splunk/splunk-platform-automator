@@ -28,6 +28,7 @@
 - name: Execute Authenticated REST Calls
   block:
     - name: 'call Splunk rest (auth): {{ splunk_software_rest_method|default("GET") }} {{ splunk_software_rest_endpoint|default("/") }}'
+      no_log: true
       tags:
         - splunk
         - splunk_software

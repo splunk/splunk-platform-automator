@@ -19,6 +19,7 @@
   when: app_path is defined
 
 - name: "Enable and Schedule Lookup Generator Reports"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/DA-ITSI-CP-monitoring-alerting/saved/searches/{{ item | urlencode }}"
     user: admin
@@ -39,6 +40,7 @@
   when: app_path is defined
 
 - name: "Update Lookup tables"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/DA-ITSI-CP-monitoring-alerting/saved/searches/{{ item | urlencode }}/dispatch"
     user: admin
@@ -58,6 +60,7 @@
   when: app_path is defined
 
 - name: "Get NEAP Content (episodes-by-itsi-service)"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/itsi/event_management_interface/notable_event_aggregation_policy/{{ item | urlencode }}"
     user: admin
@@ -72,6 +75,7 @@
   when: app_path is defined
 
 - name: "Enable NEAP Searches"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/itsi/event_management_interface/notable_event_aggregation_policy/da-itsi-cp-monitoring-alerting-episodes-by-itsi-service"
     user: admin
@@ -92,6 +96,7 @@
 
 # Set macro via REST API so it works on SHC (no filesystem write) and avoids restart.
 - name: "Set macro get_itsi_universal_index via API"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/DA-ITSI-CP-monitoring-alerting/admin/macros/get_itsi_universal_index"
     user: admin
@@ -107,6 +112,7 @@
   when: app_path is defined
 
 - name: "Enable Correlation Searches"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/itsi/saved/searches/{{ item | urlencode }}"
     user: admin
@@ -130,6 +136,7 @@
   when: app_path is defined
 
 - name: "Disable Correlation Searches"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/itsi/saved/searches/{{ item | urlencode }}"
     user: admin
@@ -147,6 +154,7 @@
   when: app_path is defined
 
 - name: "Get Service Content"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/SA-ITOA/itoa_interface/service/{{ item | urlencode }}"
     user: admin
@@ -163,6 +171,7 @@
   when: app_path is defined
 
 - name: "Enable Services"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/SA-ITOA/itoa_interface/service/{{ item.json._key | urlencode }}"
     user: admin

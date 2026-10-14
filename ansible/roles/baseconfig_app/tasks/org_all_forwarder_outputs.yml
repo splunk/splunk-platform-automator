@@ -107,6 +107,7 @@
       loop: "{{ splunk_outputs_discovery_idxc_list }}"
 
     - name: "({{ app_name }}) setting indexer discovery password"
+      no_log: true
       tags:
         - splunk
         - splunk_baseconfig

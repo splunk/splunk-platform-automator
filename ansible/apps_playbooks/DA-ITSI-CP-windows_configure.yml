@@ -12,6 +12,7 @@
 
 
 - name: "Get Service Content"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/SA-ITOA/itoa_interface/service/{{ item | urlencode }}"
     user: admin
@@ -26,6 +27,7 @@
   when: app_path is defined
 
 - name: "Enable Services"
+  no_log: true
   ansible.builtin.uri:
     url: "https://localhost:8089/servicesNS/nobody/SA-ITOA/itoa_interface/service/{{ item.json._key | urlencode }}"
     user: admin

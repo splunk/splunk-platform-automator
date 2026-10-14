@@ -178,6 +178,7 @@
         - splunk_apps
       block:
         - name: "Poll SHC status until service_ready_flag=1 and rolling_restart_flag=0 (post-restart)"
+          no_log: true
           ansible.builtin.uri:
             url: "https://localhost:8089/services/shcluster/status?output_mode=json"
             user: admin

@@ -320,8 +320,9 @@ def test_verbose_is_listed_next_to_ansible_output():
     assert "--agent" not in between
     assert "--json" not in between
     compact_opts = " ".join(options.split())
-    # -v is the unredacted native stream, not a synonym for --ansible-output.
-    assert "Stream Ansible's own output unredacted" in compact_opts
+    # -v is Ansible's own stream. Credential tasks are censored in the playbooks.
+    assert "first-party credential tasks are censored or use an auth file" in compact_opts
+    assert "Agents do not receive this stream" in compact_opts
     # Ansible's own verbosity stays a pass-through, not a -v level.
     assert "-- -vv" in compact_opts
     assert "Same as --ansible-output" not in compact_opts

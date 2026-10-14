@@ -3,6 +3,7 @@
 # Expects: splunkbase_app_id, splunkbase_cache_dir, splunkbase_dest_slug. Optional: splunkbase_version (default 'latest'), splunkbase_fail_msg_app_name.
 
 - name: "Get app info from Splunkbase (controller)"
+  no_log: true
   tags:
     - splunk
     - splunk_apps
@@ -30,6 +31,7 @@
   delegate_to: localhost
 
 - name: "Propagate Splunkbase API result to all hosts (controller)"
+  no_log: true
   tags:
     - splunk
     - splunk_apps

@@ -94,6 +94,7 @@
 
 # There is not 'loop until' with include_tasks. So, we need to code the rest call directly here.
 - name: Check for search head to complete all searches
+  no_log: true
   tags:
     - splunk
     - splunk_software
@@ -197,6 +198,7 @@
 
 # There is not 'loop until' with include_tasks. So, we need to code the rest call directly here.
 - name: Check for peer to be up
+  no_log: true
   tags:
     - splunk
     - splunk_software

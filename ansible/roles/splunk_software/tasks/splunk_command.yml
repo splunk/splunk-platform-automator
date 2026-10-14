@@ -5,10 +5,13 @@
     - splunk
     - splunk_software
     - splunk_command
-  ansible.builtin.command: '{{ splunk_home }}/bin/splunk {{ splunk_command|default("help") }} --answer-yes --no-prompt -auth {{splunk_admin_user|default("admin")}}:{{splunk_admin_password}}'
-  become: true
-  become_user: "{{ splunk_user }}"
-  register: splunk_command_output
+  ansible.builtin.include_role:
+    name: splunk_common
+    tasks_from: run_splunk_cli.yml
+  vars:
+    spa_splunk_cli_auth_user: "{{ splunk_admin_user | default('admin') }}"
+    spa_splunk_cli_register_as: splunk_command_output
+    spa_splunk_cli_args: "{{ (splunk_command | default('help')).split() + ['--answer-yes', '--no-prompt'] }}"
 
 - name: Output from command
   tags:

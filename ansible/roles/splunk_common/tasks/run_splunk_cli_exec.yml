@@ -1,0 +1,133 @@
+---
+# Body of run_splunk_cli.yml. Included twice so check_mode can be a static keyword.
+
+- name: Run splunk with auth files
+  tags: [always]
+  block:
+    - name: Ensure splunk var/run exists
+      tags: [always]
+      ansible.builtin.file:
+        path: "{{ splunk_home }}/var/run"
+        state: directory
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        mode: "0755"
+
+    - name: Install splunk CLI helper
+      tags: [always]
+      ansible.builtin.copy:
+        src: spa_splunk_cli.sh
+        dest: "{{ spa_cli_script }}"
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        mode: "0700"
+
+    - name: Write splunk CLI auth file
+      tags: [always]
+      ansible.builtin.copy:
+        dest: "{{ spa_cli_auth_file }}"
+        content: "{{ (spa_splunk_cli_auth_literal | default(splunk_admin_password)) ~ '\n' }}"
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        mode: "0600"
+      no_log: true
+
+    - name: Write splunk CLI secret file
+      tags: [always]
+      ansible.builtin.copy:
+        dest: "{{ spa_cli_secret_file }}"
+        content: "{{ splunk_shc_pass ~ '\n' }}"
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        mode: "0600"
+      no_log: true
+      when: spa_splunk_cli_use_secret | default(false) | bool
+
+    - name: Write splunk CLI password file
+      tags: [always]
+      ansible.builtin.copy:
+        dest: "{{ spa_cli_password_file }}"
+        content: "{{ splunk_admin_password ~ '\n' }}"
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_group }}"
+        mode: "0600"
+      no_log: true
+      when: spa_splunk_cli_use_password_file | default(false) | bool
+
+    - name: Run splunk CLI
+      tags: [always]
+      ansible.builtin.command:
+        argv: "{{ spa_cli_argv }}"
+      register: spa_cli_once
+      no_log: "{{ spa_splunk_cli_no_log | default(false) | bool }}"
+      changed_when: >-
+        (spa_splunk_cli_changed | default('keep') == 'never' and false) or
+        (spa_splunk_cli_changed | default('keep') == 'absent' and
+         spa_cli_once.stdout.find(spa_splunk_cli_changed_absent | default('')) == -1) or
+        (spa_splunk_cli_changed | default('keep') == 'keep')
+      failed_when: spa_cli_once.rc not in (spa_splunk_cli_ok_rcs | default([0]))
+      when: spa_splunk_cli_mode | default('once') == 'once'
+
+    - name: Run splunk CLI until it succeeds
+      tags: [always]
+      ansible.builtin.command:
+        argv: "{{ spa_cli_argv }}"
+      register: spa_cli_until_rc
+      no_log: "{{ spa_splunk_cli_no_log | default(false) | bool }}"
+      until: spa_cli_until_rc.rc == 0
+      retries: "{{ spa_splunk_cli_retries | default(1) | int }}"
+      delay: "{{ spa_splunk_cli_delay | default(1) | int }}"
+      changed_when: spa_splunk_cli_changed | default('keep') != 'never'
+      failed_when: spa_cli_until_rc.rc not in (spa_splunk_cli_ok_rcs | default([0]))
+      when: spa_splunk_cli_mode | default('once') == 'until_rc'
+
+    - name: Run splunk CLI until the search head cluster is ready
+      tags: [always]
+      ansible.builtin.command:
+        argv: "{{ spa_cli_argv }}"
+      register: spa_cli_until_shc
+      no_log: "{{ spa_splunk_cli_no_log | default(false) | bool }}"
+      until: >-
+        spa_cli_until_shc.stdout.find('service_ready_flag : 1') != -1 and
+        spa_cli_until_shc.stdout.find('status : Down') != 0
+      retries: "{{ spa_splunk_cli_retries | default(1) | int }}"
+      delay: "{{ spa_splunk_cli_delay | default(1) | int }}"
+      changed_when: false
+      failed_when: spa_cli_until_shc.rc not in (spa_splunk_cli_ok_rcs | default([0]))
+      when: spa_splunk_cli_mode | default('once') == 'until_shc_ready'
+
+    - name: Queue search head cluster bundle push
+      tags: [always]
+      ansible.builtin.debug:
+        msg: queue shcluster bundle push
+      changed_when: true
+      notify: Push shcluster bundle
+      when:
+        - spa_splunk_cli_mode | default('once') == 'until_shc_ready'
+        - spa_splunk_cli_notify | default('') == 'Push shcluster bundle'
+
+    - name: Run splunk CLI until stdout contains the marker
+      tags: [always]
+      ansible.builtin.command:
+        argv: "{{ spa_cli_argv }}"
+      register: spa_cli_until_find
+      no_log: "{{ spa_splunk_cli_no_log | default(false) | bool }}"
+      until: spa_cli_until_find.stdout.find(spa_splunk_cli_until_find | default('')) != -1
+      retries: "{{ spa_splunk_cli_retries | default(1) | int }}"
+      delay: "{{ spa_splunk_cli_delay | default(1) | int }}"
+      changed_when: false
+      failed_when: spa_cli_until_find.rc not in (spa_splunk_cli_ok_rcs | default([0]))
+      when: spa_splunk_cli_mode | default('once') == 'until_find'
+  always:
+    - name: Remove splunk CLI auth files
+      tags: [always]
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ spa_cli_auth_file | default('') }}"
+        - "{{ spa_cli_secret_file | default('') }}"
+        - "{{ spa_cli_password_file | default('') }}"
+        - "{{ spa_cli_script | default('') }}"
+      when: item | length > 0
+      failed_when: false
