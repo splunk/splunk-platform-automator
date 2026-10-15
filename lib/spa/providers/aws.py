@@ -38,6 +38,9 @@ class Provider:
             agent=bool(kwargs.get("agent")),
             ansible_output=bool(kwargs.get("ansible_output")),
             native_output=bool(kwargs.get("native_output")),
+            verbosity=int(kwargs.get("verbosity") or 0),
+            timestamps=bool(kwargs.get("timestamps")),
+            color=bool(kwargs.get("color")),
             run_log=run_log,
         )
         if run_log is not None:
@@ -104,6 +107,9 @@ class Provider:
             agent=bool(kwargs.get("agent")),
             ansible_output=bool(kwargs.get("ansible_output")),
             native_output=bool(kwargs.get("native_output")),
+            verbosity=int(kwargs.get("verbosity") or 0),
+            timestamps=bool(kwargs.get("timestamps")),
+            color=bool(kwargs.get("color")),
             run_log=kwargs.get("run_log"),
         )
 

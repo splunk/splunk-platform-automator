@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -439,6 +438,9 @@ def run_playbook(
     agent: bool = False,
     ansible_output: bool = False,
     native_output: bool = False,
+    verbosity: int = 0,
+    timestamps: bool = False,
+    color: bool = False,
     run_log: Optional[Any] = None,
 ) -> int:
     apply_paths_env(paths)
@@ -447,6 +449,8 @@ def run_playbook(
     cmd = [tool_path(paths, "ansible-playbook"), str(playbook)]
     if extra:
         cmd.extend(extra)
+    if verbosity:
+        cmd.append("-" + ("v" * verbosity))
     log = run_log or RunLog(
         paths,
         command=command,
@@ -454,13 +458,22 @@ def run_playbook(
         agent=agent,
         ansible_output=ansible_output,
         native_output=native_output,
+        verbosity=verbosity,
+        timestamps=timestamps,
+        color=color,
     )
-    native = bool(native_output) and not agent
+    native = bool(ansible_output or native_output or verbosity) and not agent
     log.native_output = native
+    log.timestamps = bool(timestamps) and not agent
+    log.force_color = bool(color) and not agent
     env = os.environ.copy()
     # Keep structured events in the aggregate spa_jsonl callback.  The default
     # stdout callback remains available for a human-requested native live view.
     env["ANSIBLE_STDOUT_CALLBACK"] = "default"
+    # The callback writes to stderr while Ansible's native formatter writes to
+    # stdout. Both share one pipe below; disable Python buffering so pipe order
+    # reflects the order in which Ansible produced the two streams.
+    env["PYTHONUNBUFFERED"] = "1"
     enabled_callbacks = [
         item.strip()
         for item in env.get("ANSIBLE_CALLBACKS_ENABLED", "").split(",")
@@ -487,34 +500,28 @@ def run_playbook(
         cmd,
         cwd=str(paths.spa_home),
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
         env=env,
     )
     assert proc.stdout is not None
-    assert proc.stderr is not None
-
-    def _stderr() -> None:
-        for line in proc.stderr:
-            if line.startswith(CALLBACK_EVENT_PREFIX):
-                callback_line = line[len(CALLBACK_EVENT_PREFIX) :]
-                log.consume_callback_line(callback_line)
-                if on_progress:
-                    on_progress(
-                        {"type": "line", "stream": "stderr", "line": callback_line.rstrip("\n")}
-                    )
-            else:
-                log.consume_callback_line(line)
-                if native:
-                    log.emit_native_output(line)
-
-    err_thread = threading.Thread(target=_stderr, name="spa-ansible-stderr", daemon=True)
-    err_thread.start()
     for line in proc.stdout:
+        if line.startswith(CALLBACK_EVENT_PREFIX):
+            callback_line = line[len(CALLBACK_EVENT_PREFIX) :]
+            log.consume_callback_line(callback_line)
+            if on_progress:
+                on_progress(
+                    {
+                        "type": "line",
+                        "stream": "stderr",
+                        "line": callback_line.rstrip("\n"),
+                    }
+                )
+            continue
+        stored = log.consume_ansible_output(line)
         if native:
-            log.emit_native_output(line)
+            log.emit_native_output(line, event_time=str(stored.get("time") or ""))
     rc = proc.wait()
-    err_thread.join(timeout=5)
     if run_log is None:
         log.finish(rc)
     return rc

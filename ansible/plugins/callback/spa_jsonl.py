@@ -157,6 +157,25 @@ class CallbackModule(CallbackBase):
             handler=True,
         )
 
+    def v2_runner_on_start(self, host, task):
+        name, role, role_path, tags, uuid, task_file = self._task_meta(task)
+        host_name = host.get_name() if host is not None else ""
+        self._emit(
+            kind="host_start",
+            playbook=self._playbook,
+            play_file=self._play_file or None,
+            play=self._play,
+            task=name,
+            task_file=task_file or None,
+            role=role or None,
+            role_path=role_path or None,
+            tags=tags,
+            task_uuid=uuid or None,
+            host=host_name,
+            status="running",
+            handler=self._handler,
+        )
+
     def _from_result(self, result, status):
         task = getattr(result, "task", None) or getattr(result, "_task", None)
         host_obj = getattr(result, "host", None) or getattr(result, "_host", None)

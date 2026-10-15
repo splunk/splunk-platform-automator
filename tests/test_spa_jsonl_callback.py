@@ -68,6 +68,7 @@ def test_callback_emits_play_file_and_role_path(monkeypatch):
         get_path=lambda: "/repo/ansible/roles/splunk_software/tasks/main.yml:4",
     )
     cb.v2_playbook_on_task_start(task, False)
+    cb.v2_runner_on_start(SimpleNamespace(get_name=lambda: "idx1"), task)
     prefix = "SPA_JSONL_EVENT="
     events = [
         json.loads(line[len(prefix) :])
@@ -75,13 +76,16 @@ def test_callback_emits_play_file_and_role_path(monkeypatch):
         if line.startswith(prefix)
     ]
     kinds = [row["kind"] for row in events]
-    assert kinds == ["playbook_start", "play_start", "task_start"]
+    assert kinds == ["playbook_start", "play_start", "task_start", "host_start"]
     assert events[0]["playbook"].endswith("deploy_site.yml")
     assert events[1]["play_file"].endswith("splunk_install.yml")
     assert events[2]["play_file"].endswith("splunk_install.yml")
     assert events[2]["task_file"].endswith("main.yml")
     assert events[2]["role"] == "splunk_software"
     assert events[2]["role_path"].endswith("splunk_software")
+    assert events[3]["host"] == "idx1"
+    assert events[3]["task"] == "Install package"
+    assert events[3]["task_file"].endswith("main.yml")
 
 
 def test_callback_imported_playbook_reports_child_file():

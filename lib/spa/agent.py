@@ -13,12 +13,20 @@ SCHEMA_VERSION = 1
 # Human playbook output. Agents stay on compact progress / spa logs JSONL.
 _FLAG_ANSIBLE_OUTPUT = {
     "long": "--ansible-output",
-    "help": "Show redacted Ansible-style output rebuilt from JSONL (not in agent output)",
+    "help": "Show captured Ansible output live or from stored logs (not in agent output)",
+}
+_FLAG_TIMESTAMPS = {
+    "long": "--timestamps",
+    "help": "Prefix --ansible-output lines with their stored event time",
+}
+_FLAG_COLOR = {
+    "long": "--color",
+    "help": "Color --ansible-output. Live runs use Ansible color; stored logs are recolored",
 }
 _FLAG_VERBOSE_NATIVE = {
     "long": "--verbose",
     "short": "-v",
-    "help": "Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv)",
+    "help": "Increase Ansible verbosity and show native output; repeat through -vvvv",
 }
 
 
@@ -161,6 +169,8 @@ COMMAND_SCHEMA = {
             "flags": [
                 {"long": "--yes", "short": "-y", "help": "Confirm provision"},
                 _FLAG_ANSIBLE_OUTPUT,
+                _FLAG_TIMESTAMPS,
+                _FLAG_COLOR,
                 _FLAG_VERBOSE_NATIVE,
             ],
             "example": "spa provision --yes && spa deploy --yes",
@@ -177,6 +187,8 @@ COMMAND_SCHEMA = {
                     "help": "Skip the check that every config host is in inventory",
                 },
                 _FLAG_ANSIBLE_OUTPUT,
+                _FLAG_TIMESTAMPS,
+                _FLAG_COLOR,
                 _FLAG_VERBOSE_NATIVE,
             ],
         },
@@ -187,6 +199,8 @@ COMMAND_SCHEMA = {
             "flags": [
                 {"long": "--yes", "short": "-y", "help": "Confirm destroy"},
                 _FLAG_ANSIBLE_OUTPUT,
+                _FLAG_TIMESTAMPS,
+                _FLAG_COLOR,
                 _FLAG_VERBOSE_NATIVE,
             ],
         },
@@ -199,6 +213,8 @@ COMMAND_SCHEMA = {
                 {"long": "--no-wait", "help": "Return after requesting stop"},
                 {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
                 _FLAG_ANSIBLE_OUTPUT,
+                _FLAG_TIMESTAMPS,
+                _FLAG_COLOR,
                 _FLAG_VERBOSE_NATIVE,
             ],
         },
@@ -210,6 +226,8 @@ COMMAND_SCHEMA = {
                 {"long": "--yes", "short": "-y", "help": "Confirm power change"},
                 {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
                 _FLAG_ANSIBLE_OUTPUT,
+                _FLAG_TIMESTAMPS,
+                _FLAG_COLOR,
                 _FLAG_VERBOSE_NATIVE,
             ],
         },
@@ -242,6 +260,8 @@ COMMAND_SCHEMA = {
                     "help": "For splunk_apps_playbook_run: curated stem or env-relative path (sets apps_playbook and app_name)",
                 },
                 _FLAG_ANSIBLE_OUTPUT,
+                _FLAG_TIMESTAMPS,
+                _FLAG_COLOR,
                 _FLAG_VERBOSE_NATIVE,
             ],
             "example": "spa run --list",
@@ -253,11 +273,8 @@ COMMAND_SCHEMA = {
                 {"long": "--last", "help": "Show the most recent run"},
                 {"long": "--follow", "help": "Follow the latest jsonl file"},
                 _FLAG_ANSIBLE_OUTPUT,
-                {
-                    "long": "--verbose",
-                    "short": "-v",
-                    "help": "Same reconstruction as --ansible-output (stored runs have no native stream)",
-                },
+                _FLAG_TIMESTAMPS,
+                _FLAG_COLOR,
             ],
             "example": "spa logs --last",
         },

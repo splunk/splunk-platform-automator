@@ -354,6 +354,34 @@ def test_run_help_passthrough_after_dashdash(monkeypatch):
     assert captured["playbook"].endswith("splunk_cli.yml")
 
 
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--no-agent", "run", "splunk_cli", "--yes", "-vvv"],
+        ["--no-agent", "-vvv", "run", "splunk_cli", "--yes"],
+    ],
+)
+def test_run_repeatable_verbose_reaches_ansible(monkeypatch, argv):
+    captured = {}
+
+    def fake_run(playbook, paths, extra, on_progress=None, **kwargs):
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr("spa.playbooks.run_playbook", fake_run)
+    from spa.providers import ProvisionState
+
+    monkeypatch.setattr(
+        "spa.providers.check_provisioned",
+        lambda paths: ProvisionState(provider="aws", provisioned=True),
+    )
+    from spa.cli import main
+
+    rc = main(argv)
+    assert rc == 0
+    assert captured["verbosity"] == 3
+
+
 def test_env_dir_playbook_resolves(tmp_path):
     dest = tmp_path / "env"
     run_spa_init(["--example", "single_node.yml", str(dest)])

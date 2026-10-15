@@ -137,8 +137,10 @@ Requires confirmation: yes (`--yes`).
 | Flag | Description |
 | --- | --- |
 | `-y`, `--yes` | Confirm provision |
-| `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
-| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
+| `--ansible-output` | Show captured Ansible output live or from stored logs (not in agent output) |
+| `--timestamps` | Prefix --ansible-output lines with their stored event time |
+| `--color` | Color --ansible-output. Live runs use Ansible color; stored logs are recolored |
+| `-v`, `--verbose` | Increase Ansible verbosity and show native output; repeat through -vvvv |
 
 Example:
 
@@ -157,8 +159,10 @@ Requires confirmation: yes (`--yes`).
 | `-y`, `--yes` | Confirm deploy (required in agent mode) |
 | `--hosts` | only these hosts (names or roles from this env) |
 | `--allow-unprovisioned` | Skip the check that every config host is in inventory |
-| `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
-| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
+| `--ansible-output` | Show captured Ansible output live or from stored logs (not in agent output) |
+| `--timestamps` | Prefix --ansible-output lines with their stored event time |
+| `--color` | Color --ansible-output. Live runs use Ansible color; stored logs are recolored |
+| `-v`, `--verbose` | Increase Ansible verbosity and show native output; repeat through -vvvv |
 
 ## `destroy`
 
@@ -169,8 +173,10 @@ Requires confirmation: yes (`--yes`).
 | Flag | Description |
 | --- | --- |
 | `-y`, `--yes` | Confirm destroy |
-| `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
-| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
+| `--ansible-output` | Show captured Ansible output live or from stored logs (not in agent output) |
+| `--timestamps` | Prefix --ansible-output lines with their stored event time |
+| `--color` | Color --ansible-output. Live runs use Ansible color; stored logs are recolored |
+| `-v`, `--verbose` | Increase Ansible verbosity and show native output; repeat through -vvvv |
 
 ## `suspend`
 
@@ -183,8 +189,10 @@ Requires confirmation: yes (`--yes`).
 | `-y`, `--yes` | Confirm power change |
 | `--no-wait` | Return after requesting stop |
 | `--hosts` | only these hosts (names or roles from this env) |
-| `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
-| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
+| `--ansible-output` | Show captured Ansible output live or from stored logs (not in agent output) |
+| `--timestamps` | Prefix --ansible-output lines with their stored event time |
+| `--color` | Color --ansible-output. Live runs use Ansible color; stored logs are recolored |
+| `-v`, `--verbose` | Increase Ansible verbosity and show native output; repeat through -vvvv |
 
 ## `resume`
 
@@ -196,8 +204,10 @@ Requires confirmation: yes (`--yes`).
 | --- | --- |
 | `-y`, `--yes` | Confirm power change |
 | `--hosts` | only these hosts (names or roles from this env) |
-| `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
-| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
+| `--ansible-output` | Show captured Ansible output live or from stored logs (not in agent output) |
+| `--timestamps` | Prefix --ansible-output lines with their stored event time |
+| `--color` | Color --ansible-output. Live runs use Ansible color; stored logs are recolored |
+| `-v`, `--verbose` | Increase Ansible verbosity and show native output; repeat through -vvvv |
 
 ## `hosts list`
 
@@ -256,8 +266,10 @@ Run a playbook by stem. Discover: spa --json run --list then spa run NAME --help
 | `--list` | Catalog playbooks with summaries |
 | `-y`, `--yes` | Confirm a mutating playbook (required in agent mode) |
 | `--apps-playbook` | For splunk_apps_playbook_run: curated stem or env-relative path (sets apps_playbook and app_name) |
-| `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
-| `-v`, `--verbose` | Stream Ansible's own unredacted output; may print secrets (verbosity: -- -vv) |
+| `--ansible-output` | Show captured Ansible output live or from stored logs (not in agent output) |
+| `--timestamps` | Prefix --ansible-output lines with their stored event time |
+| `--color` | Color --ansible-output. Live runs use Ansible color; stored logs are recolored |
+| `-v`, `--verbose` | Increase Ansible verbosity and show native output; repeat through -vvvv |
 
 Example:
 
@@ -273,8 +285,9 @@ List or show per-environment run transcripts under $SPA_ENV_DIR/logs (newest fir
 | --- | --- |
 | `--last` | Show the most recent run |
 | `--follow` | Follow the latest jsonl file |
-| `--ansible-output` | Show redacted Ansible-style output rebuilt from JSONL (not in agent output) |
-| `-v`, `--verbose` | Same reconstruction as --ansible-output (stored runs have no native stream) |
+| `--ansible-output` | Show captured Ansible output live or from stored logs (not in agent output) |
+| `--timestamps` | Prefix --ansible-output lines with their stored event time |
+| `--color` | Color --ansible-output. Live runs use Ansible color; stored logs are recolored |
 
 Example:
 

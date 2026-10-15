@@ -50,6 +50,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [x] Fold SSH/SCP into `spa hosts` (`list` / `ssh` / `copy`); `spa shell` / `spa sh` remain SSH aliases (no `spa shell -l`)
 - [x] Map top-level [ansible/](ansible/) playbooks to `spa run` (and named `provision` / `deploy` / `destroy`) — every playbook is a main entry point; do not require raw `ansible-playbook` for day-to-day use. Discover with `spa run --list`; inspect with `spa run NAME --help`.
 - [x] Env-dir playbook/Terraform logs + compact progress (full transcript in `$SPA_ENV_DIR/logs/`; agents get a small envelope + `log` path, not the dump) — [#71](https://github.com/splunk/splunk-platform-automator/issues/71)
+- [x] Richer Ansible transcripts and upgrade progress (native lines in the run log, repeatable `-v`, timestamps and color, one compact line per upgrade include) — [#93](https://github.com/splunk/splunk-platform-automator/issues/93)
 - [ ] Hide credentials in Ansible output (`no_log`, stop putting secrets on `command:` argv) so `-v` can stay native debug without leaking admin/Splunkbase/SHC/API secrets; keep agents off the transcript — [#88](https://github.com/splunk/splunk-platform-automator/issues/88)
 - [x] Main `spa` skill (cup-style `/spa` entry) plus `spa environment` registry — [#54](https://github.com/splunk/splunk-platform-automator/issues/54)
 - [ ] `spa skills install` / `spa skills remove` (Claude / Cursor / Codex) from `$SPA_HOME/skills/spa/` — [#55](https://github.com/splunk/splunk-platform-automator/issues/55)
@@ -116,6 +117,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 ## Lifecycle
 
 - [x] Manual upgrade playbooks, including rolling IDXC and SHC (`ansible/upgrade_splunk*.yml`)
+- [ ] Architecture-aware `upgrade_distributed` for complex environments: upgrade every present tier in the required order, reusing the IDXC and SHC rolling playbooks — [#96](https://github.com/splunk/splunk-platform-automator/issues/96)
 - [ ] Include Windows UF in the upgrade host set
 - [ ] Config-driven version bump (`splunk_version` change → rolling upgrade) — same runbook-vs-playbook choice as the upgrade skill
 - [ ] Remove a host: `spa destroy --hosts NAME` runs decommission (IDXC peer / SHC member, DS serverclass), then tears down only those instances and drops them from config/state. `spa destroy --all` is whole-env teardown. Omitting both `--hosts` and `--all` is an error (do not treat “no hosts” as destroy-everything). No separate `decommission` command. Until this exists, `spa destroy --yes` remains whole-env.
