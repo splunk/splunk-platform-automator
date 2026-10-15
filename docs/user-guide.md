@@ -105,14 +105,16 @@ flowchart TD
 | Discover other playbooks | `spa run --list` |
 | Inspect a playbook | `spa run NAME --help` |
 | Show a run transcript | `spa logs` / `spa logs --last` / `spa logs --follow` |
-| Ansible/Terraform-style replay (redacted) | `spa logs --last --ansible-output` |
-| Redacted Ansible-style output during a run | `spa deploy --yes --ansible-output` |
-| Ansible's own output for debugging (unredacted, may show credentials) | `spa deploy --yes -v` (Ansible verbosity: `-- -vv`) |
+| Replay the captured native Ansible transcript | `spa logs --last --ansible-output` |
+| Show event times on that transcript | `spa logs --last --ansible-output --timestamps` |
+| Color that transcript | `spa logs --last --ansible-output --color` |
+| Show native Ansible output during a run | `spa deploy --yes --ansible-output` |
+| Increase Ansible verbosity and show native output | `spa deploy --yes -v` through `-vvvv` |
 | Create or repair the Python venv | `spa venv --shared --create --yes` (see [install](install.md) for `--upgrade` / `--rebuild`) |
 
 Provider selection comes from `terraform.aws` or `virtualbox:` in config. Do not remove a live host from config and run `spa provision`; the current Terraform flow can terminate it. See [AWS](aws.md) for cloud decisions and [Upgrade](upgrade.md) for the ordered distributed-upgrade workflow.
 
-Mutating Ansible/Terraform work writes a redacted JSONL transcript under `$SPA_ENV_DIR/logs/` (local timestamps with a numeric offset). On a TTY, humans see **one live line per named group that actually runs** (for example `Deploy  App deployment · Search Head Cluster apps`), with counters updating in place. There is no `[3/10]` index; unused topology simply never appears. `spa run` of the same first-party playbooks (including upgrades) uses the same titles with a `Run` prefix. Failures print immediately. `NO_COLOR` / piped stderr stay uncolored. Agents keep a small JSON envelope on stdout plus `data.log`; they must not ingest the transcript unless you asked to debug a failure. Terraform instance changes (`instance_type`, disk) fold into the provision plan/apply line. On VirtualBox, provisioning shows one line per VM (`Provision  VM idx1`) built from Vagrant's output, and a Vagrant error is printed before the group closes as `failed`.
+Mutating Ansible/Terraform work writes a timestamped JSONL transcript under `$SPA_ENV_DIR/logs/`. On a TTY, humans see **one live line per named group that actually runs** (for example `Deploy  App deployment · Search Head Cluster apps`), with the active host and task while work is running and compact counters when it settles. Rolling upgrade groups settle once per host and include installed and target Splunk versions when reported by the playbook. There is no `[3/10]` index; unused topology simply never appears. `spa run` of every first-party playbook uses the same compact grouping, with play-name fallback for work outside known roles and functions. Failures print immediately. `NO_COLOR` / piped stderr stay uncolored. Agents keep a small JSON envelope on stdout plus `data.log`; they must not ingest the transcript unless you asked to debug a failure. Terraform instance changes (`instance_type`, disk) fold into the provision plan/apply line. On VirtualBox, provisioning shows one line per VM (`Provision  VM idx1`) built from Vagrant's output, and a Vagrant error is printed before the group closes as `failed`.
 
 ## Work with hosts and apps
 

@@ -183,6 +183,9 @@ class SpaSession(Protocol):
         agent: bool = False,
         ansible_output: bool = False,
         native_output: bool = False,
+        verbosity: int = 0,
+        timestamps: bool = False,
+        color: bool = False,
     ) -> CommandResult: ...
 
     def destroy(
@@ -192,6 +195,9 @@ class SpaSession(Protocol):
         agent: bool = False,
         ansible_output: bool = False,
         native_output: bool = False,
+        verbosity: int = 0,
+        timestamps: bool = False,
+        color: bool = False,
     ) -> CommandResult: ...
 
     def deploy(
@@ -204,6 +210,9 @@ class SpaSession(Protocol):
         skip_provision_check: bool = False,
         ansible_output: bool = False,
         native_output: bool = False,
+        verbosity: int = 0,
+        timestamps: bool = False,
+        color: bool = False,
     ) -> CommandResult: ...
 
     def suspend(
@@ -236,6 +245,9 @@ class SpaSession(Protocol):
         apps_playbook: Optional[str] = None,
         ansible_output: bool = False,
         native_output: bool = False,
+        verbosity: int = 0,
+        timestamps: bool = False,
+        color: bool = False,
     ) -> CommandResult: ...
 
     def logs(
@@ -244,6 +256,8 @@ class SpaSession(Protocol):
         last: bool = False,
         follow: bool = False,
         ansible_output: bool = False,
+        timestamps: bool = False,
+        color: bool = False,
     ) -> CommandResult: ...
 
     def aws(self, argv: Optional[List[str]] = None) -> CommandResult: ...
@@ -334,7 +348,10 @@ class LocalSpaSession:
         agent: bool,
         ansible_output: bool,
         native_output: bool = False,
+        verbosity: int = 0,
         provider: str = "",
+        timestamps: bool = False,
+        color: bool = False,
     ):
         from spa.runlog import RunLog
 
@@ -345,7 +362,10 @@ class LocalSpaSession:
             agent=agent,
             ansible_output=ansible_output,
             native_output=native_output,
+            verbosity=verbosity,
             provider=provider,
+            timestamps=timestamps,
+            color=color,
         )
 
     def schema(self) -> CommandResult:
@@ -805,6 +825,9 @@ class LocalSpaSession:
         agent: bool = False,
         ansible_output: bool = False,
         native_output: bool = False,
+        verbosity: int = 0,
+        timestamps: bool = False,
+        color: bool = False,
     ) -> CommandResult:
         blocked = self._env_gate()
         if blocked:
@@ -816,6 +839,9 @@ class LocalSpaSession:
             agent,
             ansible_output=ansible_output,
             native_output=native_output,
+            verbosity=verbosity,
+            timestamps=timestamps,
+            color=color,
         )
 
     def destroy(
@@ -825,6 +851,9 @@ class LocalSpaSession:
         agent: bool = False,
         ansible_output: bool = False,
         native_output: bool = False,
+        verbosity: int = 0,
+        timestamps: bool = False,
+        color: bool = False,
     ) -> CommandResult:
         blocked = self._env_gate()
         if blocked:
@@ -836,6 +865,9 @@ class LocalSpaSession:
             agent,
             ansible_output=ansible_output,
             native_output=native_output,
+            verbosity=verbosity,
+            timestamps=timestamps,
+            color=color,
         )
 
     def _lifecycle_playbook(
@@ -846,6 +878,9 @@ class LocalSpaSession:
         agent: bool,
         ansible_output: bool = False,
         native_output: bool = False,
+        verbosity: int = 0,
+        timestamps: bool = False,
+        color: bool = False,
     ) -> CommandResult:
         from spa.confirm import LIFECYCLE_RISK
 
@@ -877,7 +912,10 @@ class LocalSpaSession:
                 agent,
                 ansible_output,
                 native_output,
+                verbosity,
                 provider=provider.name,
+                timestamps=timestamps,
+                color=color,
             )
             rc = getattr(provider, action)(
                 args,
@@ -885,6 +923,9 @@ class LocalSpaSession:
                 agent=agent,
                 ansible_output=ansible_output,
                 native_output=native_output,
+                verbosity=verbosity,
+                timestamps=timestamps,
+                color=color,
                 command=action,
             )
         except ProviderError as exc:
@@ -925,6 +966,9 @@ class LocalSpaSession:
         skip_provision_check: bool = False,
         ansible_output: bool = False,
         native_output: bool = False,
+        verbosity: int = 0,
+        timestamps: bool = False,
+        color: bool = False,
     ) -> CommandResult:
         blocked = self._env_gate()
         if blocked:
@@ -974,7 +1018,14 @@ class LocalSpaSession:
         except PlaybookError as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
         log = self._run_log(
-            "deploy", str(playbook), agent, ansible_output or verbose, native_output
+            "deploy",
+            str(playbook),
+            agent,
+            ansible_output or verbose,
+            native_output,
+            verbosity,
+            timestamps=timestamps,
+            color=color,
         )
         rc = run_playbook(
             playbook,
@@ -985,6 +1036,9 @@ class LocalSpaSession:
             agent=agent,
             ansible_output=ansible_output or verbose,
             native_output=native_output,
+            verbosity=verbosity,
+            timestamps=timestamps,
+            color=color,
             run_log=log,
         )
         log.finish(rc)
@@ -1106,6 +1160,9 @@ class LocalSpaSession:
         apps_playbook: Optional[str] = None,
         ansible_output: bool = False,
         native_output: bool = False,
+        verbosity: int = 0,
+        timestamps: bool = False,
+        color: bool = False,
     ) -> CommandResult:
         blocked = self._env_gate()
         if blocked:
@@ -1160,7 +1217,14 @@ class LocalSpaSession:
             if blocked:
                 return blocked
         log = self._run_log(
-            "run", str(playbook), agent, ansible_output or verbose, native_output
+            "run",
+            str(playbook),
+            agent,
+            ansible_output or verbose,
+            native_output,
+            verbosity,
+            timestamps=timestamps,
+            color=color,
         )
         rc = run_playbook(
             playbook,
@@ -1171,6 +1235,9 @@ class LocalSpaSession:
             agent=agent,
             ansible_output=ansible_output or verbose,
             native_output=native_output,
+            verbosity=verbosity,
+            timestamps=timestamps,
+            color=color,
             run_log=log,
         )
         log.finish(rc)
@@ -1268,6 +1335,8 @@ class LocalSpaSession:
         last: bool = False,
         follow: bool = False,
         ansible_output: bool = False,
+        timestamps: bool = False,
+        color: bool = False,
     ) -> CommandResult:
         blocked = self._env_gate()
         if blocked:
@@ -1290,11 +1359,17 @@ class LocalSpaSession:
 
         log_path = Path(str(target.get("log") or ""))
         if follow:
-            follow_jsonl(log_path, idle_passes=-1, ansible_output=ansible_output)
+            follow_jsonl(
+                log_path,
+                idle_passes=-1,
+                ansible_output=ansible_output,
+                timestamps=timestamps,
+                color=color,
+            )
             return CommandResult(ok=True, data=target)
         target = dict(target)
         if ansible_output:
-            target["replay"] = replay_jsonl(log_path)
+            target["replay"] = replay_jsonl(log_path, timestamps=timestamps, color=color)
         else:
             target["transcript"] = read_jsonl(log_path)
         return CommandResult(ok=True, data=target)

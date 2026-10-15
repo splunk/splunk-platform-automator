@@ -10,6 +10,7 @@ from io import StringIO
 from pathlib import Path
 
 import pytest
+import yaml
 
 from spa.playbooks import run_playbook
 from spa.paths import resolve_spa_paths
@@ -37,6 +38,22 @@ def test_format_event_time_local_offset_not_z():
     stamp = format_event_time(utc)
     assert stamp.endswith("+00:00")
     assert "Z" not in stamp
+
+
+def test_run_log_name_appends_playbook_stem(tmp_path):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+    log = RunLog(
+        paths,
+        "run",
+        "ansible/upgrade_splunk.yml",
+        agent=True,
+        heartbeat_seconds=0,
+        stream=StringIO(),
+        clock=lambda: datetime(2026, 10, 14, 18, 32, 16, tzinfo=timezone(timedelta(hours=2))),
+    )
+    assert log.run_id == "2026-10-14T183216+0200-run-upgrade_splunk"
+    log.finish(0)
 
 
 def test_now_local_honors_tz_env():
@@ -81,6 +98,143 @@ def test_redact_secrets():
     assert "SECRETXML" not in text
     assert "eyJabc" not in text
     assert "***" in text or "[REDACTED]" in text
+
+
+def test_ansible_output_events_are_timestamped_ordered_and_replayed(tmp_path):
+    from spa.runlog import replay_jsonl
+
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+    log = RunLog(
+        paths,
+        "run",
+        "ansible/splunk_install.yml",
+        agent=True,
+        heartbeat_seconds=0,
+        stream=StringIO(),
+        clock=lambda: datetime(2026, 9, 17, 17, 2, 0, tzinfo=timezone(timedelta(hours=2))),
+    )
+
+    log.consume_ansible_output("PLAY [Install]\n")
+    log.consume_ansible_output("\n")
+    log.consume_ansible_output("\033[0;32mok: [idx1] => sentinel\033[0m\n")
+    log.finish(0)
+
+    rows = [
+        json.loads(line)
+        for line in log.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    output = [row for row in rows if row.get("kind") == "ansible_output"]
+    assert [row["sequence"] for row in output] == [1, 2, 3]
+    assert [row["text"] for row in output] == [
+        "PLAY [Install]",
+        "",
+        "ok: [idx1] => sentinel",
+    ]
+    assert all(row["source"] == "ansible" for row in output)
+    assert all(row["time"] == "2026-09-17T17:02:00.000+02:00" for row in output)
+    assert "\033[" not in log.jsonl_path.read_text(encoding="utf-8")
+    assert replay_jsonl(log.jsonl_path) == (
+        "PLAY [Install]\n\nok: [idx1] => sentinel\n"
+    )
+
+
+def test_ansible_output_timestamps_and_color_are_display_only(tmp_path):
+    from spa.runlog import replay_jsonl
+
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+    log = RunLog(
+        paths,
+        "run",
+        "ansible/splunk_install.yml",
+        agent=True,
+        heartbeat_seconds=0,
+        stream=StringIO(),
+        clock=lambda: datetime(2026, 9, 17, 17, 2, 1, 123000, tzinfo=timezone(timedelta(hours=2))),
+    )
+    log.consume_ansible_output("PLAY [Install]\n")
+    log.consume_ansible_output("\n")
+    log.consume_ansible_output("ok: [idx1]\n")
+    log.consume_ansible_output("changed: [idx1]\n")
+    log.consume_ansible_output("fatal: [idx1]: FAILED!\n")
+    log.consume_ansible_output("ERROR! missing playbook\n")
+    log.finish(0)
+
+    stored = [
+        json.loads(line)
+        for line in log.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert [row["text"] for row in stored] == [
+        "PLAY [Install]",
+        "",
+        "ok: [idx1]",
+        "changed: [idx1]",
+        "fatal: [idx1]: FAILED!",
+        "ERROR! missing playbook",
+    ]
+    assert "\033[" not in log.jsonl_path.read_text(encoding="utf-8")
+    stamped = replay_jsonl(log.jsonl_path, timestamps=True)
+    assert stamped == (
+        "17:02:01.123+02:00  PLAY [Install]\n"
+        "\n"
+        "17:02:01.123+02:00  ok: [idx1]\n"
+        "17:02:01.123+02:00  changed: [idx1]\n"
+        "17:02:01.123+02:00  fatal: [idx1]: FAILED!\n"
+        "17:02:01.123+02:00  ERROR! missing playbook\n"
+    )
+    colored = replay_jsonl(log.jsonl_path, timestamps=True, color=True)
+    assert colored.startswith("17:02:01.123+02:00  \033[36mPLAY [Install]\033[0m\n")
+    assert "\033[32mok: [idx1]\033[0m" in colored
+    assert "\033[33mchanged: [idx1]\033[0m" in colored
+    assert "\033[31mfatal: [idx1]: FAILED!\033[0m" in colored
+    assert "\033[31mERROR! missing playbook\033[0m" in colored
+    assert "\033[36m17:02:01.123" not in colored
+
+
+def test_follow_ansible_output_waits_for_native_events(tmp_path):
+    from spa.runlog import follow_jsonl
+
+    path = tmp_path / "run.jsonl"
+    rows = [
+        {"kind": "play_start", "play": "Install", "status": "running"},
+        {"kind": "host_result", "task": "Package", "host": "idx1", "status": "ok"},
+        {"kind": "ansible_output", "text": "PLAY [Install]", "sequence": 1},
+    ]
+    path.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    output = StringIO()
+
+    follow_jsonl(path, idle_passes=1, sleep_s=0, stream=output, ansible_output=True)
+
+    assert output.getvalue() == "PLAY [Install]\n"
+
+
+def test_follow_completed_legacy_run_replays_with_infinite_follow(tmp_path, monkeypatch):
+    from spa.runlog import follow_jsonl
+
+    path = tmp_path / "legacy.jsonl"
+    path.write_text(
+        json.dumps({"kind": "play_start", "play": "Legacy", "status": "running"})
+        + "\n",
+        encoding="utf-8",
+    )
+    path.with_name("legacy.meta.json").write_text(
+        json.dumps({"rc": 0}) + "\n",
+        encoding="utf-8",
+    )
+    output = StringIO()
+
+    def stop_after_first_pass(_seconds):
+        raise RuntimeError("stop follow")
+
+    monkeypatch.setattr("spa.runlog.time.sleep", stop_after_first_pass)
+    with pytest.raises(RuntimeError, match="stop follow"):
+        follow_jsonl(path, idle_passes=-1, sleep_s=0, stream=output, ansible_output=True)
+
+    assert "PLAY [Legacy]" in output.getvalue()
 
 
 def test_map_deploy_phases():
@@ -142,7 +296,30 @@ def test_map_phase_uses_imported_play_file_not_entry():
     )
 
 
+@pytest.mark.parametrize("playbook", sorted((PROJECT / "ansible").glob("*.yml")))
+def test_first_party_root_playbooks_have_compact_titles(playbook):
+    from spa.runlog import group_title
+
+    payload = yaml.safe_load(playbook.read_text(encoding="utf-8")) or []
+    plays = [row for row in payload if isinstance(row, dict) and "hosts" in row]
+    imports = [row for row in payload if isinstance(row, dict) and "import_playbook" in row]
+    assert plays or imports, playbook.name
+    for play in plays:
+        name = str(play.get("name") or "").strip()
+        assert name, playbook.name
+        phase = map_phase(
+            command="run",
+            playbook=playbook.name,
+            play_file=str(playbook),
+            play=name,
+        )
+        assert phase, "%s: %s" % (playbook.name, name)
+        assert group_title(phase), "%s: %s" % (playbook.name, name)
+
+
 def test_map_phase_app_overlays_and_upgrade():
+    from spa.runlog import group_title
+
     assert (
         map_phase(
             command="deploy",
@@ -178,6 +355,36 @@ def test_map_phase_app_overlays_and_upgrade():
         map_phase(command="run", playbook="upgrade_idxc_rolling.yml", play="Upgrade indexer")
         == "upgrade_idxc_peers"
     )
+    assert (
+        map_phase(
+            command="run",
+            playbook="upgrade_idxc_rolling.yml",
+            play="Upgrade indexer",
+            host="idx1",
+            kind="host_start",
+        )
+        == "upgrade_idxc_peers:idx1"
+    )
+    assert group_title("upgrade_idxc_peers:idx1") == "Indexer rolling upgrade · idx1"
+    assert group_title("upgrade_idxc_begin") == "Indexer rolling upgrade · Begin"
+    assert group_title("upgrade_step:disable boot start") == (
+        "Upgrade Splunk · Disable boot start"
+    )
+    assert group_title("upgrade_distributed_cm:backup splunk etc") == (
+        "Upgrade cluster manager · Backup splunk etc"
+    )
+    assert group_title("apps_ds") == "App deployment · Deployment Server apps"
+    assert (
+        map_phase(
+            command="run",
+            playbook="upgrade_shc_rolling.yml",
+            play="Upgrade search head",
+            host="sh1",
+            kind="host_start",
+        )
+        == "upgrade_shc_members:sh1"
+    )
+    assert group_title("upgrade_shc_members:sh1") == "Search head rolling upgrade · sh1"
     assert (
         map_phase(command="run", playbook="upgrade_idxc_rolling.yml", play="End tasks")
         == "upgrade_idxc_end"
@@ -246,7 +453,7 @@ def test_runlog_vagrant_run_wide_lines_stay_in_the_open_group(tmp_path):
     assert [row.get("status") for row in events].count("phase_start") == 1
     assert "\x1b" not in log.jsonl_path.read_text(encoding="utf-8")
     text = stderr.getvalue()
-    assert "Provision  VM idx1  tasks 3" in text
+    assert "Provision  VM idx1  Tasks 3" in text
     assert text.rstrip().endswith("ok")
 
 
@@ -346,11 +553,13 @@ def test_runlog_agent_stderr_is_sparse(tmp_path):
         {
             "playbook": "splunk_install.yml",
             "play": "Install the splunk software",
+            "kind": "host_start",
             "task": "Install package",
             "host": "idx1",
-            "status": "ok",
+            "status": "running",
         }
     )
+    log.emit({"kind": "heartbeat", "status": "heartbeat"})
     log.emit(
         {
             "playbook": "splunk_install.yml",
@@ -363,16 +572,20 @@ def test_runlog_agent_stderr_is_sparse(tmp_path):
     log.finish(1)
     err = stderr.getvalue()
     assert "PLAY" not in err
-    assert "Install package" not in err
+    assert "password=secret" not in err
     events = [json.loads(line) for line in err.splitlines() if line.startswith("{")]
     kinds = [row.get("status") for row in events]
     assert "running" in kinds
     assert any("tasks" in row for row in events if row.get("status") == "running")
+    assert any(
+        row.get("host") == "idx1" and row.get("task") == "Install package"
+        for row in events
+        if row.get("status") == "running"
+    )
     assert "failed" in kinds
     assert any(row.get("host") == "idx1" and row.get("task") == "Boom" for row in events)
     transcript = log.jsonl_path.read_text(encoding="utf-8")
-    assert "password=secret" not in transcript
-    assert "***" in transcript
+    assert "password=secret" in transcript
     fields = log.envelope_fields()
     assert fields["log"] == str(log.jsonl_path)
     assert fields["phase"]
@@ -412,6 +625,46 @@ def test_runlog_human_phase_headline(tmp_path):
     assert text.rstrip().endswith("changed")
 
 
+def test_compact_tty_shows_current_host_and_task_only_while_running(tmp_path):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+
+    class Tty(StringIO):
+        def isatty(self):
+            return True
+
+    stderr = Tty()
+    log = RunLog(
+        paths,
+        "run",
+        "ansible/custom_lab.yml",
+        agent=False,
+        heartbeat_seconds=0,
+        stream=stderr,
+        clock=lambda: datetime(2026, 9, 17, 17, 2, 0, tzinfo=timezone(timedelta(hours=2))),
+    )
+    event = {
+        "playbook": "custom_lab.yml",
+        "play": "Maintain lab",
+        "task": "Call check_splunk_version",
+        "task_file": "ansible/roles/splunk_software/tasks/check_splunk_version.yml",
+        "host": "idx1",
+    }
+
+    log.emit({**event, "kind": "host_start", "status": "running"})
+    running = stderr.getvalue()
+    assert "idx1" in running
+    assert "check splunk version" in running.lower()
+
+    log.emit({**event, "kind": "host_result", "status": "ok"})
+    log.finish(0)
+    settled = stderr.getvalue().splitlines()[-1]
+    assert "Maintain lab" in settled
+    assert "idx1" not in settled
+    assert "check splunk version" not in settled.lower()
+    assert settled.rstrip().endswith("ok")
+
+
 def test_run_playbook_fake_ansible(tmp_path, monkeypatch):
     extra = min_env_vars(tmp_path)
     paths = resolve_spa_paths(environ={**extra})
@@ -421,6 +674,7 @@ def test_run_playbook_fake_ansible(tmp_path, monkeypatch):
         "import json, os, sys\n"
         "assert os.environ['ANSIBLE_STDOUT_CALLBACK'] == 'default'\n"
         "assert 'spa_jsonl' in os.environ['ANSIBLE_CALLBACKS_ENABLED'].split(',')\n"
+        "assert os.environ['PYTHONUNBUFFERED'] == '1'\n"
         "print('PLAY [native output]')\n"
         "print('SPA_JSONL_EVENT=' + json.dumps({"
         '"playbook": "splunk_install.yml", "play": "Install the splunk software",'
@@ -449,12 +703,53 @@ def test_run_playbook_fake_ansible(tmp_path, monkeypatch):
     body = log.jsonl_path.read_text(encoding="utf-8")
     assert "idx1" in body
     assert "Install package" in body
+    assert '"kind": "ansible_output"' in body
+    assert '"text": "PLAY [native output]"' in body
     meta = json.loads(log.meta_path.read_text(encoding="utf-8"))
     assert meta["rc"] == 0
     assert meta["run_id"] == log.run_id
     assert str(log.jsonl_path) == meta["log"]
     envelope_err = stderr.getvalue()
     assert "PLAY [" not in envelope_err
+
+
+def test_run_playbook_passes_and_records_ansible_verbosity(tmp_path, monkeypatch):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+    fake = tmp_path / "ansible-playbook"
+    fake.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "assert sys.argv[-1] == '-vvv', sys.argv\n"
+        "print('ansible verbosity 3')\n",
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+    monkeypatch.setattr("spa.playbooks.tool_path", lambda _paths, name: str(fake))
+    log = RunLog(
+        paths,
+        "run",
+        str(PROJECT / "ansible" / "splunk_install.yml"),
+        agent=True,
+        heartbeat_seconds=0,
+        stream=StringIO(),
+        verbosity=3,
+    )
+
+    rc = run_playbook(
+        PROJECT / "ansible" / "splunk_install.yml",
+        paths,
+        command="run",
+        agent=True,
+        verbosity=3,
+        run_log=log,
+    )
+    log.finish(rc)
+
+    assert rc == 0
+    meta = json.loads(log.meta_path.read_text(encoding="utf-8"))
+    assert meta["verbosity"] == 3
+    assert "ansible verbosity 3" in log.jsonl_path.read_text(encoding="utf-8")
 
 
 def test_native_output_keeps_ansible_color_on_a_tty_and_not_in_jsonl(tmp_path, monkeypatch):
@@ -510,7 +805,7 @@ def test_native_output_keeps_ansible_color_on_a_tty_and_not_in_jsonl(tmp_path, m
     assert "colored warning" in transcript
 
 
-def test_run_playbook_native_output_is_live_raw_and_stored_redacted(tmp_path, monkeypatch):
+def test_run_playbook_native_output_is_live_and_stored_unredacted(tmp_path, monkeypatch):
     extra = min_env_vars(tmp_path)
     paths = resolve_spa_paths(environ={**extra})
     fake = tmp_path / "ansible-playbook"
@@ -558,13 +853,13 @@ def test_run_playbook_native_output_is_live_raw_and_stored_redacted(tmp_path, mo
     assert live.count("PLAY [Native play]") == 1
     assert live.count("fatal: [idx1]") == 1
     assert "command failed" not in live
-    # The stored transcript stays redacted even when the terminal saw the secret.
+    # Labs transcripts preserve the native line until issue 88 adds secret handling.
     transcript = log.jsonl_path.read_text(encoding="utf-8")
-    assert "sentinel" not in transcript
+    assert "sentinel" in transcript
     assert '"task": "List user"' in transcript
 
 
-def test_ansible_output_without_verbose_stays_redacted_and_reconstructed(tmp_path, monkeypatch):
+def test_ansible_output_without_verbose_shows_captured_native_output(tmp_path, monkeypatch):
     extra = min_env_vars(tmp_path)
     paths = resolve_spa_paths(environ={**extra})
     fake = tmp_path / "ansible-playbook"
@@ -604,11 +899,60 @@ def test_ansible_output_without_verbose_stays_redacted_and_reconstructed(tmp_pat
     log.finish(rc)
 
     live = stderr.getvalue()
-    # Ansible's own stdout is not echoed; this view is rebuilt from the JSONL events.
-    assert "FORCE_COLOR" not in live
+    # --ansible-output shows the native callback without increasing verbosity.
+    assert "FORCE_COLOR=0" in live
     assert "fatal: [idx1]" in live
-    assert "sentinel" not in live
-    assert "-auth ***" in live
+    assert "-auth admin:sentinel" in live
+
+
+def test_live_ansible_output_can_force_color_and_show_stored_time(tmp_path, monkeypatch):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.delenv("ANSIBLE_NOCOLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm")
+    fake = tmp_path / "ansible-playbook"
+    fake.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os\n"
+        "print('FORCE_COLOR=' + os.environ['ANSIBLE_FORCE_COLOR'])\n"
+        "print('ok: [idx1]')\n",
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+    monkeypatch.setattr("spa.playbooks.tool_path", lambda _paths, name: str(fake))
+    from spa.runlog import RunLog
+
+    stderr = StringIO()
+    log = RunLog(
+        paths,
+        "run",
+        str(PROJECT / "ansible" / "splunk_install.yml"),
+        agent=False,
+        ansible_output=True,
+        timestamps=True,
+        color=True,
+        heartbeat_seconds=0,
+        stream=stderr,
+        clock=lambda: datetime(2026, 9, 17, 17, 2, 1, 123000, tzinfo=timezone(timedelta(hours=2))),
+    )
+    rc = run_playbook(
+        PROJECT / "ansible" / "splunk_install.yml",
+        paths,
+        command="run",
+        ansible_output=True,
+        timestamps=True,
+        color=True,
+        run_log=log,
+    )
+    log.finish(rc)
+
+    live = stderr.getvalue()
+    assert "FORCE_COLOR=1" in live
+    assert "17:02:01.123+02:00  ok: [idx1]" in live
+    stored = log.jsonl_path.read_text(encoding="utf-8")
+    assert '"text": "ok: [idx1]"' in stored
+    assert "17:02:01.123+02:00  ok" not in stored
 
 
 def test_spa_logs_list_and_last(tmp_path):
@@ -730,7 +1074,7 @@ def test_runlog_counts_results_and_skipped(tmp_path):
     }
     log.finish(0)
     text = stderr.getvalue()
-    assert "tasks 1" in text
+    assert "Tasks 1" in text
     assert "changed 2/5" in text
     assert "skipped 2" in text
 
@@ -760,6 +1104,31 @@ def test_runlog_phase_line_status_word(tmp_path):
     )
     log.finish(1)
     assert stderr.getvalue().rstrip().endswith("failed")
+
+
+def test_logs_can_show_timestamps_and_color(tmp_path):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+    log = RunLog(
+        paths,
+        "run",
+        "ansible/splunk_install.yml",
+        agent=True,
+        heartbeat_seconds=0,
+        stream=StringIO(),
+        clock=lambda: datetime(2026, 9, 17, 17, 2, 1, 123000, tzinfo=timezone(timedelta(hours=2))),
+    )
+    log.consume_ansible_output("TASK [Install package]\n")
+    log.consume_ansible_output("ok: [idx1]\n")
+    log.finish(0)
+
+    result = run_spa(
+        ["--no-agent", "logs", "--last", "--ansible-output", "--timestamps", "--color"],
+        env=extra,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "17:02:01.123+02:00  \033[36mTASK [Install package]\033[0m" in result.stdout
+    assert "17:02:01.123+02:00  \033[32mok: [idx1]\033[0m" in result.stdout
 
 
 def test_ansible_replay_and_logs_flag(tmp_path):
@@ -1084,8 +1453,438 @@ def test_runlog_upgrade_rolling_three_groups(tmp_path):
             }
         )
     log.finish(0)
-    assert _phase_ids(log) == ["upgrade_idxc_begin", "upgrade_idxc_peers", "upgrade_idxc_end"]
+    assert _phase_ids(log) == [
+        "upgrade_idxc_begin",
+        "upgrade_idxc_peers:idx1",
+        "upgrade_idxc_end",
+    ]
     text = stderr.getvalue()
-    assert "Run  Indexer rolling upgrade · begin" in text
-    assert "Indexer rolling upgrade · peers" in text
-    assert "Indexer rolling upgrade · end" in text
+    assert "Run  Indexer rolling upgrade · Begin" in text
+    assert "Indexer rolling upgrade · idx1" in text
+    assert "Indexer rolling upgrade · End" in text
+
+
+def test_rolling_work_line_tasks_sits_under_the_parent_step(tmp_path):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+    stderr = StringIO()
+    log = RunLog(
+        paths,
+        "run",
+        "ansible/upgrade_idxc_rolling.yml",
+        agent=False,
+        heartbeat_seconds=0,
+        stream=stderr,
+        clock=lambda: datetime(2026, 10, 15, 10, 15, 20, tzinfo=timezone(timedelta(hours=2))),
+    )
+    base = {
+        "playbook": "upgrade_idxc_rolling.yml",
+        "play_file": "ansible/upgrade_idxc_rolling.yml",
+        "play": "Upgrade indexer",
+        "host": "idx1",
+    }
+    steps = (
+        (
+            "ansible/roles/splunk_software/tasks/upgrade_idxc_rolling_upgrade.yml",
+            "splunk_software : Call get_idxc_peerids",
+            "ok",
+        ),
+        (
+            "ansible/roles/splunk_software/tasks/get_idxc_peerids.yml",
+            "splunk_software : Fetch peer ids",
+            "ok",
+        ),
+        (
+            "ansible/roles/splunk_software/tasks/upgrade_idxc_rolling_upgrade.yml",
+            "splunk_software : Set idxc peerid",
+            "ok",
+        ),
+    )
+    for task_file, task, status in steps:
+        log.emit(
+            {
+                **base,
+                "kind": "host_result",
+                "task_file": task_file,
+                "task": task,
+                "status": status,
+            }
+        )
+    log.finish(0)
+    settled = [line.strip() for line in stderr.getvalue().splitlines() if line.strip()]
+    parent = next(line for line in settled if "Get idxc peerids" in line and line.rstrip().endswith("ok"))
+    work = next(line for line in settled if "· idx1   Tasks" in line)
+    assert parent.index("Get") == work.index("Tasks")
+
+
+@pytest.mark.parametrize(
+    ("playbook", "play", "phase_prefix", "title"),
+    [
+        (
+            "upgrade_idxc_rolling.yml",
+            "Upgrade indexer",
+            "upgrade_idxc_peers",
+            "Indexer rolling upgrade",
+        ),
+        (
+            "upgrade_shc_rolling.yml",
+            "Upgrade search head cluster member",
+            "upgrade_shc_members",
+            "Search head rolling upgrade",
+        ),
+    ],
+)
+def test_runlog_upgrade_rolling_settles_each_peer(
+    tmp_path, playbook, play, phase_prefix, title
+):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+
+    class Tty(StringIO):
+        def isatty(self):
+            return True
+
+    stderr = Tty()
+    log = RunLog(
+        paths,
+        "run",
+        "ansible/" + playbook,
+        agent=False,
+        heartbeat_seconds=0,
+        stream=stderr,
+        clock=lambda: datetime(2026, 9, 17, 17, 2, 0, tzinfo=timezone(timedelta(hours=2))),
+    )
+    for host in ("idx1", "idx2"):
+        event = {
+            "playbook": playbook,
+            "play_file": "ansible/" + playbook,
+            "play": play,
+            "task": "Call upgrade_idxc_rolling_check",
+            "host": host,
+        }
+        log.emit({**event, "kind": "host_start", "status": "running"})
+        log.emit({**event, "kind": "host_result", "status": "changed"})
+    log.finish(0)
+
+    assert _phase_ids(log) == [
+        phase_prefix + ":idx1",
+        phase_prefix + ":idx2",
+    ]
+    text = stderr.getvalue()
+    assert title + " · idx1" in text
+    assert title + " · idx2" in text
+
+
+def test_upgrade_rolling_play_start_does_not_open_coarse_group(tmp_path):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+    log = RunLog(
+        paths,
+        "run",
+        "ansible/upgrade_idxc_rolling.yml",
+        agent=False,
+        heartbeat_seconds=0,
+        stream=StringIO(),
+    )
+    base = {
+        "playbook": "upgrade_idxc_rolling.yml",
+        "play_file": "ansible/upgrade_idxc_rolling.yml",
+        "play": "Upgrade indexer",
+        "task": "Call upgrade_idxc_rolling_check",
+    }
+    log.emit({**base, "kind": "play_start", "status": "running"})
+    log.emit({**base, "kind": "task_start", "status": "running"})
+    log.emit({**base, "kind": "host_start", "host": "idx1", "status": "running"})
+    log.emit({**base, "kind": "host_result", "host": "idx1", "status": "changed"})
+    log.finish(0)
+
+    assert _phase_ids(log) == ["upgrade_idxc_peers:idx1"]
+
+
+def test_parallel_upgrade_splunk_shares_one_step_line(tmp_path):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+
+    class Tty(StringIO):
+        def isatty(self):
+            return True
+
+    stderr = Tty()
+    log = RunLog(
+        paths,
+        "run",
+        "ansible/upgrade_splunk.yml",
+        agent=False,
+        heartbeat_seconds=0,
+        stream=stderr,
+    )
+    base = {
+        "playbook": "upgrade_splunk.yml",
+        "play_file": "ansible/upgrade_splunk.yml",
+        "play": "Upgrade splunk software",
+    }
+    for host in ("idx1", "idx2"):
+        log.emit(
+            {
+                **base,
+                "kind": "host_start",
+                "host": host,
+                "task": "Display upgrade version info",
+                "status": "running",
+            }
+        )
+    for host, current in (("idx1", "9.1.2"), ("idx2", "9.2.0")):
+        log.emit(
+            {
+                **base,
+                "kind": "host_result",
+                "host": host,
+                "task": "Display upgrade version info",
+                "status": "ok",
+                "msg": "Upgrade splunk from version '%s' to version '9.3.1'" % current,
+            }
+        )
+    log.finish(0)
+
+    settled = [
+        line.strip()
+        for line in stderr.getvalue().splitlines()
+        if line.rstrip().endswith("ok")
+    ]
+    assert len(settled) == 1
+    assert "Upgrade Splunk · Display upgrade version info" in settled[0]
+    assert "9.2.0 → 9.3.1" in settled[0]
+    assert "· idx" not in settled[0]
+    rows = [
+        json.loads(line)
+        for line in log.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    ended = next(row for row in rows if row.get("status") == "phase_end")
+    assert ended["hosts_n"] == 2
+    assert ended["phase"] == "upgrade_step:Display upgrade version info"
+
+
+def test_upgrade_progress_keeps_current_and_target_versions_on_settled_line(tmp_path):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+
+    class Tty(StringIO):
+        def isatty(self):
+            return True
+
+    stderr = Tty()
+    log = RunLog(
+        paths,
+        "run",
+        "ansible/upgrade_splunk.yml",
+        agent=False,
+        heartbeat_seconds=0,
+        stream=stderr,
+        clock=lambda: datetime(2026, 9, 17, 17, 2, 0, tzinfo=timezone(timedelta(hours=2))),
+    )
+    base = {
+        "playbook": "upgrade_splunk.yml",
+        "play_file": "ansible/upgrade_splunk.yml",
+        "play": "Upgrade splunk software",
+        "host": "idx1",
+    }
+    log.emit(
+        {
+            **base,
+            "kind": "host_start",
+            "task": "Display upgrade version info",
+            "status": "running",
+        }
+    )
+    log.emit(
+        {
+            **base,
+            "kind": "host_result",
+            "task": "Display upgrade version info",
+            "status": "ok",
+            "msg": "Upgrade splunk from version '9.1.2' to version '9.3.1'",
+        }
+    )
+    log.finish(0)
+
+    rows = [
+        json.loads(line)
+        for line in log.jsonl_path.read_text(encoding="utf-8").splitlines()
+    ]
+    version = next(row for row in rows if row.get("upgrade_from"))
+    assert version["upgrade_product"] == "splunk"
+    assert version["upgrade_from"] == "9.1.2"
+    assert version["upgrade_to"] == "9.3.1"
+    settled = stderr.getvalue().splitlines()[-1]
+    assert "9.1.2 → 9.3.1" in settled
+    assert settled.rstrip().endswith("ok")
+
+
+def test_upgrade_progress_recognizes_equal_version_as_current():
+    from spa.runlog import upgrade_version_fields
+
+    fields = upgrade_version_fields(
+        "Inform about not upgrading",
+        "Installed version '9.3.1' is equal to upgrade version '9.3.1' -> nothing to upgrade",
+    )
+    assert fields == {
+        "upgrade_product": "splunk",
+        "upgrade_from": "9.3.1",
+        "upgrade_to": "9.3.1",
+        "upgrade_current": True,
+    }
+    prefixed = upgrade_version_fields(
+        "splunk_software : Display upgrade version info",
+        "Upgrade splunkforwarder from version '10.4.0' to version '10.4.2'",
+    )
+    assert prefixed["upgrade_product"] == "splunkforwarder"
+    assert prefixed["upgrade_from"] == "10.4.0"
+    assert prefixed["upgrade_to"] == "10.4.2"
+
+
+def test_upgrade_includes_settle_a_line_per_step_and_keep_versions(tmp_path):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+
+    class Tty(StringIO):
+        def isatty(self):
+            return True
+
+    stderr = Tty()
+    log = RunLog(
+        paths,
+        "run",
+        "ansible/upgrade_splunk.yml",
+        agent=False,
+        heartbeat_seconds=0,
+        stream=stderr,
+        clock=lambda: datetime(2026, 10, 14, 22, 0, 59, tzinfo=timezone(timedelta(hours=2))),
+    )
+    base = {
+        "playbook": "upgrade_splunk.yml",
+        "play_file": "ansible/upgrade_splunk.yml",
+        "play": "Upgrade splunk software",
+    }
+    version_msg = "Upgrade splunk from version '10.4.0' to version '10.4.2'"
+    steps = (
+        (
+            "ansible/roles/splunk_software/tasks/upgrade.yml",
+            "splunk_software : Display upgrade version info",
+            "ok",
+            version_msg,
+        ),
+        (
+            "ansible/roles/splunk_software/tasks/upgrade.yml",
+            "splunk_software : Backup splunk etc",
+            "changed",
+            "Backup splunk etc",
+        ),
+        (
+            "ansible/roles/splunk_software/tasks/set_splunk_installed_version.yml",
+            "splunk_software : Set installed version",
+            "ok",
+            "found splunk version 10.4.2",
+        ),
+        (
+            "ansible/roles/splunk_software/tasks/upgrade.yml",
+            "splunk_software : Call add_custom_policykit",
+            "skipped",
+            "splunk_software : Call add_custom_policykit",
+        ),
+        (
+            "ansible/roles/splunk_software/tasks/upgrade.yml",
+            "splunk_software : Start splunk by service control",
+            "changed",
+            "Start splunk by service control",
+        ),
+    )
+    for task_file, task, status, msg in steps:
+        log.emit({**base, "kind": "task_start", "task_file": task_file, "task": task, "status": "running"})
+        for host in ("cm", "idx1", "idx2"):
+            log.emit(
+                {
+                    **base,
+                    "kind": "host_result",
+                    "task_file": task_file,
+                    "task": task,
+                    "host": host,
+                    "status": status,
+                    "msg": msg if host == "cm" else version_msg if "Display upgrade" in task else msg,
+                }
+            )
+    log.finish(0)
+
+    assert _phase_ids(log) == [
+        "upgrade_step:Display upgrade version info",
+        "upgrade_step:Backup splunk etc",
+        "upgrade_step:Start splunk by service control",
+    ]
+    settled = [
+        line.strip()
+        for line in stderr.getvalue().splitlines()
+        if line.rstrip().endswith(("ok", "changed"))
+    ]
+    version_lines = [line for line in settled if "10.4.0 → 10.4.2" in line]
+    assert len(version_lines) == 1
+    assert "Display upgrade version info" in version_lines[0]
+    assert any("Backup splunk etc" in line for line in settled)
+    assert any("Start splunk by service control" in line for line in settled)
+    assert not any("policykit" in line.lower() for line in settled)
+    assert not any("Set installed version" in line for line in settled)
+    assert not any("· idx" in line or "· cm" in line for line in settled)
+
+
+def test_rolling_upgrade_appends_include_step_without_moving_begin_end():
+    from spa.runlog import group_title
+
+    assert (
+        map_phase(command="run", playbook="upgrade_idxc_rolling.yml", play="Begin tasks")
+        == "upgrade_idxc_begin"
+    )
+    assert (
+        map_phase(command="run", playbook="upgrade_idxc_rolling.yml", play="End tasks")
+        == "upgrade_idxc_end"
+    )
+    phase = map_phase(
+        command="run",
+        playbook="upgrade_idxc_rolling.yml",
+        play_file="ansible/upgrade_idxc_rolling.yml",
+        play="Upgrade indexer",
+        task_file="ansible/roles/splunk_software/tasks/upgrade.yml",
+        task="splunk_software : Upload and extract the splunk software",
+        host="idx1",
+        kind="host_result",
+    )
+    assert phase == "upgrade_idxc_peers:idx1:Upload and extract the splunk software"
+    assert group_title(phase) == (
+        "Indexer rolling upgrade · idx1 · Upload and extract the splunk software"
+    )
+    assert (
+        map_phase(
+            command="run",
+            playbook="upgrade_shc_rolling.yml",
+            play_file="ansible/upgrade_shc_rolling.yml",
+            play="Upgrade search head",
+            task_file="ansible/roles/splunk_software/tasks/upgrade_shc_rolling_upgrade.yml",
+            task="splunk_software : Call upgrade",
+            host="sh1",
+            kind="host_result",
+        )
+        == "upgrade_shc_members:sh1:upgrade"
+    )
+
+
+def test_deploy_include_does_not_open_an_upgrade_step():
+    assert (
+        map_phase(
+            command="deploy",
+            playbook="ansible/deploy_site.yml",
+            play_file="ansible/splunk_apps_deploy.yml",
+            play="Deploy apps to Deployment Server",
+            task_file="ansible/roles/apps_deployment_server/tasks/process_ds_app.yml",
+            task="Process one app",
+            host="cm",
+            kind="host_result",
+        )
+        == "apps_ds"
+    )

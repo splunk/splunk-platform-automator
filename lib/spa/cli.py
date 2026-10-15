@@ -259,6 +259,17 @@ def _add_command(sub, name, aliases=(), accept_mode_flags=True, **kwargs):
     return parser
 
 
+def _add_action(sub, name, aliases=(), **kwargs):
+    """Nested command. The handler reads canonical_action, not the typed alias."""
+    parser = sub.add_parser(name, aliases=list(aliases), **kwargs)
+    parser.set_defaults(canonical_action=name)
+    return parser
+
+
+def _action(args, dest: str):
+    return getattr(args, "canonical_action", None) or getattr(args, dest, None)
+
+
 def shell_copy_examples() -> str:
     from spa.shell import COPY_EXAMPLES
 
@@ -269,31 +280,59 @@ def _add_verbose(parser, help_text: str) -> None:
     parser.add_argument(
         "-v",
         "--verbose",
-        action="store_true",
+        action="count",
         default=argparse.SUPPRESS,
         help=help_text,
     )
 
 
-def _add_ansible_output(parser) -> None:
+def _add_ansible_output(parser, *, allow_verbose: bool = True) -> None:
     parser.add_argument(
         "--ansible-output",
         action="store_true",
-        help="Show redacted Ansible-style output (live and from stored logs; not in agent output)",
+        help="Show captured Ansible output (live and from stored logs; not in agent output)",
     )
-    _add_verbose(
-        parser,
-        "Stream Ansible's own output unredacted; may print secrets (Ansible verbosity: -- -vv)",
+    parser.add_argument(
+        "--timestamps",
+        action="store_true",
+        help="Prefix --ansible-output lines with their stored event time",
     )
+    parser.add_argument(
+        "--color",
+        action="store_true",
+        help="Color --ansible-output. Live runs use Ansible color; stored logs are recolored",
+    )
+    if allow_verbose:
+        _add_verbose(
+            parser,
+            "Increase Ansible verbosity and show native output; repeat through -vvvv",
+        )
+
+
+def _verbosity(args) -> int:
+    return int(getattr(args, "verbose", 0) or 0)
+
+
+def _transcript_timestamps(args) -> bool:
+    return bool(getattr(args, "timestamps", False))
+
+
+def _transcript_color(args) -> bool:
+    return bool(getattr(args, "color", False))
 
 
 def _want_ansible_output(args) -> bool:
-    return bool(getattr(args, "verbose", False) or getattr(args, "ansible_output", False))
+    return bool(
+        _verbosity(args)
+        or getattr(args, "ansible_output", False)
+        or _transcript_timestamps(args)
+        or _transcript_color(args)
+    )
 
 
 def _want_native_output(args) -> bool:
-    """-v gives Ansible's own stdout; --ansible-output alone stays redacted."""
-    return bool(getattr(args, "verbose", False))
+    """A verbosity flag requests Ansible's native stream."""
+    return bool(_verbosity(args))
 
 
 def _add_env_selector(parser) -> None:
@@ -459,7 +498,7 @@ def _run_init(args, session, as_agent: bool) -> int:
 def _run_environment(args, session, paths, as_agent: bool, env_parser) -> int:
     from spa.paths import format_export
 
-    action = getattr(args, "environment_cmd", None)
+    action = _action(args, "environment_cmd")
     if getattr(args, "export", False) and not action:
         if args.json:
             emit(True, data=paths.export_env(), as_agent=True)
@@ -635,12 +674,10 @@ def _run(argv: Sequence[str]) -> int:
         action="store_true",
         help="Confirm a mutating command without prompting (required in agent mode)",
     )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Verbose command output; on provision/deploy/destroy/run streams Ansible's own "
-        "unredacted output (Ansible's own verbosity: -- -vv)",
+    _add_verbose(
+        parser,
+        "Increase command verbosity; for Ansible commands, show native output "
+        "and repeat through -vvvv",
     )
     parser.add_argument("--start-dir", help="Directory to resolve .spa.yml from")
     parser.add_argument(
@@ -681,7 +718,7 @@ def _run(argv: Sequence[str]) -> int:
     )
     _add_env_selector(p_apps)
     apps_sub = p_apps.add_subparsers(dest="apps_cmd", metavar="ACTION", required=True)
-    p_apps_search = apps_sub.add_parser("search", help="Search Splunkbase (compact rows)")
+    p_apps_search = _add_action(apps_sub, "search", aliases=["sea"], help="Search Splunkbase (compact rows)")
     _add_mode_flags(p_apps_search)
     p_apps_search.add_argument("query", nargs="+", help="Technology or app name keywords")
     p_apps_search.add_argument(
@@ -702,8 +739,10 @@ def _run(argv: Sequence[str]) -> int:
         choices=list(SEARCH_KINDS),
         help="Filter SPA kind (%s)" % ", ".join(SEARCH_KINDS),
     )
-    p_apps_snippet = apps_sub.add_parser(
+    p_apps_snippet = _add_action(
+        apps_sub,
         "snippet",
+        aliases=["sni"],
         help="Print a kind-specific apps[] YAML snippet (Splunkbase id or local folder name)",
     )
     _add_mode_flags(p_apps_snippet)
@@ -738,8 +777,10 @@ def _run(argv: Sequence[str]) -> int:
         action="store_true",
         help="Include matching curated apps_playbooks customizations in the YAML",
     )
-    p_apps_download = apps_sub.add_parser(
+    p_apps_download = _add_action(
+        apps_sub,
         "download",
+        aliases=["dow"],
         help="Download an archive into apps_dir",
         description=(
             "Download an archive into apps_dir (does not edit splunk_config.yml; use spa apps "
@@ -826,12 +867,13 @@ def _run(argv: Sequence[str]) -> int:
         help="Print shell exports for external tools (spa commands resolve the env themselves)",
     )
     env_sub = p_environment.add_subparsers(dest="environment_cmd", metavar="ACTION")
-    p_env_list = env_sub.add_parser("list", aliases=["ls"], help="List registered environments")
+    p_env_list = _add_action(env_sub, "list", help="List registered environments")
     _add_mode_flags(p_env_list)
-    p_env_init = env_sub.add_parser("init", help="Scaffold or migrate an env dir")
+    p_env_init = _add_action(env_sub, "init", help="Scaffold or migrate an env dir")
     _add_mode_flags(p_env_init)
     _add_init_arguments(p_env_init)
-    p_env_set = env_sub.add_parser(
+    p_env_set = _add_action(
+        env_sub,
         "set",
         help="Set user-level defaults in paths.yml / providers.yml (not per-env .spa.yml)",
     )
@@ -872,7 +914,8 @@ def _run(argv: Sequence[str]) -> int:
         metavar="NAME",
         help="Default provider for init (aws is implicit; virtualbox writes providers.yml)",
     )
-    p_env_remove = env_sub.add_parser(
+    p_env_remove = _add_action(
+        env_sub,
         "remove",
         aliases=["rm"],
         help="Unregister and delete an env directory (not spa destroy)",
@@ -986,7 +1029,7 @@ def _run(argv: Sequence[str]) -> int:
     p_logs.add_argument("run_id", nargs="?", help="Run id (filename stem)")
     p_logs.add_argument("--last", action="store_true", help="Show the most recent run")
     p_logs.add_argument("--follow", action="store_true", help="Follow the latest jsonl file")
-    _add_ansible_output(p_logs)
+    _add_ansible_output(p_logs, allow_verbose=False)
     _add_env_selector(p_logs)
 
     p_hosts = _add_command(sub, "hosts", aliases=["h"], help="List, SSH, or copy using inventory hosts")
@@ -999,7 +1042,7 @@ def _run(argv: Sequence[str]) -> int:
     )
     _add_hosts_option(p_hosts)
     hosts_sub = p_hosts.add_subparsers(dest="hosts_cmd", metavar="ACTION")
-    p_hosts_list = hosts_sub.add_parser("list", aliases=["ls"], help="List hosts in this env")
+    p_hosts_list = _add_action(hosts_sub, "list", help="List hosts in this env")
     _add_mode_flags(p_hosts_list)
     p_hosts_list.add_argument(
         "-s",
@@ -1008,13 +1051,13 @@ def _run(argv: Sequence[str]) -> int:
         help="Include runtime power state and connectivity (skipped until hosts are provisioned)",
     )
     _add_hosts_option(p_hosts_list)
-    p_hosts_ssh = hosts_sub.add_parser("ssh", help="SSH to one host")
+    p_hosts_ssh = _add_action(hosts_sub, "ssh", help="SSH to one host")
     _add_mode_flags(p_hosts_ssh)
     p_hosts_ssh.add_argument("name", help="Inventory hostname")
     p_hosts_ssh.add_argument("ssh_args", nargs=argparse.REMAINDER, help="Additional arguments passed to ssh")
-    p_hosts_copy = hosts_sub.add_parser(
+    p_hosts_copy = _add_action(
+        hosts_sub,
         "copy",
-        aliases=["cp"],
         help="Copy files with scp (SRC DST, remote side is HOST:PATH)",
         usage="spa hosts copy [-r] SRC [SRC ...] DST",
         description="Copy files between this machine and an env host.",
@@ -1049,6 +1092,7 @@ def _run(argv: Sequence[str]) -> int:
     p_agent = _add_command(
         sub,
         "agent",
+        aliases=["agt"],
         help="Print the machine-readable command schema (spa agent schema)",
         usage="spa agent [schema]",
         description="Machine-readable contract for agents and skills: every command with\n"
@@ -1075,9 +1119,25 @@ def _run(argv: Sequence[str]) -> int:
     )
 
     args = parser.parse_args(head)
+    verbosity = _verbosity(args)
+    if verbosity > 4:
+        parser.error("spa supports at most -vvvv")
+    backend_verbosity = any(
+        token == "--verbose"
+        or (
+            token.startswith("-")
+            and token[1:]
+            and set(token[1:]) == {"v"}
+        )
+        for token in extra
+    )
+    if verbosity and backend_verbosity:
+        parser.error("set Ansible verbosity before or after --, not both")
     invoked = args.command
     if getattr(args, "canonical", None):
         args.command = args.canonical
+    if args.command == "logs" and verbosity:
+        parser.error("verbosity is only valid while executing a command")
     as_agent = agent_mode(force_agent=args.agent or args.json, force_human=args.no_agent)
     # These print their own output (aws/licenses have a native --json); an
     # envelope would only apply to a path-resolution failure below.
@@ -1177,7 +1237,7 @@ def _run(argv: Sequence[str]) -> int:
             raw = getattr(args, "roles", None) or ""
             return [part.strip() for part in raw.split(",") if part.strip()] or None
 
-        action = args.apps_cmd
+        action = _action(args, "apps_cmd")
         result = session.apps(
             action=action,
             query=" ".join(getattr(args, "query", None) or []),
@@ -1281,7 +1341,7 @@ def _run(argv: Sequence[str]) -> int:
             if result.error and result.error not in log:
                 print(result.error, file=sys.stderr)
             return result.code
-        if args.verbose and data.get("log"):
+        if _verbosity(args) and data.get("log"):
             sys.stderr.write(data["log"])
         if action == "path":
             print((data.get("stdout") or data.get("path") or "").strip())
@@ -1293,6 +1353,8 @@ def _run(argv: Sequence[str]) -> int:
             last=bool(getattr(args, "last", False)),
             follow=bool(getattr(args, "follow", False)) and not as_agent,
             ansible_output=_want_ansible_output(args),
+            timestamps=_transcript_timestamps(args),
+            color=_transcript_color(args),
         )
         if as_agent:
             payload = dict(result.data or {})
@@ -1313,8 +1375,13 @@ def _run(argv: Sequence[str]) -> int:
                 return 0
             for row in rows:
                 print(
-                    "%s  rc=%s  %s"
-                    % (row.get("run_id"), row.get("rc"), row.get("command"))
+                    "%s  rc=%s  verbosity=%s  %s"
+                    % (
+                        row.get("run_id"),
+                        row.get("rc"),
+                        row.get("verbosity", 0),
+                        row.get("command"),
+                    )
                 )
             return 0
         if _want_ansible_output(args):
@@ -1331,6 +1398,9 @@ def _run(argv: Sequence[str]) -> int:
             agent=as_agent,
             ansible_output=_want_ansible_output(args),
             native_output=_want_native_output(args),
+            verbosity=_verbosity(args),
+            timestamps=_transcript_timestamps(args),
+            color=_transcript_color(args),
         )
         if as_agent:
             return _emit_result(result, True)
@@ -1349,6 +1419,9 @@ def _run(argv: Sequence[str]) -> int:
             skip_provision_check=bool(getattr(args, "allow_unprovisioned", False)),
             ansible_output=_want_ansible_output(args),
             native_output=_want_native_output(args),
+            verbosity=_verbosity(args),
+            timestamps=_transcript_timestamps(args),
+            color=_transcript_color(args),
         )
         if as_agent:
             return _emit_result(result, True)
@@ -1419,6 +1492,9 @@ def _run(argv: Sequence[str]) -> int:
             apps_playbook=getattr(args, "apps_playbook", None),
             ansible_output=_want_ansible_output(args),
             native_output=_want_native_output(args),
+            verbosity=_verbosity(args),
+            timestamps=_transcript_timestamps(args),
+            color=_transcript_color(args),
         )
         if as_agent:
             return _emit_result(result, True)
@@ -1434,8 +1510,8 @@ def _run(argv: Sequence[str]) -> int:
         return result.code
 
     if args.command == "hosts":
-        hosts_cmd = args.hosts_cmd or "list"
-        if hosts_cmd in {"list", "ls"}:
+        hosts_cmd = _action(args, "hosts_cmd") or "list"
+        if hosts_cmd == "list":
             result = session.hosts_list(
                 status=bool(getattr(args, "status", False)),
                 hosts=getattr(args, "hosts", None),
@@ -1475,7 +1551,7 @@ def _run(argv: Sequence[str]) -> int:
             except SystemExit as exc:
                 return exc.code if isinstance(exc.code, int) else 1
             return 0
-        if hosts_cmd in {"copy", "cp"}:
+        if hosts_cmd == "copy":
             paths_args = [*extra, *list(getattr(args, "paths", []) or [])]
             if getattr(args, "recursive", False):
                 paths_args.insert(0, "-r")

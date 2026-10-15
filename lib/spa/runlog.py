@@ -84,12 +84,12 @@ GROUP_TITLES: Dict[str, str] = {
     "upgrade_splunk": "Upgrade Splunk",
     "upgrade_distributed_cm": "Upgrade cluster manager",
     "upgrade_distributed_sh": "Upgrade search heads",
-    "upgrade_idxc_begin": "Indexer rolling upgrade · begin",
-    "upgrade_idxc_peers": "Indexer rolling upgrade · peers",
-    "upgrade_idxc_end": "Indexer rolling upgrade · end",
-    "upgrade_shc_begin": "Search head rolling upgrade · begin",
-    "upgrade_shc_members": "Search head rolling upgrade · members",
-    "upgrade_shc_end": "Search head rolling upgrade · end",
+    "upgrade_idxc_begin": "Indexer rolling upgrade · Begin",
+    "upgrade_idxc_peers": "Indexer rolling upgrade · Peers",
+    "upgrade_idxc_end": "Indexer rolling upgrade · End",
+    "upgrade_shc_begin": "Search head rolling upgrade · Begin",
+    "upgrade_shc_members": "Search head rolling upgrade · Members",
+    "upgrade_shc_end": "Search head rolling upgrade · End",
     "tf_init": "Terraform init",
     "tf_plan": "Terraform plan",
     "tf_apply": "Terraform apply",
@@ -186,6 +186,14 @@ _BEARER = re.compile(r"(?i)\b(bearer\s+)([a-z0-9._\-]+)")
 _SPLUNK_CLI_SECRET = re.compile(
     r"(?i)(-(?:auth|remotePassword|password|secret)\s+)(?:'[^']*'|\"[^\"]*\"|\S+)"
 )
+_UPGRADE_VERSION = re.compile(
+    r"^Upgrade (?P<product>\S+) from version '(?P<from>[^']+)' "
+    r"to version '(?P<to>[^']+)'$"
+)
+_UPGRADE_CURRENT = re.compile(
+    r"^Installed version '(?P<from>[^']+)' is equal to upgrade version "
+    r"'(?P<to>[^']+)' -> nothing to upgrade$"
+)
 
 
 def now_local(clock: Optional[Callable[[], datetime]] = None) -> datetime:
@@ -221,6 +229,12 @@ def format_event_time(stamp: Optional[datetime] = None) -> str:
     )
 
 
+def run_script_token(playbook: str) -> str:
+    """Filename token for the playbook that was run."""
+    stem = Path(str(playbook or "")).stem
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", stem).strip("-._")
+
+
 def format_run_id_stamp(stamp: Optional[datetime] = None) -> str:
     """Filename-safe local stamp: 2026-09-17T170200+0200."""
     local = stamp if stamp is not None else now_local()
@@ -235,6 +249,30 @@ def format_run_id_stamp(stamp: Optional[datetime] = None) -> str:
     hours, rem = divmod(total, 3600)
     minutes = rem // 60
     return "%s%s%02d%02d" % (local.strftime("%Y-%m-%dT%H%M%S"), sign, hours, minutes)
+
+
+def transcript_clock(event_time: str) -> str:
+    """Clock portion of a stored event time, including milliseconds."""
+    text = str(event_time or "")
+    if "T" in text:
+        return text.split("T", 1)[1]
+    return text
+
+
+def paint_ansible_line(text: str) -> str:
+    """Color one plain Ansible line. The stored transcript stays uncolored."""
+    body = text.lstrip()
+    if body.startswith("PLAY [") or body.startswith("TASK ["):
+        color = "cyan"
+    elif body.startswith("ok:"):
+        color = "green"
+    elif body.startswith("changed:"):
+        color = "yellow"
+    elif body.startswith(("fatal:", "failed:", "ERROR!")):
+        color = "red"
+    else:
+        return text
+    return _paint(text, color, True)
 
 
 def format_headline_time(stamp: Optional[datetime] = None) -> str:
@@ -280,17 +318,124 @@ def _stem(path: str) -> str:
     return Path(str(path)).stem.lower().replace("-", "_")
 
 
+def _capitalize_phrase(text: str) -> str:
+    """Capitalize the first letter of a compact-line phrase. Host names stay as written."""
+    text = str(text or "")
+    if not text:
+        return text
+    return text[:1].upper() + text[1:]
+
+
 def group_title(phase_id: Optional[str]) -> str:
     if not phase_id:
         return ""
+    if phase_id.startswith("upgrade_step:"):
+        return "Upgrade Splunk · " + _capitalize_phrase(phase_id[len("upgrade_step:") :])
+    if phase_id.startswith("upgrade_distributed_cm:"):
+        return "Upgrade cluster manager · " + _capitalize_phrase(
+            phase_id[len("upgrade_distributed_cm:") :]
+        )
+    for prefix, title in (
+        ("upgrade_idxc_peers:", "Indexer rolling upgrade"),
+        ("upgrade_shc_members:", "Search head rolling upgrade"),
+        ("upgrade_distributed_sh:", "Upgrade search heads"),
+        ("upgrade_splunk:", "Upgrade Splunk"),
+    ):
+        if phase_id.startswith(prefix):
+            rest = phase_id[len(prefix) :]
+            host, sep, step = rest.partition(":")
+            if sep and step:
+                return "%s · %s · %s" % (title, host, _capitalize_phrase(step))
+            return "%s · %s" % (title, rest)
     if phase_id in GROUP_TITLES:
         return GROUP_TITLES[phase_id]
     if phase_id.startswith("play:"):
-        return phase_id[5:]
+        return _capitalize_phrase(phase_id[5:])
     if phase_id.startswith(VAGRANT_HOST_GROUP_PREFIX):
         return "VM " + phase_id[len(VAGRANT_HOST_GROUP_PREFIX) :]
     text = str(phase_id).replace("_", " ").replace("-", " ")
     return text[:1].upper() + text[1:] if text else str(phase_id)
+
+
+def compact_task_title(task: str) -> str:
+    text = str(task or "").strip()
+    if text.lower().startswith("call "):
+        text = text[5:].strip()
+    return text.replace("_", " ").replace("-", " ")
+
+
+def _task_leaf(task: str) -> str:
+    """Drop a leading ``role : `` so version matching sees the task name."""
+    text = str(task or "").strip()
+    marker = " : "
+    if marker in text:
+        text = text.split(marker, 1)[1].strip()
+    return text
+
+
+_UPGRADE_PROCEDURE_STEMS = frozenset(
+    {
+        "upgrade",
+        "upgrade_software",
+        "upgrade_idxc_rolling_upgrade",
+        "upgrade_shc_rolling_upgrade",
+    }
+)
+
+
+def host_only_upgrade_phase(phase_id: Optional[str]) -> bool:
+    """A rolling host line with no include step.
+
+    The parent line is ``... · host · Step``. `` · `` is three characters and the
+    normal gap before the counters is two, so one extra space puts ``Tasks``
+    under that step word.
+    """
+    if not phase_id:
+        return False
+    for prefix in (
+        "upgrade_idxc_peers:",
+        "upgrade_shc_members:",
+        "upgrade_distributed_sh:",
+        "upgrade_splunk:",
+    ):
+        if phase_id.startswith(prefix):
+            rest = phase_id[len(prefix) :]
+            return bool(rest) and ":" not in rest
+    return False
+
+
+def upgrade_step_phase(phase_id: Optional[str]) -> bool:
+    """True when a phase id is one include step, not a host-only rolling line."""
+    if not phase_id:
+        return False
+    if phase_id.startswith("upgrade_step:") or phase_id.startswith("upgrade_distributed_cm:"):
+        return True
+    for prefix in ("upgrade_idxc_peers:", "upgrade_shc_members:", "upgrade_distributed_sh:"):
+        if phase_id.startswith(prefix) and ":" in phase_id[len(prefix) :]:
+            return True
+    return False
+
+
+def upgrade_version_fields(task: str, msg: Any) -> Dict[str, Any]:
+    text = str(msg or "").strip()
+    leaf = _task_leaf(task)
+    match = None
+    current = False
+    if leaf == "Display upgrade version info":
+        match = _UPGRADE_VERSION.match(text)
+    elif "not upgrading" in leaf.lower():
+        match = _UPGRADE_CURRENT.match(text)
+        current = bool(match)
+    if match is None:
+        return {}
+    fields: Dict[str, Any] = {
+        "upgrade_product": match.groupdict().get("product") or "splunk",
+        "upgrade_from": match.group("from"),
+        "upgrade_to": match.group("to"),
+    }
+    if current:
+        fields["upgrade_current"] = True
+    return fields
 
 
 def phases_for_command(command: str, provider: str = "") -> List[Dict[str, str]]:
@@ -317,6 +462,8 @@ def map_phase(
     task_file: str = "",
     role_path: str = "",
     provider: str = "",
+    host: str = "",
+    kind: str = "",
 ) -> Optional[str]:
     """Map Ansible (or provider) context to a stable named group id."""
     origin = _stem(play_file) or _stem(playbook)
@@ -352,7 +499,15 @@ def map_phase(
         return _role_from_play(play_l) or ROLE_NAME_GROUP.get(role_l) or "role_deployment_server"
 
     if origin.startswith("upgrade_") or entry.startswith("upgrade_"):
-        return _upgrade_group(origin or entry, play_l, task_file_l)
+        return _upgrade_group(
+            origin or entry,
+            play_l,
+            task_file_l,
+            task_l,
+            task=task,
+            host=str(host or ""),
+            kind=str(kind or ""),
+        )
 
     if origin in PLAYBOOK_GROUP:
         return PLAYBOOK_GROUP[origin]
@@ -434,25 +589,76 @@ def _role_from_play(play_l: str) -> Optional[str]:
     return None
 
 
-def _upgrade_group(origin: str, play_l: str, task_file_l: str) -> str:
+def _upgrade_step_id(phase: str, task_file_l: str, task: str, host: str) -> Optional[str]:
+    """Phase for one task on the upgrade procedure file.
+
+    Nested files stay on the open step because they are not in this set.
+    Parallel upgrade_splunk shares one line; rolling plays keep the host.
+    """
+    if _stem(task_file_l) not in _UPGRADE_PROCEDURE_STEMS:
+        return None
+    label = compact_task_title(_task_leaf(task)) or "upgrade"
+    if phase == "upgrade_splunk":
+        return "upgrade_step:" + label
+    if phase == "upgrade_distributed_cm":
+        return phase + ":" + label
+    if host:
+        return "%s:%s:%s" % (phase, host, label)
+    return None
+
+
+def _upgrade_group(
+    origin: str,
+    play_l: str,
+    task_file_l: str,
+    task_l: str,
+    *,
+    task: str = "",
+    host: str = "",
+    kind: str = "",
+) -> Optional[str]:
     blob = play_l + " " + task_file_l
+    phase: str
     if origin == "upgrade_distributed":
         if "search" in play_l:
-            return "upgrade_distributed_sh"
-        return "upgrade_distributed_cm"
-    if origin == "upgrade_idxc_rolling":
+            phase = "upgrade_distributed_sh"
+        else:
+            phase = "upgrade_distributed_cm"
+    elif origin == "upgrade_idxc_rolling":
         if "begin" in blob:
             return "upgrade_idxc_begin"
         if "end" in blob:
             return "upgrade_idxc_end"
-        return "upgrade_idxc_peers"
-    if origin == "upgrade_shc_rolling":
+        phase = "upgrade_idxc_peers"
+    elif origin == "upgrade_shc_rolling":
         if "begin" in blob:
             return "upgrade_shc_begin"
         if "end" in blob:
             return "upgrade_shc_end"
-        return "upgrade_shc_members"
-    return "upgrade_splunk"
+        phase = "upgrade_shc_members"
+    else:
+        phase = "upgrade_splunk"
+    step = _upgrade_step_id(phase, task_file_l, task or task_l, host)
+    if step:
+        return step
+    host_split_phases = {
+        "upgrade_idxc_peers",
+        "upgrade_shc_members",
+        "upgrade_distributed_sh",
+        "upgrade_splunk",
+    }
+    if kind in {"play_start", "task_start"} and phase in host_split_phases:
+        return None
+    if phase == "upgrade_splunk":
+        if not kind:
+            return phase
+        if "display upgrade version info" in task_l:
+            label = compact_task_title(_task_leaf(task or task_l)) or "Display upgrade version info"
+            return "upgrade_step:" + label
+        return None
+    if host and phase in host_split_phases:
+        return "%s:%s" % (phase, host)
+    return phase
 
 
 def _provision_phase_from_task(task: str, fallback: Optional[str] = None) -> str:
@@ -615,8 +821,30 @@ def _infer_kind(raw: Dict[str, Any], status: str) -> str:
     return "task_start"
 
 
-def render_replay_text(events: Sequence[Dict[str, Any]]) -> str:
+def _display_ansible_line(event: Dict[str, Any], *, timestamps: bool, color: bool) -> str:
+    text = str(event.get("text") or "")
+    shown = paint_ansible_line(text) if color and text.strip() else text
+    if timestamps and text.strip() and event.get("time"):
+        shown = "%s  %s" % (transcript_clock(str(event["time"])), shown)
+    return shown
+
+
+def render_replay_text(
+    events: Sequence[Dict[str, Any]],
+    *,
+    timestamps: bool = False,
+    color: bool = False,
+) -> str:
     """Reconstruct Ansible-style (and Terraform) text from JSONL objects."""
+    native = [
+        event for event in events if str(event.get("kind") or "") == "ansible_output"
+    ]
+    if native:
+        return "".join(
+            _display_ansible_line(event, timestamps=timestamps, color=color) + "\n"
+            for event in native
+        )
+
     chunks: List[str] = []
     last_task = None
     for event in events:
@@ -685,7 +913,7 @@ def render_replay_text(events: Sequence[Dict[str, Any]]) -> str:
     return "\n".join(chunks) + "\n"
 
 
-def replay_jsonl(path: Path) -> str:
+def replay_jsonl(path: Path, *, timestamps: bool = False, color: bool = False) -> str:
     if not path.is_file():
         return ""
     events: List[Dict[str, Any]] = []
@@ -699,7 +927,7 @@ def replay_jsonl(path: Path) -> str:
             continue
         if isinstance(row, dict):
             events.append(row)
-    return render_replay_text(events)
+    return render_replay_text(events, timestamps=timestamps, color=color)
 
 
 class RunLog:
@@ -714,6 +942,9 @@ class RunLog:
         agent: bool = False,
         ansible_output: bool = False,
         native_output: bool = False,
+        verbosity: int = 0,
+        timestamps: bool = False,
+        color: bool = False,
         provider: str = "",
         clock: Optional[Callable[[], datetime]] = None,
         stream: Optional[TextIO] = None,
@@ -725,13 +956,20 @@ class RunLog:
         self.agent = agent
         self.provider = provider
         self.ansible_output = ansible_output
+        self.verbosity = int(verbosity)
+        self.timestamps = bool(timestamps) and not agent
+        self.force_color = bool(color) and not agent
         self._clock = clock
         self._stream = stream if stream is not None else sys.stderr
         self.heartbeat_seconds = heartbeat_seconds
         self.spa_env = Path(paths.spa_env_dir).name
         started = now_local(clock)
         self.started_at = started
-        self.run_id = "%s-%s" % (format_run_id_stamp(started), command)
+        suffix = command
+        script = run_script_token(playbook)
+        if script and script != command:
+            suffix = "%s-%s" % (command, script)
+        self.run_id = "%s-%s" % (format_run_id_stamp(started), suffix)
         folder = logs_dir(paths)
         folder.mkdir(parents=True, exist_ok=True)
         self.jsonl_path = folder / (self.run_id + JSONL_SUFFIX)
@@ -766,12 +1004,27 @@ class RunLog:
         self._tf_attached = False
         self._replay_play = None
         self._replay_task = None
+        self._ansible_sequence = 0
+        self._current_host = ""
+        self._current_task = ""
+        self._upgrade_product = ""
+        self._upgrade_from = ""
+        self._upgrade_to = ""
+        self._upgrade_current = False
         self._write_meta(rc=None, ended=None)
 
     @property
     def wants_color(self) -> bool:
         """True when the human stream can take ANSI (drives Ansible's own color)."""
-        return self._color
+        if self.agent:
+            return False
+        if (os.environ.get("NO_COLOR") or "").strip():
+            return False
+        if (os.environ.get("ANSIBLE_NOCOLOR") or "").strip():
+            return False
+        if (os.environ.get("TERM") or "") == "dumb":
+            return False
+        return self._color or self.force_color
 
     @property
     def saw_failure(self) -> bool:
@@ -829,13 +1082,14 @@ class RunLog:
         self._hb_thread = threading.Thread(target=_loop, name="spa-run-heartbeat", daemon=True)
         self._hb_thread.start()
 
-    def emit(self, raw: Dict[str, Any]) -> None:
+    def emit(self, raw: Dict[str, Any]) -> Dict[str, Any]:
         with self._lock:
             event = self._normalize(raw)
             line = json.dumps(event, default=str, ensure_ascii=False)
             self._handle.write(line + "\n")
             self._handle.flush()
         self._render(event)
+        return event
 
     def consume_callback_line(self, line: str) -> None:
         # Ansible may color its own output; the JSONL store stays escape-free.
@@ -855,6 +1109,20 @@ class RunLog:
         self.emit(payload)
         if self._looks_like_tf_plan_done(payload):
             self.attach_tf_plan()
+
+    def consume_ansible_output(self, line: str) -> Dict[str, Any]:
+        """Store one native Ansible callback line for exact later replay."""
+        self._ansible_sequence += 1
+        text = _strip_ansi(line.rstrip("\n"))
+        return self.emit(
+            {
+                "kind": "ansible_output",
+                "source": "ansible",
+                "status": "failed" if text.startswith("ERROR!") else "ok",
+                "text": text,
+                "sequence": self._ansible_sequence,
+            }
+        )
 
     @staticmethod
     def _note_payload(text: str) -> Dict[str, Any]:
@@ -884,16 +1152,20 @@ class RunLog:
             return
         self.emit(event)
 
-    def emit_native_output(self, line: str) -> None:
+    def emit_native_output(self, line: str, event_time: str = "") -> None:
         """Write one raw native Ansible line to the human stream only.
 
         Unredacted on purpose: `spa … -v` is the debugging view, and Ansible's own
-        output is reproduced byte for byte, secrets included.  Stored transcripts
-        stay redacted, so only this terminal sees them.
+        output is reproduced byte for byte, secrets included. The local JSONL
+        transcript stores an ANSI-free copy until issue 88 adds redaction.
+        A requested timestamp is a display prefix taken from the stored event.
         """
         if self.agent:
             return
-        self._stream.write(line if line.endswith("\n") else line + "\n")
+        text = line if line.endswith("\n") else line + "\n"
+        if self.timestamps and event_time and text.strip():
+            text = "%s  %s" % (transcript_clock(event_time), text)
+        self._stream.write(text)
         self._stream.flush()
 
     def attach_tf_plan(self, summary: Optional[Dict[str, Any]] = None) -> None:
@@ -913,7 +1185,7 @@ class RunLog:
                 "kind": "tf_changes",
                 "status": "tf_changes",
                 "phase": self._current_phase or "tf_plan",
-                "tf_summary": redact(summary),
+                "tf_summary": summary,
                 "hosts": [row.get("host") for row in (summary.get("hosts") or [])],
                 "msg": self._tf_bits,
             }
@@ -985,6 +1257,13 @@ class RunLog:
         self._changed = 0
         self._skipped = 0
         self._failed = 0
+        self._current_host = ""
+        self._current_task = ""
+        # The from/to pair belongs on the version step. Later includes start clean.
+        self._upgrade_product = ""
+        self._upgrade_from = ""
+        self._upgrade_to = ""
+        self._upgrade_current = False
         self._phase_started = now_local(self._clock)
 
     def _progress_payload(self, event: Dict[str, Any], status: str) -> Dict[str, Any]:
@@ -1013,6 +1292,10 @@ class RunLog:
             payload["actions"] = [
                 row.get("action") for row in ((self._tf_summary or {}).get("hosts") or [])
             ]
+        if self._current_host:
+            payload["host"] = self._current_host
+        if self._current_task:
+            payload["task"] = self._current_task
         return payload
 
     def _normalize(self, raw: Dict[str, Any]) -> Dict[str, Any]:
@@ -1026,10 +1309,11 @@ class RunLog:
             tags = [tags]
         status = str(raw.get("status") or "ok")
         kind = _infer_kind(raw, status)
-        note = kind == NOTE_KIND
+        note = kind in {NOTE_KIND, "ansible_output"}
         phase = raw.get("phase") or raw.get("phase_id")
+        held = False
         if note:
-            # A warning is not a step: it must not open or close a group.
+            # Native output and warnings are not steps: they must not open or close a group.
             phase = phase or self._current_phase
         elif not phase or status not in {"heartbeat", "phase_end"}:
             mapped = map_phase(
@@ -1044,7 +1328,19 @@ class RunLog:
                 task_file=str(raw.get("task_file") or ""),
                 role_path=str(raw.get("role_path") or ""),
                 provider=self.provider,
+                host=str(raw.get("host") or ""),
+                kind=kind,
             )
+            if (
+                mapped
+                and upgrade_step_phase(mapped)
+                and mapped != self._current_phase
+                and not (kind == "host_result" and status != "skipped")
+            ):
+                # An include opens on its first real result. An all-skipped
+                # include, and every task_start, stays off the compact line.
+                held = True
+                mapped = None
             if mapped:
                 phase = mapped
         if not phase and not note:
@@ -1052,9 +1348,23 @@ class RunLog:
             phase = self._current_phase or PROVIDER_BASE_GROUP.get(self.provider)
         if not note and status not in {"heartbeat", "phase_end"}:
             self._maybe_phase_change(str(phase) if phase else None, stamp)
-        if kind == "task_start" and task:
+        if held:
+            phase = self._current_phase
+        elif kind in {"host_start", "host_result"} and raw.get("host"):
+            host = str(raw.get("host"))
+            if host not in {"localhost", "127.0.0.1"}:
+                self._current_host = host
+            if task:
+                self._current_task = compact_task_title(task)
+        version_fields = upgrade_version_fields(task, raw.get("msg"))
+        if version_fields:
+            self._upgrade_product = str(version_fields["upgrade_product"])
+            self._upgrade_from = str(version_fields["upgrade_from"])
+            self._upgrade_to = str(version_fields["upgrade_to"])
+            self._upgrade_current = bool(version_fields.get("upgrade_current"))
+        if not held and kind == "task_start" and task:
             self._tasks.add(task)
-        if kind == "host_result" and raw.get("host"):
+        if not held and kind == "host_result" and raw.get("host"):
             if str(raw.get("host")) not in {"localhost", "127.0.0.1"}:
                 self._hosts.add(str(raw.get("host")))
             if task:
@@ -1087,6 +1397,8 @@ class RunLog:
             "task_file": str(raw.get("task_file") or "") or None,
             "kind": kind,
             "source": raw.get("source") or None,
+            "text": raw.get("text") if kind == "ansible_output" else None,
+            "sequence": raw.get("sequence") if kind == "ansible_output" else None,
             "phase": phase,
             "phase_id": phase,
             "phase_title": title,
@@ -1099,14 +1411,15 @@ class RunLog:
             "host": raw.get("host") or None,
             "status": status,
             "duration_ms": raw.get("duration_ms"),
-            "msg": redact(raw.get("msg") or raw.get("task_name") or task or ""),
+            "msg": raw.get("msg") or raw.get("task_name") or task or "",
             "handler": bool(raw.get("handler")),
             "task_uuid": raw.get("task_uuid") or None,
-            "recap": redact(raw.get("recap")) if raw.get("recap") else None,
-            "tf_summary": redact(raw.get("tf_summary")) if raw.get("tf_summary") else None,
+            "recap": raw.get("recap") if raw.get("recap") else None,
+            "tf_summary": raw.get("tf_summary") if raw.get("tf_summary") else None,
             "tasks": raw.get("tasks", len(self._tasks)),
             "hosts_n": len(self._hosts),
             "changed": raw.get("changed", self._changed),
+            **version_fields,
         }
         if status in {"failed", "unreachable"}:
             self._last_failure = {
@@ -1114,7 +1427,12 @@ class RunLog:
                 "host": event.get("host"),
                 "task": event.get("task"),
             }
-        return {key: value for key, value in event.items() if value is not None and value != ""}
+        normalized = {
+            key: value for key, value in event.items() if value is not None and value != ""
+        }
+        if kind == "ansible_output":
+            normalized["text"] = str(raw.get("text") or "")
+        return normalized
 
     def _catalog_index(self, phase: Optional[str]) -> Optional[int]:
         for i, row in enumerate(self.catalog, start=1):
@@ -1193,6 +1511,22 @@ class RunLog:
         prefix = format_headline_time(self._phase_started or now_local(self._clock))
         title = self._phase_title or group_title(self._current_phase)
         head = "%s  %s" % (self.command.capitalize(), title)
+        if self._upgrade_from and self._upgrade_to:
+            version = "%s → %s" % (self._upgrade_from, self._upgrade_to)
+            if self._upgrade_current:
+                version += " (current)"
+            head += "  " + version
+        if not final:
+            detail = " · ".join(
+                part
+                for part in (
+                    self._current_host,
+                    _capitalize_phrase(self._current_task),
+                )
+                if part
+            )
+            if detail:
+                head += " · " + detail
         # "tasks" counts distinct task names, "changed"/"skipped" count task-host
         # results, so changed is shown against the result total to keep the unit
         # obvious (changed 131/625 means 131 of 625 results changed something).
@@ -1201,7 +1535,7 @@ class RunLog:
         failed = "failed %s" % self._failed if self._failed else ""
         counters: List[str] = []
         if self._tasks:
-            counters.append("tasks %s" % len(self._tasks))
+            counters.append("Tasks %s" % len(self._tasks))
         if self._hosts:
             counters.append("hosts %s" % len(self._hosts))
         counters.extend(part for part in (changed, skipped, failed) if part)
@@ -1221,11 +1555,16 @@ class RunLog:
             tail.append(self._phase_outcome(failed_run=failed_run))
 
         def assemble(shown_counters: Sequence[str], shown_tf: str, shown_prefix: str = prefix, shown_head: str = head) -> str:
-            parts = [shown_prefix, shown_head, *shown_counters]
-            if shown_tf:
-                parts.append(shown_tf)
-            parts.extend(tail)
-            return "  ".join(str(p) for p in parts if p)
+            left = "  ".join(str(p) for p in (shown_prefix, shown_head) if p)
+            right_parts = [str(p) for p in (*shown_counters, shown_tf, *tail) if p]
+            right = "  ".join(right_parts)
+            if not right:
+                return left
+            if not left:
+                return right
+            # Host-only rolling work sits under the step word of the line above.
+            gap = "   " if shown_counters and host_only_upgrade_phase(self._current_phase) else "  "
+            return left + gap + right
 
         text = assemble(counters, tf)
         if width is None or len(text) <= width:
@@ -1374,7 +1713,12 @@ class RunLog:
             self._break_live()
             # A provider line is its own task and message; print it once.
             parts: List[str] = []
-            for part in (event.get("host"), event.get("task"), event.get("msg")):
+            for part in (
+                event.get("host"),
+                event.get("task"),
+                event.get("msg"),
+                event.get("text"),
+            ):
                 text = str(part or "").strip()
                 if text and text not in parts:
                     parts.append(text)
@@ -1391,7 +1735,7 @@ class RunLog:
             if self._live_cr:
                 self._emit_phase_line(final=False)
             return
-        if kind == "host_result" and self._live_cr:
+        if kind in {"host_start", "host_result"} and self._live_cr:
             self._emit_phase_line(final=False)
 
     def _render_ansible_live(self, event: Dict[str, Any], kind: str) -> None:
@@ -1400,7 +1744,9 @@ class RunLog:
             if summary:
                 self._write_stderr(format_tf_replay(summary).rstrip("\n"))
             return
-        text = render_replay_text([event]).rstrip("\n")
+        text = render_replay_text(
+            [event], timestamps=self.timestamps, color=self.force_color
+        ).rstrip("\n")
         if text:
             self._write_stderr(text)
 
@@ -1422,6 +1768,7 @@ class RunLog:
             "end": format_event_time(ended) if ended is not None else None,
             "duration_ms": duration,
             "rc": rc,
+            "verbosity": self.verbosity,
             "log": str(self.jsonl_path),
         }
         self.meta_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -1480,12 +1827,28 @@ def follow_jsonl(
     sleep_s: float = 0.2,
     stream: Optional[TextIO] = None,
     ansible_output: bool = False,
+    timestamps: bool = False,
+    color: bool = False,
 ) -> int:
     """Print new JSONL lines. Stops after idle_passes with no growth (tests); infinite if idle_passes < 0."""
     out = stream if stream is not None else sys.stdout
     offset = 0
     idle = 0
     leftover = ""
+    structured_events: List[Dict[str, Any]] = []
+    native_seen = False
+    legacy_rendered = False
+
+    def run_finished() -> bool:
+        if not path.name.endswith(JSONL_SUFFIX):
+            return False
+        meta = path.with_name(path.name[: -len(JSONL_SUFFIX)] + META_SUFFIX)
+        try:
+            payload = json.loads(meta.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        return isinstance(payload, dict) and payload.get("rc") is not None
+
     while True:
         if path.is_file():
             with path.open("r", encoding="utf-8") as handle:
@@ -1508,7 +1871,23 @@ def follow_jsonl(
                             continue
                         if isinstance(row, dict):
                             events.append(row)
-                    rendered = render_replay_text(events)
+                    structured_events.extend(
+                        row for row in events if row.get("kind") != "ansible_output"
+                    )
+                    native_events = [
+                        row for row in events if row.get("kind") == "ansible_output"
+                    ]
+                    if native_events:
+                        if not native_seen:
+                            structured_events.clear()
+                        native_seen = True
+                    rendered = (
+                        render_replay_text(
+                            native_events, timestamps=timestamps, color=color
+                        )
+                        if native_events
+                        else ""
+                    )
                     if rendered:
                         out.write(rendered)
                         out.flush()
@@ -1520,6 +1899,25 @@ def follow_jsonl(
                 idle += 1
         else:
             idle += 1
+        should_render_legacy = (
+            ansible_output
+            and not native_seen
+            and not legacy_rendered
+            and structured_events
+            and (
+                run_finished()
+                or (idle_passes >= 0 and idle >= idle_passes)
+            )
+        )
+        if should_render_legacy:
+            rendered = render_replay_text(
+                structured_events, timestamps=timestamps, color=color
+            )
+            if rendered:
+                out.write(rendered)
+                out.flush()
+            legacy_rendered = True
+            structured_events.clear()
         if idle_passes >= 0 and idle >= idle_passes:
             return 0
         time.sleep(sleep_s)

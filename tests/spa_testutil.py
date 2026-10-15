@@ -72,7 +72,7 @@ def spa_env(extra: Optional[Mapping[str, str]] = None) -> dict:
     return env
 
 
-def run_spa(args: Sequence[str], env=None, cwd=None, extra_env=None):
+def run_spa(args: Sequence[str], env=None, cwd=None, extra_env=None, stdin=None):
     full = spa_env(extra_env)
     if env:
         full.update(env)
@@ -82,6 +82,7 @@ def run_spa(args: Sequence[str], env=None, cwd=None, extra_env=None):
         capture_output=True,
         text=True,
         env=full,
+        input=stdin,
     )
 
 

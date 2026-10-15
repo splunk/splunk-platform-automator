@@ -291,6 +291,23 @@ def test_resolve_apps_playbook_allows_env_relative_path(tmp_path):
         resolve_apps_playbook(PROJECT_ROOT, "ancustom/missing", spa_env_dir=tmp_path)
 
 
+def test_upgrade_distributed_uses_manager_group_and_version_check():
+    import yaml
+
+    plays = yaml.safe_load(
+        (PROJECT_ROOT / "ansible" / "upgrade_distributed.yml").read_text(encoding="utf-8")
+    )
+    assert [play["hosts"] for play in plays] == [
+        "role_cluster_manager",
+        "role_search_head",
+    ]
+    assert plays[1]["serial"] == 1
+    for play in plays:
+        include = play["tasks"][0]["ansible.builtin.include_role"]
+        assert include["name"] == "splunk_software"
+        assert include["tasks_from"] == "upgrade_software"
+
+
 def test_cli_run_help_lists_curated_apps_playbooks():
     result = run_spa(["--no-agent", "run", "splunk_apps_playbook_run", "--help"])
     assert result.returncode == 0, result.stderr

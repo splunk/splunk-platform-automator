@@ -60,6 +60,8 @@ __pycache__/
 .vscode
 # Cursor local plans (keep .cursor/skills in the tree)
 .cursor/plans/
+# Local agent working notes
+.superpowers/
 # Graphify is optional; keep generated graph and the Cursor rule local
 graphify-out/
 .cursor/rules/graphify.mdc

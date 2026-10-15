@@ -1,6 +1,7 @@
 """Release contract for every public ``spa`` help and schema surface."""
 
 import json
+import re
 
 import pytest
 
@@ -175,11 +176,11 @@ HELP_CONTRACTS = [
     ),
     (
         ["logs", "--help"],
-        ["usage: spa logs", "--last", "--follow", "run_id", "--ansible-output", "-v"],
+        ["usage: spa logs", "--last", "--follow", "run_id", "--ansible-output"],
     ),
     (
         ["hosts", "--help"],
-        ["usage: spa hosts", "ACTION", "list (ls)", "ssh", "copy (cp)", "--status", "-s", "--hosts"],
+        ["usage: spa hosts", "ACTION", "list", "ssh", "copy", "--status", "-s", "--hosts"],
     ),
     (
         ["hosts", "list", "--help"],
@@ -267,6 +268,7 @@ ALIASES = {
     "sh": "usage: spa shell",
     "lic": "usage: spa licenses",
     "env": "usage: spa environment",
+    "agt": "usage: spa agent",
 }
 
 
@@ -275,6 +277,60 @@ def test_every_top_level_alias_routes_to_canonical_help(alias, usage):
     result = run_spa(["--no-agent", alias, "--help"])
     assert result.returncode == 0, result.stderr
     assert usage in result.stdout
+
+
+# Help rows look like "    validate (val)      Validate splunk_config.yml".
+_COMMAND_ROW = re.compile(r"^    ([a-z][a-z0-9_-]*)(?: \(([a-z0-9]+)\))?\s{2,}\S", re.MULTILINE)
+_ACTION_PARENTS = ("environment", "hosts", "apps")
+# Positional args that get the handler past argparse without mutating or calling out.
+_ALIAS_PROBE = {
+    ("environment", "remove"): ["no-such-env"],
+    ("hosts", "ssh"): ["no-such-host"],
+    ("apps", "search"): ["splunk", "--kind", "not-a-kind"],
+    ("apps", "snippet"): ["localapp", "--source", "local"],
+    ("apps", "download"): ["123"],
+}
+
+
+def _command_rows(help_text: str):
+    return [(match.group(1), match.group(2)) for match in _COMMAND_ROW.finditer(help_text)]
+
+
+def _discovered_commands():
+    """(parent argv, canonical name, short alias or None) for every spa command."""
+    root = run_spa(["--no-agent", "--help"])
+    assert root.returncode == 0, root.stderr
+    found = [((), name, alias) for name, alias in _command_rows(root.stdout)]
+    for parent in _ACTION_PARENTS:
+        child = run_spa(["--no-agent", parent, "--help"])
+        assert child.returncode == 0, child.stderr
+        found.extend([((parent,), name, alias) for name, alias in _command_rows(child.stdout)])
+    return found
+
+
+def test_every_short_command_is_short_enough_and_dispatches():
+    """Names under 5 characters have no alias. Longer names have one alias under 5 that runs the same command."""
+    commands = _discovered_commands()
+    names = {" ".join((*parents, name)) for parents, name, _alias in commands}
+    assert "environment remove" in names
+    assert "hosts list" in names
+    assert "apps search" in names
+    for parents, name, alias in commands:
+        label = " ".join((*parents, name))
+        if len(name) < 5:
+            assert alias is None, "%s is %s characters and must not have a short command" % (
+                label,
+                len(name),
+            )
+            continue
+        assert alias, "%s needs a short command" % label
+        assert len(alias) < 5, "%s short command %s must be under 5 characters" % (label, alias)
+        probe = _ALIAS_PROBE.get(tuple(parents) + (name,), [])
+        short = run_spa(["--no-agent", *parents, alias, *probe], stdin="n\n")
+        long = run_spa(["--no-agent", *parents, name, *probe], stdin="n\n")
+        assert short.returncode == long.returncode, label
+        assert short.stdout == long.stdout, label
+        assert short.stderr == long.stderr, label
 
 
 @pytest.mark.parametrize(
@@ -312,7 +368,7 @@ def test_verbose_is_listed_next_to_ansible_output():
     assert result.returncode == 0, result.stderr
     usage, options = result.stdout.split("options:", 1)
     compact = " ".join(usage.split())
-    assert "[--ansible-output] [-v]" in compact
+    assert "[--ansible-output] [--timestamps] [--color] [-v]" in compact
     idx_ao = options.index("--ansible-output")
     idx_v = options.index("-v, --verbose")
     assert idx_ao < idx_v
@@ -320,24 +376,44 @@ def test_verbose_is_listed_next_to_ansible_output():
     assert "--agent" not in between
     assert "--json" not in between
     compact_opts = " ".join(options.split())
-    # -v is the unredacted native stream, not a synonym for --ansible-output.
-    assert "Stream Ansible's own output unredacted" in compact_opts
-    # Ansible's own verbosity stays a pass-through, not a -v level.
-    assert "-- -vv" in compact_opts
+    assert "Increase Ansible verbosity and show native output" in compact_opts
+    assert "repeat through -vvvv" in compact_opts
     assert "Same as --ansible-output" not in compact_opts
 
 
 @pytest.mark.parametrize(
-    ("argv", "usage"),
+    "argv",
     [
-        (["hosts", "ls", "--help"], "usage: spa hosts list"),
-        (["hosts", "cp", "--help"], "usage: spa hosts copy"),
+        ["--no-agent", "logs", "-v"],
+        ["--no-agent", "-v", "logs"],
     ],
 )
-def test_every_hosts_alias_routes_to_canonical_help(argv, usage):
-    result = run_spa(["--no-agent", *argv])
-    assert result.returncode == 0, result.stderr
-    assert usage in result.stdout
+def test_logs_rejects_execution_verbosity(argv):
+    result = run_spa(argv)
+    assert result.returncode != 0
+    assert "error:" in result.stderr
+
+
+@pytest.mark.parametrize("backend_flag", ["-vv", "--verbose"])
+def test_ansible_verbosity_is_limited_and_not_duplicated_after_separator(backend_flag):
+    too_verbose = run_spa(
+        ["--no-agent", "run", "splunk_cli", "--yes", "-vvvvv"]
+    )
+    assert too_verbose.returncode != 0
+    assert "supports at most -vvvv" in too_verbose.stderr
+
+    duplicated = run_spa(
+        ["--no-agent", "run", "splunk_cli", "--yes", "-v", "--", backend_flag]
+    )
+    assert duplicated.returncode != 0
+    assert "verbosity before or after --, not both" in duplicated.stderr
+
+
+def test_removed_short_names_are_not_commands():
+    for argv in (["hosts", "ls"], ["hosts", "cp"], ["environment", "ls"]):
+        result = run_spa(["--no-agent", *argv])
+        assert result.returncode != 0, argv
+        assert "invalid choice" in result.stderr
 
 
 def test_agent_schema_is_complete_and_documented():
