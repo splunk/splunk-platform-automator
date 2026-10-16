@@ -16,6 +16,7 @@ from spa.playbooks import run_playbook
 from spa.paths import resolve_spa_paths
 from spa.runlog import (
     RunLog,
+    _strip_ansi,
     format_event_time,
     format_run_id_stamp,
     list_runs,
@@ -658,11 +659,11 @@ def test_compact_tty_shows_current_host_and_task_only_while_running(tmp_path):
 
     log.emit({**event, "kind": "host_result", "status": "ok"})
     log.finish(0)
-    settled = stderr.getvalue().splitlines()[-1]
+    settled = _plain_line(stderr.getvalue().splitlines()[-1])
     assert "Maintain lab" in settled
     assert "idx1" not in settled
     assert "check splunk version" not in settled.lower()
-    assert settled.rstrip().endswith("ok")
+    assert settled.endswith("ok")
 
 
 def test_run_playbook_fake_ansible(tmp_path, monkeypatch):
@@ -1340,6 +1341,11 @@ def test_live_phase_line_never_wraps(tmp_path, monkeypatch):
         assert len(chunk) < 60, chunk
 
 
+def _plain_line(text: str) -> str:
+    """Status checks ignore TTY color, which a dirty shell can turn off."""
+    return _strip_ansi(text).strip()
+
+
 def _phase_ids(log: RunLog) -> list:
     ids = []
     for line in log.jsonl_path.read_text(encoding="utf-8").splitlines():
@@ -1647,9 +1653,9 @@ def test_parallel_upgrade_splunk_shares_one_step_line(tmp_path):
     log.finish(0)
 
     settled = [
-        line.strip()
+        _plain_line(line)
         for line in stderr.getvalue().splitlines()
-        if line.rstrip().endswith("ok")
+        if _plain_line(line).endswith("ok")
     ]
     assert len(settled) == 1
     assert "Upgrade Splunk · Display upgrade version info" in settled[0]
@@ -1715,9 +1721,9 @@ def test_upgrade_progress_keeps_current_and_target_versions_on_settled_line(tmp_
     assert version["upgrade_product"] == "splunk"
     assert version["upgrade_from"] == "9.1.2"
     assert version["upgrade_to"] == "9.3.1"
-    settled = stderr.getvalue().splitlines()[-1]
+    settled = _plain_line(stderr.getvalue().splitlines()[-1])
     assert "9.1.2 → 9.3.1" in settled
-    assert settled.rstrip().endswith("ok")
+    assert settled.endswith("ok")
 
 
 def test_upgrade_progress_recognizes_equal_version_as_current():
@@ -1820,9 +1826,9 @@ def test_upgrade_includes_settle_a_line_per_step_and_keep_versions(tmp_path):
         "upgrade_step:Start splunk by service control",
     ]
     settled = [
-        line.strip()
+        _plain_line(line)
         for line in stderr.getvalue().splitlines()
-        if line.rstrip().endswith(("ok", "changed"))
+        if _plain_line(line).endswith(("ok", "changed"))
     ]
     version_lines = [line for line in settled if "10.4.0 → 10.4.2" in line]
     assert len(version_lines) == 1
