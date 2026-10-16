@@ -71,13 +71,21 @@ def _tilde(path: Path) -> str:
         return str(path)
 
 
-def _start_dir_from_head(head: Sequence[str]) -> Optional[str]:
+def _value_from_head(head: Sequence[str], option: str) -> Optional[str]:
     tokens = list(head)
-    if "--start-dir" in tokens:
-        index = tokens.index("--start-dir")
+    if option in tokens:
+        index = tokens.index(option)
         if index + 1 < len(tokens):
             return tokens[index + 1]
     return None
+
+
+def _start_dir_from_head(head: Sequence[str]) -> Optional[str]:
+    return _value_from_head(head, "--start-dir")
+
+
+def _env_selector_from_head(head: Sequence[str]) -> Optional[str]:
+    return _value_from_head(head, "--env")
 
 
 def _print_catalog(rows: List[dict], paths) -> None:
@@ -113,7 +121,7 @@ def _print_catalog(rows: List[dict], paths) -> None:
 def _run_help_target(head: Sequence[str]) -> Optional[str]:
     """Playbook stem, empty string for spa run --help, or None to use argparse."""
     help_flags = {"-h", "--help"}
-    skip_value = {"--start-dir"}
+    skip_value = {"--start-dir", "--env"}
     index = 0
     while index < len(head):
         token = head[index]
@@ -132,7 +140,7 @@ def _run_help_target(head: Sequence[str]) -> Optional[str]:
     if not any(item in help_flags for item in rest):
         return None
     names: List[str] = []
-    skip_run_value = {"--dir", "--hosts", "--apps-playbook"}
+    skip_run_value = {"--dir", "--env", "--hosts", "--apps-playbook", "--start-dir"}
     cursor = 0
     while cursor < len(rest):
         token = rest[cursor]
@@ -230,7 +238,7 @@ def _print_playbook_help(data: dict) -> None:
 
 
 def _add_mode_flags(parser) -> None:
-    """Accept --json/--agent/--no-agent after the subcommand (parent flags stay first)."""
+    """Accept agent mode and path-resolution globals after the subcommand."""
     parser.add_argument(
         "--json",
         action="store_true",
@@ -248,6 +256,11 @@ def _add_mode_flags(parser) -> None:
         action="store_true",
         default=argparse.SUPPRESS,
         help="Force human mode (text output, may prompt) even inside an agent",
+    )
+    parser.add_argument(
+        "--start-dir",
+        default=argparse.SUPPRESS,
+        help="Directory to resolve .spa.yml from",
     )
 
 
@@ -610,7 +623,7 @@ def _run(argv: Sequence[str]) -> int:
             force_agent="--agent" in head or "--json" in head,
             force_human="--no-agent" in head,
         )
-        paths = _paths(_start_dir_from_head(head))
+        paths = _paths(_start_dir_from_head(head), _env_selector_from_head(head))
         session = open_session(start_dir=str(paths.spa_env_dir))
         if help_name == "":
             if as_agent:

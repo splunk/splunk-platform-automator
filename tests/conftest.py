@@ -366,9 +366,13 @@ def _ensure_local_test_env() -> None:
 
 
 def pytest_configure(config):
-    """Prepare environment when tests are selected via -m local."""
+    """Prepare environment when -m selects tests marked local."""
+    from spa_testutil import INHERITED_PATH_VARS, selects_local_tests
+
     markexpr = (config.option.markexpr or "").strip()
-    if markexpr and "local" in markexpr:
+    if markexpr and selects_local_tests(markexpr):
+        for name in INHERITED_PATH_VARS:
+            os.environ.pop(name, None)
         _ensure_local_test_env()
 
 
@@ -385,14 +389,22 @@ def _default_spa_env_dir(request, tmp_path, monkeypatch):
     """Operator spa commands need an env dir; skip AWS workspaces and marked tests."""
     if request.node.get_closest_marker("aws"):
         return
+    import spa_testutil
+
     if request.node.get_closest_marker("no_spa_env"):
         monkeypatch.delenv("SPA_ENV_DIR", raising=False)
+        monkeypatch.setattr(spa_testutil, "DEFAULT_SUBPROCESS_ENV", {})
         return
     from spa_testutil import PROJECT_ROOT, write_min_env
 
     dest = write_min_env(tmp_path / "spa-operator-env")
     monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
     monkeypatch.setenv("SPA_ENV_DIR", str(dest))
+    monkeypatch.setattr(
+        spa_testutil,
+        "DEFAULT_SUBPROCESS_ENV",
+        {"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(dest)},
+    )
 
 
 # Global workspace storage for class-scoped fixture
