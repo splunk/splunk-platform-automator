@@ -17,6 +17,60 @@ from spa.playbooks import PlaybookError, resolve  # noqa: E402
 from spa.paths import resolve_spa_paths  # noqa: E402
 
 
+INHERITED_PATH_VARS = (
+    "SPA_HOME",
+    "SPA_ENV_DIR",
+    "SPA_VENV_DIR",
+    "SPA_SOFTWARE_DIR",
+    "SPA_BASECONFIG_DIR",
+    "SPA_APPS_DIR",
+    "SPLUNK_CONFIG_FILE",
+    "ANSIBLE_CONFIG",
+    "ANSIBLE_INVENTORY",
+    "ANSIBLE_ROLES_PATH",
+    "ANSIBLE_INVENTORY_PLUGINS",
+    "ANSIBLE_LOOKUP_PLUGINS",
+    "ANSIBLE_VARS_PLUGINS",
+)
+
+
+def test_spa_env_drops_inherited_spa_and_ansible_paths(monkeypatch):
+    for name in INHERITED_PATH_VARS:
+        monkeypatch.setenv(name, "/dirty-shell/%s" % name.lower())
+
+    clean = spa_env()
+
+    for name in INHERITED_PATH_VARS:
+        assert name not in clean
+
+
+@pytest.mark.parametrize(
+    ("markexpr", "selects_local"),
+    [
+        ("local", True),
+        ("local and cli", True),
+        ("local or aws", True),
+        ("not local", False),
+        ("aws", False),
+        ("cli", False),
+    ],
+)
+def test_local_marker_expression_selects_only_local_runs(markexpr, selects_local):
+    from spa_testutil import selects_local_tests
+
+    assert selects_local_tests(markexpr) is selects_local
+
+
+def test_spa_env_keeps_explicit_test_path_overrides(monkeypatch):
+    for name in INHERITED_PATH_VARS:
+        monkeypatch.setenv(name, "/dirty-shell/%s" % name.lower())
+    explicit = {name: "/test/%s" % name.lower() for name in INHERITED_PATH_VARS}
+
+    clean = spa_env(explicit)
+
+    assert {name: clean[name] for name in INHERITED_PATH_VARS} == explicit
+
+
 def test_spa_help():
     result = run_spa(["--help"])
     assert result.returncode == 0
@@ -84,28 +138,106 @@ def test_aws_and_licenses_help_use_own_parser():
         assert usage in result.stdout
 
 
-def test_split_native_keeps_spa_globals():
-    from spa.cli import _split_native, _split_passthrough
+@pytest.mark.parametrize(
+    ("argv", "expected_head", "expected_extra"),
+    [
+        (
+            ["run", "splunk_cli", "--yes", "--", "--help", "-vv"],
+            ["run", "splunk_cli", "--yes"],
+            ["--help", "-vv"],
+        ),
+        (
+            ["shell", "idx1", "--", "-L", "8000:localhost:8000"],
+            ["shell", "idx1"],
+            ["-L", "8000:localhost:8000"],
+        ),
+        (["run", "--list"], ["run", "--list"], []),
+    ],
+)
+def test_split_passthrough_contract(argv, expected_head, expected_extra):
+    from spa.cli import _split_passthrough
 
-    head, extra = _split_passthrough(["shell", "idx1", "--", "-L", "8000:localhost:8000"])
-    head, native = _split_native(head)
-    assert head == ["shell"]
-    assert native == ["idx1"]
-    assert extra == ["-L", "8000:localhost:8000"]
+    assert _split_passthrough(argv) == (expected_head, expected_extra)
 
-    head, native = _split_native(["sh", "idx1"])
-    assert head == ["sh"]
-    assert native == ["idx1"]
 
-    # A global option value that matches a command name is not the command.
-    head, native = _split_native(["--start-dir", "aws", "aws", "--list-regions"])
-    assert head == ["--start-dir", "aws", "aws"]
-    assert native == ["--list-regions"]
+@pytest.mark.parametrize(
+    ("argv", "expected_head", "expected_native"),
+    [
+        (["sh", "idx1"], ["sh"], ["idx1"]),
+        (["lic", "--json"], ["lic"], ["--json"]),
+        (["--json", "aws", "--list-regions"], ["--json", "aws"], ["--list-regions"]),
+        (
+            ["--env", "aws", "--start-dir", "licenses", "aws", "--json"],
+            ["--env", "aws", "--start-dir", "licenses", "aws"],
+            ["--json"],
+        ),
+        (["run", "--list"], ["run", "--list"], []),
+    ],
+)
+def test_split_native_contract(argv, expected_head, expected_native):
+    from spa.cli import _split_native
 
-    # Non-passthrough commands keep their flags on the spa parser.
-    head, native = _split_native(["run", "--list"])
-    assert head == ["run", "--list"]
-    assert native == []
+    assert _split_native(argv) == (expected_head, expected_native)
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected_target"),
+    [
+        (["run", "--help"], ""),
+        (["--start-dir", "/tmp/lab", "run", "splunk_cli", "--help"], "splunk_cli"),
+        (["run", "--start-dir", "/tmp/lab", "splunk_cli", "--help"], "splunk_cli"),
+        (["--env", "lab", "run", "splunk_cli", "--help"], "splunk_cli"),
+        (["run", "--env", "lab", "splunk_cli", "--help"], "splunk_cli"),
+        (
+            [
+                "run",
+                "--hosts",
+                "idx1",
+                "--apps-playbook",
+                "install_es",
+                "splunk_cli",
+                "--help",
+            ],
+            "splunk_cli",
+        ),
+        (["run", "splunk_cli", "--yes"], None),
+    ],
+)
+def test_run_help_target_contract(argv, expected_target):
+    from spa.cli import _run_help_target
+
+    assert _run_help_target(argv) == expected_target
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--json", "--env", "lab", "run", "splunk_cli", "--help"],
+        ["--json", "run", "--env", "lab", "splunk_cli", "--help"],
+    ],
+)
+def test_run_help_uses_selected_environment(monkeypatch, argv):
+    from types import SimpleNamespace
+
+    from spa.api import CommandResult
+    from spa import cli
+
+    captured = {}
+
+    def fake_paths(start_dir, env_selector=None):
+        captured["start_dir"] = start_dir
+        captured["env_selector"] = env_selector
+        return SimpleNamespace(spa_env_dir=Path("/selected-env"))
+
+    class FakeSession:
+        def describe_playbook(self, name):
+            return CommandResult(ok=True, data={"name": name})
+
+    monkeypatch.setattr(cli, "_paths", fake_paths)
+    monkeypatch.setattr(cli, "open_session", lambda **_kwargs: FakeSession())
+
+    assert cli.main(argv) == 0
+    assert captured == {"start_dir": None, "env_selector": "lab"}
 
 
 def test_provision_help_includes_yes():

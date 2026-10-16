@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from spa_testutil import run_spa
+from spa_testutil import PROJECT_ROOT, run_spa
 
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
@@ -255,30 +255,6 @@ def test_complete_help_contract(argv, required):
     assert "==SUPPRESS==" not in result.stdout
 
 
-ALIASES = {
-    "feat": "usage: spa features",
-    "val": "usage: spa validate",
-    "doc": "usage: spa doctor",
-    "prov": "usage: spa provision",
-    "dep": "usage: spa deploy",
-    "des": "usage: spa destroy",
-    "sus": "usage: spa suspend",
-    "res": "usage: spa resume",
-    "h": "usage: spa hosts",
-    "sh": "usage: spa shell",
-    "lic": "usage: spa licenses",
-    "env": "usage: spa environment",
-    "agt": "usage: spa agent",
-}
-
-
-@pytest.mark.parametrize(("alias", "usage"), ALIASES.items())
-def test_every_top_level_alias_routes_to_canonical_help(alias, usage):
-    result = run_spa(["--no-agent", alias, "--help"])
-    assert result.returncode == 0, result.stderr
-    assert usage in result.stdout
-
-
 # Help rows look like "    validate (val)      Validate splunk_config.yml".
 _COMMAND_ROW = re.compile(r"^    ([a-z][a-z0-9_-]*)(?: \(([a-z0-9]+)\))?\s{2,}\S", re.MULTILINE)
 _ACTION_PARENTS = ("environment", "hosts", "apps")
@@ -306,6 +282,79 @@ def _discovered_commands():
         assert child.returncode == 0, child.stderr
         found.extend([((parent,), name, alias) for name, alias in _command_rows(child.stdout)])
     return found
+
+
+def test_every_discovered_top_level_command_and_alias_use_canonical_help():
+    for parents, canonical, alias in _discovered_commands():
+        if parents:
+            continue
+        expected_usage = "usage: spa %s" % canonical
+        canonical_help = run_spa(["--no-agent", canonical, "--help"])
+        assert canonical_help.returncode == 0, canonical_help.stderr
+        assert expected_usage in canonical_help.stdout
+        for invoked in (alias,) if alias else ():
+            alias_help = run_spa(["--no-agent", invoked, "--help"])
+            assert alias_help.returncode == 0, alias_help.stderr
+            assert alias_help.stdout == canonical_help.stdout
+
+
+@pytest.mark.parametrize(
+    ("argv", "usage"),
+    [
+        (["--json", "validate", "--help"], "usage: spa validate"),
+        (["validate", "--json", "--help"], "usage: spa validate"),
+        (["--agent", "validate", "--help"], "usage: spa validate"),
+        (["validate", "--agent", "--help"], "usage: spa validate"),
+        (["--no-agent", "validate", "--help"], "usage: spa validate"),
+        (["validate", "--no-agent", "--help"], "usage: spa validate"),
+        (["--yes", "provision", "--help"], "usage: spa provision"),
+        (["provision", "--yes", "--help"], "usage: spa provision"),
+        (["--env", "lab", "validate", "--help"], "usage: spa validate"),
+        (["validate", "--env", "lab", "--help"], "usage: spa validate"),
+        (["--start-dir", "/tmp/lab", "validate", "--help"], "usage: spa validate"),
+        (["-v", "deploy", "--help"], "usage: spa deploy"),
+        (["deploy", "-v", "--help"], "usage: spa deploy"),
+    ],
+)
+def test_accepted_global_positions(argv, usage):
+    result = run_spa(argv)
+    assert result.returncode == 0, result.stderr
+    assert usage in result.stdout
+    assert "unrecognized arguments" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--start-dir", str(PROJECT_ROOT), "agent", "schema"],
+        ["agent", "--start-dir", str(PROJECT_ROOT), "schema"],
+    ],
+)
+def test_start_dir_routes_before_and_after_subcommand(argv):
+    result = run_spa(argv)
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["data"]["name"] == "spa"
+
+
+@pytest.mark.parametrize(
+    ("argv", "usage"),
+    [
+        (["shell", "--help"], "usage: spa shell"),
+        (["sh", "--help"], "usage: spa shell"),
+        (["aws", "--json", "--help"], "usage: spa aws"),
+        (["licenses", "--json", "--help"], "usage: spa licenses"),
+        (["lic", "--json", "--help"], "usage: spa licenses"),
+        (["--agent", "aws", "--json", "--help"], "usage: spa aws"),
+        (["--agent", "licenses", "--json", "--help"], "usage: spa licenses"),
+    ],
+)
+def test_native_commands_keep_native_flags(argv, usage):
+    result = run_spa(argv)
+    assert result.returncode == 0, result.stderr
+    assert usage in result.stdout
+    assert not result.stdout.lstrip().startswith('{"ok":')
 
 
 def test_every_short_command_is_short_enough_and_dispatches():

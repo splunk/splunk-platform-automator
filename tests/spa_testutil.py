@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import itertools
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -22,8 +24,52 @@ AGENT_ENV_VARS = (
     "CODEX_THREAD_ID",
 )
 
+INHERITED_PATH_VARS = (
+    "SPA_HOME",
+    "SPA_ENV_DIR",
+    "SPA_VENV_DIR",
+    "SPA_SOFTWARE_DIR",
+    "SPA_BASECONFIG_DIR",
+    "SPA_APPS_DIR",
+    "SPLUNK_CONFIG_FILE",
+    "ANSIBLE_CONFIG",
+    "ANSIBLE_INVENTORY",
+    "ANSIBLE_ROLES_PATH",
+    "ANSIBLE_INVENTORY_PLUGINS",
+    "ANSIBLE_LOOKUP_PLUGINS",
+    "ANSIBLE_VARS_PLUGINS",
+)
+
+
+_MARK_KEYWORDS = frozenset({"and", "or", "not"})
+_MARKER_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def selects_local_tests(markexpr: str) -> bool:
+    """True when -m selects a test carrying the local marker."""
+    from _pytest.mark.expression import Expression
+
+    if "local" not in _MARKER_NAME.findall(markexpr):
+        return False
+    expression = Expression.compile(markexpr)
+    others = list(dict.fromkeys(
+        name
+        for name in _MARKER_NAME.findall(markexpr)
+        if name not in _MARK_KEYWORDS and name != "local"
+    ))
+    for bits in itertools.product((False, True), repeat=len(others)):
+        enabled = {"local", *(name for name, bit in zip(others, bits) if bit)}
+
+        def matches(name: str, /, enabled: set[str] = enabled, **kwargs: object) -> bool:
+            return not kwargs and name in enabled
+
+        if expression.evaluate(matches):
+            return True
+    return False
+
 
 _THROWAWAY_XDG: Optional[str] = None
+DEFAULT_SUBPROCESS_ENV: Mapping[str, str] = {}
 
 
 def _throwaway_xdg_config_home() -> str:
@@ -62,7 +108,7 @@ def seed_software_dir(root: Path) -> Path:
 
 def spa_env(extra: Optional[Mapping[str, str]] = None) -> dict:
     env = os.environ.copy()
-    for name in AGENT_ENV_VARS:
+    for name in (*AGENT_ENV_VARS, *INHERITED_PATH_VARS):
         env.pop(name, None)
     env["PYTHONPATH"] = str(LIB) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     # Never let spa write the operator's ~/.config/spa (paths.yml, environments.yml).
@@ -73,7 +119,9 @@ def spa_env(extra: Optional[Mapping[str, str]] = None) -> dict:
 
 
 def run_spa(args: Sequence[str], env=None, cwd=None, extra_env=None, stdin=None):
-    full = spa_env(extra_env)
+    full = spa_env(DEFAULT_SUBPROCESS_ENV)
+    if extra_env:
+        full.update(extra_env)
     if env:
         full.update(env)
     return subprocess.run(
