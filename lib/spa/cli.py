@@ -708,20 +708,29 @@ def _run(argv: Sequence[str]) -> int:
         sub,
         "features",
         aliases=["feat"],
-        help="Look up config features (spa features list|show ID|search QUERY|keys)",
+        help="Look up config features (spa features list|show ID|search QUERY|keys|schema)",
     )
     p_feat.add_argument(
         "features_cmd",
         nargs="?",
         default="list",
-        choices=["list", "show", "search", "keys"],
-        help="list (default), show, search, or keys",
+        choices=["list", "show", "search", "keys", "schema"],
+        help="list (default), show, search, keys, or schema",
     )
-    p_feat.add_argument("features_arg", nargs="?", help="Feature id (show) or query (search)")
+    p_feat.add_argument(
+        "features_arg",
+        nargs="?",
+        help="Selector or search query. In zsh, quote a selector that contains [], or omit the brackets",
+    )
     p_feat.add_argument(
         "--keys",
         action="store_true",
         help="With show ID, include per-key types, constraints, and guidance",
+    )
+    p_feat.add_argument(
+        "--markdown",
+        action="store_true",
+        help="With schema, print GitHub-flavored markdown instead of JSON (human stdout; regenerate docs/config.md)",
     )
 
     p_apps = _add_command(
@@ -1206,12 +1215,27 @@ def _run(argv: Sequence[str]) -> int:
         action = args.features_cmd or "list"
         ident = args.features_arg if action == "show" else None
         query = args.features_arg if action == "search" else None
+        if getattr(args, "markdown", False) and action != "schema":
+            message = "spa features --markdown requires: spa features schema --markdown"
+            if as_agent:
+                emit(False, error=message, as_agent=True)
+                return 2
+            print(message, file=sys.stderr)
+            return 2
         result = session.features(
             action=action,
             ident=ident,
             query=query,
             include_keys=bool(args.keys),
         )
+        if getattr(args, "markdown", False) and action == "schema" and not as_agent:
+            if not result.ok:
+                print(result.error or "features failed", file=sys.stderr)
+                return result.code
+            from spa.catalog import format_config_markdown
+
+            sys.stdout.write(format_config_markdown(paths.spa_home))
+            return 0
         if as_agent:
             return _emit_result(result, True)
         if not result.ok:

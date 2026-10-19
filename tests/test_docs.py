@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from spa.agent import format_schema_markdown
+from spa.catalog import format_config_markdown
 from spa_testutil import run_spa
 
 import pytest
@@ -18,6 +19,7 @@ CANONICAL_DOCS = {
     "apps.md",
     "aws.md",
     "commands.md",
+    "config.md",
     "contributing.md",
     "install.md",
     "migrate.md",
@@ -122,6 +124,33 @@ class TestCommandsMarkdown:
         assert result.stdout == committed
 
 
+class TestConfigMarkdown:
+    def test_committed_file_matches_renderer_and_cli(self):
+        committed = (_docs_dir() / "config.md").read_text(encoding="utf-8")
+        rendered = format_config_markdown(PROJECT_ROOT)
+        assert committed == rendered
+        result = run_spa(["--no-agent", "features", "schema", "--markdown"])
+        assert result.returncode == 0, result.stderr
+        assert result.stdout == committed
+
+    def test_generated_descriptions_hide_internal_ids(self):
+        import re
+
+        text = format_config_markdown(PROJECT_ROOT)
+        assert re.search(r"\b(setting|topology|provider)\.[A-Za-z0-9_.]+", text) is None
+        assert "not a splunk_config.yml setting" not in text
+
+    def test_generated_descriptions_state_behavior(self):
+        text = format_config_markdown(PROJECT_ROOT)
+        assert "Text placed before each generated number" in text
+        assert "Omit the key to add nothing before the number" in text
+        assert "Default false" not in text
+        assert "default=False" in text
+        assert "VirtualBox always turns this on" in text
+        assert "Per-host override of `os.time_zone`" in text
+        assert "default='splk'" in text
+
+
 class TestSpaSkill:
     def test_entry_skill_frontmatter_name(self):
         path = PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md"
@@ -132,3 +161,15 @@ class TestSpaSkill:
         cursor = PROJECT_ROOT / ".cursor" / "skills" / "spa"
         assert cursor.is_symlink()
         assert cursor.resolve() == path.parent.resolve()
+
+    def test_create_config_skill_uses_feature_discovery_loop(self):
+        skill = PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        assert "spa --json features search QUERY" in text
+        assert "spa --json features show SELECTOR --keys" in text
+        assert "spa validate" in text
+        assert "unsupported" in text
+        assert "do not read `examples/catalog/features.yml`" in text
+        assert "spa config set SELECTOR" in text
+        entry = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
+        assert "spa --json features show SELECTOR --keys" in entry

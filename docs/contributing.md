@@ -1,6 +1,6 @@
 # Contributing
 
-Operators should start with the [user guide](user-guide.md). The generated CLI catalog is [commands.md](commands.md) (`spa --no-agent agent schema --markdown`). This page collects framework-development topics that should not expand the operator documentation.
+Operators should start with the [user guide](user-guide.md). The generated CLI catalog is [commands.md](commands.md) (`spa --no-agent agent schema --markdown`). The generated settings list is [config.md](config.md) (`spa --no-agent features schema --markdown`). This page collects framework-development topics that should not expand the operator documentation.
 
 ## Development setup
 
@@ -57,10 +57,62 @@ Stable fields: `time`, `run_id`, `spa_env`, `command`, `playbook`, optional `pla
 
 Windows guest operation is not currently a first-class SPA workflow. The historical box-authoring process used a VirtualBox Windows template, WinRM, `vagrant package`, and `vagrant box add`. If Windows guests return, implement and document them through `spa` rather than restoring a second operator CLI. The detailed former recipe remains available in Git history.
 
+## Adding a configuration feature
+
+`spa features` and [config.md](config.md) are generated. A new `splunk_config.yml` key is not listed until the Pydantic schema describes it and, when an operator must choose it, `examples/catalog/features.yml` groups it. Do not hand-edit `docs/config.md`.
+
+Read the code that honors the key before writing text: the field on `ansible/plugins/inventory/schema.py`, `defaults/*.yml`, role `default()` values, the inventory plugin, and templates. That behavior is the description. `examples/configuration_description.yml` is a pointer, not an input.
+
+### Schema description
+
+Every field needs `Field(description=...)`. The sentence says what this key does. A container (any path that has children, including `path[]`) is one line and does not name those children. A required field ends with `Required.` A key with nothing to publish uses `No default.` plus what omit does, for example `No default. Omit the key to set no tags.`
+
+An omit-safe literal uses this shape, with the period before `Omit`:
+
+```text
+Default splk. Omit the key to keep that.
+```
+
+The renderer copies `splk` into the `default` qualifier and then removes that sentence from the public description. The same parser accepts `true` / `false`, an integer, `none` (a list becomes `[]`), `Default is TOKEN.`, and a site factor such as `origin:2, total:3`. A sentence with spaces that is not a site factor stays prose and does not become `default`. Examples: the controller time zone, an AMI id, or "a lab password".
+
+Leave the Pydantic default unset (`Field(None)` or no default) unless validation itself must inject the value. Publishing `default: splk` must not make `spa validate` write `splk` into a config that omitted the key.
+
+Paths whose leaf matches `password`, `secret`, `token`, or `private_key` never get a `default` field. Say that the value is a lab secret resolved with `lookup('env', 'NAME')`. Do not put the secret, a private-key body, or a certificate (`-----BEGIN`) in the description, a catalog note, or a snippet.
+
+Per-host copies under `splunk_hosts[].os`, `splunk_hosts[].virtualbox`, and `splunk_hosts[].terraform` use the same sentence as the global key. The renderer prefixes `Per-host override of \`os.time_zone\`:`. SSL text that says "this endpoint" is specialized to Splunk Web, receiving inputs, or forwarding outputs from the path.
+
+### Catalog record
+
+Add a record only when it helps someone choose or apply config.
+
+A **setting** (`kind: setting`) has a `selector` that is one of its own schema paths. `keys` lists those paths. `when_to_use` or `when_not_to_use` is at least a short sentence about the decision, not a repeat of the title or the selector. `merge` is `deep` or `replace`. `snippet` is YAML that writes only declared paths. Passwords in a snippet use `lookup('env', ...)` or Ansible Vault, never a literal. Settings are public by selector (`spa features show os`). `setting.*` ids are unknown. Human list/show quotes a selector that contains `[]`; JSON keeps the brackets. A selector can be passed with the brackets omitted when that still matches exactly one record.
+
+A key `note` is only for a constraint the schema sentence does not already say (Java 21 on the ITSI host, gp3, AMI login user). Notes attach to leaves. A note that mostly repeats the description is dropped. Do not use a note to name children of a container.
+
+A **layout** is an SVA topology (`topology.s1`, `topology.d1`, `topology.c1`, `topology.c3`, `topology.m2`, `topology.m3`) or an implemented provider (`provider.aws`, `provider.virtualbox`). It has `kind: topology` or `kind: provider`, no `selector`, schema-backed `keys`, and a `suggest` line with the `spa init --example` or `--provider` command. Layouts have no `apply` object. Other `spa init --example` files stay on disk; do not add another `topology.*` row for them. A future skill can own extra topology design.
+
+Do not add a record with no schema paths. Those rows are unsupported and `spa features list` is only for settings and layouts that can be written. Command help that is not a config key belongs in the operator docs (`docs/apps.md` for `spa apps`).
+
+Guidance, notes, and snippets must not contain internal ids (`setting.`, `topology.`, `provider.`). Search does not index those ids either. `related` may cite `#NN` issues or another catalog id; a missing id is skipped, so delete the link when you delete the record.
+
+A new top-level schema root needs an entry in `CONFIG_AREAS` in `lib/spa/catalog.py`, in config-writing order: Identity, General, OS, Provider, Defaults, Hosts, Apps, Clustering. An unknown root lands in an "Other" section, which the settings dump must not have.
+
+### Check
+
+Regenerate the settings dump and confirm the new key with the feature command:
+
+```bash
+bin/spa --no-agent features schema --markdown > docs/config.md
+bin/spa features show SELECTOR --keys
+```
+
+`tests/test_docs.py` requires the committed `docs/config.md` to match that command. If the `features` summary in `lib/spa/agent.py` changes, regenerate `docs/commands.md` with `bin/spa --no-agent agent schema --markdown` the same way. Release bump regenerates both; do not edit them by hand.
+
 ## Documentation
 
 - Well-known root files stay uppercase: `README.md`, `AGENTS.md`, `CHANGELOG.md`, `ROADMAP.md`, `RELEASE.md`.
 - Other documentation uses lowercase kebab-case.
 - Commands are `spa`-first; raw backend commands belong only in implementation/test context.
 - Prefer links to `spa --help`, `spa features`, `spa apps`, schema, and upstream Splunk docs over duplicated reference tables.
+- New `splunk_config.yml` keys and `spa features` records follow [Adding a configuration feature](#adding-a-configuration-feature).
 - Never add credentials, private keys, certificates, or decrypted values to examples.
