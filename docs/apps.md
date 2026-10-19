@@ -3,8 +3,8 @@
 Apps are part of `splunk_config.yml` and are reconciled by `spa deploy`. Use the live catalog for the schema and examples:
 
 ```bash
-spa features show setting.apps --keys
-spa features show setting.apps.customizations --keys
+spa features show splunk_app_deployment --keys
+spa features show splunk_app_deployment.apps[].customizations.remove --keys
 spa apps search QUERY
 spa apps snippet APP_ID
 ```
@@ -80,8 +80,8 @@ Environment-local task files can be addressed by an env-relative path configured
 Use the catalog instead of hand-building premium YAML:
 
 ```bash
-spa features show setting.apps.premium.itsi --keys
-spa features show setting.apps.premium.itsi.content_pack --keys
+spa features show splunk_app_deployment.apps[].app_id --keys
+spa features show splunk_app_deployment.apps[].content_pack_apps --keys
 ```
 
 ITSI defaults to Splunkbase app ID 1841. Premium targets are determined by the premium role, not `target_roles`. Content-pack archives may be single-app, explicitly list `content_pack_apps`, or use `install_all_apps`. Listed packs are registered through the ITSI API unless `content_pack_install: false`.

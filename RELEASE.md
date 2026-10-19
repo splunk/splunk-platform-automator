@@ -9,6 +9,7 @@ Splunk Platform Automator is an Ansible/Terraform framework. A release is a **se
 | `VERSION` | Canonical semver (`X.Y.Z`) |
 | `CHANGELOG.md` | Keep a Changelog notes (`[Unreleased]` is promoted on bump) |
 | `docs/commands.md` | Regenerated on bump (`spa --no-agent agent schema --markdown`) |
+| `docs/config.md` | Regenerated on bump (`spa --no-agent features schema --markdown`) |
 | Git tag `vX.Y.Z` | What users check out |
 | GitHub Release | Release page + `install.sh` + `spa-framework-X.Y.Z.tar.gz` (plus GitHub’s automatic source zip/tar). Operators curl `https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh`. |
 
@@ -25,7 +26,7 @@ cat VERSION
 ## Checklist
 
 1. Land changes on `master`.
-2. Fill `## [Unreleased]` in `CHANGELOG.md` with what this version ships. `docs/commands.md` is regenerated in the bump commit (do not hand-edit it).
+2. Fill `## [Unreleased]` in `CHANGELOG.md` with what this version ships. `docs/commands.md` and `docs/config.md` are regenerated in the bump commit (do not hand-edit them).
 3. Optionally run local tests (also what CI runs on the tag):
 
    ```bash

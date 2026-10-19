@@ -85,7 +85,15 @@ Out of scope: writing `splunk_config.yml` via `spa config` (#76); single-app dep
 | Architecture plan | [assets/architecture-plan-template.md](assets/architecture-plan-template.md) |
 | Secrets / env vars | [references/secrets-handling.md](references/secrets-handling.md) |
 
-Repo keys: choose from concise `spa --json features list` / `search`, inspect with `show ID`, and request schema types/constraints plus catalog notes only when needed with `show ID --keys`. Types live in Pydantic (`spa validate`); [examples/catalog/features.yml](../../../examples/catalog/features.yml) is when-to-use and snippets. Pointer dump: [examples/configuration_description.yml](../../../examples/configuration_description.yml).
+Repo keys: for every requested capability, use this loop. Call `bin/spa` JSON. Do not scrape [docs/config.md](../../../docs/config.md) and do not read `examples/catalog/features.yml`.
+
+1. Search the operator’s concept: `spa --json features search QUERY`.
+2. Compare `when_to_use`, `when_not_to_use`, `matched_keys`, and allowed values. Do not choose from the title alone.
+3. Inspect the selected schema path: `spa --json features show SELECTOR --keys`.
+4. Merge only the returned `apply.snippet` and `apply.paths` into `splunk_config.yml`. Preserve `lookup('env', ...)` and vault references.
+5. Run `spa validate`. If search has no suitable result, report that the setting is unsupported. Do not invent a key.
+
+`docs/config.md` stays the human browse fallback. Layouts (`topology.*`, `provider.aws`, `provider.virtualbox`) are `spa init --example` / `--provider` choices and have no `apply` object. Once `spa config set SELECTOR` exists, replace step 4 with that command. Optional overrides are `spa config set SELECTOR --set PATH=YAML_VALUE`, and `PATH` must be one of the returned `apply.paths`. Search, show, and selector choice stay the same.
 
 ## Step 0 — Environment setup
 
@@ -154,7 +162,7 @@ Ask scale-out vs scale-up; default **scale out** for Splunk.
 
 ## Phase 3 — Linux OS
 
-Pick OS via `spa --json features search os` (`setting.os`, `setting.os.ubuntu`, `setting.ssh_username`). Write the snippet into `splunk_config.yml` yourself; do not pass OS through `spa init`.
+Pick OS via `spa --json features search os` (`os`, `os.disable_apparmor`, `terraform.aws.ssh_username`). Merge the `apply` snippet from `spa --json features show SELECTOR --keys`; do not pass OS through `spa init`.
 
 **Recommended:** Amazon Linux 2023, RHEL 10, or Ubuntu 24.04 LTS (latest AMI in region).
 
@@ -230,7 +238,7 @@ spa licenses --config config/splunk_config.yml --json
 8. **Trial-only labs** → omit both `splunk_license_file` and `license_manager`; do not add license file from Software scan alone.
 9. No usable files in Software → warn (trial only or add licenses before deploy).
 
-Use `spa --json features show setting.license` (or the licenses JSON `yaml_snippet`) under `splunk_defaults` in Phase 7.
+Use `spa --json features show splunk_defaults.splunk_license_server --keys` (or the licenses JSON `yaml_snippet`) under `splunk_defaults` in Phase 7.
 
 **Exit:** License list decided or explicitly skipped; LM + ITSI/ES warnings addressed.
 
@@ -260,7 +268,7 @@ Use `spa --json features show setting.license` (or the licenses JSON `yaml_snipp
 2. Header from [assets/config-header-template.md](assets/config-header-template.md)
 3. For OS, SSL, licenses, RF/SF, and other settings: choose with `spa --json features search QUERY`, inspect with `show ID`, and use `show ID --keys` only when per-key types, constraints, placeholders, or notes are needed. Merge each record's `snippet` into `$SPA_ENV_DIR/config/splunk_config.yml` yourself. Do not pass those through init. For **apps**, load [spa-apps](../spa-apps/SKILL.md): `spa --json apps search QUERY` then `spa --json apps snippet APP_ID`; merge that snippet. ITSI is app_id 1841, not 5403.
 4. Global `terraform.aws` already comes from `--provider aws`; add **`ssh_username`** / AMI from catalog + discovery.
-5. Matching global `os:` from `setting.os` (not from the topology file).
+5. Matching global `os:` from selector `os` (not from the topology file).
 6. `splunk_defaults` (include `splunk_license_file` from Phase 6b when chosen).
 7. Cross-check snippets against `spa --json features show`; [configuration_description.yml](../../../examples/configuration_description.yml) is a pointer only.
 

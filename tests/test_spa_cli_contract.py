@@ -118,7 +118,7 @@ HELP_CONTRACTS = [
     ),
     (
         ["features", "--help"],
-        ["usage: spa features", "list", "show", "search", "keys", "--keys", "--json", "--agent"],
+        ["usage: spa features", "list", "show", "search", "keys", "schema", "--keys", "--markdown", "--json", "--agent"],
     ),
     (
         ["apps", "--help"],

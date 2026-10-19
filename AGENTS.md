@@ -19,6 +19,8 @@ Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 | --- | --- |
 | Config | `$SPA_ENV_DIR/config/splunk_config.yml` via `spa init --example` |
 | Schema vs catalog | Pydantic (`spa validate`); `spa features` / `examples/catalog/features.yml` |
+| New config key | [docs/contributing.md](docs/contributing.md#adding-a-configuration-feature) |
+| All settings | [docs/config.md](docs/config.md) (`spa --no-agent features schema --markdown`) |
 | CLI flags | [docs/commands.md](docs/commands.md) (`spa --no-agent agent schema --markdown`) |
 | Guided design | [docs/user-guide.md](docs/user-guide.md#configure-an-environment) · `spa features` |
 | 2.x → 3.0 | [docs/migrate.md](docs/migrate.md) |

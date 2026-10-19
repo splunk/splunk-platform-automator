@@ -35,7 +35,7 @@ Reference: `tests/configs/2site-idxc_shc_mc_ds_hf_uf.yml`
 |---------|---------------|------------------|-------------|------|
 | Mgmt-minimal | `cm` only | `cluster_manager` | Minimal IDXC+SH | No MC, LM, DS |
 | CM + MC | `cm` | `cluster_manager`, `monitoring_console` | `examples/topologies/ds_cm_2idxc1site_sh_hf_uf.yml` | LM/DS separate or omitted |
-| CM + LM | `cm` | `cluster_manager`, `license_manager` | catalog `setting.license` | Needs license file |
+| CM + LM | `cm` | `cluster_manager`, `license_manager` | catalog `splunk_defaults.splunk_license_server` | Needs license file |
 | MC + LM | `mc` | `monitoring_console`, `license_manager` | 2site test configs | CM stays dedicated |
 | DS + deployer | `ds` | `deployment_server`, `deployer` | Most SHC examples | SVA-acceptable |
 | Ultra-minimal SHC | `cm` | `cluster_manager`, `deployment_server`, `deployer` | `examples/topologies/cm_2idxc1site_3shc_uf.yml` | Small labs only |

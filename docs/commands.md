@@ -14,12 +14,17 @@ Alias of spa environment init (spa init --example TOPOLOGY [--provider aws|virtu
 
 ## `features`
 
-Choose from concise topology/provider/setting records; use show ID --keys only for per-key types and constraints
+Choose settings by schema path and layouts by id; use show SELECTOR --keys for types, constraints, and apply metadata. In zsh, quote a selector that contains [], or omit the brackets.
+
+| Flag | Description |
+| --- | --- |
+| `--keys` | With show SELECTOR, include per-key types, constraints, guidance, and apply metadata |
+| `--markdown` | With schema, print GitHub-flavored markdown instead of JSON (human stdout; regenerate docs/config.md) |
 
 Example:
 
 ```bash
-spa --json features show setting.ssl --keys
+spa --json features show splunk_defaults.splunk_ssl --keys
 ```
 
 ## `validate`

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Bump VERSION, promote CHANGELOG [Unreleased], regenerate docs/commands.md,
-# then commit and tag vX.Y.Z.
+# Bump VERSION, promote CHANGELOG [Unreleased], regenerate docs/commands.md
+# and docs/config.md, then commit and tag vX.Y.Z.
 # Usage: ./scripts/bump-version.sh patch|minor|major
 set -euo pipefail
 
@@ -98,8 +98,10 @@ echo "  Updated CHANGELOG.md (promoted [Unreleased] to [${NEW_VERSION}])"
 cd "$PROJECT_ROOT"
 echo "  Regenerating docs/commands.md"
 "$PROJECT_ROOT/bin/spa" --no-agent agent schema --markdown > "$PROJECT_ROOT/docs/commands.md"
+echo "  Regenerating docs/config.md"
+"$PROJECT_ROOT/bin/spa" --no-agent features schema --markdown > "$PROJECT_ROOT/docs/config.md"
 
-git add VERSION CHANGELOG.md docs/commands.md
+git add VERSION CHANGELOG.md docs/commands.md docs/config.md
 git commit -m "$(cat <<EOF
 release: v${NEW_VERSION}
 

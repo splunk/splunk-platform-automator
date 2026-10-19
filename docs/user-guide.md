@@ -70,13 +70,13 @@ Later per-env knobs on `spa environment set --env NAME` will write that env’s 
 ```bash
 spa init --list
 spa features search cluster
-spa features show setting.idxcluster --keys
+spa features show splunk_idxclusters[].idxc_name --keys
 spa validate
 ```
 
-The Pydantic schema enforced by `spa validate` owns types and allowed values. The feature catalog owns decision guidance and snippets. Use `spa aws --json` for live regions, AMIs, instance types, and network values; use `spa licenses` and `spa validate --check-licenses` for license selection. Until `spa config` is implemented, merge snippets into the YAML by hand.
+The Pydantic schema enforced by `spa validate` owns types and allowed values. The feature catalog owns decision guidance and snippets. Browse every key in [config.md](config.md) (`spa --no-agent features schema --markdown`). Use `spa aws --json` for live regions, AMIs, instance types, and network values; use `spa licenses` and `spa validate --check-licenses` for license selection. Until `spa config set SELECTOR` is implemented, merge the `apply` snippet from `spa --json features show SELECTOR --keys` by hand. A later override is `spa config set SELECTOR --set PATH=YAML_VALUE`, where `PATH` is one of that record’s `apply.paths`.
 
-Universal-forwarder outputs always go to all indexers today. UF → heavy forwarder (or a single indexer) is not a config knob; see `spa features show setting.outputs` and [ROADMAP](../ROADMAP.md).
+Universal-forwarder outputs always go to all indexers today. UF → heavy forwarder (or a single indexer) is not a config knob; see `spa features show splunk_hosts[].splunk_outputs` and [ROADMAP](../ROADMAP.md).
 
 ## Run the lifecycle
 
@@ -156,6 +156,7 @@ Use `lookup('env', 'NAME')` or quoted Ansible Vault values; never commit plainte
 ## Where to go next
 
 - [Commands](commands.md): generated CLI catalog (`spa agent schema --markdown`)
+- [Settings](config.md): generated key list (`spa features schema --markdown`)
 - [Install](install.md): install, uninstall, VirtualBox, WSL2
 - [Apps](apps.md): routing and app lifecycle
 - [AWS](aws.md): AWS and Terraform through `spa`

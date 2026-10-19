@@ -2,7 +2,7 @@
 
 Load [spa-apps](../../spa-apps/SKILL.md) for this phase. Search Splunkbase with `spa --json apps search QUERY` (technology keywords), then **one** `spa --json apps snippet APP_ID` without `--customize`. If `playbooks` is set, ask before `snippet --customize`. Merge the printed snippet into `splunk_config.yml` (until `spa config`, #76). Do not guess `app_id`. Do not open splunkbase.com first.
 
-Deep customization: [docs/apps.md](../../../../docs/apps.md#customize-an-app) and `spa --json features show setting.apps.customizations`.
+Deep customization: [docs/apps.md](../../../../docs/apps.md#customize-an-app) and `spa --json features show splunk_app_deployment.apps[].customizations.remove`.
 
 ## 1. Deploy apps?
 
@@ -39,7 +39,7 @@ Do **not** set `target_roles` on `premium_app: itsi` or `itsi_content_pack: true
 
 ITSI / ITE Work → Splunkbase **1841** only (`spa apps snippet 1841`). Not 5403.
 
-Merge `spa --json features show setting.apps.premium.itsi` for Java 21 and license files; the apps[] slice also comes from `spa apps snippet 1841`.
+Merge `spa --json features show splunk_app_deployment.apps[].app_id --keys` for Java 21 and license files; the apps[] slice also comes from `spa apps snippet 1841`.
 
 - Main app: `premium_app: itsi`, no `target_roles`
 - Licenses: run `spa licenses --config …` after adding ITSI — proposes `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` from Software; see [licenses.md](licenses.md)
@@ -48,7 +48,7 @@ Merge `spa --json features show setting.apps.premium.itsi` for Java 21 and licen
 
 ## 6. ITSI content packs?
 
-`spa apps search "content pack"` / `snippet` 5391 (library) or a single-pack id. Sibling **1841** is required. See catalog `setting.apps.premium.itsi.content_pack` and `.single`.
+`spa apps search "content pack"` / `snippet` 5391 (library) or a single-pack id. Sibling **1841** is required. See `spa features show splunk_app_deployment.apps[].content_pack_apps` and `splunk_app_deployment.apps[].content_pack_api`.
 
 - Do not set `premium_app` or `target_roles` on the pack entry
 - **Folder `name` must match on-disk app name** inside the spl/tgz

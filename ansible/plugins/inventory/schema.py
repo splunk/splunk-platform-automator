@@ -58,16 +58,16 @@ class GeneralConfig(BaseModel):
     model_config = ConfigDict(extra='forbid')
     
     url_locale: Optional[str] = Field(
-        None, 
+        None,
         pattern=r'^[a-z]{2}[_-][A-Z]{2}$',
-        description="Language locale for links (e.g., 'en-GB')"
+        description="Language segment in the Splunk Web links on the lab index page, such as en-GB. Default en-GB. Omit the key to keep that.",
     )
 
 
 class VirtualBoxSyncedFolder(BaseModel):
     """VirtualBox synced folder configuration."""
-    source: str
-    target: str
+    source: str = Field(..., description="Path on the Ansible controller to mount into the guest. Required.")
+    target: str = Field(..., description="Path inside the guest where the controller folder is mounted. Required.")
 
 
 class VirtualBoxConfig(BaseModel):
@@ -77,166 +77,352 @@ class VirtualBoxConfig(BaseModel):
     start_ip: Optional[str] = Field(
         None,
         pattern=IPV4_PATTERN,
-        description="Starting IPv4 address for VirtualBox guests",
+        description="First guest IPv4 on the VirtualBox host-only network. Later guests increment from it. Default 192.168.60.100. Omit the key to keep that.",
     )
-    box: Optional[str] = Field(None, description="Vagrant box name")
-    memory: Optional[int] = Field(None, ge=256, description="Memory in MB (min 256)")
-    cpus: Optional[int] = Field(None, ge=1, description="Number of CPUs (min 1)")
-    install_vbox_additions: Optional[bool] = Field(None, description="Install VBox guest additions")
-    synced_folder: Optional[List[VirtualBoxSyncedFolder]] = None
+    box: Optional[str] = Field(None, description="Vagrant box name. Default almalinux/8. Omit the key to keep that.")
+    memory: Optional[int] = Field(None, ge=256, description="Guest memory in MB. Minimum 256. Default 512. Omit the key to keep that.")
+    cpus: Optional[int] = Field(None, ge=1, description="Guest virtual CPU count. Minimum 1. Default 1. Omit the key to keep that.")
+    install_vbox_additions: Optional[bool] = Field(
+        None,
+        description="When true, install VirtualBox guest additions. Default false. Omit the key to keep that.",
+    )
+    synced_folder: Optional[List[VirtualBoxSyncedFolder]] = Field(
+        None,
+        description="Folders mounted from the Ansible controller into the guest. Holds no value itself.",
+    )
 
 
 class AwsTerraformConfig(BaseModel):
     """AWS configuration for Terraform provisioning."""
     model_config = ConfigDict(extra='allow')
     
-    region: Optional[str] = Field(None, description="AWS region")
+    region: Optional[str] = Field(None, description="AWS region Terraform uses. Default eu-central-1. Omit the key to keep that.")
     ami_id: Optional[str] = Field(
         None,
         pattern=AMI_ID_PATTERN,
-        description="AMI identifier; pick a live AMI with spa aws, not a hardcoded catalog",
+        description="EC2 AMI id. Default is the id shipped in defaults/aws.yml. Omit the key to keep that. Pick a current id with spa aws --latest-ami when you choose a new image.",
     )
-    key_name: Optional[str] = Field(None, description="SSH key name")
-    ssh_private_key_file: Optional[str] = Field(None, description="Path to SSH private key")
-    security_group_names: Optional[List[str]] = Field(None, description="Security group names")
-    instance_type: Optional[str] = Field(None, description="EC2 instance type")
-    root_volume_size: Optional[int] = Field(None, ge=8, description="Root volume size in GB")
+    key_name: Optional[str] = Field(None, description="EC2 key pair name. Default aws_key. Omit the key to keep that.")
+    ssh_private_key_file: Optional[str] = Field(
+        None,
+        description="Path on the Ansible controller to the private key for key_name. Default ~/.ssh/aws_key.pem. Omit the key to keep that.",
+    )
+    security_group_names: Optional[List[str]] = Field(
+        None,
+        description="EC2 security group names. Default is Splunk_Basic. Omit the key to keep that.",
+    )
+    instance_type: Optional[str] = Field(None, description="EC2 instance type. Default t2.micro. Omit the key to keep that.")
+    root_volume_size: Optional[int] = Field(
+        None,
+        ge=8,
+        description="Root EBS size in GB. Minimum 8. No default. Omit the key to keep the AMI disk size.",
+    )
     root_volume_type: Optional[str] = Field(
         None,
-        description="EBS root volume type (AWS-defined; lab often uses gp3). Not a closed SPA list.",
+        description="EBS volume type. AWS defines the names. No default. Omit the key to keep the AMI volume type.",
     )
     ssh_username: Optional[str] = Field(
         None,
-        description="SSH login user for the AMI (ec2-user, ubuntu, admin). Match with spa aws --describe-ami.",
+        description="SSH login user for the AMI. Default ec2-user. Omit the key to keep that. Use ubuntu or admin when the AMI requires it.",
     )
-    tags: Optional[Dict[str, str]] = Field(None, description="AWS resource tags")
-    subnet_id: Optional[str] = Field(None, description="AWS VPC subnet ID")
+    tags: Optional[Dict[str, str]] = Field(
+        None,
+        description="Map of AWS tag name to tag value. No default. Omit the key to set no tags.",
+    )
+    subnet_id: Optional[str] = Field(
+        None,
+        description="VPC subnet id. No default. Omit the key to use the default subnet in the region.",
+    )
 
 
 class TerraformConfig(BaseModel):
     """Terraform provisioning settings."""
     model_config = ConfigDict(extra='allow')
     
-    aws: Optional[AwsTerraformConfig] = None
+    aws: Optional[AwsTerraformConfig] = Field(
+        None,
+        description="EC2 settings Terraform applies. Holds no value itself.",
+    )
 
 
 class OsConfig(BaseModel):
     """Operating system configuration."""
     model_config = ConfigDict(extra='allow')
     
-    remote_command: Optional[str] = None
-    time_zone: Optional[str] = None
-    enable_time_sync_cron: Optional[bool] = None
-    packages: Optional[List[str]] = None
-    ssh_keys: Optional[List[str]] = None
-    set_hostname: Optional[bool] = None
-    disable_selinux: Optional[bool] = None
-    disable_apparmor: Optional[bool] = None
-    update_hosts_file: Optional[bool] = None
-    splunk_group_create: Optional[bool] = None
-    splunk_user_create: Optional[bool] = None
+    remote_command: Optional[str] = Field(
+        None,
+        description="Shell command run on the guest before Ansible bootstraps, for an image that lacks Python or acl. No default. Omit the key to skip it.",
+    )
+    time_zone: Optional[str] = Field(
+        None,
+        description="IANA time zone set on the guest. Default is the Ansible controller's zone. Omit the key to keep that.",
+    )
+    enable_time_sync_cron: Optional[bool] = Field(
+        None,
+        description="When true, install a cron job that keeps the guest clock in sync. Default false. Omit the key to keep that. VirtualBox always turns this on.",
+    )
+    packages: Optional[List[str]] = Field(
+        None,
+        description="Extra packages installed with the guest package manager before Splunk. Default none. Omit the key to keep that.",
+    )
+    ssh_keys: Optional[List[str]] = Field(
+        None,
+        description="Public key files on the Ansible controller, appended to the login user's authorized_keys. Default none. Omit the key to keep that.",
+    )
+    set_hostname: Optional[bool] = Field(
+        None,
+        description="When true, set the guest hostname to its inventory name. Default false. Omit the key to keep that.",
+    )
+    disable_selinux: Optional[bool] = Field(
+        None,
+        description="When true, disable SELinux on RHEL and Amazon Linux. Skipped on universal forwarders. Default true. Omit the key to keep that.",
+    )
+    disable_apparmor: Optional[bool] = Field(
+        None,
+        description="When true, disable AppArmor on Ubuntu and Debian. Default true. Omit the key to keep that.",
+    )
+    update_hosts_file: Optional[bool] = Field(
+        None,
+        description="When true, write every lab host into /etc/hosts. Default true. Omit the key to keep that.",
+    )
+    splunk_group_create: Optional[bool] = Field(
+        None,
+        description="When true, create the Splunk OS group. Default true. Omit the key to keep that.",
+    )
+    splunk_user_create: Optional[bool] = Field(
+        None,
+        description="When true, create the Splunk OS user. Default true. Omit the key to keep that.",
+    )
 
 
 class SplunkDownloadConfig(BaseModel):
     """Splunk download settings."""
-    splunk: Optional[bool] = None
-    splunkforwarder: Optional[bool] = None
+    splunk: Optional[bool] = Field(
+        None,
+        description="When true, download the Splunk Enterprise tarball instead of using one already in Software. Default false. Omit the key to keep that.",
+    )
+    splunkforwarder: Optional[bool] = Field(
+        None,
+        description="When true, download the universal forwarder tarball instead of using one already in Software. Default false. Omit the key to keep that.",
+    )
 
 
 class SplunkSslEndpointConfig(BaseModel):
     """SSL endpoint configuration."""
     model_config = ConfigDict(extra='allow')
     
-    enable: Optional[bool] = None
-    own_certs: Optional[bool] = None
-    config: Optional[Dict[str, Any]] = None
+    enable: Optional[bool] = Field(
+        None,
+        description="When true, turn on TLS for this endpoint. Default false. Omit the key to keep that.",
+    )
+    own_certs: Optional[bool] = Field(
+        None,
+        description="When true, use certificate files you provide for this endpoint instead of Splunk's generated certs. Default false. Omit the key to keep that.",
+    )
+    config: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Extra conf keys for this endpoint. Default points at Splunk's generated certificate paths. Omit the key to keep that.",
+    )
 
 
 class SplunkSslConfig(BaseModel):
     """Splunk SSL settings."""
-    web: Optional[SplunkSslEndpointConfig] = None
-    inputs: Optional[SplunkSslEndpointConfig] = None
-    outputs: Optional[SplunkSslEndpointConfig] = None
+    web: Optional[SplunkSslEndpointConfig] = Field(None, description="TLS settings for this endpoint. Holds no value itself.")
+    inputs: Optional[SplunkSslEndpointConfig] = Field(None, description="TLS settings for this endpoint. Holds no value itself.")
+    outputs: Optional[SplunkSslEndpointConfig] = Field(None, description="TLS settings for this endpoint. Holds no value itself.")
 
 
 class SplunkSecretShareConfig(BaseModel):
     """Splunk secret sharing configuration."""
-    splunk: Optional[bool] = None
-    splunkforwarder: Optional[bool] = None
-    equal: Optional[bool] = None
+    splunk: Optional[bool] = Field(
+        None,
+        description="When true, reuse one splunk.secret across Splunk Enterprise hosts. Default false. Omit the key to keep that.",
+    )
+    splunkforwarder: Optional[bool] = Field(
+        None,
+        description="When true, reuse one splunk.secret across universal forwarders. Default false. Omit the key to keep that.",
+    )
+    equal: Optional[bool] = Field(
+        None,
+        description="When true, use the same splunk.secret for Enterprise and universal forwarders. Default false. Omit the key to keep that.",
+    )
 
 
 class SplunkVolumeConfig(BaseModel):
     """Splunk indexer volume configuration."""
     model_config = ConfigDict(extra='allow')
     
-    path: Optional[str] = None
-    maxVolumeDataSizeMB: Optional[int] = None
-    storageType: Optional[str] = None
+    path: Optional[str] = Field(
+        None,
+        description="Filesystem path or s3:// URI for this named volume. No default. Omit the key only when the volume name is enough.",
+    )
+    maxVolumeDataSizeMB: Optional[int] = Field(
+        None,
+        description="Maximum size of this volume in MB. No default. Omit the key to derive it from free space when a free-space reserve is set.",
+    )
+    storageType: Optional[str] = Field(
+        None,
+        description="local or remote. Default local. Omit the key to keep that. Set remote for a SmartStore volume.",
+    )
 
 
 class SplunkVolumeDefaultsConfig(BaseModel):
     """Splunk volume defaults configuration."""
     model_config = ConfigDict(extra='allow')
     
-    VolumeDataSize_Free_MB: Optional[int] = None
-    homePath: Optional[str] = None
-    coldPath: Optional[str] = None
-    remotePath: Optional[str] = None
+    VolumeDataSize_Free_MB: Optional[int] = Field(
+        None,
+        description="Megabytes left free when calculating a volume maximum size. No default. Omit the key to skip that calculation.",
+    )
+    homePath: Optional[str] = Field(
+        None,
+        description="Volume name used as the index home path. No default. Omit the key when you are not using named volumes.",
+    )
+    coldPath: Optional[str] = Field(
+        None,
+        description="Volume name used as the index cold path. No default. Omit the key when you are not using named volumes.",
+    )
+    remotePath: Optional[str] = Field(
+        None,
+        description="Volume name used as the SmartStore remote path. No default. Omit the key when indexes stay on local disk.",
+    )
 
 
 class SplunkDefaultsConfig(BaseModel):
     """Splunk default settings applied to all hosts."""
     model_config = ConfigDict(extra='allow')
     
-    splunk_env_name: Optional[str] = None
-    splunk_version: Optional[str] = Field(None, pattern=SPLUNK_VERSION_PATTERN)
-    splunk_architecture: Optional[str] = Field(None, pattern=SPLUNK_ARCHITECTURE_PATTERN)
+    splunk_env_name: Optional[str] = Field(
+        None,
+        description="Short name for this Splunk environment. Default splk. Omit the key to keep that.",
+    )
+    splunk_version: Optional[str] = Field(
+        None,
+        pattern=SPLUNK_VERSION_PATTERN,
+        description="Installer tarball version under Software: latest or a dotted version. Default latest. Omit the key to keep that.",
+    )
+    splunk_architecture: Optional[str] = Field(
+        None,
+        pattern=SPLUNK_ARCHITECTURE_PATTERN,
+        description="CPU suffix of the Splunk tarball: amd64, x86_64, or arm64. This is not the machine running spa. Default amd64. Omit the key to keep that.",
+    )
     splunk_user: Optional[str] = Field(
         None,
-        description="OS account used to run Splunk; Ansible roles default to splunk if unset",
+        description="OS account that runs Splunk. Default splunk. Omit the key to keep that.",
     )
     splunk_group: Optional[str] = Field(
         None,
-        description="Primary OS group for the Splunk account; Ansible roles default to splunk if unset",
+        description="Primary OS group for the Splunk account. Default splunk. Omit the key to keep that.",
     )
-    splunk_fips: Optional[bool] = None
-    splunk_download: Optional[SplunkDownloadConfig] = None
-    splunk_admin_password: Optional[str] = None
-    splunk_license_file: Optional[Union[str, List[str]]] = None
-    splunk_license_server: Optional[str] = None
-    splunk_set_servername: Optional[bool] = None
-    splunk_set_default_hostname: Optional[bool] = None
-    splunk_loginpage_print_hostname: Optional[bool] = None
-    splunk_loginpage_print_userpw: Optional[bool] = None
-    splunk_loginpage_print_roles: Optional[bool] = None
-    splunk_use_policykit: Optional[bool] = None
-    splunk_kv_store_engine_wiredtiger: Optional[bool] = None
-    splunk_conf: Optional[Dict[str, Dict[str, Any]]] = None
-    splunk_indexes: Optional[Dict[str, Any]] = None
-    splunk_indexes_default_paths: Optional[bool] = None
+    splunk_fips: Optional[bool] = Field(
+        None,
+        description="When true, install Splunk in FIPS mode. Default false. Omit the key to keep that.",
+    )
+    splunk_download: Optional[SplunkDownloadConfig] = Field(
+        None,
+        description="Whether installers are fetched instead of using a tarball already in Software. Holds no value itself.",
+    )
+    splunk_admin_password: Optional[str] = Field(
+        None,
+        description="Password for the Splunk admin user. Default is a lab password. Omit the key to keep that. Use an env lookup when you override it.",
+    )
+    splunk_license_file: Optional[Union[str, List[str]]] = Field(
+        None,
+        description="License file name, or a list of names, in Software. Copied onto a license_manager host. No default. Omit the key when hosts use an existing license server.",
+    )
+    splunk_license_server: Optional[str] = Field(
+        None,
+        description="IP or DNS name of an existing license manager. No default. Omit the key when this lab hosts the license manager.",
+    )
+    splunk_set_servername: Optional[bool] = Field(
+        None,
+        description="When true, set serverName to the inventory hostname. Default false. Omit the key to keep that.",
+    )
+    splunk_set_default_hostname: Optional[bool] = Field(
+        None,
+        description="When true, set default-hostname to the inventory hostname. Default false. Omit the key to keep that.",
+    )
+    splunk_loginpage_print_hostname: Optional[bool] = Field(
+        None,
+        description="When true, print the hostname on the Splunk login page. Default true. Omit the key to keep that.",
+    )
+    splunk_loginpage_print_userpw: Optional[bool] = Field(
+        None,
+        description="When true, print the admin user and password on the Splunk login page. Default true. Omit the key to keep that.",
+    )
+    splunk_loginpage_print_roles: Optional[bool] = Field(
+        None,
+        description="When true, print the host's Splunk roles on the login page. Default true. Omit the key to keep that.",
+    )
+    splunk_use_policykit: Optional[bool] = Field(
+        None,
+        description="When true, require polkit so Ansible can become root. Default true. Omit the key to keep that.",
+    )
+    splunk_kv_store_engine_wiredtiger: Optional[bool] = Field(
+        None,
+        description="When true, use WiredTiger for KV Store. Default true. Omit the key to keep that.",
+    )
+    splunk_conf: Optional[Dict[str, Dict[str, Any]]] = Field(
+        None,
+        description="Extra Splunk conf stanzas: file name, then stanza, then key. No default. Omit the key to add none.",
+    )
+    splunk_indexes: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Index definitions as a map of index name to settings. Default is a test events index and a test_metrics metric index. Omit the key to keep that.",
+    )
+    splunk_indexes_default_paths: Optional[bool] = Field(
+        None,
+        description="When true, give indexes the usual hot and cold paths. Default true. Omit the key to keep that.",
+    )
     # A volume with no properties (e.g. 'hot:') falls back to the default path at deploy time.
-    splunk_indexer_volumes: Optional[Dict[str, Optional[SplunkVolumeConfig]]] = None
-    splunk_volume_defaults: Optional[SplunkVolumeDefaultsConfig] = None
-    splunk_ssl: Optional[SplunkSslConfig] = None
-    splunk_secret_share: Optional[SplunkSecretShareConfig] = None
+    splunk_indexer_volumes: Optional[Dict[str, Optional[SplunkVolumeConfig]]] = Field(
+        None,
+        description="Named indexer storage volumes. Holds no value itself.",
+    )
+    splunk_volume_defaults: Optional[SplunkVolumeDefaultsConfig] = Field(
+        None,
+        description="Path and size defaults applied to indexer volumes. Holds no value itself.",
+    )
+    splunk_ssl: Optional[SplunkSslConfig] = Field(
+        None,
+        description="TLS settings for Splunk endpoints. Holds no value itself.",
+    )
+    splunk_secret_share: Optional[SplunkSecretShareConfig] = Field(
+        None,
+        description="Whether hosts reuse one secret file. Holds no value itself.",
+    )
 
 
 class SplunkDirsConfig(BaseModel):
     """Splunk directory paths."""
     model_config = ConfigDict(extra='allow')
     
-    splunk_baseconfig_dir: Optional[str] = None
-    splunk_software_dir: Optional[str] = None
+    splunk_baseconfig_dir: Optional[str] = Field(
+        None,
+        description="Directory of baseconfig apps, resolved next to the lab. Default ../Software. Omit the key to keep that.",
+    )
+    splunk_software_dir: Optional[str] = Field(
+        None,
+        description="Directory of Splunk tarballs and license files. Default ../Software. Omit the key to keep that.",
+    )
 
 
 class SplunkAppsConfig(BaseModel):
     """Splunk apps configuration (legacy baseconfig apps)."""
     model_config = ConfigDict(extra='allow')
     
-    splunk_save_baseconfig_apps_dir: Optional[str] = None
-    splunk_save_baseconfig_apps: Optional[bool] = None
-    splunk_save_serverclass: Optional[bool] = None
+    splunk_save_baseconfig_apps_dir: Optional[str] = Field(
+        None,
+        description="Lab folder that receives saved baseconfig apps. Default saved_base_config_apps. Omit the key to keep that.",
+    )
+    splunk_save_baseconfig_apps: Optional[bool] = Field(
+        None,
+        description="When true, copy rendered baseconfig apps into the lab. Default false. Omit the key to keep that.",
+    )
+    splunk_save_serverclass: Optional[bool] = Field(
+        None,
+        description="When true, also save the deployment-server serverclass. Default false. Omit the key to keep that.",
+    )
 
 
 ALLOWED_APP_SOURCES = ("local", "splunkbase")
@@ -250,23 +436,49 @@ class SplunkAppDeploymentConfig(BaseModel):
     """Splunk app deployment configuration (Splunkbase and local apps)."""
     model_config = ConfigDict(extra='allow')
     
-    splunkbase_username: Optional[str] = None
-    splunkbase_password: Optional[str] = None
-    local_app_repo_path: Optional[str] = None
-    update_mode: Optional[Literal["clean", "merge"]] = None
-    target_download: Optional[StrictBool] = None
-    cache_downloads: Optional[StrictBool] = None
-    backup_apps_before_update: Optional[StrictBool] = None
+    splunkbase_username: Optional[str] = Field(
+        None,
+        description="Splunkbase user for app downloads. No default. Omit the key when every app is local. Use an env lookup when you set it.",
+    )
+    splunkbase_password: Optional[str] = Field(
+        None,
+        description="Splunkbase password for app downloads. No default. Omit the key when every app is local. Use an env lookup when you set it.",
+    )
+    local_app_repo_path: Optional[str] = Field(
+        None,
+        description="Folder of local apps. Default is the apps directory from spa init. Omit the key to keep that.",
+    )
+    update_mode: Optional[Literal["clean", "merge"]] = Field(
+        None,
+        description="merge keeps extra files such as local/; clean deletes the old app first. Default merge. Omit the key to keep that.",
+    )
+    target_download: Optional[StrictBool] = Field(
+        None,
+        description="When true, each target downloads the app from Splunkbase. Default false. Omit the key to keep that.",
+    )
+    cache_downloads: Optional[StrictBool] = Field(
+        None,
+        description="When true, keep the downloaded archive after it is extracted. Default true. Omit the key to keep that.",
+    )
+    backup_apps_before_update: Optional[StrictBool] = Field(
+        None,
+        description="When true, back up the existing app directory before an update. Default false. Omit the key to keep that.",
+    )
     deploymentclient_check: StrictBool = Field(
         default=True,
         description=(
-            "When true (default), app deployment runs splunk btool deploymentclient on hosts (with a deployment server "
-            "in inventory) to set _splunk_is_deployment_client and to filter deployment-server serverclass whitelists. "
-            "When false, skip btool and assume non–deployment-server, non–SHC/IDXC-member hosts are deployment clients."
+            "When true, run splunk btool deploymentclient to see which hosts are deployment clients. "
+            "Default true. Omit the key to keep that."
         ),
     )
-    apps: Optional[List[Dict[str, Any]]] = None
-    host_specific_apps: Optional[List[Dict[str, Any]]] = None
+    apps: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="App entries to install or remove. Each entry is a map of name, source, and either a Splunkbase id or a local path. No default. Omit the key to deploy no apps.",
+    )
+    host_specific_apps: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Reserved. Not applied by deploy. No default. Omit the key.",
+    )
 
     @model_validator(mode='after')
     def validate_app_deployment_apps(self) -> 'SplunkAppDeploymentConfig':
@@ -835,42 +1047,104 @@ class SplunkEnvironment(BaseModel):
     """Splunk environment definition."""
     model_config = ConfigDict(extra='allow')
     
-    splunk_env_name: str
-    splunk_version: Optional[str] = Field(None, pattern=SPLUNK_VERSION_PATTERN)
-    splunk_admin_password: Optional[str] = None
-    splunk_license_file: Optional[str] = None
-    splunk_indexes: Optional[Dict[str, Any]] = None
+    splunk_env_name: str = Field(..., description="Name of this environment inside the config. Required.")
+    splunk_version: Optional[str] = Field(
+        None,
+        pattern=SPLUNK_VERSION_PATTERN,
+        description="Installer version for hosts in this environment. Overrides the global version. No default. Omit the key to inherit it.",
+    )
+    splunk_admin_password: Optional[str] = Field(
+        None,
+        description="Admin password for hosts in this environment. Overrides the global password. No default. Omit the key to inherit it. Use an env lookup when you set it.",
+    )
+    splunk_license_file: Optional[str] = Field(
+        None,
+        description="License file for this environment. Overrides the global license file. No default. Omit the key to inherit it.",
+    )
+    splunk_indexes: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Index map for this environment. Overrides the global indexes. No default. Omit the key to inherit them.",
+    )
 
 
 class IdxClusterConfig(BaseModel):
     """Indexer cluster configuration."""
     model_config = ConfigDict(extra='allow')
     
-    idxc_name: str
-    idxc_password: Optional[str] = None
-    idxc_replication_port: Optional[int] = Field(None, ge=1, le=65535)
-    idxc_site_rf: Optional[str] = Field(None, pattern=IDXC_SITE_FACTOR_PATTERN)
-    idxc_site_sf: Optional[str] = Field(None, pattern=IDXC_SITE_FACTOR_PATTERN)
-    idxc_rf: Optional[int] = Field(None, ge=1)
-    idxc_sf: Optional[int] = Field(None, ge=1)
-    idxc_discovery_password: Optional[str] = None
+    idxc_name: str = Field(..., description="Indexer cluster name. Hosts select it with idxcluster. Required.")
+    idxc_password: Optional[str] = Field(
+        None,
+        description="Indexer cluster secret. Default is a lab secret. Omit the key to keep that. Use an env lookup when you override it.",
+    )
+    idxc_replication_port: Optional[int] = Field(
+        None,
+        ge=1,
+        le=65535,
+        description="Indexer replication port. Default 9887. Omit the key to keep that.",
+    )
+    idxc_site_rf: Optional[str] = Field(
+        None,
+        pattern=IDXC_SITE_FACTOR_PATTERN,
+        description="Multisite replication factor, such as origin:2, total:3. Default origin:2, total:3. Omit the key to keep that.",
+    )
+    idxc_site_sf: Optional[str] = Field(
+        None,
+        pattern=IDXC_SITE_FACTOR_PATTERN,
+        description="Multisite search factor, such as origin:2, total:3. Default origin:2, total:3. Omit the key to keep that.",
+    )
+    idxc_rf: Optional[int] = Field(
+        None,
+        ge=1,
+        description="Single-site replication factor. No default. Omit the key to leave Splunk's built-in factor.",
+    )
+    idxc_sf: Optional[int] = Field(
+        None,
+        ge=1,
+        description="Single-site search factor. No default. Omit the key to leave Splunk's built-in factor.",
+    )
+    idxc_discovery_password: Optional[str] = Field(
+        None,
+        description="Password for indexer discovery. No default. Omit the key to leave discovery unset. Use an env lookup when you set it.",
+    )
 
 
 class ShClusterConfig(BaseModel):
     """Search head cluster configuration."""
     model_config = ConfigDict(extra='allow')
     
-    shc_name: str
-    shc_site: Optional[str] = Field(None, pattern=SPLUNK_SITE_PATTERN)
-    shc_password: Optional[str] = None
-    shc_replication_port: Optional[int] = Field(None, ge=1, le=65535)
+    shc_name: str = Field(..., description="Search head cluster name. Hosts select it with shcluster. Required.")
+    shc_site: Optional[str] = Field(
+        None,
+        pattern=SPLUNK_SITE_PATTERN,
+        description="Site label for this search head cluster, such as site0. Default site0. Omit the key to keep that.",
+    )
+    shc_password: Optional[str] = Field(
+        None,
+        description="Search head cluster secret. Default is a lab secret. Omit the key to keep that. Use an env lookup when you override it.",
+    )
+    shc_replication_port: Optional[int] = Field(
+        None,
+        ge=1,
+        le=65535,
+        description="Search head cluster replication port. Default 9887. Omit the key to keep that.",
+    )
 
 
 class HostIteration(BaseModel):
     """Host iteration for generating multiple hosts."""
-    prefix: Optional[str] = None
-    numbers: str = Field(..., pattern=r'^\d+\.\.\d+$', description="Range like '1..3'")
-    postfix: Optional[str] = None
+    prefix: Optional[str] = Field(
+        None,
+        description="Text placed before each generated number in the hostname. No default. Omit the key to add nothing before the number.",
+    )
+    numbers: str = Field(
+        ...,
+        pattern=r'^\d+\.\.\d+$',
+        description="Inclusive numeric range such as 1..3. One host is created per number. Required.",
+    )
+    postfix: Optional[str] = Field(
+        None,
+        description="Text placed after each generated number in the hostname. No default. Omit the key to add nothing after the number.",
+    )
 
 
 class CustomConfig(BaseModel):
@@ -883,37 +1157,110 @@ class SplunkHost(BaseModel):
     model_config = ConfigDict(extra='allow')
     
     # Host identification - exactly one must be specified
-    name: Optional[str] = None
-    list: Optional[List[str]] = None
-    iter: Optional[HostIteration] = None
+    name: Optional[str] = Field(
+        None,
+        description="Inventory hostname for this one host. No default. Set exactly one of name, list, or iter.",
+    )
+    list: Optional[List[str]] = Field(
+        None,
+        description="Hostnames generated from this one entry. No default. Set exactly one of name, list, or iter.",
+    )
+    iter: Optional[HostIteration] = Field(
+        None,
+        description="Generated hostnames from a numeric range. Holds no value itself.",
+    )
     
     # Required
-    roles: List[AllowedRole] = Field(..., min_length=1, description="At least one role required")
+    roles: List[AllowedRole] = Field(
+        ...,
+        min_length=1,
+        description="Splunk roles for this host. Required.",
+    )
     
     # Optional settings
-    splunk_env: Optional[str] = None
-    site: Optional[str] = Field(None, pattern=SPLUNK_SITE_PATTERN)
-    cname: Optional[str] = None
-    idxcluster: Optional[str] = None
-    shcluster: Optional[str] = None
-    ip_addr: Optional[str] = None
+    splunk_env: Optional[str] = Field(
+        None,
+        description="Environment name from splunk_environments. No default. Omit the key when the config has one environment.",
+    )
+    site: Optional[str] = Field(
+        None,
+        pattern=SPLUNK_SITE_PATTERN,
+        description="Multisite label such as site1. Allowed only for indexer, search_head, or cluster_manager. No default. Omit the key for a single-site lab.",
+    )
+    cname: Optional[str] = Field(
+        None,
+        description="DNS alias published for this host. No default. Omit the key to publish none.",
+    )
+    idxcluster: Optional[str] = Field(
+        None,
+        description="Indexer cluster name. Required when roles includes cluster_manager. No default for other roles. Omit the key when the host is not in an indexer cluster.",
+    )
+    shcluster: Optional[str] = Field(
+        None,
+        description="Search head cluster name. Required when roles includes deployer. No default for other roles. Omit the key when the host is not in a search head cluster.",
+    )
+    ip_addr: Optional[str] = Field(
+        None,
+        description="Guest IPv4 when you assign it yourself. No default. Omit the key to let the provider assign the address.",
+    )
     
     # Host-level overrides
-    splunk_version: Optional[str] = Field(None, pattern=SPLUNK_VERSION_PATTERN)
-    splunk_architecture: Optional[str] = Field(None, pattern=SPLUNK_ARCHITECTURE_PATTERN)
-    splunk_admin_password: Optional[str] = None
-    splunk_license_file: Optional[str] = None
-    splunk_outputs: Optional[str] = None
-    splunk_search_peers: Optional[str] = None
-    splunk_conf: Optional[Dict[str, Dict[str, Any]]] = None
-    splunk_fips: Optional[bool] = None
+    splunk_version: Optional[str] = Field(
+        None,
+        pattern=SPLUNK_VERSION_PATTERN,
+        description="Per-host override of splunk_defaults.splunk_version. Installer version for this host only. No default. Omit the key to inherit the global version.",
+    )
+    splunk_architecture: Optional[str] = Field(
+        None,
+        pattern=SPLUNK_ARCHITECTURE_PATTERN,
+        description="Per-host override of splunk_defaults.splunk_architecture. Tarball CPU suffix for this host only. No default. Omit the key to inherit the global architecture.",
+    )
+    splunk_admin_password: Optional[str] = Field(
+        None,
+        description="Per-host override of splunk_defaults.splunk_admin_password. No default. Omit the key to inherit the global password. Use an env lookup when you set it.",
+    )
+    splunk_license_file: Optional[str] = Field(
+        None,
+        description="Per-host override of splunk_defaults.splunk_license_file. No default. Omit the key to inherit the global license file.",
+    )
+    splunk_outputs: Optional[str] = Field(
+        None,
+        description="Reserved grouping of which indexers receive this host's data. Not applied; forwarders still send to every indexer. No default. Omit the key.",
+    )
+    splunk_search_peers: Optional[str] = Field(
+        None,
+        description="Reserved grouping of search peers for this host. Not applied. No default. Omit the key.",
+    )
+    splunk_conf: Optional[Dict[str, Dict[str, Any]]] = Field(
+        None,
+        description="Per-host override of splunk_defaults.splunk_conf. Extra conf stanzas for this host only. No default. Omit the key to inherit the global stanzas.",
+    )
+    splunk_fips: Optional[bool] = Field(
+        None,
+        description="Per-host override of splunk_defaults.splunk_fips. When true, install this host in FIPS mode. No default. Omit the key to inherit the global FIPS setting.",
+    )
     
     # Nested configs
-    os: Optional[OsConfig] = None
-    aws: Optional[Dict[str, Any]] = None
-    virtualbox: Optional[VirtualBoxConfig] = None
-    custom: Optional[CustomConfig] = None
-    terraform: Optional[TerraformConfig] = None
+    os: Optional[OsConfig] = Field(
+        None,
+        description="Guest OS settings for this host only. Holds no value itself.",
+    )
+    aws: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Legacy per-host AWS inventory map. Not used by Terraform. No default. Omit the key.",
+    )
+    virtualbox: Optional[VirtualBoxConfig] = Field(
+        None,
+        description="VirtualBox settings for this host only. Holds no value itself.",
+    )
+    custom: Optional[CustomConfig] = Field(
+        None,
+        description="Ansible connection variables for this host only, such as ansible_user and ansible_port. No default. Omit the key when SPA provisions the host.",
+    )
+    terraform: Optional[TerraformConfig] = Field(
+        None,
+        description="Terraform settings for this host only. Holds no value itself.",
+    )
 
     @model_validator(mode='after')
     def validate_host_identifier(self) -> 'SplunkHost':
@@ -970,24 +1317,74 @@ class SplunkConfig(BaseModel):
     model_config = ConfigDict(extra='allow')
     
     # Required fields
-    plugin: str = Field(..., pattern=r'^splunk-platform-automator$')
-    splunk_hosts: List[SplunkHost] = Field(..., min_length=1, description="At least one host required")
+    plugin: str = Field(
+        ...,
+        pattern=r'^splunk-platform-automator$',
+        description="Name of the Ansible inventory plugin. Required.",
+    )
+    splunk_hosts: List[SplunkHost] = Field(
+        ...,
+        min_length=1,
+        description="Hosts that spa provision and spa deploy act on. Holds no value itself.",
+    )
     
     # Optional sections
-    general: Optional[GeneralConfig] = None
-    custom: Optional[CustomConfig] = None
-    os: Optional[OsConfig] = None
-    virtualbox: Optional[VirtualBoxConfig] = None
-    aws: Optional[Dict[str, Any]] = None
-    terraform: Optional[TerraformConfig] = None
-    splunk_defaults: Optional[SplunkDefaultsConfig] = None
-    splunk_dirs: Optional[SplunkDirsConfig] = None
-    splunk_apps: Optional[SplunkAppsConfig] = None
-    splunk_app_deployment: Optional[SplunkAppDeploymentConfig] = None
-    splunk_systemd: Optional[SplunkSystemdConfig] = None
-    splunk_environments: Optional[List[SplunkEnvironment]] = None
-    splunk_idxclusters: Optional[List[IdxClusterConfig]] = None
-    splunk_shclusters: Optional[List[ShClusterConfig]] = None
+    general: Optional[GeneralConfig] = Field(
+        None,
+        description="Settings for the lab index page written after deploy. Holds no value itself.",
+    )
+    custom: Optional[CustomConfig] = Field(
+        None,
+        description="Ansible connection variables for hosts SPA did not provision, such as ansible_user and ansible_port. No default. Omit the block when SPA provisions the hosts.",
+    )
+    os: Optional[OsConfig] = Field(
+        None,
+        description="Guest OS settings applied before Splunk is installed. Holds no value itself.",
+    )
+    virtualbox: Optional[VirtualBoxConfig] = Field(
+        None,
+        description="VirtualBox guest size and network for Vagrant. Holds no value itself.",
+    )
+    aws: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Legacy inventory-only AWS map. Not used by Terraform provision. No default. Omit the key.",
+    )
+    terraform: Optional[TerraformConfig] = Field(
+        None,
+        description="Terraform provider settings. Holds no value itself.",
+    )
+    splunk_defaults: Optional[SplunkDefaultsConfig] = Field(
+        None,
+        description="Splunk settings applied to every host unless a host overrides them. Holds no value itself.",
+    )
+    splunk_dirs: Optional[SplunkDirsConfig] = Field(
+        None,
+        description="Paths to Software and baseconfig apps. Holds no value itself.",
+    )
+    splunk_apps: Optional[SplunkAppsConfig] = Field(
+        None,
+        description="Saving rendered baseconfig apps back into the lab. Holds no value itself.",
+    )
+    splunk_app_deployment: Optional[SplunkAppDeploymentConfig] = Field(
+        None,
+        description="Install and removal of add-ons during deploy. Holds no value itself.",
+    )
+    splunk_systemd: Optional[SplunkSystemdConfig] = Field(
+        None,
+        description="systemd unit limits: service name, then section, then directive. Default limits ship with SPA. Omit the block to keep those.",
+    )
+    splunk_environments: Optional[List[SplunkEnvironment]] = Field(
+        None,
+        description="Named Splunk environments inside one config. Holds no value itself.",
+    )
+    splunk_idxclusters: Optional[List[IdxClusterConfig]] = Field(
+        None,
+        description="Indexer clusters that hosts select by name. Holds no value itself.",
+    )
+    splunk_shclusters: Optional[List[ShClusterConfig]] = Field(
+        None,
+        description="Search head clusters that hosts select by name. Holds no value itself.",
+    )
 
     @field_validator('plugin')
     @classmethod
