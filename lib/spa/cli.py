@@ -818,13 +818,6 @@ def _run(argv: Sequence[str]) -> int:
     class AgentAwareArgumentParser(argparse.ArgumentParser):
         """Keep parse failures machine-readable when an agent invokes spa."""
 
-        def _get_nargs_pattern(self, action):
-            # Python 3.11 treats argparse.REMAINDER as one-or-more. 3.12+ gathers
-            # whatever is left, including nothing. spa hosts ssh NAME depends on that.
-            if action.nargs == argparse.REMAINDER:
-                return "(.*)"
-            return super()._get_nargs_pattern(action)
-
         def error(self, message):
             # Python 3.14 returns a subparser's unknown flags to this top-level parser.
             if "unrecognized arguments" in message:
@@ -1289,7 +1282,11 @@ def _run(argv: Sequence[str]) -> int:
     p_hosts_ssh = _add_action(hosts_sub, "ssh", help="SSH to one host")
     _add_mode_flags(p_hosts_ssh)
     p_hosts_ssh.add_argument("name", help="Inventory hostname")
-    p_hosts_ssh.add_argument("ssh_args", nargs=argparse.REMAINDER, help="Additional arguments passed to ssh")
+    # Python 3.11 marks REMAINDER positionals required. Extra ssh args are optional.
+    ssh_args = p_hosts_ssh.add_argument(
+        "ssh_args", nargs=argparse.REMAINDER, help="Additional arguments passed to ssh",
+    )
+    ssh_args.required = False
     p_hosts_copy = _add_action(
         hosts_sub,
         "copy",
@@ -1306,12 +1303,14 @@ def _run(argv: Sequence[str]) -> int:
         action="store_true",
         help="Copy directories",
     )
-    p_hosts_copy.add_argument(
+    copy_paths = p_hosts_copy.add_argument(
         "paths",
         nargs=argparse.REMAINDER,
         metavar="SRC DST",
         help="Source and destination paths; HOST:PATH for the remote side",
     )
+    # Python 3.11 marks REMAINDER positionals required. The copy action checks the count.
+    copy_paths.required = False
 
     # Flags for these are parsed by the wrapped tool (see _split_native).
     _add_command(
