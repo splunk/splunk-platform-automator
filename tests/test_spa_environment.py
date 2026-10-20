@@ -20,11 +20,13 @@ def _xdg(tmp_path: Path) -> dict:
 
 
 def test_bare_env_is_not_export():
-    result = run_spa(["env"])
-    assert result.returncode == 0
-    combined = result.stdout + result.stderr
-    assert "export SPA_" not in result.stdout
-    assert "list" in combined or "usage" in combined.lower() or "environment" in combined.lower()
+    result = run_spa(["--no-agent", "env"])
+    assert result.returncode == 2
+    assert result.stdout.strip() == ""
+    assert "export SPA_" not in result.stderr
+    assert "spa environment needs an action." in result.stderr
+    assert "spa environment list" in result.stderr
+    assert "spa environment --export" in result.stderr
 
 
 def test_one_off_init_does_not_write_env_dir(tmp_path):
@@ -416,7 +418,7 @@ def test_pre3_cwd_does_not_silently_use_registered_default(tmp_path):
         "# old plugin\n", encoding="utf-8"
     )
 
-    result = run_spa(["--no-agent", "hosts", "-s"], extra_env=extra, cwd=old)
+    result = run_spa(["--no-agent", "hosts", "list", "-s"], extra_env=extra, cwd=old)
     assert result.returncode == 2
     combined = result.stderr + result.stdout
     assert "pre-3.0 SPA environment" in combined

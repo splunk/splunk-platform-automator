@@ -77,6 +77,14 @@ def _link_target(raw: str) -> str | None:
     return path or None
 
 
+def test_agents_md_points_at_command_authoring():
+    text = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "docs/contributing.md#adding-a-spa-command" in text
+    assert "./tests/run_cli_tests.sh" in text
+    assert "docs/commands.md" in text
+    assert "generated" in text.lower()
+
+
 class TestCanonicalDocs:
     def test_well_known_root_files_exist(self):
         missing = [name for name in sorted(WELL_KNOWN_ROOT) if not (PROJECT_ROOT / name).is_file()]

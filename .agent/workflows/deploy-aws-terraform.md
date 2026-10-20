@@ -117,4 +117,4 @@ In agent mode, destroy requires `-y` / `--yes`. This permanently deletes EC2 ins
 | `spa destroy` | Destroy infrastructure |
 | `spa hosts list --status` | Inventory names, roles, runtime state |
 | `spa hosts ssh <host>` / `spa sh <host>` | SSH via inventory |
-| `spa run --list` | Playbook catalog |
+| `spa run list` | Playbook catalog |

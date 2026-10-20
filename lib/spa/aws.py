@@ -6,10 +6,10 @@ Requires boto3 and AWS credentials (env, profile, or instance role).
 
 Examples:
   spa aws --check-auth --json
-  spa aws --list-regions --json
+  spa aws list regions --json
   spa aws --region eu-central-1 --latest-ami --os amazon_linux --json
   spa aws --region eu-central-1 --latest-ami --os all --json
-  spa aws --region eu-central-1 --list-amis --name-filter "custom*" --json
+  spa aws list amis --region eu-central-1 --name-filter "custom*" --json
   spa aws --region eu-central-1 --validate \\
     --ami-id ami-xxx --key-name aws_key --security-groups Splunk_Basic \\
     --instance-type t3.medium --json
@@ -717,31 +717,77 @@ def parse_security_groups(value: Optional[str]) -> Optional[List[str]]:
     return [s.strip() for s in re.split(r"[,;]", value) if s.strip()]
 
 
+_RETIRED_AWS_LISTS = {
+    "--list-regions": "regions",
+    "--list-amis": "amis",
+    "--list-instance-types": "instance-types",
+    "--list-key-pairs": "key-pairs",
+    "--list-security-groups": "security-groups",
+}
+
+_AWS_LIST_KINDS = ("regions", "amis", "instance-types", "key-pairs", "security-groups")
+
+AWS_LIST_EXAMPLES = """
+examples:
+  spa aws list regions
+  spa aws list amis --region REGION [--os OS] [--name-filter PATTERN]
+  spa aws list instance-types --region REGION [--family FAMILY]
+  spa aws list key-pairs --region REGION
+  spa aws list security-groups --region REGION
+  spa aws --check-auth
+  spa aws --region REGION --latest-ami --os OS
+  spa aws --region REGION --survey
+  spa aws --region REGION --validate
+"""
+
+
+class AwsArgumentParser(argparse.ArgumentParser):
+    """Name the legal list command when a removed --list-* flag is used."""
+
+    def error(self, message: str) -> None:
+        for flag, kind in _RETIRED_AWS_LISTS.items():
+            if flag in message:
+                message = "Listing %s is: spa aws list %s" % (kind, kind)
+                break
+        else:
+            if "KIND" in message and "required" in message:
+                message = (
+                    "spa aws list needs a kind.\n"
+                    "Regions:         spa aws list regions\n"
+                    "AMIs:            spa aws list amis --region REGION\n"
+                    "Instance types:  spa aws list instance-types --region REGION\n"
+                    "Key pairs:       spa aws list key-pairs --region REGION\n"
+                    "Security groups: spa aws list security-groups --region REGION"
+                )
+        self.print_usage(sys.stderr)
+        self.exit(2, "%s: error: %s\n" % (self.prog, message))
+
+
+def _add_json_after_kind(parser: argparse.ArgumentParser) -> None:
+    """Accept --json after a list kind without clearing a leading --json."""
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Output JSON",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
+    p = AwsArgumentParser(
         prog="spa aws",
         description="AWS discovery and validation for splunk_config.yml",
+        epilog=AWS_LIST_EXAMPLES,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--json", action="store_true", help="Output JSON")
     p.add_argument("--region", help="AWS region")
-
     p.add_argument("--check-auth", action="store_true", help="Verify AWS credentials via STS (no --region required)")
-    p.add_argument("--list-regions", action="store_true", help="List enabled regions")
-    p.add_argument("--list-amis", action="store_true", help="List AMIs in region (use --name-filter or --os)")
     p.add_argument("--latest-ami", action="store_true", help="Resolve latest AMI for recommended OS (--os)")
     p.add_argument(
         "--os",
-        help="Recommended OS: rhel, ubuntu, amazon_linux, debian (or all). Aliases: al2023, rhel10, ubuntu2404",
+        help="Recommended OS for --latest-ami: rhel, ubuntu, amazon_linux, debian (or all). Aliases: al2023, rhel10, ubuntu2404",
     )
-    p.add_argument("--name-filter", help="AMI name wildcard for custom --list-amis (not used for recommended OS)")
-    p.add_argument(
-        "--owners",
-        help="Comma-separated AMI owners (default: amazon,aws-marketplace,self)",
-    )
-    p.add_argument("--list-instance-types", action="store_true", help="List instance types offered in region")
-    p.add_argument("--family", help="Instance type family prefix (e.g. t3)")
-    p.add_argument("--list-key-pairs", action="store_true", help="List EC2 key pairs")
-    p.add_argument("--list-security-groups", action="store_true", help="List security groups")
     p.add_argument("--describe-ami", action="store_true", help="Describe one AMI")
     p.add_argument("--ami-id", help="AMI ID for describe or validate")
     p.add_argument("--validate", action="store_true", help="Validate selections")
@@ -749,7 +795,51 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--security-groups", help="Comma-separated security group names for validate")
     p.add_argument("--instance-type", help="Instance type for validate")
     p.add_argument("--survey", action="store_true", help="Combined discovery report for a region")
-    p.add_argument("--max-results", type=int, default=15, help="Max AMIs to return")
+
+    commands = p.add_subparsers(dest="aws_command", parser_class=AwsArgumentParser)
+    list_parser = commands.add_parser(
+        "list",
+        help="List AWS resources",
+        description="List one AWS resource kind.",
+        epilog=AWS_LIST_EXAMPLES,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_json_after_kind(list_parser)
+    kinds = list_parser.add_subparsers(
+        dest="aws_list_kind",
+        required=True,
+        metavar="KIND",
+        parser_class=AwsArgumentParser,
+    )
+    _add_json_after_kind(kinds.add_parser("regions", help="List enabled regions"))
+
+    amis = kinds.add_parser("amis", help="List AMIs in a region")
+    _add_json_after_kind(amis)
+    amis.add_argument("--region", default=argparse.SUPPRESS, help="AWS region")
+    amis.add_argument("--name-filter", help="AMI name wildcard (not used with --os)")
+    amis.add_argument(
+        "--owners",
+        help="Comma-separated AMI owners (default: amazon,aws-marketplace,self)",
+    )
+    amis.add_argument("--max-results", type=int, default=15, help="Max AMIs to return")
+    amis.add_argument(
+        "--os",
+        default=argparse.SUPPRESS,
+        help="Recommended OS: rhel, ubuntu, amazon_linux, debian (or all). Aliases: al2023, rhel10, ubuntu2404",
+    )
+
+    instance_types = kinds.add_parser("instance-types", help="List instance types offered in a region")
+    _add_json_after_kind(instance_types)
+    instance_types.add_argument("--region", default=argparse.SUPPRESS, help="AWS region")
+    instance_types.add_argument("--family", default=argparse.SUPPRESS, help="Instance type family prefix (e.g. t3)")
+
+    key_pairs = kinds.add_parser("key-pairs", help="List EC2 key pairs")
+    _add_json_after_kind(key_pairs)
+    key_pairs.add_argument("--region", default=argparse.SUPPRESS, help="AWS region")
+
+    security_groups = kinds.add_parser("security-groups", help="List security groups")
+    _add_json_after_kind(security_groups)
+    security_groups.add_argument("--region", default=argparse.SUPPRESS, help="AWS region")
     return p
 
 
@@ -765,19 +855,107 @@ def _aws_result(data: Dict[str, Any], error: Optional[str] = None):
     )
 
 
+def _list_amis_result(session: Any, args: Any):
+    from spa.api import CommandResult
+
+    os_name = getattr(args, "os", None)
+    max_results = getattr(args, "max_results", 15)
+    if os_name:
+        if os_name == "all":
+            os_keys = valid_os_keys()
+        else:
+            normalized = normalize_os_key(os_name)
+            if normalized not in RECOMMENDED_OS:
+                return CommandResult(
+                    ok=False,
+                    error=(
+                        "Unknown --os %s. Valid: %s, all (aliases: %s)"
+                        % (os_name, ", ".join(valid_os_keys()), ", ".join(OS_ALIASES))
+                    ),
+                    code=1,
+                )
+            os_keys = [normalized]
+        combined: Dict[str, Any] = {"ok": True, "region": args.region, "items": []}
+        for key in os_keys:
+            entry = resolve_recommended_os_ami(
+                session, args.region, key, max_results=max_results
+            )
+            if not entry.get("ok"):
+                combined["ok"] = False
+            if entry.get("item"):
+                combined["items"].append({**entry["item"], "os": key, "label": entry.get("label")})
+            else:
+                for item in entry.get("items", []):
+                    combined["items"].append({**item, "os": key, "label": entry.get("label")})
+        return _aws_result(combined)
+    owners = args.owners.split(",") if getattr(args, "owners", None) else None
+    return _aws_result(
+        list_amis(session, args.region, getattr(args, "name_filter", None), owners, max_results)
+    )
+
+
 def execute(args: Any):
     from spa.api import CommandResult
+
+    kind = getattr(args, "aws_list_kind", None)
+    if kind and kind != "amis" and getattr(args, "os", None):
+        return CommandResult(ok=False, error="--os requires: spa aws list amis", code=2)
+
+    if not kind and not any(
+        (
+            args.check_auth,
+            args.survey,
+            args.latest_ami,
+            args.describe_ami,
+            args.validate,
+        )
+    ):
+        return CommandResult(
+            ok=False,
+            error=(
+                "spa aws needs an operation.\n"
+                "List:       spa aws list regions\n"
+                "            spa aws list amis --region REGION\n"
+                "            spa aws list instance-types --region REGION\n"
+                "            spa aws list key-pairs --region REGION\n"
+                "            spa aws list security-groups --region REGION\n"
+                "Auth:       spa aws --check-auth\n"
+                "Latest AMI: spa aws --region REGION --latest-ami --os OS\n"
+                "Survey:     spa aws --region REGION --survey\n"
+                "Validate:   spa aws --region REGION --validate"
+            ),
+            code=2,
+        )
 
     if args.check_auth:
         return _aws_result(check_auth(_session()))
 
-    if args.list_regions:
+    if kind == "regions":
         return _aws_result(list_regions(_session()))
 
-    if not args.region and not args.list_regions:
+    if kind in {"amis", "instance-types", "key-pairs", "security-groups"}:
+        if not getattr(args, "region", None):
+            return CommandResult(
+                ok=False,
+                error="--region is required for spa aws list %s" % kind,
+                code=2,
+            )
+        session = _session(args.region)
+        if kind == "amis":
+            return _list_amis_result(session, args)
+        if kind == "instance-types":
+            family = getattr(args, "family", None)
+            return _aws_result(
+                list_instance_types(session, args.region, family=family, curated=not family)
+            )
+        if kind == "key-pairs":
+            return _aws_result(list_key_pairs(session, args.region))
+        return _aws_result(list_security_groups(session, args.region))
+
+    if not getattr(args, "region", None):
         return CommandResult(
             ok=False,
-            error="--region is required for this operation (except --list-regions)",
+            error="--region is required for this operation (except spa aws list regions and --check-auth)",
             code=1,
         )
 
@@ -785,38 +963,6 @@ def execute(args: Any):
 
     if args.survey:
         return _aws_result(survey(session, args.region))
-
-    if args.list_amis:
-        if args.os:
-            if args.os == "all":
-                os_keys = valid_os_keys()
-            else:
-                normalized = normalize_os_key(args.os)
-                if normalized not in RECOMMENDED_OS:
-                    return CommandResult(
-                        ok=False,
-                        error=(
-                            "Unknown --os %s. Valid: %s, all (aliases: %s)"
-                            % (args.os, ", ".join(valid_os_keys()), ", ".join(OS_ALIASES))
-                        ),
-                        code=1,
-                    )
-                os_keys = [normalized]
-            combined: Dict[str, Any] = {"ok": True, "region": args.region, "items": []}
-            for key in os_keys:
-                entry = resolve_recommended_os_ami(
-                    session, args.region, key, max_results=args.max_results
-                )
-                if not entry.get("ok"):
-                    combined["ok"] = False
-                if entry.get("item"):
-                    combined["items"].append({**entry["item"], "os": key, "label": entry.get("label")})
-                else:
-                    for item in entry.get("items", []):
-                        combined["items"].append({**item, "os": key, "label": entry.get("label")})
-            return _aws_result(combined)
-        owners = args.owners.split(",") if args.owners else None
-        return _aws_result(list_amis(session, args.region, args.name_filter, owners, args.max_results))
 
     if args.latest_ami:
         if not args.os:
@@ -839,17 +985,6 @@ def execute(args: Any):
             )
         return _aws_result(resolve_recommended_os_ami(session, args.region, normalized, max_results=1))
 
-    if args.list_instance_types:
-        return _aws_result(
-            list_instance_types(session, args.region, family=args.family, curated=not args.family)
-        )
-
-    if args.list_key_pairs:
-        return _aws_result(list_key_pairs(session, args.region))
-
-    if args.list_security_groups:
-        return _aws_result(list_security_groups(session, args.region))
-
     if args.describe_ami:
         if not args.ami_id:
             return CommandResult(ok=False, error="--ami-id is required for --describe-ami", code=1)
@@ -871,10 +1006,14 @@ def execute(args: Any):
     return CommandResult(
         ok=False,
         error=(
-            "No operation specified. Use --check-auth, --list-regions, "
-            "--latest-ami, --list-amis, --validate, or --survey."
+            "spa aws needs an operation.\n"
+            "List:       spa aws list regions\n"
+            "Auth:       spa aws --check-auth\n"
+            "Latest AMI: spa aws --region REGION --latest-ami --os OS\n"
+            "Survey:     spa aws --region REGION --survey\n"
+            "Validate:   spa aws --region REGION --validate"
         ),
-        code=1,
+        code=2,
     )
 
 

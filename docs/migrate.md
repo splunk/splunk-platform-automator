@@ -78,7 +78,7 @@ to bump Ansible and other requirements in place (`pip install --upgrade` plus
 - A top-level `aws:` block is inventory-only (legacy vagrant-aws). vagrant-aws is removed in 3.0; use Terraform AWS for cloud.
 - VirtualBox env dirs have no `Vagrantfile`; provision and deploy through `spa`.
 
-Playbooks are invoked with `spa run NAME` (discover: `spa run --list`). Site deploy is `spa deploy --yes`.
+Playbooks are invoked with `spa run NAME` (discover: `spa run list`). Site deploy is `spa deploy --yes`.
 
 ## Host targeting
 
@@ -88,7 +88,7 @@ Do not delete a live host from `splunk_config.yml` and run `spa provision`. Terr
 
 ## Playbook stems (3.0)
 
-`spa run --list` shows current names. `spa run OLD` still resolves and prints `use spa run NEW`. Prefer `spa provision` / `spa destroy` / `spa deploy` over running the AWS or site pipeline playbooks directly.
+`spa run list` shows current names. `spa run OLD` still resolves and prints `use spa run NEW`. Prefer `spa provision` / `spa destroy` / `spa deploy` over running the AWS or site pipeline playbooks directly.
 
 | 2.x | 3.0 |
 | --- | --- |
@@ -122,7 +122,7 @@ Do not delete a live host from `splunk_config.yml` and run `spa provision`. Terr
 
 Unchanged: `deploy_site`, `preflight_deploy`, `setup_common`, `create_linkpage`, `setup_other_roles`, `update_hosts_file`, `upgrade_splunk`.
 
-First-party playbooks carry a `# spa-run:` comment. `spa run NAME --help` prints it; `spa --json run --list` includes `summary` / `risk` / `category` / `requires_provisioned`. Set `requires_provisioned: true` when the playbook needs live hosts; omit it (or `false`) for controller-only stems such as `aws_provision`.
+First-party playbooks carry a `# spa-run:` comment. `spa run NAME --help` prints it; `spa --json run list` includes `summary` / `risk` / `category` / `requires_provisioned`. Set `requires_provisioned: true` when the playbook needs live hosts; omit it (or `false`) for controller-only stems such as `aws_provision`.
 
 ## Already in 2.5.x
 

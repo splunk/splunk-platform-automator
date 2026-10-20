@@ -54,7 +54,7 @@ HELP_CONTRACTS = [
             "env_dir",
             "--example",
             "--provider",
-            "--list",
+            "spa init list",
             "--from",
             "--migrate",
             "--keep-source",
@@ -103,7 +103,19 @@ HELP_CONTRACTS = [
             "--yes",
         ],
     ),
-    (["env", "--help"], ["usage: spa environment", "--export", "list", "init", "set", "remove"]),
+    (
+        ["env", "--help"],
+        [
+            "usage: spa environment",
+            "--export",
+            "list",
+            "init",
+            "set",
+            "remove",
+            "spa environment needs an action.",
+            "spa environment list",
+        ],
+    ),
     (
         ["environment", "set", "--help"],
         [
@@ -118,11 +130,29 @@ HELP_CONTRACTS = [
     ),
     (
         ["features", "--help"],
-        ["usage: spa features", "list", "show", "search", "keys", "schema", "--keys", "--markdown", "--json", "--agent"],
+        [
+            "usage: spa features",
+            "list",
+            "show",
+            "search",
+            "keys",
+            "schema",
+            "spa features search QUERY",
+            "spa features show SELECTOR [--keys]",
+            "spa features schema --markdown",
+        ],
     ),
     (
         ["apps", "--help"],
-        ["usage: spa apps", "search", "snippet", "download", "Splunkbase"],
+        [
+            "usage: spa apps",
+            "search",
+            "snippet",
+            "download",
+            "Splunkbase",
+            "spa apps needs an action.",
+            "spa apps search QUERY",
+        ],
     ),
     (
         ["apps", "search", "--help"],
@@ -163,7 +193,7 @@ HELP_CONTRACTS = [
         ["run", "--help"],
         [
             "usage: spa run",
-            "--list",
+            "spa run list",
             "--dir",
             "--hosts",
             "--yes",
@@ -180,7 +210,7 @@ HELP_CONTRACTS = [
     ),
     (
         ["hosts", "--help"],
-        ["usage: spa hosts", "ACTION", "list", "ssh", "copy", "--status", "-s", "--hosts"],
+        ["usage: spa hosts", "ACTION", "list", "ssh", "copy", "spa hosts list [--status]"],
     ),
     (
         ["hosts", "list", "--help"],
@@ -211,16 +241,36 @@ HELP_CONTRACTS = [
             "--json",
             "--region",
             "--check-auth",
-            "--list-regions",
-            "--list-amis",
+            "list",
+            "spa aws list regions",
             "--latest-ami",
-            "--list-instance-types",
-            "--list-key-pairs",
-            "--list-security-groups",
             "--describe-ami",
             "--validate",
             "--survey",
         ],
+    ),
+    (
+        ["aws", "list", "--help"],
+        [
+            "usage: spa aws list",
+            "regions",
+            "amis",
+            "instance-types",
+            "key-pairs",
+            "security-groups",
+        ],
+    ),
+    (
+        ["aws", "list", "amis", "--help"],
+        ["usage: spa aws list amis", "--region", "--name-filter", "--owners", "--max-results", "--os"],
+    ),
+    (
+        ["aws", "list", "instance-types", "--help"],
+        ["usage: spa aws list instance-types", "--region", "--family"],
+    ),
+    (
+        ["aws", "list", "regions", "--help"],
+        ["usage: spa aws list regions"],
     ),
     (
         ["licenses", "--help"],
@@ -233,7 +283,7 @@ HELP_CONTRACTS = [
             "ACTION",
             "spa agent schema",
             "requires_confirmation",
-            "spa --json run --list",
+            "spa --json run list",
             "--markdown",
             "docs/commands.md",
         ],
@@ -465,42 +515,54 @@ def test_removed_short_names_are_not_commands():
         assert "invalid choice" in result.stderr
 
 
+def _defined_options(help_text: str) -> set[str]:
+    """Long options argparse defines, not flags named only inside an example."""
+    return set(re.findall(r"(?m)^\s+(?:-[A-Za-z],\s+)?(--[A-Za-z0-9-]+)", help_text))
+
+
+def _help_action_names():
+    """Action names advertised by help, including reserved catalog operands."""
+    root = run_spa(["--no-agent", "--help"])
+    assert root.returncode == 0, root.stderr
+    names = set()
+    for name, _alias in _command_rows(root.stdout):
+        names.add("agent schema" if name == "agent" else name)
+    for parent in ("environment", "hosts", "apps", "features"):
+        child = run_spa(["--no-agent", parent, "--help"])
+        assert child.returncode == 0, child.stderr
+        for name, _alias in _command_rows(child.stdout):
+            names.add("%s %s" % (parent, name))
+    catalogs = (
+        (["run", "--help"], "spa run list", "run list"),
+        (["init", "--help"], "spa init list", "init list"),
+        (["environment", "init", "--help"], "spa environment init list", "environment init list"),
+        (["logs", "--help"], "spa logs list", "logs list"),
+    )
+    for argv, phrase, label in catalogs:
+        text = run_spa(["--no-agent", *argv])
+        assert text.returncode == 0, text.stderr
+        flattened = " ".join(text.stdout.split())
+        assert phrase in flattened, phrase
+        names.add(label)
+    listed = run_spa(["--no-agent", "aws", "list", "--help"])
+    assert listed.returncode == 0, listed.stderr
+    for name, _alias in _command_rows(listed.stdout):
+        names.add("aws list %s" % name)
+    return names
+
+
 def test_agent_schema_is_complete_and_documented():
     result = run_spa(["agent", "schema"])
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
     commands = payload["data"]["commands"]
-
-    assert {row["name"] for row in commands} == {
-        "init",
-        "features",
-        "validate",
-        "doctor",
-        "venv",
-        "environment list",
-        "environment init",
-        "environment set",
-        "environment remove",
-        "environment",
-        "provision",
-        "deploy",
-        "destroy",
-        "suspend",
-        "resume",
-        "hosts list",
-        "hosts ssh",
-        "hosts copy",
-        "shell",
-        "aws",
-        "licenses",
-        "run",
-        "logs",
-        "apps search",
-        "apps snippet",
-        "apps download",
-        "agent schema",
-    }
+    schema_names = {row["name"] for row in commands}
+    assert schema_names == _help_action_names()
+    retired = ("--list", "--list-regions", "--list-amis", "--list-instance-types", "--list-key-pairs", "--list-security-groups")
+    encoded = json.dumps(commands)
+    for flag in retired:
+        assert flag not in encoded
     for row in commands:
         assert row.get("summary"), row["name"]
         for flag in row.get("flags", []):
@@ -513,7 +575,8 @@ def test_agent_schema_is_complete_and_documented():
         assert "--yes" in {flag["long"] for flag in by_name[name]["flags"]}
 
     run_flags = {flag["long"] for flag in by_name["run"]["flags"]}
-    assert {"--list", "--hosts", "--yes", "--apps-playbook"} <= run_flags
+    assert {"--hosts", "--yes", "--apps-playbook"} <= run_flags
+    assert "--list" not in run_flags
     assert by_name["apps download"]["requires_confirmation"] is True
     assert "--yes" in {flag["long"] for flag in by_name["apps download"]["flags"]}
     assert "--extract" in {flag["long"] for flag in by_name["apps download"]["flags"]}
@@ -523,3 +586,83 @@ def test_agent_schema_is_complete_and_documented():
     search_flags = {flag["long"] for flag in by_name["apps search"]["flags"]}
     assert {"--limit", "--type", "--kind"} <= search_flags
     assert "--markdown" in {flag["long"] for flag in by_name["agent schema"]["flags"]}
+    assert "--keys" not in {flag["long"] for flag in by_name["features"].get("flags", [])}
+    assert "--markdown" in {flag["long"] for flag in by_name["features schema"]["flags"]}
+    assert by_name["features search"]["positionals"][0]["name"] == "QUERY"
+    assert by_name["features show"]["positionals"][0]["name"] == "SELECTOR"
+    assert "features search" in by_name["features schema"]["summary"]
+
+    for parent, banned in (
+        ("features", ("--keys", "--markdown")),
+        ("hosts", ("--status", "--hosts")),
+        ("aws", ("--list-regions", "--name-filter", "--family")),
+    ):
+        options = _defined_options(run_spa(["--no-agent", parent, "--help"]).stdout)
+        for flag in banned:
+            assert flag not in options, parent
+    amis = run_spa(["--no-agent", "aws", "list", "amis", "--help"]).stdout
+    types = run_spa(["--no-agent", "aws", "list", "instance-types", "--help"]).stdout
+    assert "--family" not in amis
+    assert "--name-filter" not in types
+
+    bare_parents = {
+        "features": ("spa features search QUERY", "spa features show SELECTOR", "spa features list"),
+        "hosts": ("spa hosts list", "spa hosts ssh NAME", "spa hosts copy SRC DST"),
+        "apps": ("spa apps search QUERY", "spa apps snippet APP_ID", "spa apps download APP_ID --yes"),
+        "environment": (
+            "spa environment list",
+            "spa environment init NAME",
+            "spa environment set",
+            "spa environment remove NAME",
+        ),
+        "run": ("spa run list", "spa run NAME --help", "spa run NAME"),
+        "logs": ("spa logs list", "spa logs RUN_ID", "spa logs --last"),
+    }
+    for parent, phrases in bare_parents.items():
+        human = run_spa(["--no-agent", parent])
+        assert human.returncode == 2, parent
+        assert human.stdout.strip() == "", parent
+        assert "the following arguments are required" not in human.stderr, parent
+        for phrase in phrases:
+            assert phrase in human.stderr, (parent, phrase)
+        agent = run_spa(["--json", parent])
+        assert agent.returncode == 2, parent
+        assert agent.stderr == "", parent
+        body = json.loads(agent.stdout)
+        assert body["ok"] is False
+        assert body.get("error")
+        assert "data" not in body
+        for phrase in phrases:
+            assert phrase in body["error"], (parent, phrase)
+
+    operands = (
+        (["features", "search"], "spa features search needs QUERY."),
+        (["features", "show"], "spa features show needs SELECTOR."),
+        (["apps", "search"], "spa apps search needs QUERY."),
+        (["apps", "snippet"], "spa apps snippet needs APP_ID."),
+        (["apps", "download"], "spa apps download needs APP_ID."),
+        (["hosts", "ssh"], "spa hosts ssh needs NAME."),
+        (["environment", "remove"], "spa environment remove needs NAME."),
+        (["feat"], "spa features needs an action."),
+    )
+    for argv, phrase in operands:
+        human = run_spa(["--no-agent", *argv])
+        assert human.returncode == 2, argv
+        assert phrase in human.stderr, argv
+        assert "the following arguments are required" not in human.stderr, argv
+        agent = run_spa(["--json", *argv])
+        assert agent.returncode == 2, argv
+        assert agent.stderr == "", argv
+        body = json.loads(agent.stdout)
+        assert body["ok"] is False and "data" not in body
+        assert phrase in body["error"], argv
+
+    aws = run_spa(["--no-agent", "aws"])
+    assert aws.returncode == 2, aws.stderr
+    assert "spa aws needs an operation." in aws.stderr
+    assert "spa aws list regions" in aws.stderr
+    assert "spa aws --check-auth" in aws.stderr
+    aws_list = run_spa(["--no-agent", "aws", "list"])
+    assert aws_list.returncode == 2, aws_list.stderr
+    for kind in ("regions", "amis", "instance-types", "key-pairs", "security-groups"):
+        assert "spa aws list %s" % kind in aws_list.stderr

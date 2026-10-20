@@ -19,16 +19,16 @@ def _payload(result):
 
 
 def test_agent_and_json_flags_have_the_same_success_envelope():
-    by_agent = run_spa(["--agent", "init", "--list"])
-    by_json = run_spa(["--json", "init", "--list"])
+    by_agent = run_spa(["--agent", "init", "list"])
+    by_json = run_spa(["--json", "init", "list"])
     assert by_agent.returncode == 0, by_agent.stderr
     assert by_json.returncode == 0, by_json.stderr
     assert _payload(by_agent) == _payload(by_json)
 
 
 def test_json_and_agent_flags_work_after_the_subcommand():
-    trailing = run_spa(["init", "--list", "--json"])
-    leading = run_spa(["--json", "init", "--list"])
+    trailing = run_spa(["init", "list", "--json"])
+    leading = run_spa(["--json", "init", "list"])
     assert trailing.returncode == 0, trailing.stderr
     assert leading.returncode == 0, leading.stderr
     assert _payload(trailing) == _payload(leading)
@@ -36,7 +36,7 @@ def test_json_and_agent_flags_work_after_the_subcommand():
 
 @pytest.mark.parametrize("variable", AGENT_ENV_VARS)
 def test_every_supported_environment_variable_enables_agent_mode(variable):
-    result = run_spa(["init", "--list"], extra_env={variable: "1"})
+    result = run_spa(["init", "list"], extra_env={variable: "1"})
     assert result.returncode == 0, result.stderr
     payload = _payload(result)
     assert payload["ok"] is True
@@ -46,7 +46,7 @@ def test_every_supported_environment_variable_enables_agent_mode(variable):
 
 def test_no_agent_overrides_detected_agent_mode():
     result = run_spa(
-        ["--no-agent", "init", "--list"],
+        ["--no-agent", "init", "list"],
         extra_env={"SPA_AGENT": "1"},
     )
     assert result.returncode == 0, result.stderr

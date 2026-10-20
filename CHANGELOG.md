@@ -17,11 +17,15 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 - **`setup_ansible_remote.txt`**: unused WinRM bootstrap (Ansible `devel` script + unencrypted WinRM). Not part of `spa`; Windows guests remain git-history / ROADMAP only.
 
+- **`examples/configuration_description.yml`**: the prose key dump. Descriptions live on the Pydantic fields and in generated [docs/config.md](docs/config.md). `spa features keys` no longer reports `in_description`.
+
 - **2.x `bin/` wrappers**: `init_spa_dir.sh`, `spa_env.sh`, `spa_doctor.sh`, `validate_splunk_config.sh`, `spash`, `splunk_config_aws.py`, and `splunk_config_licenses.py`. Operators use `spa`. `bin/spa_venv.sh` remains as the venv implementation (`spa venv`; contributors may still `source` it). `--lab` / `SPA_LAB_DIR` are gone (`--env` / `SPA_ENV_DIR`).
 
 - **vagrant-aws / gecko-aws** from `Vagrantfile`. Cloud is `terraform.aws`. A leftover top-level `aws:` block is inventory-only.
 
 ### Changed
+
+- **Catalogs are explicit `list` actions** ([#99](https://github.com/splunk/splunk-platform-automator/issues/99)): `spa features`, `spa hosts`, `spa run`, and `spa logs` no longer dump a catalog when the action is missing. Use `spa features list` / `search` / `show`, `spa hosts list`, `spa run list`, `spa logs list`, `spa init list`, and `spa aws list KIND`. The old `--list` and `--list-*` flags exit 2 and name the replacement. A missing action on `spa apps`, `spa environment`, or `spa aws`, and a missing required operand, names the legal command instead of argparse's generic required-argument text. Agent mode returns `{"ok":false,"schema_version":1,"error":"..."}` with no `data`. `spa --no-agent features schema --markdown` remains the human settings dump; agent-mode `features schema` exits 2. How to add the next command is in [docs/contributing.md](docs/contributing.md#adding-a-spa-command).
 
 - **`spa init --force` follows the packaging manifest** ([#91](https://github.com/splunk/splunk-platform-automator/issues/91)): a copied 2.x checkout is cleaned from `scripts/framework-files.txt` plus checkout-only leftovers, not a hand-maintained list. That removes framework paths that used to survive, including `pic/`, `.gitignore`, `VERSION`, `install.sh`, `setup_ansible_remote.txt`, and `.ansible/`. `.cursor/skills` is removed and other `.cursor/` children stay. Terraform `*.tf` files are relinked to `SPA_HOME`; config, inventory, Terraform state under `terraform/aws`, `.vagrant/`, vault files, a complete `.venv`, and an existing `saved_base_config_apps/` stay. The strip runs only while `ansible/` is still present. A later `spa init --force` refreshes `.spa.yml` and the module links and does not delete again. `spa init` does not create `saved_base_config_apps/` (Ansible creates it when baseconfig or serverclass save is on) and does not write a `.gitignore`. `spa init --from` copies state and leaves the old tree's framework files in place.
 
@@ -168,11 +172,10 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 - **Agent skills layout** — Canonical packages under `skills/spa/` ([Agent Skills](https://agentskills.io/specification.md) format); Cursor discovery via `.cursor/skills/` symlinks; [AGENTS.md](AGENTS.md) and [docs/contributing.md](docs/contributing.md#agent-skills) for cross-tool setup.
 
-- **Default AWS tag `SPADirName`** — Lab examples and [configuration_description.yml](examples/configuration_description.yml) include `SPADirName: "{{ playbook_dir | dirname | basename }}"` under `terraform.aws.tags` (SPA repo folder name on the controller).
+- **Default AWS tag `SPADirName`** — Lab examples include `SPADirName: "{{ playbook_dir | dirname | basename }}"` under `terraform.aws.tags` (SPA repo folder name on the controller).
 
 - `examples/splunk_config_terraform_aws.yml` — default AMI guidance aligned with RHEL 10 / latest-OS discovery.
 - [examples/single_node_itsi.yml](examples/single_node_itsi.yml) — ITSI search tier uses Java 21 (`java-21-openjdk` / `openjdk-21-jdk`).
-- [examples/configuration_description.yml](examples/configuration_description.yml) — expanded `terraform.aws` / `ssh_username` documentation; example `splunk_version` 10.4.0.
 - [tests/configs/2site-idxc_shc_mc_ds_sh_hf_uf_itsi_apps.yml](tests/configs/2site-idxc_shc_mc_ds_sh_hf_uf_itsi_apps.yml) — ITSI search hosts use `java-21-openjdk` on RHEL 10 (ITSI max Java 21).
 - [README.md](README.md) — example `splunk_version` 10.4.0; badge formatting cleanup.
 - OS guidance: **polkit** required on Amazon Linux and RHEL (`polkit`); **policykit-1** on Ubuntu (SPA policykit check fails on UF without it).
@@ -243,7 +246,7 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
   - New `os.ssh_keys` config option: list of local public key file paths to install into the Ansible login user's `authorized_keys`.
   - Can be set globally in the `os:` section or per host in `splunk_hosts[].os.ssh_keys`.
   - Standalone playbook `ansible/ssh_keys.yml` to deploy keys without a full site deployment.
-  - Documented in [configuration_description.yml](examples/configuration_description.yml) and [README.md](README.md).
+  - Documented in [README.md](README.md).
 
 - **Terraform AWS** – Optional `subnet_id` for VPC subnet placement:
   - New `terraform.aws.subnet_id` option in `splunk_config.yml` (global and per-host)

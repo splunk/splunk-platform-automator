@@ -156,7 +156,7 @@ def test_copy_help_shows_syntax_and_examples():
 
 def test_copy_without_destination_explains_syntax():
     result = run_spa(["hosts", "copy", "app.tgz"])
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert "source and a destination" in result.stderr
 
 

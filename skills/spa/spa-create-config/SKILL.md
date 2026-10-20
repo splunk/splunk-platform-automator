@@ -16,7 +16,6 @@ paths:
   - "examples/topologies/*.yml"
   - "examples/providers/*.yml"
   - "examples/catalog/features.yml"
-  - "examples/configuration_description.yml"
 ---
 
 # spa-create-config — splunk_config.yml (AWS Linux)
@@ -148,7 +147,7 @@ Ask scale-out vs scale-up; default **scale out** for Splunk.
 | Needs help | [sva-questionnaire.md](references/sva-questionnaire.md) then catalog `spa --json features search` |
 | Config test only | Minimal topology (`single_node` or `cm_2idxc_sh_uf`) |
 
-**Exit:** SVA code or lab compromise; topology id from `spa init --list` (not a mixed `_aws` file).
+**Exit:** SVA code or lab compromise; topology id from `spa init list` (not a mixed `_aws` file).
 
 ## Phase 2 — Sizing tier
 
@@ -174,12 +173,12 @@ Set global `os:` block, expected `ssh_username`, and **polkit** (`polkit` on AL/
 
 **With creds:** Run `spa aws` — see [aws-baseline.md](references/aws-baseline.md).
 
-1. Region (`--list-regions` or confirm)
+1. Region (`spa aws list regions` or confirm)
 2. AMI — if unknown, `--latest-ami --os <rhel|ubuntu|amazon_linux|debian>` or `--survey` → user picks from `recommended_amis` (preference: RHEL first)
 3. `ssh_username` (`--describe-ami`)
-4. Instance type (`--list-instance-types --family t3`; suggest `t3.medium` for config tests)
-5. Key pair (`--list-key-pairs`)
-6. Security groups (`--list-security-groups`)
+4. Instance type (`spa aws list instance-types --family t3`; suggest `t3.medium` for config tests)
+5. Key pair (`spa aws list key-pairs`)
+6. Security groups (`spa aws list security-groups`)
 7. Local: `ssh_private_key_file`, tags, volume size
 8. `--validate` before write
 
@@ -270,7 +269,7 @@ Use `spa --json features show splunk_defaults.splunk_license_server --keys` (or 
 4. Global `terraform.aws` already comes from `--provider aws`; add **`ssh_username`** / AMI from catalog + discovery.
 5. Matching global `os:` from selector `os` (not from the topology file).
 6. `splunk_defaults` (include `splunk_license_file` from Phase 6b when chosen).
-7. Cross-check snippets against `spa --json features show`; [configuration_description.yml](../../../examples/configuration_description.yml) is a pointer only.
+7. Cross-check snippets against `spa --json features show`.
 
 **Exit:** File written at target path.
 

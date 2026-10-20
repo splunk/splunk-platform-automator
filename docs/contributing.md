@@ -61,7 +61,7 @@ Windows guest operation is not currently a first-class SPA workflow. The histori
 
 `spa features` and [config.md](config.md) are generated. A new `splunk_config.yml` key is not listed until the Pydantic schema describes it and, when an operator must choose it, `examples/catalog/features.yml` groups it. Do not hand-edit `docs/config.md`.
 
-Read the code that honors the key before writing text: the field on `ansible/plugins/inventory/schema.py`, `defaults/*.yml`, role `default()` values, the inventory plugin, and templates. That behavior is the description. `examples/configuration_description.yml` is a pointer, not an input.
+Read the code that honors the key before writing text: the field on `ansible/plugins/inventory/schema.py`, `defaults/*.yml`, role `default()` values, the inventory plugin, and templates. That behavior is the description.
 
 ### Schema description
 
@@ -108,6 +108,19 @@ bin/spa features show SELECTOR --keys
 
 `tests/test_docs.py` requires the committed `docs/config.md` to match that command. If the `features` summary in `lib/spa/agent.py` changes, regenerate `docs/commands.md` with `bin/spa --no-agent agent schema --markdown` the same way. Release bump regenerates both; do not edit them by hand.
 
+## Adding a spa command
+
+Operator docs stay in the user guide. This is the command-authoring contract.
+
+1. Add one parser per action. Fixed action sets (`features`, `hosts`, `apps`, `aws list`) use required subparsers. A command whose operand is a free name (`run NAME`, `init ENV_DIR`, `logs RUN_ID`) keeps that positional and reserves the literal operand `list`. Do not add a hidden subcommand or rewrite argv.
+2. Put required operands and flags only on the action that accepts them. A catalog is `list`. Do not add `--list` or `--list-*`.
+3. Usage failures exit 2. Name the legal command in the error. Human mode writes that text to stderr and does not print a catalog. Agent mode (`--agent`, `--json`, or a detected agent) writes one compact JSON object on stdout, with an empty stderr: `{"ok":false,"schema_version":1,"error":"..."}`. Do not add `data` on failure. Runtime and provider failures stay exit 1. Explicit `--help` stays exit 0.
+4. Register the action in `COMMAND_SCHEMA` in `lib/spa/agent.py` in the same change: required positional names, action-specific flags, and one legal example. `spa agent schema` is how agents discover commands.
+5. Regenerate [commands.md](commands.md) with `bin/spa --no-agent agent schema --markdown`. Do not hand-edit it or [config.md](config.md).
+6. Extend `tests/test_spa_cli_contract.py` so the help surface and `COMMAND_SCHEMA` stay equal, list flags are not advertised on the parent, and a parent that requires an action rejects a bare call with the agent envelope above. Run `./tests/run_cli_tests.sh`. A parser change does not need an AWS or live-Splunk run. `./tests/run_local_tests.sh` is the broader local gate.
+
+Examples, help, errors, and schema descriptions never contain passwords, tokens, private keys, or certificates. Use `lookup('env', ...)`.
+
 ## Documentation
 
 - Well-known root files stay uppercase: `README.md`, `AGENTS.md`, `CHANGELOG.md`, `ROADMAP.md`, `RELEASE.md`.
@@ -115,4 +128,5 @@ bin/spa features show SELECTOR --keys
 - Commands are `spa`-first; raw backend commands belong only in implementation/test context.
 - Prefer links to `spa --help`, `spa features`, `spa apps`, schema, and upstream Splunk docs over duplicated reference tables.
 - New `splunk_config.yml` keys and `spa features` records follow [Adding a configuration feature](#adding-a-configuration-feature).
+- New `spa` commands follow [Adding a spa command](#adding-a-spa-command).
 - Never add credentials, private keys, certificates, or decrypted values to examples.

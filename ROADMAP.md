@@ -46,6 +46,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 
 - [x] Portable skills under [skills/spa/](skills/spa/) + Cursor `/spa-create-config` ([docs/contributing.md](docs/contributing.md#agent-skills))
 - [x] Agent-mode `spa`: auto-detect agent env, JSON envelope with `schema_version`, `spa agent schema`, `--agent` / `--no-agent`, `-y` for destructive ops, parse-error JSON
+- [x] Explicit `spa` actions: a catalog is `spa COMMAND list`; a missing action or a retired `--list` / `--list-*` flag exits 2 and names the legal command — [#99](https://github.com/splunk/splunk-platform-automator/issues/99)
 - [x] `spa.api` backend session (`open_session` / `LocalSpaSession`) for the CLI and a future GUI; optional remote daemon later; skills stay on `spa`. See the [controller architecture](docs/contributing.md#controller-architecture).
 - [x] Fold SSH/SCP into `spa hosts` (`list` / `ssh` / `copy`); `spa shell` / `spa sh` remain SSH aliases (no `spa shell -l`)
 - [x] Map top-level [ansible/](ansible/) playbooks to `spa run` (and named `provision` / `deploy` / `destroy`) — every playbook is a main entry point; do not require raw `ansible-playbook` for day-to-day use. Discover with `spa run --list`; inspect with `spa run NAME --help`.
@@ -80,6 +81,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 
 - [x] Slim README + structured user guide + rewrite [AGENTS.md](AGENTS.md) — [#61](https://github.com/splunk/splunk-platform-automator/issues/61)
 - [x] Generated [docs/config.md](docs/config.md) of every `splunk_config.yml` key (`spa features schema --markdown`), with code-derived descriptions and omit-safe defaults — [#86](https://github.com/splunk/splunk-platform-automator/issues/86)
+- [ ] Developer architecture and contributor standards: module map, command and provider extension points, and test layers. Link the existing operator docs and command rules; do not restate them. — [#101](https://github.com/splunk/splunk-platform-automator/issues/101)
 - [ ] Production-ready setup: document must-settings (vs lab defaults); teach them in a skill/catalog; enforce with `spa validate` profile or schema (`deployment_intent: production`). Lab validate stays permissive. Not capacity planning. Secrets/TLS/RF-SF/licenses/network — never print secrets. — [#80](https://github.com/splunk/splunk-platform-automator/issues/80)
 - [ ] Docs / operator CLI follow-ups (not in #61): VirtualBox snapshots / reload after Vagrantfile changes (`spa snapshot` / `spa reload`); extra forwarded ports, `ssh-config`, VirtualBox GUI; Windows guests through `spa` (operator path is Linux AWS/VirtualBox; historical box notes are in [contributing](docs/contributing.md#windows-box-maintenance)). Do not document raw `vagrant` / `terraform` / `ansible-playbook` as the operator interface.
 - [ ] `spa apps versions` (list Splunkbase versions); `spa apps download --version` already exists
