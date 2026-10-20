@@ -11,6 +11,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Added
 
+- **Contributor architecture guide** ([#101](https://github.com/splunk/splunk-platform-automator/issues/101)): [docs/architecture.md](docs/architecture.md) maps the CLI/session boundary, providers, configuration and Ansible data flow, playbook and role contracts, current versus future controller architecture, enforced standards, test layers, and the feature development lifecycle. It links existing procedures instead of duplicating operator documentation.
+
 - **Generated `docs/config.md`** ([#86](https://github.com/splunk/splunk-platform-automator/issues/86)): `spa --no-agent features schema --markdown` dumps every `splunk_config.yml` key (path, type, constraints, code-derived description, and an omit-safe `default` when one exists). Descriptions come from the Pydantic field, not a second prose file. `spa features list`, `search`, and `show` stay the concise lookup and list only schema-backed settings plus the SVA topologies and implemented providers. Release bump regenerates the file the same way as `docs/commands.md`. How to add the next key is in [docs/contributing.md](docs/contributing.md#adding-a-configuration-feature).
 
 ### Removed
