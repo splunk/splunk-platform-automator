@@ -9,10 +9,9 @@
 *.zip
 # Ansible
 .ansible
+.ansible_tmp/
 *.retry
 ansible/verification/output/
-tests/configs/app_scope/output/*.json
-tests/configs/app_scope/output/.ansible_tmp
 # Vault password (do not commit)
 .vault_pass.txt
 .vault_pass
@@ -47,6 +46,9 @@ tests/configs/app_scope/output/.ansible_tmp
 tests/.venv
 tests/.ansible_tmp
 tests/.collections
+tests/configs/app_scope/output/*.json
+tests/configs/app_scope/output/.ansible_tmp
+.pytest_cache/
 # Shared venv (bin/spa_venv.sh) and its collections
 /.venv
 /.collections
