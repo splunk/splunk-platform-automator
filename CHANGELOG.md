@@ -11,11 +11,15 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Added
 
+- **`spa skills install` / `spa skills remove`** ([#55](https://github.com/splunk/splunk-platform-automator/issues/55)): link the packages under `$SPA_HOME/skills/spa/` into the user IDE skill directory. Platform resolution follows cup: an explicit name, a comma-separated list, or `all`, otherwise `SPA_SKILLS_PLATFORMS`, otherwise one detected IDE. Platforms are `claude-code`, `cursor`, `codex`, `opencode`, `windsurf`, `gemini-code`, `pi`, and `antigravity`. Remove deletes only those package names and requires `--yes`.
+
 - **Contributor architecture guide** ([#101](https://github.com/splunk/splunk-platform-automator/issues/101)): [docs/architecture.md](docs/architecture.md) maps the CLI/session boundary, providers, configuration and Ansible data flow, playbook and role contracts, current versus future controller architecture, enforced standards, test layers, and the feature development lifecycle. It links existing procedures instead of duplicating operator documentation.
 
 - **Generated `docs/config.md`** ([#86](https://github.com/splunk/splunk-platform-automator/issues/86)): `spa --no-agent features schema --markdown` dumps every `splunk_config.yml` key (path, type, constraints, code-derived description, and an omit-safe `default` when one exists). Descriptions come from the Pydantic field, not a second prose file. `spa features list`, `search`, and `show` stay the concise lookup and list only schema-backed settings plus the SVA topologies and implemented providers. Release bump regenerates the file the same way as `docs/commands.md`. How to add the next key is in [docs/contributing.md](docs/contributing.md#adding-a-configuration-feature).
 
 ### Removed
+
+- **Repo `.cursor/skills` links**: skill packages are installed into the user IDE directory with `spa skills install`. This checkout no longer ships those symlinks, and the framework tarball does not list the path. `spa init --force` still removes a leftover `.cursor/skills` directory from an older copied tree.
 
 - **`setup_ansible_remote.txt`**: unused WinRM bootstrap (Ansible `devel` script + unencrypted WinRM). Not part of `spa`; Windows guests remain git-history / ROADMAP only.
 

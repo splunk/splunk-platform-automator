@@ -29,7 +29,7 @@ Canonical skills live only under `skills/spa/`:
 | Find and configure Splunkbase apps | `spa-apps` |
 | Add app-scope test scenarios | `spa-add-test-scenario` |
 
-Cursor symlinks under `.cursor/skills/` point to those directories. Claude Code and generic agents can point directly at each `SKILL.md`; do not duplicate skill content. The index and setup commands are in [`skills/spa/README.md`](../skills/spa/README.md).
+Cursor symlinks are not part of this repo. Install the packages into the user IDE directory with `spa skills install` (see [`skills/spa/README.md`](../skills/spa/README.md)). Do not duplicate skill content.
 
 Agents invoke `bin/spa`, never import `spa.api`, and follow [AGENTS.md](../AGENTS.md).
 

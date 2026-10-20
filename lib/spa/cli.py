@@ -18,6 +18,7 @@ from spa.executil import (
     venv_setup_message,
 )
 from spa.paths import env_dir_required_error, resolve_spa_paths
+from spa.skills import supported_platform_list
 
 
 # Commands whose flags belong to the wrapped tool, not to spa (spa shell idx1,
@@ -26,7 +27,7 @@ from spa.paths import env_dir_required_error, resolve_spa_paths
 NATIVE_FLAG_COMMANDS = ("shell", "sh", "aws", "licenses", "lic")
 # These must keep working without a venv: they are how an operator inspects or
 # builds one. Every other command reads YAML or runs Ansible, so it is gated.
-VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs"})
+VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills"})
 GLOBAL_OPTS_WITH_VALUE = ("--start-dir", "--env")
 HOSTS_FLAG_HELP = "only these hosts (names or roles from this env)"
 AGENT_EXAMPLES = """examples:
@@ -373,6 +374,18 @@ ENVIRONMENT_NEEDS_ACTION = (
     "Set:     spa environment set --default NAME\n"
     "Remove:  spa environment remove NAME --yes\n"
     "Export:  spa environment --export"
+)
+_SKILLS_PLATFORMS = "%s, or all" % supported_platform_list()
+SKILLS_NEEDS_ACTION = (
+    "spa skills needs an action.\n"
+    "Install:    spa skills install [PLATFORM]\n"
+    "Remove:     spa skills remove [PLATFORM] --yes\n"
+    "Platforms:  %s.\n"
+    "Several:    spa skills install cursor,claude" % _SKILLS_PLATFORMS
+)
+_SKILLS_PLATFORM_HELP = (
+    "One IDE or a comma-separated list: %s. Omit to use SPA_SKILLS_PLATFORMS or auto-detect."
+    % _SKILLS_PLATFORMS
 )
 _MISSING_OPERAND = {
     ("spa features search", "query"): "spa features search needs QUERY.\nExample: spa features search QUERY",
@@ -733,6 +746,29 @@ def _run_environment(args, session, paths, as_agent: bool, env_parser) -> int:
     return 0
 
 
+def _run_skills(args, session, as_agent: bool) -> int:
+    action = _action(args, "skills_cmd")
+    if not action:
+        return _reject(SKILLS_NEEDS_ACTION, as_agent)
+    result = session.skills(
+        action=action,
+        platform=getattr(args, "platform", None),
+        name=getattr(args, "skills_name", None),
+        all_packages=bool(getattr(args, "skills_all", False)),
+        confirm=bool(getattr(args, "yes", False)),
+        agent=as_agent,
+    )
+    if as_agent:
+        return _emit_result(result, True)
+    if not result.ok:
+        print(result.error or "skills failed", file=sys.stderr)
+        return result.code
+    from spa.skills import format_skills_text
+
+    sys.stdout.write(format_skills_text(result.data or {}))
+    return 0
+
+
 def _error_agent_mode(argv: List[str]) -> bool:
     """Agent mode for a failure raised outside normal command dispatch."""
     head, _ = _split_passthrough(argv)
@@ -1044,6 +1080,61 @@ def _run(argv: Sequence[str]) -> int:
         help="Include legacy splunk_config_aws compatibility checks",
     )
     _add_env_selector(p_val)
+
+    p_skills = _add_command(
+        sub,
+        "skills",
+        aliases=["sk"],
+        help="Install or remove SPA agent skills in user IDE directories (alias: sk)",
+        epilog=SKILLS_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    skills_sub = p_skills.add_subparsers(dest="skills_cmd", metavar="ACTION")
+    p_skills_install = _add_action(
+        skills_sub,
+        "install",
+        help="Link SPA skills into a user IDE skill directory",
+        usage="spa skills install [PLATFORM]",
+    )
+    _add_mode_flags(p_skills_install)
+    p_skills_install.add_argument(
+        "platform",
+        nargs="?",
+        help=_SKILLS_PLATFORM_HELP,
+    )
+    p_skills_install.add_argument("--name", dest="skills_name", help="Install one package")
+    p_skills_install.add_argument(
+        "--all",
+        dest="skills_all",
+        action="store_true",
+        help="Install every SPA skill package (default)",
+    )
+    p_skills_remove = _add_action(
+        skills_sub,
+        "remove",
+        help="Remove SPA skills from a user IDE skill directory",
+        usage="spa skills remove [PLATFORM] --yes",
+    )
+    _add_mode_flags(p_skills_remove)
+    p_skills_remove.add_argument(
+        "platform",
+        nargs="?",
+        help=_SKILLS_PLATFORM_HELP,
+    )
+    p_skills_remove.add_argument("--name", dest="skills_name", help="Remove one package")
+    p_skills_remove.add_argument(
+        "--all",
+        dest="skills_all",
+        action="store_true",
+        help="Remove every SPA skill package (default)",
+    )
+    p_skills_remove.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm removing SPA skills (required in agent mode)",
+    )
 
     p_doc = _add_command(sub, "doctor", aliases=["doc"], help="Host prerequisite checks")
     p_doc.add_argument("--spa-home", metavar="DIR", help="Framework directory to inspect")
@@ -1394,7 +1485,7 @@ def _run(argv: Sequence[str]) -> int:
     apps_cmd = getattr(args, "apps_cmd", None)
     apps_without_env = args.command == "apps" and apps_cmd in {"search", "snippet"}
     if (
-        args.command not in {"init", "agent", "environment", "doctor", "features", "venv"}
+        args.command not in {"init", "agent", "environment", "doctor", "features", "venv", "skills"}
         and not native_help_only
         and not apps_without_env
     ):
@@ -1547,6 +1638,9 @@ def _run(argv: Sequence[str]) -> int:
         for warning in validation.get("warnings") or []:
             print("License warning: %s" % warning, file=sys.stderr)
         return result.code
+
+    if args.command == "skills":
+        return _run_skills(args, session, as_agent)
 
     if args.command == "doctor":
         from spa.doctor import format_doctor_text

@@ -16,7 +16,6 @@ from typing import Mapping
 _ACTIONS = {
     ".gitignore": "strip",
     ".agent": "strip",
-    ".cursor/skills": "strip_entry",
     "AGENTS.md": "strip",
     "CHANGELOG.md": "strip",
     "LICENSE": "strip",
@@ -56,6 +55,7 @@ CHECKOUT_ONLY_LEFTOVERS = (
     ".gitmodules",
     "setup_ansible_remote.txt",
     ".ansible",
+    ".cursor/skills",
 )
 
 _RETAIN_NAMES = (

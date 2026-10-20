@@ -147,6 +147,45 @@ COMMAND_SCHEMA = {
         },
         {"name": "doctor", "summary": "Host prerequisite checks"},
         {
+            "name": "skills",
+            "summary": "Install or remove SPA agent skills from $SPA_HOME/skills/spa/ into user IDE directories",
+            "example": "spa skills install",
+        },
+        {
+            "name": "skills install",
+            "summary": "Link SPA skill packages into the user IDE skill directory. Platform defaults to SPA_SKILLS_PLATFORMS, then auto-detect.",
+            "positionals": [
+                {
+                    "name": "PLATFORM",
+                    "required": False,
+                    "help": "One platform or a comma-separated list (cursor,claude), or all",
+                },
+            ],
+            "flags": [
+                {"long": "--name", "help": "Install one package"},
+                {"long": "--all", "help": "Install every SPA skill package (default)"},
+            ],
+            "example": "spa skills install cursor",
+        },
+        {
+            "name": "skills remove",
+            "summary": "Remove SPA skill packages from the user IDE skill directory. Other skill names are left alone.",
+            "requires_confirmation": True,
+            "positionals": [
+                {
+                    "name": "PLATFORM",
+                    "required": False,
+                    "help": "One platform or a comma-separated list (cursor,claude), or all",
+                },
+            ],
+            "flags": [
+                {"long": "--name", "help": "Remove one package"},
+                {"long": "--all", "help": "Remove every SPA skill package (default)"},
+                {"long": "--yes", "short": "-y", "help": "Confirm removing SPA skills"},
+            ],
+            "example": "spa skills remove --all --yes",
+        },
+        {
             "name": "venv",
             "summary": "Inspect or manage the shared SPA_HOME/.venv (default) or this environment's .venv",
             "requires_confirmation": True,

@@ -5,7 +5,7 @@ description: Load first for Splunk Platform Automator — Software, registered e
 
 # spa skill
 
-Product entry for SPA (same role as cup’s main skill). **Load `/spa` first.** A later `spa skills install` ([#55](https://github.com/splunk/splunk-platform-automator/issues/55)) should treat this package as the default entry; do not invent install/remove here.
+Product entry for SPA (same role as cup’s main skill). **Load `/spa` first.** `spa skills install` links this package into the user IDE skill directory.
 
 ## When to use
 

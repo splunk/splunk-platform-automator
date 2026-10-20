@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 from spa.agent import format_schema_markdown
@@ -176,9 +177,12 @@ class TestSpaSkill:
         text = path.read_text(encoding="utf-8")
         assert text.startswith("---\n")
         assert "\nname: spa\n" in text.split("---", 2)[1]
-        cursor = PROJECT_ROOT / ".cursor" / "skills" / "spa"
-        assert cursor.is_symlink()
-        assert cursor.resolve() == path.parent.resolve()
+        tracked = subprocess.check_output(
+            ["git", "ls-files", ".cursor/skills"],
+            cwd=str(PROJECT_ROOT),
+            text=True,
+        )
+        assert tracked.strip() == ""
 
     def test_create_config_skill_uses_feature_discovery_loop(self):
         skill = PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md"
