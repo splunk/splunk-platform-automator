@@ -59,14 +59,15 @@ Canonical: `skills/spa/`. When to load:
 
 Cursor: `/spa`, `/spa-create-config`, `/spa-apps`, `/spa-add-test-scenario`. See [docs/contributing.md](docs/contributing.md#agent-skills).
 
-Backend vs GUI: [docs/contributing.md](docs/contributing.md#controller-architecture).
+Backend vs GUI: [docs/architecture.md](docs/architecture.md#controller-architecture).
 
 ## Changing spa
 
+- Feature lifecycle: follow [Feature development lifecycle](docs/architecture.md#feature-development-lifecycle). Record the base branch when creating the feature branch; never assume `distribution` or `master`. Do not commit until the user explicitly authorizes it. When the user says the feature is complete, concluded, or ready to ship, run the gate, commit authorized changes, open the pull request against that recorded base, fix CI until green, merge, verify the base-branch pipeline, close the issue, and clean up both feature branches without requiring the user to enumerate those steps.
 - New command: [Adding a spa command](docs/contributing.md#adding-a-spa-command). One parser per action. A catalog is `list`. Usage errors exit 2 and name the legal command. Human text goes to stderr. Agent mode (`--agent`, `--json`, or a detected agent) returns one JSON object `{"ok":false,"schema_version":1,"error":"..."}` and does not include `data`. Register the action in `COMMAND_SCHEMA` in the same change.
 - New config key: [Adding a configuration feature](docs/contributing.md#adding-a-configuration-feature).
 - [docs/commands.md](docs/commands.md) and [docs/config.md](docs/config.md) are generated. Do not hand-edit them. Regenerate `docs/commands.md` with `spa --no-agent agent schema --markdown` and `docs/config.md` with `spa --no-agent features schema --markdown`. [tests/test_docs.py](tests/test_docs.py) fails when they drift.
 - CLI change gate: `./tests/run_cli_tests.sh`. Broader local gate: `./tests/run_local_tests.sh`. A parser change does not need an AWS run.
-- Commands return `CommandResult`. Confirmation stays in the session. Agents call `bin/spa` and do not import `spa.api`. Do not add a second operator CLI or a remote controller ([controller architecture](docs/contributing.md#controller-architecture)).
+- Commands return `CommandResult`. Confirmation stays in the session. Agents call `bin/spa` and do not import `spa.api`. Do not add a second operator CLI or a remote controller ([controller architecture](docs/architecture.md#controller-architecture)).
 - Skills live only under `skills/spa/`. `.cursor/skills/` entries are symlinks. Do not copy skill text.
 - Examples, help, errors, and schema descriptions never contain passwords, tokens, private keys, or certificates. Use `lookup('env', ...)`.

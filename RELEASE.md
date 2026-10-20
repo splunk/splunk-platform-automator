@@ -55,7 +55,7 @@ cat VERSION
 
 ## CI
 
-On every pull request and every push to `master`, `.github/workflows/ci.yml` runs:
+On every pull request, and on every push to a branch listed under `on.push.branches` in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), that workflow runs:
 
 - `bash -n` on `bin/*.sh`, `tests/run_*.sh`, `scripts/*.sh`
 - `./tests/run_local_tests.sh` (`pytest -m local`)

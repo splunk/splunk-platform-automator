@@ -17,6 +17,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 CANONICAL_DOCS = {
     "apps.md",
+    "architecture.md",
     "aws.md",
     "commands.md",
     "config.md",
@@ -80,9 +81,18 @@ def _link_target(raw: str) -> str | None:
 def test_agents_md_points_at_command_authoring():
     text = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
     assert "docs/contributing.md#adding-a-spa-command" in text
+    assert "docs/architecture.md#feature-development-lifecycle" in text
+    assert "docs/architecture.md#controller-architecture" in text
     assert "./tests/run_cli_tests.sh" in text
     assert "docs/commands.md" in text
     assert "generated" in text.lower()
+
+
+def test_architecture_documents_playbook_resolution_contract():
+    text = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
+    assert "`resolve()` and `resolve_named()` enforce" in text
+    assert "Absolute paths are accepted only inside those approved roots" in text
+    assert "`verification/<stem>`" in text
 
 
 class TestCanonicalDocs:

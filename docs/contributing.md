@@ -2,6 +2,8 @@
 
 Operators should start with the [user guide](user-guide.md). The generated CLI catalog is [commands.md](commands.md) (`spa --no-agent agent schema --markdown`). The generated settings list is [config.md](config.md) (`spa --no-agent features schema --markdown`). This page collects framework-development topics that should not expand the operator documentation.
 
+Start framework changes with the [architecture and contributor standards](architecture.md), including module and Ansible boundaries, extension contracts, test layers, controller direction, and the feature development lifecycle. The sections below contain the detailed procedures linked from that guide.
+
 ## Development setup
 
 Clone the repository as `SPA_HOME`, then create or activate the shared environment:
@@ -30,14 +32,6 @@ Canonical skills live only under `skills/spa/`:
 Cursor symlinks under `.cursor/skills/` point to those directories. Claude Code and generic agents can point directly at each `SKILL.md`; do not duplicate skill content. The index and setup commands are in [`skills/spa/README.md`](../skills/spa/README.md).
 
 Agents invoke `bin/spa`, never import `spa.api`, and follow [AGENTS.md](../AGENTS.md).
-
-## Controller architecture
-
-The current CLI opens a local `LocalSpaSession` behind `spa.api.open_session`. Commands return a JSON-serializable `CommandResult`; the CLI renderer owns human/agent presentation. Skills and automation still call the binary so they exercise the same validation, confirmation, and envelope contracts.
-
-A future GUI or remote controller may reuse the session protocol. Remote transport is intentionally not implemented. Before remote access is enabled it must provide authentication, authorization, TLS, secret redaction, audit events, bounded progress streams, cancellation, and version negotiation.
-
-Confirmation belongs in the session boundary, not a UI renderer. Mutating operations require explicit confirmation; agent/GUI clients never answer an interactive prompt.
 
 ## Framework group_vars
 
