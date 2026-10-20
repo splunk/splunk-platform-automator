@@ -818,6 +818,13 @@ def _run(argv: Sequence[str]) -> int:
     class AgentAwareArgumentParser(argparse.ArgumentParser):
         """Keep parse failures machine-readable when an agent invokes spa."""
 
+        def _get_nargs_pattern(self, action):
+            # Python 3.11 treats argparse.REMAINDER as one-or-more. 3.12+ gathers
+            # whatever is left, including nothing. spa hosts ssh NAME depends on that.
+            if action.nargs == argparse.REMAINDER:
+                return "(.*)"
+            return super()._get_nargs_pattern(action)
+
         def error(self, message):
             # Python 3.14 returns a subparser's unknown flags to this top-level parser.
             if "unrecognized arguments" in message:
