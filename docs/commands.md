@@ -106,6 +106,57 @@ Validate splunk_config.yml (schema, Software/baseconfig/local apps, inventory)
 
 Host prerequisite checks
 
+## `skills`
+
+Install or remove SPA agent skills from $SPA_HOME/skills/spa/ into user IDE directories
+
+Example:
+
+```bash
+spa skills install
+```
+
+## `skills install`
+
+Link SPA skill packages into the user IDE skill directory. Platform defaults to SPA_SKILLS_PLATFORMS, then auto-detect.
+
+| Flag | Description |
+| --- | --- |
+| `--name` | Install one package |
+| `--all` | Install every SPA skill package (default) |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `PLATFORM` | no | One platform or a comma-separated list (cursor,claude), or all |
+
+Example:
+
+```bash
+spa skills install cursor
+```
+
+## `skills remove`
+
+Remove SPA skill packages from the user IDE skill directory. Other skill names are left alone.
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `--name` | Remove one package |
+| `--all` | Remove every SPA skill package (default) |
+| `-y`, `--yes` | Confirm removing SPA skills |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `PLATFORM` | no | One platform or a comma-separated list (cursor,claude), or all |
+
+Example:
+
+```bash
+spa skills remove --all --yes
+```
+
 ## `venv`
 
 Inspect or manage the shared SPA_HOME/.venv (default) or this environment's .venv

@@ -60,8 +60,9 @@ __pycache__/
 *$py.class
 # VSCode
 .vscode
-# Cursor local plans (keep .cursor/skills in the tree)
+# Cursor local plans and skills (install skills with spa skills install)
 .cursor/plans/
+.cursor/skills/
 # Local agent working notes
 .superpowers/
 # Graphify is optional; keep generated graph and the Cursor rule local

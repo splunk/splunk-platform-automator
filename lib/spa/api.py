@@ -100,6 +100,16 @@ class SpaSession(Protocol):
         strict: bool = False,
     ) -> CommandResult: ...
 
+    def skills(
+        self,
+        action: str,
+        platform: Optional[str] = None,
+        name: Optional[str] = None,
+        all_packages: bool = False,
+        confirm: bool = False,
+        agent: bool = False,
+    ) -> CommandResult: ...
+
     def venv(
         self,
         action: str = "path",
@@ -596,6 +606,54 @@ class LocalSpaSession:
             virtualbox=virtualbox,
             strict=strict,
         )
+
+    def skills(
+        self,
+        action: str,
+        platform: Optional[str] = None,
+        name: Optional[str] = None,
+        all_packages: bool = False,
+        confirm: bool = False,
+        agent: bool = False,
+    ) -> CommandResult:
+        import os
+        from pathlib import Path
+
+        from spa.paths import user_spa_config_dir
+        from spa.skills import SkillsError, install_skills, remove_skills
+
+        if action == "remove":
+            blocked = self._confirm_gate(
+                "spa skills remove",
+                confirm=confirm,
+                agent=agent,
+                risk="skills_remove",
+            )
+            if blocked:
+                return blocked
+        elif action != "install":
+            return CommandResult(
+                ok=False,
+                error="spa skills needs an action.\nInstall:  spa skills install [PLATFORM]\nRemove:   spa skills remove [PLATFORM] --yes",
+                code=2,
+            )
+        source = self.paths.spa_home / "skills" / "spa"
+        home = Path(os.environ.get("HOME") or str(Path.home()))
+        config_dir = user_spa_config_dir(os.environ)
+        runner = remove_skills if action == "remove" else install_skills
+        try:
+            data = runner(
+                source=source,
+                home=home,
+                platform=platform,
+                name=name,
+                all_packages=all_packages,
+                environ=os.environ,
+                config_dir=config_dir,
+            )
+        except SkillsError as exc:
+            return CommandResult(ok=False, error=str(exc), code=exc.code)
+        return CommandResult(ok=True, data=data)
 
     def venv(
         self,

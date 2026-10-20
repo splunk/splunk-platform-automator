@@ -2,7 +2,6 @@
 # One path per line, relative to SPA_HOME. Comments and blanks ignored.
 .gitignore
 .agent
-.cursor/skills
 AGENTS.md
 CHANGELOG.md
 LICENSE

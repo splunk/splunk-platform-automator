@@ -57,7 +57,7 @@ Canonical: `skills/spa/`. When to load:
 | [spa-apps](skills/spa/spa-apps/SKILL.md) | Splunkbase search / snippet / download |
 | [spa-add-test-scenario](skills/spa/spa-add-test-scenario/SKILL.md) | App-scope tests |
 
-Cursor: `/spa`, `/spa-create-config`, `/spa-apps`, `/spa-add-test-scenario`. See [docs/contributing.md](docs/contributing.md#agent-skills).
+Cursor: `/spa`, `/spa-create-config`, `/spa-apps`, `/spa-add-test-scenario` after `spa skills install`. See [docs/contributing.md](docs/contributing.md#agent-skills).
 
 Backend vs GUI: [docs/architecture.md](docs/architecture.md#controller-architecture).
 
@@ -69,5 +69,5 @@ Backend vs GUI: [docs/architecture.md](docs/architecture.md#controller-architect
 - [docs/commands.md](docs/commands.md) and [docs/config.md](docs/config.md) are generated. Do not hand-edit them. Regenerate `docs/commands.md` with `spa --no-agent agent schema --markdown` and `docs/config.md` with `spa --no-agent features schema --markdown`. [tests/test_docs.py](tests/test_docs.py) fails when they drift.
 - CLI change gate: `./tests/run_cli_tests.sh`. Broader local gate: `./tests/run_local_tests.sh`. A parser change does not need an AWS run.
 - Commands return `CommandResult`. Confirmation stays in the session. Agents call `bin/spa` and do not import `spa.api`. Do not add a second operator CLI or a remote controller ([controller architecture](docs/architecture.md#controller-architecture)).
-- Skills live only under `skills/spa/`. `.cursor/skills/` entries are symlinks. Do not copy skill text.
+- Skills live only under `skills/spa/`. Install them with `spa skills install`. Do not copy skill text into this repo.
 - Examples, help, errors, and schema descriptions never contain passwords, tokens, private keys, or certificates. Use `lookup('env', ...)`.
