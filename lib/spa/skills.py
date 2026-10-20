@@ -15,8 +15,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-import yaml
-
 
 class SkillsError(Exception):
     """Usage or detection failure. ``code`` 2 is a usage error."""
@@ -416,18 +414,27 @@ def _skills_yml(config_dir: Optional[Path], environ: Dict[str, str]) -> Path:
 
 
 def _load_copies(path: Path) -> set:
+    """Read ``copies:`` without PyYAML. ``spa`` must import before a venv exists."""
     if not path.is_file():
         return set()
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError):
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
         return set()
-    if not isinstance(data, dict):
-        return set()
-    items = data.get("copies") or []
-    if not isinstance(items, list):
-        return set()
-    return {str(item) for item in items if item}
+    copies = set()
+    in_copies = False
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not raw[:1].isspace() and not stripped.startswith("-"):
+            in_copies = stripped.startswith("copies:")
+            continue
+        if in_copies and stripped.startswith("-"):
+            value = _unquote_copy(stripped[1:].strip())
+            if value:
+                copies.add(value)
+    return copies
 
 
 def _save_copies(path: Path, copies: set) -> None:
@@ -436,8 +443,18 @@ def _save_copies(path: Path, copies: set) -> None:
             path.unlink()
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "copies": sorted(copies),
-    }
-    text = yaml.safe_dump(payload, sort_keys=False)
-    path.write_text("# SPA skill copies. Not secrets.\n" + text, encoding="utf-8")
+    lines = ["# SPA skill copies. Not secrets.", "copies:"]
+    for item in sorted(copies):
+        lines.append("- %s" % _quote_copy(item))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _quote_copy(value: str) -> str:
+    return '"%s"' % value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _unquote_copy(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+        inner = value[1:-1]
+        return inner.replace('\\"', '"').replace("\\\\", "\\")
+    return value
