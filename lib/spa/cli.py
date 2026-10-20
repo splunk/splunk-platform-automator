@@ -33,7 +33,7 @@ AGENT_EXAMPLES = """examples:
   spa agent schema       command schema (name, summary, flags, requires_confirmation)
   spa agent              same as spa agent schema
   spa --no-agent agent schema --markdown  regenerate docs/commands.md
-  spa --json run --list  playbook catalog, incl. per-playbook requires_confirmation
+  spa --json run list    playbook catalog, incl. per-playbook requires_confirmation
 
 Commands whose schema entry sets requires_confirmation need -y/--yes in agent
 mode; agents never answer an interactive prompt.
@@ -144,7 +144,7 @@ def _run_help_target(head: Sequence[str]) -> Optional[str]:
     cursor = 0
     while cursor < len(rest):
         token = rest[cursor]
-        if token in help_flags or token == "--list":
+        if token in help_flags:
             cursor += 1
             continue
         if token in skip_run_value:
@@ -155,23 +155,73 @@ def _run_help_target(head: Sequence[str]) -> Optional[str]:
             continue
         names.append(token)
         cursor += 1
+    if names == ["list"]:
+        return None
     if names:
         return names[0]
     return ""
 
 
+RUN_NEEDS_PLAYBOOK = (
+    "spa run needs a playbook or list.\n"
+    "Catalog:   spa run list\n"
+    "Describe:  spa run NAME --help\n"
+    "Run:       spa run NAME ..."
+)
+HOSTS_NEEDS_ACTION = (
+    "spa hosts needs an action.\n"
+    "List hosts: spa hosts list [--status]\n"
+    "SSH:        spa hosts ssh NAME\n"
+    "Copy:       spa hosts copy SRC DST"
+)
+LOGS_NEEDS_RUN = (
+    "spa logs needs a run.\n"
+    "Index:    spa logs list\n"
+    "One run:  spa logs RUN_ID\n"
+    "Latest:   spa logs --last"
+)
+
+
+def _retired_catalog_flag(head: Sequence[str]) -> Optional[str]:
+    """Rejection for a removed --list catalog flag, including next to --help."""
+    saw_run = False
+    saw_init = False
+    saw_list = False
+    index = 0
+    tokens = list(head)
+    while index < len(tokens):
+        token = tokens[index]
+        if token in GLOBAL_OPTS_WITH_VALUE or token in {"--dir", "--hosts", "--apps-playbook", "--name", "--env-dir", "--example", "--provider", "--from"}:
+            index += 2
+            continue
+        if token == "run":
+            saw_run = True
+        elif token == "init":
+            saw_init = True
+        elif token == "--list":
+            saw_list = True
+        index += 1
+    if not saw_list:
+        return None
+    if saw_run:
+        return "Listing playbooks is: spa run list"
+    if saw_init:
+        return "Listing examples is: spa init list"
+    return None
+
+
 def _print_run_usage() -> None:
-    print("usage: spa run [-h] [--list] [--dir DIR] [--hosts NAME] [--apps-playbook STEM] [--ansible-output] [-v] [-y] [NAME]")
+    print("usage: spa run [-h] [--dir DIR] [--hosts NAME] [--apps-playbook STEM] [--ansible-output] [-v] [-y] [NAME]")
     print()
     print("Run a playbook by stem, or list/describe playbooks without executing Ansible.")
     print()
-    print("  spa run --list              catalog (name — summary)")
+    print("  spa run list                catalog (name — summary)")
     print("  spa run NAME --help         description, risk, inputs, examples")
     print("  spa run NAME [-y] [--hosts NAME] [--ansible-output] [-v] [-- ansible-playbook args]")
     print("  spa run splunk_apps_playbook_run --apps-playbook STEM|PATH --hosts ROLE --yes")
     print()
     print("Mutating playbooks need --yes in agent mode (see requires_confirmation).")
-    print("Discover first with spa --json run --list, then spa run NAME --help.")
+    print("Discover first with spa --json run list, then spa run NAME --help.")
 
 
 def _print_playbook_help(data: dict) -> None:
@@ -283,6 +333,74 @@ def _action(args, dest: str):
     return getattr(args, "canonical_action", None) or getattr(args, dest, None)
 
 
+def _reject(message: str, as_agent: bool) -> int:
+    """Usage failure: human text on stderr, one agent JSON error, no catalog payload."""
+    emit(False, error=message, as_agent=as_agent)
+    return 2
+
+
+FEATURES_NEEDS_ACTION = (
+    "spa features needs an action.\n"
+    "Look up a setting: spa features search QUERY\n"
+    "Then:              spa features show SELECTOR [--keys]\n"
+    "Full catalog:      spa features list"
+)
+FEATURES_SCHEMA_NEEDS_MARKDOWN = (
+    "spa features schema needs --markdown.\n"
+    "Look up one setting with: spa features show SELECTOR\n"
+    "Docs dump: spa features schema --markdown"
+)
+FEATURES_SCHEMA_NO_PATH = (
+    "spa features schema does not take a path.\n"
+    "Look up one setting with: spa features show PATH\n"
+    "Docs dump: spa features schema --markdown"
+)
+FEATURES_LIST_NO_ARG = (
+    "spa features list does not take an argument.\n"
+    "Full catalog: spa features list"
+)
+FEATURES_KEYS_NO_ARG = "spa features keys does not take an argument."
+APPS_NEEDS_ACTION = (
+    "spa apps needs an action.\n"
+    "Search:    spa apps search QUERY\n"
+    "Snippet:   spa apps snippet APP_ID\n"
+    "Download:  spa apps download APP_ID --yes"
+)
+ENVIRONMENT_NEEDS_ACTION = (
+    "spa environment needs an action.\n"
+    "List:    spa environment list\n"
+    "Create:  spa environment init NAME\n"
+    "Set:     spa environment set --default NAME\n"
+    "Remove:  spa environment remove NAME --yes\n"
+    "Export:  spa environment --export"
+)
+_MISSING_OPERAND = {
+    ("spa features search", "query"): "spa features search needs QUERY.\nExample: spa features search QUERY",
+    ("spa features show", "SELECTOR"): (
+        "spa features show needs SELECTOR.\nExample: spa features show SELECTOR [--keys]"
+    ),
+    ("spa apps search", "query"): "spa apps search needs QUERY.\nExample: spa apps search QUERY",
+    ("spa apps snippet", "APP_ID_OR_NAME"): (
+        "spa apps snippet needs APP_ID.\nExample: spa apps snippet APP_ID"
+    ),
+    ("spa apps download", "app_id"): (
+        "spa apps download needs APP_ID.\nExample: spa apps download APP_ID --yes"
+    ),
+    ("spa hosts ssh", "name"): "spa hosts ssh needs NAME.\nExample: spa hosts ssh NAME",
+    ("spa environment remove", "name"): (
+        "spa environment remove needs NAME.\nExample: spa environment remove NAME --yes"
+    ),
+}
+FEATURES_EXAMPLES = """
+examples:
+  spa features search QUERY
+  spa features show SELECTOR [--keys]
+  spa features list
+  spa features keys
+  spa features schema --markdown
+"""
+
+
 def shell_copy_examples() -> str:
     from spa.shell import COPY_EXAMPLES
 
@@ -374,13 +492,16 @@ def _add_init_arguments(parser) -> None:
         metavar="DIR",
         help="Parent directory for this init only (requires --name). Does not change the default parent",
     )
-    parser.add_argument("--example", metavar="NAME", help="Topology example id (see spa init --list)")
+    parser.add_argument(
+        "--example",
+        metavar="NAME",
+        help="Topology example id (see spa init list or spa environment init list)",
+    )
     parser.add_argument(
         "--provider",
         metavar="NAME",
         help="Provider example: aws or virtualbox (default: aws, or providers.yml)",
     )
-    parser.add_argument("--list", action="store_true", help="List topology and provider examples")
     parser.add_argument("--from", dest="from_dir", metavar="DIR", help="Migrate an existing SPA environment")
     parser.add_argument("--migrate", action="store_true", help="Migrate the source environment into ENV_DIR")
     parser.add_argument("--keep-source", action="store_true", help="Keep state files in the migration source")
@@ -455,8 +576,40 @@ def _doctor_env_dir(selector: Optional[str], start_dir: Optional[str]) -> Option
     return str(lookup_env_path(selector, relative_to=start))
 
 
+def _init_listing(args) -> bool:
+    if getattr(args, "env_dir", None) != "list":
+        return False
+    create_flags = (
+        "example",
+        "provider",
+        "from_dir",
+        "migrate",
+        "keep_source",
+        "force",
+        "venv",
+        "python",
+        "ansible",
+        "skip_doctor",
+        "software_dir",
+        "baseconfig_dir",
+        "apps_dir",
+        "name",
+        "init_env_dir",
+    )
+    if any(getattr(args, name, None) for name in create_flags):
+        return False
+    if getattr(args, "pip", None):
+        return False
+    return True
+
+
 def _run_init(args, session, as_agent: bool) -> int:
-    if args.list:
+    if getattr(args, "env_dir", None) == "list" and not _init_listing(args):
+        return _reject(
+            "spa init list does not take scaffold options.\nListing examples is: spa init list",
+            as_agent,
+        )
+    if _init_listing(args):
         result = session.list_examples()
         if as_agent:
             return _emit_result(result, True)
@@ -519,8 +672,7 @@ def _run_environment(args, session, paths, as_agent: bool, env_parser) -> int:
             sys.stdout.write(format_export(paths))
         return 0
     if not action:
-        env_parser.print_help()
-        return 0
+        return _reject(ENVIRONMENT_NEEDS_ACTION, as_agent)
     if action == "list":
         result = session.environment_list()
         if as_agent:
@@ -617,6 +769,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 def _run(argv: Sequence[str]) -> int:
     argv = list(argv)
     head, extra = _split_passthrough(argv)
+    retired = _retired_catalog_flag(head)
+    if retired:
+        return _reject(
+            retired,
+            agent_mode(
+                force_agent="--agent" in head or "--json" in head,
+                force_human="--no-agent" in head,
+            ),
+        )
     help_name = _run_help_target(head)
     if help_name is not None and not extra:
         as_agent = agent_mode(
@@ -631,8 +792,8 @@ def _run(argv: Sequence[str]) -> int:
                     CommandResult(
                         ok=True,
                         data={
-                            "usage": "spa run [--list] [NAME]",
-                            "discover": ["spa --json run --list", "spa run NAME --help"],
+                            "usage": "spa run list | spa run NAME",
+                            "discover": ["spa --json run list", "spa run NAME --help"],
                         },
                     ),
                     True,
@@ -658,10 +819,25 @@ def _run(argv: Sequence[str]) -> int:
         """Keep parse failures machine-readable when an agent invokes spa."""
 
         def error(self, message):
+            # Python 3.14 returns a subparser's unknown flags to this top-level parser.
+            if "unrecognized arguments" in message:
+                if "--keys" in message:
+                    message = "spa features --keys requires: spa features show SELECTOR --keys"
+                elif "--markdown" in message:
+                    message = "spa features --markdown requires: spa features schema --markdown"
+                elif "--status" in message or message.rstrip().endswith("-s"):
+                    message = HOSTS_NEEDS_ACTION
+            elif message.startswith("the following arguments are required:"):
+                missing = message.split(":", 1)[1].strip()
+                named = _MISSING_OPERAND.get((self.prog, missing))
+                if named:
+                    message = named
             if parse_as_agent:
-                emit(False, error="spa: %s" % message, as_agent=True)
+                emit(False, error=message, as_agent=True)
                 raise SystemExit(2)
-            super().error(message)
+            self.print_usage(sys.stderr)
+            print("%s: error: %s" % (self.prog, message), file=sys.stderr)
+            raise SystemExit(2)
 
     parser = AgentAwareArgumentParser(
         prog="spa",
@@ -708,38 +884,63 @@ def _run(argv: Sequence[str]) -> int:
         sub,
         "features",
         aliases=["feat"],
-        help="Look up config features (spa features list|show ID|search QUERY|keys|schema)",
+        help="Look up config features",
+        description="Look up one setting, or ask for the catalog.",
+        epilog=FEATURES_EXAMPLES,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p_feat.add_argument(
-        "features_cmd",
-        nargs="?",
-        default="list",
-        choices=["list", "show", "search", "keys", "schema"],
-        help="list (default), show, search, keys, or schema",
+    feat_sub = p_feat.add_subparsers(dest="features_cmd", metavar="ACTION")
+    p_feat_list = _add_action(feat_sub, "list", help="Full feature catalog", usage="spa features list")
+    _add_mode_flags(p_feat_list)
+    p_feat_list.add_argument("features_extra", nargs="?", help=argparse.SUPPRESS)
+    p_feat_search = _add_action(
+        feat_sub, "search", help="Search the catalog", usage="spa features search QUERY"
     )
-    p_feat.add_argument(
-        "features_arg",
-        nargs="?",
-        help="Selector or search query. In zsh, quote a selector that contains [], or omit the brackets",
+    _add_mode_flags(p_feat_search)
+    p_feat_search.add_argument("query", help="Search query")
+    p_feat_show = _add_action(
+        feat_sub,
+        "show",
+        help="Show one feature",
+        usage="spa features show SELECTOR [--keys]",
     )
-    p_feat.add_argument(
+    _add_mode_flags(p_feat_show)
+    p_feat_show.add_argument(
+        "selector",
+        metavar="SELECTOR",
+        help="Feature selector. In zsh, quote a selector that contains [], or omit the brackets",
+    )
+    p_feat_show.add_argument(
         "--keys",
         action="store_true",
-        help="With show ID, include per-key types, constraints, and guidance",
+        help="Include per-key types, constraints, and guidance",
     )
-    p_feat.add_argument(
+    p_feat_keys = _add_action(feat_sub, "keys", help="Catalog coverage of schema keys", usage="spa features keys")
+    _add_mode_flags(p_feat_keys)
+    p_feat_keys.add_argument("features_extra", nargs="?", help=argparse.SUPPRESS)
+    p_feat_schema = _add_action(
+        feat_sub,
+        "schema",
+        help="Human settings dump",
+        usage="spa features schema --markdown",
+    )
+    _add_mode_flags(p_feat_schema)
+    p_feat_schema.add_argument("rejected_path", nargs="?", help=argparse.SUPPRESS)
+    p_feat_schema.add_argument(
         "--markdown",
         action="store_true",
-        help="With schema, print GitHub-flavored markdown instead of JSON (human stdout; regenerate docs/config.md)",
+        help="Print GitHub-flavored markdown (human stdout; regenerate docs/config.md)",
     )
 
     p_apps = _add_command(
         sub,
         "apps",
         help="Search Splunkbase, print an apps[] snippet, or download an archive",
+        epilog=APPS_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     _add_env_selector(p_apps)
-    apps_sub = p_apps.add_subparsers(dest="apps_cmd", metavar="ACTION", required=True)
+    apps_sub = p_apps.add_subparsers(dest="apps_cmd", metavar="ACTION")
     p_apps_search = _add_action(apps_sub, "search", aliases=["sea"], help="Search Splunkbase (compact rows)")
     _add_mode_flags(p_apps_search)
     p_apps_search.add_argument("query", nargs="+", help="Technology or app name keywords")
@@ -881,6 +1082,8 @@ def _run(argv: Sequence[str]) -> int:
         "environment",
         aliases=["env"],
         help="List, init, set, or remove registered environments (alias: env)",
+        epilog=ENVIRONMENT_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_environment.add_argument(
         "--export",
@@ -1023,10 +1226,11 @@ def _run(argv: Sequence[str]) -> int:
     p_run = _add_command(
         sub,
         "run",
-        help="Run a playbook by stem (spa run --list; spa run NAME --help)",
+        help="Run a playbook by stem (spa run list; spa run NAME --help)",
+        epilog="Catalog: spa run list\nDescribe: spa run NAME --help\nRun: spa run NAME ...\n",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p_run.add_argument("name", nargs="?", help="Playbook stem from spa run --list")
-    p_run.add_argument("--list", action="store_true", help="List available playbooks and summaries")
+    p_run.add_argument("name", nargs="?", help="Playbook stem, or list for the catalog")
     p_run.add_argument("--dir", dest="playbook_dir", help="Extra env-dir folder to list/run")
     p_run.add_argument(
         "-y",
@@ -1047,6 +1251,8 @@ def _run(argv: Sequence[str]) -> int:
         sub,
         "logs",
         help="List or show per-environment run transcripts ($SPA_ENV_DIR/logs)",
+        epilog="Index: spa logs list\nOne run: spa logs RUN_ID\nLatest: spa logs --last\n",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_logs.add_argument("run_id", nargs="?", help="Run id (filename stem)")
     p_logs.add_argument("--last", action="store_true", help="Show the most recent run")
@@ -1054,15 +1260,15 @@ def _run(argv: Sequence[str]) -> int:
     _add_ansible_output(p_logs, allow_verbose=False)
     _add_env_selector(p_logs)
 
-    p_hosts = _add_command(sub, "hosts", aliases=["h"], help="List, SSH, or copy using inventory hosts")
-    _add_env_selector(p_hosts)
-    p_hosts.add_argument(
-        "-s",
-        "--status",
-        action="store_true",
-        help="Include runtime power state and connectivity (skipped until hosts are provisioned)",
+    p_hosts = _add_command(
+        sub,
+        "hosts",
+        aliases=["h"],
+        help="List, SSH, or copy using inventory hosts",
+        epilog=HOSTS_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    _add_hosts_option(p_hosts)
+    _add_env_selector(p_hosts)
     hosts_sub = p_hosts.add_subparsers(dest="hosts_cmd", metavar="ACTION")
     p_hosts_list = _add_action(hosts_sub, "list", help="List hosts in this env")
     _add_mode_flags(p_hosts_list)
@@ -1076,7 +1282,11 @@ def _run(argv: Sequence[str]) -> int:
     p_hosts_ssh = _add_action(hosts_sub, "ssh", help="SSH to one host")
     _add_mode_flags(p_hosts_ssh)
     p_hosts_ssh.add_argument("name", help="Inventory hostname")
-    p_hosts_ssh.add_argument("ssh_args", nargs=argparse.REMAINDER, help="Additional arguments passed to ssh")
+    # Python 3.11 marks REMAINDER positionals required. Extra ssh args are optional.
+    ssh_args = p_hosts_ssh.add_argument(
+        "ssh_args", nargs=argparse.REMAINDER, help="Additional arguments passed to ssh",
+    )
+    ssh_args.required = False
     p_hosts_copy = _add_action(
         hosts_sub,
         "copy",
@@ -1093,12 +1303,14 @@ def _run(argv: Sequence[str]) -> int:
         action="store_true",
         help="Copy directories",
     )
-    p_hosts_copy.add_argument(
+    copy_paths = p_hosts_copy.add_argument(
         "paths",
         nargs=argparse.REMAINDER,
         metavar="SRC DST",
         help="Source and destination paths; HOST:PATH for the remote side",
     )
+    # Python 3.11 marks REMAINDER positionals required. The copy action checks the count.
+    copy_paths.required = False
 
     # Flags for these are parsed by the wrapped tool (see _split_native).
     _add_command(
@@ -1122,7 +1334,7 @@ def _run(argv: Sequence[str]) -> int:
         "\n"
         "JSON envelope by default (with or without --json). Human --markdown prints the\n"
         "catalog used for docs/commands.md; --json / agent mode still JSON.\n"
-        "Playbooks are not in this schema; list them with spa --json run --list.",
+        "Playbooks are not in this schema; list them with spa --json run list.",
         epilog=AGENT_EXAMPLES,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1212,23 +1424,26 @@ def _run(argv: Sequence[str]) -> int:
         return _run_init(args, session, as_agent)
 
     if args.command == "features":
-        action = args.features_cmd or "list"
-        ident = args.features_arg if action == "show" else None
-        query = args.features_arg if action == "search" else None
-        if getattr(args, "markdown", False) and action != "schema":
-            message = "spa features --markdown requires: spa features schema --markdown"
-            if as_agent:
-                emit(False, error=message, as_agent=True)
-                return 2
-            print(message, file=sys.stderr)
-            return 2
+        action = _action(args, "features_cmd")
+        if not action:
+            return _reject(FEATURES_NEEDS_ACTION, as_agent)
+        if action == "list" and getattr(args, "features_extra", None):
+            return _reject(FEATURES_LIST_NO_ARG, as_agent)
+        if action == "keys" and getattr(args, "features_extra", None):
+            return _reject(FEATURES_KEYS_NO_ARG, as_agent)
+        if action == "schema" and getattr(args, "rejected_path", None):
+            return _reject(FEATURES_SCHEMA_NO_PATH, as_agent)
+        if action == "schema" and (as_agent or not getattr(args, "markdown", False)):
+            return _reject(FEATURES_SCHEMA_NEEDS_MARKDOWN, as_agent)
+        ident = getattr(args, "selector", None) if action == "show" else None
+        query = getattr(args, "query", None) if action == "search" else None
         result = session.features(
             action=action,
             ident=ident,
             query=query,
-            include_keys=bool(args.keys),
+            include_keys=bool(getattr(args, "keys", False)),
         )
-        if getattr(args, "markdown", False) and action == "schema" and not as_agent:
+        if action == "schema" and not as_agent:
             if not result.ok:
                 print(result.error or "features failed", file=sys.stderr)
                 return result.code
@@ -1275,6 +1490,8 @@ def _run(argv: Sequence[str]) -> int:
             return [part.strip() for part in raw.split(",") if part.strip()] or None
 
         action = _action(args, "apps_cmd")
+        if not action:
+            return _reject(APPS_NEEDS_ACTION, as_agent)
         result = session.apps(
             action=action,
             query=" ".join(getattr(args, "query", None) or []),
@@ -1385,10 +1602,22 @@ def _run(argv: Sequence[str]) -> int:
         return result.code
 
     if args.command == "logs":
+        run_id = getattr(args, "run_id", None)
+        last = bool(getattr(args, "last", False))
+        follow = bool(getattr(args, "follow", False))
+        if run_id == "list":
+            if last or follow:
+                return _reject(
+                    "spa logs list does not take --last or --follow.\nIndex: spa logs list",
+                    as_agent,
+                )
+            run_id = None
+        elif not run_id and not last and not follow:
+            return _reject(LOGS_NEEDS_RUN, as_agent)
         result = session.logs(
-            run_id=getattr(args, "run_id", None),
-            last=bool(getattr(args, "last", False)),
-            follow=bool(getattr(args, "follow", False)) and not as_agent,
+            run_id=run_id,
+            last=last,
+            follow=follow and not as_agent,
             ansible_output=_want_ansible_output(args),
             timestamps=_transcript_timestamps(args),
             color=_transcript_color(args),
@@ -1403,9 +1632,9 @@ def _run(argv: Sequence[str]) -> int:
             print(result.error or "logs failed", file=sys.stderr)
             return result.code
         data = result.data or {}
-        if args.follow:
+        if follow:
             return 0
-        if "runs" in data and not args.last and not args.run_id:
+        if "runs" in data and not last and not run_id:
             rows = data.get("runs") or []
             if not rows:
                 print("No runs in %s/logs" % paths.spa_env_dir)
@@ -1511,7 +1740,14 @@ def _run(argv: Sequence[str]) -> int:
         return 0
 
     if args.command == "run":
-        if args.list or not args.name:
+        if not args.name:
+            return _reject(RUN_NEEDS_PLAYBOOK, as_agent)
+        if args.name == "list":
+            if getattr(args, "hosts", None) or getattr(args, "yes", False) or getattr(args, "apps_playbook", None):
+                return _reject(
+                    "spa run list does not take run options.\nCatalog: spa run list [--dir DIR]",
+                    as_agent,
+                )
             result = session.catalog(extra_dir=args.playbook_dir)
             if as_agent or args.json:
                 return _emit_result(result, True)
@@ -1543,11 +1779,13 @@ def _run(argv: Sequence[str]) -> int:
         if result.error:
             print(result.error, file=sys.stderr)
             if (result.data or {}).get("provisioned") is not False:
-                print("spa run --list for the catalog", file=sys.stderr)
+                print("spa run list for the catalog", file=sys.stderr)
         return result.code
 
     if args.command == "hosts":
-        hosts_cmd = _action(args, "hosts_cmd") or "list"
+        hosts_cmd = _action(args, "hosts_cmd")
+        if not hosts_cmd:
+            return _reject(HOSTS_NEEDS_ACTION, as_agent)
         if hosts_cmd == "list":
             result = session.hosts_list(
                 status=bool(getattr(args, "status", False)),
@@ -1593,12 +1831,11 @@ def _run(argv: Sequence[str]) -> int:
             if getattr(args, "recursive", False):
                 paths_args.insert(0, "-r")
             if len([item for item in paths_args if not item.startswith("-")]) < 2:
-                print(
-                    "spa hosts copy needs a source and a destination, "
-                    "for example: spa hosts copy app.tgz idx1:/tmp/",
-                    file=sys.stderr,
+                return _reject(
+                    "spa hosts copy needs a source and a destination.\n"
+                    "Example: spa hosts copy app.tgz idx1:/tmp/",
+                    as_agent,
                 )
-                return 1
             blocked = session._require_provisioned()
             if blocked:
                 return _print_command_error(blocked)

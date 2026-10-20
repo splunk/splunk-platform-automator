@@ -89,19 +89,57 @@ COMMAND_SCHEMA = {
     "commands": [
         {"name": "init", "summary": "Alias of spa environment init (spa init --example TOPOLOGY [--provider aws|virtualbox] NAME)"},
         {
+            "name": "init list",
+            "summary": "List topology examples. Bare spa init still scaffolds; it does not list.",
+            "example": "spa init list",
+        },
+        {
             "name": "features",
-            "summary": "Choose settings by schema path and layouts by id; use show SELECTOR --keys for types, constraints, and apply metadata. In zsh, quote a selector that contains [], or omit the brackets.",
+            "summary": "Look up settings. Agents use search QUERY, then show SELECTOR [--keys]. schema --markdown is a human docs dump, not an agent payload.",
+            "example": "spa --json features search splunk",
+        },
+        {
+            "name": "features list",
+            "summary": "Full feature catalog",
+            "example": "spa features list",
+        },
+        {
+            "name": "features search",
+            "summary": "Search the catalog. In zsh, quote a selector that contains [], or omit the brackets.",
+            "positionals": [
+                {"name": "QUERY", "required": True, "help": "Search text"},
+            ],
+            "example": "spa --json features search cluster",
+        },
+        {
+            "name": "features show",
+            "summary": "Show one feature. Agents use this after features search.",
+            "positionals": [
+                {"name": "SELECTOR", "required": True, "help": "Schema path or layout id"},
+            ],
             "flags": [
                 {
                     "long": "--keys",
-                    "help": "With show SELECTOR, include per-key types, constraints, guidance, and apply metadata",
-                },
-                {
-                    "long": "--markdown",
-                    "help": "With schema, print GitHub-flavored markdown instead of JSON (human stdout; regenerate docs/config.md)",
+                    "help": "Include per-key types, constraints, guidance, and apply metadata",
                 },
             ],
             "example": "spa --json features show splunk_defaults.splunk_ssl --keys",
+        },
+        {
+            "name": "features keys",
+            "summary": "Catalog coverage of schema keys",
+            "example": "spa features keys",
+        },
+        {
+            "name": "features schema",
+            "summary": "Human documentation generation for docs/config.md. Not an agent payload. Agents use features search QUERY, then features show SELECTOR [--keys].",
+            "flags": [
+                {
+                    "long": "--markdown",
+                    "help": "Print GitHub-flavored markdown (human stdout only; regenerate docs/config.md)",
+                },
+            ],
+            "example": "spa --no-agent features schema --markdown",
         },
         {
             "name": "validate",
@@ -143,6 +181,11 @@ COMMAND_SCHEMA = {
                 {"long": "--software-dir", "help": "Shared installers directory (saved in paths.yml)"},
             ],
             "example": "spa environment init --example cm_2idxc_sh_uf my-lab",
+        },
+        {
+            "name": "environment init list",
+            "summary": "List topology examples (same catalog as spa init list)",
+            "example": "spa environment init list",
         },
         {
             "name": "environment set",
@@ -242,6 +285,11 @@ COMMAND_SCHEMA = {
             ],
         },
         {
+            "name": "hosts",
+            "summary": "Inventory actions. List hosts, SSH, or copy. Bare spa hosts exits 2.",
+            "example": "spa hosts list",
+        },
+        {
             "name": "hosts list",
             "summary": "List inventory hosts and roles",
             "flags": [
@@ -253,17 +301,54 @@ COMMAND_SCHEMA = {
         {"name": "hosts ssh", "summary": "SSH using inventory", "example": "spa hosts ssh idx1"},
         {"name": "hosts copy", "summary": "Copy files with scp: SRC DST, remote side HOST:PATH (-r for directories)", "example": "spa hosts copy local.txt idx1:/tmp/"},
         {"name": "shell", "summary": "Alias of spa hosts ssh"},
-        {"name": "aws", "summary": "AWS discovery for terraform.aws"},
+        {"name": "aws", "summary": "AWS discovery for terraform.aws. Catalogs are spa aws list KIND."},
+        {
+            "name": "aws list regions",
+            "summary": "List enabled regions. Does not require --region.",
+            "example": "spa aws list regions --json",
+        },
+        {
+            "name": "aws list amis",
+            "summary": "List AMIs in a region",
+            "flags": [
+                {"long": "--region", "help": "AWS region", "required": True},
+                {"long": "--name-filter", "help": "AMI name wildcard"},
+                {"long": "--owners", "help": "Comma-separated AMI owners"},
+                {"long": "--max-results", "help": "Max AMIs to return"},
+                {"long": "--os", "help": "Recommended OS, or all"},
+            ],
+            "example": "spa aws list amis --region eu-central-1 --json",
+        },
+        {
+            "name": "aws list instance-types",
+            "summary": "List instance types offered in a region",
+            "flags": [
+                {"long": "--region", "help": "AWS region", "required": True},
+                {"long": "--family", "help": "Instance type family prefix (e.g. t3)"},
+            ],
+            "example": "spa aws list instance-types --region eu-central-1 --family t3",
+        },
+        {
+            "name": "aws list key-pairs",
+            "summary": "List EC2 key pairs",
+            "flags": [{"long": "--region", "help": "AWS region", "required": True}],
+            "example": "spa aws list key-pairs --region eu-central-1",
+        },
+        {
+            "name": "aws list security-groups",
+            "summary": "List security groups",
+            "flags": [{"long": "--region", "help": "AWS region", "required": True}],
+            "example": "spa aws list security-groups --region eu-central-1",
+        },
         {
             "name": "licenses",
             "summary": "Inspect license type, expiration and ITSI/ES entitlements",
         },
         {
             "name": "run",
-            "summary": "Run a playbook by stem. Discover: spa --json run --list then spa run NAME --help. Honor data[].requires_confirmation with --yes.",
+            "summary": "Run a playbook by stem. Discover: spa --json run list then spa run NAME --help. Honor data[].requires_confirmation with --yes.",
             "flags": [
                 {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
-                {"long": "--list", "help": "Catalog playbooks with summaries"},
                 {"long": "--yes", "short": "-y", "help": "Confirm a mutating playbook (required in agent mode)"},
                 {
                     "long": "--apps-playbook",
@@ -274,7 +359,15 @@ COMMAND_SCHEMA = {
                 _FLAG_COLOR,
                 _FLAG_VERBOSE_NATIVE,
             ],
-            "example": "spa run --list",
+            "example": "spa run NAME --help",
+        },
+        {
+            "name": "run list",
+            "summary": "Catalog playbooks with summaries. --dir is valid here and on spa run NAME.",
+            "flags": [
+                {"long": "--dir", "help": "Extra playbook directory"},
+            ],
+            "example": "spa run list",
         },
         {
             "name": "logs",
@@ -287,6 +380,16 @@ COMMAND_SCHEMA = {
                 _FLAG_COLOR,
             ],
             "example": "spa logs --last",
+        },
+        {
+            "name": "logs list",
+            "summary": "Index of run transcripts, newest first. Do not combine with --last or --follow.",
+            "example": "spa logs list",
+        },
+        {
+            "name": "apps",
+            "summary": "Splunkbase search, an apps[] snippet, or an archive download.",
+            "example": "spa --json apps search unix",
         },
         {
             "name": "apps search",
@@ -370,7 +473,7 @@ def format_schema_markdown(schema: Optional[Dict[str, Any]] = None) -> str:
         "Generated from `spa agent schema`. Do not edit this file; regenerate with",
         "`spa --no-agent agent schema --markdown`. Workflows stay in the [user guide](user-guide.md).",
         "",
-        "Playbooks are not listed here. Discover them with `spa --json run --list`",
+        "Playbooks are not listed here. Discover them with `spa --json run list`",
         "and `spa run NAME --help`.",
         "",
     ]
@@ -396,6 +499,21 @@ def format_schema_markdown(schema: Optional[Dict[str, Any]] = None) -> str:
                 if short:
                     label = f"`{short}`, `{long}`" if long else f"`{short}`"
                 lines.append(f"| {label} | {_markdown_cell(flag.get('help') or '')} |")
+            lines.append("")
+        positionals = cmd.get("positionals") or []
+        if positionals:
+            lines.append("| Argument | Required | Description |")
+            lines.append("| --- | --- | --- |")
+            for positional in positionals:
+                required = "yes" if positional.get("required") else "no"
+                lines.append(
+                    "| `%s` | %s | %s |"
+                    % (
+                        _markdown_cell(positional.get("name") or ""),
+                        required,
+                        _markdown_cell(positional.get("help") or ""),
+                    )
+                )
             lines.append("")
         example = cmd.get("example")
         if example:

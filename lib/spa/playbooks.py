@@ -119,7 +119,7 @@ def configured_playbook_dirs(
 def custom_playbook_dir_state(env_dir: Path) -> List[Dict[str, Any]]:
     """Report each configured custom playbook folder, usable or not.
 
-    `spa run --list` skips an unusable folder silently, so `spa validate` is
+    `spa run list` skips an unusable folder silently, so `spa validate` is
     where a typo in `playbook_dirs` has to become visible.
     """
     rows: List[Dict[str, Any]] = []

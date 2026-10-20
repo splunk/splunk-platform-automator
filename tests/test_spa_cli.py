@@ -87,7 +87,7 @@ def test_spa_doctor_and_agent_schema_from_clone():
     assert doctor.returncode == 0, doctor.stderr
     schema = run_spa(["agent", "schema"])
     assert schema.returncode == 0, schema.stderr
-    listed = run_spa(["init", "--list"])
+    listed = run_spa(["init", "list"])
     assert listed.returncode == 0, listed.stderr
 
 
@@ -382,7 +382,7 @@ def test_missing_host_tool_does_not_suggest_venv(monkeypatch):
 
 
 def test_run_list_groups_by_root(tmp_path):
-    result = run_spa(["run", "--list"])
+    result = run_spa(["run", "list"])
     assert result.returncode == 0, result.stderr
     assert "Framework playbooks" in result.stdout
     assert "Verification playbooks" in result.stdout
@@ -406,7 +406,7 @@ def test_run_list_groups_by_root(tmp_path):
 
 
 def test_run_list_json():
-    result = run_spa(["--json", "run", "--list"])
+    result = run_spa(["--json", "run", "list"])
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
@@ -528,10 +528,10 @@ def test_env_dir_playbook_resolves(tmp_path):
     with pytest.raises(PlaybookError):
         resolve("foo", paths)
 
-    listing = run_spa(["run", "--list", "--dir", "custom"], env=env)
+    listing = run_spa(["run", "list", "--dir", "custom"], env=env)
     assert "Env playbooks" in listing.stdout
     assert "custom/foo" in listing.stdout
-    json_listing = run_spa(["--json", "run", "--list", "--dir", "custom"], env=env)
+    json_listing = run_spa(["--json", "run", "list", "--dir", "custom"], env=env)
     payload = json.loads(json_listing.stdout)
     foo = next(row for row in payload["data"] if row["name"] == "custom/foo")
     assert foo.get("missing") is True
@@ -551,7 +551,7 @@ def test_run_path_escape_rejected(tmp_path):
 
 
 def test_agent_json_envelope():
-    result = run_spa(["--agent", "init", "--list"])
+    result = run_spa(["--agent", "init", "list"])
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
     ids = [item["id"] for item in payload["data"]["topologies"]]
@@ -559,7 +559,7 @@ def test_agent_json_envelope():
 
 
 def test_no_agent_text_list():
-    result = run_spa(["--no-agent", "init", "--list"])
+    result = run_spa(["--no-agent", "init", "list"])
     assert "Topologies:" in result.stdout
     assert "single_node" in result.stdout
     assert not result.stdout.strip().startswith("{")
@@ -576,9 +576,9 @@ def test_agent_schema():
     run = next(c for c in payload["data"]["commands"] if c["name"] == "run")
     flags = [item["long"] for item in run.get("flags") or []]
     assert "--hosts" in flags
-    assert "--list" in flags
+    assert "--list" not in flags
     assert "--yes" in flags
-    assert "spa --json run --list" in run["summary"]
+    assert "spa --json run list" in run["summary"]
     by_name = {c["name"]: c for c in payload["data"]["commands"]}
     for name in ("provision", "destroy", "deploy", "suspend", "resume"):
         assert by_name[name].get("requires_confirmation") is True
@@ -592,7 +592,7 @@ def test_agent_help_documents_schema():
     assert "spa agent schema" in result.stdout
     assert "requires_confirmation" in result.stdout
     # The schema covers commands; playbooks are discovered separately.
-    assert "spa --json run --list" in result.stdout
+    assert "spa --json run list" in result.stdout
     assert "--markdown" in result.stdout
     assert "docs/commands.md" in result.stdout
 
@@ -816,6 +816,80 @@ def test_env_playbook_without_metadata_requires_yes(tmp_path, monkeypatch, capsy
     assert payload["ok"] is False
     assert "requires -y/--yes" in payload["error"]
     assert "Unknown playbook" not in payload["error"]
+
+
+def _assert_usage_rejection(argv, message):
+    human = run_spa(["--no-agent", *argv])
+    assert human.returncode == 2, human.stderr
+    assert message in human.stderr
+    assert human.stdout.strip() == ""
+    agent = run_spa(["--json", *argv])
+    assert agent.returncode == 2, agent.stdout
+    assert agent.stderr == ""
+    payload = json.loads(agent.stdout)
+    assert payload["ok"] is False
+    assert payload["schema_version"] == 1
+    assert "data" not in payload
+    assert message in payload["error"]
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["run"], "spa run needs a playbook or list."),
+        (["run", "--list"], "Listing playbooks is: spa run list"),
+        (["run", "--list", "--help"], "Listing playbooks is: spa run list"),
+        (["init", "--list"], "Listing examples is: spa init list"),
+        (["environment", "init", "--list"], "Listing examples is: spa init list"),
+        (["hosts"], "spa hosts needs an action."),
+        (["hosts", "--status"], "spa hosts needs an action."),
+        (["logs"], "spa logs needs a run."),
+        (["logs", "list", "--last"], "spa logs list does not take --last or --follow."),
+        (["run", "list", "--yes"], "spa run list does not take run options."),
+    ],
+)
+def test_catalog_usage_names_the_legal_command(argv, message):
+    _assert_usage_rejection(argv, message)
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["aws", "--list-regions"], "Listing regions is: spa aws list regions"),
+        (["aws", "--list-amis"], "Listing amis is: spa aws list amis"),
+        (["aws", "--list-instance-types"], "Listing instance-types is: spa aws list instance-types"),
+        (["aws", "--list-key-pairs"], "Listing key-pairs is: spa aws list key-pairs"),
+        (["aws", "--list-security-groups"], "Listing security-groups is: spa aws list security-groups"),
+        (["--json", "aws", "--list-regions"], "Listing regions is: spa aws list regions"),
+    ],
+)
+def test_aws_retired_list_flags_name_the_list_command(argv, message):
+    result = run_spa(["--no-agent", *argv])
+    assert result.returncode == 2, result.stderr
+    assert message in result.stderr
+    assert "Regions" not in result.stdout
+    assert not result.stdout.lstrip().startswith("{")
+
+
+def test_aws_list_help_keeps_flags_on_their_kind():
+    parent = run_spa(["aws", "--help"])
+    assert parent.returncode == 0, parent.stderr
+    for flag in (
+        "--list-regions",
+        "--list-amis",
+        "--list-instance-types",
+        "--list-key-pairs",
+        "--list-security-groups",
+    ):
+        assert flag not in parent.stdout
+    amis = run_spa(["aws", "list", "amis", "--help"])
+    types = run_spa(["aws", "list", "instance-types", "--help"])
+    assert amis.returncode == 0, amis.stderr
+    assert "--family" not in amis.stdout
+    assert "--name-filter" in amis.stdout
+    assert types.returncode == 0, types.stderr
+    assert "--name-filter" not in types.stdout
+    assert "--family" in types.stdout
 
 
 def test_human_env_playbook_prompt_mentions_missing_metadata(tmp_path, monkeypatch):

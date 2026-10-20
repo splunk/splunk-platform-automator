@@ -36,14 +36,14 @@ Record in config header comment when API was not used:
 | Command | Without credentials |
 |---------|---------------------|
 | `--check-auth` | `ok: false`, error (e.g. Unable to locate credentials) |
-| `--list-regions`, `--survey`, `--latest-ami`, `--validate` | `ok: false` in JSON or non-zero exit |
+| `spa aws list regions`, `--survey`, `--latest-ami`, `--validate` | `ok: false` in JSON or non-zero exit |
 | `spa validate --splunk-config-aws` | **Fails** if validate runs and AWS rejects the call — **do not use** without creds |
 
 Provision/deploy (`ap ansible/aws_provision.yml`) **requires** working AWS credentials at run time — building config offline is fine, but user must configure creds before provision.
 
 ## Without-creds Phase 4 workflow
 
-1. **Region** — user states org default (e.g. `eu-central-1`); do not call `--list-regions`.
+1. **Region** — user states org default (e.g. `eu-central-1`); do not call `spa aws list regions`.
 2. **OS + SSH** — [aws-os-matrix.md](aws-os-matrix.md) templates (`ec2-user` / `ubuntu` / `admin`).
 3. **AMI** — copy from `examples/providers/aws.yml` or catalog `provider.aws`; add comment `# verify AMI in console or re-run spa aws when creds available`.
 4. **Instance type** — lab default `t3.medium` ([aws-baseline.md](aws-baseline.md)).

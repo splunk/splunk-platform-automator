@@ -983,7 +983,7 @@ def test_spa_logs_list_and_last(tmp_path):
 
     write_run("older", "2026-09-17T17:02:00.123+02:00", "older-run")
     write_run("rid", "2026-09-18T15:00:00.000+02:00", "hello-run")
-    listed = run_spa(["--no-agent", "logs"], extra_env=extra)
+    listed = run_spa(["--no-agent", "logs", "list"], extra_env=extra)
     assert listed.returncode == 0, listed.stderr
     assert listed.stdout.index("rid") < listed.stdout.index("older")
     last = run_spa(["--no-agent", "logs", "--last"], extra_env=extra)

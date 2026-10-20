@@ -5,11 +5,11 @@ SPA provisions and deploys Splunk Enterprise (AWS Linux + Terraform, or VirtualB
 ## Contract
 
 - **`SPA_HOME`**: framework (prefix or clone). **`SPA_ENV_DIR`**: one environment. Operator `spa` needs `spa init` first. Path diagram: [user guide](docs/user-guide.md#understand-the-paths).
-- Call **`bin/spa`** only (`spa agent schema`, `spa --json features`, `spa --json apps`). Load **`/spa`** first ([skills/spa/spa/SKILL.md](skills/spa/spa/SKILL.md)). Do not import `spa.api`. Do not start a daemon. Flag catalog: [docs/commands.md](docs/commands.md).
+- Call **`bin/spa`** only (`spa agent schema`, `spa --json features search QUERY`, `spa --json apps`). Load **`/spa`** first ([skills/spa/spa/SKILL.md](skills/spa/spa/SKILL.md)). Do not import `spa.api`. Do not start a daemon. Flag catalog: [docs/commands.md](docs/commands.md).
 - Mutating commands need **`--yes`**. Never auto-run provision, deploy, suspend, resume, or destroy. Never answer `Proceed?` interactively.
 - Never print secrets (Splunkbase, AWS keys, vault). Report env vars as **set / not set**. YAML: `lookup('env', ...)`. Do not pass `-v` on provision/deploy/run (unredacted Ansible stdout).
 - Full command names (`spa hosts ssh`, `spa validate`), not `spa sh` / `spa val`.
-- Playbooks: `spa --json run --list` then `spa run NAME --help`. Confirmation: `--yes`. Extra Ansible args: `spa run NAME -- …`.
+- Playbooks: `spa --json run list` then `spa run NAME --help`. Confirmation: `--yes`. Extra Ansible args: `spa run NAME -- …`.
 
 Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 
@@ -18,11 +18,11 @@ Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 | Task | Command / path |
 | --- | --- |
 | Config | `$SPA_ENV_DIR/config/splunk_config.yml` via `spa init --example` |
-| Schema vs catalog | Pydantic (`spa validate`); `spa features` / `examples/catalog/features.yml` |
+| Schema vs catalog | Pydantic (`spa validate`); `spa features search` then `spa features show` / `examples/catalog/features.yml` |
 | New config key | [docs/contributing.md](docs/contributing.md#adding-a-configuration-feature) |
 | All settings | [docs/config.md](docs/config.md) (`spa --no-agent features schema --markdown`) |
 | CLI flags | [docs/commands.md](docs/commands.md) (`spa --no-agent agent schema --markdown`) |
-| Guided design | [docs/user-guide.md](docs/user-guide.md#configure-an-environment) · `spa features` |
+| Guided design | [docs/user-guide.md](docs/user-guide.md#configure-an-environment) · `spa features search` then `show` |
 | 2.x → 3.0 | [docs/migrate.md](docs/migrate.md) |
 | New env | `spa environment init --example cm_2idxc_sh_uf NAME` then `spa --env NAME …`, `spa environment set --default NAME`, or `cd` into it |
 | Features / apps | `spa --json features search QUERY`; `spa --json apps search QUERY` then `snippet APP_ID`. AWS live values: `spa aws --json` |
@@ -33,8 +33,8 @@ Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 | Validate | `spa validate` |
 | Provision + deploy | `spa provision --yes && spa deploy --yes` |
 | Deploy only | `spa deploy --yes` (`--hosts`; `--allow-unprovisioned` only if the operator asked) |
-| Run a playbook | `spa run --list` / `NAME --help` / `--yes` |
-| Run logs | `spa logs` / `spa logs --last` (open `data.log` only when debugging a failure). Do not pass `-v` (unredacted Ansible stdout). |
+| Run a playbook | `spa run list` / `NAME --help` / `--yes` |
+| Run logs | `spa logs list` / `spa logs RUN_ID` / `spa logs --last` (open `data.log` only when debugging a failure). Do not pass `-v` (unredacted Ansible stdout). |
 | Power | `spa suspend --yes` / `spa resume --yes` |
 | SSH / copy | `spa hosts list --status`, `spa hosts ssh NAME`, `spa hosts copy SRC DST` |
 | Destroy | `spa destroy --yes` |
@@ -60,3 +60,13 @@ Canonical: `skills/spa/`. When to load:
 Cursor: `/spa`, `/spa-create-config`, `/spa-apps`, `/spa-add-test-scenario`. See [docs/contributing.md](docs/contributing.md#agent-skills).
 
 Backend vs GUI: [docs/contributing.md](docs/contributing.md#controller-architecture).
+
+## Changing spa
+
+- New command: [Adding a spa command](docs/contributing.md#adding-a-spa-command). One parser per action. A catalog is `list`. Usage errors exit 2 and name the legal command. Human text goes to stderr. Agent mode (`--agent`, `--json`, or a detected agent) returns one JSON object `{"ok":false,"schema_version":1,"error":"..."}` and does not include `data`. Register the action in `COMMAND_SCHEMA` in the same change.
+- New config key: [Adding a configuration feature](docs/contributing.md#adding-a-configuration-feature).
+- [docs/commands.md](docs/commands.md) and [docs/config.md](docs/config.md) are generated. Do not hand-edit them. Regenerate `docs/commands.md` with `spa --no-agent agent schema --markdown` and `docs/config.md` with `spa --no-agent features schema --markdown`. [tests/test_docs.py](tests/test_docs.py) fails when they drift.
+- CLI change gate: `./tests/run_cli_tests.sh`. Broader local gate: `./tests/run_local_tests.sh`. A parser change does not need an AWS run.
+- Commands return `CommandResult`. Confirmation stays in the session. Agents call `bin/spa` and do not import `spa.api`. Do not add a second operator CLI or a remote controller ([controller architecture](docs/contributing.md#controller-architecture)).
+- Skills live only under `skills/spa/`. `.cursor/skills/` entries are symlinks. Do not copy skill text.
+- Examples, help, errors, and schema descriptions never contain passwords, tokens, private keys, or certificates. Use `lookup('env', ...)`.

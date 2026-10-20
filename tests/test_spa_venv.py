@@ -418,7 +418,7 @@ def test_venv_message_points_at_the_launcher_when_the_venv_is_fine(tmp_path, mon
         (["--no-agent", "venv", "--path"], ".venv"),
         (["--no-agent", "doctor"], "SPA host prerequisites"),
         (["--no-agent", "environment", "list"], ""),
-        (["--no-agent", "init", "--list"], "single_node"),
+        (["--no-agent", "init", "list"], "single_node"),
     ],
 )
 def test_bootstrap_commands_still_run_without_a_venv(tmp_path, args, needle):

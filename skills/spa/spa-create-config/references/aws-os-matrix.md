@@ -127,7 +127,7 @@ terraform:
 - Amazon Linux, RHEL, Red Hat → `ec2-user`
 - Default → `ec2-user` (user confirms)
 
-Custom AMI search (optional): `--list-amis --name-filter "your-pattern*"`
+Custom AMI search (optional): `spa aws list amis --region REGION --name-filter "your-pattern*"`
 
 ## Skill rules
 

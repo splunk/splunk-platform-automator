@@ -18,7 +18,7 @@ def test_init_help():
 
 
 def test_init_list_examples():
-    result = run_spa(["init", "--list"])
+    result = run_spa(["init", "list"])
     assert result.returncode == 0
     out = result.stdout
     assert "single_node" in out
@@ -158,7 +158,7 @@ def test_refuse_spa_home():
 def test_init_list_json_has_no_addons():
     import json
 
-    result = run_spa(["--json", "init", "--list"])
+    result = run_spa(["--json", "init", "list"])
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     data = payload.get("data") or {}

@@ -15,7 +15,6 @@ import yaml
 from spa.paths import SpaPaths
 
 CATALOG_REL = Path("examples") / "catalog" / "features.yml"
-DESCRIPTION_REL = Path("examples") / "configuration_description.yml"
 
 # Keys that playbooks honor but that are not Pydantic fields. Empty when schema covers them.
 USED_IN_CODE_KEYS: frozenset[str] = frozenset()
@@ -318,44 +317,11 @@ def schema_key_paths() -> List[str]:
     return list(schema_key_details())
 
 
-def description_key_paths(spa_home: Path) -> Set[str]:
-    path = spa_home / DESCRIPTION_REL
-    if not path.is_file():
-        return set()
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    raw_keys: Set[str] = set()
-
-    def walk(node: Any, prefix: str) -> None:
-        if isinstance(node, dict):
-            if prefix:
-                raw_keys.add(prefix)
-            for name, value in node.items():
-                child = "%s.%s" % (prefix, name) if prefix else str(name)
-                walk(value, child)
-        elif isinstance(node, list) and node and isinstance(node[0], dict):
-            if prefix:
-                raw_keys.add(prefix)
-            walk(node[0], prefix)
-        elif prefix:
-            raw_keys.add(prefix)
-
-    if isinstance(data, dict):
-        walk(data, "")
-    keys = set(raw_keys)
-    for schema_path in schema_key_paths():
-        pattern = re.escape(schema_path.replace("[]", ""))
-        pattern = re.sub(r"<[^>]+>", r"[^.]+", pattern)
-        if any(re.fullmatch(pattern, raw) for raw in raw_keys):
-            keys.add(schema_path)
-    return keys
-
-
 def key_inventory(spa_home: Path) -> Dict[str, Any]:
     features = load_features(spa_home)
     covered = catalog_key_set(features)
     schema_details = schema_key_details()
     schema_keys = list(schema_details)
-    described = description_key_paths(spa_home)
     catalog_details = {
         key_path(key): key
         for feature in features
@@ -363,7 +329,7 @@ def key_inventory(spa_home: Path) -> Dict[str, Any]:
         if isinstance(key, dict)
     }
     rows = []
-    all_keys = sorted(set(schema_keys) | described | USED_IN_CODE_KEYS | covered)
+    all_keys = sorted(set(schema_keys) | USED_IN_CODE_KEYS | covered)
     for key in all_keys:
         override = catalog_details.get(key) or {}
         has_detail = key in schema_details or bool(override.get("type"))
@@ -371,7 +337,6 @@ def key_inventory(spa_home: Path) -> Dict[str, Any]:
             {
                 "key": key,
                 "in_schema": key in schema_keys,
-                "in_description": key in described,
                 "used_in_code": key in USED_IN_CODE_KEYS or key in schema_keys,
                 "in_catalog": key in covered,
                 "has_key_detail": has_detail,

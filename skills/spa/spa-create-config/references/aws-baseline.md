@@ -54,11 +54,11 @@ From repo root (requires `boto3` and AWS credentials):
 
 ```bash
 spa aws --check-auth --json
-spa aws --list-regions --json
+spa aws list regions --json
 spa aws --region eu-central-1 --latest-ami --os all --json
-spa aws --region eu-central-1 --list-instance-types --family t3 --json
-spa aws --region eu-central-1 --list-key-pairs --json
-spa aws --region eu-central-1 --list-security-groups --json
+spa aws list instance-types --region eu-central-1 --family t3 --json
+spa aws list key-pairs --region eu-central-1 --json
+spa aws list security-groups --region eu-central-1 --json
 spa aws --region eu-central-1 --describe-ami --ami-id ami-xxx --json
 spa aws --region eu-central-1 --validate \
   --ami-id ami-xxx --key-name aws_key --security-groups Splunk_Basic --instance-type t3.medium --json

@@ -15,16 +15,10 @@ from schema import ConfigValidationError, validate_config_file  # noqa: E402
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Not runnable inventories: docs, fragments, or host-less skeletons.
-SKIP_EXAMPLE_BASENAMES = {
-    "configuration_description.yml",
-}
-
-
 def _example_paths():
     paths = sorted(glob.glob(os.path.join(PROJECT_ROOT, "examples", "topologies", "*.yml")))
     paths += sorted(glob.glob(os.path.join(PROJECT_ROOT, "examples", "*.yml")))
-    return [p for p in paths if os.path.basename(p) not in SKIP_EXAMPLE_BASENAMES]
+    return paths
 
 
 def _app_scope_paths():

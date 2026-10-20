@@ -1,6 +1,6 @@
 # Upgrade steps of a distributed Splunk environment
 
-From the environment directory. Discover names with `spa run --list` / `spa run NAME --help`.
+From the environment directory. Discover names with `spa run list` / `spa run NAME --help`.
 
 ## This example upgrades 8.0+ to later versions with rolling upgrades
 

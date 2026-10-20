@@ -68,7 +68,7 @@ Later per-env knobs on `spa environment set --env NAME` will write that env’s 
 `$SPA_ENV_DIR/config/splunk_config.yml` is the source of truth. Start from a composed topology and provider rather than copying a large example:
 
 ```bash
-spa init --list
+spa init list
 spa features search cluster
 spa features show splunk_idxclusters[].idxc_name --keys
 spa validate
@@ -102,9 +102,9 @@ flowchart TD
 | Stop compute and retain disks | `spa suspend --yes` |
 | Start compute | `spa resume --yes` |
 | Remove managed infrastructure | `spa destroy --yes` |
-| Discover other playbooks | `spa run --list` |
+| Discover other playbooks | `spa run list` |
 | Inspect a playbook | `spa run NAME --help` |
-| Show a run transcript | `spa logs` / `spa logs --last` / `spa logs --follow` |
+| Show a run transcript | `spa logs list` / `spa logs RUN_ID` / `spa logs --last` / `spa logs --follow` |
 | Replay the captured native Ansible transcript | `spa logs --last --ansible-output` |
 | Show event times on that transcript | `spa logs --last --ansible-output --timestamps` |
 | Color that transcript | `spa logs --last --ansible-output --color` |

@@ -69,6 +69,53 @@ def test_discover_ubuntu_ssm_path_prefers_latest_lts_gp3():
     assert aws.discover_ubuntu_ssm_path([]) is None
 
 
+def test_retired_list_flags_exit_before_any_aws_call(monkeypatch, capsys):
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("AWS session must not be created")
+
+    monkeypatch.setattr(aws, "_session", _boom)
+    for flag, kind in (
+        ("--list-regions", "regions"),
+        ("--list-amis", "amis"),
+        ("--list-instance-types", "instance-types"),
+        ("--list-key-pairs", "key-pairs"),
+        ("--list-security-groups", "security-groups"),
+    ):
+        with pytest.raises(SystemExit) as excinfo:
+            aws.main([flag])
+        assert excinfo.value.code == 2
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "Listing %s is: spa aws list %s" % (kind, kind) in captured.err
+
+
+def test_list_kind_parsers_scope_flags_and_skip_aws_without_region(monkeypatch, capsys):
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("AWS session must not be created")
+
+    monkeypatch.setattr(aws, "_session", _boom)
+    listed = aws.build_parser().parse_args(["list", "regions", "--json"])
+    assert listed.aws_list_kind == "regions"
+    assert listed.json is True
+    amis = aws.build_parser().parse_args(
+        ["list", "amis", "--region", "eu-central-1", "--name-filter", "custom*", "--json"]
+    )
+    assert amis.region == "eu-central-1"
+    assert amis.name_filter == "custom*"
+    assert amis.json is True
+    inherited = aws.build_parser().parse_args(
+        ["--region", "eu-central-1", "list", "instance-types", "--family", "t3"]
+    )
+    assert inherited.region == "eu-central-1"
+    assert inherited.family == "t3"
+    code = aws.main(["list", "amis"])
+    assert code == 2
+    assert "--region is required for spa aws list amis" in capsys.readouterr().err
+    with pytest.raises(SystemExit) as family:
+        aws.build_parser().parse_args(["list", "amis", "--region", "eu-central-1", "--family", "t3"])
+    assert family.value.code == 2
+
+
 def test_parse_security_groups():
     assert aws.parse_security_groups(None) is None
     assert aws.parse_security_groups("") is None
