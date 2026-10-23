@@ -80,10 +80,6 @@ if !settings['splunk_apps'].nil?
 end
 
 # Check for virtualization provider (VirtualBox only; AWS is terraform.aws via spa)
-if settings.has_key?("aws") and !settings.has_key?("virtualbox")
-    print "ERROR: The Vagrant AWS provider was removed. Use terraform.aws and spa provision.\n"
-    exit 2
-end
 if !settings.has_key?("virtualbox")
     print "ERROR: No virtualbox section in #{config_file}\n"
     exit 2

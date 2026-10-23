@@ -38,6 +38,7 @@ ROLES_WITH_SITE = {AllowedRole.indexer, AllowedRole.search_head, AllowedRole.clu
 # Version: "latest" or dotted numeric (e.g. 1.0, 4.21.1, 10.1.0)
 VERSION_NUMBER_PATTERN = re.compile(r"^\d+(\.\d+)*$")
 SPLUNK_VERSION_PATTERN = r"^(latest|\d+(\.\d+)*)$"
+DEPRECATED_AWS = "The aws block is deprecated and has been replaced by terraform.aws."
 SPLUNK_ARCHITECTURE_PATTERN = r"^(amd64|x86_64|arm64)$"
 SPLUNK_SITE_PATTERN = r"^site\d+$"
 # Splunk site factor tokens: origin:N, total:N, optional siteN:N
@@ -1252,10 +1253,6 @@ class SplunkHost(BaseModel):
         None,
         description="Guest OS settings for this host only. Holds no value itself.",
     )
-    aws: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Legacy per-host AWS inventory map. Not used by Terraform. No default. Omit the key.",
-    )
     virtualbox: Optional[VirtualBoxConfig] = Field(
         None,
         description="VirtualBox settings for this host only. Holds no value itself.",
@@ -1268,6 +1265,13 @@ class SplunkHost(BaseModel):
         None,
         description="Terraform settings for this host only. Holds no value itself.",
     )
+
+    @model_validator(mode='before')
+    @classmethod
+    def reject_deprecated_aws(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "aws" in data:
+            raise ValueError(DEPRECATED_AWS)
+        return data
 
     @model_validator(mode='after')
     def validate_host_identifier(self) -> 'SplunkHost':
@@ -1375,10 +1379,6 @@ class SplunkConfig(BaseModel):
         None,
         description="VirtualBox guest size and network for Vagrant. Holds no value itself.",
     )
-    aws: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Legacy inventory-only AWS map. Not used by Terraform provision. No default. Omit the key.",
-    )
     terraform: Optional[TerraformConfig] = Field(
         None,
         description="Terraform provider settings. Holds no value itself.",
@@ -1430,6 +1430,13 @@ class SplunkConfig(BaseModel):
                 "Set a literal password or an env lookup such as "
                 "\"{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}\"."
             )
+        return data
+
+    @model_validator(mode='before')
+    @classmethod
+    def reject_deprecated_aws(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "aws" in data:
+            raise ValueError(DEPRECATED_AWS)
         return data
 
     @field_validator('plugin')

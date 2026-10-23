@@ -74,10 +74,6 @@ spa run aws_wait_hosts --help
 
 Do not remove a live host from `splunk_config.yml` and provision: Terraform may interpret that as permission to terminate it. Review the plan and use the dedicated destroy workflow.
 
-## From vagrant-aws
-
-vagrant-aws is removed in 3.0. A top-level `aws:` block is only legacy inventory data, not a provider. Move cloud settings to `terraform.aws`, migrate the environment with `spa init`, validate, and review a Terraform plan before managing existing resources. See [Migrate](migrate.md).
-
 ## Maintainers
 
 The module implementation is under [`terraform/aws/`](../terraform/aws/). Its README describes module files and outputs; operator behavior belongs here and in `spa provision --help`.

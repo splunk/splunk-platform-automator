@@ -351,11 +351,7 @@ class SpaPaths:
 
     def ansible_inventory(self) -> str:
         """ANSIBLE_INVENTORY value that prefers the env over the clone config."""
-        parts = [str(self.config_file)]
-        aws_ec2 = self.config_file.parent / "aws_ec2.yml"
-        if aws_ec2.is_file():
-            parts.append(str(aws_ec2))
-        parts.append(str(self.inventory_dir))
+        parts = [str(self.config_file), str(self.inventory_dir)]
         return ",".join(parts)
 
     def export_env(self) -> Dict[str, str]:

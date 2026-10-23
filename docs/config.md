@@ -131,7 +131,6 @@ os:
 | `virtualbox.synced_folder` | list[object] | optional | Folders mounted from the Ansible controller into the guest. Holds no value itself. |
 | `virtualbox.synced_folder[].source` | string | required | Path on the Ansible controller to mount into the guest. Required. |
 | `virtualbox.synced_folder[].target` | string | required | Path inside the guest where the controller folder is mounted. Required. |
-| `aws` | map[string, any] | optional | Legacy inventory-only AWS map. Not used by Terraform provision. No default. Omit the key. |
 
 ### Snippets
 
@@ -145,16 +144,6 @@ Login user Terraform and Ansible use on the EC2 AMI. Must match the image (ec2-u
 terraform:
   aws:
     ssh_username: ec2-user
-```
-
-#### Legacy top-level aws block
-
-`aws`
-
-Inventory-only leftover from vagrant-aws. Do not use for provision; use the AWS provider (terraform.aws).
-
-```yaml
-# Do not add a top-level aws: provision block. Use terraform.aws.
 ```
 
 ## Clustering
@@ -541,7 +530,6 @@ splunk_systemd: {}
 | Path | Type | Qualifiers | Description |
 | --- | --- | --- | --- |
 | `splunk_hosts` | list[object] | required; min_length=1 | Hosts that spa provision and spa deploy act on. Holds no value itself. |
-| `splunk_hosts[].aws` | map[string, any] | optional | Legacy per-host AWS inventory map. Not used by Terraform. No default. Omit the key. |
 | `splunk_hosts[].cname` | string | optional | DNS alias published for this host. No default. Omit the key to publish none. |
 | `splunk_hosts[].custom` | CustomConfig | optional | Ansible connection variables for this host only, such as ansible_user and ansible_port. No default. Omit the key when SPA provisions the host. |
 | `splunk_hosts[].idxcluster` | string | optional | Indexer cluster name. Required when roles includes cluster_manager. No default for other roles. Omit the key when the host is not in an indexer cluster. Also associates indexer peers with that cluster. |

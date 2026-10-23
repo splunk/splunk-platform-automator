@@ -116,6 +116,11 @@ def test_development_docs_require_tdd_and_feature_review():
     assert "architecture.md#feature-completion-review" in contributing
     assert "docs/architecture.md#test-driven-development" in agents
     assert "docs/architecture.md#feature-completion-review" in agents
+    assert "before the first file edit" in agents
+    assert "see it fail before changing production code" in agents
+    assert "only after its drift test has failed" in agents
+    assert "Leave the slice open until `./tests/run_local_tests.sh` passes." in agents
+    assert "A plan, a todo list, or an implement-this request does not skip these steps." in agents
 
 
 def test_config_editing_contract_is_linked_from_development_docs():

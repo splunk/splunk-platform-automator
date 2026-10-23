@@ -1302,7 +1302,7 @@ def config_topology(
         if not feature or feature.get("kind") != "topology" or not feature.get("template"):
             raise ConfigEditError("Unknown topology feature: %s" % topology)
         topology = str(feature["template"])
-    topology_id, _, _ = resolve_example_pair(Path(spa_home), topology, None)
+    topology_id, _ = resolve_example_pair(Path(spa_home), topology, None)
     example = _load_yaml_mapping(Path(spa_home) / "examples" / "topologies" / ("%s.yml" % topology_id))
 
     def mutate(document: MutableMapping[str, Any], warnings: List[str]) -> None:
@@ -1342,7 +1342,7 @@ def config_provider(
         if not feature or feature.get("kind") != "provider" or not feature.get("template"):
             raise ConfigEditError("Unknown provider feature: %s" % provider)
         provider = str(feature["template"])
-    _, provider_id, _ = resolve_example_pair(Path(spa_home), "single_node", provider)
+    _, provider_id = resolve_example_pair(Path(spa_home), "single_node", provider)
     example = _load_yaml_mapping(Path(spa_home) / "examples" / "providers" / ("%s.yml" % provider_id))
 
     def mutate(document: MutableMapping[str, Any], warnings: List[str]) -> None:

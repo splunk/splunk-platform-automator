@@ -75,7 +75,6 @@ to bump Ansible and other requirements in place (`pip install --upgrade` plus
 ## AWS and VirtualBox
 
 - `spa provision`, `spa destroy`, `spa suspend`, and `spa resume` follow `splunk_config.yml`: **`terraform.aws`** or **`virtualbox:`**. Same env-dir loop for both.
-- A top-level `aws:` block is inventory-only (legacy vagrant-aws). vagrant-aws is removed in 3.0; use Terraform AWS for cloud.
 - VirtualBox env dirs have no `Vagrantfile`; provision and deploy through `spa`.
 
 Playbooks are invoked with `spa run NAME` (discover: `spa run list`). Site deploy is `spa deploy --yes`.
@@ -136,8 +135,6 @@ If you jump from an older 2.x (before 2.5) to 3.0:
 SPA 2.0 introduced a dynamic Ansible inventory plugin and moved topology into `splunk_config.yml`. Before going to 3.0, first ensure the old config includes `plugin: splunk-platform-automator` and that values formerly held in static `inventory/group*` files are represented in config.
 
 For VirtualBox, `start_ip` moved from `general` to `virtualbox`. For old Ansible-only environments, export the effective inventory before migration and compare it with `spa hosts list` afterwards.
-
-The 1.x AWS path depended on vagrant-aws tags and is no longer an operator path. Do not reproduce the old tagging/Vagrant procedure on 3.0. Inventory-only AWS leftovers must be redesigned as `terraform.aws` or registered as external hosts; see [AWS](aws.md).
 
 ## Splunk 9 terminology
 

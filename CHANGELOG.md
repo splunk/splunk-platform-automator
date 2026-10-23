@@ -33,7 +33,11 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 - **2.x `bin/` wrappers**: `init_spa_dir.sh`, `spa_env.sh`, `spa_doctor.sh`, `validate_splunk_config.sh`, `spash`, `splunk_config_aws.py`, and `splunk_config_licenses.py`. Operators use `spa`. `bin/spa_venv.sh` remains as the venv implementation (`spa venv`; contributors may still `source` it). `--lab` / `SPA_LAB_DIR` are gone (`--env` / `SPA_ENV_DIR`).
 
-- **vagrant-aws / gecko-aws** from `Vagrantfile`. Cloud is `terraform.aws`. A leftover top-level `aws:` block is inventory-only.
+- **vagrant-aws / gecko-aws** from `Vagrantfile`. Cloud is `terraform.aws`.
+
+- **Leftover `aws` config** ([#106](https://github.com/splunk/splunk-platform-automator/issues/106)): a top-level `aws:` key or `splunk_hosts[].aws` fails validation. The replacement is `terraform.aws`.
+
+- **Old `spa init --example` filenames.** A topology id works with either provider: `spa init --example TOPOLOGY [--provider aws|virtualbox] NAME`. A name that is not a topology id, such as `cm_2idxc_sh_uf_aws.yml`, is rejected. `single_node.yml` still selects the `single_node` topology and the default provider.
 
 ### Changed
 
