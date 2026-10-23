@@ -38,6 +38,7 @@ ROLES_WITH_SITE = {AllowedRole.indexer, AllowedRole.search_head, AllowedRole.clu
 # Version: "latest" or dotted numeric (e.g. 1.0, 4.21.1, 10.1.0)
 VERSION_NUMBER_PATTERN = re.compile(r"^\d+(\.\d+)*$")
 SPLUNK_VERSION_PATTERN = r"^(latest|\d+(\.\d+)*)$"
+DEPRECATED_AWS = "The aws block is deprecated and has been replaced by terraform.aws."
 SPLUNK_ARCHITECTURE_PATTERN = r"^(amd64|x86_64|arm64)$"
 SPLUNK_SITE_PATTERN = r"^site\d+$"
 # Splunk site factor tokens: origin:N, total:N, optional siteN:N
@@ -1269,9 +1270,7 @@ class SplunkHost(BaseModel):
     @classmethod
     def reject_deprecated_aws(cls, data: Any) -> Any:
         if isinstance(data, dict) and "aws" in data:
-            raise ValueError(
-                "The aws block is deprecated and has been replaced by terraform.aws."
-            )
+            raise ValueError(DEPRECATED_AWS)
         return data
 
     @model_validator(mode='after')
@@ -1419,15 +1418,6 @@ class SplunkConfig(BaseModel):
 
     @model_validator(mode='before')
     @classmethod
-    def reject_deprecated_aws(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "aws" in data:
-            raise ValueError(
-                "The aws block is deprecated and has been replaced by terraform.aws."
-            )
-        return data
-
-    @model_validator(mode='before')
-    @classmethod
     def validate_admin_password_is_set(cls, data: Any) -> Any:
         """The admin password must be a non-empty literal or an env lookup."""
         if not isinstance(data, dict):
@@ -1440,6 +1430,13 @@ class SplunkConfig(BaseModel):
                 "Set a literal password or an env lookup such as "
                 "\"{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}\"."
             )
+        return data
+
+    @model_validator(mode='before')
+    @classmethod
+    def reject_deprecated_aws(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "aws" in data:
+            raise ValueError(DEPRECATED_AWS)
         return data
 
     @field_validator('plugin')

@@ -2774,6 +2774,17 @@ class TestDeprecatedAwsBlock:
         text = str(exc_info.value)
         assert "The aws block is deprecated and has been replaced by terraform.aws." in text
 
+    def test_deprecated_aws_is_reported_when_the_admin_password_is_missing(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "aws": {"region": "eu-central-1"},
+            "splunk_hosts": [{"name": "idx1", "roles": ["indexer"]}],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            _schema_validate(config)
+        text = str(exc_info.value)
+        assert "The aws block is deprecated and has been replaced by terraform.aws." in text
+
     def test_host_aws_is_rejected(self):
         config = {
             "plugin": "splunk-platform-automator",

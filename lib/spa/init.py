@@ -51,31 +51,6 @@ PROVIDER_FORBIDDEN = (
     "os",
 )
 
-# Old single-file names → topology id + implied provider.
-EXAMPLE_ALIASES = {
-    "single_node.yml": ("single_node", "virtualbox"),
-    "idx_sh_uf.yml": ("idx_sh_uf", "virtualbox"),
-    "cm_2idxc_sh_uf.yml": ("cm_2idxc_sh_uf", "virtualbox"),
-    "cm_2idxc_sh_uf_aws.yml": ("cm_2idxc_sh_uf", "aws"),
-    "cm_2idxc1site_3shc_uf.yml": ("cm_2idxc1site_3shc_uf", "virtualbox"),
-    "4idxc2site_sh.yml": ("4idxc2site_sh", "virtualbox"),
-    "cm_4idxc2site_3shc_ds_uf.yml": ("cm_4idxc2site_3shc_ds_uf", "virtualbox"),
-    "two_envs_each_cm_2idxc1site_ds_sh_uf.yml": (
-        "two_envs_each_cm_2idxc1site_ds_sh_uf",
-        "virtualbox",
-    ),
-    "cm1_2idxc1site_cm2_2idxc1site_ds_3shc_smc_uf.yml": (
-        "cm1_2idxc1site_cm2_2idxc1site_ds_3shc_smc_uf",
-        "virtualbox",
-    ),
-    "ds_cm_2idxc1site_sh_hf_uf.yml": ("ds_cm_2idxc1site_sh_hf_uf", "virtualbox"),
-    "idx_3shc_uf.yml": ("idx_3shc_uf", "virtualbox"),
-    "aws_lab_baseline.yml": ("single_node", "aws"),
-    "splunk_config_terraform_aws.yml": ("cm_2idxc_sh_uf", "aws"),
-    "splunk_config_aws.yml": ("cm_2idxc_sh_uf", "aws"),
-}
-
-
 class InitError(Exception):
     def __init__(self, message: str, code: int = 1):
         super().__init__(message)
@@ -499,27 +474,13 @@ def _normalize_example_name(name: str) -> str:
 
 def resolve_example_pair(
     spa_home: Path, example: Optional[str], provider: Optional[str]
-) -> Tuple[str, str, Optional[str]]:
-    """Return (topology_id, provider_id, alias_hint)."""
+) -> Tuple[str, str]:
+    """Return (topology_id, provider_id)."""
     provider_id = (provider or "").strip().lower() or None
     if provider_id in {"terraform.aws", "terraform"}:
         provider_id = "aws"
-    raw_example = (example or "single_node.yml").strip()
-    passed_filename = raw_example.endswith((".yml", ".yaml"))
-    raw = _normalize_example_name(raw_example)
-    explicit_provider = provider_id is not None
-    hint = None
+    raw = _normalize_example_name((example or "single_node.yml").strip())
     topology_id = Path(raw).stem
-    alias = EXAMPLE_ALIASES.get(raw)
-    if alias:
-        topology_id, implied = alias
-        if provider_id is None and passed_filename:
-            provider_id = implied
-        if not explicit_provider:
-            hint = (
-                "Alias %s → --example %s --provider %s"
-                % (raw, topology_id, implied)
-            )
     if provider_id is None:
         from spa.registry import load_default_provider
 
@@ -532,7 +493,7 @@ def resolve_example_pair(
         raise InitError("Topology example not found: %s" % topo)
     if not prov.is_file():
         raise InitError("Provider example not found: %s (use aws or virtualbox)" % prov)
-    return topology_id, provider_id, hint
+    return topology_id, provider_id
 
 
 def _load_yaml_mapping(path: Path) -> Dict[str, Any]:
@@ -628,8 +589,8 @@ def _with_ami_comment(text: str, comment: str) -> str:
 
 def write_composed_config(
     dest_config: Path, spa_home: Path, example: Optional[str], provider: Optional[str]
-) -> Tuple[str, str, Optional[str]]:
-    topology_id, provider_id, hint = resolve_example_pair(spa_home, example, provider)
+) -> Tuple[str, str]:
+    topology_id, provider_id = resolve_example_pair(spa_home, example, provider)
     composed = compose_example_config(spa_home, topology_id, provider_id)
     text = dump_splunk_config(composed)
     provider_path = Path(spa_home) / "examples" / "providers" / ("%s.yml" % provider_id)
@@ -639,7 +600,7 @@ def write_composed_config(
             text = _with_ami_comment(text, comment)
     dest_config.parent.mkdir(parents=True, exist_ok=True)
     dest_config.write_text(text, encoding="utf-8")
-    return topology_id, provider_id, hint
+    return topology_id, provider_id
 
 
 def init_env(
@@ -802,7 +763,7 @@ def _init_env(
 
     if example_set:
         ensure_env_dirs(dest)
-        topology_id, provider_id, hint = write_composed_config(
+        topology_id, provider_id = write_composed_config(
             config_dest, spa_home, example, provider
         )
         _write()
@@ -810,8 +771,6 @@ def _init_env(
         run_doctor(dest, spa_home, skip_doctor)
         _say("Env scaffolded at %s" % dest)
         _say("  example:   %s --provider %s" % (topology_id, provider_id))
-        if hint:
-            _say("  note:      %s" % hint)
         _say("  config:    %s" % config_dest)
         return 0
 
@@ -830,7 +789,7 @@ def _init_env(
     if config_dest.exists() or (dest / ".spa.yml").exists():
         raise InitError("Env already exists (%s). Use --force to refresh .spa.yml." % dest)
     ensure_env_dirs(dest)
-    topology_id, provider_id, hint = write_composed_config(
+    topology_id, provider_id = write_composed_config(
         config_dest, spa_home, "single_node", "virtualbox"
     )
     _write()
@@ -838,7 +797,5 @@ def _init_env(
     run_doctor(dest, spa_home, skip_doctor)
     _say("Env scaffolded at %s" % dest)
     _say("  example:   %s --provider %s" % (topology_id, provider_id))
-    if hint:
-        _say("  note:      %s" % hint)
     _say("  config:    %s" % config_dest)
     return 0

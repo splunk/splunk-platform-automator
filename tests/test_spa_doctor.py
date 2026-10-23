@@ -50,7 +50,7 @@ def test_doctor_aws_strict_fails_without_terraform():
 def test_init_runs_doctor_by_default(tmp_path):
     dest = tmp_path / "env"
     result = run_spa(
-        ["init", "--example", "cm_2idxc_sh_uf_aws.yml", str(dest)],
+        ["init", "--example", "cm_2idxc_sh_uf", "--provider", "aws", str(dest)],
         extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
     )
     out = result.stderr + result.stdout
@@ -61,14 +61,16 @@ def test_init_runs_doctor_by_default(tmp_path):
 
 def test_init_skip_doctor(tmp_path):
     dest = tmp_path / "env"
-    result = run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    result = run_spa_init(["--example", "single_node", "--provider", "virtualbox", "--skip-doctor", str(dest)])
     assert result.returncode == 0, result.stderr + result.stdout
     assert "SPA host prerequisites" not in (result.stdout + result.stderr)
 
 
 def test_doctor_skips_vagrant_without_virtualbox(tmp_path):
     dest = tmp_path / "env"
-    run_spa_init(["--example", "cm_2idxc_sh_uf_aws.yml", "--skip-doctor", str(dest)])
+    run_spa_init(
+        ["--example", "cm_2idxc_sh_uf", "--provider", "aws", "--skip-doctor", str(dest)]
+    )
     env = spa_env()
     env["PATH"] = "/usr/bin:/bin"
     result = run_spa(
@@ -82,7 +84,7 @@ def test_doctor_skips_vagrant_without_virtualbox(tmp_path):
 def test_doctor_checks_env_provider_without_env_flag(tmp_path):
     """spa doctor from an env dir must check that env's provider tools."""
     dest = tmp_path / "env"
-    run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    run_spa_init(["--example", "single_node", "--provider", "virtualbox", "--skip-doctor", str(dest)])
     env = spa_env({"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(dest)})
     env["PATH"] = "/usr/bin:/bin"
     result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env, cwd=dest)
@@ -94,7 +96,7 @@ def test_doctor_checks_env_provider_without_env_flag(tmp_path):
 
 def test_doctor_reports_when_config_has_no_provider(tmp_path):
     dest = tmp_path / "env"
-    run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    run_spa_init(["--example", "single_node", "--provider", "virtualbox", "--skip-doctor", str(dest)])
     config = dest / "config" / "splunk_config.yml"
     config.write_text(
         "---\nsplunk_hosts:\n  - name: idx1\n    roles: [indexer]\n", encoding="utf-8"
@@ -124,7 +126,9 @@ def test_config_providers_ignores_comments_and_nested_keys():
 
 def test_doctor_env_provider_terraform_aws(tmp_path):
     dest = tmp_path / "env"
-    run_spa_init(["--example", "cm_2idxc_sh_uf_aws.yml", "--skip-doctor", str(dest)])
+    run_spa_init(
+        ["--example", "cm_2idxc_sh_uf", "--provider", "aws", "--skip-doctor", str(dest)]
+    )
     env = spa_env({"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(dest)})
     env["PATH"] = "/usr/bin:/bin"
     result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env, cwd=dest)
@@ -141,7 +145,7 @@ def test_doctor_flags_virtualbox_without_a_vagrant_driver(tmp_path, monkeypatch)
     from spa import doctor as doctor_mod
 
     dest = tmp_path / "env"
-    run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    run_spa_init(["--example", "single_node", "--provider", "virtualbox", "--skip-doctor", str(dest)])
     monkeypatch.setattr(doctor_mod.shutil, "which", lambda name: "/usr/bin/" + name)
     monkeypatch.setattr(doctor_mod, "_virtualbox_version", lambda: "7.2")
     monkeypatch.setattr(doctor_mod, "_vagrant_virtualbox_drivers", lambda: ["6.1", "7.0"])
@@ -162,7 +166,7 @@ def test_doctor_ok_when_vagrant_supports_installed_virtualbox(tmp_path, monkeypa
     from spa import doctor as doctor_mod
 
     dest = tmp_path / "env"
-    run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    run_spa_init(["--example", "single_node", "--provider", "virtualbox", "--skip-doctor", str(dest)])
     monkeypatch.setattr(doctor_mod.shutil, "which", lambda name: "/usr/bin/" + name)
     monkeypatch.setattr(doctor_mod, "_virtualbox_version", lambda: "7.0")
     monkeypatch.setattr(doctor_mod, "_vagrant_virtualbox_drivers", lambda: ["6.1", "7.0"])
@@ -177,7 +181,7 @@ def test_doctor_ok_when_vagrant_supports_installed_virtualbox(tmp_path, monkeypa
 def test_doctor_reports_incomplete_venv_for_the_env_under_test(tmp_path):
     """--env decides which .venv is checked, not the caller's SPA_ENV_DIR."""
     dest = tmp_path / "env"
-    run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    run_spa_init(["--example", "single_node", "--provider", "virtualbox", "--skip-doctor", str(dest)])
     (dest / ".venv" / "include").mkdir(parents=True)
     other = tmp_path / "other"
     (other / ".venv" / "include").mkdir(parents=True)
@@ -230,7 +234,7 @@ def test_doctor_warns_when_venv_cannot_import_requirements(tmp_path, monkeypatch
 
 def test_doctor_virtualbox_requires_vagrant(tmp_path):
     dest = tmp_path / "env"
-    run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    run_spa_init(["--example", "single_node", "--provider", "virtualbox", "--skip-doctor", str(dest)])
     env = spa_env()
     env["PATH"] = "/usr/bin:/bin"
     result = run_spa(
@@ -280,7 +284,7 @@ def test_doctor_requires_vagrant_vbguest_plugin(tmp_path, monkeypatch):
     from spa import doctor as doctor_mod
 
     dest = tmp_path / "env"
-    run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    run_spa_init(["--example", "single_node", "--provider", "virtualbox", "--skip-doctor", str(dest)])
     monkeypatch.setattr(doctor_mod.shutil, "which", lambda name: "/usr/bin/" + name)
     monkeypatch.setattr(doctor_mod, "_virtualbox_version", lambda: "7.0")
     monkeypatch.setattr(doctor_mod, "_vagrant_virtualbox_drivers", lambda: ["6.1", "7.0"])
@@ -301,7 +305,7 @@ def test_doctor_warns_for_wsl_virtualbox_plugin(tmp_path, monkeypatch):
     from spa import doctor as doctor_mod
 
     dest = tmp_path / "env"
-    run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    run_spa_init(["--example", "single_node", "--provider", "virtualbox", "--skip-doctor", str(dest)])
     monkeypatch.setattr(doctor_mod.shutil, "which", lambda name: "/usr/bin/" + name)
     monkeypatch.setattr(doctor_mod, "_virtualbox_version", lambda: "7.0")
     monkeypatch.setattr(doctor_mod, "_vagrant_virtualbox_drivers", lambda: ["7.0"])
@@ -322,7 +326,7 @@ def test_doctor_missing_vagrant_and_virtualbox_both_instruct(tmp_path, monkeypat
     from spa import doctor as doctor_mod
 
     dest = tmp_path / "env"
-    run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    run_spa_init(["--example", "single_node", "--provider", "virtualbox", "--skip-doctor", str(dest)])
     monkeypatch.setattr(doctor_mod.shutil, "which", lambda name: None)
     monkeypatch.setattr(doctor_mod, "_virtualbox_version", lambda: None)
     monkeypatch.setattr(doctor_mod, "_vagrant_install_hint", lambda: "brew tap hashicorp/tap && brew install hashicorp/tap/hashicorp-vagrant")

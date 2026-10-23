@@ -14,12 +14,11 @@ pytestmark = [pytest.mark.local, pytest.mark.cli]
 def test_explicit_aws_provider_is_not_described_as_virtualbox():
     from spa.init import resolve_example_pair
 
-    topology, provider, hint = resolve_example_pair(
+    topology, provider = resolve_example_pair(
         PROJECT_ROOT, "cm_2idxc1site_3shc_uf", "aws"
     )
     assert topology == "cm_2idxc1site_3shc_uf"
     assert provider == "aws"
-    assert hint is None
 
 
 def test_init_help():
@@ -96,13 +95,13 @@ def test_example_with_aws_provider(tmp_path):
     assert "cm" in names
 
 
-def test_aws_example_alias(tmp_path):
+def test_legacy_example_filename_is_rejected(tmp_path):
     dest = tmp_path / "legacy"
     result = run_spa_init(["--example", "cm_2idxc_sh_uf_aws.yml", str(dest)])
-    assert result.returncode == 0, result.stderr + result.stdout
-    cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
-    assert "terraform" in cfg
-    assert "Alias" in result.stdout or "cm_2idxc_sh_uf_aws" in result.stdout
+    text = result.stderr + result.stdout
+    assert result.returncode != 0
+    assert "cm_2idxc_sh_uf_aws" in text
+    assert "Alias" not in text
 
 
 def test_refuse_overwrite(tmp_path):

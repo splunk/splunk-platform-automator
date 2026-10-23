@@ -37,6 +37,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 - **Leftover `aws` config** ([#106](https://github.com/splunk/splunk-platform-automator/issues/106)): a top-level `aws:` key or `splunk_hosts[].aws` fails validation. The replacement is `terraform.aws`.
 
+- **Old `spa init --example` filenames.** A topology id works with either provider: `spa init --example TOPOLOGY [--provider aws|virtualbox] NAME`. A name that is not a topology id, such as `cm_2idxc_sh_uf_aws.yml`, is rejected. `single_node.yml` still selects the `single_node` topology and the default provider.
+
 ### Changed
 
 - **Test venv installs the config editor YAML library**: `tests/requirements.txt` includes `ruamel.yaml`, so a fresh CI environment can import the config editor. The operator venv already installed it from `requirements.txt`.
