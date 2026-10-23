@@ -147,11 +147,9 @@ def test_extra_inventory_host_does_not_block(tmp_path):
     assert "uf1" in inventory_hostnames_from_file(paths)
 
 
-def test_virtualbox_and_legacy_aws_skip_the_gate(tmp_path):
+def test_virtualbox_skips_the_gate(tmp_path):
     vbox = _paths(tmp_path / "vbox", "virtualbox:\n  memory: 4096\n")
     assert check_provisioned(vbox).provisioned is True
-    legacy = _paths(tmp_path / "legacy", "aws:\n  region: eu-central-1\n")
-    assert check_provisioned(legacy).provisioned is True
 
 
 def test_missing_config_skips_the_gate(tmp_path):

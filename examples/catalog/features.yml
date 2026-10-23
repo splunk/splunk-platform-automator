@@ -115,7 +115,7 @@ features:
     kind: provider
     template: aws
     when_to_use: EC2 via terraform.aws. Pick region, AMI, instance type, and related live values with spa aws --json (survey, latest-ami, list-instance-types, validate); do not copy a hardcoded cloud catalog.
-    when_not_to_use: "Local VirtualBox; leftover top-level aws: is inventory-only."
+    when_not_to_use: "Local VirtualBox."
     suggest: spa init --example TOPOLOGY --provider aws ENV
     keys:
       - terraform
@@ -156,15 +156,6 @@ features:
           instance_type: t3.medium
           tags:
             SPADirName: "{{ spa_env_dir | basename }}"
-
-  - id: setting.legacy_aws
-    selector: aws
-    title: Legacy top-level aws block
-    kind: setting
-    when_not_to_use: "Inventory-only leftover from vagrant-aws. Do not use for provision; use the AWS provider (terraform.aws)."
-    keys: [aws]
-    snippet: |
-      # Do not add a top-level aws: provision block. Use terraform.aws.
 
   - id: setting.splunk_defaults
     selector: splunk_defaults
@@ -560,8 +551,8 @@ features:
       on Splunk 9.0+. Start from separate indexer and search-head hosts, or a multisite indexer cluster with a search head cluster, then merge this snippet; do not
       copy leftover mixed SmartStore example files.
     when_not_to_use: >-
-      Local-disk volumes only; use splunk_defaults.splunk_indexer_volumes. Do not add a legacy top-level aws: block
-      for S3. Indexer cluster RF must equal SF when SmartStore is enabled.
+      Local-disk volumes only; use splunk_defaults.splunk_indexer_volumes.
+      Indexer cluster RF must equal SF when SmartStore is enabled.
     suggest: spa init --example idx_sh_uf --provider aws ENV then merge this snippet
     keys:
       - path: splunk_defaults.splunk_indexer_volumes.<volume>.path
@@ -1211,7 +1202,6 @@ features:
       - path: "splunk_hosts[].shcluster"
         note: Also associates search heads with that cluster.
       - "splunk_hosts[].ip_addr"
-      - "splunk_hosts[].aws"
     snippet: |
       splunk_hosts:
         - name: idx1

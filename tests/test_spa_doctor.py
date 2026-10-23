@@ -116,7 +116,7 @@ def test_config_providers_ignores_comments_and_nested_keys():
 
     assert _config_providers("virtualbox:\n  memory: 4096\n") == {"virtualbox"}
     assert _config_providers("terraform:\n  aws:\n    region: eu-central-1\n") == {"aws"}
-    # a legacy top-level aws: block is inventory-only, not terraform.aws
+    # a top-level aws: key is not terraform.aws
     assert _config_providers("aws:\n  region: eu-central-1\n") == set()
     # comments and host-level keys must not pull in tool checks
     assert _config_providers("# virtualbox: nope\nsplunk_hosts:\n  - virtualbox: {}\n") == set()

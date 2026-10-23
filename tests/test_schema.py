@@ -2760,5 +2760,69 @@ class TestSchemaOwnedTypes:
         assert result.splunk_hosts[0].splunk_architecture == "arm64"
 
 
+class TestDeprecatedAwsBlock:
+    """A top-level or per-host aws key is rejected. terraform.aws stays valid."""
+
+    def test_top_level_aws_is_rejected(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "aws": {"region": "eu-central-1"},
+            "splunk_hosts": [{"name": "idx1", "roles": ["indexer"]}],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        text = str(exc_info.value)
+        assert "The aws block is deprecated and has been replaced by terraform.aws." in text
+
+    def test_host_aws_is_rejected(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {
+                    "name": "idx1",
+                    "roles": ["indexer"],
+                    "aws": {"instance_type": "t3.medium"},
+                }
+            ],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        text = str(exc_info.value)
+        assert "The aws block is deprecated and has been replaced by terraform.aws." in text
+        assert "splunk_hosts -> 0" in text
+
+    def test_terraform_aws_is_accepted(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "terraform": {"aws": {"region": "eu-central-1"}},
+            "splunk_hosts": [
+                {
+                    "name": "idx1",
+                    "roles": ["indexer"],
+                    "terraform": {"aws": {"instance_type": "t3.medium"}},
+                }
+            ],
+        }
+        result = validate_config(config)
+        assert result.terraform.aws.region == "eu-central-1"
+        assert result.splunk_hosts[0].terraform.aws.instance_type == "t3.medium"
+
+    def test_inventory_plugin_documents_only_the_plugin_option(self):
+        plugin = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "ansible",
+            "plugins",
+            "inventory",
+            "splunk-platform-automator.py",
+        )
+        text = open(plugin, encoding="utf-8").read()
+        start = text.index("DOCUMENTATION = r'''") + len("DOCUMENTATION = r'''")
+        documentation = text[start:text.index("'''", start)]
+        import yaml
+        parsed = yaml.safe_load(documentation)
+        assert list(parsed["options"]) == ["plugin"]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

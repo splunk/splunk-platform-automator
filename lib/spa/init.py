@@ -269,6 +269,12 @@ def migrate_state(
     write_spa_yml(dest, spa_home, **(yml_opts or {}))
 
 
+def warn_unused_aws_ec2(dest: Path) -> None:
+    """Tell a migrating operator that a generated inventory file is unused."""
+    if (dest / "config" / "aws_ec2.yml").is_file():
+        _say("config/aws_ec2.yml is unused. Delete it.")
+
+
 def drop_inventory_group_vars_link(dest: Path) -> None:
     """Remove a pre-3.0 inventory/group_vars symlink. Keep a real directory."""
     link = dest / "inventory" / "group_vars"
@@ -762,6 +768,7 @@ def _init_env(
         run_doctor(dest, spa_home, skip_doctor)
         _say("Converted to an env dir at %s" % dest)
         _say("  config:    %s" % config_dest)
+        warn_unused_aws_ec2(dest)
         return 0
 
     want_migrate = migrate_set or (not example_set and has_config(source) and source != dest)
@@ -787,6 +794,7 @@ def _init_env(
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
         run_doctor(dest, spa_home, skip_doctor)
         _say("Env migrated to %s" % dest)
+        warn_unused_aws_ec2(dest)
         return 0
 
     if is_spa_env(dest) and not force:

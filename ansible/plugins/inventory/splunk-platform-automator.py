@@ -27,66 +27,6 @@ DOCUMENTATION = r'''
             description: Name of the plugin
             required: true
             choices: ['splunk-platform-automator']
-        general:
-            description: general settings
-            type: dictionary
-            required: false
-        custom:
-            description: custom settings
-            type: dictionary
-            required: false
-        os:
-            description: os settings
-            type: dictionary
-            required: false
-        aws:
-            description: aws settings
-            type: dictionary
-            required: false
-        virtualbox:
-            description: virtualbox settings
-            type: dictionary
-            required: false
-        terraform:
-            description: terraform settings for infrastructure provisioning
-            type: dictionary
-            required: false
-        splunk_defaults:
-            description: splunk_defaults settings
-            type: dictionary
-            required: false
-        splunk_environments:
-            description: splunk_environments settings
-            type: list
-            required: false
-        splunk_dirs:
-            description: splunk_dirs settings
-            type: dictionary
-            required: false
-        splunk_apps:
-            description: splunk_apps settings
-            type: dictionary
-            required: false
-        splunk_app_deployment:
-            description: splunk_app_deployment settings (Splunkbase and local app deployment)
-            type: dictionary
-            required: false
-        splunk_systemd:
-            description: splunk_systemd settings
-            type: dictionary
-            required: false
-        splunk_idxclusters:
-            description: splunk_idxclusters settings
-            type: list
-            required: false
-        splunk_shclusters:
-            description: splunk_shclusters settings
-            type: list
-            required: false
-        splunk_hosts:
-            description: splunk_hosts settings
-            type: list
-            required: true
 '''
 
 from ansible.plugins.inventory import BaseInventoryPlugin
@@ -246,7 +186,7 @@ class InventoryModule(BaseInventoryPlugin):
     def _set_virtualization(self, resolved_config):
         '''Set virtualization type based on the definition in the config (resolved dict).'''
         setattr(self, 'virtualization', None)
-        supported_virtualizations = ['virtualbox', 'aws']
+        supported_virtualizations = ['virtualbox']
         for virtualization in supported_virtualizations:
             if resolved_config and virtualization in resolved_config:
                 setattr(self, 'virtualization', virtualization)
@@ -259,6 +199,8 @@ class InventoryModule(BaseInventoryPlugin):
             with open(file,"r") as configfile:
               file_content = yaml.load(configfile, Loader=yaml.FullLoader)
             stanza=Path(file).resolve().stem
+            if not isinstance(file_content, dict) or stanza not in file_content:
+                continue
             defaults[stanza] = file_content[stanza]
         setattr(self, 'defaults', defaults)
 
@@ -386,8 +328,6 @@ class InventoryModule(BaseInventoryPlugin):
                 self.environments[self.groups['all']['splunk_env_name']]['splunk_defaults'] = self.groups['all']
             except Exception as e:
                 raise AnsibleParserError('Error: {}'.format(e))
-
-        #TODO: Treat those sections individually: virtualbox, aws
 
         # Read in Indexer Cluster config
         if isinstance(self.configfiles.get('splunk_idxclusters'), list):
@@ -603,7 +543,7 @@ class InventoryModule(BaseInventoryPlugin):
 
                 # Add the rest of the host variables
                 for key, val in splunkhost.items():
-                    if key in ['name','list','iter','splunk_env','roles','aws','virtualbox']:
+                    if key in ['name','list','iter','splunk_env','roles','virtualbox']:
                         # Ignore those ones. Either not relevant or already worked on
                         continue
                     if key in ['idxcluster','shcluster']:
@@ -725,7 +665,7 @@ class InventoryModule(BaseInventoryPlugin):
         optional_sections = [
             'general', 'custom', 'os', 'splunk_dirs', 'splunk_defaults', 'splunk_environments',
             'splunk_apps', 'splunk_app_deployment', 'splunk_systemd', 'splunk_idxclusters', 'splunk_shclusters',
-            'virtualbox', 'aws', 'terraform'
+            'virtualbox', 'terraform'
         ]
         configfiles = {}
         for section in required_sections:
@@ -740,13 +680,6 @@ class InventoryModule(BaseInventoryPlugin):
         self._init_inventory()
         # Set virtualization from resolved config (no file read)
         self._set_virtualization(resolved_config)
-
-        if self.virtualization == None or self.virtualization == 'virtualbox':
-            # Create empty aws_ec2.yml file, otherwise inventory will fail
-            #TODO: Check Ansible inventory var, if aws is there
-            dirname = os.path.dirname(path)
-            with open(os.path.join(dirname,'aws_ec2.yml'), 'w') as f:
-                f.write('#Empty file to satisfy the aws plugin\n')
 
         # Call our internal helper to read in default values
         self._populate_defaults()

@@ -58,9 +58,9 @@ def test_detects_virtualbox_from_config(tmp_path):
     assert selected.config["memory"] == 4096
 
 
-def test_legacy_aws_is_not_mistaken_for_terraform(tmp_path):
+def test_top_level_aws_is_not_a_provider(tmp_path):
     paths = _paths(tmp_path, "aws:\n  region: eu-central-1\n")
-    with pytest.raises(ProviderError, match="inventory-only"):
+    with pytest.raises(ProviderError, match="No managed deployment provider"):
         detect_provider(paths)
 
 

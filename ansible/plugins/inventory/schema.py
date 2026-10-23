@@ -1252,10 +1252,6 @@ class SplunkHost(BaseModel):
         None,
         description="Guest OS settings for this host only. Holds no value itself.",
     )
-    aws: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Legacy per-host AWS inventory map. Not used by Terraform. No default. Omit the key.",
-    )
     virtualbox: Optional[VirtualBoxConfig] = Field(
         None,
         description="VirtualBox settings for this host only. Holds no value itself.",
@@ -1268,6 +1264,15 @@ class SplunkHost(BaseModel):
         None,
         description="Terraform settings for this host only. Holds no value itself.",
     )
+
+    @model_validator(mode='before')
+    @classmethod
+    def reject_deprecated_aws(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "aws" in data:
+            raise ValueError(
+                "The aws block is deprecated and has been replaced by terraform.aws."
+            )
+        return data
 
     @model_validator(mode='after')
     def validate_host_identifier(self) -> 'SplunkHost':
@@ -1375,10 +1380,6 @@ class SplunkConfig(BaseModel):
         None,
         description="VirtualBox guest size and network for Vagrant. Holds no value itself.",
     )
-    aws: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Legacy inventory-only AWS map. Not used by Terraform provision. No default. Omit the key.",
-    )
     terraform: Optional[TerraformConfig] = Field(
         None,
         description="Terraform provider settings. Holds no value itself.",
@@ -1415,6 +1416,15 @@ class SplunkConfig(BaseModel):
         None,
         description="Search head clusters that hosts select by name. Holds no value itself.",
     )
+
+    @model_validator(mode='before')
+    @classmethod
+    def reject_deprecated_aws(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "aws" in data:
+            raise ValueError(
+                "The aws block is deprecated and has been replaced by terraform.aws."
+            )
+        return data
 
     @model_validator(mode='before')
     @classmethod

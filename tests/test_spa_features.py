@@ -246,7 +246,7 @@ def test_config_schema_payload_lists_each_schema_path_once():
             if path == prefix or path.startswith(prefix + ".") or path.startswith(prefix + "[]")
         )
 
-    assert _first("terraform") < _first("virtualbox") < _first("aws")
+    assert _first("terraform") < _first("virtualbox")
 
 
 def test_config_schema_omits_secret_defaults_and_keeps_env_lookups():

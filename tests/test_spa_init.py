@@ -51,6 +51,7 @@ def test_scaffold_creates_env_without_ansible(tmp_path):
     assert (dest / "terraform" / "aws").is_dir()
     assert not (dest / "saved_base_config_apps").exists()
     assert not (dest / "ansible").exists()
+    assert "aws_ec2.yml" not in (result.stderr + result.stdout)
 
     spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
     assert spa_yml["spa_home"] == str(PROJECT_ROOT)
@@ -95,7 +96,7 @@ def test_example_with_aws_provider(tmp_path):
     assert "cm" in names
 
 
-def test_legacy_aws_example_alias(tmp_path):
+def test_aws_example_alias(tmp_path):
     dest = tmp_path / "legacy"
     result = run_spa_init(["--example", "cm_2idxc_sh_uf_aws.yml", str(dest)])
     assert result.returncode == 0, result.stderr + result.stdout
@@ -257,6 +258,34 @@ def test_migrate_from_existing_env(tmp_path):
     assert not (source / "terraform" / "aws" / "terraform.tfstate").exists()
     assert not (source / ".vagrant").exists()
     assert (source / "ansible" / "deploy_site.yml").is_file()
+
+
+def test_old_clone_warns_once_about_unused_aws_ec2(tmp_path):
+    dest = tmp_path / "copied-clone"
+    _write_old_env(dest)
+    (dest / "ansible" / "roles").mkdir(parents=True)
+    (dest / "config" / "aws_ec2.yml").write_text("# unused\n", encoding="utf-8")
+
+    first = run_spa_init(["--force", str(dest)])
+    assert first.returncode == 0, first.stderr + first.stdout
+    assert "config/aws_ec2.yml is unused. Delete it." in (first.stderr + first.stdout)
+    assert (dest / "config" / "aws_ec2.yml").is_file()
+
+    second = run_spa_init(["--force", str(dest)])
+    assert second.returncode == 0, second.stderr + second.stdout
+    assert "aws_ec2.yml" not in (second.stderr + second.stdout)
+
+
+def test_migrate_warns_about_unused_aws_ec2(tmp_path):
+    source = tmp_path / "old-clone"
+    dest = tmp_path / "env"
+    _write_old_env(source)
+    (source / "config" / "aws_ec2.yml").write_text("# unused\n", encoding="utf-8")
+
+    result = run_spa_init(["--from", str(source), str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "config/aws_ec2.yml is unused. Delete it." in (result.stderr + result.stdout)
+    assert (dest / "config" / "aws_ec2.yml").is_file()
 
 
 def test_migrate_keep_source(tmp_path):

@@ -211,11 +211,6 @@ def detect_provider(paths: SpaPaths) -> ProviderSelection:
         if vbox is not None and not isinstance(vbox, dict):
             raise ProviderError("virtualbox must be a mapping in %s" % paths.config_file)
         return ProviderSelection(name="virtualbox", config=vbox or {})
-    if "aws" in config:
-        raise ProviderError(
-            "The legacy top-level aws section is inventory-only. "
-            "spa infrastructure commands require terraform.aws."
-        )
     raise ProviderError(
         "No managed deployment provider found in %s "
         "(expected terraform.<provider> or virtualbox; implemented: terraform.aws, virtualbox)."
