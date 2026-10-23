@@ -37,6 +37,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **Test venv installs the config editor YAML library**: `tests/requirements.txt` includes `ruamel.yaml`, so a fresh CI environment can import the config editor. The operator venv already installed it from `requirements.txt`.
+
 - **AMI comments follow the id**: `spa init` copies the provider example's `ami_id` comment into the environment config. `spa config set` on `ami_id` replaces that comment with the image name and description from AWS, and removes a stale comment when the image cannot be described. `spa config explain terraform.aws.ami_id` shows the Red Hat lookup (`spa aws --region eu-central-1 --latest-ami --os rhel`) and `spa aws list amis --os rhel`.
 
 - **One spelling for a file input**: `spa config merge TEMPLATE` names a shipped fragment. A local fragment is only `spa config merge --file FILE`, and stdin is `--file -`. A path in the template position, or both a template and `--file`, is an error. `spa validate --config FILE` is the only way to validate a file other than the current environment.

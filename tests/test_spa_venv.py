@@ -667,3 +667,8 @@ def test_run_venv_wrapper_uses_tests_venv():
         cwd=PROJECT_ROOT,
     )
     assert result.returncode == 0
+
+
+def test_test_requirements_include_the_config_editor_yaml_library():
+    text = (PROJECT_ROOT / "tests" / "requirements.txt").read_text(encoding="utf-8")
+    assert "ruamel.yaml" in text
