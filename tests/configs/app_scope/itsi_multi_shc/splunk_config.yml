@@ -11,7 +11,11 @@
 #   DS routes UF apps, direct scope handles HF, shc2 deployer gets nothing.
 plugin: splunk-platform-automator
 
+os:
+  packages: [java-21-openjdk]
+
 splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
   splunk_license_file:
     - Splunk_Enterprise.lic
     - Splunk_ITSI.lic

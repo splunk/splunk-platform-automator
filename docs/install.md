@@ -6,7 +6,14 @@ Do not copy `ansible/` into an environment directory. `SPA_HOME` is the install 
 
 ## Installer (recommended)
 
-Requires **Python 3.9+** with the `venv` module (`python3` on PATH). The installer creates a venv and `spa doctor` fails if that is missing or too old. Terraform is only required for AWS. The script always follows the newest GitHub Release (`releases/latest/download/install.sh`).
+Requires a controller Python supported by the bundled Ansible, with the `venv`
+module. While Ansible 2.21 is current, that is **Python 3.9 through 3.14**.
+If `python3` is 3.15 or newer, SPA uses the newest supported `python3.X` on
+`PATH`; otherwise it tells you which interpreter to install or pass with
+`--python`. The installer creates the venv and verifies that Ansible's
+inventory and playbook CLIs can start. Terraform is only required for AWS. The
+script always follows the newest GitHub Release
+(`releases/latest/download/install.sh`).
 
 ```sh
 curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh
@@ -25,6 +32,11 @@ Defaults:
 A relative `XDG_DATA_HOME` is ignored (XDG spec); the prefix then falls back to `~/.local/share/spa`. The installer does not create `~/.config/spa` or `~/.local/state/spa`. Env config and Terraform state stay in each `SPA_ENV_DIR`.
 
 The installer unpacks the framework tarball, runs `bin/spa_venv.sh --create`, and writes a `spa` wrapper that execs `$SPA_HOME/.venv/bin/python`. Add `~/.local/bin` to `PATH` if it is not already.
+
+If you create a virtualenv yourself, install the framework requirements and
+run `spa doctor` before using it. SPA probes the actual Ansible imports, so an
+unsupported or incomplete environment is rejected with a `spa venv` repair
+command instead of failing later during validation or deployment.
 
 From a checkout or an already extracted tarball:
 

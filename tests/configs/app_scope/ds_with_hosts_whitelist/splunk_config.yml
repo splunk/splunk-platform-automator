@@ -3,6 +3,9 @@
 # DS + multiple SHs; app with hosts_whitelist: [sh1] so DS target_hosts restricted.
 plugin: splunk-platform-automator
 
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+
 splunk_hosts:
   - name: ds
     roles:

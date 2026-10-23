@@ -22,29 +22,33 @@ Example:
 spa init list
 ```
 
-## `features`
+## `config`
 
-Look up settings. Agents use search QUERY, then show SELECTOR [--keys]. schema --markdown is a human docs dump, not an agent payload.
-
-Example:
-
-```bash
-spa --json features search splunk
-```
-
-## `features list`
-
-Full feature catalog
+Read, explain, or transactionally edit splunk_config.yml. Agents use config search QUERY, then config explain PATH. Bare spa config exits 2.
 
 Example:
 
 ```bash
-spa features list
+spa --agent config explain
 ```
 
-## `features search`
+## `config explain`
 
-Search the catalog. In zsh, quote a selector that contains [], or omit the brackets.
+Describe one config path and its immediate fields. A deeper level is a longer path. The same data is the future GUI payload.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `PATH` | no | User path such as splunk_hosts or os.packages |
+
+Example:
+
+```bash
+spa --agent config explain splunk_hosts
+```
+
+## `config search`
+
+Find config paths. Each hit is a path and a one-line description.
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -53,40 +57,22 @@ Search the catalog. In zsh, quote a selector that contains [], or omit the brack
 Example:
 
 ```bash
-spa --json features search cluster
+spa --agent config search packages
 ```
 
-## `features show`
+## `config keys`
 
-Show one feature. Agents use this after features search.
-
-| Flag | Description |
-| --- | --- |
-| `--keys` | Include per-key types, constraints, guidance, and apply metadata |
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `SELECTOR` | yes | Schema path or layout id |
+Catalog coverage of schema keys. Maintainer check, not the discovery walk.
 
 Example:
 
 ```bash
-spa --json features show splunk_defaults.splunk_ssl --keys
+spa config keys
 ```
 
-## `features keys`
+## `config schema`
 
-Catalog coverage of schema keys
-
-Example:
-
-```bash
-spa features keys
-```
-
-## `features schema`
-
-Human documentation generation for docs/config.md. Not an agent payload. Agents use features search QUERY, then features show SELECTOR [--keys].
+Human documentation generation for docs/config.md. Not an agent payload. Agents use config search QUERY, then config explain PATH.
 
 | Flag | Description |
 | --- | --- |
@@ -95,12 +81,192 @@ Human documentation generation for docs/config.md. Not an agent payload. Agents 
 Example:
 
 ```bash
-spa --no-agent features schema --markdown
+spa --no-agent config schema --markdown
+```
+
+## `config get`
+
+Read authored config state; pathless agent output is a compact identity outline
+
+| Flag | Description |
+| --- | --- |
+| `--effective` | Report the schema default when the path is unset |
+| `--full` | Return the full redacted authored document |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `PATH` | no | Schema path with optional identity selectors |
+
+Example:
+
+```bash
+spa --agent config get splunk_defaults.splunk_version
+```
+
+## `config templates`
+
+List shipped reusable config fragments and their leading summaries
+
+Example:
+
+```bash
+spa --agent config templates
+```
+
+## `config set`
+
+Transactionally replace one schema-backed value
+
+| Flag | Description |
+| --- | --- |
+| `--value-file` | Read a JSON or YAML 1.2 value |
+| `--from-env` | Write an environment lookup for a secret path |
+| `--explicit-default` | Author a value equal to its schema default |
+| `--dry-run` | Preview without writing |
+| `--expect-revision` | Require the current SHA-256 revision |
+| `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
+| `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `-y`, `--yes` | Skip the human confirmation prompt |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `PATH` | yes | Schema path with identity selectors for list items |
+| `VALUE` | no | String or strict JSON value |
+
+Example:
+
+```bash
+spa --agent config set os.time_zone Europe/Berlin
+```
+
+## `config add`
+
+Append one new non-app identity-list entry. Fails when that identity already exists.
+
+| Flag | Description |
+| --- | --- |
+| `--value-file` | Read a JSON or YAML 1.2 object |
+| `--from-env` | FIELD NAME. Write an environment lookup for a secret field; repeatable |
+| `--dry-run` | Preview without writing |
+| `--expect-revision` | Require the current SHA-256 revision |
+| `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
+| `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `-y`, `--yes` | Skip the human confirmation prompt |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `SELECTOR` | yes | Identity-list selector such as splunk_hosts[name=NAME] |
+| `JSON_OBJECT` | no | Strict JSON object for the new entry |
+
+Example:
+
+```bash
+spa --agent config add 'splunk_hosts[name=lm]' '{"roles":["license_manager"]}'
+```
+
+## `config unset`
+
+Transactionally remove one or more authored paths
+
+| Flag | Description |
+| --- | --- |
+| `--dry-run` | Preview without writing |
+| `--expect-revision` | Require the current SHA-256 revision |
+| `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
+| `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `-y`, `--yes` | Skip the human confirmation prompt |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `PATH` | yes | Authored path to remove |
+
+Example:
+
+```bash
+spa --agent config unset os.time_zone
+```
+
+## `config merge`
+
+Transactionally merge a partial splunk_config.yml
+
+| Flag | Description |
+| --- | --- |
+| `--file` | Local YAML or JSON fragment, or - for stdin |
+| `--explicit-default` | Author values equal to schema defaults |
+| `--dry-run` | Preview without writing |
+| `--expect-revision` | Require the current SHA-256 revision |
+| `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
+| `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `-y`, `--yes` | Skip the human confirmation prompt |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `TEMPLATE` | no | Shipped fragment name from examples/templates |
+
+Example:
+
+```bash
+spa --agent config merge --file fragment.yml
+```
+
+## `config topology`
+
+Replace topology-owned config sections from an example template
+
+| Flag | Description |
+| --- | --- |
+| `--dry-run` | Preview without writing |
+| `--expect-revision` | Require the current SHA-256 revision |
+| `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
+| `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `-y`, `--yes` | Skip the human confirmation prompt |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `TOPOLOGY` | yes | Feature id or topology example stem |
+
+Example:
+
+```bash
+spa --agent config topology topology.c1
+```
+
+## `config provider`
+
+Replace provider-owned config sections from an example template
+
+| Flag | Description |
+| --- | --- |
+| `--dry-run` | Preview without writing |
+| `--expect-revision` | Require the current SHA-256 revision |
+| `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
+| `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `-y`, `--yes` | Skip the human confirmation prompt |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `PROVIDER` | yes | Feature id or provider example stem |
+
+Example:
+
+```bash
+spa --agent config provider aws
 ```
 
 ## `validate`
 
 Validate splunk_config.yml (schema, Software/baseconfig/local apps, inventory)
+
+| Flag | Description |
+| --- | --- |
+| `--config` | Validate this file instead of the environment config |
+
+Example:
+
+```bash
+spa --agent validate
+```
 
 ## `doctor`
 
@@ -538,7 +704,7 @@ spa logs list
 
 ## `apps`
 
-Splunkbase search, an apps[] snippet, or an archive download.
+Discover, configure, or download Splunk apps and ITSI content packs.
 
 Example:
 
@@ -562,6 +728,21 @@ Example:
 spa --json apps search unix
 ```
 
+## `apps content-packs list`
+
+Inspect local 5391 archive metadata, or use a temporary authenticated download
+
+| Flag | Description |
+| --- | --- |
+| `--version` | Content Library release to inspect (default latest) |
+| `--archive` | Inspect a local 5391 archive without environment credentials |
+
+Example:
+
+```bash
+spa --json apps content-packs list 5391
+```
+
 ## `apps snippet`
 
 Print apps[] YAML for a Splunkbase app_id or local custom app folder
@@ -573,11 +754,58 @@ Print apps[] YAML for a Splunkbase app_id or local custom app folder
 | `--source` | Snippet source: splunkbase or local; local checks apps_dir |
 | `--local` | Shorthand for --source local |
 | `--customize` | Include matching curated apps_playbooks customizations in the YAML |
+| `--set` | Set another schema-backed app FIELD VALUE; repeatable |
 
 Example:
 
 ```bash
 spa --json apps snippet 833
+```
+
+## `apps add`
+
+Idempotently add or update one apps[] entry; edits config and does not deploy
+
+| Flag | Description |
+| --- | --- |
+| `--version` | Release or local archive version to author (default latest) |
+| `--roles` | Comma-separated target_roles; required only for normal apps and rejected for ITSI/content packs |
+| `--source` | Splunkbase metadata, or a folder/archive already in apps_dir (default splunkbase) |
+| `--local` | Shorthand for --source local |
+| `--customize` | Attach an exact matching curated SPA playbook to this top-level app entry |
+| `--set` | Set another schema-backed app FIELD from strict JSON; repeatable |
+| `--content-pack` | 5391 only: add exact bundled folder NAME; repeatable and mutually exclusive with --install-all-content-packs |
+| `--install-all-content-packs` | 5391 only: install every bundled pack; mutually exclusive with --content-pack |
+| `--explicit-default` | Write omit-safe default values that SPA normally leaves absent |
+| `--dry-run` | Plan dependencies and show the result without prompting or writing |
+| `--expect-revision` | Write only when config still has this SHA-256 revision |
+| `--resolve` | Supply unresolved dependency PATH VALUE using strict JSON; repeatable |
+| `--resolve-file` | Supply unresolved dependencies from sparse YAML/JSON; - reads stdin |
+| `-y`, `--yes` | Skip human confirmation; agent config edits never prompt |
+
+Example:
+
+```bash
+spa --agent apps add 833 --roles search_head,indexer
+```
+
+## `apps remove`
+
+Remove an authored app entry; does not uninstall deployed files
+
+| Flag | Description |
+| --- | --- |
+| `--content-pack` | Remove one named pack under Content Library 5391 |
+| `--dry-run` | Preview without writing |
+| `--expect-revision` | Require the current SHA-256 revision |
+| `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
+| `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `-y`, `--yes` | Skip the human confirmation prompt |
+
+Example:
+
+```bash
+spa --agent apps remove 833
 ```
 
 ## `apps download`

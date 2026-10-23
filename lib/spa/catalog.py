@@ -25,7 +25,6 @@ _PASSWORD_LITERAL = re.compile(
     r"(?im)^[ \t-]*[\w.]*password\w*\s*:\s*(?!.*(?:lookup\(|vault)).+$"
 )
 _NOT_CONFIGURABLE = "not a splunk_config.yml setting"
-_MERGE_MODES = frozenset({"deep", "replace"})
 _PUBLIC_FIELDS = (
     "title",
     "kind",
@@ -35,6 +34,7 @@ _PUBLIC_FIELDS = (
     "suggest",
     "constraints",
     "search_terms",
+    "template",
 )
 
 
@@ -88,6 +88,90 @@ def shell_label(label: str) -> str:
     if "[]" in label:
         return "'%s'" % label
     return label
+
+
+def _selector_parts(selector: str) -> List[Tuple[str, bool]]:
+    parts: List[Tuple[str, bool]] = []
+    for part in selector.split("."):
+        if part.endswith("[]"):
+            parts.append((part[:-2], True))
+        else:
+            parts.append((part, False))
+    return parts
+
+
+def _quote_command_path(path: str) -> str:
+    if "[" in path or "]" in path or " " in path:
+        return "'%s'" % path
+    return path
+
+
+def _filled_selector(selector: str, identities: Dict[Tuple[str, ...], Tuple[str, ...]]) -> str:
+    rendered: List[str] = []
+    names: List[str] = []
+    for name, is_list in _selector_parts(selector):
+        names.append(name)
+        if is_list:
+            keys = identities.get(tuple(names)) or ("name",)
+            rendered.append("%s[%s=NAME]" % (name, keys[0]))
+        else:
+            rendered.append(name)
+    return ".".join(rendered)
+
+
+def feature_command(item: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    """Return the one mutation command for a catalog feature.
+
+    The command is derived from the schema selector. It is a template for the
+    operator to copy. Nothing in the catalog is executed or applied.
+    """
+    klass = feature_class(item)
+    if klass == "unsupported":
+        return None
+    if klass == "layout":
+        ident = str(item.get("id") or "")
+        if item.get("kind") == "topology":
+            return {
+                "action": "topology",
+                "path": ident,
+                "command": "spa config topology %s" % ident,
+            }
+        return {
+            "action": "provider",
+            "path": ident,
+            "command": "spa config provider %s" % ident,
+        }
+    selector = str(item.get("selector") or "")
+    if "splunk_app_deployment.apps" in selector:
+        command = (
+            "spa apps add APP_ID --content-pack NAME"
+            if "content_pack" in selector
+            else "spa apps add APP_ID --roles ROLE"
+        )
+        return {"action": "apps add", "path": selector, "command": command}
+    from spa.config_edit import _APP_IDENTITY_LISTS, _IDENTITIES, _is_secret
+
+    parts = _selector_parts(selector)
+    list_at = [index for index, (_, is_list) in enumerate(parts) if is_list]
+    if list_at:
+        last = list_at[-1]
+        list_names = tuple(name for name, _ in parts[: last + 1])
+        remainder = ".".join(name for name, _ in parts[last + 1 :])
+        identities = _IDENTITIES.get(list_names)
+        if identities and list_names not in _APP_IDENTITY_LISTS and remainder in identities:
+            placeholder = "%s[%s=NAME]" % (".".join(list_names), remainder)
+            return {
+                "action": "add",
+                "path": placeholder,
+                "command": "spa config add %s JSON_OBJECT" % _quote_command_path(placeholder),
+            }
+        selector = _filled_selector(selector, _IDENTITIES)
+    quoted = _quote_command_path(selector)
+    if _is_secret(selector):
+        command = "spa config set %s --from-env NAME" % quoted
+    else:
+        command = "spa config set %s VALUE" % quoted
+    return {"action": "set", "path": selector, "command": command}
 
 
 def resolve_feature(features: Iterable[Dict[str, Any]], ident: str) -> Optional[Dict[str, Any]]:
@@ -311,6 +395,78 @@ def schema_key_details() -> Dict[str, Dict[str, Any]]:
 
     walk(SplunkConfig, "")
     return details
+
+
+_APP_ENTRY_FIELD_TYPES = {
+    "name": "string",
+    "source": "string",
+    "path": "string",
+    "app_id": "integer",
+    "version": "string",
+    "target_roles": "list[string]",
+    "state": "string",
+    "deployment_target": "string",
+    "update_mode": "string",
+    "hosts_whitelist": "list[string]",
+    "hosts_blacklist": "list[string]",
+    "shc_whitelist": "list[string]",
+    "shc_blacklist": "list[string]",
+    "idxc_whitelist": "list[string]",
+    "idxc_blacklist": "list[string]",
+    "sc_whitelist": "list[string]",
+    "sc_blacklist": "list[string]",
+    "premium_app": "string",
+    "itsi_content_pack": "boolean",
+    "content_pack_apps": "list[map]",
+    "content_pack_api": "map",
+    "customizations": "map",
+}
+_APP_ENTRY_NESTED_FIELD_TYPES = {
+    "content_pack_api.enabled": "boolean",
+    "content_pack_api.install_all": "boolean",
+    "content_pack_api.install_all_apps": "boolean",
+    "customizations.remove": "list[string]",
+    "customizations.local_configs": "map",
+    "customizations.run_playbook": "string",
+    "customizations.run_playbook_after_restart": "string",
+    "customizations.extra_vars": "map",
+}
+_APP_ENTRY_DEFAULTS = {
+    "source": "splunkbase",
+    "version": "latest",
+    "state": "installed",
+    "deployment_target": "auto",
+    "update_mode": "merge",
+}
+
+
+def app_entry_field_names() -> List[str]:
+    """Immediate apps[] fields. Nested maps are separate explain pages."""
+    return list(_APP_ENTRY_FIELD_TYPES)
+
+
+def app_entry_child_names(path: str) -> List[str]:
+    """One level under an apps[] map such as content_pack_api."""
+    prefix = path + "."
+    found = []
+    for key in _APP_ENTRY_NESTED_FIELD_TYPES:
+        if key.startswith(prefix) and key.count(".") == path.count(".") + 1:
+            found.append(key[len(prefix):])
+    return found
+
+
+def app_entry_field_detail(path: str) -> Optional[Dict[str, Any]]:
+    """Return strict value metadata for one relative apps[] field."""
+    if path in _APP_ENTRY_NESTED_FIELD_TYPES:
+        return {"path": path, "type": _APP_ENTRY_NESTED_FIELD_TYPES[path]}
+    root = path.split(".", 1)[0]
+    type_name = _APP_ENTRY_FIELD_TYPES.get(root)
+    if type_name is None or "." in path:
+        return None
+    detail = {"path": path, "type": type_name}
+    if path in _APP_ENTRY_DEFAULTS:
+        detail["default"] = _APP_ENTRY_DEFAULTS[path]
+    return detail
 
 
 def schema_key_paths() -> List[str]:
@@ -567,16 +723,6 @@ def guidance_is_useful(item: Dict[str, Any]) -> bool:
     return text not in echoes and _INTERNAL_ID.fullmatch(text) is None
 
 
-def build_apply(item: Dict[str, Any], schema: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    paths = [path for path in record_paths(item) if path_is_schema_backed(path, schema)]
-    snippet = str(item.get("snippet") or "").rstrip()
-    return {
-        "merge": item.get("merge"),
-        "snippet": snippet,
-        "paths": paths,
-    }
-
-
 def validate_feature_catalog(
     features: Iterable[Dict[str, Any]], schema: Optional[Dict[str, Dict[str, Any]]] = None
 ) -> None:
@@ -610,8 +756,6 @@ def validate_feature_catalog(
                 errors.append("duplicate selector %s (%s, %s)" % (selector, seen[str(selector)], ident))
             else:
                 seen[str(selector)] = ident
-            if item.get("merge") not in _MERGE_MODES:
-                errors.append("%s merge must be deep or replace" % ident)
             snippet = str(item.get("snippet") or "")
             if not snippet_is_safe(snippet):
                 errors.append("%s snippet contains a credential or certificate" % ident)
@@ -668,7 +812,6 @@ def public_feature(
     if include_keys and klass == "setting":
         schema = schema if schema is not None else schema_key_details()
         row["key_details"] = _public_key_details(item, feature_list, schema)
-        row["apply"] = build_apply(item, schema)
     elif include_keys and klass == "layout":
         schema = schema if schema is not None else schema_key_details()
         row["key_details"] = _public_key_details(item, feature_list, schema)
@@ -947,6 +1090,9 @@ def format_feature_text(
     if snippet:
         lines.append("snippet:")
         lines.extend("  %s" % line for line in snippet.splitlines())
+    command = item.get("command") or {}
+    if isinstance(command, dict) and command.get("command"):
+        lines.append("command: %s" % command["command"])
     return "\n".join(lines)
 
 
@@ -961,11 +1107,104 @@ CONFIG_AREAS: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = (
     ("general", "General", ("general", "custom")),
     ("os", "OS", ("os",)),
     ("provider", "Provider", ("terraform", "virtualbox", "aws")),
+    ("clustering", "Clustering", ("splunk_idxclusters", "splunk_shclusters")),
     ("defaults", "Defaults", ("splunk_defaults", "splunk_dirs", "splunk_systemd", "splunk_environments")),
     ("hosts", "Hosts", ("splunk_hosts",)),
     ("apps", "Apps", ("splunk_app_deployment", "splunk_apps")),
-    ("clustering", "Clustering", ("splunk_idxclusters", "splunk_shclusters")),
 )
+
+
+def order_config_roots(document):
+    """Order known config roots while preserving unknown and nested ordering."""
+    order = [root for _, _, roots in CONFIG_AREAS for root in roots]
+    keys = [key for key in order if key in document]
+    keys.extend(key for key in document if key not in keys)
+    if hasattr(document, "move_to_end"):
+        for key in keys:
+            document.move_to_end(key)
+        return document
+    return type(document)((key, document[key]) for key in keys)
+
+
+_LAYOUT_KEY = re.compile(r"""^(?P<dash>-\s+)?(?P<key>"[^"]*"|'[^']*'|[^\s#'"\[{][^:#]*?):(?P<rest>\s.*)?$""")
+_LAYOUT_BLOCK_SCALAR = re.compile(r"(?:^-|:)\s*[|>][-+0-9]*\s*(?:#.*)?$")
+
+
+def format_config_text(text: str) -> str:
+    """Separate config sections and their mapping list items with one blank line.
+
+    A blank line goes before every top-level key after the first and before
+    every mapping item after the first in a list that sits at most two keys
+    deep outside any other list (hosts, clusters, apps). Comments directly
+    above such a line stay attached to it. Other blank lines are kept only
+    before comments, so round-trip dumps cannot leave gaps inside a section.
+    """
+    out: List[str] = []
+    stack: List[Dict[str, Any]] = []
+    top_level_keys = 0
+    pending_blank = False
+    block_indent: Optional[int] = None
+
+    def ensure_gap(column: int, comment_column: int) -> None:
+        index = len(out)
+        while index > 0 and out[index - 1].lstrip().startswith("#"):
+            if len(out[index - 1]) - len(out[index - 1].lstrip(" ")) > comment_column:
+                break
+            index -= 1
+        if index > 0 and out[index - 1] != "":
+            out.insert(index, "")
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        column = len(line) - len(line.lstrip(" "))
+        if block_indent is not None:
+            if not stripped or column > block_indent:
+                out.append(line)
+                continue
+            block_indent = None
+        if not stripped:
+            pending_blank = bool(out)
+            continue
+        if stripped.startswith("#"):
+            if pending_blank and out and out[-1] != "":
+                out.append("")
+            pending_blank = False
+            out.append(line)
+            continue
+        pending_blank = False
+        body = line[column:]
+        match = _LAYOUT_KEY.match(body)
+        gap = False
+        comment_column = column
+        if body.startswith("-") and (len(body) == 1 or body[1] in " \t"):
+            comment_column = column + 2
+            while stack and (stack[-1]["col"] > column or (stack[-1]["item"] and stack[-1]["col"] == column)):
+                stack.pop()
+            parent = stack[-1] if stack and not stack[-1]["item"] else None
+            if parent is not None and match is not None:
+                inside_item = any(entry["item"] for entry in stack)
+                parent["items"] += 1
+                gap = parent["items"] > 1 and not inside_item and len(stack) <= 2
+            stack.append({"col": column, "item": True, "items": 0})
+            if match is not None and not (match.group("rest") or "").split("#", 1)[0].strip():
+                stack.append({"col": column + len(match.group("dash")), "item": False, "items": 0})
+        else:
+            while stack and stack[-1]["col"] >= column:
+                stack.pop()
+            if column == 0 and match is not None:
+                top_level_keys += 1
+                gap = top_level_keys > 1
+            if match is not None and not (match.group("rest") or "").split("#", 1)[0].strip():
+                stack.append({"col": column, "item": False, "items": 0})
+        if gap:
+            ensure_gap(column, comment_column)
+        out.append(line)
+        if _LAYOUT_BLOCK_SCALAR.search(body):
+            block_indent = column
+    while out and out[-1] == "":
+        out.pop()
+    return "\n".join(out) + "\n" if out else ""
+
 
 _AREA_BY_ROOT = {
     root: area_id
@@ -1074,14 +1313,14 @@ def format_config_markdown(spa_home: Path) -> str:
 
     payload = config_schema_payload(spa_home)
     lines = [
-        "<!-- Generated by spa features schema --markdown. Do not edit by hand. -->",
+        "<!-- Generated by spa config schema --markdown. Do not edit by hand. -->",
         "",
         "# splunk_config.yml settings",
         "",
         "Generated from the Pydantic schema and `examples/catalog/features.yml`.",
         "Do not edit this file; regenerate with",
-        "`spa --no-agent features schema --markdown`.",
-        "Concise lookup stays `spa features list`, `search`, and `show`.",
+        "`spa --no-agent config schema --markdown`.",
+        "Concise lookup is `spa config search QUERY`, then `spa config explain PATH`.",
         "CLI flags stay in [commands.md](commands.md).",
         "",
     ]

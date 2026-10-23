@@ -34,6 +34,27 @@ def _test_ansible_config_path() -> str:
     )
 
 
+def test_ansible_app_roles_default_omitted_source_to_splunkbase():
+    """CFG-APP-002: every deployment source lookup uses the Splunkbase default."""
+    roles_dir = os.path.join(_project_root(), "ansible", "roles")
+    text = "\n".join(
+        open(os.path.join(root, name), encoding="utf-8").read()
+        for root, _, names in os.walk(roles_dir)
+        for name in names
+        if name.endswith((".yml", ".yaml"))
+        and os.path.relpath(root, roles_dir).split(os.sep, 1)[0].startswith("apps_")
+    )
+    assert "default('local')" not in text
+    assert "{{ app_item.source }}" not in text
+    assert "source | default('')" not in text
+    deploy_playbook = open(
+        os.path.join(_project_root(), "ansible", "splunk_apps_deploy.yml"),
+        encoding="utf-8",
+    ).read()
+    assert "rejectattr('source', 'defined')" in deploy_playbook
+    assert "selectattr('source', 'defined')" in deploy_playbook
+
+
 def _minimal_playbook_env(*, ansible_config: str, extra: dict | None = None) -> dict:
     """Subprocess env for splunk_apps_deploy.yml tests — excludes CI secrets (e.g. SPLUNKBASE_*)."""
     keep = (
@@ -121,13 +142,17 @@ def _validate_config_with_app_deployment(
 ) -> None:
     """Build minimal config and run schema validate_config; raises on failure."""
     validate_config, _ = _get_validate_config()
+    defaults = dict(splunk_defaults or {})
+    defaults.setdefault(
+        "splunk_admin_password",
+        "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}",
+    )
     config = {
         "plugin": "splunk-platform-automator",
         "splunk_hosts": splunk_hosts or [{"name": "h1", "roles": ["indexer"]}],
         "splunk_app_deployment": splunk_app_deployment,
+        "splunk_defaults": defaults,
     }
-    if splunk_defaults is not None:
-        config["splunk_defaults"] = splunk_defaults
     validate_config(config)
 
 
@@ -139,7 +164,11 @@ def _normal_app(**overrides) -> dict:
 
 
 def _itsi_splunk_hosts() -> list:
-    return [{"name": "h1", "roles": ["search_head", "indexer", "license_manager"]}]
+    return [{
+        "name": "h1",
+        "roles": ["search_head", "indexer", "license_manager"],
+        "os": {"packages": ["java-21-openjdk"]},
+    }]
 
 
 def _itsi_splunk_defaults() -> dict:
@@ -193,6 +222,16 @@ class TestAppDeploymentSchemaValidation:
         with pytest.raises(ConfigValidationError) as exc_info:
             _validate_config_with_app_deployment({
                 "apps": [{"name": "MyApp", "source": "splunkbase", "target_roles": ["indexer"]}]
+            })
+        err_msg = str(exc_info.value).lower()
+        assert "app_id" in err_msg and "splunkbase" in err_msg
+
+    def test_omitted_source_defaults_to_splunkbase_and_requires_app_id(self):
+        """CFG-APP-002: omitted source has Splunkbase validation semantics."""
+        _, ConfigValidationError = _get_validate_config()
+        with pytest.raises(ConfigValidationError) as exc_info:
+            _validate_config_with_app_deployment({
+                "apps": [{"name": "MyApp", "target_roles": ["indexer"]}]
             })
         err_msg = str(exc_info.value).lower()
         assert "app_id" in err_msg and "splunkbase" in err_msg
@@ -341,7 +380,11 @@ class TestAppDeploymentSchemaValidation:
         _, ConfigValidationError = _get_validate_config()
         with pytest.raises(ConfigValidationError) as exc_info:
             _validate_config_with_app_deployment({
-                "apps": [{"name": "MyApp", "target_roles": ["search_head", "invalid_role"]}]
+                "apps": [{
+                    "name": "MyApp",
+                    "source": "local",
+                    "target_roles": ["search_head", "invalid_role"],
+                }]
             })
         err_msg = str(exc_info.value).lower()
         assert "target_roles" in err_msg or "invalid" in err_msg

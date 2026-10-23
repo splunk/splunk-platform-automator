@@ -45,6 +45,20 @@ _MARK_KEYWORDS = frozenset({"and", "or", "not"})
 _MARKER_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
+def satisfy_env_lookups(monkeypatch, start_dir: Optional[Path] = None) -> None:
+    """Set empty config lookups to a placeholder so later command gates can run."""
+    from spa.paths import resolve_spa_paths
+    from spa.preflight import env_lookup_readiness, load_config_mapping
+
+    paths = resolve_spa_paths(start_dir=start_dir)
+    config_path = Path(paths.config_file)
+    if not config_path.is_file():
+        return
+    for row in env_lookup_readiness(load_config_mapping(config_path)):
+        if row["state"] != "set":
+            monkeypatch.setenv(row["name"], "spa-test-value")
+
+
 def selects_local_tests(markexpr: str) -> bool:
     """True when -m selects a test carrying the local marker."""
     from _pytest.mark.expression import Expression

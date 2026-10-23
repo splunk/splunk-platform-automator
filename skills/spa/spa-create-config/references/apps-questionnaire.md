@@ -1,8 +1,8 @@
 # Basic apps questionnaire
 
-Load [spa-apps](../../spa-apps/SKILL.md) for this phase. Search Splunkbase with `spa --json apps search QUERY` (technology keywords), then **one** `spa --json apps snippet APP_ID` without `--customize`. If `playbooks` is set, ask before `snippet --customize`. Merge the printed snippet into `splunk_config.yml` (until `spa config`, #76). Do not guess `app_id`. Do not open splunkbase.com first.
+Load [spa-apps](../../spa-apps/SKILL.md) for this phase. Search Splunkbase with `spa --agent apps search QUERY` (technology keywords), then use one `spa --agent apps add APP_ID` transaction. If curated `playbooks` are available, ask before adding `--customize`. Do not guess `app_id`, patch YAML, or open splunkbase.com first. Finish with `spa --agent validate`.
 
-Deep customization: [docs/apps.md](../../../../docs/apps.md#customize-an-app) and `spa --json features show splunk_app_deployment.apps[].customizations.remove`.
+Deep customization: [docs/apps.md](../../../../docs/apps.md#customize-an-app) and `spa --agent config explain splunk_app_deployment.apps.customizations.remove`.
 
 ## 1. Deploy apps?
 
@@ -26,20 +26,20 @@ See [docs/apps.md](../../../../docs/apps.md). Optional vault in config. Do not v
 
 ## 3. App sources
 
-- `splunkbase` — snippet from `spa apps snippet`; requires credentials at deploy
-- `local` — `spa apps snippet APP_ID --local` (short for `--source local`) resolves the folder or archive already in `apps_dir`. Nothing there → `spa apps download APP_ID --extract --yes` first (`--extract` deletes the archive after unpacking; `--overwrite` replaces an existing folder; ITSI/content packs deploy from the archive, so omit `--extract`). For a custom app, use `spa apps snippet FOLDER_NAME --local`. Download does not print YAML.
+- `splunkbase` — `spa --agent apps add APP_ID`; requires credentials at deploy
+- `local` — `spa --agent apps add APP_ID --local` resolves the folder or archive already in `apps_dir`. Nothing there → `spa apps download APP_ID --extract --yes` first. For a custom app, use `spa --agent apps add FOLDER_NAME --local`. Download does not edit config.
 
 ## 4. Target roles
 
-For **normal** apps, `target_roles`: `search_head`, `indexer`, `universal_forwarder`, `heavy_forwarder` (maps to deployer/CM/DS/direct per SPA). Pass `--roles` on `snippet` for TAs.
+For **normal** apps, `target_roles`: `search_head`, `indexer`, `universal_forwarder`, `heavy_forwarder` (maps to deployer/CM/DS/direct per SPA). Pass `--roles` to `apps add`.
 
 Do **not** set `target_roles` on `premium_app: itsi` or `itsi_content_pack: true` entries.
 
 ## 5. Premium ITSI?
 
-ITSI / ITE Work → Splunkbase **1841** only (`spa apps snippet 1841`). Not 5403.
+ITSI / ITE Work → Splunkbase **1841** only (`spa --agent apps add 1841`). Not 5403.
 
-Merge `spa --json features show splunk_app_deployment.apps[].app_id --keys` for Java 21 and license files; the apps[] slice also comes from `spa apps snippet 1841`.
+Discover Java and license paths with `spa --agent config explain PATH`, then set chosen values with `spa --agent config set PATH VALUE`.
 
 - Main app: `premium_app: itsi`, no `target_roles`
 - Licenses: run `spa licenses --config …` after adding ITSI — proposes `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` from Software; see [licenses.md](licenses.md)
@@ -48,14 +48,14 @@ Merge `spa --json features show splunk_app_deployment.apps[].app_id --keys` for 
 
 ## 6. ITSI content packs?
 
-`spa apps search "content pack"` / `snippet` 5391 (library) or a single-pack id. Sibling **1841** is required. See `spa features show splunk_app_deployment.apps[].content_pack_apps` and `splunk_app_deployment.apps[].content_pack_api`.
+`spa apps search "content pack"` then `spa --agent apps add 5391 --content-pack NAME` (library) or add a single-pack id. Sibling **1841** is added when missing.
 
 - Do not set `premium_app` or `target_roles` on the pack entry
 - **Folder `name` must match on-disk app name** inside the spl/tgz
 
 ## 7. Other Splunkbase apps
 
-`spa --json apps search QUERY` then `snippet APP_ID`. Fill `target_roles`.
+`spa --agent apps search QUERY` then `spa --agent apps add APP_ID --roles ROLE[,ROLE]`.
 
 ## 8. Local org apps
 
@@ -65,4 +65,4 @@ Merge `spa --json features show splunk_app_deployment.apps[].app_id --keys` for 
 
 - ES full prerequisite matrix (`premium_app: es` is not valid)
 - Auto-deploy without approval
-- `spa apps add` / `remove` (that is #76 / #68)
+- Host uninstall remains out of scope; `apps remove` removes only authored config.

@@ -201,7 +201,8 @@ splunk_app_deployment:
     assert check_controller_data(paths).ok is True
 
 
-def test_default_source_is_local(tmp_path):
+def test_default_source_is_splunkbase(tmp_path):
+    """CFG-APP-002: omitted source does not require a local app folder."""
     software = seed_software_dir(tmp_path)
     apps = tmp_path / "apps"
     apps.mkdir()
@@ -213,8 +214,7 @@ splunk_app_deployment:
 """
     paths = _paths(tmp_path, config, software=software, apps_dir=apps)
     state = check_controller_data(paths)
-    assert state.ok is False
-    assert "org_implicit" in state.reason or str(apps / "org_implicit") in state.reason
+    assert state.ok is True
 
 
 def test_local_path_override(tmp_path):

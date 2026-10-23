@@ -340,32 +340,72 @@ def _reject(message: str, as_agent: bool) -> int:
     return 2
 
 
-FEATURES_NEEDS_ACTION = (
-    "spa features needs an action.\n"
-    "Look up a setting: spa features search QUERY\n"
-    "Then:              spa features show SELECTOR [--keys]\n"
-    "Full catalog:      spa features list"
+CONFIG_SCHEMA_NEEDS_MARKDOWN = (
+    "spa config schema needs --markdown.\n"
+    "Look up one setting with: spa config explain PATH\n"
+    "Docs dump: spa config schema --markdown"
 )
-FEATURES_SCHEMA_NEEDS_MARKDOWN = (
-    "spa features schema needs --markdown.\n"
-    "Look up one setting with: spa features show SELECTOR\n"
-    "Docs dump: spa features schema --markdown"
+CONFIG_SCHEMA_NO_PATH = (
+    "spa config schema does not take a path.\n"
+    "Look up one setting with: spa config explain PATH\n"
+    "Docs dump: spa config schema --markdown"
 )
-FEATURES_SCHEMA_NO_PATH = (
-    "spa features schema does not take a path.\n"
-    "Look up one setting with: spa features show PATH\n"
-    "Docs dump: spa features schema --markdown"
+CONFIG_SCHEMA_AGENT = (
+    "spa config schema --markdown is a human docs dump.\n"
+    "Look up a setting with: spa config search QUERY\n"
+    "Then: spa config explain PATH"
 )
-FEATURES_LIST_NO_ARG = (
-    "spa features list does not take an argument.\n"
-    "Full catalog: spa features list"
+CONFIG_KEYS_NO_ARG = "spa config keys does not take an argument."
+FEATURES_REMOVED = (
+    "spa features was removed.\n"
+    "Look up a setting with: spa config explain [PATH]\n"
+    "Search: spa config search QUERY"
 )
-FEATURES_KEYS_NO_ARG = "spa features keys does not take an argument."
 APPS_NEEDS_ACTION = (
     "spa apps needs an action.\n"
     "Search:    spa apps search QUERY\n"
+    "Packs:     spa apps content-packs list 5391\n"
     "Snippet:   spa apps snippet APP_ID\n"
+    "Add:       spa apps add APP_ID --roles ROLE\n"
+    "Remove:    spa apps remove APP_ID\n"
     "Download:  spa apps download APP_ID --yes"
+)
+CONTENT_PACKS_NEEDS_ACTION = (
+    "spa apps content-packs needs an action.\n"
+    "List: spa apps content-packs list 5391"
+)
+APPS_ADD_DESCRIPTION = """\
+Idempotently add or update one apps[] entry. This command edits splunk_config.yml but does not deploy software.
+
+App kinds:
+  Normal app
+    APP_ID_OR_NAME --roles ROLE[,ROLE]
+  ITSI 1841
+    No --roles; SPA authors premium_app: itsi.
+  Content Library 5391
+    Choose repeatable --content-pack NAME or --install-all-content-packs.
+    Discover exact names with: spa apps content-packs list 5391
+  Recognized single pack
+    Use its own Splunkbase app ID; no --roles or 5391 policy flag.
+"""
+APPS_ADD_EPILOG = """\
+Examples:
+  spa apps add 833 --roles search_head,indexer --yes
+  spa apps add 1841 --yes
+  spa apps add 5391 --content-pack DA-ITSI-CP-nix --yes
+  spa apps add 5391 --install-all-content-packs --yes
+  spa apps add 7294 --yes
+
+Then run spa validate. Deploy only when intended: spa deploy --yes
+"""
+CONFIG_NEEDS_ACTION = (
+    "spa config needs an action.\n"
+    "Look up a setting: spa config search QUERY\n"
+    "Then:              spa config explain PATH\n"
+    "Read current:      spa config get [PATH]\n"
+    "Write:             set, add, unset, merge, topology, or provider\n"
+    "Coverage:          spa config keys\n"
+    "Docs dump:         spa config schema --markdown"
 )
 ENVIRONMENT_NEEDS_ACTION = (
     "spa environment needs an action.\n"
@@ -388,10 +428,7 @@ _SKILLS_PLATFORM_HELP = (
     % _SKILLS_PLATFORMS
 )
 _MISSING_OPERAND = {
-    ("spa features search", "query"): "spa features search needs QUERY.\nExample: spa features search QUERY",
-    ("spa features show", "SELECTOR"): (
-        "spa features show needs SELECTOR.\nExample: spa features show SELECTOR [--keys]"
-    ),
+    ("spa config search", "query"): "spa config search needs QUERY.\nExample: spa config search QUERY",
     ("spa apps search", "query"): "spa apps search needs QUERY.\nExample: spa apps search QUERY",
     ("spa apps snippet", "APP_ID_OR_NAME"): (
         "spa apps snippet needs APP_ID.\nExample: spa apps snippet APP_ID"
@@ -404,16 +441,6 @@ _MISSING_OPERAND = {
         "spa environment remove needs NAME.\nExample: spa environment remove NAME --yes"
     ),
 }
-FEATURES_EXAMPLES = """
-examples:
-  spa features search QUERY
-  spa features show SELECTOR [--keys]
-  spa features list
-  spa features keys
-  spa features schema --markdown
-"""
-
-
 def shell_copy_examples() -> str:
     from spa.shell import COPY_EXAMPLES
 
@@ -857,12 +884,14 @@ def _run(argv: Sequence[str]) -> int:
         def error(self, message):
             # Python 3.14 returns a subparser's unknown flags to this top-level parser.
             if "unrecognized arguments" in message:
-                if "--keys" in message:
-                    message = "spa features --keys requires: spa features show SELECTOR --keys"
+                if "--command" in message or "--keys" in message:
+                    message = "spa config explain PATH shows one level. A deeper level is a longer path."
                 elif "--markdown" in message:
-                    message = "spa features --markdown requires: spa features schema --markdown"
+                    message = "spa config --markdown requires: spa config schema --markdown"
                 elif "--status" in message or message.rstrip().endswith("-s"):
                     message = HOSTS_NEEDS_ACTION
+            elif "invalid choice" in message and ("'features'" in message or "'feat'" in message):
+                message = FEATURES_REMOVED
             elif message.startswith("the following arguments are required:"):
                 missing = message.split(":", 1)[1].strip()
                 named = _MISSING_OPERAND.get((self.prog, missing))
@@ -916,62 +945,131 @@ def _run(argv: Sequence[str]) -> int:
     p_init = _add_command(sub, "init", help="Scaffold or migrate an env dir (alias of spa environment init)")
     _add_init_arguments(p_init)
 
-    p_feat = _add_command(
+    p_config = _add_command(
         sub,
-        "features",
-        aliases=["feat"],
-        help="Look up config features",
-        description="Look up one setting, or ask for the catalog.",
-        epilog=FEATURES_EXAMPLES,
+        "config",
+        aliases=["cfg"],
+        help="Read or transactionally edit splunk_config.yml",
+        epilog=CONFIG_NEEDS_ACTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    feat_sub = p_feat.add_subparsers(dest="features_cmd", metavar="ACTION")
-    p_feat_list = _add_action(feat_sub, "list", help="Full feature catalog", usage="spa features list")
-    _add_mode_flags(p_feat_list)
-    p_feat_list.add_argument("features_extra", nargs="?", help=argparse.SUPPRESS)
-    p_feat_search = _add_action(
-        feat_sub, "search", help="Search the catalog", usage="spa features search QUERY"
+    _add_env_selector(p_config)
+    config_sub = p_config.add_subparsers(dest="config_cmd", metavar="ACTION")
+
+    def _config_mutation_flags(config_parser, *, explicit_default=False):
+        _add_mode_flags(config_parser)
+        config_parser.add_argument("--dry-run", action="store_true", help="Validate and preview without writing")
+        config_parser.add_argument("--expect-revision", metavar="SHA256", help="Fail if the current content revision differs")
+        config_parser.add_argument("--resolve", nargs=2, action="append", metavar=("PATH", "VALUE"), help="Supply one unresolved dependency value (repeatable)")
+        config_parser.add_argument("--resolve-file", metavar="FILE", help="Sparse YAML/JSON dependency resolution fragment")
+        config_parser.add_argument("-y", "--yes", action="store_true", default=argparse.SUPPRESS, help="Confirm without prompting")
+        if explicit_default:
+            config_parser.add_argument("--explicit-default", action="store_true", help="Author values equal to schema defaults")
+
+    p_config_get = _add_action(config_sub, "get", help="Read authored or effective configuration")
+    _add_mode_flags(p_config_get)
+    p_config_get.add_argument("path", nargs="?", metavar="PATH")
+    p_config_get.add_argument("--effective", action="store_true", help="Include the schema default when the path is unset")
+    p_config_get.add_argument("--full", action="store_true", help="Return the full redacted authored document")
+
+    p_config_templates = _add_action(
+        config_sub,
+        "templates",
+        aliases=["tpl"],
+        help="List shipped reusable config fragments",
     )
-    _add_mode_flags(p_feat_search)
-    p_feat_search.add_argument("query", help="Search query")
-    p_feat_show = _add_action(
-        feat_sub,
-        "show",
-        help="Show one feature",
-        usage="spa features show SELECTOR [--keys]",
+    _add_mode_flags(p_config_templates)
+
+    p_config_explain = _add_action(
+        config_sub,
+        "explain",
+        aliases=["exp"],
+        help="Describe one config path and its immediate fields",
+        usage="spa config explain [PATH]",
     )
-    _add_mode_flags(p_feat_show)
-    p_feat_show.add_argument(
-        "selector",
-        metavar="SELECTOR",
-        help="Feature selector. In zsh, quote a selector that contains [], or omit the brackets",
+    _add_mode_flags(p_config_explain)
+    p_config_explain.add_argument("path", nargs="?", metavar="PATH", help="User path such as splunk_hosts or os.packages")
+
+    p_config_search = _add_action(
+        config_sub,
+        "search",
+        aliases=["sea"],
+        help="Find config paths",
+        usage="spa config search QUERY",
     )
-    p_feat_show.add_argument(
-        "--keys",
-        action="store_true",
-        help="Include per-key types, constraints, and guidance",
+    _add_mode_flags(p_config_search)
+    p_config_search.add_argument("query", help="Search text")
+
+    p_config_keys = _add_action(
+        config_sub, "keys", help="Catalog coverage of schema keys", usage="spa config keys"
     )
-    p_feat_keys = _add_action(feat_sub, "keys", help="Catalog coverage of schema keys", usage="spa features keys")
-    _add_mode_flags(p_feat_keys)
-    p_feat_keys.add_argument("features_extra", nargs="?", help=argparse.SUPPRESS)
-    p_feat_schema = _add_action(
-        feat_sub,
+    _add_mode_flags(p_config_keys)
+    p_config_keys.add_argument("config_extra", nargs="?", help=argparse.SUPPRESS)
+
+    p_config_schema = _add_action(
+        config_sub,
         "schema",
         help="Human settings dump",
-        usage="spa features schema --markdown",
+        usage="spa config schema --markdown",
     )
-    _add_mode_flags(p_feat_schema)
-    p_feat_schema.add_argument("rejected_path", nargs="?", help=argparse.SUPPRESS)
-    p_feat_schema.add_argument(
+    _add_mode_flags(p_config_schema)
+    p_config_schema.add_argument("rejected_path", nargs="?", help=argparse.SUPPRESS)
+    p_config_schema.add_argument(
         "--markdown",
         action="store_true",
         help="Print GitHub-flavored markdown (human stdout; regenerate docs/config.md)",
     )
 
+    p_config_set = _add_action(config_sub, "set", help="Set one schema-backed path")
+    _config_mutation_flags(p_config_set, explicit_default=True)
+    p_config_set.add_argument("path", metavar="PATH")
+    p_config_set.add_argument("value", nargs="?", metavar="VALUE")
+    p_config_set.add_argument("--value-file", metavar="FILE", help="Read a JSON or YAML 1.2 value")
+    p_config_set.add_argument("--from-env", metavar="NAME", help="Write a safe environment lookup for a secret path")
+
+    p_config_add = _add_action(config_sub, "add", help="Append one new identity-list entry")
+    _config_mutation_flags(p_config_add)
+    p_config_add.add_argument("path", metavar="SELECTOR")
+    p_config_add.add_argument("value", nargs="?", metavar="JSON_OBJECT")
+    p_config_add.add_argument("--value-file", metavar="FILE", help="Read a JSON or YAML 1.2 object")
+    p_config_add.add_argument(
+        "--from-env",
+        nargs=2,
+        action="append",
+        metavar=("FIELD", "NAME"),
+        help="Write an environment lookup for a secret field in the new entry (repeatable)",
+    )
+
+    p_config_unset = _add_action(config_sub, "unset", aliases=["uns"], help="Remove one or more authored paths")
+    _config_mutation_flags(p_config_unset)
+    p_config_unset.add_argument("paths", nargs="+", metavar="PATH")
+
+    p_config_merge = _add_action(config_sub, "merge", aliases=["mer"], help="Merge a partial splunk_config.yml")
+    _config_mutation_flags(p_config_merge, explicit_default=True)
+    p_config_merge.add_argument(
+        "operand",
+        nargs="?",
+        metavar="TEMPLATE",
+        help="Shipped fragment name from examples/templates",
+    )
+    p_config_merge.add_argument(
+        "--file",
+        metavar="FILE",
+        help="Local YAML or JSON fragment, or - for stdin",
+    )
+
+    p_config_topology = _add_action(config_sub, "topology", aliases=["top"], help="Replace topology-owned sections")
+    _config_mutation_flags(p_config_topology)
+    p_config_topology.add_argument("operand", metavar="TOPOLOGY")
+
+    p_config_provider = _add_action(config_sub, "provider", aliases=["pro"], help="Replace provider-owned sections")
+    _config_mutation_flags(p_config_provider)
+    p_config_provider.add_argument("operand", metavar="PROVIDER")
+
     p_apps = _add_command(
         sub,
         "apps",
-        help="Search Splunkbase, print an apps[] snippet, or download an archive",
+        help="Discover, configure, or download Splunk apps and ITSI content packs",
         epilog=APPS_NEEDS_ACTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -998,6 +1096,47 @@ def _run(argv: Sequence[str]) -> int:
         choices=list(SEARCH_KINDS),
         help="Filter SPA kind (%s)" % ", ".join(SEARCH_KINDS),
     )
+    p_content_packs = _add_action(
+        apps_sub,
+        "content-packs",
+        aliases=["cp"],
+        help="Discover packs bundled in an ITSI Content Library archive",
+        epilog=CONTENT_PACKS_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    content_pack_sub = p_content_packs.add_subparsers(
+        dest="content_packs_cmd",
+        metavar="ACTION",
+    )
+    p_content_pack_list = _add_action(
+        content_pack_sub,
+        "list",
+        help="List bundled pack names, descriptions, and SPA automation",
+        description=(
+            "Read-only inspection of Content Library 5391. With --archive, read that file "
+            "without an environment. Otherwise use a matching archive in apps_dir, or make "
+            "a temporary authenticated Splunkbase download that is deleted after inspection."
+        ),
+    )
+    p_content_pack_list.set_defaults(canonical_action="content-packs-list")
+    _add_mode_flags(p_content_pack_list)
+    p_content_pack_list.add_argument(
+        "app_id",
+        nargs="?",
+        default="5391",
+        metavar="APP_ID",
+        help="Content Library Splunkbase app id (only 5391 is supported)",
+    )
+    p_content_pack_list.add_argument(
+        "--version",
+        default="latest",
+        help="Content Library release to inspect (default latest)",
+    )
+    p_content_pack_list.add_argument(
+        "--archive",
+        metavar="PATH",
+        help="Inspect this local 5391 archive; no environment or credentials required",
+    )
     p_apps_snippet = _add_action(
         apps_sub,
         "snippet",
@@ -1015,7 +1154,7 @@ def _run(argv: Sequence[str]) -> int:
     )
     p_apps_snippet.add_argument(
         "--roles",
-        help="Comma-separated target_roles (TA only; ignored for premium/content packs)",
+        help="Comma-separated target_roles (TA only; rejected for ITSI/content packs)",
     )
     p_apps_snippet.add_argument(
         "--source",
@@ -1036,6 +1175,126 @@ def _run(argv: Sequence[str]) -> int:
         action="store_true",
         help="Include matching curated apps_playbooks customizations in the YAML",
     )
+    p_apps_snippet.add_argument(
+        "--set",
+        dest="set_values",
+        nargs=2,
+        action="append",
+        metavar=("FIELD", "VALUE"),
+        help="Set another schema-backed app field (repeatable)",
+    )
+    p_apps_add = _add_action(
+        apps_sub,
+        "add",
+        help="Add or update one app entry in splunk_config.yml",
+        description=APPS_ADD_DESCRIPTION,
+        epilog=APPS_ADD_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_mode_flags(p_apps_add)
+    p_apps_add.add_argument(
+        "app_id",
+        metavar="APP_ID_OR_NAME",
+        help="Splunkbase app ID or local app folder name (with --source local)",
+    )
+    p_apps_add.add_argument(
+        "--version",
+        default="latest",
+        help="Release or local archive version to author (default latest)",
+    )
+    p_apps_add.add_argument(
+        "--roles",
+        help="Comma-separated target_roles; required only for normal apps and rejected for ITSI/content packs",
+    )
+    p_apps_add.add_argument(
+        "--source",
+        choices=["splunkbase", "local"],
+        default="splunkbase",
+        help="Use Splunkbase metadata, or a folder/archive already in apps_dir (default splunkbase)",
+    )
+    p_apps_add.add_argument(
+        "--local",
+        dest="source",
+        action="store_const",
+        const="local",
+        default=argparse.SUPPRESS,
+        help="Shorthand for --source local",
+    )
+    p_apps_add.add_argument(
+        "--customize",
+        action="store_true",
+        help="Attach an exact matching curated SPA playbook to this top-level app entry",
+    )
+    p_apps_add.add_argument(
+        "--set",
+        dest="set_values",
+        nargs=2,
+        action="append",
+        metavar=("FIELD", "VALUE"),
+        help="Set another schema-backed app FIELD from strict JSON; repeatable",
+    )
+    p_apps_add.add_argument(
+        "--content-pack",
+        dest="content_packs",
+        action="append",
+        metavar="NAME",
+        help="5391 only: add exact bundled folder NAME; repeatable and mutually exclusive with --install-all-content-packs",
+    )
+    p_apps_add.add_argument(
+        "--install-all-content-packs",
+        action="store_true",
+        help="5391 only: install every bundled pack; mutually exclusive with --content-pack",
+    )
+    p_apps_add.add_argument(
+        "--explicit-default",
+        action="store_true",
+        help="Write omit-safe default values that SPA normally leaves absent",
+    )
+    p_apps_add.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Plan dependencies and show the result without prompting or writing",
+    )
+    p_apps_add.add_argument(
+        "--expect-revision",
+        metavar="SHA256",
+        help="Write only when the config still has this SHA-256 revision",
+    )
+    p_apps_add.add_argument(
+        "--resolve",
+        nargs=2,
+        action="append",
+        metavar=("PATH", "VALUE"),
+        help="Supply one unresolved dependency PATH VALUE; VALUE uses strict JSON; repeatable",
+    )
+    p_apps_add.add_argument(
+        "--resolve-file",
+        metavar="FILE",
+        help="Supply unresolved dependencies from sparse YAML/JSON; use - for stdin",
+    )
+    p_apps_add.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Skip the human config-edit confirmation; agent mode never prompts",
+    )
+
+    p_apps_remove = _add_action(
+        apps_sub,
+        "remove",
+        aliases=["rem"],
+        help="Remove an authored app entry (does not uninstall deployed files)",
+    )
+    _add_mode_flags(p_apps_remove)
+    p_apps_remove.add_argument("app_id", metavar="APP_ID_OR_NAME")
+    p_apps_remove.add_argument("--content-pack", metavar="NAME", help="Remove one named pack under Content Library 5391")
+    p_apps_remove.add_argument("--dry-run", action="store_true")
+    p_apps_remove.add_argument("--expect-revision", metavar="SHA256")
+    p_apps_remove.add_argument("--resolve", nargs=2, action="append", metavar=("PATH", "VALUE"))
+    p_apps_remove.add_argument("--resolve-file", metavar="FILE")
+    p_apps_remove.add_argument("-y", "--yes", action="store_true", default=argparse.SUPPRESS)
+
     p_apps_download = _add_action(
         apps_sub,
         "download",
@@ -1072,7 +1331,11 @@ def _run(argv: Sequence[str]) -> int:
     )
 
     p_val = _add_command(sub, "validate", aliases=["val"], help="Validate splunk_config.yml")
-    p_val.add_argument("config", nargs="?", help="Configuration file (defaults to this environment)")
+    p_val.add_argument(
+        "--config",
+        metavar="FILE",
+        help="Validate this file instead of the environment config",
+    )
     p_val.add_argument("--check-licenses", action="store_true", help="Validate configured license files")
     p_val.add_argument(
         "--splunk-config-aws",
@@ -1483,11 +1746,16 @@ def _run(argv: Sequence[str]) -> int:
 
     native_help_only = invoked in NATIVE_FLAG_COMMANDS and set(native) <= {"-h", "--help"}
     apps_cmd = getattr(args, "apps_cmd", None)
+    config_without_env = (
+        args.command == "config"
+        and getattr(args, "config_cmd", None) in {"templates", "tpl", "explain", "exp", "search", "sea", "keys", "schema"}
+    )
     apps_without_env = args.command == "apps" and apps_cmd in {"search", "snippet"}
     if (
-        args.command not in {"init", "agent", "environment", "doctor", "features", "venv", "skills"}
+        args.command not in {"init", "agent", "environment", "doctor", "venv", "skills"}
         and not native_help_only
         and not apps_without_env
+        and not config_without_env
     ):
         missing = env_dir_required_error(paths)
         if missing:
@@ -1514,51 +1782,70 @@ def _run(argv: Sequence[str]) -> int:
     if args.command == "init":
         return _run_init(args, session, as_agent)
 
-    if args.command == "features":
-        action = _action(args, "features_cmd")
+    if args.command == "config":
+        action = _action(args, "config_cmd")
         if not action:
-            return _reject(FEATURES_NEEDS_ACTION, as_agent)
-        if action == "list" and getattr(args, "features_extra", None):
-            return _reject(FEATURES_LIST_NO_ARG, as_agent)
-        if action == "keys" and getattr(args, "features_extra", None):
-            return _reject(FEATURES_KEYS_NO_ARG, as_agent)
+            return _reject(CONFIG_NEEDS_ACTION, as_agent)
+        if action == "keys" and getattr(args, "config_extra", None):
+            return _reject(CONFIG_KEYS_NO_ARG, as_agent)
         if action == "schema" and getattr(args, "rejected_path", None):
-            return _reject(FEATURES_SCHEMA_NO_PATH, as_agent)
-        if action == "schema" and (as_agent or not getattr(args, "markdown", False)):
-            return _reject(FEATURES_SCHEMA_NEEDS_MARKDOWN, as_agent)
-        ident = getattr(args, "selector", None) if action == "show" else None
-        query = getattr(args, "query", None) if action == "search" else None
-        result = session.features(
-            action=action,
-            ident=ident,
-            query=query,
-            include_keys=bool(getattr(args, "keys", False)),
-        )
-        if action == "schema" and not as_agent:
-            if not result.ok:
-                print(result.error or "features failed", file=sys.stderr)
-                return result.code
+            return _reject(CONFIG_SCHEMA_NO_PATH, as_agent)
+        if action == "schema" and as_agent:
+            return _reject(CONFIG_SCHEMA_AGENT, as_agent)
+        if action == "schema" and not getattr(args, "markdown", False):
+            return _reject(CONFIG_SCHEMA_NEEDS_MARKDOWN, as_agent)
+        if action == "schema":
             from spa.catalog import format_config_markdown
 
             sys.stdout.write(format_config_markdown(paths.spa_home))
             return 0
+        operand = getattr(args, "operand", None)
+        merge_file = getattr(args, "file", None) if action == "merge" else None
+        stdin_text = None
+        if merge_file == "-" or getattr(args, "resolve_file", None) == "-":
+            stdin_text = sys.stdin.read()
+        result = session.config(
+            action=action,
+            paths=(
+                [getattr(args, "query", None)]
+                if action == "search"
+                else getattr(args, "paths", None)
+                or ([getattr(args, "path", None)] if getattr(args, "path", None) else None)
+            ),
+            value=getattr(args, "value", None),
+            operand=operand,
+            file=merge_file,
+            value_file=getattr(args, "value_file", None),
+            from_env=getattr(args, "from_env", None) if action == "set" else None,
+            from_env_fields=getattr(args, "from_env", None) if action == "add" else None,
+            explicit_default=bool(getattr(args, "explicit_default", False)),
+            effective=bool(getattr(args, "effective", False)),
+            full=bool(getattr(args, "full", False)),
+            dry_run=bool(getattr(args, "dry_run", False)),
+            expect_revision=getattr(args, "expect_revision", None),
+            resolve=getattr(args, "resolve", None),
+            resolve_file=getattr(args, "resolve_file", None),
+            stdin_text=stdin_text,
+            confirm=args.yes,
+            agent=as_agent,
+        )
         if as_agent:
             return _emit_result(result, True)
         if not result.ok:
-            print(result.error or "features failed", file=sys.stderr)
-            return result.code
+            return _print_command_error(result)
         data = result.data or {}
-        if action in {"list", "search"}:
-            from spa.catalog import format_feature_rows
+        if action == "explain":
+            from spa.config_tree import format_explain
 
-            rows = data.get("features") or []
-            if not rows and action == "search":
-                print("No features matched %r" % query)
-                return 0
-            print(format_feature_rows(rows))
+            sys.stdout.write(format_explain(data))
             return 0
-        if action == "show":
-            print(data.get("text") or "")
+        if action == "search":
+            matches = data.get("matches") or []
+            if not matches:
+                print("No config paths matched %r" % getattr(args, "query", ""))
+                return 0
+            for item in matches:
+                print("%s  %s" % (item.get("path"), item.get("description") or ""))
             return 0
         if action == "keys":
             missing = data.get("missing_from_catalog") or []
@@ -1573,6 +1860,39 @@ def _run(argv: Sequence[str]) -> int:
             for key in missing_detail:
                 print("missing detail: %s" % key)
             return 0 if not missing and not missing_detail else 1
+        if action == "get":
+            from ruamel.yaml import YAML
+
+            yaml = YAML()
+            yaml.default_flow_style = False
+            yaml.dump(data, sys.stdout)
+            return 0
+        if action == "templates":
+            for row in data.get("templates") or []:
+                print("%s - %s" % (row["name"], row.get("summary") or ""))
+            return 0
+        if data.get("ready") is False:
+            print("Config %s: unresolved; no changes written" % action)
+            for operation in data.get("planned_operations") or []:
+                print("Planned: %s %s" % (operation.get("op"), operation.get("path")))
+            for requirement in data.get("requirements") or []:
+                print(
+                    "Required [%s/%s]: %s"
+                    % (
+                        requirement.get("rule_id"),
+                        requirement.get("kind"),
+                        requirement.get("summary"),
+                    )
+                )
+                print("Retry: %s" % requirement.get("retry"))
+            return 0
+        state = "would change" if getattr(args, "dry_run", False) and data.get("changed") else (
+            "changed" if data.get("changed") else "unchanged"
+        )
+        print("Config %s: %s" % (action, state))
+        for warning in data.get("warnings") or []:
+            print("Warning: %s" % warning, file=sys.stderr)
+        print("Run spa validate after the final edit.")
         return 0
 
     if args.command == "apps":
@@ -1583,6 +1903,13 @@ def _run(argv: Sequence[str]) -> int:
         action = _action(args, "apps_cmd")
         if not action:
             return _reject(APPS_NEEDS_ACTION, as_agent)
+        if action == "content-packs":
+            return _reject(CONTENT_PACKS_NEEDS_ACTION, as_agent)
+        apps_stdin = (
+            sys.stdin.read()
+            if getattr(args, "resolve_file", None) == "-"
+            else None
+        )
         result = session.apps(
             action=action,
             query=" ".join(getattr(args, "query", None) or []),
@@ -1596,6 +1923,17 @@ def _run(argv: Sequence[str]) -> int:
             extract=bool(getattr(args, "extract", False)),
             overwrite=bool(getattr(args, "overwrite", False)),
             customize=bool(getattr(args, "customize", False)),
+            set_values=getattr(args, "set_values", None),
+            explicit_default=bool(getattr(args, "explicit_default", False)),
+            content_packs=getattr(args, "content_packs", None),
+            install_all_content_packs=bool(getattr(args, "install_all_content_packs", False)),
+            content_pack=getattr(args, "content_pack", None),
+            archive=getattr(args, "archive", None),
+            dry_run=bool(getattr(args, "dry_run", False)),
+            expect_revision=getattr(args, "expect_revision", None),
+            resolve=getattr(args, "resolve", None),
+            resolve_file=getattr(args, "resolve_file", None),
+            stdin_text=apps_stdin,
             confirm=args.yes,
             agent=as_agent,
         )
@@ -1610,12 +1948,41 @@ def _run(argv: Sequence[str]) -> int:
 
             sys.stdout.write(format_search_text(data.get("query") or "", data.get("apps") or []))
             return 0
+        if action == "content-packs-list":
+            from spa.apps import format_content_pack_catalog
+
+            sys.stdout.write(format_content_pack_catalog(data))
+            return 0
         if action == "download":
             if data.get("extracted_path"):
                 print("Extracted: %s" % data["extracted_path"])
                 print("Removed archive after extract")
             else:
                 print("Downloaded: %s" % (data.get("path") or ""))
+            return 0
+        if action in {"add", "remove"}:
+            if data.get("ready") is False:
+                print("App %s: unresolved; no changes written" % action)
+                for operation in data.get("planned_operations") or []:
+                    print("Planned: %s %s" % (operation.get("op"), operation.get("path")))
+                for requirement in data.get("requirements") or []:
+                    print(
+                        "Required [%s/%s]: %s"
+                        % (
+                            requirement.get("rule_id"),
+                            requirement.get("kind"),
+                            requirement.get("summary"),
+                        )
+                    )
+                    print("Retry: %s" % requirement.get("retry"))
+                return 0
+            state = "would change" if getattr(args, "dry_run", False) and data.get("changed") else (
+                "changed" if data.get("changed") else "unchanged"
+            )
+            print("App %s: %s" % (action, state))
+            if data.get("note"):
+                print(data["note"])
+            print("Run spa validate after the final edit.")
             return 0
         sys.stdout.write(data.get("snippet") or "")
         return 0
@@ -1631,8 +1998,9 @@ def _run(argv: Sequence[str]) -> int:
         )
         if as_agent:
             return _emit_result(result, True)
-        sys.stdout.write(format_validate_text(result))
-        if result.error:
+        text = format_validate_text(result)
+        sys.stdout.write(text)
+        if result.error and result.error not in text:
             print(result.error, file=sys.stderr)
         validation = ((result.data or {}).get("license_validation") or {})
         for warning in validation.get("warnings") or []:

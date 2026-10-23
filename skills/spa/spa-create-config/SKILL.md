@@ -33,7 +33,7 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 ## When NOT to Use
 
 - App-scope test distillation → [spa-add-test-scenario](../spa-add-test-scenario/SKILL.md)
-- Splunkbase search / TA lookup → load [spa-apps](../spa-apps/SKILL.md) (`spa --json apps search` then one `snippet`)
+- Splunkbase search / TA lookup → load [spa-apps](../spa-apps/SKILL.md) (`spa --agent apps search` then one `spa --agent apps add`)
 - Flat deployment test configs under `tests/configs/*.yml` only
 - Production sizing / PS engagement (guidance only; no auto-sizing)
 - Auto-running provision/deploy (user runs `spa provision` / `spa deploy` after validation)
@@ -56,13 +56,11 @@ Follow [secrets-handling.md](references/secrets-handling.md) for the full list.
 
 **Actions:**
 
-1. `spa --json features search QUERY` (words from the request: `itsi`, `smartstore`, `apps`, `ssl`, `volumes`).
-2. `spa --json features show ID` for the matching record; `show ID --keys` only when types, allowed values, or notes are needed.
-3. Merge the record `snippet` into the existing config using the catalog `merge` field (`deep` vs `replace`). Honor `when_not_to_use`.
-4. Do not invent YAML from leftover mixed example files. ITSI full lab: copy or merge `examples/single_node_itsi.yml` when they want the whole env, not only the snippet. For Splunkbase TAs and packs, follow [spa-apps](../spa-apps/SKILL.md): `spa --json apps search QUERY` then one `snippet`; merge the snippet (do not guess `app_id`).
-5. `spa validate` (Phase 8). Do not auto-run provision/deploy.
-
-Out of scope: writing `splunk_config.yml` via `spa config` (#76); single-app deploy (#68).
+1. `spa --agent config search QUERY` (words from the request: `itsi`, `smartstore`, `apps`, `ssl`, `volumes`).
+2. `spa --agent config explain PATH` for the matching path. It returns one level, the decision, and one mutation command. It does not apply the command. A deeper level is a longer path. When `scope` is present, `applies_to` plus `per_host_path` or `global_path` is the other place that setting can go. `behavior` `merge` adds a per-host list to the global list. `replace` uses the host value instead of the global one. Omit `scope` means that path has no counterpart.
+3. Update one existing schema path with `spa --agent config set PATH VALUE`. Append a new host, indexer cluster, or search-head cluster with `spa --agent config add SELECTOR JSON_OBJECT`. Use `spa --agent config merge --file FILE` only for a deliberate multi-setting fragment.
+4. Do not invent YAML from leftover mixed example files or apply a catalog snippet. For Splunkbase TAs and packs, follow [spa-apps](../spa-apps/SKILL.md): search, choose the ID and roles, then use one `spa --agent apps add` transaction.
+5. `spa --agent validate` (Phase 8). Do not auto-run provision/deploy.
 
 ## Reference files (load on demand)
 
@@ -86,13 +84,13 @@ Out of scope: writing `splunk_config.yml` via `spa config` (#76); single-app dep
 
 Repo keys: for every requested capability, use this loop. Call `bin/spa` JSON. Do not scrape [docs/config.md](../../../docs/config.md) and do not read `examples/catalog/features.yml`.
 
-1. Search the operator’s concept: `spa --json features search QUERY`.
-2. Compare `when_to_use`, `when_not_to_use`, `matched_keys`, and allowed values. Do not choose from the title alone.
-3. Inspect the selected schema path: `spa --json features show SELECTOR --keys`.
-4. Merge only the returned `apply.snippet` and `apply.paths` into `splunk_config.yml`. Preserve `lookup('env', ...)` and vault references.
-5. Run `spa validate`. If search has no suitable result, report that the setting is unsupported. Do not invent a key.
+1. Search the operator’s concept: `spa --agent config search QUERY`.
+2. Compare the one-line description. Do not choose from the title alone.
+3. Inspect the selected schema path: `spa --agent config explain PATH`.
+4. Author the selected value with `spa --agent config set PATH VALUE`, or append a new non-app identity with `spa --agent config add SELECTOR JSON_OBJECT`. For several already-known paths, pass one sparse fragment to `spa --agent config merge --file -`.
+5. Run `spa --agent validate`. If search has no suitable result, report that the setting is unsupported. Do not invent a key.
 
-`docs/config.md` stays the human browse fallback. Layouts (`topology.*`, `provider.aws`, `provider.virtualbox`) are `spa init --example` / `--provider` choices and have no `apply` object. Once `spa config set SELECTOR` exists, replace step 4 with that command. Optional overrides are `spa config set SELECTOR --set PATH=YAML_VALUE`, and `PATH` must be one of the returned `apply.paths`. Search, show, and selector choice stay the same.
+`docs/config.md` stays the human browse fallback. Reselect layouts with `spa --agent config topology TOPOLOGY` and `spa --agent config provider PROVIDER`; those actions replace only their owned sections.
 
 ## Step 0 — Environment setup
 
@@ -144,7 +142,7 @@ Ask scale-out vs scale-up; default **scale out** for Splunk.
 | Path | Action |
 |------|--------|
 | User knows SVA code | Confirm code → [sva-topology-map.md](references/sva-topology-map.md) then `spa init --example TOPOLOGY --provider aws\|virtualbox ENV` |
-| Needs help | [sva-questionnaire.md](references/sva-questionnaire.md) then catalog `spa --json features search` |
+| Needs help | [sva-questionnaire.md](references/sva-questionnaire.md) then `spa --agent config search` |
 | Config test only | Minimal topology (`single_node` or `cm_2idxc_sh_uf`) |
 
 **Exit:** SVA code or lab compromise; topology id from `spa init list` (not a mixed `_aws` file).
@@ -161,7 +159,7 @@ Ask scale-out vs scale-up; default **scale out** for Splunk.
 
 ## Phase 3 — Linux OS
 
-Pick OS via `spa --json features search os` (`os`, `os.disable_apparmor`, `terraform.aws.ssh_username`). Merge the `apply` snippet from `spa --json features show SELECTOR --keys`; do not pass OS through `spa init`.
+Pick OS via `spa --agent config search os`, then `spa --agent config explain os`, `os.disable_apparmor`, or `terraform.aws.ssh_username`. Author each chosen value with `spa --agent config set`; do not pass OS through `spa init`.
 
 **Recommended:** Amazon Linux 2023, RHEL 10, or Ubuntu 24.04 LTS (latest AMI in region).
 
@@ -237,7 +235,7 @@ spa licenses --config config/splunk_config.yml --json
 8. **Trial-only labs** → omit both `splunk_license_file` and `license_manager`; do not add license file from Software scan alone.
 9. No usable files in Software → warn (trial only or add licenses before deploy).
 
-Use `spa --json features show splunk_defaults.splunk_license_server --keys` (or the licenses JSON `yaml_snippet`) under `splunk_defaults` in Phase 7.
+Use `spa --agent config explain splunk_defaults.splunk_license_server` or the licenses result's `proposed_splunk_license_file`, then author it under `splunk_defaults` in Phase 7 with `spa --agent config set`.
 
 **Exit:** License list decided or explicitly skipped; LM + ITSI/ES warnings addressed.
 
@@ -265,18 +263,18 @@ Use `spa --json features show splunk_defaults.splunk_license_server --keys` (or 
 
 1. Scaffold with `spa init --example TOPOLOGY --provider aws|virtualbox ENV` (topology + provider only). Do not invent `--addon` or OS flags on init.
 2. Header from [assets/config-header-template.md](assets/config-header-template.md)
-3. For OS, SSL, licenses, RF/SF, and other settings: choose with `spa --json features search QUERY`, inspect with `show ID`, and use `show ID --keys` only when per-key types, constraints, placeholders, or notes are needed. Merge each record's `snippet` into `$SPA_ENV_DIR/config/splunk_config.yml` yourself. Do not pass those through init. For **apps**, load [spa-apps](../spa-apps/SKILL.md): `spa --json apps search QUERY` then `spa --json apps snippet APP_ID`; merge that snippet. ITSI is app_id 1841, not 5403.
+3. For OS, SSL, licenses, RF/SF, and other settings: choose with `spa --agent config search QUERY`, then `spa --agent config explain PATH`. Use the one command on that page. That is `spa --agent config set PATH VALUE` for an existing scalar or map, or `spa --agent config add SELECTOR JSON_OBJECT` for a new non-app identity. Use one intentional `spa --agent config merge --file FILE` for a multi-setting fragment. Never paste a feature snippet. For **apps**, load [spa-apps](../spa-apps/SKILL.md), search, and call `spa --agent apps add`. ITSI is app_id 1841, not 5403.
 4. Global `terraform.aws` already comes from `--provider aws`; add **`ssh_username`** / AMI from catalog + discovery.
 5. Matching global `os:` from selector `os` (not from the topology file).
 6. `splunk_defaults` (include `splunk_license_file` from Phase 6b when chosen).
-7. Cross-check snippets against `spa --json features show`.
+7. Cross-check authored paths against `spa --agent config explain PATH`.
 
 **Exit:** File written at target path.
 
 ## Phase 8 — Validate (quality gate)
 
 ```bash
-spa validate config/splunk_config.yml
+spa validate --config config/splunk_config.yml
 ```
 
 This always runs schema validation, inventory load, **license file ↔ license_manager pairing**, and playbook syntax-check. Fix any failure before handoff.
@@ -286,14 +284,14 @@ This always runs schema validation, inventory load, **license file ↔ license_m
 With AWS creds:
 
 ```bash
-spa validate --splunk-config-aws config/splunk_config.yml
+spa validate --splunk-config-aws --config config/splunk_config.yml
 ```
 
 Optional: verify license files exist, parse as valid XML, are not expired, and
 provide the Enterprise / ITSI / ES capabilities required by the config:
 
 ```bash
-spa validate --check-licenses config/splunk_config.yml
+spa validate --check-licenses --config config/splunk_config.yml
 ```
 
 Optional: `./tests/run_schema_tests.sh -q`
@@ -332,4 +330,4 @@ Use consistently: `cluster_manager`, `terraform.aws`, `splunk_hosts`, `plugin: s
 - [ ] Step 0 and phase exit criteria followed
 - [ ] `bin/*` invoked from project root
 - [ ] Secrets: Splunkbase and AWS credential env values never shown in chat or terminal output
-- [ ] Incremental add uses `spa --json features search` / `show` / merge, or [spa-apps](../spa-apps/SKILL.md) for Splunkbase, then `spa validate` (does not restart SVA for a single setting)
+- [ ] Incremental add uses `spa --agent config search` then `spa --agent config explain`, then `spa --agent config set`, `spa --agent config add`, or [spa-apps](../spa-apps/SKILL.md), followed by `spa --agent validate`

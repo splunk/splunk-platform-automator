@@ -17,12 +17,27 @@ from schema import (
     SplunkConfig,
     SplunkHost,
     AllowedRole,
-    validate_config,
+    validate_config as _schema_validate,
     ConfigValidationError,
     GeneralConfig,
     IdxClusterConfig,
     ShClusterConfig,
 )
+
+
+def validate_config(config):
+    """Schema entry point for existing cases. Supplies the required admin password."""
+    if not isinstance(config, dict):
+        return _schema_validate(config)
+    data = dict(config)
+    defaults = data.get("splunk_defaults")
+    defaults = dict(defaults) if isinstance(defaults, dict) else {}
+    defaults.setdefault(
+        "splunk_admin_password",
+        "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}",
+    )
+    data["splunk_defaults"] = defaults
+    return _schema_validate(data)
 
 
 class TestValidConfigurations:
@@ -40,6 +55,40 @@ class TestValidConfigurations:
         assert result.plugin == "splunk-platform-automator"
         assert len(result.splunk_hosts) == 1
         assert result.splunk_hosts[0].name == "idx1"
+
+    def test_admin_password_is_required(self):
+        """splunk_defaults.splunk_admin_password must be present and non-empty."""
+        from schema import validate_config as schema_validate
+
+        missing = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "idx1", "roles": ["indexer"]}],
+        }
+        with pytest.raises(ConfigValidationError, match="splunk_admin_password"):
+            schema_validate(missing)
+        blank = {
+            "plugin": "splunk-platform-automator",
+            "splunk_defaults": {"splunk_admin_password": "   "},
+            "splunk_hosts": [{"name": "idx1", "roles": ["indexer"]}],
+        }
+        with pytest.raises(ConfigValidationError, match="splunk_admin_password"):
+            schema_validate(blank)
+        present = {
+            "plugin": "splunk-platform-automator",
+            "splunk_defaults": {
+                "splunk_admin_password": "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}",
+            },
+            "splunk_hosts": [{"name": "idx1", "roles": ["indexer"]}],
+        }
+        result = schema_validate(present)
+        assert "lookup('env', 'SPLUNK_ADMIN_PASSWORD')" in result.splunk_defaults.splunk_admin_password
+        literal = {
+            "plugin": "splunk-platform-automator",
+            "splunk_defaults": {"splunk_admin_password": "kept-literal"},
+            "splunk_hosts": [{"name": "idx1", "roles": ["indexer"]}],
+        }
+        result = schema_validate(literal)
+        assert result.splunk_defaults.splunk_admin_password == "kept-literal"
 
     def test_host_with_list(self):
         """Test host definition using list syntax."""
@@ -183,7 +232,9 @@ class TestValidConfigurations:
                 {"shc_name": "shc1", "shc_password": "secret"}
             ],
             "splunk_hosts": [
-                {"name": "idx1", "roles": ["indexer"]}
+                {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+                {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"name": "idx2", "roles": ["indexer"], "idxcluster": "idxc1"},
             ]
         }
         result = validate_config(config)
@@ -508,8 +559,8 @@ class TestClusterConfigurations:
         msg = str(exc_info.value).lower()
         assert "cluster_manager" in msg and "idxcluster" in msg
 
-    def test_host_idxcluster_requires_splunk_idxclusters_section_raises(self):
-        """If any host has idxcluster set, splunk_idxclusters must define that cluster."""
+    def test_host_idxcluster_requires_persisted_cluster_section(self):
+        """Final validation rejects a cluster identity not persisted by the editor."""
         config = {
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [
@@ -521,8 +572,7 @@ class TestClusterConfigurations:
         }
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(config)
-        msg = str(exc_info.value).lower()
-        assert "splunk_idxclusters" in msg
+        assert "splunk_idxclusters" in str(exc_info.value).lower()
 
     def test_host_idxcluster_name_must_match_splunk_idxclusters_raises(self):
         """Host idxcluster value must appear in splunk_idxclusters."""
@@ -546,12 +596,13 @@ class TestClusterConfigurations:
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [
                 {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
-                {"name": "sh1", "roles": ["search_head"]}
-            ]
+                {"name": "sh1", "roles": ["search_head"], "shcluster": "shc1"},
+            ],
+            "splunk_shclusters": [{"shc_name": "shc1"}],
         }
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(config)
-        assert "3 search heads" in str(exc_info.value)
+        assert "3" in str(exc_info.value) and "search head" in str(exc_info.value).lower()
 
     def test_deployer_requires_shcluster_on_search_heads(self):
         """Test that at least 3 search heads must have shcluster when deployer exists."""
@@ -585,8 +636,8 @@ class TestClusterConfigurations:
         msg = str(exc_info.value).lower()
         assert "deployer" in msg and "shcluster" in msg
 
-    def test_host_shcluster_requires_splunk_shclusters_section_raises(self):
-        """If any host has shcluster set, splunk_shclusters must define that cluster."""
+    def test_host_shcluster_requires_persisted_cluster_section(self):
+        """Final validation rejects a cluster identity not persisted by the editor."""
         config = {
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [
@@ -597,8 +648,7 @@ class TestClusterConfigurations:
         }
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(config)
-        msg = str(exc_info.value).lower()
-        assert "splunk_shclusters" in msg
+        assert "splunk_shclusters" in str(exc_info.value).lower()
 
     def test_host_shcluster_name_must_match_splunk_shclusters_raises(self):
         """Host shcluster value must appear in splunk_shclusters."""
@@ -705,6 +755,7 @@ class TestClusterConfigurations:
         """ITSI in app deployment with search_head, indexer, and license_manager present validates."""
         config = {
             "plugin": "splunk-platform-automator",
+            "os": {"packages": ["java-21-openjdk"]},
             "splunk_hosts": [
                 {"name": "sh", "roles": ["search_head"]},
                 {"name": "idx", "roles": ["indexer"]},
@@ -733,7 +784,9 @@ class TestClusterConfigurations:
                 {"name": "cm1", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
                 {"name": "cm2", "roles": ["cluster_manager"], "idxcluster": "idxc2"},
                 {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"name": "idx1b", "roles": ["indexer"], "idxcluster": "idxc1"},
                 {"name": "idx2", "roles": ["indexer"], "idxcluster": "idxc2"},
+                {"name": "idx2b", "roles": ["indexer"], "idxcluster": "idxc2"},
             ],
             "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
             "splunk_idxclusters": [
@@ -784,6 +837,7 @@ class TestClusterConfigurations:
         """ITSI for install with exactly one indexer cluster and no standalone indexers passes."""
         config = {
             "plugin": "splunk-platform-automator",
+            "os": {"packages": ["java-21-openjdk"]},
             "splunk_hosts": [
                 {"name": "sh", "roles": ["search_head"]},
                 {"name": "lm", "roles": ["license_manager"]},
@@ -808,6 +862,7 @@ class TestClusterConfigurations:
         """ITSI for install with no IDXC and exactly one standalone indexer passes."""
         config = {
             "plugin": "splunk-platform-automator",
+            "os": {"packages": ["java-21-openjdk"]},
             "splunk_hosts": [
                 {"name": "sh", "roles": ["search_head"]},
                 {"name": "idx", "roles": ["indexer"]},
@@ -928,6 +983,97 @@ class TestMultiRoleHosts:
         result = validate_config(config)
         assert len(result.splunk_hosts[0].roles) == 2
 
+    def test_second_deployer_for_the_same_shc_is_rejected(self):
+        """One search-head cluster has one deployer. Two names concatenate in inventory."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "cm", "roles": ["deployer"], "shcluster": "shc1"},
+                {"name": "lm", "roles": ["deployer"], "shcluster": "shc1"},
+                {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+            ],
+            "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        message = str(exc_info.value)
+        assert "shc1" in message
+        assert "cm" in message and "lm" in message
+
+    def test_deployers_for_different_shcs_are_allowed(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "dep1", "roles": ["deployer"], "shcluster": "shc1"},
+                {"name": "dep2", "roles": ["deployer"], "shcluster": "shc2"},
+                {"iter": {"prefix": "a", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+                {"iter": {"prefix": "b", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc2"},
+            ],
+            "splunk_shclusters": [
+                {"shc_name": "shc1", "shc_secret": "secret"},
+                {"shc_name": "shc2", "shc_secret": "secret"},
+            ],
+        }
+        result = validate_config(config)
+        deployers = [host.name for host in result.splunk_hosts if AllowedRole.deployer in host.roles]
+        assert deployers == ["dep1", "dep2"]
+
+    def test_second_deployment_server_is_rejected(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "cm", "roles": ["deployment_server"]},
+                {"name": "lm", "roles": ["deployment_server"]},
+            ],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        message = str(exc_info.value)
+        assert "deployment_server" in message
+        assert "cm" in message and "lm" in message
+
+    def test_deployment_servers_in_different_environments_are_allowed(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_environments": [
+                {"splunk_env_name": "splk1"},
+                {"splunk_env_name": "splk2"},
+            ],
+            "splunk_hosts": [
+                {"name": "ds1", "splunk_env": "splk1", "roles": ["deployment_server"]},
+                {"name": "ds2", "splunk_env": "splk2", "roles": ["deployment_server"]},
+            ],
+        }
+        result = validate_config(config)
+        assert len(result.splunk_hosts) == 2
+
+    def test_second_license_manager_is_rejected(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
+            "splunk_hosts": [
+                {"name": "cm", "roles": ["license_manager"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        message = str(exc_info.value)
+        assert "license_manager" in message
+        assert "cm" in message and "lm" in message
+
+    def test_generated_range_counts_as_multiple_license_managers(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
+            "splunk_hosts": [
+                {"iter": {"prefix": "lm", "numbers": "1..2"}, "roles": ["license_manager"]},
+            ],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "license_manager" in str(exc_info.value)
+
 
 class TestAppDeploymentConfig:
     """Schema validation for splunk_app_deployment section."""
@@ -973,6 +1119,7 @@ class TestAppDeploymentConfig:
         """Premium app (premium_app: itsi) without target_roles is valid."""
         config = {
             "plugin": "splunk-platform-automator",
+            "os": {"packages": ["java-21-openjdk"]},
             "splunk_hosts": [
                 {"name": "sh", "roles": ["search_head"]},
                 {"name": "h1", "roles": ["indexer"]},
@@ -1023,6 +1170,7 @@ class TestAppDeploymentConfig:
         """Valid itsi_content_pack entry with ITSI app (premium_app: itsi, state: installed) is accepted."""
         config = {
             "plugin": "splunk-platform-automator",
+            "os": {"packages": ["java-21-openjdk"]},
             "splunk_hosts": [
                 {"name": "h1", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
@@ -1105,6 +1253,7 @@ class TestAppDeploymentConfig:
         """Single-app itsi_content_pack (no content_pack_apps) with top-level content_pack_api is accepted."""
         config = {
             "plugin": "splunk-platform-automator",
+            "os": {"packages": ["java-21-openjdk"]},
             "splunk_hosts": [
                 {"name": "h1", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
@@ -1186,6 +1335,7 @@ class TestAppDeploymentConfig:
         """Top-level name without content_pack_apps is single-app mode (even if name is a library folder)."""
         config = {
             "plugin": "splunk-platform-automator",
+            "os": {"packages": ["java-21-openjdk"]},
             "splunk_hosts": [
                 {"name": "h1", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
@@ -1215,6 +1365,7 @@ class TestAppDeploymentConfig:
         """content_pack_apps item with only name (content_pack_install omitted) is accepted."""
         config = {
             "plugin": "splunk-platform-automator",
+            "os": {"packages": ["java-21-openjdk"]},
             "splunk_hosts": [
                 {"name": "h1", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
@@ -1741,6 +1892,7 @@ class TestAppDeploymentConfig:
         """Single standalone search head: premium app without shc/hosts filters is allowed."""
         config = {
             "plugin": "splunk-platform-automator",
+            "os": {"packages": ["java-21-openjdk"]},
             "splunk_hosts": [
                 {"name": "standalone_sh", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
@@ -1783,6 +1935,7 @@ class TestAppDeploymentConfig:
         """Multiple standalone search heads: premium app with hosts_whitelist set is allowed."""
         config = {
             "plugin": "splunk-platform-automator",
+            "os": {"packages": ["java-21-openjdk"]},
             "splunk_hosts": [
                 {"name": "sh1", "roles": ["search_head"]},
                 {"name": "sh2", "roles": ["search_head"]},
@@ -1829,6 +1982,7 @@ class TestAppDeploymentConfig:
         """SHC and standalone search head: premium app with shc_whitelist set is allowed."""
         config = {
             "plugin": "splunk-platform-automator",
+            "os": {"packages": ["java-21-openjdk"]},
             "splunk_hosts": [
                 {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
                 {"iter": {"numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
@@ -2001,6 +2155,109 @@ class TestAppDeploymentConfig:
         msg = str(exc_info.value).lower()
         assert "itsi" in msg
         assert "not both" in msg or "either" in msg or ("shc" in msg and "standalone" in msg)
+
+    def _itsi_base(self, hosts, apps, **extra):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "os": {"packages": ["java-21-openjdk"]},
+            "splunk_defaults": {"splunk_license_file": ["Enterprise.lic"]},
+            "splunk_hosts": hosts,
+            "splunk_app_deployment": {"apps": apps},
+        }
+        config.update(extra)
+        return config
+
+    def _installed_itsi(self, **fields):
+        app = {"name": "ITSI", "app_id": 1841, "premium_app": "itsi"}
+        app.update(fields)
+        return app
+
+    def test_itsi_one_shc_without_filter_passes(self):
+        """CFG-APP-009."""
+        config = self._itsi_base(
+            [
+                {"name": "cm", "roles": ["cluster_manager", "deployer", "license_manager"], "idxcluster": "idxc1", "shcluster": "shc1"},
+                {"iter": {"prefix": "idx", "numbers": "1..2"}, "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+            ],
+            [self._installed_itsi()],
+            splunk_idxclusters=[{"idxc_name": "idxc1", "idxc_password": "idxc-secret"}],
+            splunk_shclusters=[{"shc_name": "shc1", "shc_password": "shc-secret"}],
+        )
+        result = validate_config(config)
+        assert result.splunk_app_deployment.apps[0].get("shc_whitelist") in (None, [])
+
+    def test_itsi_multiple_shc_without_filter_raises(self):
+        """CFG-APP-009."""
+        config = self._itsi_base(
+            [
+                {"name": "dep1", "roles": ["deployer", "license_manager"], "shcluster": "shc1"},
+                {"name": "dep2", "roles": ["deployer"], "shcluster": "shc2"},
+                {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+                {"iter": {"prefix": "idx", "numbers": "1..2"}, "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+                {"iter": {"prefix": "sh", "numbers": "4..6"}, "roles": ["search_head"], "shcluster": "shc2"},
+            ],
+            [self._installed_itsi()],
+            splunk_idxclusters=[{"idxc_name": "idxc1", "idxc_password": "idxc-secret"}],
+            splunk_shclusters=[
+                {"shc_name": "shc1", "shc_password": "shc-secret"},
+                {"shc_name": "shc2", "shc_password": "shc-secret-2"},
+            ],
+        )
+        with pytest.raises(ConfigValidationError, match="exactly one"):
+            validate_config(config)
+
+    def test_itsi_one_selected_shc_passes_and_many_selected_shcs_raise(self):
+        """CFG-APP-009."""
+        hosts = [
+            {"name": "dep1", "roles": ["deployer", "license_manager"], "shcluster": "shc1"},
+            {"name": "dep2", "roles": ["deployer"], "shcluster": "shc2"},
+            {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+            {"iter": {"prefix": "idx", "numbers": "1..2"}, "roles": ["indexer"], "idxcluster": "idxc1"},
+            {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+            {"iter": {"prefix": "sh", "numbers": "4..6"}, "roles": ["search_head"], "shcluster": "shc2"},
+        ]
+        clusters = {
+            "splunk_idxclusters": [{"idxc_name": "idxc1", "idxc_password": "idxc-secret"}],
+            "splunk_shclusters": [
+                {"shc_name": "shc1", "shc_password": "shc-secret"},
+                {"shc_name": "shc2", "shc_password": "shc-secret-2"},
+            ],
+        }
+        selected = self._itsi_base(hosts, [self._installed_itsi(shc_whitelist=["shc1"])], **clusters)
+        assert validate_config(selected).splunk_app_deployment.apps[0]["shc_whitelist"] == ["shc1"]
+        both = self._itsi_base(hosts, [self._installed_itsi(shc_whitelist=["shc1", "shc2"])], **clusters)
+        with pytest.raises(ConfigValidationError, match="exactly one"):
+            validate_config(both)
+
+    def test_itsi_many_selected_standalone_search_heads_raise(self):
+        """CFG-APP-009."""
+        config = self._itsi_base(
+            [
+                {"name": "sh1", "roles": ["search_head"]},
+                {"name": "sh2", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            [self._installed_itsi(hosts_whitelist=["sh1", "sh2"])],
+        )
+        with pytest.raises(ConfigValidationError, match="exactly one"):
+            validate_config(config)
+
+    def test_absent_itsi_ignores_ambiguous_search_tier(self):
+        """CFG-APP-009."""
+        config = self._itsi_base(
+            [
+                {"name": "sh1", "roles": ["search_head"]},
+                {"name": "sh2", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            [self._installed_itsi(state="absent")],
+        )
+        result = validate_config(config)
+        assert result.splunk_app_deployment.apps[0]["state"] == "absent"
 
 
 class TestTargetFilterOptions:

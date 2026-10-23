@@ -1,6 +1,6 @@
 # Contributing
 
-Operators should start with the [user guide](user-guide.md). The generated CLI catalog is [commands.md](commands.md) (`spa --no-agent agent schema --markdown`). The generated settings list is [config.md](config.md) (`spa --no-agent features schema --markdown`). This page collects framework-development topics that should not expand the operator documentation.
+Operators should start with the [user guide](user-guide.md). The generated CLI catalog is [commands.md](commands.md) (`spa --no-agent agent schema --markdown`). The generated settings list is [config.md](config.md) (`spa --no-agent config schema --markdown`). This page collects framework-development topics that should not expand the operator documentation.
 
 Start framework changes with the [architecture and contributor standards](architecture.md), including module and Ansible boundaries, extension contracts, test layers, controller direction, and the feature development lifecycle. The sections below contain the detailed procedures linked from that guide.
 
@@ -14,7 +14,7 @@ source bin/spa_venv.sh
 ./tests/run_local_tests.sh
 ```
 
-`spa venv` installs the pinned Python and Ansible dependencies plus collections (`bin/spa_venv.sh` is the implementation). Do not rely on Homebrew/system Ansible. If the host Python is too old, install Python 3.9+ with pyenv or a private prefix and pass that interpreter to `spa venv --python` or `spa init --python`.
+`spa venv` installs the pinned Python and Ansible dependencies plus collections (`bin/spa_venv.sh` is the implementation). Do not rely on Homebrew/system Ansible. If the host Python is outside the controller range supported by the bundled Ansible, install a supported Python with pyenv or a private prefix and pass that interpreter to `spa venv --python` or `spa init --python`. Ansible 2.21 supports Python 3.9 through 3.14; when `python3` is 3.15 or newer, `spa venv` uses the newest supported `python3.X` on `PATH`. Creation and runtime probe the actual Ansible CLI imports so later dependency changes fail with a repair instruction rather than a traceback.
 
 Use `tests/README.md` for suites and app-scope scenarios. Release steps are in [RELEASE.md](../RELEASE.md).
 
@@ -53,7 +53,15 @@ Windows guest operation is not currently a first-class SPA workflow. The histori
 
 ## Adding a configuration feature
 
-`spa features` and [config.md](config.md) are generated. A new `splunk_config.yml` key is not listed until the Pydantic schema describes it and, when an operator must choose it, `examples/catalog/features.yml` groups it. Do not hand-edit `docs/config.md`.
+`spa config explain` and [config.md](config.md) are generated. A new `splunk_config.yml` key is not listed until the Pydantic schema describes it and, when an operator must choose it, `examples/catalog/features.yml` groups it. Do not hand-edit `docs/config.md`.
+
+Use the architecture guide's
+[test-driven development](architecture.md#test-driven-development) procedure
+and finish with its
+[feature completion review](architecture.md#feature-completion-review).
+Changes to config mutation behavior must also update the normative
+[config-editing contract](config-editing.md) and its mapped test in the same
+red-green-refactor cycle.
 
 Read the code that honors the key before writing text: the field on `ansible/plugins/inventory/schema.py`, `defaults/*.yml`, role `default()` values, the inventory plugin, and templates. That behavior is the description.
 
@@ -73,19 +81,19 @@ Leave the Pydantic default unset (`Field(None)` or no default) unless validation
 
 Paths whose leaf matches `password`, `secret`, `token`, or `private_key` never get a `default` field. Say that the value is a lab secret resolved with `lookup('env', 'NAME')`. Do not put the secret, a private-key body, or a certificate (`-----BEGIN`) in the description, a catalog note, or a snippet.
 
-Per-host copies under `splunk_hosts[].os`, `splunk_hosts[].virtualbox`, and `splunk_hosts[].terraform` use the same sentence as the global key. The renderer prefixes `Per-host override of \`os.time_zone\`:`. SSL text that says "this endpoint" is specialized to Splunk Web, receiving inputs, or forwarding outputs from the path.
+Per-host copies under `splunk_hosts[].os`, `splunk_hosts[].virtualbox`, and `splunk_hosts[].terraform` use the same sentence as the global key. The renderer prefixes `Per-host override of \`os.time_zone\`:`. SSL text that says "this endpoint" is specialized to Splunk Web, receiving inputs, or forwarding outputs from the path. `spa config explain` adds `SCOPE` when the same setting exists globally and on a host, including `custom` and flattened `splunk_defaults` fields such as `splunk_version`. Each host gets the global list plus its own items for list fields under `os` and `custom`. Other paired values replace the global value for that host. A setting with no counterpart omits `SCOPE`.
 
 ### Catalog record
 
 Add a record only when it helps someone choose or apply config.
 
-A **setting** (`kind: setting`) has a `selector` that is one of its own schema paths. `keys` lists those paths. `when_to_use` or `when_not_to_use` is at least a short sentence about the decision, not a repeat of the title or the selector. `merge` is `deep` or `replace`. `snippet` is YAML that writes only declared paths. Passwords in a snippet use `lookup('env', ...)` or Ansible Vault, never a literal. Settings are public by selector (`spa features show os`). `setting.*` ids are unknown. Human list/show quotes a selector that contains `[]`; JSON keeps the brackets. A selector can be passed with the brackets omitted when that still matches exactly one record.
+A **setting** (`kind: setting`) has a `selector` that is one of its own schema paths. `keys` lists those paths. `when_to_use` or `when_not_to_use` is at least a short sentence about the decision, not a repeat of the title or the selector. Catalog snippets are examples, not applicable fragments. `spa config explain PATH` prints the one mutation command for that feature. Operators update an existing path with `spa config set` and append a non-app identity with `spa config add`. App entries use `spa apps add`. A snippet writes only declared paths. Passwords in a snippet use `lookup('env', ...)` or Ansible Vault, never a literal. Settings are public by user path (`spa config explain os`). `setting.*` ids are unknown. Explain paths omit empty `[]`. Mutation selectors such as `splunk_hosts[name=NAME]` keep the identity. In zsh, quote a selector that contains `[]`.
 
 A key `note` is only for a constraint the schema sentence does not already say (Java 21 on the ITSI host, gp3, AMI login user). Notes attach to leaves. A note that mostly repeats the description is dropped. Do not use a note to name children of a container.
 
 A **layout** is an SVA topology (`topology.s1`, `topology.d1`, `topology.c1`, `topology.c3`, `topology.m2`, `topology.m3`) or an implemented provider (`provider.aws`, `provider.virtualbox`). It has `kind: topology` or `kind: provider`, no `selector`, schema-backed `keys`, and a `suggest` line with the `spa init --example` or `--provider` command. Layouts have no `apply` object. Other `spa init --example` files stay on disk; do not add another `topology.*` row for them. A future skill can own extra topology design.
 
-Do not add a record with no schema paths. Those rows are unsupported and `spa features list` is only for settings and layouts that can be written. Command help that is not a config key belongs in the operator docs (`docs/apps.md` for `spa apps`).
+Do not add a record with no schema paths. Those rows are unsupported and `spa config explain` is only for settings and layouts that can be written. Command help that is not a config key belongs in the operator docs (`docs/apps.md` for `spa apps`).
 
 Guidance, notes, and snippets must not contain internal ids (`setting.`, `topology.`, `provider.`). Search does not index those ids either. `related` may cite `#NN` issues or another catalog id; a missing id is skipped, so delete the link when you delete the record.
 
@@ -96,15 +104,19 @@ A new top-level schema root needs an entry in `CONFIG_AREAS` in `lib/spa/catalog
 Regenerate the settings dump and confirm the new key with the feature command:
 
 ```bash
-bin/spa --no-agent features schema --markdown > docs/config.md
-bin/spa features show SELECTOR --keys
+bin/spa --no-agent config schema --markdown > docs/config.md
+bin/spa config explain PATH
 ```
 
-`tests/test_docs.py` requires the committed `docs/config.md` to match that command. If the `features` summary in `lib/spa/agent.py` changes, regenerate `docs/commands.md` with `bin/spa --no-agent agent schema --markdown` the same way. Release bump regenerates both; do not edit them by hand.
+`tests/test_docs.py` requires the committed `docs/config.md` to match that command. If `COMMAND_SCHEMA` in `lib/spa/agent.py` changes, regenerate `docs/commands.md` with `bin/spa --no-agent agent schema --markdown` the same way. Release bump regenerates both; do not edit them by hand.
 
 ## Adding a spa command
 
 Operator docs stay in the user guide. This is the command-authoring contract.
+Use [test-driven development](architecture.md#test-driven-development) and the
+[feature completion review](architecture.md#feature-completion-review).
+Commands that read or write `splunk_config.yml` also follow the
+[config-editing contract](config-editing.md).
 
 1. Add one parser per action. Fixed action sets (`features`, `hosts`, `apps`, `aws list`) use required subparsers. A command whose operand is a free name (`run NAME`, `init ENV_DIR`, `logs RUN_ID`) keeps that positional and reserves the literal operand `list`. Do not add a hidden subcommand or rewrite argv.
 2. Put required operands and flags only on the action that accepts them. A catalog is `list`. Do not add `--list` or `--list-*`.
@@ -120,7 +132,7 @@ Examples, help, errors, and schema descriptions never contain passwords, tokens,
 - Well-known root files stay uppercase: `README.md`, `AGENTS.md`, `CHANGELOG.md`, `ROADMAP.md`, `RELEASE.md`.
 - Other documentation uses lowercase kebab-case.
 - Commands are `spa`-first; raw backend commands belong only in implementation/test context.
-- Prefer links to `spa --help`, `spa features`, `spa apps`, schema, and upstream Splunk docs over duplicated reference tables.
-- New `splunk_config.yml` keys and `spa features` records follow [Adding a configuration feature](#adding-a-configuration-feature).
+- Prefer links to `spa --help`, `spa config explain`, `spa apps`, schema, and upstream Splunk docs over duplicated reference tables.
+- New `splunk_config.yml` keys and `spa config explain` records follow [Adding a configuration feature](#adding-a-configuration-feature).
 - New `spa` commands follow [Adding a spa command](#adding-a-spa-command).
 - Never add credentials, private keys, certificates, or decrypted values to examples.

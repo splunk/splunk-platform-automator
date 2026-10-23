@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from spa_testutil import PROJECT_ROOT, LIB, run_spa, run_spa_init, spa_env
+from spa_testutil import PROJECT_ROOT, LIB, run_spa, run_spa_init, satisfy_env_lookups, spa_env
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -249,6 +249,7 @@ def test_provision_help_includes_yes():
 
 def test_provision_yes_after_subcommand_auto_approves(monkeypatch):
     """spa provision --yes must be a subcommand flag, not only spa --yes provision."""
+    satisfy_env_lookups(monkeypatch)
     captured = {}
 
     class FakeProvider:
@@ -268,6 +269,7 @@ def test_provision_yes_after_subcommand_auto_approves(monkeypatch):
 
 @pytest.mark.parametrize("argv", [["-y", "provision"], ["provision", "-y"]])
 def test_provision_yes_works_before_or_after_subcommand(monkeypatch, argv):
+    satisfy_env_lookups(monkeypatch)
     captured = []
 
     class FakeProvider:
@@ -571,7 +573,8 @@ def test_agent_schema():
     assert payload["ok"] is True
     names = {c["name"] for c in payload["data"]["commands"]}
     assert "run" in names
-    assert "features" in names
+    assert "config explain" in names
+    assert "features" not in names
     assert "shell" in names
     run = next(c for c in payload["data"]["commands"] if c["name"] == "run")
     flags = [item["long"] for item in run.get("flags") or []]
@@ -721,6 +724,7 @@ def test_human_run_prompt_names_playbook_and_risk(monkeypatch):
     [("provision", "mutating"), ("destroy", "destructive"), ("deploy", "mutating")],
 )
 def test_human_lifecycle_prompt_names_command_and_risk(monkeypatch, command, risk):
+    satisfy_env_lookups(monkeypatch)
     from spa.confirm import prompt_text
 
     seen = []

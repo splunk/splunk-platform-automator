@@ -69,14 +69,16 @@ Later per-env knobs on `spa environment set --env NAME` will write that env’s 
 
 ```bash
 spa init list
-spa features search cluster
-spa features show splunk_idxclusters[].idxc_name --keys
+spa config search cluster
+spa config explain splunk_idxclusters.idxc_name
 spa validate
 ```
 
-The Pydantic schema enforced by `spa validate` owns types and allowed values. The feature catalog owns decision guidance and snippets. Browse every key in [config.md](config.md) (`spa --no-agent features schema --markdown`). Use `spa aws --json` for live regions, AMIs, instance types, and network values; use `spa licenses` and `spa validate --check-licenses` for license selection. Until `spa config set SELECTOR` is implemented, merge the `apply` snippet from `spa --json features show SELECTOR --keys` by hand. A later override is `spa config set SELECTOR --set PATH=YAML_VALUE`, where `PATH` is one of that record’s `apply.paths`.
+When a setting uses `{{ lookup('env', 'NAME') }}`, export the variable to a non-empty value before `spa validate`, `spa provision`, or `spa deploy`. `spa init` lists each referenced name as `set` or `not set` and does not stop. A missing value fails with the variable name, for example `SPLUNK_ADMIN_PASSWORD`, and does not print the value. `spa config set PATH --from-env NAME` can record the reference before the variable exists.
 
-Universal-forwarder outputs always go to all indexers today. UF → heavy forwarder (or a single indexer) is not a config knob; see `spa features show splunk_hosts[].splunk_outputs` and [ROADMAP](../ROADMAP.md).
+The Pydantic schema enforced by `spa validate` owns types and allowed values. The feature catalog owns decision guidance and example snippets; editing commands never apply those snippets. Browse every key in [config.md](config.md) (`spa --no-agent config schema --markdown`). Discover a key with `spa --agent config explain PATH`. `spa --agent config explain PATH` prints the one mutation command for that feature and does not apply it. Author an existing scalar or map with `spa --agent config set PATH VALUE`. Append a new non-app identity, such as a host or cluster, with `spa --agent config add SELECTOR JSON_OBJECT`. Use one `spa --agent config merge --file FILE` transaction for a deliberate multi-setting fragment. Use `spa config topology` and `spa config provider` for layout replacement. App entries stay on `spa apps add`. Finish with `spa --agent validate`. Use `spa aws --json` for live regions, AMIs, instance types, and network values; use `spa licenses` and `spa validate --check-licenses` for license selection. See the [configuration editing contract](config-editing.md). For a full clustered ITSI example, follow [Build a clustered ITSI config](config-walkthrough.md).
+
+Universal-forwarder outputs always go to all indexers today. UF → heavy forwarder (or a single indexer) is not a config knob; see `spa config explain splunk_hosts.splunk_outputs` and [ROADMAP](../ROADMAP.md).
 
 ## Run the lifecycle
 
@@ -138,11 +140,12 @@ spa hosts copy SOURCE HOST:DESTINATION
 
 VirtualBox images normally log in as OS user `vagrant`; Splunk runs as OS user `splunk`. The former is an account name, not an instruction to call the Vagrant CLI.
 
-Find application metadata and generate config without maintaining an app-ID table in docs:
+Find application metadata and update config without maintaining an app-ID table in docs:
 
 ```bash
 spa --json apps search QUERY
-spa apps snippet APP_ID
+spa --agent apps add APP_ID --roles ROLE
+spa --agent validate
 spa apps download APP_ID --yes
 spa deploy --yes
 ```
@@ -155,8 +158,9 @@ Use `lookup('env', 'NAME')` or quoted Ansible Vault values; never commit plainte
 
 ## Where to go next
 
+- [Clustered ITSI config](config-walkthrough.md): copy-paste `spa config` and `spa apps` example
 - [Commands](commands.md): generated CLI catalog (`spa agent schema --markdown`)
-- [Settings](config.md): generated key list (`spa features schema --markdown`)
+- [Settings](config.md): generated key list (`spa config schema --markdown`)
 - [Install](install.md): install, uninstall, VirtualBox, WSL2
 - [Apps](apps.md): routing and app lifecycle
 - [AWS](aws.md): AWS and Terraform through `spa`

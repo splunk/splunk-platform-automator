@@ -11,7 +11,7 @@ splunk_defaults:
   # splunk_env_name: splk
   # splunk_version: '8.2.3'
   # splunk_architecture: amd64
-  # splunk_admin_password: 'splunklab'
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
   # splunk_license_file: Splunk_Enterprise.lic
   # splunk_indexes:
   #   test1:
@@ -21,7 +21,7 @@ splunk_defaults:
 # Indexer Cluster settings
 splunk_idxclusters:
   - idxc_name: idxc1
-    idxc_password: splunkidxc
+    idxc_password: "{{ lookup('env', 'SPLUNK_IDXC_PASSWORD') }}"
     idxc_replication_port: 9887
     idxc_site_rf: 'origin:2, total:3'
     idxc_site_sf: 'origin:1, total:2'
@@ -30,7 +30,7 @@ splunk_idxclusters:
 splunk_shclusters:
   - shc_name: shc1
     shc_site: site0
-    shc_password: splunkshc
+    shc_password: "{{ lookup('env', 'SPLUNK_SHC_PASSWORD') }}"
     shc_replication_port: 9887
 
 # Splunk hosts with its settings

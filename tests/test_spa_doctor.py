@@ -40,8 +40,6 @@ def test_doctor_ok_when_spa_comes_from_spa_home():
 
 
 def test_doctor_aws_strict_fails_without_terraform():
-    if shutil.which("terraform"):
-        pytest.skip("terraform is installed")
     env = spa_env()
     env["PATH"] = "/usr/bin:/bin"
     result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT), "--aws"], env=env)

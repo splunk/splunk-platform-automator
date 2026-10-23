@@ -5,7 +5,7 @@ plugin: splunk-platform-automator
 terraform:
   aws:
     region: "eu-central-1"
-    ami_id: "ami-0443f7d10da53831f"
+    ami_id: "ami-0443f7d10da53831f" # RHEL 10 hourly (eu-central-1). Does not include acl or PolicyKit.
     key_name: "aws_key"
     ssh_private_key_file: "~/.ssh/aws_key.pem"
     security_group_names: ["Splunk_Basic"]

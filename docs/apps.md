@@ -3,8 +3,8 @@
 Apps are part of `splunk_config.yml` and are reconciled by `spa deploy`. Use the live catalog for the schema and examples:
 
 ```bash
-spa features show splunk_app_deployment --keys
-spa features show splunk_app_deployment.apps[].customizations.remove --keys
+spa config explain splunk_app_deployment
+spa config explain splunk_app_deployment.apps.customizations.remove
 spa apps search QUERY
 spa apps snippet APP_ID
 ```
@@ -51,6 +51,13 @@ spa deploy --yes
 
 Limit a rollout with `--hosts`, but remember that cluster-managed apps are staged on their manager or deployer.
 
+`spa apps add --help` separates the four legal forms: a normal app requires
+`--roles`; ITSI 1841 rejects roles; Content Library 5391 requires named packs
+or the all-packs policy; and a recognized independently published pack uses
+its own app ID. The help also documents local lookup, strict-JSON `--set`,
+curated customization, dry-run, revision checks, dependency resolution, and
+confirmation. `apps add` only edits config—it never runs deploy.
+
 ## Customize an app
 
 Per-app `customizations` can remove files, write `local/` configuration, update index paths, or invoke a task file or role. The same app can appear more than once with different roles and customizations.
@@ -80,11 +87,30 @@ Environment-local task files can be addressed by an env-relative path configured
 Use the catalog instead of hand-building premium YAML:
 
 ```bash
-spa features show splunk_app_deployment.apps[].app_id --keys
-spa features show splunk_app_deployment.apps[].content_pack_apps --keys
+spa config explain splunk_app_deployment.apps.app_id
+spa config explain splunk_app_deployment.apps.content_pack_apps
+spa apps content-packs list 5391
 ```
 
 ITSI defaults to Splunkbase app ID 1841. Premium targets are determined by the premium role, not `target_roles`. Content-pack archives may be single-app, explicitly list `content_pack_apps`, or use `install_all_apps`. Listed packs are registered through the ITSI API unless `content_pack_install: false`.
+
+The Content Library's Splunkbase page describes app 5391 but does not list the
+pack folders bundled in each release. `content-packs list` inspects the selected
+archive and reports each exact `DA-ITSI-CP-*` folder, its app label,
+description and version when present, and any matching SPA post-install
+automation. It first uses the matching archive in `apps_dir`; otherwise it
+downloads the selected release to a temporary location using the configured
+Splunkbase credentials. Inspect a file directly, without an environment or
+credentials, with:
+
+```bash
+spa apps content-packs list 5391 --archive /path/to/content-library.tgz
+```
+
+Each row prints its `spa apps add 5391 --content-pack NAME --yes` command.
+Use `--install-all-content-packs` instead when every bundled pack is intended.
+An independently published single-pack app has its own Splunkbase app ID and
+is added by that ID; it is not a `--content-pack` name under 5391.
 
 For an SHC, SPA waits for service readiness and any rolling restart before content-pack API and post-restart work. API/config tasks run once on the first SHC member. A 404 from the installed check or install endpoint is reported and processing continues because endpoint behavior differs across ITSI versions.
 

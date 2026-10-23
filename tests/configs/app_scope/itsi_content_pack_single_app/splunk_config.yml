@@ -5,7 +5,11 @@
 # Verifies: single-app CP routes via direct like ITSI; scope shows itsi_content_pack without content_pack_apps.
 plugin: splunk-platform-automator
 
+os:
+  packages: [java-21-openjdk]
+
 splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
   splunk_license_file: [Splunk_Enterprise.lic]
 
 splunk_hosts:

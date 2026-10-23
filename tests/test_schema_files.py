@@ -30,6 +30,8 @@ class TestValidateConfigFile:
         cfg = tmp_path / "splunk_config.yml"
         cfg.write_text(
             "plugin: splunk-platform-automator\n"
+            "splunk_defaults:\n"
+            "  splunk_admin_password: \"{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}\"\n"
             "splunk_hosts:\n"
             "  - name: idx1\n"
             "    roles: [indexer]\n"

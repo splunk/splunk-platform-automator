@@ -64,7 +64,26 @@ SESSION_API_PARAMETERS = {
         "default",
     ),
     "environment_remove": ("name", "confirm", "force"),
-    "features": ("action", "ident", "query", "include_keys"),
+    "config": (
+        "action",
+        "paths",
+        "value",
+        "operand",
+        "file",
+        "value_file",
+        "from_env",
+        "from_env_fields",
+        "explicit_default",
+        "effective",
+        "full",
+        "dry_run",
+        "expect_revision",
+        "resolve",
+        "resolve_file",
+        "stdin_text",
+        "confirm",
+        "agent",
+    ),
     "apps": (
         "action",
         "query",
@@ -78,6 +97,17 @@ SESSION_API_PARAMETERS = {
         "extract",
         "overwrite",
         "customize",
+        "set_values",
+        "explicit_default",
+        "content_packs",
+        "install_all_content_packs",
+        "content_pack",
+        "archive",
+        "dry_run",
+        "expect_revision",
+        "resolve",
+        "resolve_file",
+        "stdin_text",
         "confirm",
         "agent",
     ),
@@ -257,7 +287,7 @@ def test_session_doctor_jsonable(capsys):
 
 
 def test_cli_validate_json_envelope():
-    result = run_spa(["--json", "validate", str(PROJECT_ROOT / "does-not-exist.yml")])
+    result = run_spa(["--json", "validate", "--config", str(PROJECT_ROOT / "does-not-exist.yml")])
     payload = json.loads(result.stdout)
     assert payload["ok"] is False
     assert "not found" in (payload.get("error") or "").lower()

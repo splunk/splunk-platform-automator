@@ -4,6 +4,9 @@
 # Verifies: SingleIndexerApp only direct to idx, NOT on CM; IndexerClusterApp on CM targeting idx1, idx2.
 plugin: splunk-platform-automator
 
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+
 splunk_idxclusters:
   - idxc_name: idxc1
     idxc_password: splunkidxc

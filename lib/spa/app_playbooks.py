@@ -7,6 +7,7 @@ Never logs extra_vars values.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -92,6 +93,18 @@ def _parse_extra_vars(raw: Any, path: Path) -> List[Dict[str, Any]]:
     return out
 
 
+def _comment_list(text: str, label: str) -> List[str]:
+    pattern = re.compile(r"^\s*#\s*%s:\s*(.*?)\s*$" % re.escape(label), re.I | re.M)
+    match = pattern.search(text)
+    if not match:
+        return []
+    return [
+        item.strip()
+        for item in re.split(r"\s*,\s*", match.group(1))
+        if item.strip()
+    ]
+
+
 def parse_app_playbook_metadata(path: Path) -> Optional[Dict[str, Any]]:
     try:
         text = path.read_text(encoding="utf-8")
@@ -129,6 +142,9 @@ def parse_app_playbook_metadata(path: Path) -> Optional[Dict[str, Any]]:
         "relpath": "apps_playbooks/%s" % path.name,
         "extra_vars": _parse_extra_vars(data.get("extra_vars"), path),
     }
+    prerequisites = _comment_list(text, "Prerequisites")
+    if prerequisites:
+        out["prerequisites"] = prerequisites
     app_id = data.get("app_id")
     if app_id is not None:
         try:

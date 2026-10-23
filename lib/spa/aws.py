@@ -373,6 +373,7 @@ def _ami_item_from_image(img: Dict[str, Any]) -> Dict[str, Any]:
         "name": name,
         "creation_date": img.get("CreationDate"),
         "architecture": img.get("Architecture"),
+        "description": desc,
         "suggested_ssh_username": suggest_ssh_username(name, desc),
         "public_ssm_parameter": img.get("PublicSsmParameterName"),
     }
@@ -555,6 +556,35 @@ def list_amis(
         return {"ok": False, "error": str(exc), "items": []}
 
 
+def format_ami_comment(name: str, description: str, region: str) -> Optional[str]:
+    """One-line image note for an ami_id end-of-line comment. No leading hash."""
+    image = " ".join(str(name or "").split())
+    detail = " ".join(str(description or "").split())
+    where = " (%s)" % region if region else ""
+    if image and detail:
+        return "%s%s. %s" % (image, where, detail)
+    if image or detail:
+        return "%s%s" % (image or detail, where)
+    return None
+
+
+def ami_comment_for_config(region: str, ami_id: str) -> Optional[str]:
+    """Image name and description for a config comment. None when AWS cannot describe it."""
+    if boto3 is None or not region or not ami_id:
+        return None
+    try:
+        described = describe_ami(_session(region), region, ami_id)
+    except Exception:
+        return None
+    if not isinstance(described, dict) or not described.get("ok"):
+        return None
+    return format_ami_comment(
+        str(described.get("name") or ""),
+        str(described.get("description") or ""),
+        region,
+    )
+
+
 def describe_ami(session: Any, region: str, ami_id: str) -> Dict[str, Any]:
     ec2 = session.client("ec2", region_name=region)
     try:
@@ -563,17 +593,10 @@ def describe_ami(session: Any, region: str, ami_id: str) -> Dict[str, Any]:
         if not images:
             return {"ok": False, "error": f"AMI not found: {ami_id}"}
         img = images[0]
-        name = img.get("Name", "")
-        desc = img.get("Description", "") or ""
-        return {
-            "ok": True,
-            "ami_id": ami_id,
-            "name": name,
-            "state": img.get("State"),
-            "architecture": img.get("Architecture"),
-            "creation_date": img.get("CreationDate"),
-            "suggested_ssh_username": suggest_ssh_username(name, desc),
-        }
+        item = _ami_item_from_image(img)
+        item["ok"] = True
+        item["state"] = img.get("State")
+        return item
     except (ClientError, BotoCoreError) as exc:
         return {"ok": False, "error": str(exc)}
 

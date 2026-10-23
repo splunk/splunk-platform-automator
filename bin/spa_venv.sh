@@ -33,6 +33,10 @@ _spa_venv_home="${SPA_HOME:-$(cd "${_spa_venv_bin_dir}/.." && pwd)}"
 _spa_venv_dir=""
 _spa_venv_env="${SPA_ENV_DIR:-}"
 _spa_venv_python="${SPA_VENV_PYTHON:-python3}"
+_spa_venv_python_explicit=false
+if [[ -n "${SPA_VENV_PYTHON:-}" ]]; then
+    _spa_venv_python_explicit=true
+fi
 _spa_venv_mode="activate"
 _spa_venv_create=true
 _spa_venv_install=true
@@ -73,6 +77,37 @@ _spa_venv_progress() {
     echo "$1" >&2
 }
 
+# ansible-core 2.21 crashes on startup under Python 3.15: it patches
+# dataclasses._is_type, which 3.15 removed. 2.22 is the first release that
+# supports 3.15, and it is not published yet. Prints old, new, or ok.
+_spa_venv_python_band() {
+    "$1" -c 'import sys
+v = sys.version_info[:2]
+raise SystemExit(print("old" if v < (3, 9) else "new" if v >= (3, 15) else "ok"))'
+}
+
+_spa_venv_choose_python() {
+    local band candidate version
+    band="$(_spa_venv_python_band "$_spa_venv_python" 2>/dev/null || true)"
+    [[ "$band" == "new" ]] || return 0
+    if [[ "$_spa_venv_python_explicit" == true ]]; then
+        _spa_venv_fail "spa_venv: ${_spa_venv_python} is Python 3.15 or newer. Ansible 2.21 runs on Python 3.9 through 3.14. Pass --python python3.14."
+        return 1
+    fi
+    for candidate in python3.14 python3.13 python3.12 python3.11 python3.10 python3.9; do
+        command -v "$candidate" >/dev/null 2>&1 || continue
+        band="$(_spa_venv_python_band "$candidate" 2>/dev/null || true)"
+        [[ "$band" == "ok" ]] || continue
+        "$candidate" -c 'import venv' >/dev/null 2>&1 || continue
+        version="$("$candidate" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])')"
+        _spa_venv_progress "Using Python ${version} (${candidate}). Ansible 2.21 does not run on Python 3.15 or newer."
+        _spa_venv_python="$candidate"
+        return 0
+    done
+    _spa_venv_fail "spa_venv: python3 is Python 3.15 or newer, and no Python 3.9 through 3.14 interpreter is on PATH. Install Python 3.14 and rerun, or pass --python python3.14."
+    return 1
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --dir)
@@ -88,6 +123,7 @@ while [[ $# -gt 0 ]]; do
         --python)
             [[ $# -ge 2 ]] || { _spa_venv_fail "--python needs a value"; break; }
             _spa_venv_python="$2"
+            _spa_venv_python_explicit=true
             shift 2
             ;;
         --requirements)
@@ -188,6 +224,11 @@ if [[ $_spa_venv_rc -eq 0 && "$_spa_venv_mode" != "done" && "$_spa_venv_mode" !=
         if [[ "$_spa_venv_create" != true ]]; then
             echo "spa_venv: no venv at ${_spa_venv_dir} (create it with: ${_spa_venv_bin_dir}/spa_venv.sh --create)" >&2
             _spa_venv_mode="done"
+        else
+            _spa_venv_choose_python
+        fi
+        if [[ $_spa_venv_rc -ne 0 || "$_spa_venv_mode" == "done" ]]; then
+            :
         elif ! command -v "$_spa_venv_python" >/dev/null 2>&1; then
             _spa_venv_fail "spa_venv: interpreter not found: ${_spa_venv_python}"
         elif ! "$_spa_venv_python" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)'; then
@@ -237,9 +278,21 @@ if [[ $_spa_venv_rc -eq 0 && "$_spa_venv_mode" != "done" && "$_spa_venv_mode" !=
         fi
     fi
 
+    # Verify the capability SPA actually needs. This catches unsupported
+    # Python/Ansible combinations and incomplete manual venvs without encoding
+    # every future compatibility boundary in the command paths.
+    if [[ -x "${_spa_venv_dir}/bin/ansible-inventory" ]]; then
+        _spa_venv_probe_tmp="$(mktemp -d "${TMPDIR:-/tmp}/spa-ansible-probe.XXXXXX")"
+        if ! ANSIBLE_LOCAL_TEMP="$_spa_venv_probe_tmp" ANSIBLE_REMOTE_TEMP="$_spa_venv_probe_tmp" \
+             python -c 'from ansible.cli.inventory import main; from ansible.cli.playbook import main' >/dev/null 2>&1; then
+            _spa_venv_fail "spa_venv: Ansible cannot start with $(python -c 'import sys; print("Python %d.%d" % sys.version_info[:2])'). Rebuild with a supported interpreter, for example: spa venv --shared --rebuild --python python3.14 --yes"
+        fi
+        rm -rf "$_spa_venv_probe_tmp"
+    fi
+
     # ansible-core ships no collection filters (e.g. json_query). Keep them beside
     # the venv so developer machines do not depend on ~/.ansible.
-    if command -v ansible-galaxy >/dev/null 2>&1 && [[ -f "${_spa_venv_home}/requirements.yml" ]]; then
+    if [[ $_spa_venv_rc -eq 0 ]] && command -v ansible-galaxy >/dev/null 2>&1 && [[ -f "${_spa_venv_home}/requirements.yml" ]]; then
         _spa_venv_collections="${SPA_COLLECTIONS_DIR:-$(dirname "$_spa_venv_dir")/.collections}"
         mkdir -p "$_spa_venv_collections"
         export ANSIBLE_COLLECTIONS_PATH="$_spa_venv_collections"
@@ -287,12 +340,13 @@ else
 fi
 
 _spa_venv_exit=$_spa_venv_rc
-unset -f _spa_venv_usage _spa_venv_fail _spa_venv_progress
+unset -f _spa_venv_usage _spa_venv_fail _spa_venv_progress \
+    _spa_venv_python_band _spa_venv_choose_python
 unset _spa_venv_self _spa_venv_bin_dir _spa_venv_home _spa_venv_env \
-    _spa_venv_python _spa_venv_mode _spa_venv_create _spa_venv_install \
+    _spa_venv_python _spa_venv_python_explicit _spa_venv_mode _spa_venv_create _spa_venv_install \
     _spa_venv_reinstall _spa_venv_upgrade _spa_venv_rebuild \
     _spa_venv_reqs _spa_venv_pkgs _spa_venv_req _spa_venv_fresh \
-    _spa_venv_dir _spa_venv_rc
+    _spa_venv_dir _spa_venv_rc _spa_venv_probe_tmp
 
 if [[ "$_spa_venv_sourced" == true ]]; then
     unset _spa_venv_sourced

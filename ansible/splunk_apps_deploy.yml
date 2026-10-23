@@ -38,7 +38,10 @@
       run_once: true
       when: >-
         (_splunkbase_credentials_check | default(false) | bool)
-        or (splunk_app_deployment is defined and (splunk_app_deployment.apps | default([]) | selectattr('source', 'equalto', 'splunkbase') | list | length) > 0)
+        or (splunk_app_deployment is defined and (
+          (splunk_app_deployment.apps | default([]) | rejectattr('source', 'defined') | list | length) > 0
+          or (splunk_app_deployment.apps | default([]) | selectattr('source', 'defined') | selectattr('source', 'equalto', 'splunkbase') | list | length) > 0
+        ))
 
 # Step 0b: Set _splunk_is_deployment_client on clients (btool when deploymentclient_check, else inventory heuristic).
 - name: Detect deployment clients for DS staging whitelist

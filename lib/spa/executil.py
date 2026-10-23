@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 from functools import lru_cache
 from importlib.util import find_spec
@@ -42,6 +43,57 @@ HOST_TOOLS = frozenset({"vagrant", "terraform", "VBoxManage"})
 
 
 SPA_VENV_MODULES = ("yaml", "pydantic")
+
+
+@lru_cache(maxsize=None)
+def ansible_controller_problem(venv: Path) -> Optional[str]:
+    """Why Ansible cannot start in this venv, or None when its CLIs import."""
+    python = venv_python(venv)
+    if python is None:
+        return None
+    try:
+        with tempfile.TemporaryDirectory(prefix="spa-ansible-probe-") as temp_dir:
+            probe_env = {
+                **os.environ,
+                "ANSIBLE_LOCAL_TEMP": temp_dir,
+                "ANSIBLE_REMOTE_TEMP": temp_dir,
+            }
+            proc = subprocess.run(
+                [
+                    str(python),
+                    "-c",
+                    (
+                        "import sys\n"
+                        "from ansible.cli.inventory import main as inventory_main\n"
+                        "from ansible.cli.playbook import main as playbook_main\n"
+                        "print('%d.%d' % sys.version_info[:2])"
+                    ),
+                ],
+                capture_output=True,
+                text=True,
+                env=probe_env,
+            )
+    except OSError:
+        return None
+    if proc.returncode == 0:
+        return None
+    version = "unknown"
+    try:
+        version_proc = subprocess.run(
+            [str(python), "-c", "import sys; print('%d.%d' % sys.version_info[:2])"],
+            capture_output=True,
+            text=True,
+        )
+        if version_proc.returncode == 0 and version_proc.stdout.strip():
+            version = version_proc.stdout.strip()
+    except OSError:
+        pass
+    return (
+        "Ansible cannot start in %s with Python %s. "
+        "The installed Ansible and Python versions are incompatible or incomplete. "
+        "Repair it with: spa venv --shared --rebuild --yes"
+        % (venv, version)
+    )
 
 
 def venv_python(path: Path) -> Optional[Path]:
@@ -248,6 +300,10 @@ def tool_path(paths: SpaPaths, name: str, required: bool = True) -> str:
     if name not in HOST_TOOLS:
         venv = resolve_venv_dir(paths)
         if venv is not None:
+            if name.startswith("ansible"):
+                blocked = ansible_controller_problem(venv)
+                if blocked:
+                    raise ToolNotFound(blocked)
             candidate = venv / "bin" / name
             if candidate.is_file():
                 return str(candidate)
@@ -260,6 +316,7 @@ def tool_path(paths: SpaPaths, name: str, required: bool = True) -> str:
 
 
 VENV_PROGRESS_PREFIXES = (
+    "Using Python",
     "Creating virtual environment",
     "Rebuilding virtual environment",
     "Recreating incomplete virtual environment",

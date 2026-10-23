@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from spa_testutil import LIB, PROJECT_ROOT, run_spa
+from spa_testutil import LIB, PROJECT_ROOT, run_spa, satisfy_env_lookups
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -113,6 +113,7 @@ def test_cli_agent_schema_includes_hosts_commands():
 
 
 def test_session_deploy_injects_limit(monkeypatch):
+    satisfy_env_lookups(monkeypatch, start_dir=PROJECT_ROOT)
     from spa.api import open_session
 
     captured = {}

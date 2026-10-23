@@ -140,6 +140,45 @@ _ENV_LOOKUP_RE = re.compile(
 )
 
 
+def env_lookup_names(value, found=None):
+    """Collect environment-variable names from exact lookup expressions.
+
+    The returned names never include resolved values.
+    """
+    if found is None:
+        found = set()
+    if isinstance(value, str):
+        found.update(_ENV_LOOKUP_RE.findall(value))
+    elif isinstance(value, dict):
+        for child in value.values():
+            env_lookup_names(child, found)
+    elif isinstance(value, list):
+        for child in value:
+            env_lookup_names(child, found)
+    return found
+
+
+def env_lookup_readiness(config):
+    """Return sorted name/state rows. Empty and missing variables are not set."""
+    rows = []
+    for name in sorted(env_lookup_names(config)):
+        state = "set" if os.environ.get(name) else "not set"
+        rows.append({"name": name, "state": state})
+    return rows
+
+
+def unresolved_env_message(config):
+    """Name every unresolved lookup, or return None when execution can continue."""
+    missing = [row["name"] for row in env_lookup_readiness(config) if row["state"] == "not set"]
+    if not missing:
+        return None
+    return (
+        "Environment variables required by splunk_config.yml are not set: %s.\n"
+        "Export each variable to a non-empty value and rerun the command."
+        % ", ".join(missing)
+    )
+
+
 def _resolve_env_lookups(value):
     """
     Resolve Jinja2 ``{{ lookup('env', 'VAR') }}`` expressions in *value* by
