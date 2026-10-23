@@ -19,8 +19,9 @@ Returns:
 - `selected_licenses` — newest usable files that collectively meet requirements
 - `recommended_additions` — selected files not already in the config
 - `unsatisfied_requirements` — capabilities no valid file provides
-- `proposed_splunk_license_file` — content-based suggested list for `splunk_defaults`
-- `yaml_snippet` — paste into `splunk_defaults`
+- `proposed_splunk_license_file` — content-based suggested list for
+  `splunk_defaults`; pass the selected list to
+  `spa --agent config set splunk_defaults.splunk_license_file '<JSON_LIST>'`
 - `itsi_in_config` / `es_in_config` — derived from installed app entries
 - `license_validation` — errors for missing, invalid, expired, or wrong-entitlement
   configured files; warnings for expiry within 30 days or unknown expiration

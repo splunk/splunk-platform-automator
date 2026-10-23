@@ -190,7 +190,7 @@
   when:
     - app_check.stat.exists
     - verify_app_item.state | default('installed') != 'absent'
-    - _splunkbase_credentials_available | default(true) | bool or verify_app_item.source | default('') != 'splunkbase'
+    - _splunkbase_credentials_available | default(true) | bool or verify_app_item.source | default('splunkbase') != 'splunkbase'
 
 - name: "Record version drift for {{ verify_app_item.name }}"
   tags:

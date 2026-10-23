@@ -57,13 +57,13 @@ Do **not** block config completion on missing AWS API. Warn that AMI IDs **expir
 Required:
 
 ```bash
-spa validate config/splunk_config.yml
+spa validate --config config/splunk_config.yml
 ```
 
 Optional (no AWS):
 
 ```bash
-spa validate --check-licenses config/splunk_config.yml
+spa validate --check-licenses --config config/splunk_config.yml
 ```
 
 **Skip** `--splunk-config-aws` until credentials work.

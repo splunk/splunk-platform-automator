@@ -164,4 +164,4 @@ Use `splunk_defaults.splunk_volume_defaults` / per-host `terraform.aws.root_volu
 
 - Automated RF/SF solver for arbitrary site explicit lists (use Splunk docs + PS).
 - ES / ITSI full capacity models.
-- SmartStore RF=SF constraint (`spa features show splunk_defaults.splunk_indexer_volumes.<volume>.storageType`).
+- SmartStore RF=SF constraint (`spa config explain splunk_defaults.splunk_indexer_volumes.<volume>.storageType`).

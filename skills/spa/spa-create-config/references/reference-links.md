@@ -21,7 +21,7 @@ Curated links for the `spa-create-config` workflow. Use for user handoff and hea
 
 ## Splunk Platform Automator (SPA)
 
-- `spa --json features list|show|search` — [examples/catalog/features.yml](../../../../examples/catalog/features.yml)
+- `spa --agent config search QUERY` then `spa --agent config explain PATH` — [examples/catalog/features.yml](../../../../examples/catalog/features.yml)
 - [User guide](../../../../docs/user-guide.md) — human operator journey
 - [AWS](../../../../docs/aws.md) — provision and deploy on AWS
 - [Apps](../../../../docs/apps.md) — routing, Splunkbase, premium apps, and customization

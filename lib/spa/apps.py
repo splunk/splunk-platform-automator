@@ -1,11 +1,14 @@
-"""spa apps: Splunkbase search, snippet, and download (no config write)."""
+"""spa apps discovery, entry construction, archive inspection, and download."""
 
 from __future__ import annotations
 
+import configparser
+import io
 import re
 import shutil
 import tarfile
 import tempfile
+import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 from urllib.parse import urlparse
@@ -24,6 +27,11 @@ ES_ID = 263
 SINGLE_PACK_IDS = frozenset({7294})
 
 SUMMARY_CHARS = 100
+CONTENT_PACK_LIMIT = 100
+MAX_ARCHIVE_MEMBERS = 10000
+MAX_APP_CONF_BYTES = 256 * 1024
+MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024
+MAX_ARCHIVE_EXPANDED_BYTES = 8 * 1024 * 1024 * 1024
 ITE_WORK_ERROR = (
     "use app_id 1841 (premium_app: itsi); ITE Work is unlicensed ITSI, not a separate SPA app."
 )
@@ -240,16 +248,13 @@ def _ta_keys(
     source: str,
     path: Optional[str] = None,
 ) -> List[str]:
-    lines = [
-        "- name: %s" % name,
-        "  source: %s" % source,
-    ]
+    lines = ["- name: %s" % name]
+    if source != "splunkbase":
+        lines.append("  source: %s" % source)
     if source == "splunkbase":
         lines.append("  app_id: %s" % app_id)
         if version and version != "latest":
             lines.append("  version: %s" % version)
-        else:
-            lines.append("  version: latest")
     else:
         if path:
             lines.append("  path: %s" % path)
@@ -280,10 +285,9 @@ def format_snippet_yaml(
             "SPA premium_app: itsi. No target_roles.",
             "Java 21 on the search/ITSI host; Enterprise + ITSI license files.",
         ]
-        body = [
-            "- name: %s" % name,
-            "  source: %s" % source,
-        ]
+        body = ["- name: %s" % name]
+        if source != "splunkbase":
+            body.append("  source: %s" % source)
         if source == "splunkbase":
             body += ["  app_id: %s" % app_id, "  premium_app: itsi"]
         else:
@@ -292,10 +296,9 @@ def format_snippet_yaml(
             body.append("  premium_app: itsi")
     elif kind == "itsi_content_library":
         extra.insert(0, "Requires a sibling premium_app: itsi (app_id 1841). Fill content_pack_apps.")
-        body = [
-            "- name: %s" % name,
-            "  source: %s" % source,
-        ]
+        body = ["- name: %s" % name]
+        if source != "splunkbase":
+            body.append("  source: %s" % source)
         if source == "splunkbase":
             body.append("  app_id: %s" % app_id)
         elif path:
@@ -303,10 +306,9 @@ def format_snippet_yaml(
         body += ["  itsi_content_pack: true", "  content_pack_apps: []"]
     elif kind == "itsi_content_pack_single":
         extra.insert(0, "Requires a sibling premium_app: itsi (app_id 1841).")
-        body = [
-            "- name: %s" % name,
-            "  source: %s" % source,
-        ]
+        body = ["- name: %s" % name]
+        if source != "splunkbase":
+            body.append("  source: %s" % source)
         if source == "splunkbase":
             body.append("  app_id: %s" % app_id)
         elif path:
@@ -433,7 +435,7 @@ def _refuse_ite_work(app_id: int) -> None:
         raise AppsError(ITE_WORK_ERROR)
 
 
-def snippet(
+def build_entry(
     app_id_raw: Any,
     *,
     version: str = "latest",
@@ -442,10 +444,16 @@ def snippet(
     apps_dir: Optional[Path] = None,
     spa_home: Optional[Path] = None,
     customize: bool = False,
+    content_packs: Optional[Sequence[str]] = None,
+    install_all_content_packs: bool = False,
+    explicit_default: bool = False,
+    set_values: Optional[Sequence[Sequence[Any]]] = None,
+    for_add: bool = True,
     client=None,
 ) -> Dict[str, Any]:
+    """Build one structured apps[] entry; rendering and config writes share it."""
     if source not in {"splunkbase", "local"}:
-        raise AppsError("spa apps snippet --source must be one of: splunkbase, local")
+        raise AppsError("--source must be one of: splunkbase, local")
     custom_name = folder_appid(app_id_raw) if source == "local" else None
     is_custom = custom_name is not None and not str(app_id_raw).strip().isdigit()
     if is_custom:
@@ -457,27 +465,118 @@ def snippet(
         _refuse_ite_work(app_id)
         app = get_app(app_id, client=client)
         kind = classify_kind(app_id, app)
-    roles_ignored = bool(roles) and kind not in {"ta", "es_not_premium"}
-    use_roles = None if roles_ignored else roles
+
+    normal = kind in {"ta", "es_not_premium"}
+    if roles and not normal:
+        raise AppsError("--roles is not valid for ITSI or content packs")
+    if for_add and normal and not roles:
+        raise AppsError("--roles is required for normal apps")
+    if content_packs and install_all_content_packs:
+        raise AppsError("--content-pack and --install-all-content-packs are mutually exclusive")
+    if kind != "itsi_content_library" and (content_packs or install_all_content_packs):
+        raise AppsError("Content-pack policy flags are only valid for app 5391")
+    if for_add and kind == "itsi_content_library" and not (
+        content_packs or install_all_content_packs
+    ):
+        raise AppsError(
+            "spa apps add 5391 requires --install-all-content-packs or --content-pack NAME"
+        )
+
     resolved = latest_version(app) if (not version or version == "latest") else version
+    name = str(custom_name) if is_custom else _entry_name(kind, app, int(app_id))
     local_path: Optional[str] = None
     notes: List[str] = []
-    name = str(custom_name) if is_custom else _entry_name(kind, app, int(app_id))
     if source == "local":
         if apps_dir is None:
-            raise AppsError("spa apps snippet --source local requires an environment with apps_dir")
-        found = _local_source(
-            Path(apps_dir), name, resolved or version or "latest", kind, app_id
-        )
+            raise AppsError("--source local requires an environment with apps_dir")
+        found = _local_source(Path(apps_dir), name, resolved or version or "latest", kind, app_id)
         local_path = found.name
-        # Deploy rsyncs a folder for normal apps; only ITSI/content packs take an archive.
-        if found.is_file() and kind in {"ta", "es_not_premium"}:
+        if found.is_file() and normal:
             hint = (
                 "spa apps download %s --extract --yes" % app_id
                 if app_id is not None
                 else "unpack it in apps_dir"
             )
             notes.append("Archive found; normal apps deploy from a folder — %s." % hint)
+
+    entry: Dict[str, Any] = {"name": name}
+    if source == "local":
+        entry["source"] = "local"
+        if local_path:
+            entry["path"] = local_path
+    else:
+        entry["app_id"] = int(app_id)
+        if explicit_default:
+            entry["source"] = "splunkbase"
+    if version and version != "latest":
+        entry["version"] = version
+    elif explicit_default:
+        entry["version"] = "latest"
+
+    if kind == "premium_itsi":
+        entry["premium_app"] = "itsi"
+    elif kind == "itsi_content_library":
+        entry["itsi_content_pack"] = True
+        if install_all_content_packs:
+            entry["content_pack_api"] = {"install_all_apps": True}
+        else:
+            entry["content_pack_apps"] = [
+                {"name": str(pack)} for pack in (content_packs or [])
+            ]
+    elif kind == "itsi_content_pack_single":
+        entry["itsi_content_pack"] = True
+        entry["content_pack_api"] = {"install_all": True, "enabled": True}
+    else:
+        entry["target_roles"] = list(roles or [])
+
+    dedicated = {"name", "app_id", "premium_app", "source", "version"}
+    if roles:
+        dedicated.add("target_roles")
+    omitted_defaults: List[Dict[str, Any]] = []
+    for assignment in set_values or []:
+        if len(assignment) != 2:
+            raise AppsError("--set needs FIELD VALUE")
+        field, value = str(assignment[0]), assignment[1]
+        if field in {"name", "app_id", "premium_app"}:
+            raise AppsError("--set cannot set %s; app classification owns it" % field)
+        if field in dedicated:
+            raise AppsError("--set %s duplicates a dedicated flag" % field)
+        try:
+            from spa.config_edit import ConfigEditError, _parse_value
+
+            selector = (
+                "app_id=%s" % app_id
+                if app_id is not None
+                else "name=%s" % name
+            )
+            value = _parse_value(
+                "splunk_app_deployment.apps[%s].%s" % (selector, field),
+                str(value),
+            )
+        except ConfigEditError as exc:
+            raise AppsError(str(exc)) from exc
+        from spa.catalog import app_entry_field_detail
+
+        detail = app_entry_field_detail(field) or {}
+        if (
+            not explicit_default
+            and "default" in detail
+            and value == detail["default"]
+        ):
+            omitted_defaults.append({"path": field, "value": value})
+            continue
+        current = entry
+        parts = field.split(".")
+        for part in parts[:-1]:
+            child = current.get(part)
+            if child is None:
+                child = {}
+                current[part] = child
+            if not isinstance(child, dict):
+                raise AppsError("--set %s has a non-mapping parent" % field)
+            current = child
+        current[parts[-1]] = value
+
     related = []
     customization_lines: List[str] = []
     if spa_home is not None:
@@ -488,32 +587,32 @@ def snippet(
             match_app_playbooks,
         )
 
-        related = match_app_playbooks(
-            spa_home, kind=kind, name=name, app_id=app_id
-        )
+        related = match_app_playbooks(spa_home, kind=kind, name=name, app_id=app_id)
         if related and customize:
             customization_lines = customization_yaml_lines(related)
+            if customization_lines:
+                import yaml
+
+                rendered = "- name: placeholder\n%s\n" % "\n".join(
+                    customization_lines
+                )
+                customization = yaml.safe_load(rendered)[0].get("customizations")
+                if customization is not None:
+                    entry["customizations"] = customization
         elif related:
             notes.extend(advertise_notes(related))
-    yaml_text = format_snippet_yaml(
-        app,
-        app_id=int(app_id or 0),
-        kind=kind,
-        version=version or "latest",
-        roles=use_roles,
-        source=source,
-        path=local_path,
-        roles_ignored=roles_ignored,
-        notes=notes,
-        customization_lines=customization_lines,
-    )
+
     data: Dict[str, Any] = {
         "kind": kind,
         "title": _one_line(app.get("title")),
         "name": name,
         "source": source,
         "version": resolved or version or "latest",
-        "snippet": yaml_text,
+        "entry": entry,
+        "_app": app,
+        "_notes": notes,
+        "_customization_lines": customization_lines,
+        "omitted_defaults": omitted_defaults,
     }
     if app_id is not None:
         data["app_id"] = app_id
@@ -522,6 +621,72 @@ def snippet(
     if related:
         data["playbooks"] = compact_playbooks(related)
     return data
+
+
+def snippet(
+    app_id_raw: Any,
+    *,
+    version: str = "latest",
+    roles: Optional[Sequence[str]] = None,
+    source: str = "splunkbase",
+    apps_dir: Optional[Path] = None,
+    spa_home: Optional[Path] = None,
+    customize: bool = False,
+    set_values: Optional[Sequence[Sequence[Any]]] = None,
+    client=None,
+) -> Dict[str, Any]:
+    built = build_entry(
+        app_id_raw,
+        version=version,
+        roles=roles,
+        source=source,
+        apps_dir=apps_dir,
+        spa_home=spa_home,
+        customize=customize,
+        set_values=set_values,
+        for_add=False,
+        client=client,
+    )
+    app = built.pop("_app")
+    notes = built.pop("_notes")
+    customization_lines = built.pop("_customization_lines")
+    kind = built["kind"]
+    app_id = built.get("app_id")
+    name = built["name"]
+    local_path = built.get("path")
+    yaml_text = format_snippet_yaml(
+        app,
+        app_id=int(app_id or 0),
+        kind=kind,
+        version=version or "latest",
+        roles=roles,
+        source=source,
+        path=local_path,
+        roles_ignored=False,
+        notes=notes,
+        customization_lines=customization_lines,
+    )
+    if set_values:
+        from ruamel.yaml import YAML
+
+        rendered = io.StringIO()
+        yaml = YAML()
+        yaml.default_flow_style = False
+        assigned_roots = {str(pair[0]).split(".", 1)[0] for pair in set_values}
+        yaml.dump(
+            {
+                key: value
+                for key, value in built["entry"].items()
+                if key in assigned_roots
+            },
+            rendered,
+        )
+        yaml_text += "".join(
+            "  %s\n" % line if line else "\n"
+            for line in rendered.getvalue().splitlines()
+        )
+    built["snippet"] = yaml_text
+    return built
 
 
 def _safe_filename(name: str, version: str) -> str:
@@ -572,6 +737,336 @@ def _local_source(
         "Local app %s not found in apps_dir %s; run spa apps download %s%s --yes first"
         % (name, apps_dir, app_id, extract)
     )
+
+
+def _humanize_content_pack(name: str) -> str:
+    suffix = re.sub(r"^DA-ITSI-CP-", "", name, flags=re.I)
+    words = re.sub(r"[-_]+", " ", suffix).strip()
+    return words.title() if words else name
+
+
+def _safe_archive_text(value: Any, *, limit: int = 500) -> str:
+    text = "".join(
+        character
+        if not unicodedata.category(character).startswith("C")
+        else " "
+        for character in str(value or "")
+    )
+    return _WS.sub(" ", text).strip()[:limit]
+
+
+def _app_conf_value(
+    parser: configparser.ConfigParser, section: str, option: str
+) -> str:
+    if not parser.has_section(section):
+        return ""
+    return _safe_archive_text(parser.get(section, option, fallback=""))
+
+
+def _parse_app_conf(raw: bytes) -> configparser.ConfigParser:
+    parser = configparser.ConfigParser(interpolation=None, strict=False)
+    try:
+        parser.read_string(raw.decode("utf-8-sig", errors="replace"))
+    except configparser.Error:
+        return configparser.ConfigParser(interpolation=None)
+    return parser
+
+
+def _content_pack_automation(
+    spa_home: Optional[Path], name: str
+) -> Optional[Dict[str, Any]]:
+    if spa_home is None:
+        return None
+    from spa.app_playbooks import match_app_playbooks
+
+    matches = match_app_playbooks(
+        Path(spa_home),
+        kind="itsi_content_pack_single",
+        name=name,
+    )
+    if not matches:
+        return None
+    row = matches[0]
+    automation = {
+        "hook": row.get("hook"),
+        "summary": row.get("summary"),
+        "path": row.get("path"),
+    }
+    if row.get("prerequisites"):
+        automation["prerequisites"] = row["prerequisites"]
+    return {
+        key: value
+        for key, value in automation.items()
+        if value not in (None, "", [], {})
+    }
+
+
+def inspect_content_pack_archive(
+    archive: Path,
+    *,
+    spa_home: Optional[Path] = None,
+) -> List[Dict[str, Any]]:
+    """List 5391 content packs without extracting untrusted archive members."""
+    archive = Path(archive)
+    if not archive.is_file():
+        raise AppsError("Content Library archive not found: %s" % archive)
+    if archive.stat().st_size > MAX_ARCHIVE_BYTES:
+        raise AppsError(
+            "Content Library archive exceeds %s bytes" % MAX_ARCHIVE_BYTES
+        )
+    found: Dict[str, Dict[str, Any]] = {}
+    expanded_bytes = 0
+    try:
+        with tarfile.open(str(archive), mode="r:*") as bundle:
+            for index, member in enumerate(bundle):
+                if index >= MAX_ARCHIVE_MEMBERS:
+                    raise AppsError(
+                        "Content Library archive has more than %s members"
+                        % MAX_ARCHIVE_MEMBERS
+                    )
+                member_path = Path(member.name)
+                if member_path.is_absolute() or ".." in member_path.parts:
+                    raise AppsError("Refusing unsafe archive path: %s" % member.name)
+                if member.issym() or member.islnk() or member.isdev():
+                    raise AppsError("Refusing unsafe archive member: %s" % member.name)
+                expanded_bytes += max(int(member.size or 0), 0)
+                if expanded_bytes > MAX_ARCHIVE_EXPANDED_BYTES:
+                    raise AppsError(
+                        "Content Library archive expands beyond %s bytes"
+                        % MAX_ARCHIVE_EXPANDED_BYTES
+                    )
+                parts = member_path.parts
+                if (
+                    len(parts) != 3
+                    or parts[-2:] != ("default", "app.conf")
+                    or not parts[-3].startswith("DA-ITSI-CP-")
+                ):
+                    continue
+                name = parts[-3]
+                if not _FOLDER.fullmatch(name):
+                    raise AppsError(
+                        "Refusing invalid content pack folder: %s" % name
+                    )
+                if name in found:
+                    raise AppsError(
+                        "Content Library archive contains duplicate pack folder: %s"
+                        % name
+                    )
+                if member.size > MAX_APP_CONF_BYTES:
+                    raise AppsError(
+                        "Content pack app.conf exceeds %s bytes: %s"
+                        % (MAX_APP_CONF_BYTES, member.name)
+                    )
+                stream = bundle.extractfile(member)
+                if stream is None:
+                    continue
+                raw = stream.read(MAX_APP_CONF_BYTES + 1)
+                if len(raw) > MAX_APP_CONF_BYTES:
+                    raise AppsError(
+                        "Content pack app.conf exceeds %s bytes: %s"
+                        % (MAX_APP_CONF_BYTES, member.name)
+                    )
+                parser = _parse_app_conf(raw)
+                title = _app_conf_value(parser, "ui", "label")
+                summary = _app_conf_value(parser, "launcher", "description")
+                version = (
+                    _app_conf_value(parser, "launcher", "version")
+                    or _app_conf_value(parser, "id", "version")
+                    or _app_conf_value(parser, "package", "version")
+                )
+                row: Dict[str, Any] = {
+                    "name": name,
+                    "title": title or _humanize_content_pack(name),
+                    "command": "spa apps add 5391 --content-pack %s --yes" % name,
+                }
+                if summary:
+                    row["summary"] = _one_line(summary)
+                if version:
+                    row["version"] = version
+                automation = _content_pack_automation(spa_home, name)
+                if automation:
+                    row["spa_automation"] = automation
+                found[name] = row
+    except AppsError:
+        raise
+    except (tarfile.TarError, OSError) as exc:
+        raise AppsError("Could not inspect Content Library archive: %s" % exc) from exc
+    return [found[name] for name in sorted(found)]
+
+
+def _content_library_archive_version(archive: Path) -> str:
+    try:
+        with tarfile.open(str(archive), mode="r:*") as bundle:
+            for member in bundle:
+                parts = Path(member.name).parts
+                if (
+                    len(parts) == 3
+                    and parts[0] == "DA-ITSI-ContentLibrary"
+                    and parts[1:] == ("default", "app.conf")
+                    and 0 <= member.size <= MAX_APP_CONF_BYTES
+                ):
+                    stream = bundle.extractfile(member)
+                    if stream is None:
+                        return ""
+                    parser = _parse_app_conf(stream.read(MAX_APP_CONF_BYTES + 1))
+                    return (
+                        _app_conf_value(parser, "launcher", "version")
+                        or _app_conf_value(parser, "id", "version")
+                        or _app_conf_value(parser, "package", "version")
+                    )
+    except (tarfile.TarError, OSError):
+        return ""
+    return ""
+
+
+def _local_content_library_archive(
+    apps_dir: Path, version: str
+) -> Optional[Path]:
+    name = "DA-ITSI-ContentLibrary"
+    candidates = _archive_candidates(apps_dir, name, version)
+    if version == "latest":
+        return (
+            max(candidates, key=lambda item: item.stat().st_mtime)
+            if candidates
+            else None
+        )
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._") or "app"
+    wanted = "%s_%s" % (
+        stem,
+        re.sub(r"[^A-Za-z0-9._-]+", "_", version).strip("._"),
+    )
+    for candidate in candidates:
+        if candidate.name in {
+            wanted + ".tgz",
+            wanted + ".tar.gz",
+            wanted + ".spl",
+        }:
+            return candidate
+    return None
+
+
+def _trusted_download_url(url: str) -> bool:
+    parsed = urlparse(url)
+    return (
+        parsed.scheme == "https"
+        and (parsed.hostname or "").lower() == "splunkbase.splunk.com"
+    )
+
+
+def content_pack_catalog(
+    app_id_raw: Any = CONTENT_LIBRARY_ID,
+    *,
+    version: str = "latest",
+    archive: Optional[Path] = None,
+    apps_dir: Optional[Path] = None,
+    spa_home: Optional[Path] = None,
+    config: Optional[Mapping[str, Any]] = None,
+    client=None,
+) -> Dict[str, Any]:
+    """Discover packs from an explicit, local, or temporary 5391 archive."""
+    app_id = parse_app_id(app_id_raw)
+    if app_id != CONTENT_LIBRARY_ID:
+        raise AppsError(
+            "spa apps content-packs list supports Content Library app_id 5391"
+        )
+    resolved = version or "latest"
+    selected: Optional[Path] = Path(archive) if archive is not None else None
+    source = "archive"
+    temporary: Optional[tempfile.TemporaryDirectory] = None
+    try:
+        if selected is None:
+            if apps_dir is not None:
+                selected = _local_content_library_archive(
+                    Path(apps_dir), resolved
+                )
+            if selected is not None:
+                source = "local_archive"
+                if resolved == "latest":
+                    resolved = (
+                        _content_library_archive_version(selected) or "unknown"
+                    )
+            else:
+                app = get_app(app_id, client=client)
+                resolved = latest_version(app) if resolved == "latest" else resolved
+                name = _entry_name("itsi_content_library", app, app_id)
+                temporary = tempfile.TemporaryDirectory(prefix="spa-content-packs-")
+                selected = Path(temporary.name) / _safe_filename(name, resolved)
+                url = release_download_url(app, version or "latest")
+                if not _trusted_download_url(url):
+                    raise AppsError("Refusing download URL host")
+                download_release(url, selected, client=client, config=config)
+                source = "temporary_download"
+        packs = inspect_content_pack_archive(selected, spa_home=spa_home)
+        if source in {"archive", "local_archive"}:
+            archive_version = _content_library_archive_version(selected)
+            if resolved == "latest":
+                resolved = archive_version or "unknown"
+            elif archive_version and archive_version != resolved:
+                raise AppsError(
+                    "Requested version %s does not match archive version %s"
+                    % (resolved, archive_version)
+                )
+        if not packs:
+            raise AppsError(
+                "Content Library archive contains no DA-ITSI-CP-*/default/app.conf entries"
+            )
+        return {
+            "app_id": app_id,
+            "version": resolved,
+            "source": source,
+            "packs": packs[:CONTENT_PACK_LIMIT],
+            "total_matches": len(packs),
+            "truncated": len(packs) > CONTENT_PACK_LIMIT,
+        }
+    finally:
+        if temporary is not None:
+            temporary.cleanup()
+
+
+def format_content_pack_catalog(data: Mapping[str, Any]) -> str:
+    """Render bounded content-pack rows from the session payload."""
+    lines = [
+        "Content Library %s (%s) — %s"
+        % (
+            data.get("app_id") or CONTENT_LIBRARY_ID,
+            data.get("version") or "unknown version",
+            str(data.get("source") or "archive").replace("_", " "),
+        )
+    ]
+    for row in data.get("packs") or []:
+        title = row.get("title") or row.get("name") or ""
+        lines.append("")
+        lines.append("%s  %s" % (row.get("name") or "", title))
+        if row.get("version"):
+            lines.append("  version: %s" % row["version"])
+        if row.get("summary"):
+            lines.append("  %s" % row["summary"])
+        automation = row.get("spa_automation") or {}
+        if automation:
+            lines.append(
+                "  SPA automation: %s (%s)"
+                % (
+                    automation.get("summary") or "available",
+                    automation.get("hook") or "configured hook",
+                )
+            )
+            if automation.get("prerequisites"):
+                lines.append(
+                    "  prerequisites: %s"
+                    % ", ".join(str(item) for item in automation["prerequisites"])
+                )
+        lines.append("  command: %s" % row.get("command"))
+    if data.get("truncated"):
+        lines.append("")
+        lines.append(
+            "Showing %s of %s packs."
+            % (len(data.get("packs") or []), data.get("total_matches"))
+        )
+    lines.append("")
+    lines.append(
+        "All packs: spa apps add 5391 --install-all-content-packs --yes"
+    )
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def _extract_archive(
@@ -638,8 +1133,7 @@ def download(
     name = _entry_name(kind, app, app_id)
     filename = _safe_filename(name, resolved or "latest")
     dest = dest_dir / filename
-    parsed = urlparse(url)
-    if parsed.scheme not in {"https", "http"} or "splunkbase.splunk.com" not in (parsed.netloc or ""):
+    if not _trusted_download_url(url):
         raise AppsError("Refusing download URL host")
     if extract and kind not in {"ta", "es_not_premium"}:
         raise AppsError(

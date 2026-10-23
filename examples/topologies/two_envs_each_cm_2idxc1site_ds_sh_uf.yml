@@ -7,6 +7,7 @@ plugin: splunk-platform-automator
 
 # Splunk default settings
 splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
   # splunk_license_file: Splunk_Enterprise.lic
 
 # Splunk general settings
@@ -14,7 +15,7 @@ splunk_environments:
   - splunk_env_name: splk1
     # splunk_version: '8.2.3'
     # splunk_architecture: amd64
-    # splunk_admin_password: 'splunklab'
+    # splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
     # splunk_indexes:
     #   test1:
     #   test2_metrics:
@@ -23,7 +24,7 @@ splunk_environments:
   - splunk_env_name: splk2
     # splunk_version: '8.2.3'
     # splunk_architecture: amd64
-    # splunk_admin_password: 'splunklab'
+    # splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
     # splunk_indexes:
     #   test1:
     #   test2_metrics:
@@ -32,13 +33,13 @@ splunk_environments:
 # Indexer Cluster settings
 splunk_idxclusters:
   - idxc_name: idxc1
-    idxc_password: splunkidxc1
+    idxc_password: "{{ lookup('env', 'SPLUNK_IDXC1_PASSWORD') }}"
     idxc_replication_port: 9887
     idxc_site_rf: 'origin:2, total:2'
     idxc_site_sf: 'origin:1, total:1'
 
   - idxc_name: idxc2
-    idxc_password: splunkidxc2
+    idxc_password: "{{ lookup('env', 'SPLUNK_IDXC2_PASSWORD') }}"
     idxc_replication_port: 9887
     idxc_site_rf: 'origin:2, total:2'
     idxc_site_sf: 'origin:1, total:1'

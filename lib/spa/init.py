@@ -501,17 +501,19 @@ def resolve_example_pair(
     raw_example = (example or "single_node.yml").strip()
     passed_filename = raw_example.endswith((".yml", ".yaml"))
     raw = _normalize_example_name(raw_example)
+    explicit_provider = provider_id is not None
     hint = None
     topology_id = Path(raw).stem
     alias = EXAMPLE_ALIASES.get(raw)
     if alias:
         topology_id, implied = alias
-        hint = (
-            "Alias %s → --example %s --provider %s"
-            % (raw, topology_id, implied)
-        )
         if provider_id is None and passed_filename:
             provider_id = implied
+        if not explicit_provider:
+            hint = (
+                "Alias %s → --example %s --provider %s"
+                % (raw, topology_id, implied)
+            )
     if provider_id is None:
         from spa.registry import load_default_provider
 
@@ -564,10 +566,58 @@ def compose_example_config(spa_home: Path, topology_id: str, provider_id: str) -
     return composed
 
 
+def _report_env_references(config_path: Path) -> None:
+    """Print lookup readiness without resolving or failing init."""
+    if not config_path.is_file():
+        return
+    from spa.preflight import env_reference_lines, load_config_mapping
+
+    try:
+        config = load_config_mapping(config_path)
+    except Exception:
+        return
+    for line in env_reference_lines(config):
+        _say(line)
+
+
 def dump_splunk_config(data: Dict[str, Any]) -> str:
     if yaml is None:
         raise InitError("PyYAML is required to compose examples")
-    return yaml.safe_dump(data, sort_keys=False, default_flow_style=False)
+    from spa.catalog import format_config_text, order_config_roots
+
+    return format_config_text(
+        yaml.safe_dump(order_config_roots(data), sort_keys=False, default_flow_style=False)
+    )
+
+
+def _provider_ami_comment(provider_text: str) -> Optional[str]:
+    """End-of-line note on the provider example's ami_id, without the hash."""
+    import re
+
+    for line in provider_text.splitlines():
+        if "ami_id:" not in line or "#" not in line:
+            continue
+        before, _, comment = line.partition("#")
+        if re.search(r"ami_id\s*:", before):
+            note = comment.strip()
+            return note or None
+    return None
+
+
+def _with_ami_comment(text: str, comment: str) -> str:
+    """Put the provider AMI note on uncommented ami_id lines. PyYAML drops comments."""
+    import re
+
+    lines = text.splitlines(keepends=True)
+    rewritten = []
+    for line in lines:
+        body = line.rstrip("\r\n")
+        ending = line[len(body):] or "\n"
+        if re.match(r"\s*ami_id\s*:", body) and "#" not in body:
+            rewritten.append("%s # %s%s" % (body.rstrip(), comment, ending))
+        else:
+            rewritten.append(line)
+    return "".join(rewritten)
 
 
 def write_composed_config(
@@ -575,8 +625,14 @@ def write_composed_config(
 ) -> Tuple[str, str, Optional[str]]:
     topology_id, provider_id, hint = resolve_example_pair(spa_home, example, provider)
     composed = compose_example_config(spa_home, topology_id, provider_id)
+    text = dump_splunk_config(composed)
+    provider_path = Path(spa_home) / "examples" / "providers" / ("%s.yml" % provider_id)
+    if provider_path.is_file():
+        comment = _provider_ami_comment(provider_path.read_text(encoding="utf-8"))
+        if comment:
+            text = _with_ami_comment(text, comment)
     dest_config.parent.mkdir(parents=True, exist_ok=True)
-    dest_config.write_text(dump_splunk_config(composed), encoding="utf-8")
+    dest_config.write_text(text, encoding="utf-8")
     return topology_id, provider_id, hint
 
 
@@ -634,6 +690,7 @@ def init_env(
                 )
             except RegistryError as exc:
                 raise InitError(str(exc), exc.code)
+            _report_env_references(dest / "config" / "splunk_config.yml")
         return rc
     finally:
         if token is not None:

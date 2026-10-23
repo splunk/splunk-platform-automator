@@ -9,7 +9,7 @@ AWS credentials come from the normal AWS credential chain or vault/env reference
 ```bash
 spa aws --check-auth --json
 spa aws --survey --region REGION --json
-spa features show provider.aws --keys
+spa config explain provider.aws
 ```
 
 Configure `terraform.aws` with a region, AMI, EC2 key pair, SSH user/key, security groups, and defaults such as instance type and root volume. Per-host `terraform.aws` overrides global defaults. `iter` can generate numbered hosts. Terraform modules remain in `SPA_HOME`; generated variables and state remain in `SPA_ENV_DIR`.

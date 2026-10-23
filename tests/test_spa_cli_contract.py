@@ -36,7 +36,7 @@ HELP_CONTRACTS = [
             "shell (sh)",
             "aws",
             "licenses (lic)",
-            "features (feat)",
+            "config (cfg)",
             "apps",
             "agent",
             "--json",
@@ -73,7 +73,7 @@ HELP_CONTRACTS = [
     ),
     (
         ["validate", "--help"],
-        ["usage: spa validate", "config", "--check-licenses", "--splunk-config-aws"],
+        ["usage: spa validate", "--config", "--check-licenses", "--splunk-config-aws"],
     ),
     (
         ["doctor", "--help"],
@@ -129,25 +129,46 @@ HELP_CONTRACTS = [
         ],
     ),
     (
-        ["features", "--help"],
+        ["config", "--help"],
         [
-            "usage: spa features",
-            "list",
-            "show",
+            "usage: spa config",
+            "get",
+            "explain",
             "search",
             "keys",
             "schema",
-            "spa features search QUERY",
-            "spa features show SELECTOR [--keys]",
-            "spa features schema --markdown",
+            "set",
+            "add",
+            "unset",
+            "merge",
+            "topology",
+            "provider",
+            "spa config search QUERY",
+            "spa config explain PATH",
+            "spa config schema --markdown",
         ],
+    ),
+    (
+        ["config", "set", "--help"],
+        ["usage: spa config set", "PATH", "VALUE", "--value-file", "--from-env", "--dry-run", "--expect-revision", "--resolve"],
+    ),
+    (
+        ["config", "add", "--help"],
+        ["usage: spa config add", "SELECTOR", "JSON_OBJECT", "--value-file", "--from-env", "--dry-run", "--resolve"],
+    ),
+    (
+        ["config", "merge", "--help"],
+        ["usage: spa config merge", "TEMPLATE", "--file", "--dry-run", "--resolve-file"],
     ),
     (
         ["apps", "--help"],
         [
             "usage: spa apps",
             "search",
+            "content-packs (cp)",
             "snippet",
+            "add",
+            "remove",
             "download",
             "Splunkbase",
             "spa apps needs an action.",
@@ -159,8 +180,26 @@ HELP_CONTRACTS = [
         ["usage: spa apps search", "--limit", "--type", "--kind", "addon", "premium_itsi", "keywords"],
     ),
     (
+        ["apps", "content-packs", "list", "--help"],
+        [
+            "usage: spa apps content-packs list",
+            "--version",
+            "--archive",
+            "matching archive in apps_dir",
+            "temporary authenticated Splunkbase download",
+        ],
+    ),
+    (
         ["apps", "snippet", "--help"],
-        ["usage: spa apps snippet", "--version", "--roles", "--source", "--customize", "APP_ID_OR_NAME"],
+        ["usage: spa apps snippet", "--version", "--roles", "--source", "--customize", "--set", "APP_ID_OR_NAME"],
+    ),
+    (
+        ["apps", "add", "--help"],
+        ["usage: spa apps add", "--roles", "--set", "--content-pack", "--install-all-content-packs", "--dry-run"],
+    ),
+    (
+        ["apps", "remove", "--help"],
+        ["usage: spa apps remove", "--content-pack", "--dry-run", "APP_ID_OR_NAME"],
     ),
     (
         ["apps", "download", "--help"],
@@ -527,10 +566,18 @@ def _help_action_names():
     names = set()
     for name, _alias in _command_rows(root.stdout):
         names.add("agent schema" if name == "agent" else name)
-    for parent in ("environment", "hosts", "apps", "features", "skills"):
+    for parent in ("environment", "hosts", "apps", "config", "skills"):
         child = run_spa(["--no-agent", parent, "--help"])
         assert child.returncode == 0, child.stderr
         for name, _alias in _command_rows(child.stdout):
+            if parent == "apps" and name == "content-packs":
+                nested = run_spa(
+                    ["--no-agent", "apps", "content-packs", "--help"]
+                )
+                assert nested.returncode == 0, nested.stderr
+                for nested_name, _nested_alias in _command_rows(nested.stdout):
+                    names.add("apps content-packs %s" % nested_name)
+                continue
             names.add("%s %s" % (parent, name))
     catalogs = (
         (["run", "--help"], "spa run list", "run list"),
@@ -586,14 +633,14 @@ def test_agent_schema_is_complete_and_documented():
     search_flags = {flag["long"] for flag in by_name["apps search"]["flags"]}
     assert {"--limit", "--type", "--kind"} <= search_flags
     assert "--markdown" in {flag["long"] for flag in by_name["agent schema"]["flags"]}
-    assert "--keys" not in {flag["long"] for flag in by_name["features"].get("flags", [])}
-    assert "--markdown" in {flag["long"] for flag in by_name["features schema"]["flags"]}
-    assert by_name["features search"]["positionals"][0]["name"] == "QUERY"
-    assert by_name["features show"]["positionals"][0]["name"] == "SELECTOR"
-    assert "features search" in by_name["features schema"]["summary"]
+    assert "features" not in by_name
+    assert "--markdown" in {flag["long"] for flag in by_name["config schema"]["flags"]}
+    assert by_name["config search"]["positionals"][0]["name"] == "QUERY"
+    assert by_name["config explain"]["positionals"][0]["name"] == "PATH"
+    assert "config search" in by_name["config schema"]["summary"]
 
     for parent, banned in (
-        ("features", ("--keys", "--markdown")),
+        ("config", ("--keys", "--command")),
         ("hosts", ("--status", "--hosts")),
         ("aws", ("--list-regions", "--name-filter", "--family")),
     ):
@@ -606,7 +653,7 @@ def test_agent_schema_is_complete_and_documented():
     assert "--name-filter" not in types
 
     bare_parents = {
-        "features": ("spa features search QUERY", "spa features show SELECTOR", "spa features list"),
+        "config": ("spa config search QUERY", "spa config explain PATH", "spa config get [PATH]"),
         "hosts": ("spa hosts list", "spa hosts ssh NAME", "spa hosts copy SRC DST"),
         "apps": ("spa apps search QUERY", "spa apps snippet APP_ID", "spa apps download APP_ID --yes"),
         "environment": (
@@ -636,14 +683,13 @@ def test_agent_schema_is_complete_and_documented():
             assert phrase in body["error"], (parent, phrase)
 
     operands = (
-        (["features", "search"], "spa features search needs QUERY."),
-        (["features", "show"], "spa features show needs SELECTOR."),
+        (["config", "search"], "spa config search needs QUERY."),
         (["apps", "search"], "spa apps search needs QUERY."),
         (["apps", "snippet"], "spa apps snippet needs APP_ID."),
         (["apps", "download"], "spa apps download needs APP_ID."),
         (["hosts", "ssh"], "spa hosts ssh needs NAME."),
         (["environment", "remove"], "spa environment remove needs NAME."),
-        (["feat"], "spa features needs an action."),
+        (["feat"], "spa features was removed."),
     )
     for argv, phrase in operands:
         human = run_spa(["--no-agent", *argv])

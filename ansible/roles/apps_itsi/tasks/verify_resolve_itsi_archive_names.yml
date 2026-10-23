@@ -16,7 +16,7 @@
          else (_verify_local_app_repo_path | default(splunk_app_deployment.local_app_repo_path | default(spa_apps_dir | default(playbook_dir + '/../../apps', true), true))
          ~ '/' ~ (verify_app_item.path | default('splunk-it-service-intelligence_' ~ ((verify_app_item.version | default('latest')) | string | replace('.', '')) ~ '.spl')))) }}
     _itsi_verify_resolved_version: "{{ verify_app_item.version | default('latest') }}"
-  when: (verify_app_item.source | default('local')) != 'splunkbase'
+  when: (verify_app_item.source | default('splunkbase')) != 'splunkbase'
 
 - name: "Resolve ITSI Splunkbase archive for verify"
   tags:
@@ -24,7 +24,7 @@
     - splunk_apps
     - itsi
     - verify
-  when: (verify_app_item.source | default('local')) == 'splunkbase'
+  when: (verify_app_item.source | default('splunkbase')) == 'splunkbase'
   block:
     - name: "Set Splunkbase vars for ITSI verify archive resolution"
       ansible.builtin.set_fact:
@@ -64,7 +64,7 @@
     _archive_path: >-
       {{ splunkbase_archive_path if (splunk_app_deployment.target_download | default(false))
       else (((_itsi_verify_download_result | default({})).ansible_facts | default({})).get('_itsi_verify_archive_path', '')) }}
-  when: (verify_app_item.source | default('local')) == 'splunkbase'
+  when: (verify_app_item.source | default('splunkbase')) == 'splunkbase'
 
 - name: "Build ITSI app conf cache for verify"
   tags:

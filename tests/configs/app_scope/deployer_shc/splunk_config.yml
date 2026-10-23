@@ -4,6 +4,9 @@
 # Verifies: deployer.apps and target_hosts = SHC members; no direct deploy for SHC members.
 plugin: splunk-platform-automator
 
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+
 splunk_shclusters:
   - shc_name: shc1
     shc_site: site0

@@ -50,10 +50,10 @@ VirtualBox: `--provider virtualbox` (for example `single_node`). Full narrative:
 | --- | --- |
 | Humans (and agents following examples) | [docs/user-guide.md](docs/user-guide.md) |
 | Command catalog (generated) | [docs/commands.md](docs/commands.md) · `spa agent schema --markdown` |
-| Settings (generated) | [docs/config.md](docs/config.md) · `spa features schema --markdown` |
+| Settings (generated) | [docs/config.md](docs/config.md) · `spa config schema --markdown` |
 | Contributors | [docs/architecture.md](docs/architecture.md) · [docs/contributing.md](docs/contributing.md) |
 | Agents | [AGENTS.md](AGENTS.md) |
-| Config keys / snippets | `spa features list` · [examples/catalog/features.yml](examples/catalog/features.yml) |
+| Config keys / snippets | `spa config explain` · [examples/catalog/features.yml](examples/catalog/features.yml) |
 | Roadmap | [ROADMAP.md](ROADMAP.md) |
 | Changelog | [CHANGELOG.md](CHANGELOG.md) |
 | Releases | [RELEASE.md](RELEASE.md) |

@@ -343,8 +343,13 @@ def collect_checks(
             )
     if venv is not None:
         rec("ok", "spa_venv", "venv at %s" % venv)
+        from spa.executil import ansible_controller_problem
+
+        blocked = ansible_controller_problem(venv)
         ansible = venv / "bin" / "ansible"
-        if ansible.is_file():
+        if blocked:
+            rec("error", "ansible", blocked, "spa venv %s --rebuild --yes" % _venv_scope(venv))
+        elif ansible.is_file():
             ver = subprocess.run([str(ansible), "--version"], capture_output=True, text=True).stdout.splitlines()
             rec("ok", "ansible", ver[0] if ver else str(ansible))
         else:

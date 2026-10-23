@@ -4,6 +4,9 @@
 # Verifies: deployment_server, deployer, cluster_manager each get correct subset; direct_scope consistent.
 plugin: splunk-platform-automator
 
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+
 splunk_idxclusters:
   - idxc_name: idxc1
     idxc_password: splunkidx

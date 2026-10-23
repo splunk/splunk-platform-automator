@@ -5,6 +5,11 @@
   ansible.builtin.include_tasks: set_hostname.yml
   when: ansible_facts['os_family']|lower != 'windows'
 
+- name: Add guest packages Ansible needs
+  ansible.builtin.set_fact:
+    packages: "{{ ((packages | default([])) + ['acl'] + ((['policykit-1'] if ansible_facts['os_family'] == 'Debian' else ['polkit']) if (splunk_use_policykit | default(true) | bool) else [])) | unique }}"
+  when: ansible_facts['os_family']|lower != 'windows'
+
 - name: Call Install packages
   ansible.builtin.include_tasks: packages.yml
   when:

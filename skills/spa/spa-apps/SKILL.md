@@ -1,19 +1,19 @@
 ---
 name: spa-apps
 description: >-
-  Search Splunkbase and print SPA apps[] snippets or download archives. Use when
+  Search Splunkbase, add SPA app entries, or download archives. Use when
   adding Splunkbase TAs, ITSI (1841), or ITSI content packs to a lab. Invoke from
   spa-create-config during the apps phase, or with /spa-apps.
 license: Proprietary
-compatibility: Requires SPA_HOME. spa apps search and snippet work without an env dir. spa apps download needs an env (apps_dir).
+compatibility: Requires SPA_HOME. spa apps search and snippet work without an env dir. add, remove, and download need an env.
 metadata:
   product: splunk-platform-automator
   version: "1.0.0"
 ---
 
-# spa-apps — Splunkbase search and snippets
+# spa-apps — Splunkbase search and config entries
 
-Agents call `bin/spa` only. Never auto-run `spa deploy`. Do not edit `splunk_config.yml` here; merge the printed snippet (later `spa config`, [#76](https://github.com/splunk/splunk-platform-automator/issues/76)).
+Agents call `bin/spa` only. Never auto-run `spa deploy`. Use `spa --agent apps add` and `spa --agent apps remove`; do not patch YAML or parse a rendered snippet.
 
 ## When to use
 
@@ -35,13 +35,14 @@ Follow [secrets-handling.md](../spa-create-config/references/secrets-handling.md
 
 ## Workflow (token-cheap)
 
-1. `spa --json apps search QUERY` with technology keywords. Optional `--type app|addon` and `--kind ta|premium_itsi|itsi_content_library|itsi_content_pack_single|es_not_premium`. An `itsi` query pins **1841** first; `es` pins **263**. Do **not** open splunkbase.com first.
+1. `spa --agent apps search QUERY` with technology keywords. Optional `--type app|addon` and `--kind ta|premium_itsi|itsi_content_library|itsi_content_pack_single|es_not_premium`. An `itsi` query pins **1841** first; `es` pins **263**. Do **not** open splunkbase.com first.
 2. Pick one `app_id` from the compact rows (`app_id`, `name`, `title`, `type`, `kind`, `version`, `summary`). No full description on search. Default 10 hits; tighten QUERY if the page is wrong.
-3. `spa --json apps snippet APP_ID` **without** `--customize`. Merge that YAML under `splunk_app_deployment.apps`.
-4. If `playbooks` is non-empty (or the snippet comment says “pass --customize”), **ask** whether to add the curated playbook. Do not assume yes. If they agree: `spa --json apps snippet APP_ID --customize` and merge that YAML. Required extra_vars secrets: report env vars as **set / not set** only.
-5. Local source: `spa apps snippet APP_ID --local --roles ...` (`--local` is short for `--source local`). It looks up the app folder or archive in `apps_dir` and uses whichever it finds, folder first. Nothing there → download first (`spa apps download APP_ID --extract --yes` for a normal folder-backed app; `--extract` removes the archive once unpacked. Add `--overwrite` to replace an existing folder. ITSI/content packs deploy from the archive, so omit `--extract`). Download never prints YAML.
-6. Custom local app (not Splunkbase): put its folder or archive in `apps_dir`, then `spa apps snippet FOLDER_NAME --local --roles ...`. This does not contact Splunkbase.
-7. `spa validate`. Deploy only if the operator asked (`spa deploy --yes`). Standalone configure: `spa run splunk_apps_playbook_run --help` then `--apps-playbook STEM --hosts ROLE --yes`. Env-dir custom files: `--apps-playbook ancustom/my_custom_playbook` (not listed).
+3. For a normal app, use one transaction: `spa --agent apps add APP_ID --roles ROLE[,ROLE]`. Add schema-backed fields with repeatable `--set FIELD VALUE`; lists and maps use strict JSON.
+4. If search reports curated playbooks, **ask** whether to add the customization. Do not assume yes. If agreed, add `--customize` to the same `apps add` command. Required extra-vars secrets are reported as **set / not set** only.
+5. Local source: `spa --agent apps add APP_ID --local --roles ...`. It selects the app folder or archive in `apps_dir`, folder first. Nothing there → download first (`spa apps download APP_ID --extract --yes` for a normal folder-backed app; ITSI/content packs deploy from the archive, so omit `--extract`). A custom local app uses its folder name instead of an app ID.
+6. Before selecting from Content Library 5391, run `spa --agent apps content-packs list 5391`. It inspects the matching archive in `apps_dir`, or temporarily downloads the selected release with configured Splunkbase credentials. Each row supplies the exact folder name, archive label/description/version, matching SPA automation, and legal add command. Use `--archive PATH` to inspect a local archive without an env or credentials. Content Library 5391 then requires either repeatable `--content-pack NAME` or `--install-all-content-packs`. A recognized single content pack has its own Splunkbase app ID and needs neither library flag. The add command adds missing ITSI 1841 deterministically and reports unresolved topology, license, or Java requirements without a partial write.
+7. Use `spa --agent apps remove APP_ID_OR_NAME` to remove authored configuration; it does not uninstall deployed files. Use `--content-pack NAME` to remove one nested 5391 pack.
+8. `spa --agent validate`. Deploy only if the operator asked (`spa deploy --yes`). Standalone configure: `spa run splunk_apps_playbook_run --help` then `--apps-playbook STEM --hosts ROLE --yes`. Env-dir custom files: `--apps-playbook ancustom/my_custom_playbook` (not listed).
 
 ITSI / ITE Work → **app_id 1841** (`premium_app: itsi`). Do not use 5403.
 

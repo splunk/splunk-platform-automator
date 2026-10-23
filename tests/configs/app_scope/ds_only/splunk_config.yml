@@ -4,6 +4,9 @@
 # Verifies: deployment_server.apps_with_targets has correct target_hosts.
 plugin: splunk-platform-automator
 
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+
 splunk_hosts:
   - name: ds
     roles:

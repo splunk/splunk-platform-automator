@@ -6,6 +6,7 @@ LocalSpaSession; open_session(url=...) is reserved for that transport.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -160,12 +161,26 @@ class SpaSession(Protocol):
         self, name: str, confirm: bool = False, force: bool = False
     ) -> CommandResult: ...
 
-    def features(
+    def config(
         self,
-        action: str = "list",
-        ident: Optional[str] = None,
-        query: Optional[str] = None,
-        include_keys: bool = False,
+        action: str,
+        paths: Optional[Sequence[str]] = None,
+        value: Optional[str] = None,
+        operand: Optional[str] = None,
+        file: Optional[str] = None,
+        value_file: Optional[str] = None,
+        from_env: Optional[str] = None,
+        from_env_fields: Optional[Sequence[Sequence[str]]] = None,
+        explicit_default: bool = False,
+        effective: bool = False,
+        full: bool = False,
+        dry_run: bool = False,
+        expect_revision: Optional[str] = None,
+        resolve: Optional[Sequence[Sequence[str]]] = None,
+        resolve_file: Optional[str] = None,
+        stdin_text: Optional[str] = None,
+        confirm: bool = False,
+        agent: bool = False,
     ) -> CommandResult: ...
 
     def apps(
@@ -182,6 +197,17 @@ class SpaSession(Protocol):
         extract: bool = False,
         overwrite: bool = False,
         customize: bool = False,
+        set_values: Optional[Sequence[Sequence[str]]] = None,
+        explicit_default: bool = False,
+        content_packs: Optional[Sequence[str]] = None,
+        install_all_content_packs: bool = False,
+        content_pack: Optional[str] = None,
+        archive: Optional[str] = None,
+        dry_run: bool = False,
+        expect_revision: Optional[str] = None,
+        resolve: Optional[Sequence[Sequence[str]]] = None,
+        resolve_file: Optional[str] = None,
+        stdin_text: Optional[str] = None,
         confirm: bool = False,
         agent: bool = False,
     ) -> CommandResult: ...
@@ -309,6 +335,27 @@ class LocalSpaSession:
             return CommandResult(ok=False, error=message, code=2)
         return None
 
+    def _env_lookup_gate(self) -> Optional[CommandResult]:
+        """Reject missing lookup targets before confirmation, inventory, or providers."""
+        from spa.preflight import env_lookup_readiness, load_config_mapping, unresolved_env_message
+
+        config_path = Path(self.paths.config_file)
+        if not config_path.is_file():
+            return None
+        try:
+            loaded = load_config_mapping(config_path)
+        except Exception:
+            return None
+        message = unresolved_env_message(loaded)
+        if not message:
+            return None
+        return CommandResult(
+            ok=False,
+            error=message,
+            code=1,
+            data={"env_lookups": env_lookup_readiness(loaded)},
+        )
+
     def _venv_gate(self) -> Optional[CommandResult]:
         """Ansible/provider work needs the venv; say so instead of ImportError."""
         from spa.executil import venv_required_error
@@ -421,71 +468,226 @@ class LocalSpaSession:
 
         return CommandResult(ok=True, data=list_examples(self.paths.spa_home))
 
-    def features(
+    def _config_discovery(
         self,
-        action: str = "list",
-        ident: Optional[str] = None,
-        query: Optional[str] = None,
-        include_keys: bool = False,
+        action: str,
+        paths: Optional[Sequence[str]],
+        agent: bool = False,
     ) -> CommandResult:
-        from spa.catalog import (
-            config_schema_payload,
-            format_feature_text,
-            key_inventory,
-            list_payload,
-            load_features,
-            public_feature,
-            resolve_feature,
-            search_payload,
-            validate_feature_catalog,
-        )
+        from spa.catalog import config_schema_payload, key_inventory
+        from spa.config_tree import explain_config, search_config
 
-        spa_home = self.paths.spa_home
-        if include_keys and action != "show":
-            return CommandResult(
-                ok=False,
-                error="spa features --keys requires: spa features show SELECTOR --keys",
-                code=2,
-            )
+        target = ((paths or [None])[0] or "").strip()
         try:
+            if action == "explain":
+                return CommandResult(ok=True, data=explain_config(target))
+            if action == "search":
+                if not target:
+                    return CommandResult(
+                        ok=False,
+                        error="spa config search needs QUERY.\nExample: spa config search QUERY",
+                        code=2,
+                    )
+                return CommandResult(ok=True, data=search_config(target))
             if action == "keys":
-                return CommandResult(ok=True, data=key_inventory(spa_home))
+                return CommandResult(ok=True, data=key_inventory(self.paths.spa_home))
             if action == "schema":
-                return CommandResult(ok=True, data=config_schema_payload(spa_home))
-            features = load_features(spa_home)
-            validate_feature_catalog(features)
+                if agent:
+                    return CommandResult(
+                        ok=False,
+                        error=(
+                            "spa config schema --markdown is a human docs dump.\n"
+                            "Look up a setting with: spa config search QUERY\n"
+                            "Then: spa config explain PATH"
+                        ),
+                        code=2,
+                    )
+                return CommandResult(ok=True, data=config_schema_payload(self.paths.spa_home))
+        except KeyError:
+            return CommandResult(ok=False, error="Unknown config path: %s" % target, code=1)
         except (OSError, ValueError) as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
-        if action == "list":
-            return CommandResult(ok=True, data=list_payload(spa_home))
-        if action == "search":
-            if not (query or "").strip():
-                return CommandResult(ok=False, error="spa features search QUERY", code=2)
+        return CommandResult(ok=False, error="Unknown spa config action: %s" % action, code=2)
+
+    def config(
+        self,
+        action: str,
+        paths: Optional[Sequence[str]] = None,
+        value: Optional[str] = None,
+        operand: Optional[str] = None,
+        file: Optional[str] = None,
+        value_file: Optional[str] = None,
+        from_env: Optional[str] = None,
+        from_env_fields: Optional[Sequence[Sequence[str]]] = None,
+        explicit_default: bool = False,
+        effective: bool = False,
+        full: bool = False,
+        dry_run: bool = False,
+        expect_revision: Optional[str] = None,
+        resolve: Optional[Sequence[Sequence[str]]] = None,
+        resolve_file: Optional[str] = None,
+        stdin_text: Optional[str] = None,
+        confirm: bool = False,
+        agent: bool = False,
+    ) -> CommandResult:
+        from spa.config_edit import (
+            ConfigEditError,
+            config_add,
+            config_get,
+            config_merge,
+            merge_operand,
+            config_provider,
+            config_set,
+            config_templates,
+            config_topology,
+            config_unset,
+        )
+
+        if action == "templates":
             return CommandResult(
-                ok=True,
-                data={"query": query, "features": search_payload(features, query or "")},
+                ok=True, data=config_templates(self.paths.spa_home)
             )
-        if action == "show":
-            if not (ident or "").strip():
-                return CommandResult(ok=False, error="spa features show SELECTOR", code=2)
-            item = resolve_feature(features, ident or "")
-            if item is None:
+        if action in {"explain", "search", "keys", "schema"}:
+            return self._config_discovery(action, paths, agent=agent)
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
+        config_path = self.paths.config_file
+        try:
+            if action == "get":
                 return CommandResult(
-                    ok=False, error="Unknown feature: %s" % ident, code=1
+                    ok=True,
+                    data=config_get(
+                        config_path,
+                        self.paths.spa_home,
+                        (paths or [None])[0],
+                        effective=effective,
+                        full=full,
+                    ),
                 )
-            feature = public_feature(item, features, include_keys=include_keys)
-            snippet = str(item.get("snippet") or "").rstrip()
-            if snippet:
-                feature["snippet"] = snippet
-            details = feature.get("key_details") if include_keys else None
-            return CommandResult(
-                ok=True,
-                data={
-                    "feature": feature,
-                    "text": format_feature_text(feature, key_details=details),
-                },
+            if action not in {"set", "add", "unset", "merge", "topology", "provider"}:
+                return CommandResult(
+                    ok=False,
+                    error="Unknown spa config action: %s" % action,
+                    code=2,
+                )
+            if not dry_run and not agent:
+                blocked = self._confirm_gate(
+                    "spa config %s" % action,
+                    confirm=confirm,
+                    agent=False,
+                    details=["config: %s" % config_path],
+                    risk="config_edit",
+                )
+                if blocked:
+                    return blocked
+            common = {
+                "dry_run": dry_run,
+                "expect_revision": expect_revision,
+            }
+            if action == "set":
+                if not paths:
+                    raise ConfigEditError("spa config set needs PATH VALUE")
+                data = config_set(
+                    config_path,
+                    self.paths.spa_home,
+                    paths[0],
+                    value,
+                    value_file=value_file,
+                    from_env=from_env,
+                    explicit_default=explicit_default,
+                    resolve=resolve,
+                    resolve_file=resolve_file,
+                    stdin_text=stdin_text,
+                    **common,
+                )
+            elif action == "add":
+                if not paths:
+                    raise ConfigEditError("spa config add needs SELECTOR JSON_OBJECT")
+                data = config_add(
+                    config_path,
+                    self.paths.spa_home,
+                    paths[0],
+                    value,
+                    value_file=value_file,
+                    from_env=from_env_fields,
+                    resolve=resolve,
+                    resolve_file=resolve_file,
+                    stdin_text=stdin_text,
+                    **common,
+                )
+            elif action == "unset":
+                if not paths:
+                    raise ConfigEditError("spa config unset needs PATH")
+                data = config_unset(
+                    config_path,
+                    self.paths.spa_home,
+                    list(paths),
+                    resolve=resolve,
+                    resolve_file=resolve_file,
+                    stdin_text=stdin_text,
+                    **common,
+                )
+            elif action == "merge":
+                data = config_merge(
+                    config_path,
+                    self.paths.spa_home,
+                    merge_operand(operand, file),
+                    stdin_text=stdin_text,
+                    explicit_default=explicit_default,
+                    resolve=resolve,
+                    resolve_file=resolve_file,
+                    **common,
+                )
+            elif action == "topology":
+                if not operand:
+                    raise ConfigEditError("spa config topology needs TOPOLOGY")
+                data = config_topology(
+                    config_path,
+                    self.paths.spa_home,
+                    operand,
+                    resolve=resolve,
+                    resolve_file=resolve_file,
+                    stdin_text=stdin_text,
+                    **common,
+                )
+            else:
+                if not operand:
+                    raise ConfigEditError("spa config provider needs PROVIDER")
+                data = config_provider(
+                    config_path,
+                    self.paths.spa_home,
+                    operand,
+                    resolve=resolve,
+                    resolve_file=resolve_file,
+                    stdin_text=stdin_text,
+                    **common,
+                )
+            return CommandResult(ok=True, data=data)
+        except ConfigEditError as exc:
+            text = str(exc)
+            usage = any(
+                token in text
+                for token in (
+                    "needs PATH",
+                    "needs SELECTOR",
+                    "needs NAME",
+                    "needs TEMPLATE",
+                    "or --file, not both",
+                    "uses spa config merge --file",
+                    "needs TOPOLOGY",
+                    "needs PROVIDER",
+                    "needs an identity selector",
+                    "requires an identity list",
+                    "requires a JSON object",
+                    "identity must be one of",
+                    "App entries use spa apps add",
+                    "Unknown schema path",
+                    "strict JSON",
+                    "Provide exactly",
+                )
             )
-        return CommandResult(ok=False, error="Unknown spa features action: %s" % action, code=2)
+            return CommandResult(ok=False, error=text, code=2 if usage else 1)
 
     def apps(
         self,
@@ -501,10 +703,29 @@ class LocalSpaSession:
         extract: bool = False,
         overwrite: bool = False,
         customize: bool = False,
+        set_values: Optional[Sequence[Sequence[str]]] = None,
+        explicit_default: bool = False,
+        content_packs: Optional[Sequence[str]] = None,
+        install_all_content_packs: bool = False,
+        content_pack: Optional[str] = None,
+        archive: Optional[str] = None,
+        dry_run: bool = False,
+        expect_revision: Optional[str] = None,
+        resolve: Optional[Sequence[Sequence[str]]] = None,
+        resolve_file: Optional[str] = None,
+        stdin_text: Optional[str] = None,
         confirm: bool = False,
         agent: bool = False,
     ) -> CommandResult:
-        from spa.apps import AppsError, download, search, snippet
+        from spa.apps import (
+            AppsError,
+            build_entry,
+            content_pack_catalog,
+            download,
+            search,
+            snippet,
+        )
+        from spa.config_edit import ConfigEditError, config_app_add, config_app_remove
         from spa.splunkbase import SplunkbaseError
 
         try:
@@ -530,6 +751,81 @@ class LocalSpaSession:
                     apps_dir=self.paths.apps_dir if source == "local" else None,
                     spa_home=self.paths.spa_home,
                     customize=customize,
+                    set_values=set_values,
+                )
+                return CommandResult(ok=True, data=data)
+            if action == "content-packs-list":
+                if archive is None:
+                    blocked = self._env_gate()
+                    if blocked:
+                        return blocked
+                data = content_pack_catalog(
+                    app_id or "5391",
+                    version=version or "latest",
+                    archive=Path(archive) if archive else None,
+                    apps_dir=self.paths.apps_dir if archive is None else None,
+                    spa_home=self.paths.spa_home,
+                    config=self._app_deployment_config() if archive is None else None,
+                )
+                return CommandResult(ok=True, data=data)
+            if action in {"add", "remove"}:
+                blocked = self._env_gate()
+                if blocked:
+                    return blocked
+                if not dry_run and not agent:
+                    blocked = self._confirm_gate(
+                        "spa apps %s" % action,
+                        confirm=confirm,
+                        agent=False,
+                        details=["config: %s" % self.paths.config_file],
+                        risk="config_edit",
+                    )
+                    if blocked:
+                        return blocked
+                if action == "remove":
+                    data = config_app_remove(
+                        self.paths.config_file,
+                        self.paths.spa_home,
+                        str(app_id or ""),
+                        content_pack=content_pack,
+                        dry_run=dry_run,
+                        expect_revision=expect_revision,
+                        resolve=resolve,
+                        resolve_file=resolve_file,
+                        stdin_text=stdin_text,
+                    )
+                    return CommandResult(ok=True, data=data)
+                built = build_entry(
+                    app_id,
+                    version=version or "latest",
+                    roles=roles,
+                    source=source,
+                    apps_dir=self.paths.apps_dir if source == "local" else None,
+                    spa_home=self.paths.spa_home,
+                    customize=customize,
+                    content_packs=content_packs,
+                    install_all_content_packs=install_all_content_packs,
+                    explicit_default=explicit_default,
+                    set_values=set_values,
+                    for_add=True,
+                )
+                data = config_app_add(
+                    self.paths.config_file,
+                    self.paths.spa_home,
+                    built["entry"],
+                    dry_run=dry_run,
+                    expect_revision=expect_revision,
+                    resolve=resolve,
+                    resolve_file=resolve_file,
+                    stdin_text=stdin_text,
+                )
+                data.update(
+                    {
+                        "app_id": built.get("app_id"),
+                        "name": built["name"],
+                        "kind": built["kind"],
+                        "omitted_defaults": built.get("omitted_defaults") or [],
+                    }
                 )
                 return CommandResult(ok=True, data=data)
             if action == "download":
@@ -560,12 +856,20 @@ class LocalSpaSession:
                 return CommandResult(ok=True, data=data)
         except AppsError as exc:
             message = str(exc)
-            code = 2 if "must be an integer" in message or message.startswith("spa apps search") else 1
+            code = (
+                2
+                if "must be an integer" in message
+                or message.startswith("spa apps search")
+                or message.startswith("spa apps content-packs")
+                else 1
+            )
             return CommandResult(ok=False, error=message, code=code)
         except SplunkbaseError as exc:
             message = str(exc)
             code = 2 if message == "spa apps search QUERY" else 1
             return CommandResult(ok=False, error=message, code=code)
+        except ConfigEditError as exc:
+            return CommandResult(ok=False, error=str(exc), code=1)
         return CommandResult(ok=False, error="Unknown spa apps action: %s" % action, code=2)
 
     def validate(
@@ -890,6 +1194,9 @@ class LocalSpaSession:
         blocked = self._env_gate()
         if blocked:
             return blocked
+        blocked = self._env_lookup_gate()
+        if blocked:
+            return blocked
         return self._lifecycle_playbook(
             "provision",
             extra,
@@ -1029,6 +1336,9 @@ class LocalSpaSession:
         color: bool = False,
     ) -> CommandResult:
         blocked = self._env_gate()
+        if blocked:
+            return blocked
+        blocked = self._env_lookup_gate()
         if blocked:
             return blocked
         from spa.hosts import with_ansible_limit

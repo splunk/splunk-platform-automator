@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from spa.api import CommandResult
-from spa.executil import apply_paths_env, tool_path
+from spa.executil import ToolNotFound, apply_paths_env, tool_path
 from spa.paths import SpaPaths, resolve_spa_paths
 
 
@@ -134,6 +134,19 @@ def validate_env(
             code=1,
         )
 
+    from spa.preflight import env_lookup_readiness, load_config_mapping, unresolved_env_message
+
+    try:
+        loaded = load_config_mapping(config_path)
+    except Exception:
+        loaded = None
+    if loaded is not None:
+        env_error = unresolved_env_message(loaded)
+        if env_error:
+            data["env_lookups"] = env_lookup_readiness(loaded)
+            steps.append({"id": "env_lookups", "ok": False, "message": env_error})
+            return CommandResult(ok=False, error=env_error, data=data, code=1)
+
     plugin = str(paths.spa_home / "ansible" / "plugins" / "inventory")
     lib = str(paths.spa_home / "lib")
     env["PYTHONPATH"] = os.pathsep.join([lib, plugin, env.get("PYTHONPATH", "")])
@@ -217,8 +230,13 @@ except ConfigValidationError as e:
         phase="inventory",
         index=3,
     )
+    try:
+        inventory_bin = tool_path(paths, "ansible-inventory")
+    except ToolNotFound as exc:
+        steps.append({"id": "inventory", "ok": False, "message": str(exc)})
+        return CommandResult(ok=False, error=str(exc), data=data, code=1)
     rc = subprocess.run(
-        [tool_path(paths, "ansible-inventory"), "--list"],
+        [inventory_bin, "--list"],
         cwd=str(paths.spa_home),
         env=env,
         stdout=subprocess.DEVNULL,
@@ -383,14 +401,19 @@ def run(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Validate splunk_config.yml")
     parser.add_argument("--check-licenses", action="store_true")
     parser.add_argument("--splunk-config-aws", action="store_true")
-    parser.add_argument("config", nargs="?", help="Path to splunk_config.yml")
+    parser.add_argument(
+        "--config",
+        metavar="FILE",
+        help="Validate this file instead of the environment config",
+    )
     args = parser.parse_args(argv)
     result = validate_env(
         config=args.config,
         check_licenses=args.check_licenses,
         splunk_config_aws=args.splunk_config_aws,
     )
-    sys.stdout.write(format_validate_text(result))
-    if result.error:
+    text = format_validate_text(result)
+    sys.stdout.write(text)
+    if result.error and result.error not in text:
         print(result.error, file=sys.stderr)
     return result.code

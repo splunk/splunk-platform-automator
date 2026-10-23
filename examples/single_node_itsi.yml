@@ -42,7 +42,7 @@ splunk_defaults:
   splunk_download:
     splunk: true
     splunkforwarder: true
-  # splunk_admin_password: 'splunklab'
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
   # ITSI needs an Enterprise and an ITSI license in the Software directory.
   splunk_license_file:
     - Splunk_Enterprise.lic

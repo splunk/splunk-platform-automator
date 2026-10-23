@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 import re
 import ssl
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -19,8 +21,30 @@ from xml.etree import ElementTree
 API_ROOT = "https://splunkbase.splunk.com/api/v1"
 LOGIN_URL = "https://splunkbase.splunk.com/api/account:login"
 DEFAULT_TIMEOUT = 60
+MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024
 
 _ID_IN_XML = re.compile(r"<id>([^<]+)</id>", re.IGNORECASE)
+
+
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Never forward a Splunkbase token across origins or an HTTPS downgrade."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        old = urllib.parse.urlparse(req.full_url)
+        new = urllib.parse.urlparse(newurl)
+        if old.scheme == "https" and new.scheme != "https":
+            return None
+        redirected = super().redirect_request(
+            req, fp, code, msg, headers, newurl
+        )
+        if redirected is None:
+            return None
+        old_origin = (old.scheme.lower(), (old.hostname or "").lower(), old.port)
+        new_origin = (new.scheme.lower(), (new.hostname or "").lower(), new.port)
+        if old_origin != new_origin:
+            redirected.remove_header("X-Auth-Token")
+            redirected.remove_header("Authorization")
+        return redirected
 
 
 class SplunkbaseError(RuntimeError):
@@ -40,6 +64,13 @@ class SplunkbaseClient(Protocol):
         self, url: str, headers: Optional[Mapping[str, str]] = None
     ) -> Tuple[int, bytes]: ...
 
+    def download_to(
+        self,
+        url: str,
+        dest: Any,
+        headers: Optional[Mapping[str, str]] = None,
+    ) -> int: ...
+
 
 class UrllibSplunkbaseClient:
     """Default client. Does not attach Splunkbase credentials to GET search/info."""
@@ -48,7 +79,8 @@ class UrllibSplunkbaseClient:
         self.timeout = timeout
         ctx = ssl.create_default_context()
         self._opener = urllib.request.build_opener(
-            urllib.request.HTTPSHandler(context=ctx)
+            _SafeRedirectHandler(),
+            urllib.request.HTTPSHandler(context=ctx),
         )
 
     def _request(
@@ -89,6 +121,58 @@ class UrllibSplunkbaseClient:
         self, url: str, headers: Optional[Mapping[str, str]] = None
     ) -> Tuple[int, bytes]:
         return self._request(url, headers=headers)
+
+    def download_to(
+        self,
+        url: str,
+        dest: Any,
+        headers: Optional[Mapping[str, str]] = None,
+    ) -> int:
+        """Stream a bounded response to disk without retaining the archive."""
+        hdrs = {"User-Agent": "spa-apps"}
+        if headers:
+            hdrs.update(
+                {
+                    key: value
+                    for key, value in headers.items()
+                    if key.lower() != "authorization"
+                }
+            )
+        request = urllib.request.Request(url, headers=hdrs)
+        path = Path(dest)
+        partial: Optional[Path] = None
+        total = 0
+        try:
+            with self._opener.open(request, timeout=self.timeout) as response:
+                status = int(getattr(response, "status", 200) or 200)
+                if status != 200:
+                    return status
+                fd, partial_name = tempfile.mkstemp(
+                    prefix=".%s." % path.name,
+                    suffix=".part",
+                    dir=str(path.parent),
+                )
+                partial = Path(partial_name)
+                with os.fdopen(fd, "wb") as stream:
+                    while True:
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        total += len(chunk)
+                        if total > MAX_DOWNLOAD_BYTES:
+                            raise SplunkbaseError(
+                                "Splunkbase archive exceeds maximum download size"
+                            )
+                        stream.write(chunk)
+            partial.replace(path)
+            return 200
+        except urllib.error.HTTPError as exc:
+            return int(exc.code)
+        except urllib.error.URLError as exc:
+            raise SplunkbaseError("Splunkbase request failed") from exc
+        finally:
+            if partial is not None:
+                partial.unlink(missing_ok=True)
 
 
 ENV_USERNAME = "SPLUNKBASE_USERNAME"
@@ -255,9 +339,17 @@ def download_release(
     """Write the release archive to dest (path-like). Token is not logged."""
     http = client or UrllibSplunkbaseClient()
     token = _login_token(http, config)
-    status, raw = http.get_bytes(release_url, headers={"X-Auth-Token": token})
+    headers = {"X-Auth-Token": token}
+    if hasattr(http, "download_to"):
+        status = http.download_to(release_url, dest, headers=headers)
+        if status != 200:
+            raise SplunkbaseError("Splunkbase download failed (HTTP %s)" % status)
+        return
+    status, raw = http.get_bytes(release_url, headers=headers)
     if status != 200:
         raise SplunkbaseError("Splunkbase download failed (HTTP %s)" % status)
+    if len(raw) > MAX_DOWNLOAD_BYTES:
+        raise SplunkbaseError("Splunkbase archive exceeds maximum download size")
     path = dest if hasattr(dest, "write_bytes") else None
     if path is not None:
         dest.write_bytes(raw)

@@ -1,6 +1,6 @@
 ---
 # Feature catalog — choose with list/search, inspect with show ID, and request
-# per-key types/constraints only when needed: spa features show ID --keys
+# one level at a time: spa config explain PATH
 # How to add a record: docs/contributing.md#adding-a-configuration-feature
 # Snippets are YAML fragments for the skill (or a later spa config CLI) to write
 # into splunk_config.yml. Do not put secrets in snippets.
@@ -11,12 +11,12 @@ features:
   - id: topology.s1
     title: S1 single node
     kind: topology
+    template: single_node
     sva: S1
     when_to_use: Config-test or a single host with indexer and search_head together.
     when_not_to_use: Clustered or production-like labs; use C1 or D1.
     suggest: spa init --example single_node --provider virtualbox|aws ENV
     keys: [splunk_hosts]
-    merge: replace
     snippet: |
       # topology file examples/topologies/single_node.yml
     related: []
@@ -24,55 +24,56 @@ features:
   - id: topology.d1
     title: D1 standalone indexer and search head
     kind: topology
+    template: idx_sh_uf
     sva: D1
     when_to_use: Separate indexer and SH without clustering.
     when_not_to_use: Need indexer cluster (C1) or SHC (C3).
     suggest: spa init --example idx_sh_uf --provider virtualbox|aws ENV
     keys: [splunk_hosts]
-    merge: replace
 
   - id: topology.c1
     title: C1 cluster manager and indexer cluster
     kind: topology
+    template: cm_2idxc_sh_uf
     sva: C1 / C11
     when_to_use: Single-site IDXC with a standalone search head.
     when_not_to_use: Need SHC (C3) or multisite (M2/M3). M4/M14 stretched SHC is not a lab file.
     suggest: spa init --example cm_2idxc_sh_uf --provider virtualbox|aws ENV
     keys: [splunk_hosts, splunk_idxclusters]
     constraints: "Lab idxc_rf/idxc_sf 2; at least 2 indexer peers."
-    merge: replace
 
   - id: topology.c3
     title: C3 indexer cluster and search head cluster
     kind: topology
+    template: cm_2idxc1site_3shc_uf
     sva: C3 / C13
     when_to_use: IDXC plus a 3-member SHC.
     suggest: spa init --example cm_2idxc1site_3shc_uf --provider virtualbox|aws ENV
     keys: [splunk_hosts, splunk_idxclusters, splunk_shclusters]
-    merge: replace
 
   - id: topology.m2
     title: M2 multisite indexer cluster
     kind: topology
+    template: 4idxc2site_sh
     sva: M2 / M12
     when_to_use: Two indexer sites and a shared search head.
     when_not_to_use: Need per-site search (M3). Lab compromise is a single SH.
     suggest: spa init --example 4idxc2site_sh --provider virtualbox|aws ENV
     keys: [splunk_hosts, splunk_idxclusters]
-    merge: replace
 
   - id: topology.m3
     title: M3 multisite IDXC and SHC
     kind: topology
+    template: cm_4idxc2site_3shc_ds_uf
     sva: M3 / M13
     when_to_use: Multisite indexers plus search head cluster.
     suggest: spa init --example cm_4idxc2site_3shc_ds_uf --provider virtualbox|aws ENV
     keys: [splunk_hosts, splunk_idxclusters, splunk_shclusters]
-    merge: replace
 
   - id: provider.virtualbox
     title: VirtualBox provider
     kind: provider
+    template: virtualbox
     when_to_use: >-
       Local Linux VMs with Vagrant. spa init --provider virtualbox copies these knobs.
       box is the Vagrant box name, memory is MB (minimum 256), cpus at least 1, start_ip is
@@ -103,7 +104,6 @@ features:
       - "splunk_hosts[].virtualbox.synced_folder"
       - "splunk_hosts[].virtualbox.synced_folder[].source"
       - "splunk_hosts[].virtualbox.synced_folder[].target"
-    merge: deep
     snippet: |
       virtualbox:
         box: almalinux/8
@@ -113,6 +113,7 @@ features:
   - id: provider.aws
     title: AWS Terraform provider
     kind: provider
+    template: aws
     when_to_use: EC2 via terraform.aws. Pick region, AMI, instance type, and related live values with spa aws --json (survey, latest-ami, list-instance-types, validate); do not copy a hardcoded cloud catalog.
     when_not_to_use: "Local VirtualBox; leftover top-level aws: is inventory-only."
     suggest: spa init --example TOPOLOGY --provider aws ENV
@@ -148,7 +149,6 @@ features:
       - "splunk_hosts[].terraform.aws.tags"
       - path: "splunk_hosts[].terraform.aws.ssh_username"
         note: Login user must match the AMI. Pair with spa aws --describe-ami.
-    merge: deep
     snippet: |
       terraform:
         aws:
@@ -163,7 +163,6 @@ features:
     kind: setting
     when_not_to_use: "Inventory-only leftover from vagrant-aws. Do not use for provision; use the AWS provider (terraform.aws)."
     keys: [aws]
-    merge: deep
     snippet: |
       # Do not add a top-level aws: provision block. Use terraform.aws.
 
@@ -177,7 +176,6 @@ features:
       minimal block; add keys by merging specific catalog snippets rather than copying this
       empty one.
     keys: [splunk_defaults]
-    merge: deep
     snippet: |
       splunk_defaults: {}
 
@@ -189,7 +187,6 @@ features:
       First line of every splunk_config.yml. It tells Ansible to load SPA's inventory plugin.
       spa init writes this; do not change it.
     keys: [plugin]
-    merge: replace
     snippet: |
       plugin: splunk-platform-automator
 
@@ -203,7 +200,6 @@ features:
       lowercase letters, hyphen or underscore, two uppercase letters. Default in the template
       is en-GB if unset.
     keys: [general, general.url_locale]
-    merge: deep
     snippet: |
       general:
         url_locale: en-US
@@ -219,7 +215,6 @@ features:
       terraform.aws.ssh_username on AWS-provisioned labs.
     when_not_to_use: AWS or VirtualBox labs that spa provision created; those get connection data from inventory after provision.
     keys: [custom, "splunk_hosts[].custom"]
-    merge: deep
     snippet: |
       custom:
         ansible_user: ansible
@@ -275,7 +270,6 @@ features:
       - "splunk_hosts[].os.splunk_group_create"
       - "splunk_hosts[].os.splunk_user_create"
     related: ["setting.os.ubuntu", "setting.ssh_username"]
-    merge: deep
     snippet: |
       os:
         set_hostname: true
@@ -291,7 +285,6 @@ features:
       MAC layer to disable is AppArmor (not SELinux). Otherwise the same keys as os.
     keys: [os.packages, os.disable_apparmor, os.set_hostname]
     related: ["setting.os"]
-    merge: deep
     snippet: |
       os:
         set_hostname: true
@@ -310,7 +303,6 @@ features:
       - path: terraform.aws.ssh_username
         note: Login user must match the AMI (for example ec2-user, ubuntu, or admin). Pair with spa aws --describe-ami.
     related: ["provider.aws", "setting.os"]
-    merge: deep
     snippet: |
       terraform:
         aws:
@@ -326,7 +318,6 @@ features:
       sets splunk_hosts[].splunk_env to one of those names.
     keys: [splunk_defaults.splunk_env_name, splunk_environments, "splunk_environments[].splunk_env_name"]
     related: []
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_env_name: splk
@@ -341,7 +332,6 @@ features:
       10.1.0 when several tarballs are present. Can override per host or per splunk_environments entry.
     keys: [splunk_defaults.splunk_version, "splunk_hosts[].splunk_version", "splunk_environments[].splunk_version"]
     related: ["setting.dirs", "setting.splunk_download"]
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_version: latest
@@ -355,7 +345,6 @@ features:
       machine running spa. VirtualBox AlmaLinux labs are amd64 even on Apple Silicon hosts.
     keys: [splunk_defaults.splunk_architecture, "splunk_hosts[].splunk_architecture"]
     related: ["#74"]
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_architecture: amd64
@@ -368,7 +357,6 @@ features:
       Turns on Splunk Enterprise FIPS at install when the lab must use FIPS-validated crypto.
       Needs a FIPS-capable installer and matching OS packages; not a substitute for OS-level FIPS.
     keys: [splunk_defaults.splunk_fips, "splunk_hosts[].splunk_fips"]
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_fips: true
@@ -383,7 +371,6 @@ features:
       because the installer license agreement is accepted from that file. Incomplete (#65).
     keys: [splunk_defaults.splunk_download, splunk_defaults.splunk_download.splunk, splunk_defaults.splunk_download.splunkforwarder]
     related: ["#65", "setting.dirs"]
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_download:
@@ -395,13 +382,12 @@ features:
     title: Splunk admin password
     kind: setting
     when_to_use: >-
-      Password for the Splunk admin user created at install (roles default to splunklab if
-      unset). Prefer an env or vault lookup. Override per host or per named environment when
-      stacks must not share the password.
+      Password for the Splunk admin user created at install. Required under splunk_defaults.
+      A literal password is valid. Prefer an env or vault lookup. Override per host or per
+      named environment when stacks must not share the password.
     when_not_to_use: Never commit a production password in git; prefer env/vault later (#52).
     keys: [splunk_defaults.splunk_admin_password, "splunk_hosts[].splunk_admin_password", "splunk_environments[].splunk_admin_password"]
     related: ["setting.loginpage"]
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
@@ -416,7 +402,6 @@ features:
       is checked by spa validate and spa licenses. ITSI/ES need matching entitlement files.
     keys: [splunk_defaults.splunk_license_file, splunk_defaults.splunk_license_server, "splunk_hosts[].splunk_license_file", "splunk_environments[].splunk_license_file"]
     related: ["#66"]
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_license_file: Splunk_Enterprise.lic
@@ -432,7 +417,6 @@ features:
       print the name on the login form (splunk_defaults.splunk_loginpage_print_hostname).
     keys: [splunk_defaults.splunk_set_servername, splunk_defaults.splunk_set_default_hostname]
     related: ["setting.loginpage", "setting.os"]
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_set_servername: true
@@ -459,7 +443,6 @@ features:
         note: Turn this off on a shared or internet-facing UI.
       - splunk_defaults.splunk_loginpage_print_roles
     related: ["setting.splunk_admin_password", "setting.hostnames"]
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_loginpage_print_hostname: false
@@ -477,7 +460,6 @@ features:
       cannot ship polkit.
     keys: [splunk_defaults.splunk_use_policykit]
     related: ["setting.os"]
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_use_policykit: true
@@ -491,7 +473,6 @@ features:
       that engine on Enterprise hosts that support it. Leave unset to keep Splunk's default
       for the installed version.
     keys: [splunk_defaults.splunk_kv_store_engine_wiredtiger]
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_kv_store_engine_wiredtiger: true
@@ -506,7 +487,6 @@ features:
       generated app). Prefer a catalog setting when one exists (indexes, SSL, volumes).
       Per-host splunk_hosts[].splunk_conf merges over the defaults.
     keys: [splunk_defaults.splunk_conf, "splunk_hosts[].splunk_conf"]
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_conf:
@@ -528,7 +508,6 @@ features:
       - splunk_defaults.splunk_indexes_default_paths
       - "splunk_environments[].splunk_indexes"
     related: ["setting.volumes"]
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_indexes:
@@ -555,7 +534,6 @@ features:
       - splunk_defaults.splunk_volume_defaults.VolumeDataSize_Free_MB
       - splunk_defaults.splunk_volume_defaults.homePath
       - splunk_defaults.splunk_volume_defaults.coldPath
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_indexer_volumes:
@@ -596,7 +574,6 @@ features:
       - path: splunk_defaults.splunk_volume_defaults.coldPath
         note: Must equal homePath when SmartStore is enabled.
     related: ["setting.volumes"]
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_indexer_volumes:
@@ -641,7 +618,6 @@ features:
         note: When true, provide and verify the output certificate/key material under auth.
       - splunk_defaults.splunk_ssl.outputs.config
     related: ["#69"]
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_ssl:
@@ -664,7 +640,6 @@ features:
       - splunk_defaults.splunk_secret_share.splunk
       - splunk_defaults.splunk_secret_share.splunkforwarder
       - splunk_defaults.splunk_secret_share.equal
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_secret_share:
@@ -684,7 +659,6 @@ features:
       - splunk_defaults.splunk_user
       - splunk_defaults.splunk_group
     related: ["setting.os"]
-    merge: deep
     snippet: |
       splunk_defaults:
         splunk_user: splunk
@@ -701,7 +675,6 @@ features:
       such as ../Software.
     keys: [splunk_dirs, splunk_dirs.splunk_baseconfig_dir, splunk_dirs.splunk_software_dir]
     related: ["setting.baseconfig_save"]
-    merge: deep
     snippet: |
       splunk_dirs:
         splunk_software_dir: ../Software
@@ -721,7 +694,6 @@ features:
       - splunk_apps.splunk_save_baseconfig_apps
       - splunk_apps.splunk_save_serverclass
     related: ["#64", "setting.apps"]
-    merge: deep
     snippet: |
       splunk_apps:
         splunk_save_baseconfig_apps: true
@@ -731,7 +703,7 @@ features:
     title: Splunk app deployment
     kind: setting
     when_to_use: >-
-      Install or remove normal Splunk apps during deploy from Splunkbase (source splunkbase
+      Install or remove normal Splunk apps during deploy from Splunkbase (the default source,
       plus numeric app_id) or from an extracted local folder (source local plus path under
       apps_dir). Each apps[] entry needs name and target_roles (which Splunk roles receive
       it). SPA then picks the target_path: SHC deployer, cluster manager, deployment server,
@@ -743,8 +715,8 @@ features:
       spa init does not compose app lists. Premium ITSI is splunk_app_deployment.apps[].app_id; content
       packs are splunk_app_deployment.apps[].content_pack_apps (library) or
       splunk_app_deployment.apps[].content_pack_api. host_specific_apps is reserved and
-      unimplemented; use target_roles and whitelist filters. Use spa apps search / snippet
-      (#59) to find Splunkbase app_id values; spa config apply is #76. Do not paste Splunkbase
+      unimplemented; use target_roles and whitelist filters. Use spa apps search, then
+      spa apps add to write a selected Splunkbase app_id. Do not paste Splunkbase
       passwords.
     keys:
       - splunk_app_deployment
@@ -764,6 +736,9 @@ features:
           path when the folder name is not the app name. Normal apps need target_roles.
           Optional version (latest or dotted), state (installed or absent), deployment_target
           (auto or direct), serverclass, target_path, and cluster/serverclass filter lists.
+      - path: "splunk_app_deployment.apps[].source"
+        type: string
+        note: Omit for Splunkbase (the default). Set local explicitly for a folder or archive in apps_dir.
       - path: "splunk_app_deployment.apps[].version"
         type: string
         note: latest or a dotted version. Omit to default to latest.
@@ -821,15 +796,12 @@ features:
       - setting.apps.premium.itsi.content_pack.single
       - setting.apps.customizations
       - setting.dirs
-    merge: deep
     snippet: |
       splunk_app_deployment:
         splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
         splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
-        update_mode: merge
         apps:
           - name: Splunk_TA_nix
-            source: splunkbase
             app_id: 833
             target_roles: [search_head, indexer]
 
@@ -877,7 +849,6 @@ features:
         type: list
         note: Not allowed on premium_app entries.
     related: ["setting.apps", "setting.apps.premium.itsi"]
-    merge: deep
     snippet: |
       # premium_app: itsi is the only allowed value. See splunk_app_deployment.apps[].app_id.
       # Do not set premium_app: es.
@@ -934,7 +905,6 @@ features:
       - setting.apps.premium
       - setting.apps.premium.itsi.content_pack
       - setting.apps.premium.itsi.content_pack.single
-    merge: deep
     snippet: |
       splunk_hosts:
         - name: sh1
@@ -1022,7 +992,6 @@ features:
         note: When true, extract the whole library archive; otherwise list content_pack_apps.
       - splunk_app_deployment.apps
     related: ["setting.apps.premium.itsi", "setting.apps.premium.itsi.content_pack.single"]
-    merge: deep
     snippet: |
       splunk_app_deployment:
         apps:
@@ -1089,7 +1058,6 @@ features:
         note: Default false. When true, run the configure playbook even if the pack was already installed.
       - splunk_app_deployment.apps
     related: ["setting.apps.premium.itsi", "setting.apps.premium.itsi.content_pack"]
-    merge: deep
     snippet: |
       splunk_app_deployment:
         apps:
@@ -1134,7 +1102,6 @@ features:
         note: Extra Ansible vars for the playbook. Use lookups for tokens and passwords; never literals.
       - splunk_app_deployment.apps
     related: ["setting.apps"]
-    merge: deep
     snippet: |
       splunk_app_deployment:
         apps:
@@ -1160,7 +1127,6 @@ features:
       similar). Empty object means role defaults. Only for Linux systemd-managed Splunk,
       not Windows UF.
     keys: [splunk_systemd]
-    merge: deep
     snippet: |
       splunk_systemd: {}
 
@@ -1188,7 +1154,6 @@ features:
       - path: "splunk_idxclusters[].idxc_sf"
         note: Single-site search factor; must not exceed the replication factor or peer count.
       - "splunk_idxclusters[].idxc_discovery_password"
-    merge: deep
     snippet: |
       splunk_idxclusters:
         - idxc_name: idxc1
@@ -1210,7 +1175,6 @@ features:
       - "splunk_shclusters[].shc_site"
       - "splunk_shclusters[].shc_password"
       - "splunk_shclusters[].shc_replication_port"
-    merge: deep
     snippet: |
       splunk_shclusters:
         - shc_name: shc1
@@ -1248,7 +1212,6 @@ features:
         note: Also associates search heads with that cluster.
       - "splunk_hosts[].ip_addr"
       - "splunk_hosts[].aws"
-    merge: replace
     snippet: |
       splunk_hosts:
         - name: idx1
@@ -1264,7 +1227,6 @@ features:
       not change routing today. Do not design a lab around them.
     keys: ["splunk_hosts[].splunk_outputs", "splunk_hosts[].splunk_search_peers"]
     related: []
-    merge: deep
     snippet: |
       # Not applied cluster-wide yet. Do not rely on splunk_outputs in config.
 

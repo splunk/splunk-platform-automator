@@ -94,56 +94,167 @@ COMMAND_SCHEMA = {
             "example": "spa init list",
         },
         {
-            "name": "features",
-            "summary": "Look up settings. Agents use search QUERY, then show SELECTOR [--keys]. schema --markdown is a human docs dump, not an agent payload.",
-            "example": "spa --json features search splunk",
+            "name": "config",
+            "summary": "Read, explain, or transactionally edit splunk_config.yml. Agents use config search QUERY, then config explain PATH. Bare spa config exits 2.",
+            "example": "spa --agent config explain",
         },
         {
-            "name": "features list",
-            "summary": "Full feature catalog",
-            "example": "spa features list",
+            "name": "config explain",
+            "summary": "Describe one config path and its immediate fields. A deeper level is a longer path. The same data is the future GUI payload.",
+            "read_only": True,
+            "positionals": [{"name": "PATH", "required": False, "help": "User path such as splunk_hosts or os.packages"}],
+            "example": "spa --agent config explain splunk_hosts",
         },
         {
-            "name": "features search",
-            "summary": "Search the catalog. In zsh, quote a selector that contains [], or omit the brackets.",
-            "positionals": [
-                {"name": "QUERY", "required": True, "help": "Search text"},
-            ],
-            "example": "spa --json features search cluster",
+            "name": "config search",
+            "summary": "Find config paths. Each hit is a path and a one-line description.",
+            "read_only": True,
+            "positionals": [{"name": "QUERY", "required": True, "help": "Search text"}],
+            "example": "spa --agent config search packages",
         },
         {
-            "name": "features show",
-            "summary": "Show one feature. Agents use this after features search.",
-            "positionals": [
-                {"name": "SELECTOR", "required": True, "help": "Schema path or layout id"},
-            ],
-            "flags": [
-                {
-                    "long": "--keys",
-                    "help": "Include per-key types, constraints, guidance, and apply metadata",
-                },
-            ],
-            "example": "spa --json features show splunk_defaults.splunk_ssl --keys",
+            "name": "config keys",
+            "summary": "Catalog coverage of schema keys. Maintainer check, not the discovery walk.",
+            "read_only": True,
+            "example": "spa config keys",
         },
         {
-            "name": "features keys",
-            "summary": "Catalog coverage of schema keys",
-            "example": "spa features keys",
-        },
-        {
-            "name": "features schema",
-            "summary": "Human documentation generation for docs/config.md. Not an agent payload. Agents use features search QUERY, then features show SELECTOR [--keys].",
+            "name": "config schema",
+            "summary": "Human documentation generation for docs/config.md. Not an agent payload. Agents use config search QUERY, then config explain PATH.",
             "flags": [
                 {
                     "long": "--markdown",
                     "help": "Print GitHub-flavored markdown (human stdout only; regenerate docs/config.md)",
                 },
             ],
-            "example": "spa --no-agent features schema --markdown",
+            "example": "spa --no-agent config schema --markdown",
+        },
+        {
+            "name": "config get",
+            "summary": "Read authored config state; pathless agent output is a compact identity outline",
+            "read_only": True,
+            "positionals": [{"name": "PATH", "required": False, "help": "Schema path with optional identity selectors"}],
+            "flags": [
+                {"long": "--effective", "help": "Report the schema default when the path is unset"},
+                {"long": "--full", "help": "Return the full redacted authored document"},
+            ],
+            "example": "spa --agent config get splunk_defaults.splunk_version",
+        },
+        {
+            "name": "config templates",
+            "summary": "List shipped reusable config fragments and their leading summaries",
+            "example": "spa --agent config templates",
+        },
+        {
+            "name": "config set",
+            "summary": "Transactionally replace one schema-backed value",
+            "idempotent": True,
+            "positionals": [
+                {"name": "PATH", "required": True, "help": "Schema path with identity selectors for list items"},
+                {"name": "VALUE", "required": False, "help": "String or strict JSON value"},
+            ],
+            "flags": [
+                {"long": "--value-file", "help": "Read a JSON or YAML 1.2 value"},
+                {"long": "--from-env", "help": "Write an environment lookup for a secret path"},
+                {"long": "--explicit-default", "help": "Author a value equal to its schema default"},
+                {"long": "--dry-run", "help": "Preview without writing"},
+                {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},
+                {"long": "--resolve", "help": "Supply PATH VALUE for an unresolved dependency; repeatable"},
+                {"long": "--resolve-file", "help": "Supply a sparse YAML/JSON dependency fragment"},
+                {"long": "--yes", "short": "-y", "help": "Skip the human confirmation prompt"},
+            ],
+            "example": "spa --agent config set os.time_zone Europe/Berlin",
+        },
+        {
+            "name": "config add",
+            "summary": "Append one new non-app identity-list entry. Fails when that identity already exists.",
+            "idempotent": False,
+            "positionals": [
+                {"name": "SELECTOR", "required": True, "help": "Identity-list selector such as splunk_hosts[name=NAME]"},
+                {"name": "JSON_OBJECT", "required": False, "help": "Strict JSON object for the new entry"},
+            ],
+            "flags": [
+                {"long": "--value-file", "help": "Read a JSON or YAML 1.2 object"},
+                {"long": "--from-env", "help": "FIELD NAME. Write an environment lookup for a secret field; repeatable"},
+                {"long": "--dry-run", "help": "Preview without writing"},
+                {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},
+                {"long": "--resolve", "help": "Supply PATH VALUE for an unresolved dependency; repeatable"},
+                {"long": "--resolve-file", "help": "Supply a sparse YAML/JSON dependency fragment"},
+                {"long": "--yes", "short": "-y", "help": "Skip the human confirmation prompt"},
+            ],
+            "example": "spa --agent config add 'splunk_hosts[name=lm]' '{\"roles\":[\"license_manager\"]}'",
+        },
+        {
+            "name": "config unset",
+            "summary": "Transactionally remove one or more authored paths",
+            "idempotent": True,
+            "positionals": [{"name": "PATH", "required": True, "repeatable": True, "help": "Authored path to remove"}],
+            "flags": [
+                {"long": "--dry-run", "help": "Preview without writing"},
+                {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},
+                {"long": "--resolve", "help": "Supply PATH VALUE for an unresolved dependency; repeatable"},
+                {"long": "--resolve-file", "help": "Supply a sparse YAML/JSON dependency fragment"},
+                {"long": "--yes", "short": "-y", "help": "Skip the human confirmation prompt"},
+            ],
+            "example": "spa --agent config unset os.time_zone",
+        },
+        {
+            "name": "config merge",
+            "summary": "Transactionally merge a partial splunk_config.yml",
+            "idempotent": True,
+            "positionals": [
+                {
+                    "name": "TEMPLATE",
+                    "required": False,
+                    "help": "Shipped fragment name from examples/templates",
+                }
+            ],
+            "flags": [
+                {"long": "--file", "help": "Local YAML or JSON fragment, or - for stdin"},
+                {"long": "--explicit-default", "help": "Author values equal to schema defaults"},
+                {"long": "--dry-run", "help": "Preview without writing"},
+                {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},
+                {"long": "--resolve", "help": "Supply PATH VALUE for an unresolved dependency; repeatable"},
+                {"long": "--resolve-file", "help": "Supply a sparse YAML/JSON dependency fragment"},
+                {"long": "--yes", "short": "-y", "help": "Skip the human confirmation prompt"},
+            ],
+            "example": "spa --agent config merge --file fragment.yml",
+        },
+        {
+            "name": "config topology",
+            "summary": "Replace topology-owned config sections from an example template",
+            "idempotent": True,
+            "positionals": [{"name": "TOPOLOGY", "required": True, "help": "Feature id or topology example stem"}],
+            "flags": [
+                {"long": "--dry-run", "help": "Preview without writing"},
+                {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},
+                {"long": "--resolve", "help": "Supply PATH VALUE for an unresolved dependency; repeatable"},
+                {"long": "--resolve-file", "help": "Supply a sparse YAML/JSON dependency fragment"},
+                {"long": "--yes", "short": "-y", "help": "Skip the human confirmation prompt"},
+            ],
+            "example": "spa --agent config topology topology.c1",
+        },
+        {
+            "name": "config provider",
+            "summary": "Replace provider-owned config sections from an example template",
+            "idempotent": True,
+            "positionals": [{"name": "PROVIDER", "required": True, "help": "Feature id or provider example stem"}],
+            "flags": [
+                {"long": "--dry-run", "help": "Preview without writing"},
+                {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},
+                {"long": "--resolve", "help": "Supply PATH VALUE for an unresolved dependency; repeatable"},
+                {"long": "--resolve-file", "help": "Supply a sparse YAML/JSON dependency fragment"},
+                {"long": "--yes", "short": "-y", "help": "Skip the human confirmation prompt"},
+            ],
+            "example": "spa --agent config provider aws",
         },
         {
             "name": "validate",
             "summary": "Validate splunk_config.yml (schema, Software/baseconfig/local apps, inventory)",
+            "flags": [
+                {"long": "--config", "help": "Validate this file instead of the environment config"},
+            ],
+            "example": "spa --agent validate",
         },
         {"name": "doctor", "summary": "Host prerequisite checks"},
         {
@@ -427,7 +538,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "apps",
-            "summary": "Splunkbase search, an apps[] snippet, or an archive download.",
+            "summary": "Discover, configure, or download Splunk apps and ITSI content packs.",
             "example": "spa --json apps search unix",
         },
         {
@@ -447,6 +558,21 @@ COMMAND_SCHEMA = {
             "example": "spa --json apps search unix",
         },
         {
+            "name": "apps content-packs list",
+            "summary": "Inspect local 5391 archive metadata, or use a temporary authenticated download",
+            "flags": [
+                {
+                    "long": "--version",
+                    "help": "Content Library release to inspect (default latest)",
+                },
+                {
+                    "long": "--archive",
+                    "help": "Inspect a local 5391 archive without environment credentials",
+                },
+            ],
+            "example": "spa --json apps content-packs list 5391",
+        },
+        {
             "name": "apps snippet",
             "summary": "Print apps[] YAML for a Splunkbase app_id or local custom app folder",
             "flags": [
@@ -461,8 +587,85 @@ COMMAND_SCHEMA = {
                     "long": "--customize",
                     "help": "Include matching curated apps_playbooks customizations in the YAML",
                 },
+                {"long": "--set", "help": "Set another schema-backed app FIELD VALUE; repeatable"},
             ],
             "example": "spa --json apps snippet 833",
+        },
+        {
+            "name": "apps add",
+            "summary": "Idempotently add or update one apps[] entry; edits config and does not deploy",
+            "idempotent": True,
+            "flags": [
+                {
+                    "long": "--version",
+                    "help": "Release or local archive version to author (default latest)",
+                },
+                {
+                    "long": "--roles",
+                    "help": "Comma-separated target_roles; required only for normal apps and rejected for ITSI/content packs",
+                },
+                {
+                    "long": "--source",
+                    "help": "Splunkbase metadata, or a folder/archive already in apps_dir (default splunkbase)",
+                },
+                {"long": "--local", "help": "Shorthand for --source local"},
+                {
+                    "long": "--customize",
+                    "help": "Attach an exact matching curated SPA playbook to this top-level app entry",
+                },
+                {
+                    "long": "--set",
+                    "help": "Set another schema-backed app FIELD from strict JSON; repeatable",
+                },
+                {
+                    "long": "--content-pack",
+                    "help": "5391 only: add exact bundled folder NAME; repeatable and mutually exclusive with --install-all-content-packs",
+                },
+                {
+                    "long": "--install-all-content-packs",
+                    "help": "5391 only: install every bundled pack; mutually exclusive with --content-pack",
+                },
+                {
+                    "long": "--explicit-default",
+                    "help": "Write omit-safe default values that SPA normally leaves absent",
+                },
+                {
+                    "long": "--dry-run",
+                    "help": "Plan dependencies and show the result without prompting or writing",
+                },
+                {
+                    "long": "--expect-revision",
+                    "help": "Write only when config still has this SHA-256 revision",
+                },
+                {
+                    "long": "--resolve",
+                    "help": "Supply unresolved dependency PATH VALUE using strict JSON; repeatable",
+                },
+                {
+                    "long": "--resolve-file",
+                    "help": "Supply unresolved dependencies from sparse YAML/JSON; - reads stdin",
+                },
+                {
+                    "long": "--yes",
+                    "short": "-y",
+                    "help": "Skip human confirmation; agent config edits never prompt",
+                },
+            ],
+            "example": "spa --agent apps add 833 --roles search_head,indexer",
+        },
+        {
+            "name": "apps remove",
+            "summary": "Remove an authored app entry; does not uninstall deployed files",
+            "idempotent": True,
+            "flags": [
+                {"long": "--content-pack", "help": "Remove one named pack under Content Library 5391"},
+                {"long": "--dry-run", "help": "Preview without writing"},
+                {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},
+                {"long": "--resolve", "help": "Supply PATH VALUE for an unresolved dependency; repeatable"},
+                {"long": "--resolve-file", "help": "Supply a sparse YAML/JSON dependency fragment"},
+                {"long": "--yes", "short": "-y", "help": "Skip the human confirmation prompt"},
+            ],
+            "example": "spa --agent apps remove 833",
         },
         {
             "name": "apps download",

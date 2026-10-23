@@ -2,7 +2,7 @@
 
 This page is for contributors changing the Splunk Platform Automator framework. Operators should use the [user guide](user-guide.md). Command and setting reference material is generated in [commands.md](commands.md) and [config.md](config.md); do not duplicate or hand-edit it.
 
-Related guides cover [installation](install.md), [migration](migrate.md), [apps](apps.md), [AWS](aws.md), [secrets](secrets.md), and detailed [contributing procedures](contributing.md). Future product work belongs in the [ROADMAP](../ROADMAP.md).
+Related guides cover [installation](install.md), [migration](migrate.md), [apps](apps.md), [AWS](aws.md), [secrets](secrets.md), the normative [config-editing.md](config-editing.md) contract, and detailed [contributing procedures](contributing.md). Future product work belongs in the [ROADMAP](../ROADMAP.md).
 
 ## Current execution architecture
 
@@ -104,6 +104,14 @@ flowchart LR
 
 Framework defaults live under [`defaults/`](../defaults). Framework Ansible variables live under [`ansible/group_vars/`](../ansible/group_vars). Generated inventory and environment state belong under `SPA_ENV_DIR`, not in the framework tree. The schema commonly allows extra keys, so repository-wide rejection of unknown configuration keys is not a current invariant.
 
+Config mutations use one transaction path: parse an explicit operation, lock
+and read the current document, build and validate one in-memory candidate,
+produce a redacted preview, then either stop for dry-run or atomically replace
+the file. The detailed command, merge, dependency, serialization, app, and
+security requirements are the normative
+[config-editing.md](config-editing.md) contract. A change to that process must
+update its contract ID and mapped test in the same test-driven cycle.
+
 ## Ansible execution architecture
 
 `spa deploy` resolves [`ansible/deploy_site.yml`](../ansible/deploy_site.yml). Its import order is the deployment pipeline: preflight, common setup, control link, software installation, Splunk roles, configuration, other roles, and app deployment. Preserve that order when adding a stage whose preconditions depend on an earlier stage.
@@ -192,6 +200,49 @@ Use the narrowest gate that proves the changed contract:
 
 A parser or documentation change does not need an AWS run. Test marker definitions are in [`tests/pytest.ini`](../tests/pytest.ini).
 
+## Test-driven development
+
+Every feature, bug fix, refactor, and behavior change uses red-green-refactor.
+Do not write production code until a focused test for that behavior has run and
+failed because the behavior is missing. A test that passes on its first run
+does not prove the new behavior. Delete production code written before its
+failing test and implement it again from the test.
+
+Use one observable behavior per cycle:
+
+1. Write a clearly named test against public behavior where practical.
+2. Run that test alone and verify the expected failure. Fix collection errors,
+   typos, or unrelated failures until the test is genuinely red.
+3. Write the smallest production change that makes it pass.
+4. Run the focused test and existing tests for every touched module.
+5. Refactor only while those tests remain green; refactoring adds no behavior.
+
+Close a feature slice only after `./tests/run_local_tests.sh` passes. Report a
+pre-existing failure by name instead of omitting it. Generated documentation is
+regenerated only after its drift test has gone red. Documentation and skill
+contracts start with a failing assertion when a test can express the
+requirement. Ask before making an exception; a throwaway prototype is deleted
+and is never adapted into production.
+
+## Feature completion review
+
+A feature is not complete and does not enter the commit, pull-request, or merge
+steps until it passes an independent whole-change review:
+
+1. Build a checklist from the issue, accepted plan, and any normative contract.
+   Every acceptance criterion needs a test that was observed failing before its
+   production implementation.
+2. Compare the checklist with the entire branch diff, public command and schema
+   surfaces, documentation, and tests. A green suite alone is not proof that
+   every requirement exists.
+3. Have an independent reviewer inspect the complete diff for missing behavior,
+   untested branches, contradictory documentation, and exposed passwords,
+   tokens, private keys, or certificates.
+4. Fix every confirmed finding with a new red-green-refactor cycle and rerun
+   the required local gates.
+5. Proceed only when no required finding remains. Record deferred minor
+   findings explicitly.
+
 ## Feature development lifecycle
 
 The base branch is the branch from which the feature branch was created. It may be `distribution`, `master`, or another integration branch; never infer it from a fixed name.
@@ -203,7 +254,11 @@ Before implementation:
 3. Record the base branch in the plan or working context. If it cannot be determined unambiguously, ask before opening a pull request.
 4. Do not commit until the user explicitly authorizes commits.
 
-Develop and verify on the feature branch. Keep the issue, `[Unreleased]` changelog entry, and ROADMAP status aligned with the implemented scope.
+Develop and verify on the feature branch using
+[test-driven development](#test-driven-development). Keep the issue,
+`[Unreleased]` changelog entry, and ROADMAP status aligned with the implemented
+scope. Complete the [feature completion review](#feature-completion-review)
+before starting the ship steps below.
 
 When the user says the feature is complete, concluded, or ready to ship, finish it without requiring them to enumerate the integration steps:
 

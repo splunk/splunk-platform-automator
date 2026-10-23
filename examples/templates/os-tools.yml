@@ -1,0 +1,5 @@
+# Add common operating-system utility packages.
+os:
+  packages:
+    - acl
+    - polkit

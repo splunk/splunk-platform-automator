@@ -88,6 +88,115 @@ def test_create_without_install(tmp_path):
     assert (venv / "bin" / "activate").is_file()
 
 
+def _python_band_stubs(tmp_path: Path) -> Path:
+    """A python3 that reports itself as 3.15, plus a real python3.14."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    stub = bindir / "python3"
+    stub.write_text(
+        "#!/bin/bash\n"
+        'if [[ "$1" == "-m" ]]; then echo created-with-3.15; exit 99; fi\n'
+        'if [[ "$1" == "-c" && "$2" == *"(3, 15)"* ]]; then echo new; exit 0; fi\n'
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+    (bindir / "python3.14").symlink_to(sys.executable)
+    return bindir
+
+
+def test_create_uses_python_3_14_when_python3_is_too_new_for_ansible(tmp_path):
+    bindir = _python_band_stubs(tmp_path)
+    venv = tmp_path / "venv"
+    result = _run(
+        ["--create", "--no-install", "--dir", str(venv)],
+        env={"PATH": "%s%s/usr/bin%s/bin" % (bindir, os.pathsep, os.pathsep)},
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "created-with-3.15" not in result.stdout + result.stderr
+    assert "3.15" in result.stderr
+    assert (venv / "bin" / "activate").is_file()
+    cfg = (venv / "pyvenv.cfg").read_text(encoding="utf-8")
+    assert "3.14" in cfg
+
+
+def test_explicit_python_3_15_is_rejected(tmp_path):
+    bindir = _python_band_stubs(tmp_path)
+    venv = tmp_path / "venv"
+    result = _run(
+        ["--create", "--no-install", "--dir", str(venv), "--python", str(bindir / "python3")],
+        env={"PATH": "%s%s/usr/bin%s/bin" % (bindir, os.pathsep, os.pathsep)},
+    )
+    assert result.returncode != 0
+    assert "3.15" in result.stderr
+    assert "python3.14" in result.stderr
+    assert not venv.exists()
+
+
+def test_broken_ansible_import_asks_for_a_rebuild(tmp_path):
+    from spa.executil import ansible_controller_problem
+
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    python = venv / "bin" / "python3"
+    python.write_text(
+        "#!/bin/sh\n"
+        'case "$2" in\n'
+        "  *ansible.cli*) echo broken >&2; exit 1 ;;\n"
+        "  *) echo 3.15 ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    python.chmod(0o755)
+    message = ansible_controller_problem(venv)
+    assert message is not None
+    assert "Python 3.15" in message
+    assert "spa venv --shared --rebuild --yes" in message
+    python.write_text("#!/bin/sh\necho 3.14\n", encoding="utf-8")
+    ansible_controller_problem.cache_clear()
+    assert ansible_controller_problem(venv) is None
+
+
+def test_reinstall_checks_that_ansible_can_start_before_galaxy(tmp_path):
+    venv = tmp_path / "venv"
+    bin_dir = venv / "bin"
+    bin_dir.mkdir(parents=True)
+    (bin_dir / "activate").write_text(
+        'PATH="%s:$PATH"\nexport PATH\n' % bin_dir, encoding="utf-8"
+    )
+    python = bin_dir / "python"
+    python.write_text(
+        "#!/bin/sh\n"
+        'case "$2" in\n'
+        "  *ansible.cli*) exit 1 ;;\n"
+        "  *) echo 'Python 3.15' ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    python.chmod(0o755)
+    for name in ("pip", "ansible-inventory"):
+        tool = bin_dir / name
+        tool.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        tool.chmod(0o755)
+    galaxy_marker = tmp_path / "galaxy-ran"
+    galaxy = bin_dir / "ansible-galaxy"
+    galaxy.write_text(
+        '#!/bin/sh\ntouch "$GALAXY_MARKER"\n', encoding="utf-8"
+    )
+    galaxy.chmod(0o755)
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("example-package\n", encoding="utf-8")
+
+    result = _run(
+        ["--reinstall", "--dir", str(venv), "--requirements", str(requirements)],
+        env={"GALAXY_MARKER": str(galaxy_marker)},
+    )
+    assert result.returncode != 0
+    assert "Ansible cannot start" in result.stderr
+    assert "python3.14" in result.stderr
+    assert not galaxy_marker.exists()
+
+
 def test_run_venv_script_streams_progress_and_keeps_pip_in_the_log(tmp_path):
     from spa.executil import run_venv_script
 
@@ -558,3 +667,8 @@ def test_run_venv_wrapper_uses_tests_venv():
         cwd=PROJECT_ROOT,
     )
     assert result.returncode == 0
+
+
+def test_test_requirements_include_the_config_editor_yaml_library():
+    text = (PROJECT_ROOT / "tests" / "requirements.txt").read_text(encoding="utf-8")
+    assert "ruamel.yaml" in text

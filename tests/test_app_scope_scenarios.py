@@ -97,7 +97,9 @@ def _ensure_software_stubs(stub_dir: Path) -> None:
             path.write_text("# CI stub\n", encoding="utf-8")
 
 
-def _run_scope_playbook(scenario_name: str, scope_output_path: Path) -> subprocess.CompletedProcess:
+def _run_scope_playbook(
+    scenario_name: str, scope_output_path: Path, unset_env: tuple[str, ...] = ()
+) -> subprocess.CompletedProcess:
     """Run debug_app_scope.yml with -i <scenario_config> -e run_scope_locally=true etc."""
     root = _project_root()
     playbook = root / "ansible" / "verification" / "debug_app_scope.yml"
@@ -129,7 +131,10 @@ def _run_scope_playbook(scenario_name: str, scope_output_path: Path) -> subproce
         "ANSIBLE_REMOTE_TEMP": str(remote_tmp),
         "SPA_BASECONFIG_DIR": str(stub_software),
         "SPA_SOFTWARE_DIR": str(stub_software),
+        "SPLUNK_ADMIN_PASSWORD": "scenario-admin",
     }
+    for name in unset_env:
+        env.pop(name, None)
     collections_dir = root / "tests" / ".collections"
     if collections_dir.is_dir():
         existing = env.get("ANSIBLE_COLLECTIONS_PATH", "")
@@ -207,6 +212,13 @@ def test_scenario_scope_playbook_succeeds(scenario_name: str):
         f"debug_app_scope.yml failed for scenario {scenario_name!r}"
     )
     assert scope_path.is_file(), f"Scope output not written: {scope_path}"
+
+
+def test_inventory_names_unset_admin_password_lookup(tmp_path):
+    """CFG-SEC-003. A blank resolved password names the unset variable."""
+    result = _run_scope_playbook("ds_only", tmp_path / "scope.json", unset_env=("SPLUNK_ADMIN_PASSWORD",))
+    assert result.returncode != 0
+    assert "are not set: SPLUNK_ADMIN_PASSWORD" in result.stderr
 
 
 @pytest.mark.parametrize("scenario_name", _collect_scenario_names())

@@ -5,7 +5,7 @@ Run from **repository root** after writing `config/splunk_config.yml`.
 ## Primary script
 
 ```bash
-spa validate [path/to/splunk_config.yml]
+spa validate [--config path/to/splunk_config.yml]
 ```
 
 Default path: `config/splunk_config.yml`.
@@ -26,7 +26,7 @@ the selected apps. It warns when expiration is within 30 days or cannot be
 determined:
 
 ```bash
-spa validate --check-licenses config/splunk_config.yml
+spa validate --check-licenses --config config/splunk_config.yml
 ```
 
 Or directly:
@@ -40,7 +40,7 @@ spa licenses --config config/splunk_config.yml --json
 When credentials are available:
 
 ```bash
-spa validate --splunk-config-aws config/splunk_config.yml
+spa validate --splunk-config-aws --config config/splunk_config.yml
 ```
 
 Parses `terraform.aws` from the YAML and runs `spa aws --validate`.

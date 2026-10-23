@@ -1,15 +1,18 @@
-"""spa apps search / snippet / download (mocked Splunkbase HTTP)."""
+"""spa apps discovery, entry construction, and download (mocked HTTP)."""
 
 from __future__ import annotations
 
 import io
 import json
+import secrets
 import sys
 import tarfile
+import urllib.request
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pytest
+from ruamel.yaml import YAML
 
 from spa_testutil import LIB, PROJECT_ROOT, run_spa, write_min_env
 
@@ -21,13 +24,15 @@ from spa.api import open_session  # noqa: E402
 from spa.apps import (  # noqa: E402
     AppsError,
     ITE_WORK_ERROR,
+    content_pack_catalog,
     download,
     format_search_text,
+    inspect_content_pack_archive,
     search,
     snippet,
     summarize,
 )
-from spa.splunkbase import SplunkbaseError  # noqa: E402
+from spa.splunkbase import SplunkbaseError, _SafeRedirectHandler  # noqa: E402
 
 
 def _ta(uid=833, **extra):
@@ -182,6 +187,206 @@ def _tgz(name: str, *, unsafe_name: Optional[str] = None) -> bytes:
     return output.getvalue()
 
 
+def _content_library_tgz(*, unsafe_name: Optional[str] = None) -> bytes:
+    output = io.BytesIO()
+    configs = {
+        "DA-ITSI-CP-nix/default/app.conf": (
+            "[launcher]\n"
+            "version = 3.2.1\n"
+            "description = Monitor Unix and Linux infrastructure.\n"
+            "[ui]\n"
+            "label = Unix and Linux\n"
+        ),
+        "DA-ITSI-CP-windows/default/app.conf": (
+            "[launcher]\n"
+            "version = 4.5.6\n"
+            "[ui]\n"
+            "label = Microsoft Windows\n"
+        ),
+        "DA-ITSI-ContentLibrary/default/app.conf": "[launcher]\nversion = 2.0.0\n",
+    }
+    with tarfile.open(fileobj=output, mode="w:gz") as bundle:
+        for path, text in configs.items():
+            payload = text.encode("utf-8")
+            member = tarfile.TarInfo(path)
+            member.size = len(payload)
+            bundle.addfile(member, io.BytesIO(payload))
+        if unsafe_name:
+            payload = b"unsafe"
+            member = tarfile.TarInfo(unsafe_name)
+            member.size = len(payload)
+            bundle.addfile(member, io.BytesIO(payload))
+    return output.getvalue()
+
+
+def test_content_pack_archive_is_authoritative_and_enriched(tmp_path):
+    archive = tmp_path / "DA-ITSI-ContentLibrary_2.0.0.tgz"
+    archive.write_bytes(_content_library_tgz())
+
+    packs = inspect_content_pack_archive(archive, spa_home=PROJECT_ROOT)
+
+    assert [row["name"] for row in packs] == [
+        "DA-ITSI-CP-nix",
+        "DA-ITSI-CP-windows",
+    ]
+    nix = packs[0]
+    assert nix["title"] == "Unix and Linux"
+    assert nix["summary"] == "Monitor Unix and Linux infrastructure."
+    assert nix["version"] == "3.2.1"
+    assert nix["spa_automation"]["hook"] == "run_playbook_after_restart"
+    assert "Wire Unix content pack" in nix["spa_automation"]["summary"]
+    assert nix["spa_automation"]["prerequisites"] == ["Splunk_TA_nix"]
+    assert nix["command"] == (
+        "spa apps add 5391 --content-pack DA-ITSI-CP-nix --yes"
+    )
+
+
+def test_content_pack_archive_rejects_unsafe_members(tmp_path):
+    archive = tmp_path / "unsafe.tgz"
+    archive.write_bytes(_content_library_tgz(unsafe_name="../outside"))
+    with pytest.raises(AppsError, match="unsafe archive path"):
+        inspect_content_pack_archive(archive, spa_home=PROJECT_ROOT)
+
+
+def test_content_pack_archive_rejects_command_like_folder_name(tmp_path):
+    output = io.BytesIO()
+    with tarfile.open(fileobj=output, mode="w:gz") as bundle:
+        payload = b"[launcher]\nversion = 1\n"
+        member = tarfile.TarInfo(
+            "DA-ITSI-CP-nix;touch-pwned/default/app.conf"
+        )
+        member.size = len(payload)
+        bundle.addfile(member, io.BytesIO(payload))
+    archive = tmp_path / "unsafe-name.tgz"
+    archive.write_bytes(output.getvalue())
+    with pytest.raises(AppsError, match="invalid content pack folder"):
+        inspect_content_pack_archive(archive, spa_home=PROJECT_ROOT)
+
+
+def test_content_pack_catalog_prefers_matching_local_archive(tmp_path):
+    archive = tmp_path / "DA-ITSI-ContentLibrary_2.0.0.tgz"
+    archive.write_bytes(_content_library_tgz())
+    data = content_pack_catalog(
+        5391,
+        version="2.0.0",
+        apps_dir=tmp_path,
+        spa_home=PROJECT_ROOT,
+        client=FakeClient(by_id={5391: _library()}),
+    )
+    assert data["app_id"] == 5391
+    assert data["version"] == "2.0.0"
+    assert data["source"] == "local_archive"
+    assert data["total_matches"] == 2
+    assert data["truncated"] is False
+    assert len(data["packs"]) == 2
+
+
+def test_content_pack_catalog_accepts_latest_local_spl_archive(tmp_path):
+    archive = tmp_path / "DA-ITSI-ContentLibrary_2.0.0.spl"
+    archive.write_bytes(_content_library_tgz())
+    data = content_pack_catalog(
+        5391,
+        apps_dir=tmp_path,
+        spa_home=PROJECT_ROOT,
+        client=FakeClient(by_id={}),
+    )
+    assert data["source"] == "local_archive"
+    assert data["version"] == "2.0.0"
+
+
+def test_content_pack_catalog_uses_temporary_authenticated_download(tmp_path, monkeypatch):
+    monkeypatch.setenv("SPLUNKBASE_USERNAME", "user@example.com")
+    monkeypatch.setenv("SPLUNKBASE_PASSWORD", secrets.token_urlsafe(24))
+    client = FakeClient(
+        by_id={5391: _library()},
+        archive=_content_library_tgz(),
+    )
+    data = content_pack_catalog(
+        5391,
+        apps_dir=tmp_path,
+        spa_home=PROJECT_ROOT,
+        client=client,
+    )
+    assert data["source"] == "temporary_download"
+    assert data["version"] == "2.0.0"
+    assert not list(tmp_path.glob("*.tgz"))
+    assert client.login_fields
+
+
+def test_content_pack_catalog_rejects_download_over_transport_limit(tmp_path, monkeypatch):
+    monkeypatch.setenv("SPLUNKBASE_USERNAME", "user@example.com")
+    monkeypatch.setenv("SPLUNKBASE_PASSWORD", secrets.token_urlsafe(24))
+    monkeypatch.setattr("spa.splunkbase.MAX_DOWNLOAD_BYTES", 1)
+    with pytest.raises(SplunkbaseError, match="maximum download size"):
+        content_pack_catalog(
+            5391,
+            apps_dir=tmp_path,
+            spa_home=PROJECT_ROOT,
+            client=FakeClient(
+                by_id={5391: _library()},
+                archive=_content_library_tgz(),
+            ),
+        )
+
+
+def test_content_pack_catalog_refuses_lookalike_download_host(tmp_path):
+    library = _library()
+    library["release"]["path"] = (
+        "https://splunkbase.splunk.com.evil.example/app/5391/download/"
+    )
+    with pytest.raises(AppsError, match="Refusing download URL host"):
+        content_pack_catalog(
+            5391,
+            apps_dir=tmp_path,
+            spa_home=PROJECT_ROOT,
+            client=FakeClient(by_id={5391: library}),
+        )
+
+
+def test_authenticated_redirect_drops_token_across_origins_and_https_downgrade():
+    handler = _SafeRedirectHandler()
+    request = urllib.request.Request(
+        "https://splunkbase.splunk.com/download",
+        headers={"X-Auth-Token": secrets.token_urlsafe(24)},
+    )
+    redirected = handler.redirect_request(
+        request,
+        None,
+        302,
+        "Found",
+        {},
+        "https://downloads.example/archive.tgz",
+    )
+    assert redirected is not None
+    assert redirected.get_header("X-Auth-Token") is None
+    assert (
+        handler.redirect_request(
+            request,
+            None,
+            302,
+            "Found",
+            {},
+            "http://splunkbase.splunk.com/archive.tgz",
+        )
+        is None
+    )
+
+
+def test_content_pack_archive_rejects_malformed_archive(tmp_path):
+    archive = tmp_path / "broken.tgz"
+    archive.write_bytes(b"not an archive")
+    with pytest.raises(AppsError, match="Could not inspect"):
+        inspect_content_pack_archive(archive, spa_home=PROJECT_ROOT)
+
+
+def test_content_pack_archive_enforces_expanded_size_limit(tmp_path, monkeypatch):
+    archive = tmp_path / "large-expanded.tgz"
+    archive.write_bytes(_content_library_tgz())
+    monkeypatch.setattr("spa.apps.MAX_ARCHIVE_EXPANDED_BYTES", 1)
+    with pytest.raises(AppsError, match="expands beyond"):
+        inspect_content_pack_archive(archive, spa_home=PROJECT_ROOT)
+
+
 def test_summarize_truncates_without_html():
     text = "<p>" + ("word " * 80) + "</p>"
     out = summarize(text, limit=40)
@@ -319,6 +524,12 @@ def test_snippet_ta_comments_and_folder_name():
     assert "password" not in text.lower()
 
 
+def test_snippet_omits_default_splunkbase_source():
+    """CFG-APP-002: generated Splunkbase entries omit the default source."""
+    data = snippet(833, roles=["indexer"], client=FakeClient(by_id={833: _ta()}))
+    assert "source: splunkbase" not in data["snippet"]
+
+
 def test_snippet_comment_is_title_only():
     data = snippet(833, client=FakeClient(by_id={833: _ta()}))
     comments = [line for line in data["snippet"].splitlines() if line.startswith("#")]
@@ -327,14 +538,9 @@ def test_snippet_comment_is_title_only():
     assert "rapid insights" not in data["snippet"]
 
 
-def test_snippet_itsi_premium_no_target_roles():
-    data = snippet(1841, roles=["search_head"], client=FakeClient(by_id={1841: _itsi()}))
-    text = data["snippet"]
-    assert "premium_app: itsi" in text
-    assert "  target_roles:" not in text
-    assert "--roles is ignored" in text
-    assert data["kind"] == "premium_itsi"
-    assert data["name"] == "Splunk IT Service Intelligence"
+def test_snippet_itsi_rejects_target_roles():
+    with pytest.raises(AppsError, match="--roles is not valid"):
+        snippet(1841, roles=["search_head"], client=FakeClient(by_id={1841: _itsi()}))
 
 
 def test_snippet_content_library():
@@ -659,9 +865,15 @@ def test_cli_help_and_schema():
     help_result = run_spa(["--no-agent", "apps", "--help"])
     assert help_result.returncode == 0, help_result.stderr
     assert "search" in help_result.stdout
+    assert "content-packs" in help_result.stdout
     schema = json.loads(run_spa(["agent", "schema"]).stdout)
     names = {row["name"] for row in schema["data"]["commands"]}
-    assert {"apps search", "apps snippet", "apps download"} <= names
+    assert {
+        "apps search",
+        "apps snippet",
+        "apps content-packs list",
+        "apps download",
+    } <= names
     download_row = next(row for row in schema["data"]["commands"] if row["name"] == "apps download")
     assert download_row["requires_confirmation"] is True
     assert "--roles" not in {flag["long"] for flag in download_row.get("flags", [])}
@@ -678,6 +890,78 @@ def test_cli_help_and_schema():
     assert "--source {splunkbase,local}" in snippet_help.stdout
     assert "--local" in snippet_help.stdout
     assert "--customize" in snippet_help.stdout
+    add_help = run_spa(["--no-agent", "apps", "add", "--help"])
+    assert add_help.returncode == 0, add_help.stderr
+    for phrase in (
+        "App kinds:",
+        "Normal app",
+        "ITSI 1841",
+        "Content Library 5391",
+        "Recognized single pack",
+        "edits splunk_config.yml but does not deploy",
+        "spa apps content-packs list 5391",
+        "--content-pack NAME",
+        "mutually exclusive",
+        "strict JSON",
+        "spa validate",
+        "spa deploy --yes",
+    ):
+        assert phrase in add_help.stdout
+    assert "Splunkbase app ID or local app folder name" in add_help.stdout
+
+
+def test_cli_content_pack_catalog_from_explicit_archive(tmp_path, capsys):
+    archive = tmp_path / "library.tgz"
+    archive.write_bytes(_content_library_tgz())
+    from spa.cli import _run
+
+    code = _run(
+        [
+            "--agent",
+            "apps",
+            "content-packs",
+            "list",
+            "5391",
+            "--archive",
+            str(archive),
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["data"]["source"] == "archive"
+    assert payload["data"]["version"] == "2.0.0"
+    assert payload["data"]["packs"][0]["name"] == "DA-ITSI-CP-nix"
+
+    code = _run(
+        [
+            "--no-agent",
+            "apps",
+            "content-packs",
+            "list",
+            "5391",
+            "--archive",
+            str(archive),
+        ]
+    )
+    text = capsys.readouterr().out
+    assert code == 0
+    assert "DA-ITSI-CP-nix" in text
+    assert "Unix and Linux" in text
+    assert "SPA automation:" in text
+    assert "spa apps add 5391 --content-pack DA-ITSI-CP-nix --yes" in text
+
+
+def test_explicit_content_pack_archive_rejects_mismatched_version(tmp_path):
+    archive = tmp_path / "library.tgz"
+    archive.write_bytes(_content_library_tgz())
+    with pytest.raises(AppsError, match="does not match archive version"):
+        content_pack_catalog(
+            5391,
+            version="9.9.9",
+            archive=archive,
+            spa_home=PROJECT_ROOT,
+        )
 
 
 def test_cli_local_flag_is_shorthand_for_source_local(tmp_path, monkeypatch, capsys):
@@ -699,6 +983,43 @@ def test_cli_local_flag_is_shorthand_for_source_local(tmp_path, monkeypatch, cap
     assert code == 0, out
     assert "source: local" in out
     assert "path: Splunk_TA_nix" in out
+
+
+def test_cli_agent_add_and_remove_edit_config_without_yes(tmp_path, monkeypatch, capsys):
+    """CFG-CLI-003 CFG-APP-003 CFG-APP-008."""
+    env = write_min_env(tmp_path / "env")
+    config = env / "config" / "splunk_config.yml"
+    config.write_text(
+        "plugin: splunk-platform-automator\n"
+        "splunk_defaults:\n"
+        "  splunk_admin_password: \"{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}\"\n"
+        "splunk_hosts:\n"
+        "  - name: idx\n"
+        "    roles: [indexer]\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(env))
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(config))
+    monkeypatch.setattr("spa.apps.get_app", lambda app_id, client=None: _ta())
+    from spa.cli import _run
+
+    assert _run(
+        ["--agent", "--start-dir", str(env), "apps", "add", "833", "--roles", "indexer"]
+    ) == 0
+    added = json.loads(capsys.readouterr().out)
+    assert added["data"]["changed"] is True
+    authored = YAML(typ="safe").load(config.read_text(encoding="utf-8"))
+    assert authored["splunk_app_deployment"]["apps"][0]["app_id"] == 833
+
+    assert _run(
+        ["--agent", "--start-dir", str(env), "apps", "remove", "833"]
+    ) == 0
+    removed = json.loads(capsys.readouterr().out)
+    assert removed["data"]["changed"] is True
+    assert YAML(typ="safe").load(
+        config.read_text(encoding="utf-8")
+    )["splunk_app_deployment"]["apps"] == []
 
 
 def test_cli_search_without_env(monkeypatch, capsys):
@@ -745,6 +1066,9 @@ def test_snippet_customize_adds_run_playbook():
     assert "    run_playbook: ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml" in data["snippet"]
     assert "ta_nix_script_index: itsi_im_metrics" in data["snippet"]
     assert "pass --customize" not in data["snippet"]
+    assert data["entry"]["customizations"]["run_playbook"].endswith(
+        "Splunk_TA_nix-enable_perf_metrics.yml"
+    )
 
 
 def test_snippet_content_pack_playbook_does_not_match_ta():

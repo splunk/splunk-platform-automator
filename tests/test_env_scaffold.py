@@ -64,6 +64,7 @@ def test_separate_env_inventory_does_not_write_clone(tmp_path):
     before = _clone_snapshots()
 
     env = spa_env()
+    env["SPLUNK_ADMIN_PASSWORD"] = "scaffold-admin"
     venv_bin = PROJECT_ROOT / "tests" / ".venv" / "bin"
     if venv_bin.is_dir():
         env["PATH"] = str(venv_bin) + os.pathsep + env.get("PATH", "")
@@ -111,18 +112,21 @@ def test_validate_separate_env(tmp_path):
 
     before = _clone_snapshots()
     env = spa_env()
+    env["SPLUNK_ADMIN_PASSWORD"] = "scaffold-admin"
     env["SPA_HOME"] = str(PROJECT_ROOT)
     env["SPA_ENV_DIR"] = str(dest)
+    env["SPA_VENV_DIR"] = str(PROJECT_ROOT / "tests" / ".venv")
     env["SPA_SOFTWARE_DIR"] = str(stub)
     env["SPA_BASECONFIG_DIR"] = str(stub)
     env["ANSIBLE_LOCAL_TEMP"] = str(tmp_path / "ansible_tmp")
+    env["SPLUNK_ADMIN_PASSWORD"] = "scaffold-admin"
     collections = PROJECT_ROOT / "tests" / ".collections"
     if collections.is_dir():
         env["ANSIBLE_COLLECTIONS_PATH"] = str(collections)
     (tmp_path / "ansible_tmp").mkdir()
 
     validated = run_spa(
-        ["validate", str(dest / "config" / "splunk_config.yml")],
+        ["validate", "--config", str(dest / "config" / "splunk_config.yml")],
         env=env,
     )
     out = validated.stderr + validated.stdout
@@ -151,6 +155,7 @@ def test_leftover_group_vars_symlink_does_not_block_inventory(tmp_path):
     assert leftover.is_symlink()
 
     env = spa_env()
+    env["SPLUNK_ADMIN_PASSWORD"] = "scaffold-admin"
     venv_bin = PROJECT_ROOT / "tests" / ".venv" / "bin"
     if venv_bin.is_dir():
         env["PATH"] = str(venv_bin) + os.pathsep + env.get("PATH", "")
@@ -184,6 +189,7 @@ def test_clone_equal_inventory_still_parses(tmp_path):
     stub = PROJECT_ROOT / "tests" / "fixtures" / "baseconfig"
     _ensure_software_stubs(stub)
     env = spa_env()
+    env["SPLUNK_ADMIN_PASSWORD"] = "scaffold-admin"
     venv_bin = PROJECT_ROOT / "tests" / ".venv" / "bin"
     if venv_bin.is_dir():
         env["PATH"] = str(venv_bin) + os.pathsep + env.get("PATH", "")
@@ -221,6 +227,7 @@ def test_create_linkpage_writes_env_not_clone(tmp_path):
     before = _clone_snapshots()
 
     env = spa_env()
+    env["SPLUNK_ADMIN_PASSWORD"] = "scaffold-admin"
     venv_bin = PROJECT_ROOT / "tests" / ".venv" / "bin"
     if venv_bin.is_dir():
         env["PATH"] = str(venv_bin) + os.pathsep + env.get("PATH", "")

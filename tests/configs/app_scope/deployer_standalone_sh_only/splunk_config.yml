@@ -4,6 +4,9 @@
 # Verifies: app NOT on deployer (goes direct to standalone_sh only); direct_scope on_scope only on standalone_sh.
 plugin: splunk-platform-automator
 
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+
 splunk_shclusters:
   - shc_name: shc1
     shc_site: site0

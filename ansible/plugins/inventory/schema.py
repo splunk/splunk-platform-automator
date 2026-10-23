@@ -7,9 +7,10 @@ ensuring configurations are valid before Ansible inventory processing begins.
 
 from __future__ import annotations
 
+import json
 import re
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 
@@ -100,7 +101,13 @@ class AwsTerraformConfig(BaseModel):
     ami_id: Optional[str] = Field(
         None,
         pattern=AMI_ID_PATTERN,
-        description="EC2 AMI id. Default is the id shipped in defaults/aws.yml. Omit the key to keep that. Pick a current id with spa aws --latest-ami when you choose a new image.",
+        description=(
+            "EC2 AMI id. Default is the id shipped in defaults/aws.yml. Omit the key to keep that. "
+            "spa config set writes an end-of-line comment with the image name and description when AWS can describe the id. "
+            "Find a current Red Hat image with spa aws --region eu-central-1 --latest-ami --os rhel, "
+            "or list matches with spa aws list amis --region eu-central-1 --os rhel. "
+            "ubuntu, amazon_linux, and debian use the same --os form."
+        ),
     )
     key_name: Optional[str] = Field(None, description="EC2 key pair name. Default aws_key. Omit the key to keep that.")
     ssh_private_key_file: Optional[str] = Field(
@@ -322,9 +329,9 @@ class SplunkDefaultsConfig(BaseModel):
         None,
         description="Whether installers are fetched instead of using a tarball already in Software. Holds no value itself.",
     )
-    splunk_admin_password: Optional[str] = Field(
-        None,
-        description="Password for the Splunk admin user. Default is a lab password. Omit the key to keep that. Use an env lookup when you override it.",
+    splunk_admin_password: str = Field(
+        ...,
+        description="Password for the Splunk admin user. Required. A literal password or an env lookup.",
     )
     splunk_license_file: Optional[Union[str, List[str]]] = Field(
         None,
@@ -499,8 +506,8 @@ class SplunkAppDeploymentConfig(BaseModel):
                 raise ValueError(f"splunk_app_deployment.apps[{i}] must have a 'name' field")
             if not isinstance(name, str):
                 raise ValueError(f"splunk_app_deployment.apps[{i}].name must be a string")
-            source = app.get("source")
-            if source is not None and source not in ALLOWED_APP_SOURCES:
+            source = app.get("source", "splunkbase")
+            if source not in ALLOWED_APP_SOURCES:
                 raise ValueError(
                     f"splunk_app_deployment.apps[{i}] (name={name!r}): 'source' must be one of {ALLOWED_APP_SOURCES}, got {source!r}"
                 )
@@ -1074,7 +1081,7 @@ class IdxClusterConfig(BaseModel):
     idxc_name: str = Field(..., description="Indexer cluster name. Hosts select it with idxcluster. Required.")
     idxc_password: Optional[str] = Field(
         None,
-        description="Indexer cluster secret. Default is a lab secret. Omit the key to keep that. Use an env lookup when you override it.",
+        description="Indexer cluster secret. No default. Set it in splunk_config.yml. A literal password or an env lookup.",
     )
     idxc_replication_port: Optional[int] = Field(
         None,
@@ -1120,7 +1127,7 @@ class ShClusterConfig(BaseModel):
     )
     shc_password: Optional[str] = Field(
         None,
-        description="Search head cluster secret. Default is a lab secret. Omit the key to keep that. Use an env lookup when you override it.",
+        description="Search head cluster secret. No default. Set it in splunk_config.yml. A literal password or an env lookup.",
     )
     shc_replication_port: Optional[int] = Field(
         None,
@@ -1304,6 +1311,29 @@ class SplunkHost(BaseModel):
 # Root configuration model
 # =============================================================================
 
+def _model_host_count(host: SplunkHost) -> int:
+    if host.list:
+        return len(host.list)
+    if host.iter:
+        start, end = (int(part) for part in host.iter.numbers.split(".."))
+        return end - start + 1
+    return 1
+
+
+def _host_env(host: SplunkHost) -> str:
+    return (host.splunk_env or "").strip()
+
+
+def _host_label(host: SplunkHost) -> str:
+    if host.name:
+        return host.name
+    if host.list:
+        return ", ".join(host.list)
+    if host.iter:
+        return "%s[%s]%s" % (host.iter.prefix or "", host.iter.numbers, host.iter.postfix or "")
+    return "unnamed host"
+
+
 class SplunkConfig(BaseModel):
     """
     Root configuration model for splunk_config.yml.
@@ -1386,6 +1416,22 @@ class SplunkConfig(BaseModel):
         description="Search head clusters that hosts select by name. Holds no value itself.",
     )
 
+    @model_validator(mode='before')
+    @classmethod
+    def validate_admin_password_is_set(cls, data: Any) -> Any:
+        """The admin password must be a non-empty literal or an env lookup."""
+        if not isinstance(data, dict):
+            return data
+        defaults = data.get("splunk_defaults")
+        password = defaults.get("splunk_admin_password") if isinstance(defaults, dict) else None
+        if not isinstance(password, str) or not password.strip():
+            raise ValueError(
+                "splunk_defaults.splunk_admin_password is required. "
+                "Set a literal password or an env lookup such as "
+                "\"{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}\"."
+            )
+        return data
+
     @field_validator('plugin')
     @classmethod
     def validate_plugin_name(cls, v: str) -> str:
@@ -1395,36 +1441,21 @@ class SplunkConfig(BaseModel):
 
     @model_validator(mode='after')
     def validate_deployer_requires_shc(self) -> 'SplunkConfig':
-        """Ensure deployer role has at least 3 search heads (SHC minimum).
-        
-        Only validates when search heads are explicitly defined in the config.
-        A deployer with 0 search heads is allowed (external SHC scenario).
-        """
-        has_deployer = False
-        search_head_count = 0
-        
+        """Enforce the SHC member minimum per deployer-linked cluster."""
+        member_counts: Dict[str, int] = {}
         for host in self.splunk_hosts:
-            if AllowedRole.deployer in host.roles:
-                has_deployer = True
-            if AllowedRole.search_head in host.roles:
-                # Count hosts based on identifier type
-                if host.name:
-                    search_head_count += 1
-                elif host.list:
-                    search_head_count += len(host.list)
-                elif host.iter:
-                    # Parse range like '1..3' to count hosts
-                    parts = host.iter.numbers.split('..')
-                    start, end = int(parts[0]), int(parts[1])
-                    search_head_count += (end - start + 1)
-        
-        # Only validate if search heads are defined (1 or 2 is invalid with deployer)
-        if has_deployer and search_head_count > 0 and search_head_count < 3:
-            raise ValueError(
-                f"A deployer requires a Search Head Cluster with at least 3 search heads. "
-                f"Found {search_head_count} search head(s)."
-            )
-        
+            if AllowedRole.search_head in host.roles and host.shcluster:
+                member_counts[host.shcluster] = member_counts.get(host.shcluster, 0) + _model_host_count(host)
+        for host in self.splunk_hosts:
+            if AllowedRole.deployer not in host.roles or not host.shcluster:
+                continue
+            count = member_counts.get(host.shcluster, 0)
+            # Zero members is the documented external-SHC exception.
+            if 0 < count < 3:
+                raise ValueError(
+                    f"Search Head Cluster {host.shcluster!r} requires at least 3 linked search heads. "
+                    f"Found {count}."
+                )
         return self
 
     @model_validator(mode='after')
@@ -1453,7 +1484,7 @@ class SplunkConfig(BaseModel):
                     start, end = int(parts[0]), int(parts[1])
                     shc_member_count += (end - start + 1)
         
-        if has_deployer and shc_member_count < 3:
+        if has_deployer and 0 < shc_member_count < 3:
             raise ValueError(
                 f"When a deployer is defined, at least 3 search heads must have 'shcluster' specified. "
                 f"Found {shc_member_count} search head(s) with shcluster."
@@ -1564,37 +1595,66 @@ class SplunkConfig(BaseModel):
         return self
 
     @model_validator(mode='after')
-    def validate_idxc_members_have_idxcluster(self) -> 'SplunkConfig':
-        """Ensure at least 2 indexers have idxcluster flag when cluster_manager exists.
-        
-        If a cluster_manager role is defined, at least 2 indexer roles must have
-        an idxcluster specified to form a valid Indexer Cluster.
-        Standalone indexers without idxcluster are allowed alongside IDXC members.
-        """
-        has_cluster_manager = False
-        idxc_member_count = 0
-        
+    def validate_one_deployer_per_shcluster(self) -> 'SplunkConfig':
+        """One deployer per search-head cluster. A second name is concatenated into the SSH target."""
+        grouped: Dict[Tuple[str, str], List[SplunkHost]] = {}
         for host in self.splunk_hosts:
-            if AllowedRole.cluster_manager in host.roles:
-                has_cluster_manager = True
-            
-            if AllowedRole.indexer in host.roles and host.idxcluster:
-                # Count IDXC members based on identifier type
-                if host.name:
-                    idxc_member_count += 1
-                elif host.list:
-                    idxc_member_count += len(host.list)
-                elif host.iter:
-                    parts = host.iter.numbers.split('..')
-                    start, end = int(parts[0]), int(parts[1])
-                    idxc_member_count += (end - start + 1)
-        
-        if has_cluster_manager and idxc_member_count < 2:
+            if AllowedRole.deployer not in host.roles:
+                continue
+            shc = (host.shcluster or "").strip() if isinstance(host.shcluster, str) else ""
+            grouped.setdefault((_host_env(host), shc), []).append(host)
+        for (env, shc), hosts in grouped.items():
+            total = sum(_model_host_count(host) for host in hosts)
+            if total <= 1:
+                continue
+            where = f"environment {env!r}" if env else "this config"
+            labels = ", ".join(_host_label(host) for host in hosts)
+            cluster = shc or "(unset)"
             raise ValueError(
-                f"When a cluster_manager is defined, at least 2 indexers must have 'idxcluster' specified. "
-                f"Found {idxc_member_count} indexer(s) with idxcluster."
+                f"Search head cluster {cluster!r} can have only one deployer in {where}. "
+                f"Found {total} hosts: {labels}. "
+                f"Keep the deployer role on one host for this cluster."
             )
-        
+        return self
+
+    @model_validator(mode='after')
+    def validate_singleton_management_roles(self) -> 'SplunkConfig':
+        """One deployment server and one license manager per environment."""
+        for role in (AllowedRole.deployment_server, AllowedRole.license_manager):
+            grouped: Dict[str, List[SplunkHost]] = {}
+            for host in self.splunk_hosts:
+                if role not in host.roles:
+                    continue
+                grouped.setdefault(_host_env(host), []).append(host)
+            for env, hosts in grouped.items():
+                total = sum(_model_host_count(host) for host in hosts)
+                if total <= 1:
+                    continue
+                where = f"environment {env!r}" if env else "this config"
+                labels = ", ".join(_host_label(host) for host in hosts)
+                raise ValueError(
+                    f"Role {role.value!r} can be assigned only once in {where}. "
+                    f"Found {total} hosts: {labels}. "
+                    f"Move the role onto one host."
+                )
+        return self
+
+    @model_validator(mode='after')
+    def validate_idxc_members_have_idxcluster(self) -> 'SplunkConfig':
+        """Enforce the IDXC member minimum per manager-linked cluster."""
+        member_counts: Dict[str, int] = {}
+        for host in self.splunk_hosts:
+            if AllowedRole.indexer in host.roles and host.idxcluster:
+                member_counts[host.idxcluster] = member_counts.get(host.idxcluster, 0) + _model_host_count(host)
+        for host in self.splunk_hosts:
+            if AllowedRole.cluster_manager not in host.roles or not host.idxcluster:
+                continue
+            count = member_counts.get(host.idxcluster, 0)
+            if count < 2:
+                raise ValueError(
+                    f"Indexer Cluster (idxcluster={host.idxcluster!r}) requires at least 2 linked indexers. "
+                    f"Found {count}."
+                )
         return self
 
     @model_validator(mode='after')
@@ -1615,6 +1675,29 @@ class SplunkConfig(BaseModel):
             raise ValueError(
                 "Indexers with 'idxcluster' set (Indexer Cluster members) require a cluster_manager. "
                 "No host has the 'cluster_manager' role. Add a host with role 'cluster_manager' or remove 'idxcluster' from indexers."
+            )
+        return self
+
+    @model_validator(mode='after')
+    def validate_each_idxc_has_linked_cluster_manager(self) -> 'SplunkConfig':
+        """Every named IDXC with members has a manager linked to that identity."""
+        if not self.splunk_idxclusters:
+            return self
+        managers = {
+            host.idxcluster
+            for host in self.splunk_hosts
+            if AllowedRole.cluster_manager in host.roles and host.idxcluster
+        }
+        member_clusters = {
+            host.idxcluster
+            for host in self.splunk_hosts
+            if AllowedRole.indexer in host.roles and host.idxcluster
+        }
+        missing = member_clusters - managers
+        if missing:
+            raise ValueError(
+                "Every Indexer Cluster with members requires a linked cluster_manager. "
+                f"IDXC(s) without one: {sorted(missing)!r}."
             )
         return self
 
@@ -2197,6 +2280,8 @@ class SplunkConfig(BaseModel):
         for i, app in enumerate(dep.apps):
             if not app.get("premium_app"):
                 continue
+            if str(app.get("state", "installed")).strip().lower() == "absent":
+                continue
             has_filter = (
                 (app.get("shc_whitelist") and len(app.get("shc_whitelist", [])) > 0)
                 or (app.get("hosts_whitelist") and len(app.get("hosts_whitelist", [])) > 0)
@@ -2292,6 +2377,8 @@ class SplunkConfig(BaseModel):
         for i, app in enumerate(dep.apps):
             if not (app.get("premium_app") and isinstance(app.get("premium_app"), str) and (app.get("premium_app") or "").strip().lower() == "itsi"):
                 continue
+            if str(app.get("state", "installed")).strip().lower() == "absent":
+                continue
             name = app.get("name", "?")
             effective_sh: set = set()
             shc_w = [v.strip() for v in (app.get("shc_whitelist") or []) if isinstance(v, str) and v.strip()]
@@ -2314,6 +2401,520 @@ class SplunkConfig(BaseModel):
                     "Use shc_whitelist to target only SHC(s), or hosts_whitelist to target only standalone search head host(s)."
                 )
         return self
+
+    @model_validator(mode='after')
+    def validate_itsi_search_tier_is_singular(self) -> 'SplunkConfig':
+        """Installed ITSI resolves to exactly one SHC or one standalone search head."""
+        if not self.splunk_app_deployment or not self.splunk_app_deployment.apps:
+            return self
+        plain_hosts = []
+        for host in self.splunk_hosts:
+            plain_hosts.append({
+                "name": host.name,
+                "list": list(host.list or []),
+                "iter": (
+                    {
+                        "prefix": host.iter.prefix,
+                        "numbers": host.iter.numbers,
+                        "postfix": host.iter.postfix,
+                    }
+                    if host.iter else None
+                ),
+                "roles": [role.value for role in host.roles],
+                "shcluster": host.shcluster,
+            })
+        issue = itsi_search_tier_requirement({
+            "splunk_hosts": plain_hosts,
+            "splunk_app_deployment": {"apps": self.splunk_app_deployment.apps},
+        })
+        if issue:
+            raise ValueError(issue["summary"])
+        return self
+
+
+# =============================================================================
+# Declarative cross-section dependency planning
+# =============================================================================
+
+def _dependency_rule(
+    rule_id: str,
+    kind: str,
+    trigger: str,
+    required_facts: List[str],
+    repair: str,
+    unresolved: str,
+) -> Dict[str, Any]:
+    return {
+        "id": rule_id,
+        "kind": kind,
+        "trigger": trigger,
+        "required_facts": required_facts,
+        "repair": repair,
+        "unresolved": unresolved,
+        "error": unresolved,
+    }
+
+
+DEPENDENCY_RULES = (
+    _dependency_rule("host.deployer.shcluster", "choice", "host role deployer", ["SHC identities"], "link sole SHC", "Choose the SHC identity served by the deployer."),
+    _dependency_rule("shcluster.members.minimum", "cardinality", "linked deployer and local SHC members", ["member count"], "none", "Each local SHC requires at least three linked search heads."),
+    _dependency_rule("shcluster.deployer.required", "cardinality", "local SHC members", ["linked deployer"], "none", "Each local SHC requires a linked deployer."),
+    _dependency_rule("host.cluster_manager.idxcluster", "choice", "host role cluster_manager", ["IDXC identities"], "link sole IDXC", "Choose the IDXC identity served by the cluster manager."),
+    _dependency_rule("idxcluster.members.minimum", "cardinality", "linked cluster manager", ["member count"], "none", "Each IDXC requires at least two linked indexers."),
+    _dependency_rule("idxcluster.manager.required", "cardinality", "IDXC members", ["linked cluster manager"], "none", "Each IDXC with members requires a linked cluster manager."),
+    _dependency_rule("license_manager.license_file", "external_resource", "license_manager role", ["license file"], "none", "Provide an existing Splunk license file path."),
+    _dependency_rule("license_file.license_manager", "choice", "configured license file", ["license_manager placement"], "none", "Choose a host for the license_manager role."),
+    _dependency_rule("itsi.topology", "cardinality", "ITSI or content pack app", ["search head", "indexer", "license manager"], "none", "ITSI requires search, indexing, and license tiers."),
+    _dependency_rule("itsi.java", "value", "ITSI or content pack app", ["Java 21 package"], "none", "ITSI requires Java 21 on its search tier."),
+    _dependency_rule("itsi.search_tier", "choice", "installed ITSI app", ["one SHC or one standalone search head"], "none", "ITSI must target exactly one search tier."),
+    _dependency_rule("app.filter.cluster", "choice", "cluster app filter", ["existing cluster identities"], "none", "Choose existing cluster identities for app filters."),
+    _dependency_rule("app.filter.serverclass", "choice", "server-class app filter", ["deployment server"], "none", "Server-class filters require a deployment_server host."),
+    _dependency_rule("dependency.cycle", "value", "dependency planning", ["stable closure"], "none", "Dependency planning could not reach a stable closure."),
+)
+
+_DEPENDENCY_RULE_BY_ID = {rule["id"]: rule for rule in DEPENDENCY_RULES}
+
+
+def _raw_host_count(host: Dict[str, Any]) -> int:
+    names = host.get("list")
+    if isinstance(names, list):
+        return len(names)
+    iteration = host.get("iter")
+    if isinstance(iteration, dict):
+        numbers = str(iteration.get("numbers") or "")
+        match = re.fullmatch(r"(\d+)\.\.(\d+)", numbers)
+        if match:
+            first, last = int(match.group(1)), int(match.group(2))
+            return max(0, last - first + 1)
+    return 1
+
+
+def _raw_host_label(host: Dict[str, Any], index: int) -> str:
+    if host.get("name"):
+        return "splunk_hosts[name=%s]" % host["name"]
+    if isinstance(host.get("iter"), dict) and host["iter"].get("prefix"):
+        return "splunk_hosts[iter.prefix=%s]" % host["iter"]["prefix"]
+    return "splunk_hosts[%s]" % index
+
+
+def _raw_host_names(host: Dict[str, Any]) -> List[str]:
+    if host.get("name"):
+        return [str(host["name"])]
+    names = host.get("list")
+    if isinstance(names, list):
+        return [str(item) for item in names]
+    iteration = host.get("iter")
+    if isinstance(iteration, dict):
+        match = re.fullmatch(r"(\d+)\.\.(\d+)", str(iteration.get("numbers") or ""))
+        if match:
+            start, end = int(match.group(1)), int(match.group(2))
+            width = len(match.group(2))
+            prefix = iteration.get("prefix") or ""
+            postfix = iteration.get("postfix") or ""
+            return [
+                "%s%s%s" % (prefix, str(number).zfill(width), postfix)
+                for number in range(start, end + 1)
+            ]
+    return []
+
+
+def _search_tiers(hosts: List[Dict[str, Any]]) -> tuple:
+    clusters: Dict[str, List[str]] = {}
+    standalone: List[str] = []
+    for host in hosts or []:
+        if not isinstance(host, dict):
+            continue
+        roles = {str(getattr(role, "value", role)) for role in (host.get("roles") or [])}
+        if "search_head" not in roles:
+            continue
+        names = _raw_host_names(host)
+        cluster = str(host.get("shcluster") or "").strip()
+        if cluster:
+            clusters.setdefault(cluster, []).extend(names)
+        else:
+            standalone.extend(names)
+    return clusters, standalone
+
+
+def _installed_itsi_apps(config: Dict[str, Any]) -> List[tuple]:
+    apps = ((config.get("splunk_app_deployment") or {}).get("apps") or [])
+    installed = []
+    for index, app in enumerate(apps):
+        if not isinstance(app, dict):
+            continue
+        if str(app.get("state", "installed")).strip().lower() == "absent":
+            continue
+        premium = str(app.get("premium_app") or "").strip().lower()
+        if premium == "itsi" or app.get("app_id") == 1841:
+            installed.append((index, app))
+    return installed
+
+
+def itsi_search_tier_requirement(config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Return the singular ITSI search-tier choice, or None when placement is valid."""
+    clusters, standalone = _search_tiers(config.get("splunk_hosts") or [])
+    cluster_names = list(clusters)
+    for _index, app in _installed_itsi_apps(config):
+        app_id = app.get("app_id", 1841)
+        selected_clusters = [
+            str(value).strip()
+            for value in (app.get("shc_whitelist") or [])
+            if str(value).strip()
+        ]
+        selected_hosts = [
+            str(value).strip()
+            for value in (app.get("hosts_whitelist") or [])
+            if str(value).strip()
+        ]
+        one_cluster = (
+            len(selected_clusters) == 1
+            and selected_clusters[0] in clusters
+            and not selected_hosts
+        )
+        one_host = (
+            len(selected_hosts) == 1
+            and selected_hosts[0] in standalone
+            and not selected_clusters
+        )
+        implicit_cluster = (
+            not selected_clusters
+            and not selected_hosts
+            and len(cluster_names) == 1
+            and not standalone
+        )
+        implicit_host = (
+            not selected_clusters
+            and not selected_hosts
+            and len(standalone) == 1
+            and not cluster_names
+        )
+        if one_cluster or one_host or implicit_cluster or implicit_host:
+            continue
+        if cluster_names:
+            retry_path = "splunk_app_deployment.apps[app_id=%s].shc_whitelist" % app_id
+            retry_value = cluster_names[0]
+        else:
+            retry_path = "splunk_app_deployment.apps[app_id=%s].hosts_whitelist" % app_id
+            retry_value = standalone[0] if standalone else "search_head"
+        return {
+            "paths": [retry_path, "splunk_hosts"],
+            "summary": (
+                "ITSI must target exactly one search tier. "
+                "Set shc_whitelist to one search-head cluster or hosts_whitelist to one standalone search head."
+            ),
+            "allowed": cluster_names + standalone,
+            "retry": "--resolve '%s' '[\"%s\"]'" % (retry_path, retry_value),
+        }
+    return None
+
+
+def _raw_license_file_present(config: Dict[str, Any]) -> bool:
+    defaults = config.get("splunk_defaults") or {}
+    if defaults.get("splunk_license_file"):
+        return True
+    for environment in config.get("splunk_environments") or []:
+        if (environment.get("splunk_defaults") or {}).get("splunk_license_file"):
+            return True
+    return any(host.get("splunk_license_file") for host in config.get("splunk_hosts") or [])
+
+
+def _plan_config_dependencies_pass(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply one pass of deterministic repairs and collect requirements.
+
+    This function intentionally consumes plain mappings so the editor can plan
+    an incomplete candidate before Pydantic rejects it. Final validation still
+    runs the model validators after this function reports ready.
+    """
+    requirements: List[Dict[str, Any]] = []
+    repairs: List[Dict[str, Any]] = []
+    seen_requirements = set()
+
+    def require(rule_id, kind, paths, summary, *, allowed=None, retry=None):
+        rule = _DEPENDENCY_RULE_BY_ID[rule_id]
+        if kind != rule["kind"]:
+            raise RuntimeError(
+                "Dependency rule %s emitted kind %s, expected %s"
+                % (rule_id, kind, rule["kind"])
+            )
+        key = (rule_id, tuple(paths), summary)
+        if key in seen_requirements:
+            return
+        seen_requirements.add(key)
+        item = {
+            "rule_id": rule_id,
+            "kind": kind,
+            "paths": list(paths),
+            "summary": summary,
+            "retry": retry or "Retry with --resolve PATH VALUE or --resolve-file FILE",
+        }
+        if allowed:
+            item["allowed"] = list(allowed)
+        requirements.append(item)
+
+    hosts = config.setdefault("splunk_hosts", [])
+    shclusters = config.get("splunk_shclusters") or []
+    idxclusters = config.get("splunk_idxclusters") or []
+    shc_names = [str(row.get("shc_name")) for row in shclusters if row.get("shc_name")]
+    idxc_names = [str(row.get("idxc_name")) for row in idxclusters if row.get("idxc_name")]
+
+    # Link managers only when the choice is unique; scaffold an explicitly
+    # named cluster identity without inventing topology members.
+    for index, host in enumerate(hosts):
+        roles = set(host.get("roles") or [])
+        label = _raw_host_label(host, index)
+        if "deployer" in roles and not host.get("shcluster"):
+            if len(shc_names) == 1:
+                host["shcluster"] = shc_names[0]
+                repairs.append({"op": "set", "path": label + ".shcluster", "value": shc_names[0]})
+            else:
+                require(
+                    "host.deployer.shcluster", "choice",
+                    [label + ".shcluster", "splunk_shclusters"],
+                    "Choose the search-head cluster managed by this deployer.",
+                    allowed=shc_names,
+                )
+        if "cluster_manager" in roles and not host.get("idxcluster"):
+            if len(idxc_names) == 1:
+                host["idxcluster"] = idxc_names[0]
+                repairs.append({"op": "set", "path": label + ".idxcluster", "value": idxc_names[0]})
+            else:
+                require(
+                    "host.cluster_manager.idxcluster", "choice",
+                    [label + ".idxcluster", "splunk_idxclusters"],
+                    "Choose the indexer cluster managed by this cluster manager.",
+                    allowed=idxc_names,
+                )
+
+    # A caller-supplied identity is enough to scaffold the corresponding
+    # section. It is not enough to synthesize members.
+    for host in hosts:
+        shcluster = host.get("shcluster")
+        if shcluster and str(shcluster) not in shc_names:
+            config.setdefault("splunk_shclusters", []).append({"shc_name": shcluster})
+            shc_names.append(str(shcluster))
+            repairs.append({"op": "append", "path": "splunk_shclusters", "value": {"shc_name": shcluster}})
+        idxcluster = host.get("idxcluster")
+        if idxcluster and str(idxcluster) not in idxc_names:
+            config.setdefault("splunk_idxclusters", []).append({"idxc_name": idxcluster})
+            idxc_names.append(str(idxcluster))
+            repairs.append({"op": "append", "path": "splunk_idxclusters", "value": {"idxc_name": idxcluster}})
+
+    for name in shc_names:
+        deployers = [
+            host for host in hosts
+            if "deployer" in set(host.get("roles") or []) and str(host.get("shcluster")) == name
+        ]
+        members = sum(
+            _raw_host_count(host)
+            for host in hosts
+            if "search_head" in set(host.get("roles") or []) and str(host.get("shcluster")) == name
+        )
+        if not deployers and (members or len(shc_names) > 1):
+            require(
+                "shcluster.deployer.required", "cardinality",
+                ["splunk_shclusters[shc_name=%s]" % name, "splunk_hosts"],
+                "Search-head cluster %s needs one linked deployer." % name,
+            )
+        if deployers and 0 < members < 3:
+            require(
+                "shcluster.members.minimum", "cardinality",
+                ["splunk_shclusters[shc_name=%s]" % name, "splunk_hosts"],
+                "Search-head cluster %s needs at least 3 linked search heads; found %s." % (name, members),
+            )
+
+    for name in idxc_names:
+        managers = [
+            host for host in hosts
+            if "cluster_manager" in set(host.get("roles") or []) and str(host.get("idxcluster")) == name
+        ]
+        members = sum(
+            _raw_host_count(host)
+            for host in hosts
+            if "indexer" in set(host.get("roles") or []) and str(host.get("idxcluster")) == name
+        )
+        if not managers:
+            require(
+                "idxcluster.manager.required", "cardinality",
+                ["splunk_idxclusters[idxc_name=%s]" % name, "splunk_hosts"],
+                "Indexer cluster %s needs one linked cluster manager." % name,
+            )
+        if managers and members < 2:
+            require(
+                "idxcluster.members.minimum", "cardinality",
+                ["splunk_idxclusters[idxc_name=%s]" % name, "splunk_hosts"],
+                "Indexer cluster %s needs at least 2 linked indexers; found %s." % (name, members),
+            )
+
+    has_license_manager = any(
+        "license_manager" in set(host.get("roles") or []) for host in hosts
+    )
+    has_license_file = _raw_license_file_present(config)
+    if has_license_manager and not has_license_file:
+        require(
+            "license_manager.license_file", "external_resource",
+            ["splunk_defaults.splunk_license_file"],
+            "Provide an existing Splunk license file path.",
+        )
+    if has_license_file and not has_license_manager:
+        require(
+            "license_file.license_manager", "choice",
+            ["splunk_hosts"],
+            "Choose a host for the license_manager role.",
+        )
+
+    apps = ((config.get("splunk_app_deployment") or {}).get("apps") or [])
+    active_apps = [
+        app
+        for app in apps
+        if isinstance(app, dict) and app.get("state", "installed") != "absent"
+    ]
+    has_content_pack = any(
+        app.get("itsi_content_pack") is True
+        and app.get("app_id") != 1841
+        and app.get("premium_app") != "itsi"
+        for app in active_apps
+    )
+    has_itsi_app = any(
+        app.get("premium_app") == "itsi" or app.get("app_id") == 1841
+        for app in active_apps
+    )
+    if has_content_pack and not has_itsi_app:
+        itsi_entry = {
+            "name": "Splunk IT Service Intelligence",
+            "app_id": 1841,
+            "premium_app": "itsi",
+        }
+        apps.insert(0, itsi_entry)
+        repairs.append(
+            {
+                "op": "set",
+                "path": "splunk_app_deployment.apps[app_id=1841]",
+                "value": itsi_entry,
+            }
+        )
+    has_itsi = any(
+        app.get("premium_app") == "itsi"
+        or app.get("app_id") == 1841
+        or app.get("itsi_content_pack") is True
+        for app in active_apps
+    )
+    if has_itsi:
+        tier = itsi_search_tier_requirement(config)
+        if tier:
+            require(
+                "itsi.search_tier", "choice",
+                tier["paths"],
+                tier["summary"],
+                allowed=tier["allowed"],
+                retry=tier["retry"],
+            )
+        role_set = {
+            role
+            for host in hosts
+            for role in (host.get("roles") or [])
+        }
+        for role in ("search_head", "indexer", "license_manager"):
+            if role not in role_set:
+                require(
+                    "itsi.topology", "cardinality",
+                    ["splunk_hosts"],
+                    "ITSI requires at least one %s host." % role,
+                )
+        global_packages = set((config.get("os") or {}).get("packages") or [])
+        java_present = any(
+            "java-21" in str(package)
+            for package in global_packages
+        ) or any(
+            "search_head" in set(host.get("roles") or [])
+            and any(
+                "java-21" in str(package)
+                for package in ((host.get("os") or {}).get("packages") or [])
+            )
+            for host in hosts
+        )
+        if not java_present:
+            require(
+                "itsi.java", "value",
+                ["os.packages", "splunk_hosts[].os.packages"],
+                "ITSI requires Java 21 on its search tier.",
+            )
+
+    for index, app in enumerate(apps):
+        if not isinstance(app, dict):
+            continue
+        for field, existing in (
+            ("shc_whitelist", shc_names), ("shc_blacklist", shc_names),
+            ("idxc_whitelist", idxc_names), ("idxc_blacklist", idxc_names),
+        ):
+            missing = [str(name) for name in app.get(field) or [] if str(name) not in existing]
+            if missing:
+                require(
+                    "app.filter.cluster", "choice",
+                    ["splunk_app_deployment.apps[%s].%s" % (index, field)],
+                    "App filter references unknown cluster identities: %s." % ", ".join(missing),
+                    allowed=existing,
+                )
+        if app.get("sc_whitelist") or app.get("sc_blacklist"):
+            if not any(
+                "deployment_server" in set(host.get("roles") or [])
+                for host in hosts
+            ):
+                require(
+                    "app.filter.serverclass", "choice",
+                    ["splunk_hosts", "splunk_app_deployment.apps[%s]" % index],
+                    "Server-class filters require a deployment_server host.",
+                )
+
+    return {
+        "ready": not requirements,
+        "requirements": requirements,
+        "repairs": repairs,
+    }
+
+
+def plan_config_dependencies(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply dependency rules to a fixpoint and detect repair cycles."""
+    all_repairs: List[Dict[str, Any]] = []
+    repair_keys = set()
+    seen_states = set()
+
+    for _ in range(64):
+        before = json.dumps(config, sort_keys=True, default=str)
+        if before in seen_states:
+            return {
+                "ready": False,
+                "requirements": [{
+                    "rule_id": "dependency.cycle",
+                    "kind": "value",
+                    "paths": [],
+                    "summary": _DEPENDENCY_RULE_BY_ID["dependency.cycle"]["unresolved"],
+                    "retry": "Remove the conflicting dependency resolutions and retry.",
+                }],
+                "repairs": all_repairs,
+            }
+        seen_states.add(before)
+        result = _plan_config_dependencies_pass(config)
+        for repair in result["repairs"]:
+            key = json.dumps(repair, sort_keys=True, default=str)
+            if key not in repair_keys:
+                repair_keys.add(key)
+                all_repairs.append(repair)
+        after = json.dumps(config, sort_keys=True, default=str)
+        if after == before:
+            result["repairs"] = all_repairs
+            return result
+
+    return {
+        "ready": False,
+        "requirements": [{
+            "rule_id": "dependency.cycle",
+            "kind": "value",
+            "paths": [],
+            "summary": _DEPENDENCY_RULE_BY_ID["dependency.cycle"]["unresolved"],
+            "retry": "Remove the conflicting dependency resolutions and retry.",
+        }],
+        "repairs": all_repairs,
+    }
 
 
 # =============================================================================
@@ -2354,9 +2955,32 @@ def validate_config(config_data: Dict[str, Any]) -> SplunkConfig:
     from pydantic import ValidationError
 
     try:
-        return SplunkConfig.model_validate(config_data)
-    except ValidationError as e:
-        raise ConfigValidationError(e.errors())
+        model = SplunkConfig.model_validate(config_data)
+    except ValidationError as initial_error:
+        raise ConfigValidationError(initial_error.errors())
+    candidate = model.model_dump(mode="json", exclude_none=True)
+    dependency = plan_config_dependencies(candidate)
+    if dependency["requirements"]:
+        raise ConfigValidationError(
+            [
+                {
+                    "loc": requirement["paths"],
+                    "msg": requirement["summary"],
+                }
+                for requirement in dependency["requirements"]
+            ]
+        )
+    if dependency["repairs"]:
+        raise ConfigValidationError(
+            [
+                {
+                    "loc": [repair.get("path") or "config"],
+                    "msg": "Configuration requires dependency repair before validation.",
+                }
+                for repair in dependency["repairs"]
+            ]
+        )
+    return model
 
 
 def validate_config_file(file_path: str) -> SplunkConfig:

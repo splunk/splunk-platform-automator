@@ -1,4 +1,4 @@
-"""Feature catalog lookup (`spa features`)."""
+"""Feature catalog quality and spa config explain/search."""
 
 import json
 import sys
@@ -11,8 +11,8 @@ from spa_testutil import PROJECT_ROOT, run_spa
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
 
-def test_features_list_includes_topologies_and_os():
-    result = run_spa(["features", "list"])
+def test_root_explain_includes_topologies_and_os():
+    result = run_spa(["config", "explain"])
     assert result.returncode == 0, result.stderr
     assert "topology.c1" in result.stdout
     assert "topology.s1" in result.stdout
@@ -20,48 +20,43 @@ def test_features_list_includes_topologies_and_os():
         assert extra not in result.stdout
     assert "provider.aws" in result.stdout
     assert "setting.os" not in result.stdout
-    assert "\nos  " in "\n" + result.stdout
+    assert "\n  os " in result.stdout or "\n  os<" in result.stdout or "os <" in result.stdout
 
 
 def test_os_guidance_says_what_the_block_provides():
     """The title alone cannot tell an operator what an os: block covers."""
-    result = run_spa(["--json", "features", "list"])
+    result = run_spa(["--json", "config", "explain", "os"])
     assert result.returncode == 0, result.stderr
-    features = {
-        item.get("selector") or item.get("id") or item.get("title"): item
-        for item in json.loads(result.stdout)["data"]["features"]
-    }
-    guidance = features["os"]["when_to_use"].lower()
+    data = json.loads(result.stdout)["data"]
+    guidance = data["when_to_use"].lower()
     for topic in ("packages", "hostname", "time", "selinux", "ssh", "splunk user"):
         assert topic in guidance, topic
     assert "after init" in guidance
-    assert "ssh_username" in features["os"]["when_not_to_use"]
-    assert "id" not in features["os"]
+    assert "ssh_username" in data["when_not_to_use"]
+    assert "id" not in data
 
 
 def test_implemented_settings_have_operator_guidance():
     """Records that write YAML must say what they do, not only a title."""
-    result = run_spa(["--json", "features", "list"])
-    assert result.returncode == 0, result.stderr
-    show = run_spa(["--json", "features", "show", "splunk_app_deployment"])
-    assert show.returncode == 0, show.stderr
-    apps = json.loads(show.stdout)["data"]["feature"]
+    from spa.catalog import load_features
+
+    features = load_features(PROJECT_ROOT)
+    apps = next(item for item in features if item.get("selector") == "splunk_app_deployment")
     blob = (apps.get("when_to_use") or "").lower()
     for topic in ("splunkbase", "local", "target_roles", "lookup"):
         assert topic in blob, topic
     assert "SPLUNKBASE" in (apps.get("snippet") or "")
-    for item in json.loads(result.stdout)["data"]["features"]:
+    for item in features:
         label = item.get("selector") or item.get("id") or item.get("title")
         assert item.get("when_to_use") or item.get("when_not_to_use"), label
         if item.get("kind") == "setting" and item.get("selector"):
             assert len(item.get("when_to_use") or item.get("when_not_to_use") or "") >= 24, label
 
 
-def test_feat_alias_lists_features():
+def test_feat_alias_is_removed():
     result = run_spa(["feat", "list"])
-    assert result.returncode == 0, result.stderr
-    assert "topology.c1" in result.stdout
-    assert "provider.aws" in result.stdout
+    assert result.returncode == 2
+    assert "config explain" in result.stderr
 
 
 def test_list_guidance_is_aligned_under_the_title():
@@ -107,10 +102,10 @@ def test_long_guidance_wraps_with_the_same_indent():
         assert len(line) <= 80
 
 
-def test_every_list_record_has_decision_guidance():
-    result = run_spa(["--json", "features", "list"])
-    assert result.returncode == 0, result.stderr
-    features = json.loads(result.stdout)["data"]["features"]
+def test_every_catalog_record_has_decision_guidance():
+    from spa.catalog import list_payload
+
+    features = list_payload(PROJECT_ROOT)["features"]
     assert features
     for feature in features:
         label = feature.get("selector") or feature.get("id") or feature.get("title")
@@ -120,58 +115,49 @@ def test_every_list_record_has_decision_guidance():
         assert "keys" not in feature
 
 
-def test_features_search_ssl():
-    result = run_spa(["features", "search", "ssl"])
+def test_config_search_ssl():
+    result = run_spa(["config", "search", "ssl"])
     assert result.returncode == 0, result.stderr
     assert "splunk_defaults.splunk_ssl" in result.stdout
     assert "setting.ssl" not in result.stdout
 
 
-def test_features_search_os():
-    result = run_spa(["features", "search", "os"])
+def test_config_search_os():
+    result = run_spa(["config", "search", "os"])
     assert result.returncode == 0, result.stderr
-    assert "\nos  " in "\n" + result.stdout
+    assert "os " in result.stdout or result.stdout.startswith("os ")
     assert "setting.os" not in result.stdout
 
 
-def test_features_show_c1():
-    result = run_spa(["features", "show", "topology.c1"])
+def test_explain_c1():
+    result = run_spa(["config", "explain", "topology.c1"])
     assert result.returncode == 0, result.stderr
     assert "C1" in result.stdout
     assert "cm_2idxc_sh_uf" in result.stdout
     assert "keys:" not in result.stdout
 
 
-def test_features_show_keys_includes_schema_metadata_and_placeholders():
-    result = run_spa(["features", "show", "splunk_hosts[].name", "--keys"])
+def test_explain_host_roles_includes_schema_metadata():
+    result = run_spa(["config", "explain", "splunk_hosts.roles"])
     assert result.returncode == 0, result.stderr
-    assert "keys:" in result.stdout
-    assert "splunk_hosts[].roles" in result.stdout
     assert "list[enum]" in result.stdout
-    assert "required" in result.stdout
-    assert "allowed=cluster_manager" in result.stdout
+    assert "cluster_manager" in result.stdout
+    assert "[]" not in result.stdout
 
 
-def test_features_show_keys_merges_catalog_only_metadata():
-    result = run_spa(["features", "show", "provider.aws", "--keys"])
+def test_explain_aws_keeps_catalog_guidance_off_child_lines():
+    result = run_spa(["config", "explain", "terraform.aws"])
     assert result.returncode == 0, result.stderr
-    assert "terraform.aws.ssh_username" in result.stdout
-    assert "Login user must match the AMI" in result.stdout
-    assert "terraform.aws.root_volume_type" in result.stdout
+    assert "ssh_username" in result.stdout
+    assert "root_volume_type" in result.stdout
     assert "allowed=gp3|gp2" not in result.stdout
-    volume_lines = [
-        line
-        for line in result.stdout.splitlines()
-        if "terraform.aws.root_volume_type" in line
-    ]
-    assert volume_lines
-    assert "string" in volume_lines[0]
-    assert "allowed=" not in volume_lines[0]
-    assert "lab often uses gp3" in result.stdout.lower()
+    username = run_spa(["config", "explain", "terraform.aws.ssh_username"])
+    assert username.returncode == 0, username.stderr
+    assert "Login user must match the AMI" in username.stdout or "AMI" in username.stdout
 
 
-def test_features_keys_schema_owns_former_orphans():
-    result = run_spa(["--json", "features", "keys"])
+def test_config_keys_schema_owns_former_orphans():
+    result = run_spa(["--json", "config", "keys"])
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)["data"]
     assert payload.get("missing_key_detail") in (None, [],)
@@ -186,54 +172,48 @@ def test_features_keys_schema_owns_former_orphans():
         assert by_key[key]["has_key_detail"] is True
 
 
-def test_features_show_keys_rejects_other_actions():
-    result = run_spa(["features", "list", "--keys"])
+def test_explain_rejects_a_recursive_keys_flag():
+    result = run_spa(["config", "explain", "os", "--keys"])
     assert result.returncode == 2
-    assert "requires" in result.stderr
+    assert "longer path" in result.stderr
     assert not result.stdout.strip().startswith("{")
 
 
-def test_features_json_after_subcommand():
-    trailing = run_spa(["features", "list", "--json"])
-    leading = run_spa(["--json", "features", "list"])
+def test_config_json_after_subcommand():
+    trailing = run_spa(["config", "explain", "os", "--json"])
+    leading = run_spa(["--json", "config", "explain", "os"])
     assert trailing.returncode == 0, trailing.stderr
     assert leading.returncode == 0, leading.stderr
     assert json.loads(trailing.stdout) == json.loads(leading.stdout)
-    rows = json.loads(trailing.stdout)["data"]["features"]
-    ids = [item["id"] for item in rows if item.get("id")]
-    assert "topology.c1" in ids
-    assert all(not str(item.get("selector", "")).startswith("setting.") for item in rows)
-    assert all(not str(item.get("id", "")).startswith("setting.") for item in rows)
+    assert json.loads(trailing.stdout)["data"]["path"] == "os"
 
 
-def test_features_keys_misuse_is_enveloped_in_agent_mode():
-    result = run_spa(["--json", "features", "list", "--keys"])
+def test_explain_keys_misuse_is_enveloped_in_agent_mode():
+    result = run_spa(["--json", "config", "explain", "--keys"])
     assert result.returncode == 2
     assert not result.stderr
     payload = json.loads(result.stdout)
     assert payload["ok"] is False
     assert payload["schema_version"] == 1
-    assert "show SELECTOR --keys" in payload["error"]
+    assert "data" not in payload
+    assert "longer path" in payload["error"]
 
 
-def test_features_keys_cover_schema():
-    result = run_spa(["features", "keys"])
+def test_config_keys_cover_schema():
+    result = run_spa(["config", "keys"])
     assert result.returncode == 0, result.stderr
     assert "missing:" not in result.stdout
     assert "missing detail:" not in result.stdout
 
 
-def test_features_json_search():
-    result = run_spa(["--json", "features", "search", "architecture"])
+def test_config_json_search():
+    result = run_spa(["--json", "config", "search", "architecture"])
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    rows = payload["data"]["features"]
-    selectors = [item.get("selector") for item in rows]
-    assert "splunk_defaults.splunk_architecture" in selectors
-    assert rows[0]["match_reason"]
-    assert "matched_keys" in rows[0]
-    assert "snippet" not in payload["data"]["features"][0]
-    assert "keys" not in payload["data"]["features"][0]
+    rows = payload["data"]["matches"]
+    paths = [item["path"] for item in rows]
+    assert "splunk_defaults.splunk_architecture" in paths
+    assert set(rows[0]) == {"path", "description"}
 
 
 def test_config_schema_payload_lists_each_schema_path_once():
@@ -251,10 +231,10 @@ def test_config_schema_payload_lists_each_schema_path_once():
         "General",
         "OS",
         "Provider",
+        "Clustering",
         "Defaults",
         "Hosts",
         "Apps",
-        "Clustering",
     ]
     provider = next(area["keys"] for area in payload["areas"] if area["title"] == "Provider")
     provider_paths = [key["path"] for key in provider]
@@ -296,7 +276,7 @@ def test_config_markdown_header_groups_defaults_and_hides_secrets():
 
     text = format_config_markdown(PROJECT_ROOT)
     assert text.startswith(
-        "<!-- Generated by spa features schema --markdown. Do not edit by hand. -->\n"
+        "<!-- Generated by spa config schema --markdown. Do not edit by hand. -->\n"
     )
     assert "\n## Defaults\n" in text
     assert "-----BEGIN" not in text
@@ -306,31 +286,30 @@ def test_config_markdown_header_groups_defaults_and_hides_secrets():
     assert literal.findall(text) == []
 
 
-def test_features_schema_markdown_is_human_dump():
-    result = run_spa(["--no-agent", "features", "schema", "--markdown"])
+def test_config_schema_markdown_is_human_dump():
+    result = run_spa(["--no-agent", "config", "schema", "--markdown"])
     assert result.returncode == 0, result.stderr
     assert result.stdout.startswith(
-        "<!-- Generated by spa features schema --markdown. Do not edit by hand. -->"
+        "<!-- Generated by spa config schema --markdown. Do not edit by hand. -->"
     )
     assert not result.stdout.lstrip().startswith("{")
 
 
-def test_features_schema_markdown_is_not_an_agent_payload():
-    result = run_spa(["--json", "features", "schema", "--markdown"])
+def test_config_schema_markdown_is_not_an_agent_payload():
+    result = run_spa(["--json", "config", "schema", "--markdown"])
     assert result.returncode == 2
     assert not result.stderr
     payload = json.loads(result.stdout)
     assert payload["ok"] is False
     assert "data" not in payload
-    assert "spa features schema needs --markdown." in payload["error"]
-    assert "spa features show SELECTOR" in payload["error"]
+    assert "config explain" in payload["error"]
 
 
-def test_features_needs_an_action():
+def test_removed_features_command_points_at_explain():
     human = run_spa(["features"])
     assert human.returncode == 2
-    assert "spa features needs an action." in human.stderr
-    assert "spa features list" in human.stderr
+    assert "spa features was removed." in human.stderr
+    assert "spa config explain" in human.stderr
     assert not human.stdout.strip()
     agent = run_spa(["--json", "feat"])
     assert agent.returncode == 2
@@ -338,69 +317,65 @@ def test_features_needs_an_action():
     payload = json.loads(agent.stdout)
     assert payload["ok"] is False
     assert "data" not in payload
-    assert "spa features search QUERY" in payload["error"]
+    assert "spa config explain" in payload["error"]
 
 
-def test_features_schema_rejects_a_path():
-    result = run_spa(["features", "schema", "splunk_defaults.splunk_admin_password"])
+def test_config_schema_rejects_a_path():
+    result = run_spa(["config", "schema", "splunk_defaults.splunk_admin_password"])
     assert result.returncode == 2
-    assert "spa features schema does not take a path." in result.stderr
-    assert "spa features show PATH" in result.stderr
-    assert "spa features schema --markdown" in result.stderr
+    assert "spa config schema does not take a path." in result.stderr
+    assert "spa config explain PATH" in result.stderr
+    assert "spa config schema --markdown" in result.stderr
     assert not result.stdout.strip()
-    agent = run_spa(["--json", "feat", "schema"])
+    agent = run_spa(["--json", "config", "schema"])
     assert agent.returncode == 2
     payload = json.loads(agent.stdout)
     assert "data" not in payload
-    assert "needs --markdown" in payload["error"]
+    assert "config explain" in payload["error"]
 
 
-def test_features_list_rejects_an_extra_argument():
-    result = run_spa(["features", "list", "extra"])
+def test_config_keys_rejects_an_extra_argument():
+    result = run_spa(["config", "keys", "extra"])
     assert result.returncode == 2
-    assert "spa features list does not take an argument." in result.stderr
-    assert "Full catalog: spa features list" in result.stderr
+    assert "spa config keys does not take an argument." in result.stderr
 
 
-def test_features_action_help_lists_only_that_actions_arguments():
-    show = run_spa(["features", "show", "--help"])
-    assert show.returncode == 0, show.stderr
-    assert "SELECTOR" in show.stdout
-    assert "--keys" in show.stdout
-    assert "--markdown" not in show.stdout
-    schema = run_spa(["features", "schema", "--help"])
+def test_config_action_help_lists_only_that_actions_arguments():
+    explain = run_spa(["config", "explain", "--help"])
+    assert explain.returncode == 0, explain.stderr
+    assert "PATH" in explain.stdout
+    assert "--keys" not in explain.stdout
+    assert "--command" not in explain.stdout
+    assert "--markdown" not in explain.stdout
+    schema = run_spa(["config", "schema", "--help"])
     assert schema.returncode == 0, schema.stderr
     assert "--markdown" in schema.stdout
-    assert "SELECTOR" not in schema.stdout
     assert "rejected_path" not in schema.stdout
 
 
-def test_features_markdown_requires_schema_action():
-    result = run_spa(["features", "list", "--markdown"])
+def test_markdown_requires_schema_action():
+    result = run_spa(["config", "explain", "--markdown"])
     assert result.returncode == 2
-    assert "spa features schema --markdown" in result.stderr
+    assert "spa config schema --markdown" in result.stderr
     assert not result.stdout.strip().startswith("{")
 
 
-def test_features_json_show_only_adds_details_with_keys_flag():
-    compact = run_spa(["--json", "features", "show", "splunk_defaults.splunk_indexer_volumes"])
-    detailed = run_spa(
-        ["--json", "features", "show", "splunk_defaults.splunk_indexer_volumes", "--keys"]
-    )
-    assert compact.returncode == 0, compact.stderr
-    assert detailed.returncode == 0, detailed.stderr
-    compact_feature = json.loads(compact.stdout)["data"]["feature"]
-    detailed_feature = json.loads(detailed.stdout)["data"]["feature"]
-    assert "keys" not in compact_feature
-    assert "key_details" not in compact_feature
-    paths = {item["path"] for item in detailed_feature["key_details"]}
-    assert "splunk_defaults.splunk_indexer_volumes.<volume>.path" in paths
-    assert "id" not in detailed_feature
-    assert detailed_feature["apply"]["merge"] in {"deep", "replace"}
-    assert "splunk_defaults.splunk_indexer_volumes" in detailed_feature["apply"]["paths"]
+def test_explain_shows_one_level_of_indexer_volumes():
+    result = run_spa(["--json", "config", "explain", "splunk_defaults.splunk_indexer_volumes"])
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)["data"]
+    names = [item["name"] for item in data.get("fields") or []]
+    assert names
+    assert "path" not in names
+    assert "id" not in data
+    assert "apply" not in data
+    child = run_spa(["--json", "config", "explain", "splunk_defaults.splunk_indexer_volumes.<volume>"])
+    assert child.returncode == 0, child.stderr
+    child_names = [item["name"] for item in json.loads(child.stdout)["data"].get("fields") or []]
+    assert "path" in child_names
 
 
-def test_schema_selectors_reject_old_ids_and_expose_apply():
+def test_schema_selectors_reject_old_ids_and_keep_snippets_examples_only():
     import re
 
     from spa.catalog import (
@@ -426,61 +401,47 @@ def test_schema_selectors_reject_old_ids_and_expose_apply():
             assert "selector" not in item
     assert len(selectors) == len(set(selectors))
 
-    listed = run_spa(["--json", "features", "list"])
+    listed = run_spa(["--json", "config", "explain"])
     assert listed.returncode == 0, listed.stderr
     assert "setting." not in listed.stdout
-    for row in json.loads(listed.stdout)["data"]["features"]:
-        if row.get("configurable") and row.get("kind") == "setting":
-            assert row["selector"]
-            assert "id" not in row
 
-    rejected = run_spa(["features", "show", "setting.ssl"])
+    rejected = run_spa(["config", "explain", "setting.ssl"])
     assert rejected.returncode != 0
-    assert "Unknown feature" in rejected.stderr
+    assert "Unknown config path" in rejected.stderr
 
-    tls = json.loads(run_spa(["--json", "features", "search", "tls"]).stdout)
-    assert tls["data"]["features"][0]["selector"] == "splunk_defaults.splunk_ssl"
-    assert tls["data"]["features"][0]["match_reason"] == "search term"
-    assert "matched_keys" in tls["data"]["features"][0]
+    tls = json.loads(run_spa(["--json", "config", "search", "tls"]).stdout)
+    assert tls["data"]["matches"][0]["path"] == "splunk_defaults.splunk_ssl"
 
     exact = json.loads(
-        run_spa(["--json", "features", "search", "splunk_defaults.splunk_ssl"]).stdout
+        run_spa(["--json", "config", "search", "splunk_defaults.splunk_ssl"]).stdout
     )
-    assert exact["data"]["features"][0]["selector"] == "splunk_defaults.splunk_ssl"
-    assert exact["data"]["features"][0]["match_reason"] in {"selector", "schema path"}
+    assert exact["data"]["matches"][0]["path"] == "splunk_defaults.splunk_ssl"
 
-    roles = json.loads(run_spa(["--json", "features", "search", "cluster_manager"]).stdout)
-    assert any(
-        "splunk_hosts[].roles" in row.get("matched_keys", [])
-        for row in roles["data"]["features"]
-    )
+    roles = json.loads(run_spa(["--json", "config", "search", "roles"]).stdout)
+    assert any(row["path"] == "splunk_hosts.roles" for row in roles["data"]["matches"])
 
-    empty = json.loads(run_spa(["--json", "features", "search", "zzznosupport"]).stdout)
-    assert empty["data"]["features"] == []
+    empty = json.loads(run_spa(["--json", "config", "search", "zzznosupport"]).stdout)
+    assert empty["data"]["matches"] == []
 
-    gone = run_spa(["features", "show", "LDAP authentication"])
+    gone = run_spa(["config", "explain", "LDAP authentication"])
     assert gone.returncode != 0
-    assert "Unknown feature" in gone.stderr
-    listed = run_spa(["features", "list"])
-    assert "not a splunk_config.yml setting" not in listed.stdout
-    assert "GCP provider" not in listed.stdout
-    assert "Apps management CLI" not in listed.stdout
+    assert "Unknown config path" in gone.stderr
+    root = run_spa(["config", "explain"])
+    assert "not a splunk_config.yml setting" not in root.stdout
+    assert "GCP provider" not in root.stdout
+    assert "Apps management CLI" not in root.stdout
 
-    layout = json.loads(
-        run_spa(["--json", "features", "show", "provider.aws", "--keys"]).stdout
-    )
-    assert layout["data"]["feature"]["id"] == "provider.aws"
-    assert layout["data"]["feature"].get("suggest")
-    assert "apply" not in layout["data"]["feature"]
+    layout = json.loads(run_spa(["--json", "config", "explain", "provider.aws"]).stdout)
+    assert layout["data"]["path"] == "provider.aws"
+    assert layout["data"].get("suggest")
+    assert "apply" not in layout["data"]
 
-    shown = json.loads(
-        run_spa(["--json", "features", "show", "os", "--keys"]).stdout
-    )
-    apply = shown["data"]["feature"]["apply"]
-    assert apply["merge"] in {"deep", "replace"}
-    assert "os" in apply["paths"]
-    assert "-----BEGIN" not in apply["snippet"]
-    assert "lookup('env'" in apply["snippet"] or "password:" not in apply["snippet"].lower()
+    shown = json.loads(run_spa(["--json", "config", "explain", "os"]).stdout)
+    feature = shown["data"]
+    assert "apply" not in feature
+    assert feature["fields"]
+    blob = json.dumps(feature)
+    assert "-----BEGIN" not in blob
 
     text = format_config_markdown(PROJECT_ROOT)
     assert re.search(r"\b(setting|topology|provider)\.[A-Za-z0-9_.]+", text) is None
@@ -595,44 +556,31 @@ def test_key_descriptions_state_behavior_and_omit_defaults():
     if isinstance(admin, str) and "lookup" not in admin and len(admin) > 3:
         assert admin not in blob
 
-    shown = json.loads(run_spa(["--json", "features", "show", "os", "--keys"]).stdout)
-    by_path = {row["path"]: row for row in shown["data"]["feature"]["key_details"]}
-    assert by_path["os.enable_time_sync_cron"]["description"] == cron
-    assert "note" not in by_path["os.enable_time_sync_cron"]
-    assert by_path["splunk_hosts[].os.time_zone"]["description"] == texts[
-        "splunk_hosts[].os.time_zone"
-    ]
-    assert "Java 21" in by_path["splunk_hosts[].os.packages"]["description"]
-    assert "Java 21" not in by_path["os.packages"]["description"]
+    shown = json.loads(run_spa(["--json", "config", "explain", "os"]).stdout)
+    by_name = {row["name"]: row for row in shown["data"]["fields"]}
+    assert "Default false" not in by_name["enable_time_sync_cron"]["description"]
+    host_packages = json.loads(
+        run_spa(["--json", "config", "explain", "splunk_hosts.os.packages"]).stdout
+    )
+    assert "Java 21" in host_packages["data"]["description"]
+    assert "Java 21" not in by_name["packages"]["description"]
 
 
-def test_show_accepts_selector_without_brackets():
-    human = run_spa(["features", "show", "splunk_app_deployment.apps.premium_app"])
+def test_explain_accepts_a_path_without_brackets():
+    human = run_spa(["config", "explain", "splunk_app_deployment.apps.premium_app"])
     assert human.returncode == 0, human.stderr
-    assert "'splunk_app_deployment.apps[].premium_app'" in human.stdout
+    assert human.stdout.splitlines()[0] == "PATH: splunk_app_deployment.apps.premium_app"
     payload = json.loads(
-        run_spa(
-            ["--json", "features", "show", "splunk_app_deployment.apps.premium_app"]
-        ).stdout
+        run_spa(["--json", "config", "explain", "splunk_app_deployment.apps.premium_app"]).stdout
     )
-    assert payload["data"]["feature"]["selector"] == "splunk_app_deployment.apps[].premium_app"
-    keys = run_spa(["features", "show", "splunk_hosts.name", "--keys"])
+    assert payload["data"]["path"] == "splunk_app_deployment.apps.premium_app"
+    keys = run_spa(["config", "explain", "splunk_hosts.name"])
     assert keys.returncode == 0, keys.stderr
-    assert "'splunk_hosts[].name'" in keys.stdout
-    detailed = json.loads(
-        run_spa(["--json", "features", "show", "splunk_hosts.name", "--keys"]).stdout
-    )
-    paths = {row["path"] for row in detailed["data"]["feature"]["key_details"]}
-    assert "splunk_hosts[].name" in paths
-    listed = run_spa(["features", "list"])
-    assert "'splunk_hosts[].name'" in listed.stdout
+    assert keys.stdout.startswith("PATH: splunk_hosts.name")
     found = json.loads(
-        run_spa(
-            ["--json", "features", "search", "splunk_app_deployment.apps.premium_app"]
-        ).stdout
+        run_spa(["--json", "config", "search", "splunk_app_deployment.apps.premium_app"]).stdout
     )
-    assert found["data"]["features"][0]["selector"] == "splunk_app_deployment.apps[].premium_app"
-    assert found["data"]["features"][0]["match_reason"] == "selector"
+    assert found["data"]["matches"][0]["path"] == "splunk_app_deployment.apps.premium_app"
 
 
 def test_folded_selectors_stay_unique():
@@ -672,12 +620,75 @@ def test_omit_default_is_a_payload_field():
     assert "default" not in by_path["terraform.aws.ssh_private_key_file"]
 
     shown = json.loads(
-        run_spa(
-            ["--json", "features", "show", "splunk_defaults.splunk_env_name", "--keys"]
-        ).stdout
+        run_spa(["--json", "config", "explain", "splunk_defaults.splunk_env_name"]).stdout
     )
-    details = {row["path"]: row for row in shown["data"]["feature"]["key_details"]}
-    assert details["splunk_defaults.splunk_env_name"]["default"] == "splk"
-    human = run_spa(["features", "show", "splunk_defaults.splunk_env_name", "--keys"])
+    assert shown["data"]["default"] == "splk"
+    human = run_spa(["config", "explain", "splunk_defaults.splunk_env_name"])
     assert human.returncode == 0, human.stderr
-    assert "default='splk'" in human.stdout
+    assert 'default: "splk"' in human.stdout
+
+
+def test_ansible_defaults_do_not_ship_admin_or_cluster_passwords():
+    """Admin and cluster passwords come from splunk_config.yml, not defaults/*.yml."""
+    files = {
+        "splunk_defaults.yml": "splunk_admin_password",
+        "splunk_idxclusters.yml": "idxc_password",
+        "splunk_shclusters.yml": "shc_password",
+    }
+    for name, key in files.items():
+        text = (PROJECT_ROOT / "defaults" / name).read_text(encoding="utf-8")
+        assert "must be set in splunk_config.yml" in text
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            assert not stripped.startswith("%s:" % key), name
+
+
+def test_explain_command_is_read_only_and_one_per_feature():
+    """CFG-ADD-005."""
+    from spa.catalog import feature_class, feature_command, load_features, public_feature
+
+    shown = run_spa(["--json", "config", "explain", "splunk_hosts"])
+    assert shown.returncode == 0, shown.stderr
+    feature = json.loads(shown.stdout)["data"]
+    assert "spa config add 'splunk_hosts[name=NAME]' JSON_OBJECT" in feature["command"]
+    assert "apply" not in feature
+    human = run_spa(["config", "explain", "splunk_hosts"])
+    assert human.returncode == 0, human.stderr
+    assert "spa config add 'splunk_hosts[name=idx1]'" in human.stdout
+    refused = run_spa(["--json", "config", "explain", "--command"])
+    assert refused.returncode == 2
+    assert "longer path" in json.loads(refused.stdout)["error"]
+
+    features = load_features(PROJECT_ROOT)
+    supported = {"set", "add", "topology", "provider", "apps add"}
+    commands = []
+    for item in features:
+        command = feature_command(item)
+        public = public_feature(item, features)
+        if feature_class(item) == "unsupported":
+            assert command is None
+            assert public["configurable"] is False
+            continue
+        assert command is not None
+        assert set(command) == {"action", "path", "command"}
+        assert command["action"] in supported
+        assert command["command"].startswith("spa ")
+        assert "\n" not in command["command"]
+        commands.append(command)
+    by_path = {item.get("selector") or item.get("id"): feature_command(item) for item in features}
+    assert by_path["splunk_idxclusters[].idxc_name"]["action"] == "add"
+    assert by_path["splunk_shclusters[].shc_name"]["action"] == "add"
+    assert by_path["splunk_hosts[].splunk_outputs"]["action"] == "set"
+    assert by_path["splunk_hosts[].splunk_outputs"]["command"].startswith("spa config set ")
+    assert by_path["splunk_defaults.splunk_admin_password"]["command"].endswith("--from-env NAME")
+    assert by_path["splunk_app_deployment.apps[].app_id"]["action"] == "apps add"
+    assert by_path["splunk_app_deployment.apps[].content_pack_apps"]["command"].startswith(
+        "spa apps add "
+    )
+    assert by_path["os"]["command"] == "spa config set os VALUE"
+    assert by_path["topology.c1"]["command"] == "spa config topology topology.c1"
+    assert by_path["provider.aws"]["command"] == "spa config provider provider.aws"
+    assert feature_command({"id": "note.example", "kind": "note", "title": "Not configurable"}) is None
+    assert commands

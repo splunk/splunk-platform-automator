@@ -11,6 +11,17 @@ from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
 
+def test_explicit_aws_provider_is_not_described_as_virtualbox():
+    from spa.init import resolve_example_pair
+
+    topology, provider, hint = resolve_example_pair(
+        PROJECT_ROOT, "cm_2idxc1site_3shc_uf", "aws"
+    )
+    assert topology == "cm_2idxc1site_3shc_uf"
+    assert provider == "aws"
+    assert hint is None
+
+
 def test_init_help():
     result = run_spa(["init", "--help"])
     assert result.returncode == 0

@@ -114,9 +114,10 @@ except ImportError as e:
 
 # Secret resolution (vault / env)
 try:
-    from secret_resolver import load_config_with_secrets
+    from secret_resolver import load_config_with_secrets, unresolved_env_message
 except ImportError:
     load_config_with_secrets = None
+    unresolved_env_message = None
 
 try:
     from spa_paths import resolve_shared_data_dir, resolve_spa_paths
@@ -714,7 +715,8 @@ class InventoryModule(BaseInventoryPlugin):
         try:
             validate_config(resolved_config)
         except ConfigValidationError as e:
-            raise AnsibleParserError(str(e))
+            hint = unresolved_env_message(load_config_with_secrets(path, resolve_secrets=False))
+            raise AnsibleParserError("%s\n%s" % (e, hint) if hint else str(e))
         except Exception as e:
             raise AnsibleParserError(f"Failed to validate configuration: {e}")
 

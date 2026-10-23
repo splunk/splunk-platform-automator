@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import glob
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -40,6 +41,36 @@ def _defaultish(configured: Any, env_var: str) -> bool:
     if "{{" in value:
         return True
     return value in _DEFAULTS.get(env_var, ())
+
+
+def _secret_resolver():
+    plugin = Path(__file__).resolve().parents[2] / "ansible" / "plugins" / "inventory"
+    plugin_dir = str(plugin)
+    if plugin_dir not in sys.path:
+        sys.path.insert(0, plugin_dir)
+    import secret_resolver
+
+    return secret_resolver
+
+
+def env_lookup_readiness(config: Any) -> List[Dict[str, str]]:
+    """Sorted environment-lookup status. Values are never included."""
+    return _secret_resolver().env_lookup_readiness(config)
+
+
+def unresolved_env_message(config: Any) -> Optional[str]:
+    """Error naming every missing or empty lookup, or None when all are set."""
+    return _secret_resolver().unresolved_env_message(config)
+
+
+def env_reference_lines(config: Any) -> List[str]:
+    """Non-failing readiness summary. An empty config returns no lines."""
+    rows = env_lookup_readiness(config)
+    if not rows:
+        return []
+    return ["Environment references:"] + [
+        "  %s: %s" % (row["name"], row["state"]) for row in rows
+    ]
 
 
 def load_config_mapping(path: Path) -> Dict[str, Any]:
@@ -82,7 +113,7 @@ def _local_apps(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     for app in list(dep.get("apps") or []) + list(dep.get("host_specific_apps") or []):
         if not isinstance(app, dict):
             continue
-        source = app.get("source") or "local"
+        source = app.get("source") or "splunkbase"
         if source != "local":
             continue
         found.append(app)
