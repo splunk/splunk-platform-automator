@@ -166,11 +166,56 @@ For a new provider, register its module in `PROVIDER_MODULES` in [`lib/spa/provi
 
 For a new playbook or role, preserve the Ansible responsibilities above, add valid metadata to a cataloged playbook, use generated inventory groups, review progress mapping, and add the focused tests described below. For a curated app task file, follow the `# spa-app:` parser contract.
 
+## CLI UX and output conventions
+
+One command language for humans and agents. The CLI parses and renders. `SpaSession` returns a JSON-serializable `CommandResult`. A future GUI uses that session and does not parse human text. `schema_version` stays `1` until a stable `data` field is renamed or removed. Additive `data` fields do not bump it.
+
+### Command language
+
+- `list` is a catalog and the last word of the command (`spa hosts list`, `spa apps content-packs list`, `spa aws regions list`). `get` is the current value. `explain` is one definition. `search` is ranked discovery. Mutations stay explicit: `set`, `add`, `remove`, `merge`, `deploy`, `destroy`, and the other existing verbs. Do not use two verbs for the same operation.
+- A noun with several actions owns subcommands (`spa config`, `spa apps`). A single operation stays top-level (`spa validate`, `spa deploy`).
+- A bare parent that needs an action prints the legal forms and exits 2. It does not dump a catalog.
+- `spa --help` lists canonical names. Human `--help` for one command uses `usage: spa validate` and a separate `Aliases:` line for a short form such as `val`. Parent help, invalid-choice text, `COMMAND_SCHEMA`, generated docs, and agent output omit those short forms. `spa init` and `spa env` stay documented human aliases. Schema examples use `spa environment`. `spa shell` stays the SSH command; `sh` appears only on its `Aliases:` line. Retired `feat` is an error, not an alias.
+
+### Human output
+
+Successful data goes to stdout. Diagnostics, warnings, progress, and errors go to stderr. Usage errors exit 2. Runtime failures exit 1. Help exits 0. Name the legal command and a next action.
+
+A usage error must name the legal values when the set is small (`aws` or `virtualbox`), or say what the operand is, name the command that lists the values, and give one example. `spa config topology` points at `spa init list` (the same catalog as `spa environment init list`) and shows an example such as `spa config topology cm_2idxc_sh_uf`. An unknown topology or provider points at that list and does not stop at a filesystem path. Do not paste an open-ended catalog into the error. Human stderr and the agent `error` string carry the same sentences.
+
+When stdin is not a terminal and the process is not in agent mode, do not prompt. Exit 2 with an error that names `-y/--yes` and does not say "agent mode". A human TTY still gets `Proceed?`. An agent missing `--yes`, and a declined TTY prompt, stay exit 1.
+
+### Agent output
+
+`--agent` is the documented selector. `--json` stays a working synonym of the same envelope. Failure is `{"ok":false,"schema_version":1,"error":"..."}` with no `data`. Omit absent `data` and `error`. When agent mode is on, including auto-detect without `--agent`, `--help` returns that envelope: `spa --help` is an index of names and summaries, and `spa COMMAND --help` is that one `COMMAND_SCHEMA` entry. `--no-agent --help` stays human text. `spa agent schema` remains the full catalog.
+
+Agent mode prints one JSON object on stdout and does not print a human sentence on stdout or stderr. That includes progress and cache notices. A human sees those sentences; `--agent` and `--json` do not. Long-running commands may write progress to stderr only as one JSON object per line. `spa shell`, and an SSH or SCP session started by `spa hosts ssh` or `spa hosts copy`, stay native text. A provision failure from those hosts commands is still the JSON envelope.
+
+### Command classes
+
+Human rendering and agent JSON consume the same session data. Each command belongs to one class:
+
+- Catalog or search: stable order, one row per item, and truncation metadata when the list is bounded.
+- Selected definition: `spa config explain`.
+- Current value: `spa config get`.
+- Mutation: plan or result, and the revision when the command already has one. Agent mode does not prompt.
+- Validation: `spa validate`.
+- Long-running: compact progress plus a log path. Do not apply catalog formatting to that stream. The run-log contract under [env-dir run logs](contributing.md#env-dir-run-logs) stays the source for the stream.
+
+### Intentional exceptions
+
+- `spa aws`, `spa licenses`, and `spa shell` own native output and are not wrapped in the envelope. Their `--help` stays text even when an agent is detected. `spa aws` and `spa licenses` print text by default. Human diagnostics, including the region sentence, go to stderr. `--json` and `--agent` print only that command's JSON, with no text sentence before or after it. A usage failure from those two commands is `{"ok":false,"error":"..."}` and does not add `schema_version`. `spa shell` stays text.
+- `spa config schema --markdown` and `spa agent schema --markdown` are human docs dumps and keep `--no-agent`.
+- `spa config explain` keeps the shape from its accepted config-editing plan.
+- VirtualBox `suspend` and `resume` do not call `input()` today. This contract does not add that prompt.
+- Shell completion is a later command, `spa completion`. This contract does not add it. Completion reads `COMMAND_SCHEMA` and offers canonical names only.
+
 ## Enforced contracts and current conventions
 
 Tests currently enforce:
 
 - `SpaSession` and `LocalSpaSession` API shape plus the `CommandResult` envelope
+- Agent mode prints one JSON object and no human sentence, including `spa apps content-packs list`
 - Pydantic configuration behavior and validation of shipped examples
 - First-party playbook metadata, safe path resolution, provisioning gates, and confirmation
 - Generated `commands.md` and `config.md`, canonical documentation names, and relative links
@@ -240,8 +285,10 @@ steps until it passes an independent whole-change review:
    tokens, private keys, or certificates.
 4. Fix every confirmed finding with a new red-green-refactor cycle and rerun
    the required local gates.
-5. Proceed only when no required finding remains. Record deferred minor
-   findings explicitly.
+5. Report the review to the user before any commit. For each finding, say what
+   was found, what was fixed, and what was left out. Do not commit until the user confirms the left-out items.
+6. Continue to the ship steps only after the user confirms the left-out items.
+   A request to fix a left-out item returns to step 4.
 
 ## Feature development lifecycle
 
@@ -257,8 +304,9 @@ Before implementation:
 Develop and verify on the feature branch using
 [test-driven development](#test-driven-development). Keep the issue,
 `[Unreleased]` changelog entry, and ROADMAP status aligned with the implemented
-scope. Complete the [feature completion review](#feature-completion-review)
-before starting the ship steps below.
+scope. Complete the [feature completion review](#feature-completion-review),
+including the user's confirmation of what was left out, before starting the
+ship steps below.
 
 When the user says the feature is complete, concluded, or ready to ship, finish it without requiring them to enumerate the integration steps:
 

@@ -315,7 +315,7 @@ def collect_checks(
             "warn",
             "spa_venv_pin",
             "SPA_VENV_DIR points outside this SPA_HOME/environment: %s" % explicit,
-            "unset SPA_VENV_DIR; then run spa venv --shared --rebuild --yes",
+            "unset SPA_VENV_DIR; then run spa venv rebuild --shared --yes",
         )
     checked = [explicit] if explicit else []
     if env_path:
@@ -332,14 +332,14 @@ def collect_checks(
                 "warn",
                 "spa_venv",
                 "incomplete venv at %s (no bin/activate)" % candidate,
-                "spa venv %s --rebuild --yes" % _venv_scope(candidate),
+                "spa venv rebuild %s --yes" % _venv_scope(candidate),
             )
         elif not venv_has_requirements(candidate):
             rec(
                 "warn",
                 "spa_venv_packages",
                 "venv at %s cannot import %s" % (candidate, " / ".join(SPA_VENV_MODULES)),
-                "spa venv %s --reinstall --yes" % _venv_scope(candidate),
+                "spa venv reinstall %s --yes" % _venv_scope(candidate),
             )
     if venv is not None:
         rec("ok", "spa_venv", "venv at %s" % venv)
@@ -348,7 +348,7 @@ def collect_checks(
         blocked = ansible_controller_problem(venv)
         ansible = venv / "bin" / "ansible"
         if blocked:
-            rec("error", "ansible", blocked, "spa venv %s --rebuild --yes" % _venv_scope(venv))
+            rec("error", "ansible", blocked, "spa venv rebuild %s --yes" % _venv_scope(venv))
         elif ansible.is_file():
             ver = subprocess.run([str(ansible), "--version"], capture_output=True, text=True).stdout.splitlines()
             rec("ok", "ansible", ver[0] if ver else str(ansible))
@@ -357,17 +357,17 @@ def collect_checks(
                 "warn",
                 "ansible",
                 "ansible is not installed in %s" % venv,
-                "spa venv %s --reinstall --yes" % _venv_scope(venv),
+                "spa venv reinstall %s --yes" % _venv_scope(venv),
             )
     elif shared.is_dir():
         rec(
             "warn",
             "spa_venv",
             "no usable venv yet (%s exists but cannot run spa)" % shared,
-            "spa venv --shared --rebuild --yes",
+            "spa venv rebuild --shared --yes",
         )
     else:
-        rec("warn", "spa_venv", "shared venv not created yet", "spa venv --shared --create --yes")
+        rec("warn", "spa_venv", "shared venv not created yet", "spa venv create --shared --yes")
 
     spa_bin = shutil.which("spa")
     expected = str(spa_home_path / "bin" / "spa")

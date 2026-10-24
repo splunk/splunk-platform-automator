@@ -189,8 +189,11 @@ def test_missing_example(tmp_path):
     result = run_spa_init(
         ["--example", "does-not-exist.yml", "--provider", "virtualbox", str(tmp_path / "x")]
     )
-    assert result.returncode != 0
-    assert "not found" in (result.stderr + result.stdout).lower()
+    assert result.returncode == 2
+    text = (result.stderr + result.stdout).lower()
+    assert "does-not-exist" in text
+    assert "spa init list" in text
+    assert "examples/topologies" not in text
 
 
 def _write_old_env(root: Path, marker: str = "migrated-env") -> None:

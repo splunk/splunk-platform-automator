@@ -115,7 +115,7 @@ def check_ansible_status(hosts, paths=None):
                     
     except FileNotFoundError:
         print(
-            "Warning: %s not found. Repair it: spa venv --shared --rebuild --yes" % ansible_bin,
+            "Warning: %s not found. Repair it: spa venv rebuild --shared --yes" % ansible_bin,
             file=sys.stderr,
         )
     except Exception as e:
@@ -393,7 +393,7 @@ def main(argv=None):
 
     parser = argparse.ArgumentParser(
         prog="spa shell",
-        description="SSH or SCP using inventory (alias of spa hosts ssh / spa hosts copy).",
+        description="Aliases: sh\n\nSSH or SCP using inventory (alias of spa hosts ssh / spa hosts copy).",
         epilog="Copy: spa shell -c SRC DST, where a remote side is HOST:PATH\n"
         "  spa shell -c app.tgz idx1:/tmp/\n"
         "  spa shell -c idx1:/opt/splunk/etc/system/local/server.conf .\n",

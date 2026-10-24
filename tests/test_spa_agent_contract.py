@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from spa_testutil import AGENT_ENV_VARS, PROJECT_ROOT, run_spa
+from spa_testutil import AGENT_ENV_VARS, PROJECT_ROOT, run_spa, write_min_env
 
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
@@ -107,3 +107,176 @@ def test_native_help_remains_native_text_when_agent_is_auto_detected():
     assert result.returncode == 0, result.stderr
     assert result.stdout.startswith("usage: spa aws")
     assert not result.stdout.startswith("{")
+
+
+def _assert_agent_json_only(result):
+    """--agent/--json: one JSON object on stdout and no human text on stderr."""
+    assert result.stderr == "", result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["schema_version"] == 1
+    assert isinstance(payload["ok"], bool)
+    assert result.stdout == json.dumps(payload, separators=(",", ":")) + "\n"
+    return payload
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--agent", "init", "list"],
+        ["--json", "doctor"],
+        ["--agent", "environment", "list"],
+        ["--agent", "agent", "schema"],
+        ["--agent", "run", "list"],
+        ["--agent", "config", "search", "region"],
+        ["--agent", "apps", "search", "unix"],
+        ["--agent", "skills"],
+        ["--agent", "venv"],
+        ["--agent", "logs", "list"],
+        ["--agent", "hosts", "list"],
+        ["--agent", "validate"],
+    ],
+)
+def test_read_only_agent_commands_print_json_only(argv):
+    result = run_spa(argv)
+    _assert_agent_json_only(result)
+
+
+def test_agent_content_packs_list_prints_json_only(tmp_path, monkeypatch, capsys):
+    env = write_min_env(tmp_path / "env")
+    cache = tmp_path / "cache"
+    conf = (
+        cache
+        / "content_pack_DA-ITSI-ContentLibrary"
+        / "content_pack_app_confs"
+        / "2.5.1"
+        / "DA-ITSI-CP-nix"
+        / "default"
+    )
+    conf.mkdir(parents=True)
+    (conf / "app.conf").write_text(
+        "[ui]\nlabel = Unix and Linux\n[launcher]\nversion = 1\n",
+        encoding="utf-8",
+    )
+    (env / "config" / "splunk_config.yml").write_text(
+        "splunk_app_deployment:\n  temp_dir: %s\n" % cache,
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(env))
+    monkeypatch.setenv("SPA_APPS_DIR", str(tmp_path / "apps"))
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(env / "config" / "splunk_config.yml"))
+    monkeypatch.setattr("spa.executil.venv_required_error", lambda _paths: None)
+    from spa.cli import main
+
+    for flag in ("--agent", "--json"):
+        rc = main([flag, "apps", "content-packs", "list", "5391", "--version", "2.5.1"])
+        captured = capsys.readouterr()
+        assert rc == 0, captured.err
+        assert captured.err == ""
+        payload = json.loads(captured.out)
+        assert payload["ok"] is True
+        assert payload["data"]["version"] == "2.5.1"
+        assert [row["name"] for row in payload["data"]["packs"]] == ["DA-ITSI-CP-nix"]
+        assert payload["data"]["source"] == "cached"
+        assert captured.out == json.dumps(payload, separators=(",", ":")) + "\n"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--agent", "aws", "--bogus"],
+        ["aws", "--json", "--bogus"],
+        ["--agent", "licenses", "--bogus"],
+        ["licenses", "--json", "--bogus"],
+    ],
+)
+def test_native_usage_errors_are_json_only(argv):
+    """aws and licenses own their JSON. It is not the spa envelope."""
+    result = run_spa(argv)
+    assert result.returncode == 2
+    assert result.stderr == "", result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert "unrecognized arguments" in payload["error"]
+    assert "schema_version" not in payload
+    assert "data" not in payload
+    assert result.stdout == json.dumps(payload, separators=(",", ":")) + "\n"
+
+
+def test_agent_hosts_ssh_provision_error_is_json_only(tmp_path, monkeypatch, capsys):
+    env = write_min_env(tmp_path / "env")
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(env))
+    monkeypatch.setattr("spa.executil.venv_required_error", lambda _paths: None)
+    from spa.api import CommandResult
+
+    monkeypatch.setattr(
+        "spa.api.LocalSpaSession._require_provisioned",
+        lambda self, extra_line=None: CommandResult(
+            ok=False, error="hosts not provisioned: idx1", code=1
+        ),
+    )
+    from spa.cli import main
+
+    rc = main(["--agent", "hosts", "ssh", "idx1"])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["ok"] is False
+    assert "hosts not provisioned: idx1" in payload["error"]
+    assert payload["schema_version"] == 1
+
+
+def test_agent_hosts_copy_provision_error_is_json_only(tmp_path, monkeypatch, capsys):
+    env = write_min_env(tmp_path / "env")
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(env))
+    monkeypatch.setattr("spa.executil.venv_required_error", lambda _paths: None)
+    from spa.api import CommandResult
+
+    monkeypatch.setattr(
+        "spa.api.LocalSpaSession._require_provisioned",
+        lambda self, extra_line=None: CommandResult(
+            ok=False, error="hosts not provisioned: idx1", code=1
+        ),
+    )
+    from spa.cli import main
+
+    rc = main(["--agent", "hosts", "copy", "app.tgz", "idx1:/tmp/"])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["ok"] is False
+    assert payload["schema_version"] == 1
+    assert "hosts not provisioned: idx1" in payload["error"]
+    assert "data" not in payload
+
+
+def test_agent_hosts_copy_shell_error_is_json_only(tmp_path, monkeypatch, capsys):
+    env = write_min_env(tmp_path / "env")
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(env))
+    monkeypatch.setattr("spa.executil.venv_required_error", lambda _paths: None)
+    monkeypatch.setattr(
+        "spa.api.LocalSpaSession._require_provisioned",
+        lambda self, extra_line=None: None,
+    )
+    from spa.shell import ShellError
+
+    def _fail(_paths):
+        raise ShellError("scp failed: idx1")
+
+    monkeypatch.setattr("spa.shell.run_scp", _fail)
+    from spa.cli import main
+
+    rc = main(["--agent", "hosts", "copy", "app.tgz", "idx1:/tmp/"])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["ok"] is False
+    assert payload["schema_version"] == 1
+    assert payload["error"] == "scp failed: idx1"
+    assert "data" not in payload

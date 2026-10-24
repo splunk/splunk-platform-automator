@@ -490,9 +490,13 @@ def resolve_example_pair(
     topo = spa_home / "examples" / "topologies" / ("%s.yml" % topology_id)
     prov = spa_home / "examples" / "providers" / ("%s.yml" % provider_id)
     if not topo.is_file():
-        raise InitError("Topology example not found: %s" % topo)
+        from spa.usage import unknown_topology
+
+        raise InitError(unknown_topology(topology_id), code=2)
     if not prov.is_file():
-        raise InitError("Provider example not found: %s (use aws or virtualbox)" % prov)
+        from spa.usage import unknown_provider
+
+        raise InitError(unknown_provider(provider_id), code=2)
     return topology_id, provider_id
 
 

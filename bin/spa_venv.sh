@@ -285,7 +285,7 @@ if [[ $_spa_venv_rc -eq 0 && "$_spa_venv_mode" != "done" && "$_spa_venv_mode" !=
         _spa_venv_probe_tmp="$(mktemp -d "${TMPDIR:-/tmp}/spa-ansible-probe.XXXXXX")"
         if ! ANSIBLE_LOCAL_TEMP="$_spa_venv_probe_tmp" ANSIBLE_REMOTE_TEMP="$_spa_venv_probe_tmp" \
              python -c 'from ansible.cli.inventory import main; from ansible.cli.playbook import main' >/dev/null 2>&1; then
-            _spa_venv_fail "spa_venv: Ansible cannot start with $(python -c 'import sys; print("Python %d.%d" % sys.version_info[:2])'). Rebuild with a supported interpreter, for example: spa venv --shared --rebuild --python python3.14 --yes"
+            _spa_venv_fail "spa_venv: Ansible cannot start with $(python -c 'import sys; print("Python %d.%d" % sys.version_info[:2])'). Rebuild with a supported interpreter, for example: spa venv rebuild --shared --python python3.14 --yes"
         fi
         rm -rf "$_spa_venv_probe_tmp"
     fi

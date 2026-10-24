@@ -362,7 +362,7 @@ def test_missing_tool_raises_actionable_error(tmp_path):
         tool_path(paths, "spa-no-such-tool")
     message = str(excinfo.value)
     assert "spa-no-such-tool not found" in message
-    assert "spa venv --shared --create --yes" in message
+    assert "spa venv create --shared --yes" in message
     assert "spa doctor" in message
 
 
@@ -581,7 +581,7 @@ def test_agent_schema():
     assert "--hosts" in flags
     assert "--list" not in flags
     assert "--yes" in flags
-    assert "spa --json run list" in run["summary"]
+    assert "spa --agent run list" in run["summary"]
     by_name = {c["name"]: c for c in payload["data"]["commands"]}
     for name in ("provision", "destroy", "deploy", "suspend", "resume"):
         assert by_name[name].get("requires_confirmation") is True
@@ -595,7 +595,7 @@ def test_agent_help_documents_schema():
     assert "spa agent schema" in result.stdout
     assert "requires_confirmation" in result.stdout
     # The schema covers commands; playbooks are discovered separately.
-    assert "spa --json run list" in result.stdout
+    assert "spa --agent run list" in result.stdout
     assert "--markdown" in result.stdout
     assert "docs/commands.md" in result.stdout
 
@@ -687,6 +687,7 @@ def test_agent_run_readonly_without_yes(monkeypatch):
 
 def test_human_run_mutating_cancel(monkeypatch):
     called = _fake_run_playbook(monkeypatch)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda *_a, **_k: "n")
     from spa.cli import main
 
@@ -697,6 +698,7 @@ def test_human_run_mutating_cancel(monkeypatch):
 
 def test_human_run_mutating_accept(monkeypatch):
     called = _fake_run_playbook(monkeypatch)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda *_a, **_k: "y")
     from spa.cli import main
 
@@ -710,6 +712,7 @@ def test_human_run_prompt_names_playbook_and_risk(monkeypatch):
 
     seen = []
     called = _fake_run_playbook(monkeypatch)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": seen.append(prompt) or "n")
     from spa.cli import main
 
@@ -756,6 +759,7 @@ def test_human_lifecycle_prompt_names_command_and_risk(monkeypatch, command, ris
     monkeypatch.setattr(
         "spa.playbooks.run_playbook", lambda *a, **k: called.append("deploy") or 0
     )
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": seen.append(prompt) or "n")
     from spa.cli import main
 
@@ -859,12 +863,11 @@ def test_catalog_usage_names_the_legal_command(argv, message):
 @pytest.mark.parametrize(
     ("argv", "message"),
     [
-        (["aws", "--list-regions"], "Listing regions is: spa aws list regions"),
-        (["aws", "--list-amis"], "Listing amis is: spa aws list amis"),
-        (["aws", "--list-instance-types"], "Listing instance-types is: spa aws list instance-types"),
-        (["aws", "--list-key-pairs"], "Listing key-pairs is: spa aws list key-pairs"),
-        (["aws", "--list-security-groups"], "Listing security-groups is: spa aws list security-groups"),
-        (["--json", "aws", "--list-regions"], "Listing regions is: spa aws list regions"),
+        (["aws", "--list-regions"], "Listing regions is: spa aws regions list"),
+        (["aws", "--list-amis"], "Listing amis is: spa aws amis list"),
+        (["aws", "--list-instance-types"], "Listing instance-types is: spa aws instance-types list"),
+        (["aws", "--list-key-pairs"], "Listing key-pairs is: spa aws key-pairs list"),
+        (["aws", "--list-security-groups"], "Listing security-groups is: spa aws security-groups list"),
     ],
 )
 def test_aws_retired_list_flags_name_the_list_command(argv, message):
@@ -873,6 +876,32 @@ def test_aws_retired_list_flags_name_the_list_command(argv, message):
     assert message in result.stderr
     assert "Regions" not in result.stdout
     assert not result.stdout.lstrip().startswith("{")
+
+
+def test_hidden_alias_expands_after_a_flag():
+    from spa.cli import _expand_hidden_aliases
+
+    assert _expand_hidden_aliases(["config", "--env", "lab", "sea", "region"]) == [
+        "config",
+        "--env",
+        "lab",
+        "search",
+        "region",
+    ]
+    assert _expand_hidden_aliases(["config", "--yes", "top", "cm_2idxc_sh_uf"]) == [
+        "config",
+        "--yes",
+        "topology",
+        "cm_2idxc_sh_uf",
+    ]
+
+
+def test_aws_retired_list_flag_json_names_the_list_command():
+    result = run_spa(["--json", "aws", "--list-regions"])
+    assert result.returncode == 2
+    assert result.stderr == ""
+    payload = json.loads(result.stdout)
+    assert payload == {"ok": False, "error": "Listing regions is: spa aws regions list"}
 
 
 def test_aws_list_help_keeps_flags_on_their_kind():
@@ -886,8 +915,8 @@ def test_aws_list_help_keeps_flags_on_their_kind():
         "--list-security-groups",
     ):
         assert flag not in parent.stdout
-    amis = run_spa(["aws", "list", "amis", "--help"])
-    types = run_spa(["aws", "list", "instance-types", "--help"])
+    amis = run_spa(["aws", "amis", "list", "--help"])
+    types = run_spa(["aws", "instance-types", "list", "--help"])
     assert amis.returncode == 0, amis.stderr
     assert "--family" not in amis.stdout
     assert "--name-filter" in amis.stdout
@@ -908,6 +937,7 @@ def test_human_env_playbook_prompt_mentions_missing_metadata(tmp_path, monkeypat
     seen = []
     monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
     monkeypatch.setenv("SPA_ENV_DIR", str(dest))
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": seen.append(prompt) or "n")
     from spa.cli import main
 

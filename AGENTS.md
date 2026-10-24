@@ -5,11 +5,11 @@ SPA provisions and deploys Splunk Enterprise (AWS Linux + Terraform, or VirtualB
 ## Contract
 
 - **`SPA_HOME`**: framework (prefix or clone). **`SPA_ENV_DIR`**: one environment. Operator `spa` needs `spa init` first. Path diagram: [user guide](docs/user-guide.md#understand-the-paths).
-- Call **`bin/spa`** only (`spa agent schema`, `spa --json config search QUERY`, `spa --json apps`). Load **`/spa`** first ([skills/spa/spa/SKILL.md](skills/spa/spa/SKILL.md)). Do not import `spa.api`. Do not start a daemon. Flag catalog: [docs/commands.md](docs/commands.md).
+- Call **`bin/spa`** only (`spa agent schema`, `spa --agent config search QUERY`, `spa --agent apps`). Load **`/spa`** first ([skills/spa/spa/SKILL.md](skills/spa/spa/SKILL.md)). Do not import `spa.api`. Do not start a daemon. Flag catalog: [docs/commands.md](docs/commands.md).
 - Mutating commands need **`--yes`**. Never auto-run provision, deploy, suspend, resume, or destroy. Never answer `Proceed?` interactively.
 - Never print secrets (Splunkbase, AWS keys, vault). Report env vars as **set / not set**. YAML: `lookup('env', ...)`. Do not pass `-v` on provision/deploy/run (unredacted Ansible stdout).
 - Full command names (`spa hosts ssh`, `spa validate`), not `spa sh` / `spa val`.
-- Playbooks: `spa --json run list` then `spa run NAME --help`. Confirmation: `--yes`. Extra Ansible args: `spa run NAME -- …`.
+- Playbooks: `spa --agent run list` then `spa run NAME --help`. Confirmation: `--yes`. Extra Ansible args: `spa run NAME -- …`.
 
 Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 
@@ -25,10 +25,10 @@ Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 | Guided design | [docs/user-guide.md](docs/user-guide.md#configure-an-environment) · `spa config search` then `spa config explain` |
 | 2.x → 3.0 | [docs/migrate.md](docs/migrate.md) |
 | New env | `spa environment init --example cm_2idxc_sh_uf NAME` then `spa --env NAME …`, `spa environment set --default NAME`, or `cd` into it |
-| Features / apps | `spa --json config search QUERY`; `spa --json apps search QUERY` then `snippet APP_ID`. For 5391: `spa --json apps content-packs list 5391`. AWS live values: `spa aws --json` |
-| Python | `spa venv --shared --create --yes` (`spa init` creates it when missing) |
-| Repair Python venv | `spa venv --shared --reinstall --yes` (or `--rebuild`) |
-| Upgrade Python/Ansible in the venv | `spa venv --shared --upgrade --yes` |
+| Features / apps | `spa --agent config search QUERY`; `spa --agent apps search QUERY` then `snippet APP_ID`. For 5391: `spa --agent apps content-packs list 5391`. AWS live values: `spa aws --json` |
+| Python | `spa venv create --shared --yes` (`spa init` creates it when missing) |
+| Repair Python venv | `spa venv reinstall --shared --yes` (or `spa venv rebuild --shared --yes`) |
+| Upgrade Python/Ansible in the venv | `spa venv upgrade --shared --yes` |
 | Host tools | `spa doctor` |
 | Validate | `spa validate` |
 | Provision + deploy | `spa provision --yes && spa deploy --yes` |
@@ -64,7 +64,7 @@ Backend vs GUI: [docs/architecture.md](docs/architecture.md#controller-architect
 ## Changing spa
 
 - Feature lifecycle: before the first file edit, fetch and update the recorded base branch and create the feature branch. Never assume `distribution` or `master`. Record that base. A plan, a todo list, or an implement-this request does not skip these steps. For each behavior, add one test, run it alone, and see it fail before changing production code. Regenerate `docs/commands.md` or `docs/config.md` only after its drift test has failed. Leave the slice open until `./tests/run_local_tests.sh` passes. Follow [Test-driven development](docs/architecture.md#test-driven-development), [Feature completion review](docs/architecture.md#feature-completion-review), and [Feature development lifecycle](docs/architecture.md#feature-development-lifecycle). Do not commit until the user explicitly authorizes it. When the user says the feature is complete, concluded, or ready to ship, complete the independent review, run the gate, commit authorized changes, open the pull request against that recorded base, fix CI until green, merge, verify the base-branch pipeline, close the issue, and clean up both feature branches without requiring the user to enumerate those steps.
-- New command: [Adding a spa command](docs/contributing.md#adding-a-spa-command). One parser per action. A catalog is `list`. Usage errors exit 2 and name the legal command. Human text goes to stderr. Agent mode (`--agent`, `--json`, or a detected agent) returns one JSON object `{"ok":false,"schema_version":1,"error":"..."}` and does not include `data`. Register the action in `COMMAND_SCHEMA` in the same change.
+- New command: [Adding a spa command](docs/contributing.md#adding-a-spa-command). One parser per action. A catalog is `list`. Usage errors exit 2 and name the legal command. Human text goes to stderr. Agent mode (`--agent`, `--json`, or a detected agent) returns one JSON object on stdout and does not print a human sentence. A failure is `{"ok":false,"schema_version":1,"error":"..."}` and does not include `data`. Register the action in `COMMAND_SCHEMA` in the same change.
 - New config key: [Adding a configuration feature](docs/contributing.md#adding-a-configuration-feature).
 - [docs/commands.md](docs/commands.md) and [docs/config.md](docs/config.md) are generated. Do not hand-edit them. Regenerate `docs/commands.md` with `spa --no-agent agent schema --markdown` and `docs/config.md` with `spa --no-agent config schema --markdown`. [tests/test_docs.py](tests/test_docs.py) fails when they drift.
 - CLI change gate: `./tests/run_cli_tests.sh`. Broader local gate: `./tests/run_local_tests.sh`. A parser change does not need an AWS run.

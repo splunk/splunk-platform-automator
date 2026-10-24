@@ -1281,6 +1281,22 @@ def config_merge(
     return result
 
 
+def resolve_topology_id(spa_home: Path, topology: str) -> str:
+    """Return the example stem for a topology name. Does not write config."""
+    from spa.init import resolve_example_pair
+
+    if topology.startswith("topology."):
+        from spa.catalog import load_features, resolve_feature
+        from spa.usage import unknown_topology
+
+        feature = resolve_feature(load_features(Path(spa_home)), topology)
+        if not feature or feature.get("kind") != "topology" or not feature.get("template"):
+            raise ConfigEditError(unknown_topology(topology))
+        topology = str(feature["template"])
+    topology_id, _provider_id = resolve_example_pair(Path(spa_home), topology, None)
+    return topology_id
+
+
 def config_topology(
     config_path: Path,
     spa_home: Path,
@@ -1293,16 +1309,9 @@ def config_topology(
     resolve_file: Optional[str] = None,
     stdin_text: Optional[str] = None,
 ) -> Dict[str, Any]:
-    from spa.init import _load_yaml_mapping, resolve_example_pair
+    from spa.init import _load_yaml_mapping
 
-    if topology.startswith("topology."):
-        from spa.catalog import load_features, resolve_feature
-
-        feature = resolve_feature(load_features(Path(spa_home)), topology)
-        if not feature or feature.get("kind") != "topology" or not feature.get("template"):
-            raise ConfigEditError("Unknown topology feature: %s" % topology)
-        topology = str(feature["template"])
-    topology_id, _ = resolve_example_pair(Path(spa_home), topology, None)
+    topology_id = resolve_topology_id(spa_home, topology)
     example = _load_yaml_mapping(Path(spa_home) / "examples" / "topologies" / ("%s.yml" % topology_id))
 
     def mutate(document: MutableMapping[str, Any], warnings: List[str]) -> None:
@@ -1340,7 +1349,9 @@ def config_provider(
 
         feature = resolve_feature(load_features(Path(spa_home)), provider)
         if not feature or feature.get("kind") != "provider" or not feature.get("template"):
-            raise ConfigEditError("Unknown provider feature: %s" % provider)
+            from spa.usage import unknown_provider
+
+            raise ConfigEditError(unknown_provider(provider))
         provider = str(feature["template"])
     _, provider_id = resolve_example_pair(Path(spa_home), "single_node", provider)
     example = _load_yaml_mapping(Path(spa_home) / "examples" / "providers" / ("%s.yml" % provider_id))

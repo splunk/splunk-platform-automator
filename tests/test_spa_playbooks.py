@@ -164,6 +164,29 @@ def test_requires_confirmation_from_risk():
     assert requires_confirmation(risk=None, missing_metadata=False) is True
 
 
+def test_non_tty_session_mutation_names_yes_and_does_not_prompt(monkeypatch):
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("prompted")),
+    )
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    session = open_session(start_dir=str(PROJECT_ROOT))
+    result = session.venv(action="create", confirm=False, agent=False)
+    assert result.code == 2
+    assert result.ok is False
+    assert "-y/--yes" in result.error
+    assert "agent mode" not in result.error
+
+
+def test_tty_decline_stays_exit_1(monkeypatch):
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "n")
+    session = open_session(start_dir=str(PROJECT_ROOT))
+    result = session.venv(action="create", confirm=False, agent=False)
+    assert result.code == 1
+    assert "cancelled" in result.error
+
+
 def test_ensure_confirmed_agent_never_prompts(monkeypatch):
     monkeypatch.setattr("builtins.input", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("prompted")))
     with pytest.raises(ConfirmationError, match="requires -y/--yes"):
@@ -199,6 +222,7 @@ def test_prompt_text_for_local_risks_never_mentions_hosts():
 
 def test_ensure_confirmed_human_prompt_uses_risk(monkeypatch):
     seen = []
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": seen.append(prompt) or "n")
     with pytest.raises(ConfirmationError, match="run splunk_remove cancelled"):
         ensure_confirmed("run splunk_remove", confirm=False, agent=False, risk="destructive")
@@ -206,6 +230,7 @@ def test_ensure_confirmed_human_prompt_uses_risk(monkeypatch):
 
 
 def test_ensure_confirmed_prints_hosts_not_extra_vars(monkeypatch, capsys):
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")
     ensure_confirmed(
         "deploy",

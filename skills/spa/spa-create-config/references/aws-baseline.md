@@ -54,16 +54,18 @@ From repo root (requires `boto3` and AWS credentials):
 
 ```bash
 spa aws --check-auth --json
-spa aws list regions --json
+spa aws --json regions list
 spa aws --region eu-central-1 --latest-ami --os all --json
-spa aws list instance-types --region eu-central-1 --family t3 --json
-spa aws list key-pairs --region eu-central-1 --json
-spa aws list security-groups --region eu-central-1 --json
+spa aws --json instance-types list --region eu-central-1 --family t3
+spa aws --json key-pairs list --region eu-central-1
+spa aws --json security-groups list --region eu-central-1
 spa aws --region eu-central-1 --describe-ami --ami-id ami-xxx --json
 spa aws --region eu-central-1 --validate \
   --ami-id ami-xxx --key-name aws_key --security-groups Splunk_Basic --instance-type t3.medium --json
 spa aws --survey --region eu-central-1 --json
 ```
+
+`--region` wins. When it is omitted, `spa aws` uses `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `region` in `~/.aws/config` for the active profile. Text output names that source, and `spa aws regions list` marks the region with `selected`. `--json` and `--agent` print only JSON, including `region_source`. Provision and the other lifecycle commands still read `terraform.aws.region` from the environment config.
 
 ## Prerequisites checklist
 
