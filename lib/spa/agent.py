@@ -7,6 +7,15 @@ import os
 import sys
 from typing import Any, Dict, Optional
 
+from spa.usage import (
+    APP_ID_HELP,
+    PROVIDER_HELP,
+    SELECTOR_HELP,
+    SET_PATH_HELP,
+    TOPOLOGY_HELP,
+    UNSET_PATH_HELP,
+)
+
 
 SCHEMA_VERSION = 1
 
@@ -150,7 +159,7 @@ COMMAND_SCHEMA = {
             "summary": "Transactionally replace one schema-backed value",
             "idempotent": True,
             "positionals": [
-                {"name": "PATH", "required": True, "help": "Schema path with identity selectors for list items"},
+                {"name": "PATH", "required": True, "help": SET_PATH_HELP},
                 {"name": "VALUE", "required": False, "help": "String or strict JSON value"},
             ],
             "flags": [
@@ -170,7 +179,7 @@ COMMAND_SCHEMA = {
             "summary": "Append one new non-app identity-list entry. Fails when that identity already exists.",
             "idempotent": False,
             "positionals": [
-                {"name": "SELECTOR", "required": True, "help": "Identity-list selector such as splunk_hosts[name=NAME]"},
+                {"name": "SELECTOR", "required": True, "help": SELECTOR_HELP},
                 {"name": "JSON_OBJECT", "required": False, "help": "Strict JSON object for the new entry"},
             ],
             "flags": [
@@ -188,7 +197,7 @@ COMMAND_SCHEMA = {
             "name": "config unset",
             "summary": "Transactionally remove one or more authored paths",
             "idempotent": True,
-            "positionals": [{"name": "PATH", "required": True, "repeatable": True, "help": "Authored path to remove"}],
+            "positionals": [{"name": "PATH", "required": True, "repeatable": True, "help": UNSET_PATH_HELP}],
             "flags": [
                 {"long": "--dry-run", "help": "Preview without writing"},
                 {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},
@@ -224,7 +233,7 @@ COMMAND_SCHEMA = {
             "name": "config topology",
             "summary": "Replace topology-owned config sections from an example template",
             "idempotent": True,
-            "positionals": [{"name": "TOPOLOGY", "required": True, "help": "Feature id or topology example stem"}],
+            "positionals": [{"name": "TOPOLOGY", "required": True, "help": TOPOLOGY_HELP}],
             "flags": [
                 {"long": "--dry-run", "help": "Preview without writing"},
                 {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},
@@ -238,7 +247,7 @@ COMMAND_SCHEMA = {
             "name": "config provider",
             "summary": "Replace provider-owned config sections from an example template",
             "idempotent": True,
-            "positionals": [{"name": "PROVIDER", "required": True, "help": "Feature id or provider example stem"}],
+            "positionals": [{"name": "PROVIDER", "required": True, "help": PROVIDER_HELP}],
             "flags": [
                 {"long": "--dry-run", "help": "Preview without writing"},
                 {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},
@@ -299,20 +308,69 @@ COMMAND_SCHEMA = {
         {
             "name": "venv",
             "summary": "Inspect or manage the shared SPA_HOME/.venv (default) or this environment's .venv",
+            "example": "spa venv path",
+        },
+        {
+            "name": "venv path",
+            "summary": "Print the shared SPA_HOME/.venv path, or this environment's .venv with --environment",
+            "read_only": True,
+            "flags": [
+                {"long": "--shared", "help": "Target SPA_HOME/.venv (default)"},
+                {"long": "--environment", "help": "Target this environment's .venv"},
+            ],
+            "example": "spa venv path",
+        },
+        {
+            "name": "venv create",
+            "summary": "Create the venv when missing",
             "requires_confirmation": True,
             "flags": [
-                {"long": "--path", "help": "Print the target venv path (default; no confirmation)"},
-                {"long": "--create", "help": "Create the venv when missing"},
-                {"long": "--reinstall", "help": "Install requirements into the existing venv"},
-                {"long": "--upgrade", "help": "Upgrade packages and Ansible collections in the existing venv"},
-                {"long": "--rebuild", "help": "Delete, recreate, and install the venv"},
                 {"long": "--shared", "help": "Target SPA_HOME/.venv (default)"},
                 {"long": "--environment", "help": "Target this environment's .venv"},
                 {"long": "--python", "help": "Python interpreter used to create the venv"},
-                {"long": "--no-install", "help": "Create/rebuild without package or collection installs"},
-                {"long": "--yes", "short": "-y", "help": "Confirm creating or changing the venv"},
+                {"long": "--no-install", "help": "Create without package or collection installs"},
+                {"long": "--yes", "short": "-y", "help": "Confirm creating the venv"},
             ],
-            "example": "spa venv --shared --rebuild --yes",
+            "example": "spa venv create --shared --yes",
+        },
+        {
+            "name": "venv reinstall",
+            "summary": "Install requirements into the existing venv",
+            "requires_confirmation": True,
+            "flags": [
+                {"long": "--shared", "help": "Target SPA_HOME/.venv (default)"},
+                {"long": "--environment", "help": "Target this environment's .venv"},
+                {"long": "--python", "help": "Python interpreter used when the venv must be created"},
+                {"long": "--no-install", "help": "Skip package and collection installs"},
+                {"long": "--yes", "short": "-y", "help": "Confirm reinstalling the venv"},
+            ],
+            "example": "spa venv reinstall --shared --yes",
+        },
+        {
+            "name": "venv upgrade",
+            "summary": "Upgrade packages and Ansible collections in the existing venv",
+            "requires_confirmation": True,
+            "flags": [
+                {"long": "--shared", "help": "Target SPA_HOME/.venv (default)"},
+                {"long": "--environment", "help": "Target this environment's .venv"},
+                {"long": "--python", "help": "Python interpreter used when the venv must be created"},
+                {"long": "--no-install", "help": "Skip package and collection installs"},
+                {"long": "--yes", "short": "-y", "help": "Confirm upgrading the venv"},
+            ],
+            "example": "spa venv upgrade --shared --yes",
+        },
+        {
+            "name": "venv rebuild",
+            "summary": "Delete, recreate, and install the venv",
+            "requires_confirmation": True,
+            "flags": [
+                {"long": "--shared", "help": "Target SPA_HOME/.venv (default)"},
+                {"long": "--environment", "help": "Target this environment's .venv"},
+                {"long": "--python", "help": "Python interpreter used to create the venv"},
+                {"long": "--no-install", "help": "Rebuild without package or collection installs"},
+                {"long": "--yes", "short": "-y", "help": "Confirm rebuilding the venv"},
+            ],
+            "example": "spa venv rebuild --shared --yes",
         },
         {
             "name": "environment list",
@@ -363,7 +421,7 @@ COMMAND_SCHEMA = {
             "name": "environment",
             "summary": "Environment family (alias: env). spa resolves cwd or --env itself; --export is for external tools",
             "flags": [{"long": "--export", "help": "Print shell exports for external tools"}],
-            "example": "spa env --export",
+            "example": "spa environment --export",
         },
         {
             "name": "provision",
@@ -451,44 +509,60 @@ COMMAND_SCHEMA = {
         {"name": "hosts ssh", "summary": "SSH using inventory", "example": "spa hosts ssh idx1"},
         {"name": "hosts copy", "summary": "Copy files with scp: SRC DST, remote side HOST:PATH (-r for directories)", "example": "spa hosts copy local.txt idx1:/tmp/"},
         {"name": "shell", "summary": "Alias of spa hosts ssh"},
-        {"name": "aws", "summary": "AWS discovery for terraform.aws. Catalogs are spa aws list KIND."},
+        {"name": "aws", "summary": "AWS discovery for terraform.aws. Catalogs are spa aws regions list and the other resource list commands."},
         {
-            "name": "aws list regions",
-            "summary": "List enabled regions. Does not require --region.",
-            "example": "spa aws list regions --json",
+            "name": "aws regions list",
+            "summary": "List enabled regions. Marks the region from --region, AWS_REGION, AWS_DEFAULT_REGION, or ~/.aws/config.",
+            "example": "spa aws regions list --json",
         },
         {
-            "name": "aws list amis",
+            "name": "aws amis list",
             "summary": "List AMIs in a region",
             "flags": [
-                {"long": "--region", "help": "AWS region", "required": True},
+                {
+                    "long": "--region",
+                    "help": "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config.",
+                },
                 {"long": "--name-filter", "help": "AMI name wildcard"},
                 {"long": "--owners", "help": "Comma-separated AMI owners"},
                 {"long": "--max-results", "help": "Max AMIs to return"},
                 {"long": "--os", "help": "Recommended OS, or all"},
             ],
-            "example": "spa aws list amis --region eu-central-1 --json",
+            "example": "spa aws amis list --region eu-central-1 --json",
         },
         {
-            "name": "aws list instance-types",
+            "name": "aws instance-types list",
             "summary": "List instance types offered in a region",
             "flags": [
-                {"long": "--region", "help": "AWS region", "required": True},
+                {
+                    "long": "--region",
+                    "help": "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config.",
+                },
                 {"long": "--family", "help": "Instance type family prefix (e.g. t3)"},
             ],
-            "example": "spa aws list instance-types --region eu-central-1 --family t3",
+            "example": "spa aws instance-types list --region eu-central-1 --family t3",
         },
         {
-            "name": "aws list key-pairs",
+            "name": "aws key-pairs list",
             "summary": "List EC2 key pairs",
-            "flags": [{"long": "--region", "help": "AWS region", "required": True}],
-            "example": "spa aws list key-pairs --region eu-central-1",
+            "flags": [
+                {
+                    "long": "--region",
+                    "help": "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config.",
+                }
+            ],
+            "example": "spa aws key-pairs list --region eu-central-1",
         },
         {
-            "name": "aws list security-groups",
+            "name": "aws security-groups list",
             "summary": "List security groups",
-            "flags": [{"long": "--region", "help": "AWS region", "required": True}],
-            "example": "spa aws list security-groups --region eu-central-1",
+            "flags": [
+                {
+                    "long": "--region",
+                    "help": "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config.",
+                }
+            ],
+            "example": "spa aws security-groups list --region eu-central-1",
         },
         {
             "name": "licenses",
@@ -496,7 +570,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "run",
-            "summary": "Run a playbook by stem. Discover: spa --json run list then spa run NAME --help. Honor data[].requires_confirmation with --yes.",
+            "summary": "Run a playbook by stem. Discover: spa --agent run list then spa run NAME --help. Honor data[].requires_confirmation with --yes.",
             "flags": [
                 {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
                 {"long": "--yes", "short": "-y", "help": "Confirm a mutating playbook (required in agent mode)"},
@@ -539,7 +613,7 @@ COMMAND_SCHEMA = {
         {
             "name": "apps",
             "summary": "Discover, configure, or download Splunk apps and ITSI content packs.",
-            "example": "spa --json apps search unix",
+            "example": "spa --agent apps search unix",
         },
         {
             "name": "apps search",
@@ -555,22 +629,22 @@ COMMAND_SCHEMA = {
                     "help": "Filter SPA kind (ta, premium_itsi, itsi_content_library, itsi_content_pack_single, es_not_premium)",
                 },
             ],
-            "example": "spa --json apps search unix",
+            "example": "spa --agent apps search unix",
         },
         {
             "name": "apps content-packs list",
-            "summary": "Inspect local 5391 archive metadata, or use a temporary authenticated download",
+            "summary": "Inspect Content Library 5391 from --archive, apps_dir, an existing install archive, or cached pack app.conf files. An install archive is left in place. --version selects the release (default latest).",
             "flags": [
                 {
                     "long": "--version",
-                    "help": "Content Library release to inspect (default latest)",
+                    "help": "Content Library release to inspect (default latest). A newer latest release replaces the cached app.conf files.",
                 },
                 {
                     "long": "--archive",
                     "help": "Inspect a local 5391 archive without environment credentials",
                 },
             ],
-            "example": "spa --json apps content-packs list 5391",
+            "example": "spa --agent apps content-packs list 5391",
         },
         {
             "name": "apps snippet",
@@ -589,7 +663,7 @@ COMMAND_SCHEMA = {
                 },
                 {"long": "--set", "help": "Set another schema-backed app FIELD VALUE; repeatable"},
             ],
-            "example": "spa --json apps snippet 833",
+            "example": "spa --agent apps snippet 833",
         },
         {
             "name": "apps add",
@@ -606,9 +680,9 @@ COMMAND_SCHEMA = {
                 },
                 {
                     "long": "--source",
-                    "help": "Splunkbase metadata, or a folder/archive already in apps_dir (default splunkbase)",
+                    "help": "Use Splunkbase metadata, or a folder/archive already in apps_dir (default splunkbase). Mutually exclusive with --local",
                 },
-                {"long": "--local", "help": "Shorthand for --source local"},
+                {"long": "--local", "help": "Shorthand for --source local. Mutually exclusive with --source"},
                 {
                     "long": "--customize",
                     "help": "Attach an exact matching curated SPA playbook to this top-level app entry",
@@ -635,20 +709,20 @@ COMMAND_SCHEMA = {
                 },
                 {
                     "long": "--expect-revision",
-                    "help": "Write only when config still has this SHA-256 revision",
+                    "help": "Write only when the config still has this SHA-256 revision",
                 },
                 {
                     "long": "--resolve",
-                    "help": "Supply unresolved dependency PATH VALUE using strict JSON; repeatable",
+                    "help": "Supply one unresolved dependency PATH VALUE; VALUE uses strict JSON; repeatable",
                 },
                 {
                     "long": "--resolve-file",
-                    "help": "Supply unresolved dependencies from sparse YAML/JSON; - reads stdin",
+                    "help": "Supply unresolved dependencies from sparse YAML/JSON; use - for stdin",
                 },
                 {
                     "long": "--yes",
                     "short": "-y",
-                    "help": "Skip human confirmation; agent config edits never prompt",
+                    "help": "Skip the human config-edit confirmation; agent mode never prompts",
                 },
             ],
             "example": "spa --agent apps add 833 --roles search_head,indexer",
@@ -657,6 +731,13 @@ COMMAND_SCHEMA = {
             "name": "apps remove",
             "summary": "Remove an authored app entry; does not uninstall deployed files",
             "idempotent": True,
+            "positionals": [
+                {
+                    "name": "APP_ID_OR_NAME",
+                    "required": True,
+                    "help": APP_ID_HELP,
+                }
+            ],
             "flags": [
                 {"long": "--content-pack", "help": "Remove one named pack under Content Library 5391"},
                 {"long": "--dry-run", "help": "Preview without writing"},
@@ -715,7 +796,7 @@ def format_schema_markdown(schema: Optional[Dict[str, Any]] = None) -> str:
         "Generated from `spa agent schema`. Do not edit this file; regenerate with",
         "`spa --no-agent agent schema --markdown`. Workflows stay in the [user guide](user-guide.md).",
         "",
-        "Playbooks are not listed here. Discover them with `spa --json run list`",
+        "Playbooks are not listed here. Discover them with `spa --agent run list`",
         "and `spa run NAME --help`.",
         "",
     ]

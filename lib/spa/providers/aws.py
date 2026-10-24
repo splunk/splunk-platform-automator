@@ -180,7 +180,7 @@ class Provider:
         except ImportError:
             raise ProviderError(
                 "AWS lifecycle commands require boto3. Recreate the venv "
-                "(spa venv --shared --rebuild --yes) so requirements.txt is installed."
+                "(spa venv rebuild --shared --yes) so requirements.txt is installed."
             )
         config = self._resolved_config()
         kwargs: Dict[str, Any] = {"region_name": config.get("region")}
@@ -227,23 +227,30 @@ class Provider:
 
     @staticmethod
     def _confirm(action: str, targets: Dict[str, Dict[str, Any]], yes: bool, agent: bool) -> None:
-        if yes:
-            return
-        if agent:
-            raise ProviderError("%s requires -y/--yes in agent mode." % action)
-        from spa.hosts import format_host_groups, load_inventory
+        from spa.confirm import ConfirmationError, ConfirmationUsageError, ensure_confirmed
 
-        names = sorted(targets)
-        print(
-            "%s %d AWS instance%s:"
-            % (action.capitalize(), len(names), "" if len(names) == 1 else "s"),
-            file=sys.stderr,
-        )
-        for line in format_host_groups(load_inventory(), names):
-            print(line, file=sys.stderr)
-        answer = input("Proceed? [y/N] ")
-        if answer.strip().lower() not in {"y", "yes"}:
-            raise ProviderError("%s cancelled." % action.capitalize())
+        details = None
+        if not yes and not agent and sys.stdin.isatty():
+            from spa.hosts import format_host_groups, load_inventory
+
+            names = sorted(targets)
+            details = [
+                "%s %d AWS instance%s:"
+                % (action.capitalize(), len(names), "" if len(names) == 1 else "s")
+            ]
+            details.extend(format_host_groups(load_inventory(), names))
+        try:
+            ensure_confirmed(
+                action,
+                confirm=yes,
+                agent=agent,
+                details=details,
+                risk="mutating",
+            )
+        except ConfirmationUsageError as exc:
+            raise ProviderError(str(exc), code=2) from exc
+        except ConfirmationError as exc:
+            raise ProviderError(str(exc)) from exc
 
     @staticmethod
     def _instance_rows(

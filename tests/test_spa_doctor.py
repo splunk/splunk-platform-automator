@@ -226,7 +226,7 @@ def test_doctor_warns_when_venv_cannot_import_requirements(tmp_path, monkeypatch
     assert packages["level"] == "warn"
     assert str(stale) in packages["message"]
     assert "cannot import yaml / pydantic" in packages["message"]
-    assert packages["fix"] == "spa venv --shared --reinstall --yes"
+    assert packages["fix"] == "spa venv reinstall --shared --yes"
     # The broken pin must not be selected as the venv spa runs tools from.
     selected = next(row for row in result.data["checks"] if row["id"] == "spa_venv")
     assert str(stale) not in selected["message"]

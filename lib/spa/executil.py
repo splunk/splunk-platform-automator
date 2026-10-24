@@ -91,7 +91,7 @@ def ansible_controller_problem(venv: Path) -> Optional[str]:
     return (
         "Ansible cannot start in %s with Python %s. "
         "The installed Ansible and Python versions are incompatible or incomplete. "
-        "Repair it with: spa venv --shared --rebuild --yes"
+        "Repair it with: spa venv rebuild --shared --yes"
         % (venv, version)
     )
 
@@ -219,14 +219,14 @@ def venv_setup_message(paths: SpaPaths, missing: Sequence[str]) -> str:
         running_on_it = Path(sys.prefix).resolve() == usable.resolve()
         if running_on_it:
             # That venv runs spa but is missing a lazily imported requirement.
-            lines.append("Install requirements: spa venv %s --reinstall --yes" % scope)
+            lines.append("Install requirements: spa venv reinstall %s --yes" % scope)
         else:
             lines.append("That venv can run spa, but spa started on another interpreter.")
             lines.append("Run it through: %s" % (paths.spa_home / "bin" / "spa"))
     elif existing is not None:
-        lines.append("Repair it:   spa venv %s --rebuild --yes" % scope)
+        lines.append("Repair it:   spa venv rebuild %s --yes" % scope)
     else:
-        lines.append("Create it:   spa venv %s --create --yes" % scope)
+        lines.append("Create it:   spa venv create %s --yes" % scope)
     lines.append("Then check:  spa doctor")
     return "\n".join(lines)
 
@@ -289,8 +289,8 @@ def _missing_tool_message(paths: SpaPaths, name: str, venv: Optional[Path]) -> s
             )
         else:
             lines.append("Incomplete venv: %s (no bin/activate)" % candidate)
-    lines.append("Create it:   spa venv --shared --create --yes")
-    lines.append("Repair it:   spa venv --shared --rebuild --yes")
+    lines.append("Create it:   spa venv create --shared --yes")
+    lines.append("Repair it:   spa venv rebuild --shared --yes")
     lines.append("Then check:  spa doctor")
     return "\n".join(lines)
 

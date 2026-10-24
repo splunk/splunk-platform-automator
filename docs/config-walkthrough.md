@@ -203,8 +203,7 @@ Before selecting packs, inspect the exact Content Library release:
 spa apps content-packs list 5391
 ```
 
-The command uses a matching archive already in `apps_dir`, or temporarily
-downloads the selected release with the configured Splunkbase credentials.
+The command uses `--archive`, a matching archive in `apps_dir`, an install archive already in the app temp directory, or cached pack `app.conf` files. An install archive is left in place. `--version` selects a release; the default `latest` replaces the `app.conf` cache when Splunkbase has a newer one. A download says so before it starts, and that downloaded archive is removed.
 It lists the exact folder names, what each archive says it provides, and any
 matching SPA post-install automation. The Unix and Windows rows print the two
 selection commands used below.

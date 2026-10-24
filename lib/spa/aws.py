@@ -6,10 +6,10 @@ Requires boto3 and AWS credentials (env, profile, or instance role).
 
 Examples:
   spa aws --check-auth --json
-  spa aws list regions --json
+  spa aws regions list --json
   spa aws --region eu-central-1 --latest-ami --os amazon_linux --json
   spa aws --region eu-central-1 --latest-ami --os all --json
-  spa aws list amis --region eu-central-1 --name-filter "custom*" --json
+  spa aws amis list --region eu-central-1 --name-filter "custom*" --json
   spa aws --region eu-central-1 --validate \\
     --ami-id ami-xxx --key-name aws_key --security-groups Splunk_Basic \\
     --instance-type t3.medium --json
@@ -20,9 +20,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 try:
     import boto3
@@ -82,17 +83,163 @@ def _err(message: str) -> None:
     print(message, file=sys.stderr)
 
 
+def _aws_item_line(item: Any) -> str:
+    if isinstance(item, str):
+        return item
+    if not isinstance(item, dict):
+        return str(item)
+    if item.get("name") and "endpoint" in item:
+        return "%s  selected" % item["name"] if item.get("selected") else str(item["name"])
+    if item.get("ami_id"):
+        parts = [
+            item.get("ami_id"),
+            item.get("name"),
+            item.get("architecture"),
+            item.get("suggested_ssh_username"),
+        ]
+        return "  ".join(str(part) for part in parts if part)
+    if item.get("group_name"):
+        return "  ".join(
+            str(part) for part in (item.get("group_id"), item.get("group_name")) if part
+        )
+    if item.get("name"):
+        return str(item["name"])
+    return "  ".join(
+        "%s=%s" % (key, value) for key, value in item.items() if value is not None and key != "ok"
+    )
+
+
+def format_aws_text(data: Any) -> str:
+    """Human stdout. JSON mode prints the payload and does not call this."""
+    if not isinstance(data, dict):
+        return str(data) + "\n"
+    lines: List[str] = []
+    if data.get("account"):
+        lines.append("Account: %s" % data["account"])
+    if data.get("arn"):
+        lines.append("ARN: %s" % data["arn"])
+    if data.get("ami_id") and "items" not in data:
+        lines.append(_aws_item_line(data))
+    items = data.get("items")
+    if isinstance(items, list):
+        if not items and data.get("ok") is not False:
+            lines.append("No results.")
+        for item in items:
+            lines.append(_aws_item_line(item))
+    item = data.get("item")
+    if isinstance(item, dict):
+        lines.append(_aws_item_line(item))
+    for label, key in (
+        ("Key pairs", "key_pairs"),
+        ("Security groups", "security_groups"),
+        ("Instance types", "instance_types_t3"),
+    ):
+        nested = data.get(key)
+        if not isinstance(nested, dict):
+            continue
+        lines.append("%s:" % label)
+        nested_items = nested.get("items") or []
+        if not nested_items:
+            lines.append("  No results.")
+        for entry in nested_items:
+            lines.append("  %s" % _aws_item_line(entry))
+    recommended = data.get("recommended_amis")
+    if isinstance(recommended, dict):
+        lines.append("AMIs:")
+        for os_key, entry in recommended.items():
+            chosen = (entry or {}).get("item") or {}
+            ami = chosen.get("ami_id") or (entry or {}).get("error") or "not found"
+            lines.append("  %s  %s" % (os_key, ami))
+    checks = data.get("checks")
+    if isinstance(checks, dict):
+        for name, entry in checks.items():
+            if isinstance(entry, dict):
+                state = "ok" if entry.get("ok") else "failed"
+                detail = entry.get("error") or entry.get("ami_id") or entry.get("key_name") or entry.get("instance_type") or ""
+                lines.append("%s: %s%s" % (name, state, ("  %s" % detail) if detail else ""))
+            else:
+                lines.append("%s: %s" % (name, entry))
+    if not lines:
+        lines.append("ok" if data.get("ok", True) else "failed")
+    return "\n".join(lines) + "\n"
+
+
 def _output(data: Any, as_json: bool) -> None:
+    from spa.runlog import redact
+
     if as_json:
-        print(json.dumps(data, indent=2, default=str))
-    else:
-        print(json.dumps(data, indent=2, default=str))
+        print(json.dumps(redact(data), indent=2, default=str))
+        return
+    if isinstance(data, dict):
+        notice = region_notice(
+            _ResolvedRegion(data.get("region"), data.get("region_source"), data.get("profile"))
+        )
+        if notice:
+            _err(notice)
+        if data.get("ok") is False and data.get("error"):
+            _err(str(redact(data["error"])))
+    sys.stdout.write(format_aws_text(data))
 
 
 def _require_boto3() -> None:
     if boto3 is None:
-        _err("boto3 is required. Install with: pip install boto3")
+        message = "boto3 is required. Install with: pip install boto3"
+        if AwsArgumentParser.json_errors:
+            from spa.runlog import redact
+
+            print(json.dumps({"ok": False, "error": redact(message)}, separators=(",", ":")))
+        else:
+            _err(message)
         sys.exit(2)
+
+
+class _ResolvedRegion:
+    def __init__(self, region: Optional[str], source: Optional[str], profile: Optional[str] = None):
+        self.region = region
+        self.source = source
+        self.profile = profile
+
+
+def resolve_region(explicit: Optional[str] = None) -> _ResolvedRegion:
+    """Prefer --region, then AWS_REGION, then AWS_DEFAULT_REGION, then the AWS config."""
+    if explicit:
+        return _ResolvedRegion(explicit, "--region")
+    for name in ("AWS_REGION", "AWS_DEFAULT_REGION"):
+        value = os.environ.get(name, "").strip()
+        if value:
+            return _ResolvedRegion(value, name)
+    _require_boto3()
+    session = boto3.Session()
+    region = session.region_name
+    if region:
+        profile = getattr(session, "profile_name", None) or "default"
+        return _ResolvedRegion(region, "aws-config", profile)
+    return _ResolvedRegion(None, None)
+
+
+def region_notice(resolved: _ResolvedRegion) -> str:
+    if not resolved.region:
+        return ""
+    if resolved.source == "--region":
+        return "Using region %s from --region." % resolved.region
+    if resolved.source in ("AWS_REGION", "AWS_DEFAULT_REGION"):
+        return "Using region %s from %s." % (resolved.region, resolved.source)
+    profile = resolved.profile or "default"
+    return "Using region %s from ~/.aws/config (profile %s)." % (resolved.region, profile)
+
+
+def _stamp_region(data: Any, resolved: _ResolvedRegion) -> None:
+    if not isinstance(data, dict) or not resolved.region:
+        return
+    data.setdefault("region", resolved.region)
+    data["region_source"] = resolved.source
+    if resolved.source == "aws-config":
+        data["profile"] = resolved.profile or "default"
+
+
+def _finish(result: Any, resolved: _ResolvedRegion) -> Any:
+    _stamp_region(getattr(result, "data", None), resolved)
+    return result
 
 
 def _session(region: Optional[str] = None) -> Any:
@@ -352,14 +499,16 @@ def check_auth(session: Any) -> Dict[str, Any]:
         return {"ok": False, "error": str(exc)}
 
 
-def list_regions(session: Any) -> Dict[str, Any]:
+def list_regions(session: Any, selected_region: Optional[str] = None) -> Dict[str, Any]:
     ec2 = session.client("ec2", region_name="us-east-1")
     try:
         resp = ec2.describe_regions(AllRegions=False)
-        items = [
-            {"name": r["RegionName"], "endpoint": r.get("Endpoint")}
-            for r in sorted(resp.get("Regions", []), key=lambda x: x["RegionName"])
-        ]
+        items = []
+        for r in sorted(resp.get("Regions", []), key=lambda x: x["RegionName"]):
+            item = {"name": r["RegionName"], "endpoint": r.get("Endpoint")}
+            if selected_region and item["name"] == selected_region:
+                item["selected"] = True
+            items.append(item)
         return {"ok": True, "items": items}
     except (ClientError, BotoCoreError) as exc:
         return {"ok": False, "error": str(exc), "items": []}
@@ -750,13 +899,35 @@ _RETIRED_AWS_LISTS = {
 
 _AWS_LIST_KINDS = ("regions", "amis", "instance-types", "key-pairs", "security-groups")
 
+def _listing_command(kind: str) -> str:
+    return "spa aws %s list" % kind
+
+
+def _listing_menu() -> str:
+    return (
+        "spa aws list has moved.\n"
+        "Regions:         %s\n"
+        "AMIs:            %s --region REGION\n"
+        "Instance types:  %s --region REGION\n"
+        "Key pairs:       %s --region REGION\n"
+        "Security groups: %s --region REGION"
+        % (
+            _listing_command("regions"),
+            _listing_command("amis"),
+            _listing_command("instance-types"),
+            _listing_command("key-pairs"),
+            _listing_command("security-groups"),
+        )
+    )
+
+
 AWS_LIST_EXAMPLES = """
 examples:
-  spa aws list regions
-  spa aws list amis --region REGION [--os OS] [--name-filter PATTERN]
-  spa aws list instance-types --region REGION [--family FAMILY]
-  spa aws list key-pairs --region REGION
-  spa aws list security-groups --region REGION
+  spa aws regions list
+  spa aws amis list --region REGION [--os OS] [--name-filter PATTERN]
+  spa aws instance-types list --region REGION [--family FAMILY]
+  spa aws key-pairs list --region REGION
+  spa aws security-groups list --region REGION
   spa aws --check-auth
   spa aws --region REGION --latest-ami --os OS
   spa aws --region REGION --survey
@@ -767,21 +938,28 @@ examples:
 class AwsArgumentParser(argparse.ArgumentParser):
     """Name the legal list command when a removed --list-* flag is used."""
 
+    json_errors = False
+
     def error(self, message: str) -> None:
         for flag, kind in _RETIRED_AWS_LISTS.items():
             if flag in message:
-                message = "Listing %s is: spa aws list %s" % (kind, kind)
+                message = "Listing %s is: %s" % (kind, _listing_command(kind))
                 break
         else:
-            if "KIND" in message and "required" in message:
-                message = (
-                    "spa aws list needs a kind.\n"
-                    "Regions:         spa aws list regions\n"
-                    "AMIs:            spa aws list amis --region REGION\n"
-                    "Instance types:  spa aws list instance-types --region REGION\n"
-                    "Key pairs:       spa aws list key-pairs --region REGION\n"
-                    "Security groups: spa aws list security-groups --region REGION"
-                )
+            resource = self.prog.removeprefix("spa aws ").strip()
+            if resource in _AWS_LIST_KINDS and (
+                "required" in message or "invalid choice" in message
+            ):
+                message = "Listing %s is: %s" % (resource, _listing_command(resource))
+            elif "KIND" in message and "required" in message:
+                message = _listing_menu()
+        if type(self).json_errors:
+            from spa.runlog import redact
+
+            sys.stdout.write(
+                json.dumps({"ok": False, "error": redact(message)}, separators=(",", ":")) + "\n"
+            )
+            self.exit(2)
         self.print_usage(sys.stderr)
         self.exit(2, "%s: error: %s\n" % (self.prog, message))
 
@@ -792,7 +970,7 @@ def _add_json_after_kind(parser: argparse.ArgumentParser) -> None:
         "--json",
         action="store_true",
         default=argparse.SUPPRESS,
-        help="Output JSON",
+        help="Print JSON. The default is text.",
     )
 
 
@@ -803,8 +981,11 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=AWS_LIST_EXAMPLES,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("--json", action="store_true", help="Output JSON")
-    p.add_argument("--region", help="AWS region")
+    p.add_argument("--json", action="store_true", help="Print JSON. The default is text.")
+    p.add_argument(
+        "--region",
+        help="AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config.",
+    )
     p.add_argument("--check-auth", action="store_true", help="Verify AWS credentials via STS (no --region required)")
     p.add_argument("--latest-ami", action="store_true", help="Resolve latest AMI for recommended OS (--os)")
     p.add_argument(
@@ -820,25 +1001,28 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--survey", action="store_true", help="Combined discovery report for a region")
 
     commands = p.add_subparsers(dest="aws_command", parser_class=AwsArgumentParser)
-    list_parser = commands.add_parser(
-        "list",
-        help="List AWS resources",
-        description="List one AWS resource kind.",
-        epilog=AWS_LIST_EXAMPLES,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    region_help = (
+        "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config."
     )
-    _add_json_after_kind(list_parser)
-    kinds = list_parser.add_subparsers(
-        dest="aws_list_kind",
-        required=True,
-        metavar="KIND",
-        parser_class=AwsArgumentParser,
-    )
-    _add_json_after_kind(kinds.add_parser("regions", help="List enabled regions"))
 
-    amis = kinds.add_parser("amis", help="List AMIs in a region")
-    _add_json_after_kind(amis)
-    amis.add_argument("--region", default=argparse.SUPPRESS, help="AWS region")
+    def _add_catalog(name: str, summary: str) -> argparse.ArgumentParser:
+        resource = commands.add_parser(name, help=summary)
+        _add_json_after_kind(resource)
+        actions = resource.add_subparsers(
+            dest="aws_action",
+            required=True,
+            metavar="ACTION",
+            parser_class=AwsArgumentParser,
+        )
+        listing = actions.add_parser("list", help=summary)
+        _add_json_after_kind(listing)
+        listing.set_defaults(aws_list_kind=name)
+        return listing
+
+    _add_catalog("regions", "List enabled regions")
+
+    amis = _add_catalog("amis", "List AMIs in a region")
+    amis.add_argument("--region", default=argparse.SUPPRESS, help=region_help)
     amis.add_argument("--name-filter", help="AMI name wildcard (not used with --os)")
     amis.add_argument(
         "--owners",
@@ -851,18 +1035,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recommended OS: rhel, ubuntu, amazon_linux, debian (or all). Aliases: al2023, rhel10, ubuntu2404",
     )
 
-    instance_types = kinds.add_parser("instance-types", help="List instance types offered in a region")
-    _add_json_after_kind(instance_types)
-    instance_types.add_argument("--region", default=argparse.SUPPRESS, help="AWS region")
+    instance_types = _add_catalog("instance-types", "List instance types offered in a region")
+    instance_types.add_argument("--region", default=argparse.SUPPRESS, help=region_help)
     instance_types.add_argument("--family", default=argparse.SUPPRESS, help="Instance type family prefix (e.g. t3)")
 
-    key_pairs = kinds.add_parser("key-pairs", help="List EC2 key pairs")
-    _add_json_after_kind(key_pairs)
-    key_pairs.add_argument("--region", default=argparse.SUPPRESS, help="AWS region")
+    key_pairs = _add_catalog("key-pairs", "List EC2 key pairs")
+    key_pairs.add_argument("--region", default=argparse.SUPPRESS, help=region_help)
 
-    security_groups = kinds.add_parser("security-groups", help="List security groups")
-    _add_json_after_kind(security_groups)
-    security_groups.add_argument("--region", default=argparse.SUPPRESS, help="AWS region")
+    security_groups = _add_catalog("security-groups", "List security groups")
+    security_groups.add_argument("--region", default=argparse.SUPPRESS, help=region_help)
     return p
 
 
@@ -922,7 +1103,7 @@ def execute(args: Any):
 
     kind = getattr(args, "aws_list_kind", None)
     if kind and kind != "amis" and getattr(args, "os", None):
-        return CommandResult(ok=False, error="--os requires: spa aws list amis", code=2)
+        return CommandResult(ok=False, error="--os requires: spa aws amis list", code=2)
 
     if not kind and not any(
         (
@@ -937,11 +1118,11 @@ def execute(args: Any):
             ok=False,
             error=(
                 "spa aws needs an operation.\n"
-                "List:       spa aws list regions\n"
-                "            spa aws list amis --region REGION\n"
-                "            spa aws list instance-types --region REGION\n"
-                "            spa aws list key-pairs --region REGION\n"
-                "            spa aws list security-groups --region REGION\n"
+                "List:       spa aws regions list\n"
+                "            spa aws amis list --region REGION\n"
+                "            spa aws instance-types list --region REGION\n"
+                "            spa aws key-pairs list --region REGION\n"
+                "            spa aws security-groups list --region REGION\n"
                 "Auth:       spa aws --check-auth\n"
                 "Latest AMI: spa aws --region REGION --latest-ami --os OS\n"
                 "Survey:     spa aws --region REGION --survey\n"
@@ -954,38 +1135,55 @@ def execute(args: Any):
         return _aws_result(check_auth(_session()))
 
     if kind == "regions":
-        return _aws_result(list_regions(_session()))
+        resolved = resolve_region(getattr(args, "region", None))
+        data = list_regions(_session(), selected_region=resolved.region)
+        _stamp_region(data, resolved)
+        return _aws_result(data)
 
     if kind in {"amis", "instance-types", "key-pairs", "security-groups"}:
-        if not getattr(args, "region", None):
+        resolved = resolve_region(getattr(args, "region", None))
+        if not resolved.region:
             return CommandResult(
                 ok=False,
-                error="--region is required for spa aws list %s" % kind,
+                error=(
+                    "--region is required for %s. "
+                    "Or set AWS_REGION, AWS_DEFAULT_REGION, or region in ~/.aws/config."
+                )
+                % _listing_command(kind),
                 code=2,
             )
-        session = _session(args.region)
+        args.region = resolved.region
+        session = _session(resolved.region)
         if kind == "amis":
-            return _list_amis_result(session, args)
+            return _finish(_list_amis_result(session, args), resolved)
         if kind == "instance-types":
             family = getattr(args, "family", None)
-            return _aws_result(
-                list_instance_types(session, args.region, family=family, curated=not family)
+            return _finish(
+                _aws_result(
+                    list_instance_types(session, args.region, family=family, curated=not family)
+                ),
+                resolved,
             )
         if kind == "key-pairs":
-            return _aws_result(list_key_pairs(session, args.region))
-        return _aws_result(list_security_groups(session, args.region))
+            return _finish(_aws_result(list_key_pairs(session, args.region)), resolved)
+        return _finish(_aws_result(list_security_groups(session, args.region)), resolved)
 
-    if not getattr(args, "region", None):
+    resolved = resolve_region(getattr(args, "region", None))
+    if not resolved.region:
         return CommandResult(
             ok=False,
-            error="--region is required for this operation (except spa aws list regions and --check-auth)",
+            error=(
+                "--region is required for this operation (except spa aws regions list and --check-auth). "
+                "Or set AWS_REGION, AWS_DEFAULT_REGION, or region in ~/.aws/config."
+            ),
             code=1,
         )
 
-    session = _session(args.region)
+    args.region = resolved.region
+    session = _session(resolved.region)
 
     if args.survey:
-        return _aws_result(survey(session, args.region))
+        return _finish(_aws_result(survey(session, args.region)), resolved)
 
     if args.latest_ami:
         if not args.os:
@@ -995,7 +1193,7 @@ def execute(args: Any):
                 code=1,
             )
         if args.os == "all":
-            return _aws_result(recommended_os_amis(session, args.region))
+            return _finish(_aws_result(recommended_os_amis(session, args.region)), resolved)
         normalized = normalize_os_key(args.os)
         if normalized not in RECOMMENDED_OS:
             return CommandResult(
@@ -1006,31 +1204,37 @@ def execute(args: Any):
                 ),
                 code=1,
             )
-        return _aws_result(resolve_recommended_os_ami(session, args.region, normalized, max_results=1))
+        return _finish(
+            _aws_result(resolve_recommended_os_ami(session, args.region, normalized, max_results=1)),
+            resolved,
+        )
 
     if args.describe_ami:
         if not args.ami_id:
             return CommandResult(ok=False, error="--ami-id is required for --describe-ami", code=1)
-        return _aws_result(describe_ami(session, args.region, args.ami_id))
+        return _finish(_aws_result(describe_ami(session, args.region, args.ami_id)), resolved)
 
     if args.validate:
         sg = parse_security_groups(args.security_groups)
-        return _aws_result(
-            validate_selections(
-                session,
-                args.region,
-                ami_id=args.ami_id,
-                key_name=args.key_name,
-                security_groups=sg,
-                instance_type=args.instance_type,
-            )
+        return _finish(
+            _aws_result(
+                validate_selections(
+                    session,
+                    args.region,
+                    ami_id=args.ami_id,
+                    key_name=args.key_name,
+                    security_groups=sg,
+                    instance_type=args.instance_type,
+                )
+            ),
+            resolved,
         )
 
     return CommandResult(
         ok=False,
         error=(
             "spa aws needs an operation.\n"
-            "List:       spa aws list regions\n"
+            "List:       spa aws regions list\n"
             "Auth:       spa aws --check-auth\n"
             "Latest AMI: spa aws --region REGION --latest-ami --os OS\n"
             "Survey:     spa aws --region REGION --survey\n"
@@ -1040,18 +1244,54 @@ def execute(args: Any):
     )
 
 
+def _retired_list_message(argv: Sequence[str]) -> Optional[str]:
+    """The old spa aws list KIND form names the resource command and exits."""
+    tokens = [token for token in argv if token and not str(token).startswith("-")]
+    if not tokens or tokens[0] != "list":
+        return None
+    if len(tokens) > 1 and tokens[1] in _AWS_LIST_KINDS:
+        return "Listing %s is: %s" % (tokens[1], _listing_command(tokens[1]))
+    return _listing_menu()
+
+
 def execute_argv(argv: Optional[List[str]] = None):
-    return execute(build_parser().parse_args(argv))
+    raw = list(sys.argv[1:] if argv is None else argv)
+    retired = _retired_list_message(raw)
+    if retired:
+        from spa.api import CommandResult
+
+        return CommandResult(ok=False, error=retired, code=2)
+    return execute(build_parser().parse_args(raw))
 
 
-def main(argv: Optional[List[str]] = None) -> int:
-    args = build_parser().parse_args(argv)
-    result = execute(args)
-    if result.data is not None:
-        _output(result.data, args.json)
-    elif result.error:
-        _err(result.error)
-    return result.code
+def main(argv: Optional[List[str]] = None, as_agent: bool = False) -> int:
+    raw = list(sys.argv[1:] if argv is None else argv)
+    AwsArgumentParser.json_errors = bool(as_agent or "--json" in raw)
+    try:
+        retired = _retired_list_message(raw)
+        if retired:
+            if as_agent or "--json" in raw:
+                from spa.runlog import redact
+
+                print(json.dumps({"ok": False, "error": redact(retired)}, separators=(",", ":")))
+            else:
+                _err(retired)
+            return 2
+        args = build_parser().parse_args(raw)
+        result = execute(args)
+        as_json = bool(args.json or as_agent)
+        if result.data is not None:
+            _output(result.data, as_json)
+        elif result.error:
+            if as_json:
+                from spa.runlog import redact
+
+                print(json.dumps({"ok": False, "error": redact(result.error)}, separators=(",", ":")))
+            else:
+                _err(result.error)
+        return result.code
+    finally:
+        AwsArgumentParser.json_errors = False
 
 
 if __name__ == "__main__":

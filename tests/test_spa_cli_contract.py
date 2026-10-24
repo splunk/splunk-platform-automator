@@ -2,10 +2,11 @@
 
 import json
 import re
+from pathlib import Path
 
 import pytest
 
-from spa_testutil import PROJECT_ROOT, run_spa
+from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init, write_min_env
 
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
@@ -21,22 +22,22 @@ HELP_CONTRACTS = [
             "usage: spa ",
             "COMMAND",
             "init",
-            "validate (val)",
-            "doctor (doc)",
+            "validate",
+            "doctor",
             "venv",
             "environment (env)",
-            "provision (prov)",
-            "deploy (dep)",
+            "provision",
+            "deploy",
             "destroy",
-            "suspend (sus)",
-            "resume (res)",
+            "suspend",
+            "resume",
             "run",
             "logs",
-            "hosts (h)",
-            "shell (sh)",
+            "hosts",
+            "shell",
             "aws",
-            "licenses (lic)",
-            "config (cfg)",
+            "licenses",
+            "config",
             "apps",
             "agent",
             "--json",
@@ -91,16 +92,11 @@ HELP_CONTRACTS = [
         ["venv", "--help"],
         [
             "usage: spa venv",
-            "--path",
-            "--create",
-            "--reinstall",
-            "--upgrade",
-            "--rebuild",
-            "--shared",
-            "--environment",
-            "--python",
-            "--no-install",
-            "--yes",
+            "path",
+            "create",
+            "reinstall",
+            "upgrade",
+            "rebuild",
         ],
     ),
     (
@@ -165,7 +161,7 @@ HELP_CONTRACTS = [
         [
             "usage: spa apps",
             "search",
-            "content-packs (cp)",
+            "content-packs",
             "snippet",
             "add",
             "remove",
@@ -186,7 +182,9 @@ HELP_CONTRACTS = [
             "--version",
             "--archive",
             "matching archive in apps_dir",
-            "temporary authenticated Splunkbase download",
+            "install archive",
+            "--version",
+            "cached pack app.conf",
         ],
     ),
     (
@@ -280,8 +278,9 @@ HELP_CONTRACTS = [
             "--json",
             "--region",
             "--check-auth",
-            "list",
-            "spa aws list regions",
+            "regions",
+            "amis",
+            "spa aws regions list",
             "--latest-ami",
             "--describe-ami",
             "--validate",
@@ -289,27 +288,20 @@ HELP_CONTRACTS = [
         ],
     ),
     (
-        ["aws", "list", "--help"],
-        [
-            "usage: spa aws list",
-            "regions",
-            "amis",
-            "instance-types",
-            "key-pairs",
-            "security-groups",
-        ],
+        ["aws", "regions", "--help"],
+        ["usage: spa aws regions", "list"],
     ),
     (
-        ["aws", "list", "amis", "--help"],
-        ["usage: spa aws list amis", "--region", "--name-filter", "--owners", "--max-results", "--os"],
+        ["aws", "regions", "list", "--help"],
+        ["usage: spa aws regions list"],
     ),
     (
-        ["aws", "list", "instance-types", "--help"],
-        ["usage: spa aws list instance-types", "--region", "--family"],
+        ["aws", "amis", "list", "--help"],
+        ["usage: spa aws amis list", "--region", "--name-filter", "--owners", "--max-results", "--os"],
     ),
     (
-        ["aws", "list", "regions", "--help"],
-        ["usage: spa aws list regions"],
+        ["aws", "instance-types", "list", "--help"],
+        ["usage: spa aws instance-types list", "--region", "--family"],
     ),
     (
         ["licenses", "--help"],
@@ -322,7 +314,7 @@ HELP_CONTRACTS = [
             "ACTION",
             "spa agent schema",
             "requires_confirmation",
-            "spa --json run list",
+            "spa --agent run list",
             "--markdown",
             "docs/commands.md",
         ],
@@ -347,14 +339,6 @@ def test_complete_help_contract(argv, required):
 # Help rows look like "    validate (val)      Validate splunk_config.yml".
 _COMMAND_ROW = re.compile(r"^    ([a-z][a-z0-9_-]*)(?: \(([a-z0-9]+)\))?\s{2,}\S", re.MULTILINE)
 _ACTION_PARENTS = ("environment", "hosts", "apps")
-# Positional args that get the handler past argparse without mutating or calling out.
-_ALIAS_PROBE = {
-    ("environment", "remove"): ["no-such-env"],
-    ("hosts", "ssh"): ["no-such-host"],
-    ("apps", "search"): ["splunk", "--kind", "not-a-kind"],
-    ("apps", "snippet"): ["localapp", "--source", "local"],
-    ("apps", "download"): ["123"],
-}
 
 
 def _command_rows(help_text: str):
@@ -373,6 +357,72 @@ def _discovered_commands():
     return found
 
 
+def test_venv_uses_one_parser_per_action():
+    bare = run_spa(["--no-agent", "venv"])
+    assert bare.returncode == 2
+    assert bare.stdout.strip() == ""
+    for action in ("path", "create", "reinstall", "upgrade", "rebuild"):
+        assert "spa venv %s" % action in bare.stderr
+    assert "--rebuild" not in bare.stderr
+    rebuild = run_spa(["--no-agent", "venv", "rebuild", "--help"])
+    assert rebuild.returncode == 0, rebuild.stderr
+    assert "usage: spa venv rebuild" in rebuild.stdout
+    assert "--shared" in rebuild.stdout
+    assert "--yes" in rebuild.stdout
+    path = run_spa(["--no-agent", "venv", "path", "--help"])
+    assert "usage: spa venv path" in path.stdout
+    assert "--yes" not in path.stdout
+    rejected = run_spa(["--no-agent", "venv", "--rebuild"])
+    assert rejected.returncode == 2
+    schema = json.loads(run_spa(["--no-agent", "agent", "schema"]).stdout)
+    by_name = {row["name"]: row for row in schema["data"]["commands"]}
+    assert by_name["venv rebuild"]["example"] == "spa venv rebuild --shared --yes"
+    assert "--rebuild" not in json.dumps(by_name["venv path"])
+
+
+def test_schema_and_help_teach_agent_not_the_json_envelope_flag():
+    schema = json.loads(run_spa(["--no-agent", "agent", "schema"]).stdout)
+    assert schema["ok"] is True
+    for row in schema["data"]["commands"]:
+        for field in ("example", "summary"):
+            text = row.get(field) or ""
+            assert "spa --json" not in text, (row["name"], field)
+            assert "spa env --export" not in text
+    exported = next(row for row in schema["data"]["commands"] if row["name"] == "environment")
+    assert exported["example"] == "spa environment --export"
+    by_agent = run_spa(["--agent", "init", "list"])
+    by_json = run_spa(["--json", "init", "list"])
+    assert by_agent.returncode == by_json.returncode == 0
+    assert by_agent.stdout == by_json.stdout
+    root = run_spa(["--no-agent", "--help"])
+    assert "Synonym of --agent" in root.stdout
+
+
+def test_short_aliases_stay_on_the_command_help_page():
+    """Parent help and agent errors use the canonical name. The command page lists Aliases:."""
+    parent = run_spa(["--no-agent", "--help"])
+    assert parent.returncode == 0, parent.stderr
+    assert "validate (val)" not in parent.stdout
+    assert re.search(r"\bval\b", parent.stdout) is None
+    assert "environment (env)" in parent.stdout
+
+    human = run_spa(["--no-agent", "validate", "--help"])
+    assert "usage: spa validate" in human.stdout
+    assert "Aliases: val" in human.stdout
+    via_alias = run_spa(["--no-agent", "val", "--help"])
+    assert via_alias.stdout == human.stdout
+
+    shell = run_spa(["--no-agent", "shell", "--help"])
+    assert "usage: spa shell" in shell.stdout
+    assert "Aliases: sh" in shell.stdout
+    assert re.search(r"\bsh\b", parent.stdout) is None
+
+    agent = run_spa(["--agent", "nosuch"])
+    assert agent.returncode == 2
+    assert re.search(r"\bval\b", agent.stdout) is None
+    assert "validate" in agent.stdout
+
+
 def test_every_discovered_top_level_command_and_alias_use_canonical_help():
     for parents, canonical, alias in _discovered_commands():
         if parents:
@@ -388,12 +438,12 @@ def test_every_discovered_top_level_command_and_alias_use_canonical_help():
 
 
 @pytest.mark.parametrize(
-    ("argv", "usage"),
+    ("argv", "expect"),
     [
-        (["--json", "validate", "--help"], "usage: spa validate"),
-        (["validate", "--json", "--help"], "usage: spa validate"),
-        (["--agent", "validate", "--help"], "usage: spa validate"),
-        (["validate", "--agent", "--help"], "usage: spa validate"),
+        (["--json", "validate", "--help"], "validate"),
+        (["validate", "--json", "--help"], "validate"),
+        (["--agent", "validate", "--help"], "validate"),
+        (["validate", "--agent", "--help"], "validate"),
         (["--no-agent", "validate", "--help"], "usage: spa validate"),
         (["validate", "--no-agent", "--help"], "usage: spa validate"),
         (["--yes", "provision", "--help"], "usage: spa provision"),
@@ -405,11 +455,265 @@ def test_every_discovered_top_level_command_and_alias_use_canonical_help():
         (["deploy", "-v", "--help"], "usage: spa deploy"),
     ],
 )
-def test_accepted_global_positions(argv, usage):
+def test_accepted_global_positions(argv, expect):
     result = run_spa(argv)
     assert result.returncode == 0, result.stderr
-    assert usage in result.stdout
     assert "unrecognized arguments" not in result.stderr
+    if expect.startswith("usage:"):
+        assert expect in result.stdout
+        return
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["schema_version"] == 1
+    assert "data" in payload
+    assert payload["data"]["name"] == expect
+    assert re.search(r"\bval\b", result.stdout) is None
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["config", "set"],
+        ["config", "add"],
+        ["config", "unset"],
+        ["config", "topology"],
+        ["config", "provider"],
+        ["apps", "remove"],
+    ],
+)
+@pytest.mark.parametrize("mode", ["--no-agent", "--agent"])
+def test_required_operands_say_how_to_find_a_legal_value(argv, mode):
+    result = run_spa([mode, *argv])
+    assert result.returncode == 2, result.stderr + result.stdout
+    if mode == "--agent":
+        payload = json.loads(result.stdout)
+        assert payload["ok"] is False
+        assert "data" not in payload
+        text = payload["error"]
+        assert result.stderr == ""
+    else:
+        text = result.stderr
+        assert result.stdout.strip() == ""
+    assert "the following arguments are required" not in text
+    if argv[-1] == "topology":
+        assert "spa init list" in text
+        assert "spa config topology cm_2idxc_sh_uf" in text
+    if argv[-1] == "provider":
+        assert "spa init list" in text
+        assert "spa config provider aws" in text
+
+
+def test_apps_add_help_names_kinds_flags_and_the_next_action():
+    result = run_spa(["--no-agent", "apps", "add", "--help"])
+    assert result.returncode == 0, result.stderr
+    pieces: list[str] = []
+    for line in result.stdout.splitlines():
+        stripped = line.strip()
+        if pieces and line.startswith(" ") and pieces[-1].endswith("-"):
+            pieces[-1] += stripped
+        else:
+            pieces.append(stripped)
+    text = " ".join(pieces)
+    for phrase in (
+        "edits splunk_config.yml",
+        "does not deploy",
+        "Normal app",
+        "1841",
+        "Content Library 5391",
+        "7294",
+        "spa apps content-packs list 5391",
+        "spa validate",
+        "spa deploy --yes",
+        "required only for normal apps",
+        "rejected for ITSI",
+        "default latest",
+        "default splunkbase",
+        "Shorthand for --source local",
+        "Mutually exclusive with --source",
+        "repeatable",
+        "mutually exclusive with --install-all-content-packs",
+        "mutually exclusive with --content-pack",
+        "without prompting or writing",
+        "SHA-256 revision",
+        "strict JSON",
+        "use - for stdin",
+        "agent mode never prompts",
+    ):
+        assert phrase in text, phrase
+    from spa.agent import COMMAND_SCHEMA
+
+    add = next(row for row in COMMAND_SCHEMA["commands"] if row["name"] == "apps add")
+    for flag in add["flags"]:
+        assert flag["help"] in text, flag["long"]
+
+
+def test_command_classes_keep_one_human_and_agent_shape(tmp_path):
+    """One representative of each output class. Same facts, two renderings."""
+    dest = tmp_path / "env"
+    created = run_spa_init(["--example", "single_node", "--provider", "aws", str(dest)])
+    assert created.returncode == 0, created.stderr
+    env = {"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(dest)}
+
+    human_search = run_spa(["--no-agent", "config", "search", "host"])
+    agent_search = run_spa(["--agent", "config", "search", "host"])
+    assert human_search.returncode == 0, human_search.stderr
+    assert not human_search.stdout.lstrip().startswith("{")
+    human_rows = [line.split("  ", 1)[0] for line in human_search.stdout.splitlines() if line.strip()]
+    search_body = json.loads(agent_search.stdout)
+    matches = search_body["data"]["matches"]
+    assert search_body["data"]["truncated"] is True
+    assert search_body["data"]["total_matches"] > len(matches)
+    assert [row["path"] for row in matches] == human_rows
+    again = json.loads(run_spa(["--agent", "config", "search", "host"]).stdout)
+    assert [row["path"] for row in again["data"]["matches"]] == [row["path"] for row in matches]
+
+    human_explain = run_spa(["--no-agent", "config", "explain", "os.packages"])
+    agent_explain = run_spa(["--agent", "config", "explain", "os.packages"])
+    assert human_explain.stdout.splitlines()[0] == "PATH: os.packages"
+    explained = json.loads(agent_explain.stdout)["data"]
+    assert explained["path"] == "os.packages"
+    assert explained["type"]
+    assert "matches" not in explained
+
+    human_get = run_spa(["--no-agent", "config", "get", "os.time_zone"], env=env)
+    agent_get = run_spa(["--agent", "config", "get", "os.time_zone"], env=env)
+    assert human_get.returncode == 0, human_get.stderr
+    assert not human_get.stdout.lstrip().startswith("{")
+    got = json.loads(agent_get.stdout)
+    assert got["ok"] is True
+    assert got["data"]["path"] == "os.time_zone"
+    assert "revision" in got["data"]
+
+    human_edit = run_spa(
+        ["--no-agent", "config", "set", "os.time_zone", "Europe/Berlin", "--dry-run"],
+        env=env,
+    )
+    agent_edit = run_spa(
+        ["--agent", "config", "set", "os.time_zone", "Europe/Berlin", "--dry-run"],
+        env=env,
+    )
+    assert human_edit.returncode == 0, human_edit.stderr
+    assert "would change" in human_edit.stdout or "unchanged" in human_edit.stdout
+    edited = json.loads(agent_edit.stdout)
+    assert edited["ok"] is True
+    assert "revision_before" in edited["data"]
+    assert "Proceed?" not in agent_edit.stdout
+    assert "Proceed?" not in agent_edit.stderr
+
+    human_validate = run_spa(["--no-agent", "validate"], env=env)
+    agent_validate = run_spa(["--agent", "validate"], env=env)
+    assert not human_validate.stdout.lstrip().startswith("{")
+    validated = json.loads(agent_validate.stdout)
+    assert validated["schema_version"] == 1
+    assert validated["ok"] is (agent_validate.returncode == 0)
+    if validated["ok"]:
+        assert validated["data"]["config_file"]
+    else:
+        assert validated.get("error") or validated.get("data")
+
+    folder = Path(dest) / "logs"
+    folder.mkdir()
+    jsonl = folder / "rid.jsonl"
+    jsonl.write_text(
+        '{"time":"2026-09-18T15:00:00.000+02:00","msg":"hello-run"}\n',
+        encoding="utf-8",
+    )
+    (folder / "rid.meta.json").write_text(
+        json.dumps(
+            {
+                "run_id": "rid",
+                "command": "deploy",
+                "rc": 0,
+                "log": str(jsonl),
+                "start": "2026-09-18T15:00:00.000+02:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    human_log = run_spa(["--no-agent", "logs", "--last"], env=env)
+    agent_log = run_spa(["--agent", "logs", "--last"], env=env)
+    assert human_log.returncode == 0, human_log.stderr
+    assert "hello-run" in human_log.stdout
+    assert "  rc=" not in human_log.stdout
+    logged = json.loads(agent_log.stdout)
+    assert logged["data"]["log"]
+    assert logged["data"]["run_id"] == "rid"
+    assert "transcript" not in logged["data"]
+    assert "hello-run" not in agent_log.stdout
+
+
+def test_unknown_topology_is_reported_before_confirmation(tmp_path):
+    dest = write_min_env(tmp_path / "env")
+    (dest / "config" / "splunk_config.yml").write_text("splunk_hosts: []\n", encoding="utf-8")
+    env = {"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(dest)}
+    human = run_spa(["--no-agent", "config", "topology", "not_a_real_topology"], env=env)
+    assert human.returncode == 2, human.stderr
+    assert "spa init list" in human.stderr
+    assert "requires -y/--yes" not in human.stderr + human.stdout
+
+
+def test_unknown_topology_points_at_init_list(tmp_path):
+    dest = tmp_path / "env"
+    created = run_spa_init(["--example", "single_node", "--provider", "aws", str(dest)])
+    assert created.returncode == 0, created.stderr
+    env = {"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(dest)}
+    human = run_spa(
+        ["--no-agent", "config", "topology", "not_a_real_topology", "--dry-run"],
+        env=env,
+    )
+    agent = run_spa(
+        ["--agent", "config", "topology", "not_a_real_topology"],
+        env=env,
+    )
+    assert human.returncode == 2, human.stderr
+    assert "spa init list" in human.stderr
+    assert "not_a_real_topology" in human.stderr
+    assert "/examples/" not in human.stderr
+    body = json.loads(agent.stdout)
+    assert agent.returncode == 2
+    assert "data" not in body
+    assert body["error"] in human.stderr
+    assert "spa init list" in body["error"]
+    assert "not_a_real_topology" in body["error"]
+    assert "/examples/" not in body["error"]
+
+
+def test_agent_help_is_one_schema_entry_or_an_index():
+    root = run_spa(["--agent", "--help"])
+    assert root.returncode == 0, root.stderr
+    index = json.loads(root.stdout)
+    assert index["ok"] is True
+    rows = index["data"]["commands"]
+    validate = next(row for row in rows if row["name"] == "validate")
+    assert validate["help"] == "spa validate --help"
+    assert "summary" in validate
+    assert "flags" not in validate
+    assert all(row["name"] != "val" for row in rows)
+
+    nested = run_spa(["--agent", "config", "explain", "--help"])
+    assert nested.returncode == 0, nested.stderr
+    explained = json.loads(nested.stdout)
+    assert explained["data"]["name"] == "config explain"
+    assert explained["data"]["positionals"][0]["name"] == "PATH"
+
+    detected = run_spa(["config", "explain", "--help"], extra_env={"SPA_AGENT": "1"})
+    assert json.loads(detected.stdout)["data"]["name"] == "config explain"
+
+    forced_human = run_spa(
+        ["--no-agent", "validate", "--help"], extra_env={"SPA_AGENT": "1"}
+    )
+    assert "usage: spa validate" in forced_human.stdout
+    assert not forced_human.stdout.lstrip().startswith("{")
+
+    for argv in (
+        ["--agent", "aws", "--help"],
+        ["--agent", "licenses", "--help"],
+        ["--agent", "shell", "--help"],
+    ):
+        native = run_spa(argv)
+        assert native.returncode == 0, native.stderr
+        assert "usage: spa" in native.stdout
+        assert not native.stdout.lstrip().startswith("{")
 
 
 @pytest.mark.parametrize(
@@ -446,29 +750,27 @@ def test_native_commands_keep_native_flags(argv, usage):
     assert not result.stdout.lstrip().startswith('{"ok":')
 
 
-def test_every_short_command_is_short_enough_and_dispatches():
-    """Names under 5 characters have no alias. Longer names have one alias under 5 that runs the same command."""
+def test_parent_help_shows_only_the_documented_env_alias():
+    """Hidden shortcuts stay out of the parent list. env remains visible."""
     commands = _discovered_commands()
     names = {" ".join((*parents, name)) for parents, name, _alias in commands}
     assert "environment remove" in names
     assert "hosts list" in names
     assert "apps search" in names
-    for parents, name, alias in commands:
-        label = " ".join((*parents, name))
-        if len(name) < 5:
-            assert alias is None, "%s is %s characters and must not have a short command" % (
-                label,
-                len(name),
-            )
-            continue
-        assert alias, "%s needs a short command" % label
-        assert len(alias) < 5, "%s short command %s must be under 5 characters" % (label, alias)
-        probe = _ALIAS_PROBE.get(tuple(parents) + (name,), [])
-        short = run_spa(["--no-agent", *parents, alias, *probe], stdin="n\n")
-        long = run_spa(["--no-agent", *parents, name, *probe], stdin="n\n")
-        assert short.returncode == long.returncode, label
-        assert short.stdout == long.stdout, label
-        assert short.stderr == long.stderr, label
+    visible = [(parents, name, alias) for parents, name, alias in commands if alias]
+    assert visible == [((), "environment", "env")]
+    hidden = {
+        (): {"val": "validate", "sh": "shell", "cfg": "config"},
+        ("config",): {"top": "topology"},
+        ("apps",): {"sea": "search"},
+        ("environment",): {"rm": "remove"},
+    }
+    for parents, mapping in hidden.items():
+        for alias, canonical in mapping.items():
+            short = run_spa(["--no-agent", *parents, alias, "--help"])
+            long = run_spa(["--no-agent", *parents, canonical, "--help"])
+            assert short.returncode == 0, (parents, alias, short.stderr)
+            assert short.stdout == long.stdout
 
 
 @pytest.mark.parametrize(
@@ -566,7 +868,7 @@ def _help_action_names():
     names = set()
     for name, _alias in _command_rows(root.stdout):
         names.add("agent schema" if name == "agent" else name)
-    for parent in ("environment", "hosts", "apps", "config", "skills"):
+    for parent in ("environment", "hosts", "apps", "config", "skills", "venv"):
         child = run_spa(["--no-agent", parent, "--help"])
         assert child.returncode == 0, child.stderr
         for name, _alias in _command_rows(child.stdout):
@@ -591,10 +893,11 @@ def _help_action_names():
         flattened = " ".join(text.stdout.split())
         assert phrase in flattened, phrase
         names.add(label)
-    listed = run_spa(["--no-agent", "aws", "list", "--help"])
-    assert listed.returncode == 0, listed.stderr
-    for name, _alias in _command_rows(listed.stdout):
-        names.add("aws list %s" % name)
+    for resource in ("regions", "amis", "instance-types", "key-pairs", "security-groups"):
+        listed = run_spa(["--no-agent", "aws", resource, "--help"])
+        assert listed.returncode == 0, listed.stderr
+        for name, _alias in _command_rows(listed.stdout):
+            names.add("aws %s %s" % (resource, name))
     return names
 
 
@@ -706,9 +1009,9 @@ def test_agent_schema_is_complete_and_documented():
     aws = run_spa(["--no-agent", "aws"])
     assert aws.returncode == 2, aws.stderr
     assert "spa aws needs an operation." in aws.stderr
-    assert "spa aws list regions" in aws.stderr
+    assert "spa aws regions list" in aws.stderr
     assert "spa aws --check-auth" in aws.stderr
     aws_list = run_spa(["--no-agent", "aws", "list"])
     assert aws_list.returncode == 2, aws_list.stderr
     for kind in ("regions", "amis", "instance-types", "key-pairs", "security-groups"):
-        assert "spa aws list %s" % kind in aws_list.stderr
+        assert "spa aws %s list" % kind in aws_list.stderr

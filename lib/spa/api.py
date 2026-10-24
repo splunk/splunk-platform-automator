@@ -530,6 +530,8 @@ class LocalSpaSession:
         confirm: bool = False,
         agent: bool = False,
     ) -> CommandResult:
+        from spa.init import InitError
+        from spa.usage import MISSING_OPERAND
         from spa.config_edit import (
             ConfigEditError,
             config_add,
@@ -571,6 +573,12 @@ class LocalSpaSession:
                     error="Unknown spa config action: %s" % action,
                     code=2,
                 )
+            if action == "topology":
+                if not operand:
+                    raise ConfigEditError(MISSING_OPERAND[("spa config topology", "TOPOLOGY")])
+                from spa.config_edit import resolve_topology_id
+
+                resolve_topology_id(Path(self.paths.spa_home), operand)
             if not dry_run and not agent:
                 blocked = self._confirm_gate(
                     "spa config %s" % action,
@@ -587,7 +595,7 @@ class LocalSpaSession:
             }
             if action == "set":
                 if not paths:
-                    raise ConfigEditError("spa config set needs PATH VALUE")
+                    raise ConfigEditError(MISSING_OPERAND[("spa config set", "PATH")])
                 data = config_set(
                     config_path,
                     self.paths.spa_home,
@@ -603,7 +611,7 @@ class LocalSpaSession:
                 )
             elif action == "add":
                 if not paths:
-                    raise ConfigEditError("spa config add needs SELECTOR JSON_OBJECT")
+                    raise ConfigEditError(MISSING_OPERAND[("spa config add", "SELECTOR")])
                 data = config_add(
                     config_path,
                     self.paths.spa_home,
@@ -618,7 +626,7 @@ class LocalSpaSession:
                 )
             elif action == "unset":
                 if not paths:
-                    raise ConfigEditError("spa config unset needs PATH")
+                    raise ConfigEditError(MISSING_OPERAND[("spa config unset", "PATH")])
                 data = config_unset(
                     config_path,
                     self.paths.spa_home,
@@ -641,7 +649,7 @@ class LocalSpaSession:
                 )
             elif action == "topology":
                 if not operand:
-                    raise ConfigEditError("spa config topology needs TOPOLOGY")
+                    raise ConfigEditError(MISSING_OPERAND[("spa config topology", "TOPOLOGY")])
                 data = config_topology(
                     config_path,
                     self.paths.spa_home,
@@ -653,7 +661,7 @@ class LocalSpaSession:
                 )
             else:
                 if not operand:
-                    raise ConfigEditError("spa config provider needs PROVIDER")
+                    raise ConfigEditError(MISSING_OPERAND[("spa config provider", "PROVIDER")])
                 data = config_provider(
                     config_path,
                     self.paths.spa_home,
@@ -664,6 +672,8 @@ class LocalSpaSession:
                     **common,
                 )
             return CommandResult(ok=True, data=data)
+        except InitError as exc:
+            return CommandResult(ok=False, error=str(exc), code=exc.code)
         except ConfigEditError as exc:
             text = str(exc)
             usage = any(
@@ -683,6 +693,7 @@ class LocalSpaSession:
                     "identity must be one of",
                     "App entries use spa apps add",
                     "Unknown schema path",
+                    "Unknown topology",
                     "strict JSON",
                     "Provide exactly",
                 )
@@ -766,6 +777,7 @@ class LocalSpaSession:
                     apps_dir=self.paths.apps_dir if archive is None else None,
                     spa_home=self.paths.spa_home,
                     config=self._app_deployment_config() if archive is None else None,
+                    agent=agent,
                 )
                 return CommandResult(ok=True, data=data)
             if action in {"add", "remove"}:
@@ -1162,12 +1174,14 @@ class LocalSpaSession:
         details: Optional[Sequence[str]] = None,
         risk: Optional[str] = None,
     ) -> Optional[CommandResult]:
-        from spa.confirm import ConfirmationError, ensure_confirmed
+        from spa.confirm import ConfirmationError, ConfirmationUsageError, ensure_confirmed
 
         try:
             ensure_confirmed(
                 label, confirm=confirm, agent=agent, details=details, risk=risk
             )
+        except ConfirmationUsageError as exc:
+            return CommandResult(ok=False, error=str(exc), code=2)
         except ConfirmationError as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
         return None
@@ -1295,9 +1309,10 @@ class LocalSpaSession:
             )
         except ProviderError as exc:
             data = log.envelope_fields() if log is not None else None
+            code = getattr(exc, "code", 1) or 1
             if log is not None:
-                log.finish(1)
-            return CommandResult(ok=False, error=str(exc), code=1, data=data)
+                log.finish(code)
+            return CommandResult(ok=False, error=str(exc), code=code, data=data)
         log.finish(rc)
         data = {"provider": provider.name, "action": action}
         data.update(log.envelope_fields())
@@ -1496,7 +1511,7 @@ class LocalSpaSession:
         try:
             provider = get_provider(self.paths)
         except ProviderError as exc:
-            return CommandResult(ok=False, error=str(exc), code=1)
+            return CommandResult(ok=False, error=str(exc), code=getattr(exc, "code", 1) or 1)
         log = self._run_log(action, action, agent, ansible_output, provider=provider.name)
         log.emit({"status": "ok", "phase": "power", "task": action})
         try:
@@ -1504,9 +1519,10 @@ class LocalSpaSession:
                 yes=True, agent=agent, wait=wait, hosts=resolved, run_log=log
             )
         except ProviderError as exc:
-            log.finish(1)
+            code = getattr(exc, "code", 1) or 1
+            log.finish(code)
             payload = log.envelope_fields()
-            return CommandResult(ok=False, error=str(exc), code=1, data=payload)
+            return CommandResult(ok=False, error=str(exc), code=code, data=payload)
         log.finish(0)
         payload = dict(data or {})
         payload["provider"] = provider.name

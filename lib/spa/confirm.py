@@ -15,6 +15,10 @@ class ConfirmationError(Exception):
     """Caller declined, or agent/GUI omitted --yes / confirm=True."""
 
 
+class ConfirmationUsageError(ConfirmationError):
+    """Human stdin is not a terminal and -y/--yes was omitted. Exit 2."""
+
+
 LIFECYCLE_RISK = {
     "provision": "mutating",
     "destroy": "destructive",
@@ -56,11 +60,15 @@ def ensure_confirmed(
     details: Optional[Sequence[str]] = None,
     risk: Optional[str] = None,
 ) -> None:
-    """No-op if confirm; fail in agent mode; otherwise prompt on stderr/stdin."""
+    """No-op if confirm; fail in agent mode; otherwise prompt on a terminal."""
     if confirm:
         return
     if agent:
         raise ConfirmationError("%s requires -y/--yes in agent mode." % label)
+    if not sys.stdin.isatty():
+        raise ConfirmationUsageError(
+            "%s requires -y/--yes when stdin is not a terminal." % label
+        )
     for line in details or ():
         print(line, file=sys.stderr)
     answer = input(prompt_text(label, risk=risk))

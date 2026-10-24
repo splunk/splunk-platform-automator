@@ -6,6 +6,7 @@ import configparser
 import io
 import re
 import shutil
+import sys
 import tarfile
 import tempfile
 import unicodedata
@@ -866,27 +867,7 @@ def inspect_content_pack_archive(
                         "Content pack app.conf exceeds %s bytes: %s"
                         % (MAX_APP_CONF_BYTES, member.name)
                     )
-                parser = _parse_app_conf(raw)
-                title = _app_conf_value(parser, "ui", "label")
-                summary = _app_conf_value(parser, "launcher", "description")
-                version = (
-                    _app_conf_value(parser, "launcher", "version")
-                    or _app_conf_value(parser, "id", "version")
-                    or _app_conf_value(parser, "package", "version")
-                )
-                row: Dict[str, Any] = {
-                    "name": name,
-                    "title": title or _humanize_content_pack(name),
-                    "command": "spa apps add 5391 --content-pack %s --yes" % name,
-                }
-                if summary:
-                    row["summary"] = _one_line(summary)
-                if version:
-                    row["version"] = version
-                automation = _content_pack_automation(spa_home, name)
-                if automation:
-                    row["spa_automation"] = automation
-                found[name] = row
+                found[name] = _content_pack_row(name, raw, spa_home)
     except AppsError:
         raise
     except (tarfile.TarError, OSError) as exc:
@@ -945,6 +926,256 @@ def _local_content_library_archive(
     return None
 
 
+CONTENT_LIBRARY_FOLDER = "DA-ITSI-ContentLibrary"
+DEFAULT_APP_TEMP_DIR = "/tmp/splunk_apps"
+
+
+def _app_temp_dir(config: Optional[Mapping[str, Any]]) -> Path:
+    deployment: Mapping[str, Any] = {}
+    if isinstance(config, Mapping):
+        raw = config.get("splunk_app_deployment")
+        if isinstance(raw, Mapping):
+            deployment = raw
+    return Path(str(deployment.get("temp_dir") or DEFAULT_APP_TEMP_DIR)).expanduser()
+
+
+def _content_library_folder(config: Optional[Mapping[str, Any]]) -> str:
+    """Ansible cache slug uses the 5391 entry name, with spaces turned into underscores."""
+    name = ""
+    if isinstance(config, Mapping):
+        deployment = config.get("splunk_app_deployment")
+        apps = deployment.get("apps") if isinstance(deployment, Mapping) else None
+        if isinstance(apps, list):
+            for entry in apps:
+                if not isinstance(entry, Mapping):
+                    continue
+                try:
+                    app_id = int(entry.get("app_id"))
+                except (TypeError, ValueError):
+                    continue
+                if app_id != CONTENT_LIBRARY_ID:
+                    continue
+                name = str(entry.get("name") or "").replace(" ", "_")
+                break
+    if name and name == Path(name).name and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
+        return name
+    return CONTENT_LIBRARY_FOLDER
+
+
+def _content_library_cache_dir(config: Optional[Mapping[str, Any]]) -> Path:
+    """Ansible cache for Content Library: the install tarball and app.conf files."""
+    return _app_temp_dir(config) / ("content_pack_%s" % _content_library_folder(config))
+
+
+def _content_library_conf_root(config: Optional[Mapping[str, Any]]) -> Path:
+    """Same layout Ansible uses for content-pack app.conf files."""
+    return _content_library_cache_dir(config) / "content_pack_app_confs"
+
+
+def _install_content_library_archive(cache_dir: Path, version: str) -> Optional[Path]:
+    """Return the Splunkbase tarball an app install already left in the cache."""
+    if (
+        not version
+        or version == "latest"
+        or version != Path(version).name
+        or not re.fullmatch(r"[A-Za-z0-9._-]+", version)
+    ):
+        return None
+    candidate = cache_dir / ("%s_%s.tgz" % (cache_dir.name, version))
+    return candidate if candidate.is_file() else None
+
+
+def _require_cache_version(version: str) -> str:
+    """A cache directory name is one safe path segment, never a relative path."""
+    if (
+        not version
+        or version == "latest"
+        or version != Path(version).name
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", version)
+    ):
+        raise AppsError("Refusing unsafe Content Library version: %s" % version)
+    return version
+
+
+def _cache_has_packs(version_dir: Path) -> bool:
+    if not version_dir.is_dir():
+        return False
+    return any(
+        path.is_file()
+        for path in version_dir.glob("DA-ITSI-CP-*/default/app.conf")
+        if _FOLDER.fullmatch(path.parents[1].name)
+    )
+
+
+def _other_cached_versions(root: Path, keep: str) -> List[str]:
+    if not root.is_dir():
+        return []
+    return sorted(
+        path.name
+        for path in root.iterdir()
+        if (
+            path.is_dir()
+            and not path.is_symlink()
+            and path.name != keep
+            and not path.name.endswith(".partial")
+            and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", path.name)
+        )
+    )
+
+
+def _prune_other_cached_versions(root: Path, keep: str) -> None:
+    keep = _require_cache_version(keep)
+    for name in _other_cached_versions(root, keep):
+        shutil.rmtree(root / name)
+
+
+def _content_pack_row(name: str, raw: bytes, spa_home: Optional[Path]) -> Dict[str, Any]:
+    parser = _parse_app_conf(raw)
+    title = _app_conf_value(parser, "ui", "label")
+    summary = _app_conf_value(parser, "launcher", "description")
+    version = (
+        _app_conf_value(parser, "launcher", "version")
+        or _app_conf_value(parser, "id", "version")
+        or _app_conf_value(parser, "package", "version")
+    )
+    row: Dict[str, Any] = {
+        "name": name,
+        "title": title or _humanize_content_pack(name),
+        "command": "spa apps add 5391 --content-pack %s --yes" % name,
+    }
+    if summary:
+        row["summary"] = _one_line(summary)
+    if version:
+        row["version"] = version
+    automation = _content_pack_automation(spa_home, name)
+    if automation:
+        row["spa_automation"] = automation
+    return row
+
+
+def inspect_content_pack_cache(
+    version_dir: Path,
+    *,
+    spa_home: Optional[Path] = None,
+) -> List[Dict[str, Any]]:
+    """Read pack app.conf files kept from an earlier Content Library download."""
+    found: Dict[str, Dict[str, Any]] = {}
+    for path in sorted(version_dir.glob("DA-ITSI-CP-*/default/app.conf")):
+        name = path.parents[1].name
+        if not name.startswith("DA-ITSI-CP-") or not _FOLDER.fullmatch(name):
+            continue
+        if path.stat().st_size > MAX_APP_CONF_BYTES:
+            raise AppsError("Content pack app.conf exceeds %s bytes: %s" % (MAX_APP_CONF_BYTES, name))
+        if name in found:
+            raise AppsError("Content Library cache contains duplicate pack folder: %s" % name)
+        found[name] = _content_pack_row(name, path.read_bytes(), spa_home)
+    return [found[name] for name in sorted(found)]
+
+
+def _store_content_library_cache(archive: Path, version_dir: Path) -> None:
+    """Keep each top-level app.conf, including the library folder."""
+    staging = version_dir.with_name(version_dir.name + ".partial")
+    if staging.exists():
+        shutil.rmtree(staging)
+    staging.mkdir(parents=True)
+    expanded_bytes = 0
+    seen = set()
+    try:
+        with tarfile.open(str(archive), mode="r:*") as bundle:
+            for index, member in enumerate(bundle):
+                if index >= MAX_ARCHIVE_MEMBERS:
+                    raise AppsError(
+                        "Content Library archive has more than %s members" % MAX_ARCHIVE_MEMBERS
+                    )
+                member_path = Path(member.name)
+                if member_path.is_absolute() or ".." in member_path.parts:
+                    raise AppsError("Refusing unsafe archive path: %s" % member.name)
+                if member.issym() or member.islnk() or member.isdev():
+                    raise AppsError("Refusing unsafe archive member: %s" % member.name)
+                expanded_bytes += max(int(member.size or 0), 0)
+                if expanded_bytes > MAX_ARCHIVE_EXPANDED_BYTES:
+                    raise AppsError(
+                        "Content Library archive expands beyond %s bytes"
+                        % MAX_ARCHIVE_EXPANDED_BYTES
+                    )
+                parts = member_path.parts
+                if len(parts) != 3 or parts[-2:] != ("default", "app.conf"):
+                    continue
+                name = parts[-3]
+                if name.startswith("DA-ITSI-CP-") and not _FOLDER.fullmatch(name):
+                    raise AppsError("Refusing invalid content pack folder: %s" % name)
+                if not _FOLDER.fullmatch(name):
+                    continue
+                if name in seen:
+                    raise AppsError(
+                        "Content Library archive contains duplicate pack folder: %s" % name
+                    )
+                seen.add(name)
+                if member.size > MAX_APP_CONF_BYTES:
+                    raise AppsError(
+                        "Content pack app.conf exceeds %s bytes: %s" % (MAX_APP_CONF_BYTES, member.name)
+                    )
+                stream = bundle.extractfile(member)
+                if stream is None:
+                    continue
+                raw = stream.read(MAX_APP_CONF_BYTES + 1)
+                if len(raw) > MAX_APP_CONF_BYTES:
+                    raise AppsError(
+                        "Content pack app.conf exceeds %s bytes: %s" % (MAX_APP_CONF_BYTES, member.name)
+                    )
+                dest = staging / name / "default" / "app.conf"
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(raw)
+        if version_dir.exists():
+            shutil.rmtree(version_dir)
+        staging.rename(version_dir)
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+
+
+def _note(text: str, *, agent: bool) -> None:
+    """Human progress. Agent and JSON mode stay a single JSON object."""
+    if agent:
+        return
+    print(text, file=sys.stderr, flush=True)
+
+
+def _note_install_archive(app_id: int, version: str, archive: Path, *, agent: bool = False) -> None:
+    _note(
+        "Using installed Content Library %s (%s) from %s." % (app_id, version, archive),
+        agent=agent,
+    )
+
+
+def _note_cached(app_id: int, version: str, cache_dir: Path, *, agent: bool = False) -> None:
+    _note(
+        "Using cached Content Library %s (%s) from %s." % (app_id, version, cache_dir),
+        agent=agent,
+    )
+
+
+def _note_download(
+    app_id: int,
+    version: str,
+    cache_dir: Path,
+    previous: Sequence[str],
+    *,
+    agent: bool = False,
+) -> None:
+    lines = []
+    if previous:
+        lines.append(
+            "Replacing cached Content Library %s with %s." % (", ".join(previous), version)
+        )
+    lines.append(
+        "Downloading Content Library %s (%s) from Splunkbase. This can take a minute."
+        % (app_id, version)
+    )
+    lines.append("Keeping pack app.conf files in %s." % cache_dir)
+    _note("\n".join(lines), agent=agent)
+
+
 def _trusted_download_url(url: str) -> bool:
     parsed = urlparse(url)
     return (
@@ -962,17 +1193,22 @@ def content_pack_catalog(
     spa_home: Optional[Path] = None,
     config: Optional[Mapping[str, Any]] = None,
     client=None,
+    agent: bool = False,
 ) -> Dict[str, Any]:
-    """Discover packs from an explicit, local, or temporary 5391 archive."""
+    """Discover packs from an archive, apps_dir, an install tarball, or cached app.conf files."""
     app_id = parse_app_id(app_id_raw)
     if app_id != CONTENT_LIBRARY_ID:
         raise AppsError(
             "spa apps content-packs list supports Content Library app_id 5391"
         )
-    resolved = version or "latest"
+    requested = version or "latest"
+    if requested != "latest":
+        requested = _require_cache_version(requested)
+    resolved = requested
     selected: Optional[Path] = Path(archive) if archive is not None else None
     source = "archive"
     temporary: Optional[tempfile.TemporaryDirectory] = None
+    cached_dir: Optional[Path] = None
     try:
         if selected is None:
             if apps_dir is not None:
@@ -986,18 +1222,68 @@ def content_pack_catalog(
                         _content_library_archive_version(selected) or "unknown"
                     )
             else:
-                app = get_app(app_id, client=client)
-                resolved = latest_version(app) if resolved == "latest" else resolved
-                name = _entry_name("itsi_content_library", app, app_id)
-                temporary = tempfile.TemporaryDirectory(prefix="spa-content-packs-")
-                selected = Path(temporary.name) / _safe_filename(name, resolved)
-                url = release_download_url(app, version or "latest")
-                if not _trusted_download_url(url):
-                    raise AppsError("Refusing download URL host")
-                download_release(url, selected, client=client, config=config)
-                source = "temporary_download"
-        packs = inspect_content_pack_archive(selected, spa_home=spa_home)
-        if source in {"archive", "local_archive"}:
+                cache_dir = _content_library_cache_dir(config)
+                cache_root = _content_library_conf_root(config)
+                install_archive = (
+                    _install_content_library_archive(cache_dir, requested)
+                    if requested != "latest"
+                    else None
+                )
+                if install_archive is not None:
+                    selected = install_archive
+                    resolved = requested
+                    source = "install_cache"
+                    _note_install_archive(app_id, resolved, install_archive, agent=agent)
+                elif requested != "latest" and _cache_has_packs(cache_root / requested):
+                    resolved = requested
+                    cached_dir = cache_root / resolved
+                    _note_cached(app_id, resolved, cached_dir, agent=agent)
+                    source = "cached"
+                else:
+                    app = get_app(app_id, client=client)
+                    if requested == "latest":
+                        resolved = latest_version(app)
+                    if not resolved or resolved == "latest":
+                        raise AppsError("Splunkbase did not report a Content Library version")
+                    resolved = _require_cache_version(str(resolved))
+                    install_archive = _install_content_library_archive(cache_dir, resolved)
+                    if install_archive is not None:
+                        selected = install_archive
+                        source = "install_cache"
+                        if requested == "latest":
+                            _prune_other_cached_versions(cache_root, resolved)
+                        _note_install_archive(app_id, resolved, install_archive, agent=agent)
+                    else:
+                        cached_dir = cache_root / resolved
+                    if source != "install_cache" and _cache_has_packs(cached_dir):
+                        if requested == "latest":
+                            _prune_other_cached_versions(cache_root, resolved)
+                        _note_cached(app_id, resolved, cached_dir, agent=agent)
+                        source = "cached"
+                    elif source != "install_cache":
+                        name = _entry_name("itsi_content_library", app, app_id)
+                        url = release_download_url(app, resolved)
+                        if not _trusted_download_url(url):
+                            raise AppsError("Refusing download URL host")
+                        previous = (
+                            _other_cached_versions(cache_root, resolved)
+                            if requested == "latest"
+                            else []
+                        )
+                        _note_download(app_id, resolved, cached_dir, previous, agent=agent)
+                        temporary = tempfile.TemporaryDirectory(prefix="spa-content-packs-")
+                        selected = Path(temporary.name) / _safe_filename(name, resolved)
+                        download_release(url, selected, client=client, config=config)
+                        _store_content_library_cache(selected, cached_dir)
+                        if requested == "latest":
+                            _prune_other_cached_versions(cache_root, resolved)
+                        source = "cached"
+                        selected = None
+        if cached_dir is not None:
+            packs = inspect_content_pack_cache(cached_dir, spa_home=spa_home)
+        else:
+            packs = inspect_content_pack_archive(selected, spa_home=spa_home)
+        if source in {"archive", "local_archive", "install_cache"}:
             archive_version = _content_library_archive_version(selected)
             if resolved == "latest":
                 resolved = archive_version or "unknown"

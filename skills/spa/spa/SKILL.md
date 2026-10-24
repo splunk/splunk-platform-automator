@@ -48,7 +48,7 @@ spa --env my-lab validate
 spa environment remove my-lab --yes                    # not spa destroy; --force if it looks deployed
 ```
 
-`--name` is the registry key (default: folder basename). `spa` resolves `--env`, cwd, or the registered default and applies the required environment internally. `spa env --export` remains only for external tools.
+`--name` is the registry key (default: folder basename). `spa` resolves `--env`, cwd, or the registered default and applies the required environment internally. `spa environment --export` is the canonical form for external tools. `spa env --export` remains the human alias.
 
 ## Software
 
@@ -56,9 +56,9 @@ One shared directory per machine, not inside `SPA_HOME` and not copied per env. 
 
 ```bash
 spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
-spa venv --shared --reinstall --yes                    # repair shared Python requirements
-spa venv --shared --upgrade --yes                      # bump Ansible and other requirements
-spa venv --shared --rebuild --yes                      # recreate the shared venv
+spa venv reinstall --shared --yes                    # repair shared Python requirements
+spa venv upgrade --shared --yes                      # bump Ansible and other requirements
+spa venv rebuild --shared --yes                      # recreate the shared venv
 spa doctor
 spa validate
 spa provision --yes && spa deploy --yes
