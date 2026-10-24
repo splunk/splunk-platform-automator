@@ -176,6 +176,24 @@ def test_list_regions_marks_the_region_from_the_aws_config(monkeypatch, capsys, 
     assert json.loads(captured.out)["region_source"] == "aws-config"
 
 
+def test_config_region_does_not_require_boto3(monkeypatch, tmp_path):
+    _aws_config(monkeypatch, tmp_path, "eu-central-1")
+    monkeypatch.setattr(aws, "boto3", None)
+    resolved = aws.resolve_region()
+    assert resolved.region == "eu-central-1"
+    assert resolved.source == "aws-config"
+    assert resolved.profile == "default"
+
+    named = tmp_path / "named"
+    named.write_text("[profile lab]\nregion = us-west-2\n", encoding="utf-8")
+    monkeypatch.setenv("AWS_CONFIG_FILE", str(named))
+    monkeypatch.setenv("AWS_PROFILE", "lab")
+    resolved = aws.resolve_region()
+    assert resolved.region == "us-west-2"
+    assert resolved.source == "aws-config"
+    assert resolved.profile == "lab"
+
+
 def test_list_regions_uses_aws_default_region(monkeypatch, capsys, tmp_path):
     _aws_config(monkeypatch, tmp_path, "eu-central-1")
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-west-2")

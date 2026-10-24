@@ -19,6 +19,7 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import configparser
 import json
 import os
 import re
@@ -200,6 +201,45 @@ class _ResolvedRegion:
         self.profile = profile
 
 
+def _aws_config_path() -> str:
+    configured = os.environ.get("AWS_CONFIG_FILE", "").strip()
+    return configured or os.path.expanduser("~/.aws/config")
+
+
+def _aws_profile_name() -> str:
+    return (
+        os.environ.get("AWS_PROFILE", "").strip()
+        or os.environ.get("AWS_DEFAULT_PROFILE", "").strip()
+        or "default"
+    )
+
+
+def _profile_sections(profile: str) -> tuple:
+    if profile == "default":
+        return ("default", "profile default")
+    return ("profile %s" % profile,)
+
+
+def _region_from_aws_config() -> _ResolvedRegion:
+    """Read region from the AWS config file. This does not import boto3."""
+    profile = _aws_profile_name()
+    path = _aws_config_path()
+    if not os.path.isfile(path):
+        return _ResolvedRegion(None, None)
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(path, encoding="utf-8")
+    except (configparser.Error, OSError, UnicodeError):
+        return _ResolvedRegion(None, None)
+    for section in _profile_sections(profile):
+        if not parser.has_section(section) or not parser.has_option(section, "region"):
+            continue
+        region = parser.get(section, "region", fallback="").strip()
+        if region:
+            return _ResolvedRegion(region, "aws-config", profile)
+    return _ResolvedRegion(None, None)
+
+
 def resolve_region(explicit: Optional[str] = None) -> _ResolvedRegion:
     """Prefer --region, then AWS_REGION, then AWS_DEFAULT_REGION, then the AWS config."""
     if explicit:
@@ -208,13 +248,7 @@ def resolve_region(explicit: Optional[str] = None) -> _ResolvedRegion:
         value = os.environ.get(name, "").strip()
         if value:
             return _ResolvedRegion(value, name)
-    _require_boto3()
-    session = boto3.Session()
-    region = session.region_name
-    if region:
-        profile = getattr(session, "profile_name", None) or "default"
-        return _ResolvedRegion(region, "aws-config", profile)
-    return _ResolvedRegion(None, None)
+    return _region_from_aws_config()
 
 
 def region_notice(resolved: _ResolvedRegion) -> str:
