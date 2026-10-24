@@ -169,14 +169,14 @@ Set global `os:` block, expected `ssh_username`, and **polkit** (`polkit` on AL/
 
 ## Phase 4 — AWS settings
 
-**With creds:** Run `spa aws` — see [aws-baseline.md](references/aws-baseline.md).
+**With creds:** Run `spa aws --json` — see [aws-baseline.md](references/aws-baseline.md). Agents pass `--json` so the result is JSON.
 
-1. Region (`spa aws list regions` or confirm)
-2. AMI — if unknown, `--latest-ami --os <rhel|ubuntu|amazon_linux|debian>` or `--survey` → user picks from `recommended_amis` (preference: RHEL first)
-3. `ssh_username` (`--describe-ami`)
-4. Instance type (`spa aws list instance-types --family t3`; suggest `t3.medium` for config tests)
-5. Key pair (`spa aws list key-pairs`)
-6. Security groups (`spa aws list security-groups`)
+1. Region (`spa aws --json regions list` or confirm)
+2. AMI — if unknown, `spa aws --json --latest-ami --os <rhel|ubuntu|amazon_linux|debian>` or `spa aws --json --survey` → user picks from `recommended_amis` (preference: RHEL first)
+3. `ssh_username` (`spa aws --json --describe-ami`)
+4. Instance type (`spa aws --json instance-types list --family t3`; suggest `t3.medium` for config tests)
+5. Key pair (`spa aws --json key-pairs list`)
+6. Security groups (`spa aws --json security-groups list`)
 7. Local: `ssh_private_key_file`, tags, volume size
 8. `--validate` before write
 

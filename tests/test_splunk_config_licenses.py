@@ -1,5 +1,6 @@
 """Unit tests for spa.licenses (no Software/ or AWS required)."""
 
+import json
 import os
 import sys
 
@@ -10,6 +11,20 @@ pytestmark = pytest.mark.local
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from spa import licenses  # noqa: E402
+
+
+def test_licenses_json_error_redacts_secrets(monkeypatch, capsys):
+    secret = "AKIA0000000000000000"
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("denied " + secret)
+
+    monkeypatch.setattr(licenses, "scan_licenses", boom)
+    assert licenses.main(["--json"]) == 1
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert secret not in captured.out
+    assert "***" in captured.out
 
 
 def _license_xml(
@@ -243,6 +258,52 @@ splunk_app_deployment:
     assert result["required_capabilities"] == ["enterprise", "es"]
     assert result["proposed_splunk_license_file"] == ["base.lic", "security-addon.lic"]
     assert result["license_validation"]["errors"] == []
+
+
+def test_licenses_human_output_stays_out_of_json(monkeypatch, capsys):
+    monkeypatch.setattr(
+        licenses,
+        "scan_licenses",
+        lambda *args, **kwargs: {
+            "ok": True,
+            "software_dir": "/tmp/Software",
+            "software_dir_exists": True,
+            "discovered_files": [
+                {
+                    "basename": "Splunk_Enterprise.lic",
+                    "license_type": "enterprise",
+                    "status": "valid",
+                    "expires_at": "2099-01-01",
+                    "signature": "must-not-be-emitted",
+                }
+            ],
+            "proposed_splunk_license_file": ["Splunk_Enterprise.lic"],
+            "yaml_snippet": "splunk_license_file: Splunk_Enterprise.lic",
+            "warnings": [],
+            "license_validation": {"errors": [], "warnings": []},
+        },
+    )
+
+    assert licenses.main([]) == 0
+    human = capsys.readouterr()
+    assert human.err == ""
+    assert human.out.startswith("{") is False
+    assert "Splunk_Enterprise.lic" in human.out
+    assert "enterprise" in human.out
+    assert "valid" in human.out
+    assert "must-not-be-emitted" not in human.out
+
+    assert licenses.main(["--json"]) == 0
+    encoded = capsys.readouterr()
+    assert encoded.err == ""
+    payload = json.loads(encoded.out)
+    assert payload["proposed_splunk_license_file"] == ["Splunk_Enterprise.lic"]
+    assert "Software:" not in encoded.out
+
+    assert licenses.main([], as_agent=True) == 0
+    agent = capsys.readouterr()
+    assert agent.err == ""
+    assert json.loads(agent.out)["software_dir"] == "/tmp/Software"
 
 
 def test_build_yaml_snippet():

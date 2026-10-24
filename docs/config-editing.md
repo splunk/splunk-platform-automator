@@ -412,12 +412,14 @@ confirmation requirement and writes only the app repository.
 
 `spa apps content-packs list 5391` treats the selected Content Library archive
 as authoritative. It reads bounded `DA-ITSI-CP-*/default/app.conf` members
-without extracting the archive, then returns exact folder names,
-label/description/version metadata, matching curated SPA automation, and one
-legal add command per pack. `--archive` needs no environment. Otherwise SPA
-uses the matching archive in `apps_dir` or a temporary authenticated download.
-Unsafe, malformed, excessive, or empty archives fail without writing files or
-printing credentials. `spa apps add --help` describes every option and the
+and returns exact folder names, label/description/version metadata, matching
+curated SPA automation, and one legal add command per pack. `--archive` needs
+no environment. Otherwise SPA uses a matching archive in `apps_dir`, an
+install archive already in the app temp directory, or cached pack `app.conf`
+files for `--version` (default `latest`). An install archive is left in place.
+A newer latest release replaces the `app.conf` cache. An archive this command
+downloads is not kept. Unsafe,
+malformed, excessive, or empty archives fail without printing credentials. `spa apps add --help` describes every option and the
 normal-app, ITSI, Content Library, and independently published pack forms; it
 states that add edits config and does not deploy.
 

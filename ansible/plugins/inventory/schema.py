@@ -106,7 +106,7 @@ class AwsTerraformConfig(BaseModel):
             "EC2 AMI id. Default is the id shipped in defaults/aws.yml. Omit the key to keep that. "
             "spa config set writes an end-of-line comment with the image name and description when AWS can describe the id. "
             "Find a current Red Hat image with spa aws --region eu-central-1 --latest-ami --os rhel, "
-            "or list matches with spa aws list amis --region eu-central-1 --os rhel. "
+            "or list matches with spa aws amis list --region eu-central-1 --os rhel. "
             "ubuntu, amazon_linux, and debian use the same --os form."
         ),
     )

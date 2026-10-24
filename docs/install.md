@@ -78,7 +78,7 @@ Build or download `spa-framework-X.Y.Z.tar.gz` (no wrapping directory). Unpack w
 ```bash
 mkdir -p ~/src/spa && tar -xzf spa-framework-X.Y.Z.tar.gz -C ~/src/spa
 export SPA_HOME=~/src/spa
-"$SPA_HOME/bin/spa" venv --shared --create --yes
+"$SPA_HOME/bin/spa" venv create --shared --yes
 export PATH="$SPA_HOME/bin:$PATH"
 spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
 ```
@@ -98,13 +98,13 @@ The archive excludes `tests/`, `.git`, GitHub workflows, and lab `config/` / `in
 ```bash
 git clone https://github.com/splunk/splunk-platform-automator.git
 cd splunk-platform-automator
-bin/spa venv --shared --create --yes
+bin/spa venv create --shared --yes
 spa doctor
 ```
 
-Repair an existing shared venv with `spa venv --shared --reinstall --yes`, bump
-packages and Ansible collections with `spa venv --shared --upgrade --yes`, or
-delete and recreate it with `spa venv --shared --rebuild --yes`. These commands
+Repair an existing shared venv with `spa venv reinstall --shared --yes`, bump
+packages and Ansible collections with `spa venv upgrade --shared --yes`, or
+delete and recreate it with `spa venv rebuild --shared --yes`. These commands
 target this `SPA_HOME` explicitly, even if the shell has a stale `SPA_VENV_DIR`.
 
 Put Splunk installers and Professional Services baseconfig apps in a `Software/` directory as a sibling of the env (preferred) or of `SPA_HOME`. Checklist: [Prepare Software](user-guide.md#prepare-software). The full path contract is in the [user guide](user-guide.md#understand-the-paths).

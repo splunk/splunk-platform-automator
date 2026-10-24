@@ -98,6 +98,27 @@ def test_agents_md_points_at_command_authoring():
     assert "generated" in text.lower()
 
 
+def test_architecture_defines_cli_ux_and_output_conventions():
+    architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
+    contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
+    assert "## CLI UX and output conventions" in architecture
+    assert "schema_version" in architecture
+    assert "`list` is a catalog" in architecture
+    assert "`get` is the current value" in architecture
+    assert "`explain` is one definition" in architecture
+    assert "`search` is ranked discovery" in architecture
+    assert "spa init list" in architecture
+    assert "Aliases:" in architecture
+    assert "`--agent` is the documented selector" in architecture
+    assert "`--json` stays a working synonym" in architecture
+    assert "stdin is not a terminal" in architecture
+    assert "spa aws" in architecture
+    assert "spa licenses" in architecture
+    assert "spa shell" in architecture
+    assert "VirtualBox" in architecture
+    assert "architecture.md#cli-ux-and-output-conventions" in contributing
+
+
 def test_architecture_documents_playbook_resolution_contract():
     text = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
     assert "`resolve()` and `resolve_named()` enforce" in text
@@ -112,6 +133,8 @@ def test_development_docs_require_tdd_and_feature_review():
 
     assert "## Test-driven development" in architecture
     assert "## Feature completion review" in architecture
+    assert "what was left out" in architecture
+    assert "until the user confirms the left-out items" in architecture
     assert "architecture.md#test-driven-development" in contributing
     assert "architecture.md#feature-completion-review" in contributing
     assert "docs/architecture.md#test-driven-development" in agents
@@ -285,5 +308,7 @@ class TestSpaSkill:
         assert "unsupported" in text
         assert "do not read `examples/catalog/features.yml`" in text
         assert "spa --agent config set PATH VALUE" in text
+        assert "spa aws --json regions list" in text
+        assert "spa aws list regions" not in text
         entry = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
         assert "spa --agent config explain PATH" in entry

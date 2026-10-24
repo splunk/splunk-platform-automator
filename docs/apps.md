@@ -98,9 +98,7 @@ The Content Library's Splunkbase page describes app 5391 but does not list the
 pack folders bundled in each release. `content-packs list` inspects the selected
 archive and reports each exact `DA-ITSI-CP-*` folder, its app label,
 description and version when present, and any matching SPA post-install
-automation. It first uses the matching archive in `apps_dir`; otherwise it
-downloads the selected release to a temporary location using the configured
-Splunkbase credentials. Inspect a file directly, without an environment or
+automation. It first uses `--archive`, then a matching archive in `apps_dir`. Otherwise it uses an install archive already at `splunk_app_deployment.temp_dir` (default `/tmp/splunk_apps/content_pack_<app name>/content_pack_<app name>_<version>.tgz`, where the app name is the 5391 entry or `DA-ITSI-ContentLibrary`) and leaves that file in place. If that archive is absent, it reads cached `DA-ITSI-CP-*/default/app.conf` files under `content_pack_app_confs/<version>`. The stored cache also keeps the library folder and applies the same archive limits as a direct inspection. `--version` selects that release and must be a single version name; the default `latest` checks Splunkbase and replaces the `app.conf` cache when a newer release is current. An archive this command downloads is not kept. A download prints a notice before it starts. Inspect a file directly, without an environment or
 credentials, with:
 
 ```bash

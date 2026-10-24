@@ -54,8 +54,48 @@ def _err(message: str) -> None:
     print(message, file=sys.stderr)
 
 
+def format_licenses_text(data: Any) -> str:
+    """Human stdout. JSON mode prints the payload and does not call this."""
+    if not isinstance(data, dict):
+        return str(data) + "\n"
+    lines: List[str] = []
+    software = data.get("software_dir")
+    if software:
+        state = "present" if data.get("software_dir_exists") else "missing"
+        lines.append("Software: %s (%s)" % (software, state))
+    for record in data.get("discovered_files") or []:
+        if not isinstance(record, dict):
+            continue
+        parts = [record.get("basename"), record.get("license_type"), record.get("status")]
+        if record.get("expires_at"):
+            parts.append("expires %s" % record["expires_at"])
+        lines.append("  ".join(str(part) for part in parts if part))
+    proposed = data.get("proposed_splunk_license_file") or []
+    if proposed:
+        lines.append("Proposed: %s" % ", ".join(proposed))
+    snippet = data.get("yaml_snippet")
+    if snippet:
+        lines.append(str(snippet))
+    for warning in data.get("warnings") or []:
+        lines.append("Warning: %s" % warning)
+    validation = data.get("license_validation") or {}
+    if isinstance(validation, dict):
+        for error in validation.get("errors") or []:
+            lines.append("Error: %s" % error)
+        for warning in validation.get("warnings") or []:
+            lines.append("Warning: %s" % warning)
+    if not lines:
+        lines.append("No licenses found.")
+    return "\n".join(lines) + "\n"
+
+
 def _output(data: Any, as_json: bool) -> None:
-    print(json.dumps(data, indent=2, default=str))
+    if as_json:
+        from spa.runlog import redact
+
+        print(json.dumps(redact(data), indent=2, default=str))
+        return
+    sys.stdout.write(format_licenses_text(data))
 
 
 def repo_root_from_script() -> Path:
@@ -704,15 +744,30 @@ def scan_licenses(
     return result
 
 
+class _LicensesParser(argparse.ArgumentParser):
+    json_errors = False
+
+    def error(self, message: str) -> None:
+        if type(self).json_errors:
+            from spa.runlog import redact
+
+            sys.stdout.write(
+                json.dumps({"ok": False, "error": redact(message)}, separators=(",", ":")) + "\n"
+            )
+            self.exit(2)
+        super().error(message)
+
+
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
+    p = _LicensesParser(
         prog="spa licenses",
         description=(
+            "Aliases: lic\n\n"
             "Inspect Splunk license type, expiration, and add-ons; "
             "propose splunk_license_file for the selected apps"
         ),
     )
-    p.add_argument("--json", action="store_true", help="Output JSON")
+    p.add_argument("--json", action="store_true", help="Print JSON. The default is text.")
     p.add_argument(
         "--software-dir",
         help="Software directory (default: ../Software from SPA_ENV_DIR, SPA splunk_software_dir)",
@@ -730,8 +785,14 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: Optional[List[str]] = None) -> int:
-    args = build_parser().parse_args(argv)
+def main(argv: Optional[List[str]] = None, as_agent: bool = False) -> int:
+    raw = list(sys.argv[1:] if argv is None else argv)
+    _LicensesParser.json_errors = bool(as_agent or "--json" in raw)
+    try:
+        args = build_parser().parse_args(raw)
+    finally:
+        _LicensesParser.json_errors = False
+    as_json = bool(args.json or as_agent)
     project_root = resolve_env_root()
     config_path = None
     if args.config:
@@ -749,10 +810,15 @@ def main(argv: Optional[List[str]] = None) -> int:
             env_recommend=not args.no_env_recommend,
         )
     except Exception as exc:
-        _err(str(exc))
+        if as_json:
+            from spa.runlog import redact
+
+            print(json.dumps({"ok": False, "error": redact(str(exc))}, separators=(",", ":")))
+        else:
+            _err(str(exc))
         return 1
 
-    _output(result, args.json)
+    _output(result, as_json)
     return 0 if result.get("software_dir_exists") or result.get("discovered_files") else 0
 
 

@@ -112,7 +112,7 @@ flowchart TD
 | Color that transcript | `spa logs --last --ansible-output --color` |
 | Show native Ansible output during a run | `spa deploy --yes --ansible-output` |
 | Increase Ansible verbosity and show native output | `spa deploy --yes -v` through `-vvvv` |
-| Create or repair the Python venv | `spa venv --shared --create --yes` (see [install](install.md) for `--upgrade` / `--rebuild`) |
+| Create or repair the Python venv | `spa venv create --shared --yes` (see [install](install.md) for `upgrade` / `rebuild`) |
 
 Provider selection comes from `terraform.aws` or `virtualbox:` in config. Do not remove a live host from config and run `spa provision`; the current Terraform flow can terminate it. See [AWS](aws.md) for cloud decisions and [Upgrade](upgrade.md) for the ordered distributed-upgrade workflow.
 
@@ -143,7 +143,7 @@ VirtualBox images normally log in as OS user `vagrant`; Splunk runs as OS user `
 Find application metadata and update config without maintaining an app-ID table in docs:
 
 ```bash
-spa --json apps search QUERY
+spa --agent apps search QUERY
 spa --agent apps add APP_ID --roles ROLE
 spa --agent validate
 spa apps download APP_ID --yes

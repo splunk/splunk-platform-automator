@@ -1,6 +1,7 @@
 """Provider selection and AWS lifecycle tests (no cloud calls)."""
 
 import json
+import sys
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -158,6 +159,25 @@ def _aws_provider(tmp_path):
     return provider
 
 
+def test_confirmed_power_action_does_not_load_inventory(tmp_path, monkeypatch):
+    provider = _aws_provider(tmp_path)
+
+    def boom():
+        raise AssertionError("inventory loaded")
+
+    monkeypatch.setattr("spa.hosts.load_inventory", boom)
+    provider._confirm("suspend", {"idx1": {"id": "i-123"}}, yes=True, agent=False)
+
+
+def test_nontty_provider_confirm_is_a_usage_error(tmp_path, monkeypatch):
+    provider = _aws_provider(tmp_path)
+    monkeypatch.setattr("spa.hosts.load_inventory", lambda: {})
+    with pytest.raises(ProviderError) as caught:
+        provider._confirm("suspend", {"idx1": {"id": "i-123"}}, yes=False, agent=False)
+    assert caught.value.code == 2
+    assert "requires -y/--yes" in str(caught.value)
+
+
 def test_suspend_stops_and_waits_without_destroying_state(tmp_path):
     provider = _aws_provider(tmp_path)
     ec2 = _Ec2("running")
@@ -279,10 +299,23 @@ def test_suspend_hosts_filters_targets(tmp_path):
     assert [row["name"] for row in result["instances"]] == ["sh1"]
 
 
+def test_aws_confirm_non_tty_names_yes_and_does_not_prompt(tmp_path, monkeypatch):
+    provider = _aws_provider(tmp_path)
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("prompted")),
+    )
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    with pytest.raises(ProviderError, match=r"-y/--yes") as caught:
+        provider._confirm("suspend", {"idx1": {}}, yes=False, agent=False)
+    assert "agent mode" not in str(caught.value)
+
+
 @pytest.mark.parametrize("action", ["suspend", "resume"])
 def test_confirm_groups_hosts_by_role(tmp_path, monkeypatch, capsys, action):
     """50 hosts must not print 50 lines; group them by role instead."""
     provider = _aws_provider(tmp_path)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt: "y")
     monkeypatch.setattr(
         "spa.hosts.load_inventory",
@@ -304,6 +337,7 @@ def test_confirm_groups_hosts_by_role(tmp_path, monkeypatch, capsys, action):
 
 def test_confirm_trims_very_long_role_lines(tmp_path, monkeypatch, capsys):
     provider = _aws_provider(tmp_path)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt: "y")
     names = ["idx%02d" % index for index in range(1, 51)]
     monkeypatch.setattr("spa.hosts.load_inventory", lambda: {"role_indexer": {"hosts": names}})

@@ -50,6 +50,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [x] `spa.api` backend session (`open_session` / `LocalSpaSession`) for the CLI and a future GUI; optional remote daemon later; skills stay on `spa`. See the [controller architecture](docs/contributing.md#controller-architecture).
 - [x] Fold SSH/SCP into `spa hosts` (`list` / `ssh` / `copy`); `spa shell` / `spa sh` remain SSH aliases (no `spa shell -l`)
 - [ ] Shell completion for every `spa` command (`spa completion bash|zsh` prints the script; `spa shell` stays SSH) — [#107](https://github.com/splunk/splunk-platform-automator/issues/107)
+- [x] Stable CLI UX and output contract: one command language, usage errors that name how to find a value, agent `--help` from `COMMAND_SCHEMA`, canonical names in the schema, `spa venv` actions, and non-TTY confirmation — [#108](https://github.com/splunk/splunk-platform-automator/issues/108), [#105](https://github.com/splunk/splunk-platform-automator/issues/105)
 - [x] Map top-level [ansible/](ansible/) playbooks to `spa run` (and named `provision` / `deploy` / `destroy`) — every playbook is a main entry point; do not require raw `ansible-playbook` for day-to-day use. Discover with `spa run --list`; inspect with `spa run NAME --help`.
 - [x] Env-dir playbook/Terraform logs + compact progress (full transcript in `$SPA_ENV_DIR/logs/`; agents get a small envelope + `log` path, not the dump) — [#71](https://github.com/splunk/splunk-platform-automator/issues/71)
 - [x] Richer Ansible transcripts and upgrade progress (native lines in the run log, repeatable `-v`, timestamps and color, one compact line per upgrade include) — [#93](https://github.com/splunk/splunk-platform-automator/issues/93)
@@ -90,6 +91,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 ## Provisioning
 
 - [x] Terraform AWS + `spa aws` ([docs/aws.md](docs/aws.md))
+- [x] `spa aws` uses `--region`, then `AWS_REGION`, `AWS_DEFAULT_REGION`, or `~/.aws/config`, names that source, and marks it in `spa aws regions list`
 - [x] VirtualBox spa provider (`spa provision` / `destroy` / suspend-resume via Vagrant) — [#56](https://github.com/splunk/splunk-platform-automator/issues/56)
 - [ ] Shared network access groups (provider-agnostic CLI; AWS first; SPA_HOME state; env destroy does not delete) — [#58](https://github.com/splunk/splunk-platform-automator/issues/58)
 - [ ] External / BYO SSH hosts (register only; mixed with managed; never terminate the real machine) — [#57](https://github.com/splunk/splunk-platform-automator/issues/57). `spa deploy --allow-unprovisioned` is the interim escape hatch until BYO hosts are first-class.

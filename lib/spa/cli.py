@@ -18,6 +18,15 @@ from spa.executil import (
     venv_setup_message,
 )
 from spa.paths import env_dir_required_error, resolve_spa_paths
+from spa.usage import (
+    APP_ID_HELP,
+    MISSING_OPERAND,
+    PROVIDER_HELP,
+    SELECTOR_HELP,
+    SET_PATH_HELP,
+    TOPOLOGY_HELP,
+    UNSET_PATH_HELP,
+)
 from spa.skills import supported_platform_list
 
 
@@ -25,6 +34,44 @@ from spa.skills import supported_platform_list
 # spa aws --check-auth). argparse.REMAINDER drops a leading option, so these are
 # split off before the spa parser runs.
 NATIVE_FLAG_COMMANDS = ("shell", "sh", "aws", "licenses", "lic")
+# Accepted at the command position, omitted from parent help and agent errors.
+# ``env`` stays a visible argparse alias of ``environment``.
+_HIDDEN_ALIASES = {
+    (): {
+        "cfg": "config",
+        "val": "validate",
+        "sk": "skills",
+        "doc": "doctor",
+        "prov": "provision",
+        "dep": "deploy",
+        "des": "destroy",
+        "sus": "suspend",
+        "res": "resume",
+        "h": "hosts",
+        "sh": "shell",
+        "lic": "licenses",
+        "agt": "agent",
+    },
+    ("config",): {
+        "tpl": "templates",
+        "exp": "explain",
+        "sea": "search",
+        "uns": "unset",
+        "mer": "merge",
+        "top": "topology",
+        "pro": "provider",
+    },
+    ("apps",): {
+        "sea": "search",
+        "cp": "content-packs",
+        "sni": "snippet",
+        "rem": "remove",
+        "dow": "download",
+    },
+    ("environment",): {"rm": "remove"},
+    ("env",): {"rm": "remove"},
+}
+_VISIBLE_ALIAS = {"environment": frozenset({"env"})}
 # These must keep working without a venv: they are how an operator inspects or
 # builds one. Every other command reads YAML or runs Ansible, so it is gated.
 VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills"})
@@ -34,7 +81,7 @@ AGENT_EXAMPLES = """examples:
   spa agent schema       command schema (name, summary, flags, requires_confirmation)
   spa agent              same as spa agent schema
   spa --no-agent agent schema --markdown  regenerate docs/commands.md
-  spa --json run list    playbook catalog, incl. per-playbook requires_confirmation
+  spa --agent run list    playbook catalog, incl. per-playbook requires_confirmation
 
 Commands whose schema entry sets requires_confirmation need -y/--yes in agent
 mode; agents never answer an interactive prompt.
@@ -163,6 +210,70 @@ def _run_help_target(head: Sequence[str]) -> Optional[str]:
     return ""
 
 
+def _positional_tokens(head: Sequence[str]) -> List[str]:
+    """Command words, skipping flags and the values of global options."""
+    tokens: List[str] = []
+    index = 0
+    while index < len(head):
+        token = head[index]
+        if token in GLOBAL_OPTS_WITH_VALUE:
+            index += 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        tokens.append(token)
+        index += 1
+    return tokens
+
+
+def _schema_help(head: Sequence[str]) -> Optional[int]:
+    """Agent --help is one COMMAND_SCHEMA entry, or an index at spa --help.
+
+    Native aws, licenses, and shell help stay text. Playbook help stays on
+    the spa run --help path.
+    """
+    if not any(token in {"-h", "--help"} for token in head):
+        return None
+    as_agent = agent_mode(
+        force_agent="--agent" in head or "--json" in head,
+        force_human="--no-agent" in head,
+    )
+    if not as_agent:
+        return None
+    tokens = _positional_tokens(head)
+    if tokens and tokens[0] in NATIVE_FLAG_COMMANDS:
+        return None
+    if tokens and tokens[0] == "run" and tokens[1:2] != ["list"]:
+        return None
+    from spa.agent import COMMAND_SCHEMA
+
+    if not tokens:
+        emit(
+            True,
+            data={
+                "commands": [
+                    {
+                        "name": row["name"],
+                        "summary": row.get("summary") or "",
+                        "help": "spa %s --help" % row["name"],
+                    }
+                    for row in COMMAND_SCHEMA["commands"]
+                ]
+            },
+            as_agent=True,
+        )
+        return 0
+    by_name = {row["name"]: row for row in COMMAND_SCHEMA["commands"]}
+    for length in range(len(tokens), 0, -1):
+        entry = by_name.get(" ".join(tokens[:length]))
+        if entry is None:
+            continue
+        emit(True, data=dict(entry), as_agent=True)
+        return 0
+    return None
+
+
 RUN_NEEDS_PLAYBOOK = (
     "spa run needs a playbook or list.\n"
     "Catalog:   spa run list\n"
@@ -222,7 +333,7 @@ def _print_run_usage() -> None:
     print("  spa run splunk_apps_playbook_run --apps-playbook STEM|PATH --hosts ROLE --yes")
     print()
     print("Mutating playbooks need --yes in agent mode (see requires_confirmation).")
-    print("Discover first with spa --json run list, then spa run NAME --help.")
+    print("Discover first with spa --agent run list, then spa run NAME --help.")
 
 
 def _print_playbook_help(data: dict) -> None:
@@ -294,7 +405,7 @@ def _add_mode_flags(parser) -> None:
         "--json",
         action="store_true",
         default=argparse.SUPPRESS,
-        help="JSON output / agent envelope",
+        help="Synonym of --agent",
     )
     parser.add_argument(
         "--agent",
@@ -315,9 +426,56 @@ def _add_mode_flags(parser) -> None:
     )
 
 
+def _expand_hidden_aliases(argv: Sequence[str]) -> List[str]:
+    """Rewrite hidden command aliases to canonical names before argparse sees them."""
+    tokens = list(argv)
+    if "--" in tokens:
+        cut = tokens.index("--")
+        head, tail = tokens[:cut], tokens[cut:]
+    else:
+        head, tail = tokens, []
+    out: List[str] = []
+    path: Tuple[str, ...] = ()
+    index = 0
+    while index < len(head):
+        token = head[index]
+        between_commands = not path or path in _HIDDEN_ALIASES
+        if between_commands and token in GLOBAL_OPTS_WITH_VALUE:
+            out.append(token)
+            index += 1
+            if index < len(head):
+                out.append(head[index])
+                index += 1
+            continue
+        if between_commands and token.startswith("-"):
+            out.append(token)
+            index += 1
+            continue
+        canonical = _HIDDEN_ALIASES.get(path, {}).get(token, token)
+        out.append(canonical)
+        path = path + (canonical,)
+        index += 1
+        if path not in _HIDDEN_ALIASES:
+            out.extend(head[index:])
+            break
+    return out + tail
+
+
+def _attach_hidden_aliases(parser, hidden: Sequence[str]) -> None:
+    if not hidden:
+        return
+    line = "Aliases: %s" % ", ".join(hidden)
+    description = parser.description
+    parser.description = line if not description else "%s\n\n%s" % (line, description)
+
+
 def _add_command(sub, name, aliases=(), accept_mode_flags=True, **kwargs):
-    parser = sub.add_parser(name, aliases=list(aliases), **kwargs)
+    visible = _VISIBLE_ALIAS.get(name, frozenset())
+    shown = [alias for alias in aliases if alias in visible]
+    hidden = [alias for alias in aliases if alias not in visible]
+    parser = sub.add_parser(name, aliases=shown, **kwargs)
     parser.set_defaults(canonical=name)
+    _attach_hidden_aliases(parser, hidden)
     if accept_mode_flags:
         _add_mode_flags(parser)
     return parser
@@ -325,8 +483,9 @@ def _add_command(sub, name, aliases=(), accept_mode_flags=True, **kwargs):
 
 def _add_action(sub, name, aliases=(), **kwargs):
     """Nested command. The handler reads canonical_action, not the typed alias."""
-    parser = sub.add_parser(name, aliases=list(aliases), **kwargs)
+    parser = sub.add_parser(name, **kwargs)
     parser.set_defaults(canonical_action=name)
+    _attach_hidden_aliases(parser, list(aliases))
     return parser
 
 
@@ -416,6 +575,14 @@ ENVIRONMENT_NEEDS_ACTION = (
     "Export:  spa environment --export"
 )
 _SKILLS_PLATFORMS = "%s, or all" % supported_platform_list()
+VENV_NEEDS_ACTION = (
+    "spa venv needs an action.\n"
+    "Path:      spa venv path\n"
+    "Create:    spa venv create --shared --yes\n"
+    "Reinstall: spa venv reinstall --shared --yes\n"
+    "Upgrade:   spa venv upgrade --shared --yes\n"
+    "Rebuild:   spa venv rebuild --shared --yes"
+)
 SKILLS_NEEDS_ACTION = (
     "spa skills needs an action.\n"
     "Install:    spa skills install [PLATFORM]\n"
@@ -428,6 +595,7 @@ _SKILLS_PLATFORM_HELP = (
     % _SKILLS_PLATFORMS
 )
 _MISSING_OPERAND = {
+    **MISSING_OPERAND,
     ("spa config search", "query"): "spa config search needs QUERY.\nExample: spa config search QUERY",
     ("spa apps search", "query"): "spa apps search needs QUERY.\nExample: spa apps search QUERY",
     ("spa apps snippet", "APP_ID_OR_NAME"): (
@@ -595,7 +763,9 @@ def _emit_result(result: CommandResult, as_agent: bool) -> int:
     return result.code
 
 
-def _print_command_error(result: CommandResult) -> int:
+def _print_command_error(result: CommandResult, as_agent: bool = False) -> int:
+    if as_agent:
+        return _emit_result(result, True)
     if result.error:
         print(result.error, file=sys.stderr)
     return result.code
@@ -830,7 +1000,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 
 def _run(argv: Sequence[str]) -> int:
-    argv = list(argv)
+    argv = _expand_hidden_aliases(argv)
     head, extra = _split_passthrough(argv)
     retired = _retired_catalog_flag(head)
     if retired:
@@ -856,7 +1026,7 @@ def _run(argv: Sequence[str]) -> int:
                         ok=True,
                         data={
                             "usage": "spa run list | spa run NAME",
-                            "discover": ["spa --json run list", "spa run NAME --help"],
+                            "discover": ["spa --agent run list", "spa run NAME --help"],
                         },
                     ),
                     True,
@@ -871,6 +1041,9 @@ def _run(argv: Sequence[str]) -> int:
             return result.code
         _print_playbook_help(result.data or {})
         return 0
+    schema_help = _schema_help(head)
+    if schema_help is not None:
+        return schema_help
     head, native = _split_native(head)
 
     parse_as_agent = agent_mode(
@@ -911,7 +1084,7 @@ def _run(argv: Sequence[str]) -> int:
             "and verification on AWS or VirtualBox. Agent-ready."
         ),
     )
-    parser.add_argument("--json", action="store_true", help="JSON output / agent envelope")
+    parser.add_argument("--json", action="store_true", help="Synonym of --agent")
     parser.add_argument(
         "--agent",
         action="store_true",
@@ -1022,14 +1195,14 @@ def _run(argv: Sequence[str]) -> int:
 
     p_config_set = _add_action(config_sub, "set", help="Set one schema-backed path")
     _config_mutation_flags(p_config_set, explicit_default=True)
-    p_config_set.add_argument("path", metavar="PATH")
+    p_config_set.add_argument("path", metavar="PATH", help=SET_PATH_HELP)
     p_config_set.add_argument("value", nargs="?", metavar="VALUE")
     p_config_set.add_argument("--value-file", metavar="FILE", help="Read a JSON or YAML 1.2 value")
     p_config_set.add_argument("--from-env", metavar="NAME", help="Write a safe environment lookup for a secret path")
 
     p_config_add = _add_action(config_sub, "add", help="Append one new identity-list entry")
     _config_mutation_flags(p_config_add)
-    p_config_add.add_argument("path", metavar="SELECTOR")
+    p_config_add.add_argument("path", metavar="SELECTOR", help=SELECTOR_HELP)
     p_config_add.add_argument("value", nargs="?", metavar="JSON_OBJECT")
     p_config_add.add_argument("--value-file", metavar="FILE", help="Read a JSON or YAML 1.2 object")
     p_config_add.add_argument(
@@ -1042,7 +1215,7 @@ def _run(argv: Sequence[str]) -> int:
 
     p_config_unset = _add_action(config_sub, "unset", aliases=["uns"], help="Remove one or more authored paths")
     _config_mutation_flags(p_config_unset)
-    p_config_unset.add_argument("paths", nargs="+", metavar="PATH")
+    p_config_unset.add_argument("paths", nargs="+", metavar="PATH", help=UNSET_PATH_HELP)
 
     p_config_merge = _add_action(config_sub, "merge", aliases=["mer"], help="Merge a partial splunk_config.yml")
     _config_mutation_flags(p_config_merge, explicit_default=True)
@@ -1060,11 +1233,11 @@ def _run(argv: Sequence[str]) -> int:
 
     p_config_topology = _add_action(config_sub, "topology", aliases=["top"], help="Replace topology-owned sections")
     _config_mutation_flags(p_config_topology)
-    p_config_topology.add_argument("operand", metavar="TOPOLOGY")
+    p_config_topology.add_argument("operand", metavar="TOPOLOGY", help=TOPOLOGY_HELP)
 
     p_config_provider = _add_action(config_sub, "provider", aliases=["pro"], help="Replace provider-owned sections")
     _config_mutation_flags(p_config_provider)
-    p_config_provider.add_argument("operand", metavar="PROVIDER")
+    p_config_provider.add_argument("operand", metavar="PROVIDER", help=PROVIDER_HELP)
 
     p_apps = _add_command(
         sub,
@@ -1114,8 +1287,11 @@ def _run(argv: Sequence[str]) -> int:
         help="List bundled pack names, descriptions, and SPA automation",
         description=(
             "Read-only inspection of Content Library 5391. With --archive, read that file "
-            "without an environment. Otherwise use a matching archive in apps_dir, or make "
-            "a temporary authenticated Splunkbase download that is deleted after inspection."
+            "without an environment. Otherwise use a matching archive in apps_dir, an "
+            "install archive already in the app temp directory, or the cached pack "
+            "app.conf files for --version (default latest). A newer latest release "
+            "replaces that app.conf cache. An install archive that is already there is "
+            "left in place. An archive this command downloads is not kept."
         ),
     )
     p_content_pack_list.set_defaults(canonical_action="content-packs-list")
@@ -1130,7 +1306,7 @@ def _run(argv: Sequence[str]) -> int:
     p_content_pack_list.add_argument(
         "--version",
         default="latest",
-        help="Content Library release to inspect (default latest)",
+        help="Content Library release to inspect (default latest). A newer latest release replaces the cached app.conf files.",
     )
     p_content_pack_list.add_argument(
         "--archive",
@@ -1210,7 +1386,7 @@ def _run(argv: Sequence[str]) -> int:
         "--source",
         choices=["splunkbase", "local"],
         default="splunkbase",
-        help="Use Splunkbase metadata, or a folder/archive already in apps_dir (default splunkbase)",
+        help="Use Splunkbase metadata, or a folder/archive already in apps_dir (default splunkbase). Mutually exclusive with --local",
     )
     p_apps_add.add_argument(
         "--local",
@@ -1218,7 +1394,7 @@ def _run(argv: Sequence[str]) -> int:
         action="store_const",
         const="local",
         default=argparse.SUPPRESS,
-        help="Shorthand for --source local",
+        help="Shorthand for --source local. Mutually exclusive with --source",
     )
     p_apps_add.add_argument(
         "--customize",
@@ -1287,7 +1463,7 @@ def _run(argv: Sequence[str]) -> int:
         help="Remove an authored app entry (does not uninstall deployed files)",
     )
     _add_mode_flags(p_apps_remove)
-    p_apps_remove.add_argument("app_id", metavar="APP_ID_OR_NAME")
+    p_apps_remove.add_argument("app_id", metavar="APP_ID_OR_NAME", help=APP_ID_HELP)
     p_apps_remove.add_argument("--content-pack", metavar="NAME", help="Remove one named pack under Content Library 5391")
     p_apps_remove.add_argument("--dry-run", action="store_true")
     p_apps_remove.add_argument("--expect-revision", metavar="SHA256")
@@ -1348,7 +1524,7 @@ def _run(argv: Sequence[str]) -> int:
         sub,
         "skills",
         aliases=["sk"],
-        help="Install or remove SPA agent skills in user IDE directories (alias: sk)",
+        help="Install or remove SPA agent skills in user IDE directories",
         epilog=SKILLS_NEEDS_ACTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1410,26 +1586,42 @@ def _run(argv: Sequence[str]) -> int:
         sub,
         "venv",
         help="Inspect, create, reinstall, upgrade, or rebuild the SPA Python virtualenv",
+        epilog=VENV_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    venv_action = p_venv.add_mutually_exclusive_group()
-    venv_action.add_argument("--path", action="store_const", const="path", dest="venv_action", help="Print the target venv path (default)")
-    venv_action.add_argument("--create", action="store_const", const="create", dest="venv_action", help="Create the venv when missing")
-    venv_action.add_argument("--reinstall", action="store_const", const="reinstall", dest="venv_action", help="Install requirements into the existing venv")
-    venv_action.add_argument("--upgrade", action="store_const", const="upgrade", dest="venv_action", help="Upgrade packages and Ansible collections in the existing venv")
-    venv_action.add_argument("--rebuild", action="store_const", const="rebuild", dest="venv_action", help="Delete, recreate, and install the venv")
-    venv_scope = p_venv.add_mutually_exclusive_group()
-    venv_scope.add_argument("--shared", action="store_true", help="Use SPA_HOME/.venv (default)")
-    venv_scope.add_argument("--environment", action="store_true", help="Use this environment's .venv")
-    p_venv.add_argument("--python", metavar="PATH", help="Python interpreter used to create the venv")
-    p_venv.add_argument("--no-install", action="store_true", help="Create/rebuild without pip or Ansible collection installs")
-    p_venv.add_argument(
-        "-y",
-        "--yes",
-        action="store_true",
-        default=argparse.SUPPRESS,
-        help="Confirm creating or changing the venv (required in agent mode)",
-    )
-    _add_env_selector(p_venv)
+    venv_sub = p_venv.add_subparsers(dest="venv_cmd", metavar="ACTION")
+
+    def _venv_scope(parser, *, mutate: bool, install_flags: bool) -> None:
+        scope = parser.add_mutually_exclusive_group()
+        scope.add_argument("--shared", action="store_true", help="Use SPA_HOME/.venv (default)")
+        scope.add_argument("--environment", action="store_true", help="Use this environment's .venv")
+        if install_flags:
+            parser.add_argument("--python", metavar="PATH", help="Python interpreter used to create the venv")
+            parser.add_argument(
+                "--no-install",
+                action="store_true",
+                help="Create or rebuild without pip or Ansible collection installs",
+            )
+        if mutate:
+            parser.add_argument(
+                "-y",
+                "--yes",
+                action="store_true",
+                default=argparse.SUPPRESS,
+                help="Confirm creating or changing the venv (required in agent mode)",
+            )
+        _add_env_selector(parser)
+
+    for action_name, action_help, mutate, install_flags in (
+        ("path", "Print the target venv path", False, False),
+        ("create", "Create the venv when missing", True, True),
+        ("reinstall", "Install requirements into the existing venv", True, True),
+        ("upgrade", "Upgrade packages and Ansible collections in the existing venv", True, True),
+        ("rebuild", "Delete, recreate, and install the venv", True, True),
+    ):
+        action_parser = _add_action(venv_sub, action_name, help=action_help)
+        _add_mode_flags(action_parser)
+        _venv_scope(action_parser, mutate=mutate, install_flags=install_flags)
 
     p_environment = _add_command(
         sub,
@@ -1688,7 +1880,7 @@ def _run(argv: Sequence[str]) -> int:
         "\n"
         "JSON envelope by default (with or without --json). Human --markdown prints the\n"
         "catalog used for docs/commands.md; --json / agent mode still JSON.\n"
-        "Playbooks are not in this schema; list them with spa --json run list.",
+        "Playbooks are not in this schema; list them with spa --agent run list.",
         epilog=AGENT_EXAMPLES,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -2027,6 +2219,9 @@ def _run(argv: Sequence[str]) -> int:
         return result.code
 
     if args.command == "venv":
+        action = _action(args, "venv_cmd")
+        if not action:
+            return _reject(VENV_NEEDS_ACTION, as_agent)
         if not as_agent:
             def _venv_step(event):
                 step = (event or {}).get("step")
@@ -2035,11 +2230,11 @@ def _run(argv: Sequence[str]) -> int:
 
             session.on_progress = _venv_step
         result = session.venv(
-            action=getattr(args, "venv_action", None) or "path",
-            environment=bool(args.environment),
-            python=args.python,
-            no_install=bool(args.no_install),
-            confirm=args.yes,
+            action=action,
+            environment=bool(getattr(args, "environment", False)),
+            python=getattr(args, "python", None),
+            no_install=bool(getattr(args, "no_install", False)),
+            confirm=bool(getattr(args, "yes", False)),
             agent=as_agent,
         )
         if as_agent:
@@ -2049,7 +2244,6 @@ def _run(argv: Sequence[str]) -> int:
             emit(result.ok, data=payload, error=result.error, as_agent=True)
             return result.code
         data = result.data or {}
-        action = getattr(args, "venv_action", None) or "path"
         if not result.ok:
             log = data.get("log") or ""
             if log:
@@ -2282,7 +2476,7 @@ def _run(argv: Sequence[str]) -> int:
         if hosts_cmd == "ssh":
             blocked = session._require_provisioned()
             if blocked:
-                return _print_command_error(blocked)
+                return _print_command_error(blocked, as_agent)
             try:
                 shell_mod.main([args.name, *list(getattr(args, "ssh_args", []) or []), *extra])
             except SystemExit as exc:
@@ -2300,12 +2494,15 @@ def _run(argv: Sequence[str]) -> int:
                 )
             blocked = session._require_provisioned()
             if blocked:
-                return _print_command_error(blocked)
+                return _print_command_error(blocked, as_agent)
             try:
                 shell_mod.apply_spa_env()
                 shell_mod.run_scp(paths_args)
             except shell_mod.ShellError as exc:
-                print(str(exc), file=sys.stderr)
+                if as_agent:
+                    emit(False, error=str(exc), as_agent=True)
+                else:
+                    print(str(exc), file=sys.stderr)
                 return 1
             except SystemExit as exc:
                 return exc.code if isinstance(exc.code, int) else 1
@@ -2330,7 +2527,7 @@ def _run(argv: Sequence[str]) -> int:
         from spa import aws as aws_mod
 
         try:
-            return aws_mod.main([*native, *extra])
+            return aws_mod.main([*native, *extra], as_agent=bool(args.agent or args.json))
         except SystemExit as exc:
             return exc.code if isinstance(exc.code, int) else 1
 
@@ -2338,7 +2535,7 @@ def _run(argv: Sequence[str]) -> int:
         from spa import licenses as licenses_mod
 
         try:
-            return licenses_mod.main([*native, *extra])
+            return licenses_mod.main([*native, *extra], as_agent=bool(args.agent or args.json))
         except SystemExit as exc:
             return exc.code if isinstance(exc.code, int) else 1
 

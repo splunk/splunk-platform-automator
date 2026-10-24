@@ -263,7 +263,7 @@ def test_content_pack_archive_rejects_command_like_folder_name(tmp_path):
         inspect_content_pack_archive(archive, spa_home=PROJECT_ROOT)
 
 
-def test_content_pack_catalog_prefers_matching_local_archive(tmp_path):
+def test_content_pack_catalog_prefers_matching_local_archive(tmp_path, capsys):
     archive = tmp_path / "DA-ITSI-ContentLibrary_2.0.0.tgz"
     archive.write_bytes(_content_library_tgz())
     data = content_pack_catalog(
@@ -279,6 +279,7 @@ def test_content_pack_catalog_prefers_matching_local_archive(tmp_path):
     assert data["total_matches"] == 2
     assert data["truncated"] is False
     assert len(data["packs"]) == 2
+    assert "Downloading Content Library" not in capsys.readouterr().err
 
 
 def test_content_pack_catalog_accepts_latest_local_spl_archive(tmp_path):
@@ -294,23 +295,309 @@ def test_content_pack_catalog_accepts_latest_local_spl_archive(tmp_path):
     assert data["version"] == "2.0.0"
 
 
-def test_content_pack_catalog_uses_temporary_authenticated_download(tmp_path, monkeypatch):
+def test_content_pack_catalog_uses_temporary_authenticated_download(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("SPLUNKBASE_USERNAME", "user@example.com")
     monkeypatch.setenv("SPLUNKBASE_PASSWORD", secrets.token_urlsafe(24))
     client = FakeClient(
         by_id={5391: _library()},
         archive=_content_library_tgz(),
     )
+    downloads = {"n": 0}
+    original = client.get_bytes
+
+    def _count_download(url, headers=None):
+        downloads["n"] += 1
+        return original(url, headers)
+
+    client.get_bytes = _count_download
+    cache_root = tmp_path / "splunk_apps"
     data = content_pack_catalog(
         5391,
-        apps_dir=tmp_path,
+        apps_dir=tmp_path / "apps",
         spa_home=PROJECT_ROOT,
         client=client,
+        config={"splunk_app_deployment": {"temp_dir": str(cache_root)}},
     )
-    assert data["source"] == "temporary_download"
+    assert data["source"] == "cached"
     assert data["version"] == "2.0.0"
-    assert not list(tmp_path.glob("*.tgz"))
+    assert downloads["n"] == 1
+    assert not list(tmp_path.rglob("*.tgz"))
+    cached = (
+        cache_root
+        / "content_pack_DA-ITSI-ContentLibrary"
+        / "content_pack_app_confs"
+        / "2.0.0"
+        / "DA-ITSI-CP-nix"
+        / "default"
+        / "app.conf"
+    )
+    assert cached.is_file()
+    library_conf = cached.parents[2] / "DA-ITSI-ContentLibrary" / "default" / "app.conf"
+    assert library_conf.is_file()
     assert client.login_fields
+    err = capsys.readouterr().err
+    assert "Downloading Content Library 5391 (2.0.0) from Splunkbase." in err
+    assert "This can take a minute." in err
+    assert "No cache is kept." not in err
+    assert str(cached.parent.parent.parent) in err
+
+    again = content_pack_catalog(
+        5391,
+        apps_dir=tmp_path / "apps",
+        spa_home=PROJECT_ROOT,
+        client=client,
+        config={"splunk_app_deployment": {"temp_dir": str(cache_root)}},
+    )
+    assert again["source"] == "cached"
+    assert again["version"] == "2.0.0"
+    assert downloads["n"] == 1
+    reused = capsys.readouterr().err
+    assert "Using cached Content Library 5391 (2.0.0)" in reused
+    assert "Downloading Content Library" not in reused
+
+
+def test_content_pack_cache_replaces_an_older_version_and_keeps_a_requested_one(tmp_path, monkeypatch):
+    monkeypatch.setenv("SPLUNKBASE_USERNAME", "user@example.com")
+    monkeypatch.setenv("SPLUNKBASE_PASSWORD", secrets.token_urlsafe(24))
+    cache_root = tmp_path / "splunk_apps"
+    old = (
+        cache_root
+        / "content_pack_DA-ITSI-ContentLibrary"
+        / "content_pack_app_confs"
+        / "2.0.0"
+        / "DA-ITSI-CP-nix"
+        / "default"
+    )
+    old.mkdir(parents=True)
+    (old / "app.conf").write_text("[ui]\nlabel = Unix and Linux\n", encoding="utf-8")
+    newer = _library()
+    newer["release"]["title"] = "2.1.0"
+    newer["release"]["path"] = "https://splunkbase.splunk.com/app/5391/release/2.1.0/download/"
+    client = FakeClient(by_id={5391: newer}, archive=_content_library_tgz())
+    config = {"splunk_app_deployment": {"temp_dir": str(cache_root)}}
+
+    pinned = content_pack_catalog(
+        5391, version="2.0.0", apps_dir=tmp_path / "apps", spa_home=PROJECT_ROOT, client=client, config=config
+    )
+    assert pinned["version"] == "2.0.0"
+    assert pinned["source"] == "cached"
+    assert old.joinpath("app.conf").is_file()
+    assert client.login_fields == []
+
+    latest = content_pack_catalog(
+        5391, apps_dir=tmp_path / "apps", spa_home=PROJECT_ROOT, client=client, config=config
+    )
+    assert latest["version"] == "2.1.0"
+    assert latest["source"] == "cached"
+    assert not old.parent.parent.exists()
+    assert (
+        cache_root
+        / "content_pack_DA-ITSI-ContentLibrary"
+        / "content_pack_app_confs"
+        / "2.1.0"
+        / "DA-ITSI-CP-nix"
+        / "default"
+        / "app.conf"
+    ).is_file()
+    assert client.login_fields
+
+
+def test_content_library_cache_rejects_unsafe_archives(tmp_path, monkeypatch):
+    from spa.apps import _store_content_library_cache
+
+    monkeypatch.setattr("spa.apps.MAX_ARCHIVE_EXPANDED_BYTES", 32)
+    archive = tmp_path / "library.tgz"
+    archive.write_bytes(_content_library_tgz())
+    with pytest.raises(AppsError, match="expands beyond"):
+        _store_content_library_cache(archive, tmp_path / "cache" / "2.0.0")
+
+    monkeypatch.setattr("spa.apps.MAX_ARCHIVE_EXPANDED_BYTES", 8 * 1024 * 1024 * 1024)
+    duplicate = io.BytesIO()
+    with tarfile.open(fileobj=duplicate, mode="w:gz") as bundle:
+        for _unused in range(2):
+            payload = b"[ui]\nlabel = Unix\n"
+            member = tarfile.TarInfo("DA-ITSI-CP-nix/default/app.conf")
+            member.size = len(payload)
+            bundle.addfile(member, io.BytesIO(payload))
+    dup_path = tmp_path / "duplicate.tgz"
+    dup_path.write_bytes(duplicate.getvalue())
+    with pytest.raises(AppsError, match="duplicate"):
+        _store_content_library_cache(dup_path, tmp_path / "cache" / "2.0.0")
+
+    invalid = io.BytesIO()
+    with tarfile.open(fileobj=invalid, mode="w:gz") as bundle:
+        payload = b"[ui]\nlabel = Unix\n"
+        member = tarfile.TarInfo("DA-ITSI-CP-bad name/default/app.conf")
+        member.size = len(payload)
+        bundle.addfile(member, io.BytesIO(payload))
+    invalid_path = tmp_path / "invalid.tgz"
+    invalid_path.write_bytes(invalid.getvalue())
+    with pytest.raises(AppsError, match="invalid content pack folder"):
+        _store_content_library_cache(invalid_path, tmp_path / "cache" / "2.0.0")
+
+
+def test_content_library_cache_rejects_unsafe_members(tmp_path, monkeypatch):
+    from spa.apps import _store_content_library_cache
+
+    def _archive(members) -> bytes:
+        output = io.BytesIO()
+        with tarfile.open(fileobj=output, mode="w:gz") as bundle:
+            for member, payload in members:
+                bundle.addfile(member, io.BytesIO(payload) if payload is not None else None)
+        return output.getvalue()
+
+    unsafe = tmp_path / "unsafe.tgz"
+    escaped = tarfile.TarInfo("../DA-ITSI-CP-nix/default/app.conf")
+    body = b"[ui]\nlabel = Unix\n"
+    escaped.size = len(body)
+    unsafe.write_bytes(_archive([(escaped, body)]))
+    with pytest.raises(AppsError, match="unsafe archive path"):
+        _store_content_library_cache(unsafe, tmp_path / "cache" / "2.0.0")
+
+    linked = tmp_path / "link.tgz"
+    symlink = tarfile.TarInfo("DA-ITSI-CP-nix/default/app.conf")
+    symlink.type = tarfile.SYMTYPE
+    symlink.linkname = "elsewhere"
+    linked.write_bytes(_archive([(symlink, None)]))
+    with pytest.raises(AppsError, match="unsafe archive member"):
+        _store_content_library_cache(linked, tmp_path / "cache" / "2.0.0")
+
+    monkeypatch.setattr("spa.apps.MAX_APP_CONF_BYTES", 4)
+    oversized = tmp_path / "oversize.tgz"
+    big = tarfile.TarInfo("DA-ITSI-CP-nix/default/app.conf")
+    big.size = len(body)
+    oversized.write_bytes(_archive([(big, body)]))
+    with pytest.raises(AppsError, match="exceeds 4 bytes"):
+        _store_content_library_cache(oversized, tmp_path / "cache" / "2.0.0")
+
+    monkeypatch.setattr("spa.apps.MAX_APP_CONF_BYTES", 256 * 1024)
+    monkeypatch.setattr("spa.apps.MAX_ARCHIVE_MEMBERS", 1)
+    crowded = tmp_path / "crowded.tgz"
+    first = tarfile.TarInfo("readme.txt")
+    first.size = 1
+    second = tarfile.TarInfo("DA-ITSI-CP-nix/default/app.conf")
+    second.size = len(body)
+    crowded.write_bytes(_archive([(first, b"x"), (second, body)]))
+    with pytest.raises(AppsError, match="more than 1 members"):
+        _store_content_library_cache(crowded, tmp_path / "cache" / "2.0.0")
+
+
+def test_content_pack_catalog_rejects_an_unsafe_version(tmp_path):
+    with pytest.raises(AppsError, match="unsafe Content Library version"):
+        content_pack_catalog(
+            5391,
+            version="../2.0.0",
+            apps_dir=tmp_path / "apps",
+            config={"splunk_app_deployment": {"temp_dir": str(tmp_path / "cache")}},
+        )
+    assert not (tmp_path / "cache").exists()
+
+
+def test_content_pack_catalog_uses_the_configured_library_name(tmp_path, monkeypatch):
+    monkeypatch.setenv("SPLUNKBASE_USERNAME", "user@example.com")
+    monkeypatch.setenv("SPLUNKBASE_PASSWORD", secrets.token_urlsafe(24))
+    cache_root = tmp_path / "splunk_apps"
+    install_dir = cache_root / "content_pack_Library_Alias"
+    kept = install_dir / "content_pack_Library_Alias_2.0.0.tgz"
+    kept.parent.mkdir(parents=True)
+    kept.write_bytes(_content_library_tgz())
+    client = FakeClient(by_id={5391: _library()}, archive=_content_library_tgz())
+    catalog = content_pack_catalog(
+        5391,
+        version="2.0.0",
+        apps_dir=tmp_path / "apps",
+        spa_home=PROJECT_ROOT,
+        client=client,
+        config={
+            "splunk_app_deployment": {
+                "temp_dir": str(cache_root),
+                "apps": [{"name": "Library Alias", "app_id": 5391}],
+            }
+        },
+    )
+    assert catalog["source"] == "install_cache"
+    assert catalog["version"] == "2.0.0"
+    assert kept.is_file()
+    assert client.login_fields == []
+
+
+def test_content_pack_catalog_keeps_an_existing_install_archive(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("SPLUNKBASE_USERNAME", "user@example.com")
+    monkeypatch.setenv("SPLUNKBASE_PASSWORD", secrets.token_urlsafe(24))
+    cache_root = tmp_path / "splunk_apps"
+    install_dir = cache_root / "content_pack_DA-ITSI-ContentLibrary"
+    kept = install_dir / "content_pack_DA-ITSI-ContentLibrary_2.0.0.tgz"
+    kept.parent.mkdir(parents=True)
+    kept.write_bytes(_content_library_tgz())
+    stale = install_dir / "content_pack_app_confs" / "1.9.0" / "DA-ITSI-CP-nix" / "default"
+    stale.mkdir(parents=True)
+    (stale / "app.conf").write_text("[ui]\nlabel = Old\n", encoding="utf-8")
+    client = FakeClient(by_id={5391: _library()}, archive=_content_library_tgz())
+    downloads = {"n": 0}
+    original = client.get_bytes
+
+    def _count_download(url, headers=None):
+        downloads["n"] += 1
+        return original(url, headers)
+
+    client.get_bytes = _count_download
+    config = {"splunk_app_deployment": {"temp_dir": str(cache_root)}}
+
+    pinned = content_pack_catalog(
+        5391,
+        version="2.0.0",
+        apps_dir=tmp_path / "apps",
+        spa_home=PROJECT_ROOT,
+        client=client,
+        config=config,
+    )
+    assert pinned["source"] == "install_cache"
+    assert pinned["version"] == "2.0.0"
+    assert pinned["total_matches"] == 2
+    assert kept.is_file()
+    assert downloads["n"] == 0
+    assert client.login_fields == []
+    err = capsys.readouterr().err
+    assert str(kept) in err
+    assert "Downloading Content Library" not in err
+
+    latest = content_pack_catalog(
+        5391,
+        apps_dir=tmp_path / "apps",
+        spa_home=PROJECT_ROOT,
+        client=client,
+        config=config,
+    )
+    assert latest["source"] == "install_cache"
+    assert latest["version"] == "2.0.0"
+    assert kept.is_file()
+    assert downloads["n"] == 0
+    assert not stale.parent.parent.exists()
+
+    newer = _library()
+    newer["release"]["title"] = "2.1.0"
+    newer["release"]["path"] = "https://splunkbase.splunk.com/app/5391/release/2.1.0/download/"
+    client.by_id[5391] = newer
+    moved = content_pack_catalog(
+        5391,
+        apps_dir=tmp_path / "apps",
+        spa_home=PROJECT_ROOT,
+        client=client,
+        config=config,
+    )
+    assert moved["version"] == "2.1.0"
+    assert moved["source"] == "cached"
+    assert kept.is_file()
+    assert downloads["n"] == 1
+    assert list(cache_root.rglob("*.tgz")) == [kept]
+    assert (
+        install_dir
+        / "content_pack_app_confs"
+        / "2.1.0"
+        / "DA-ITSI-CP-nix"
+        / "default"
+        / "app.conf"
+    ).is_file()
 
 
 def test_content_pack_catalog_rejects_download_over_transport_limit(tmp_path, monkeypatch):

@@ -151,10 +151,16 @@ def test_broken_ansible_import_asks_for_a_rebuild(tmp_path):
     message = ansible_controller_problem(venv)
     assert message is not None
     assert "Python 3.15" in message
-    assert "spa venv --shared --rebuild --yes" in message
+    assert "spa venv rebuild --shared --yes" in message
     python.write_text("#!/bin/sh\necho 3.14\n", encoding="utf-8")
     ansible_controller_problem.cache_clear()
     assert ansible_controller_problem(venv) is None
+
+
+def test_venv_script_rebuild_hint_names_the_action():
+    text = (PROJECT_ROOT / "bin" / "spa_venv.sh").read_text(encoding="utf-8")
+    assert "spa venv rebuild --shared --python python3.14 --yes" in text
+    assert "spa venv --shared --rebuild" not in text
 
 
 def test_reinstall_checks_that_ansible_can_start_before_galaxy(tmp_path):
@@ -224,7 +230,7 @@ def test_run_venv_script_streams_progress_and_keeps_pip_in_the_log(tmp_path):
 def test_spa_venv_create_prints_progress_not_pip(tmp_path):
     dest = write_min_env(tmp_path / "env")
     result = run_spa(
-        ["venv", "--environment", "--create", "--no-install", "--yes"],
+        ["venv", "create", "--environment", "--no-install", "--yes"],
         cwd=dest,
         env={"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(dest)},
     )
@@ -342,20 +348,21 @@ def test_upgrade_bumps_packages_and_collections(tmp_path):
 @pytest.mark.parametrize(
     ("action", "expected"),
     [
-        ("--upgrade", "local"),
-        ("--reinstall", "local"),
-        ("--create", "local"),
-        ("--rebuild", "local_destructive"),
+        ("upgrade", "local"),
+        ("reinstall", "local"),
+        ("create", "local"),
+        ("rebuild", "local_destructive"),
     ],
 )
 def test_venv_prompt_talks_about_this_machine_not_hosts(monkeypatch, action, expected):
     from spa.confirm import prompt_text
 
     seen = []
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": seen.append(prompt) or "n")
     from spa.cli import main
 
-    rc = main(["--no-agent", "venv", "--shared", action])
+    rc = main(["--no-agent", "venv", action, "--shared"])
 
     assert rc != 0
     assert len(seen) == 1
@@ -381,7 +388,7 @@ def test_launcher_reexecs_into_shared_venv_when_interpreter_is_incomplete(tmp_pa
         pytest.skip("shared venv not built on this machine")
 
     result = subprocess.run(
-        [str(bare / "bin" / "python3"), str(PROJECT_ROOT / "bin" / "spa"), "--no-agent", "venv", "--path"],
+        [str(bare / "bin" / "python3"), str(PROJECT_ROOT / "bin" / "spa"), "--no-agent", "venv", "path"],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
@@ -474,8 +481,8 @@ def test_venv_gate_is_json_in_agent_mode(tmp_path):
 @pytest.mark.parametrize(
     ("state", "expected"),
     [
-        ("absent", "Create it:   spa venv --shared --create --yes"),
-        ("incomplete", "Repair it:   spa venv --shared --rebuild --yes"),
+        ("absent", "Create it:   spa venv create --shared --yes"),
+        ("incomplete", "Repair it:   spa venv rebuild --shared --yes"),
     ],
 )
 def test_venv_message_fix_matches_what_is_on_disk(tmp_path, state, expected, monkeypatch):
@@ -524,7 +531,7 @@ def test_venv_message_points_at_the_launcher_when_the_venv_is_fine(tmp_path, mon
 @pytest.mark.parametrize(
     ("args", "needle"),
     [
-        (["--no-agent", "venv", "--path"], ".venv"),
+        (["--no-agent", "venv", "path"], ".venv"),
         (["--no-agent", "doctor"], "SPA host prerequisites"),
         (["--no-agent", "environment", "list"], ""),
         (["--no-agent", "init", "list"], "single_node"),
@@ -574,7 +581,7 @@ def test_unrelated_import_error_is_not_swallowed(monkeypatch):
 def test_spa_venv_defaults_to_shared_path_despite_stale_pin(tmp_path):
     stale = tmp_path / "old-clone" / ".venv"
     result = run_spa(
-        ["venv", "--path"],
+        ["venv", "path"],
         env={"SPA_VENV_DIR": str(stale)},
     )
     assert result.returncode == 0, result.stderr
@@ -584,7 +591,7 @@ def test_spa_venv_defaults_to_shared_path_despite_stale_pin(tmp_path):
 def test_spa_venv_can_create_environment_venv_without_install(tmp_path):
     dest = write_min_env(tmp_path / "env")
     result = run_spa(
-        ["venv", "--environment", "--create", "--no-install", "--yes"],
+        ["venv", "create", "--environment", "--no-install", "--yes"],
         cwd=dest,
         env={"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(dest)},
     )
