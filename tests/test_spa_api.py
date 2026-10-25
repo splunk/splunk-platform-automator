@@ -166,6 +166,8 @@ SESSION_API_PARAMETERS = {
     "licenses": ("software_dir", "config", "env_recommend"),
     "hosts_list": ("status", "hosts"),
     "shell_list": ("verbose", "hosts"),
+    "completion_script": ("shell",),
+    "complete": ("words", "index"),
 }
 
 

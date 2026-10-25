@@ -47,6 +47,7 @@ Public command behavior follows these status contracts:
 - Exit `1`: runtime, provider, validation, or execution failure.
 - Agent failure: one `{"ok":false,"schema_version":1,"error":"..."}` object with no `data`.
 - Catalog commands expose an explicit `list` action.
+- A new spa command is not done until shell completion can offer it. Register the command in `COMMAND_SCHEMA` so completion offers the command, its subcommands, and its flags without a second list. An argument whose values are a known set or a local list must carry those values on the schema positional or flag. Do not add a command whose arguments can only be discovered by reading help.
 
 See [Adding a spa command](contributing.md#adding-a-spa-command) for the parser, schema, documentation, and test procedure.
 
@@ -158,7 +159,7 @@ The [`spa_jsonl` callback](../ansible/plugins/callback/spa_jsonl.py) emits struc
 
 ## Extension points
 
-For a new command, follow [Adding a spa command](contributing.md#adding-a-spa-command). Keep parsing in the CLI, behavior in the session/backend, presentation in the renderer, and register the action in `COMMAND_SCHEMA`.
+For a new command, follow [Adding a spa command](contributing.md#adding-a-spa-command). Keep parsing in the CLI, behavior in the session/backend, presentation in the renderer, and register the action in `COMMAND_SCHEMA`. A new spa command is not done until shell completion can offer it. Set `choices` for a closed set, `takes_value` when the next token belongs to the flag, and `completes_from` when the values come from a local list command. Do not add a command whose arguments can only be discovered by reading help.
 
 For a new configuration key, follow [Adding a configuration feature](contributing.md#adding-a-configuration-feature). The Pydantic schema is authoritative; update defaults, inventory, templates, catalog guidance, and generated docs only where the procedure requires them.
 
@@ -208,7 +209,7 @@ Human rendering and agent JSON consume the same session data. Each command belon
 - `spa config schema --markdown` and `spa agent schema --markdown` are human docs dumps and keep `--no-agent`.
 - `spa config explain` keeps the shape from its accepted config-editing plan.
 - VirtualBox `suspend` and `resume` do not call `input()` today. This contract does not add that prompt.
-- Shell completion is a later command, `spa completion`. This contract does not add it. Completion reads `COMMAND_SCHEMA` and offers canonical names only.
+- Shell completion is a human command, `spa completion bash` or `spa completion zsh`. Its `--help` is the install page. The function calls `spa --no-agent` for the word under the cursor. Agent mode exits 2 and names `spa agent schema`. Completion reads `COMMAND_SCHEMA` and offers canonical names only.
 
 ## Enforced contracts and current conventions
 

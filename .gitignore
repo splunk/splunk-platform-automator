@@ -65,6 +65,7 @@ __pycache__/
 .cursor/skills/
 # Local agent working notes
 .superpowers/
+docs/superpowers/
 # Graphify is optional; keep generated graph and the Cursor rule local
 graphify-out/
 .cursor/rules/graphify.mdc

@@ -216,6 +216,7 @@ COMMAND_SCHEMA = {
                     "name": "TEMPLATE",
                     "required": False,
                     "help": "Shipped fragment name from examples/templates",
+                    "completes_from": "config templates",
                 }
             ],
             "flags": [
@@ -233,7 +234,14 @@ COMMAND_SCHEMA = {
             "name": "config topology",
             "summary": "Replace topology-owned config sections from an example template",
             "idempotent": True,
-            "positionals": [{"name": "TOPOLOGY", "required": True, "help": TOPOLOGY_HELP}],
+            "positionals": [
+                {
+                    "name": "TOPOLOGY",
+                    "required": True,
+                    "help": TOPOLOGY_HELP,
+                    "completes_from": "init list",
+                }
+            ],
             "flags": [
                 {"long": "--dry-run", "help": "Preview without writing"},
                 {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},
@@ -247,7 +255,15 @@ COMMAND_SCHEMA = {
             "name": "config provider",
             "summary": "Replace provider-owned config sections from an example template",
             "idempotent": True,
-            "positionals": [{"name": "PROVIDER", "required": True, "help": PROVIDER_HELP}],
+            "positionals": [
+                {
+                    "name": "PROVIDER",
+                    "required": True,
+                    "help": PROVIDER_HELP,
+                    "choices": ["aws", "virtualbox"],
+                    "completes_from": "providers",
+                }
+            ],
             "flags": [
                 {"long": "--dry-run", "help": "Preview without writing"},
                 {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},
@@ -279,10 +295,11 @@ COMMAND_SCHEMA = {
                     "name": "PLATFORM",
                     "required": False,
                     "help": "One platform or a comma-separated list (cursor,claude), or all",
+                    "completes_from": "skills platforms",
                 },
             ],
             "flags": [
-                {"long": "--name", "help": "Install one package"},
+                {"long": "--name", "help": "Install one package", "takes_value": True},
                 {"long": "--all", "help": "Install every SPA skill package (default)"},
             ],
             "example": "spa skills install cursor",
@@ -296,10 +313,11 @@ COMMAND_SCHEMA = {
                     "name": "PLATFORM",
                     "required": False,
                     "help": "One platform or a comma-separated list (cursor,claude), or all",
+                    "completes_from": "skills platforms",
                 },
             ],
             "flags": [
-                {"long": "--name", "help": "Remove one package"},
+                {"long": "--name", "help": "Remove one package", "takes_value": True},
                 {"long": "--all", "help": "Remove every SPA skill package (default)"},
                 {"long": "--yes", "short": "-y", "help": "Confirm removing SPA skills"},
             ],
@@ -316,7 +334,7 @@ COMMAND_SCHEMA = {
             "read_only": True,
             "flags": [
                 {"long": "--shared", "help": "Target SPA_HOME/.venv (default)"},
-                {"long": "--environment", "help": "Target this environment's .venv"},
+                {"long": "--environment", "help": "Target this environment's .venv", "takes_value": False},
             ],
             "example": "spa venv path",
         },
@@ -326,7 +344,7 @@ COMMAND_SCHEMA = {
             "requires_confirmation": True,
             "flags": [
                 {"long": "--shared", "help": "Target SPA_HOME/.venv (default)"},
-                {"long": "--environment", "help": "Target this environment's .venv"},
+                {"long": "--environment", "help": "Target this environment's .venv", "takes_value": False},
                 {"long": "--python", "help": "Python interpreter used to create the venv"},
                 {"long": "--no-install", "help": "Create without package or collection installs"},
                 {"long": "--yes", "short": "-y", "help": "Confirm creating the venv"},
@@ -339,7 +357,7 @@ COMMAND_SCHEMA = {
             "requires_confirmation": True,
             "flags": [
                 {"long": "--shared", "help": "Target SPA_HOME/.venv (default)"},
-                {"long": "--environment", "help": "Target this environment's .venv"},
+                {"long": "--environment", "help": "Target this environment's .venv", "takes_value": False},
                 {"long": "--python", "help": "Python interpreter used when the venv must be created"},
                 {"long": "--no-install", "help": "Skip package and collection installs"},
                 {"long": "--yes", "short": "-y", "help": "Confirm reinstalling the venv"},
@@ -352,7 +370,7 @@ COMMAND_SCHEMA = {
             "requires_confirmation": True,
             "flags": [
                 {"long": "--shared", "help": "Target SPA_HOME/.venv (default)"},
-                {"long": "--environment", "help": "Target this environment's .venv"},
+                {"long": "--environment", "help": "Target this environment's .venv", "takes_value": False},
                 {"long": "--python", "help": "Python interpreter used when the venv must be created"},
                 {"long": "--no-install", "help": "Skip package and collection installs"},
                 {"long": "--yes", "short": "-y", "help": "Confirm upgrading the venv"},
@@ -365,7 +383,7 @@ COMMAND_SCHEMA = {
             "requires_confirmation": True,
             "flags": [
                 {"long": "--shared", "help": "Target SPA_HOME/.venv (default)"},
-                {"long": "--environment", "help": "Target this environment's .venv"},
+                {"long": "--environment", "help": "Target this environment's .venv", "takes_value": False},
                 {"long": "--python", "help": "Python interpreter used to create the venv"},
                 {"long": "--no-install", "help": "Rebuild without package or collection installs"},
                 {"long": "--yes", "short": "-y", "help": "Confirm rebuilding the venv"},
@@ -381,8 +399,13 @@ COMMAND_SCHEMA = {
             "name": "environment init",
             "summary": "Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Platform-Automator or paths.yml env_dir)",
             "flags": [
-                {"long": "--example", "help": "Topology example id"},
-                {"long": "--provider", "help": "aws or virtualbox (default aws, or providers.yml)"},
+                {"long": "--example", "help": "Topology example id", "takes_value": True, "completes_from": "init list"},
+                {
+                    "long": "--provider",
+                    "help": "aws or virtualbox (default aws, or providers.yml)",
+                    "takes_value": True,
+                    "choices": ["aws", "virtualbox"],
+                },
                 {"long": "--env-dir", "help": "One-off parent (requires --name); does not change the default parent"},
                 {"long": "--name", "help": "Registry name (default: folder basename)"},
                 {"long": "--force", "help": "Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example)"},
@@ -403,8 +426,18 @@ COMMAND_SCHEMA = {
                 {"long": "--software-dir", "help": "Shared installers directory (also sets baseconfig_dir if unset)"},
                 {"long": "--baseconfig-dir", "help": "PS baseconfig apps directory"},
                 {"long": "--apps-dir", "help": "Local apps directory"},
-                {"long": "--default", "help": "Registered environment used when cwd does not select one"},
-                {"long": "--provider", "help": "Default provider (aws|virtualbox)"},
+                {
+                    "long": "--default",
+                    "help": "Registered environment used when cwd does not select one",
+                    "takes_value": True,
+                    "completes_from": "environment list",
+                },
+                {
+                    "long": "--provider",
+                    "help": "Default provider (aws|virtualbox)",
+                    "takes_value": True,
+                    "choices": ["aws", "virtualbox"],
+                },
             ],
             "example": "spa environment set --software-dir ~/Software --apps-dir ~/labs/apps",
         },
@@ -412,6 +445,14 @@ COMMAND_SCHEMA = {
             "name": "environment remove",
             "summary": "Unregister and delete the env directory (not spa destroy)",
             "requires_confirmation": True,
+            "positionals": [
+                {
+                    "name": "NAME",
+                    "required": True,
+                    "help": "Registered environment name",
+                    "completes_from": "environment list",
+                }
+            ],
             "flags": [
                 {"long": "--yes", "short": "-y", "help": "Confirm deleting the env directory"},
                 {"long": "--force", "help": "Allow deleting a dir that looks deployed (local only)"},
@@ -506,9 +547,9 @@ COMMAND_SCHEMA = {
             ],
             "example": "spa hosts list --status",
         },
-        {"name": "hosts ssh", "summary": "SSH using inventory", "example": "spa hosts ssh idx1"},
+        {"name": "hosts ssh", "summary": "SSH using inventory", "positionals": [{"name": "NAME", "required": True, "help": "Inventory hostname or role", "completes_from": "hosts"}], "example": "spa hosts ssh idx1"},
         {"name": "hosts copy", "summary": "Copy files with scp: SRC DST, remote side HOST:PATH (-r for directories)", "example": "spa hosts copy local.txt idx1:/tmp/"},
-        {"name": "shell", "summary": "Alias of spa hosts ssh"},
+        {"name": "shell", "summary": "Alias of spa hosts ssh", "positionals": [{"name": "NAME", "required": False, "help": "Inventory hostname or role", "completes_from": "hosts"}]},
         {"name": "aws", "summary": "AWS discovery for terraform.aws. Catalogs are spa aws regions list and the other resource list commands."},
         {
             "name": "aws regions list",
@@ -571,12 +612,22 @@ COMMAND_SCHEMA = {
         {
             "name": "run",
             "summary": "Run a playbook by stem. Discover: spa --agent run list then spa run NAME --help. Honor data[].requires_confirmation with --yes.",
+            "positionals": [
+                {
+                    "name": "NAME",
+                    "required": False,
+                    "help": "Playbook stem from spa run list",
+                    "completes_from": "run list",
+                }
+            ],
             "flags": [
                 {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
                 {"long": "--yes", "short": "-y", "help": "Confirm a mutating playbook (required in agent mode)"},
                 {
                     "long": "--apps-playbook",
                     "help": "For splunk_apps_playbook_run: curated stem or env-relative path (sets apps_playbook and app_name)",
+                    "takes_value": True,
+                    "completes_from": "apps playbooks",
                 },
                 _FLAG_ANSIBLE_OUTPUT,
                 _FLAG_TIMESTAMPS,
@@ -596,6 +647,14 @@ COMMAND_SCHEMA = {
         {
             "name": "logs",
             "summary": "List or show per-environment run transcripts under $SPA_ENV_DIR/logs (newest first)",
+            "positionals": [
+                {
+                    "name": "RUN_ID",
+                    "required": False,
+                    "help": "Run id from spa logs list",
+                    "completes_from": "logs list",
+                }
+            ],
             "flags": [
                 {"long": "--last", "help": "Show the most recent run"},
                 {"long": "--follow", "help": "Follow the latest jsonl file"},
@@ -623,10 +682,20 @@ COMMAND_SCHEMA = {
                 {
                     "long": "--type",
                     "help": "Filter Splunkbase type (app, addon)",
+                    "takes_value": True,
+                    "choices": ["app", "addon"],
                 },
                 {
                     "long": "--kind",
                     "help": "Filter SPA kind (ta, premium_itsi, itsi_content_library, itsi_content_pack_single, es_not_premium)",
+                    "takes_value": True,
+                    "choices": [
+                        "ta",
+                        "premium_itsi",
+                        "itsi_content_library",
+                        "itsi_content_pack_single",
+                        "es_not_premium",
+                    ],
                 },
             ],
             "example": "spa --agent apps search unix",
@@ -655,6 +724,8 @@ COMMAND_SCHEMA = {
                 {
                     "long": "--source",
                     "help": "Snippet source: splunkbase or local; local checks apps_dir",
+                    "takes_value": True,
+                    "choices": ["splunkbase", "local"],
                 },
                 {"long": "--local", "help": "Shorthand for --source local"},
                 {
@@ -681,6 +752,8 @@ COMMAND_SCHEMA = {
                 {
                     "long": "--source",
                     "help": "Use Splunkbase metadata, or a folder/archive already in apps_dir (default splunkbase). Mutually exclusive with --local",
+                    "takes_value": True,
+                    "choices": ["splunkbase", "local"],
                 },
                 {"long": "--local", "help": "Shorthand for --source local. Mutually exclusive with --source"},
                 {
@@ -698,6 +771,7 @@ COMMAND_SCHEMA = {
                 {
                     "long": "--install-all-content-packs",
                     "help": "5391 only: install every bundled pack; mutually exclusive with --content-pack",
+                    "takes_value": False,
                 },
                 {
                     "long": "--explicit-default",
@@ -776,6 +850,23 @@ COMMAND_SCHEMA = {
                 },
             ],
             "example": "spa --no-agent agent schema --markdown",
+        },
+        {
+            "name": "completion",
+            "summary": "Print a bash or zsh completion function. Human shell setup. Bare spa completion exits 2. Agents use spa agent schema.",
+            "example": "spa completion zsh",
+        },
+        {
+            "name": "completion bash",
+            "summary": "Print a bash function for eval. Does not edit the shell startup file. Agents use spa agent schema.",
+            "read_only": True,
+            "example": "spa completion bash",
+        },
+        {
+            "name": "completion zsh",
+            "summary": "Print a zsh function for eval. Does not edit the shell startup file. Agents use spa agent schema.",
+            "read_only": True,
+            "example": "spa completion zsh",
         },
     ],
 }

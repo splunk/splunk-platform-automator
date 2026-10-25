@@ -60,6 +60,12 @@ That writes `${XDG_CONFIG_HOME:-~/.config}/spa/paths.yml` (directories only, not
 
 What to put in `Software/`: [Prepare Software](user-guide.md#prepare-software) (Linux tgz installers, PS baseconfig apps, optional `Splunk_Enterprise.lic`). Splunk / Cisco employees can download baseconfig apps from [https://go2.cisco.com/baseconfigs](https://go2.cisco.com/baseconfigs).
 
+## Shell completion
+
+`spa completion bash` and `spa completion zsh` print a function. spa does not edit the shell startup file.
+
+`spa completion --help` shows how to load it.
+
 ## Uninstall
 
 `install.sh --uninstall --yes` removes the prefix (`SPA_HOME`) and the matching PATH wrapper (`~/.local/bin/spa` by default). It is **not** `spa destroy`: env dirs, Terraform state, and AWS stay untouched.

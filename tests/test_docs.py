@@ -119,6 +119,25 @@ def test_architecture_defines_cli_ux_and_output_conventions():
     assert "architecture.md#cli-ux-and-output-conventions" in contributing
 
 
+def test_shell_completion_is_part_of_shipping_a_command():
+    architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
+    contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
+    install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    rule = "A new spa command is not done until shell completion can offer it."
+    assert architecture.count(rule) >= 2
+    assert "Do not add a command whose arguments can only be discovered by reading help." in architecture
+    assert "Shell completion is a later command" not in architecture
+    assert "takes_value" in contributing
+    assert "completes_from" in contributing
+    assert "spa completion --help" in install
+    assert "does not edit" in install
+    assert 'eval "$(spa --no-agent completion zsh)"' not in install
+    assert "Press Tab twice" in guide
+    assert "install.md#shell-completion" in guide
+    assert 'eval "$(spa --no-agent completion zsh)"' not in guide
+
+
 def test_architecture_documents_playbook_resolution_contract():
     text = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
     assert "`resolve()` and `resolve_named()` enforce" in text
