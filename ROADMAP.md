@@ -76,6 +76,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [ ] Disable remaining UI tours and info wizards after login
 - [x] Feature catalog + provider-independent topology examples; separate provider examples; spa init composes on select — [#53](https://github.com/splunk/splunk-platform-automator/issues/53)
 - [x] `spa config` transactionally edits explicit schema paths and fragments; `spa config explain` and `spa config search` are the schema walk; `spa apps add/remove` owns structured app entries. Catalog snippets remain examples — [#76](https://github.com/splunk/splunk-platform-automator/issues/76)
+- [ ] User config templates: `spa config template list|save|show|remove` writes `~/.config/spa/examples/{topologies,providers,templates}` and init, `config topology`, `config provider`, and `config merge` apply them. Retire `spa config templates` so the catalog is `list` — [#113](https://github.com/splunk/splunk-platform-automator/issues/113)
 - [ ] Certificate add/rotate + SPA vault for certs/keys (closes [#30](https://github.com/splunk/splunk-platform-automator/issues/30)) — [#69](https://github.com/splunk/splunk-platform-automator/issues/69). Blocked by [#52](https://github.com/splunk/splunk-platform-automator/issues/52)
 - [ ] Credentials / `spa auth` (profiles, Splunkbase, vault password; macOS Keychain; backwards compatible) — [#52](https://github.com/splunk/splunk-platform-automator/issues/52)
 
