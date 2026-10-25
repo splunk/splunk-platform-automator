@@ -119,6 +119,55 @@ def test_architecture_defines_cli_ux_and_output_conventions():
     assert "architecture.md#cli-ux-and-output-conventions" in contributing
 
 
+def test_shell_completion_is_part_of_shipping_a_command():
+    architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
+    contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
+    install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    rule = "A new spa command is not done until shell completion can offer it."
+    assert architecture.count(rule) >= 2
+    assert "Do not add a command whose arguments can only be discovered by reading help." in architecture
+    assert "Shell completion is a later command" not in architecture
+    assert "takes_value" in contributing
+    assert "completes_from" in contributing
+    assert "spa completion --help" in install
+    assert "does not edit" in install
+    assert 'eval "$(spa --no-agent completion zsh)"' not in install
+    assert "Press Tab twice" in guide
+    assert "every `spa` command, subcommand, and flag" in guide
+    assert "install.md#shell-completion" in guide
+    assert 'eval "$(spa --no-agent completion zsh)"' not in guide
+
+
+def test_user_guide_does_not_repeat_install_steps():
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    start = guide.split("## Start here", 1)[1].split("\n## ", 1)[0]
+    assert "install.md" in start
+    assert "README.md#install" not in guide
+    assert "spa venv create" not in guide
+
+    contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
+    documentation = contributing.split("## Documentation", 1)[1]
+    assert "The user guide explains how to use spa after it is installed." in documentation
+
+    architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
+    intro = architecture.split("## Current execution architecture", 1)[0]
+    assert "install.md" in intro
+    assert "do not copy those commands" in intro
+
+    install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
+    assert "go2.cisco.com/baseconfigs" not in install
+    assert "user-guide.md#prepare-software" in install
+    assert "spa environment set --software-dir" in install
+
+    setup = contributing.split("## Development setup", 1)[1].split("\n## ", 1)[0]
+    assert "install.md#develop-spa-git-clone" in setup
+    assert "Python 3.9 through 3.14" not in setup
+    assert "bin/spa venv create" not in setup
+    assert "source bin/spa_venv.sh" in setup
+    assert "Homebrew" in setup
+
+
 def test_architecture_documents_playbook_resolution_contract():
     text = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
     assert "`resolve()` and `resolve_named()` enforce" in text

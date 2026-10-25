@@ -4,7 +4,7 @@ SPA installs and configures Splunk Enterprise for testing, training, staging, an
 
 ## Start here
 
-Install the framework first ([README](../README.md#install) or the commands in [install.md](install.md)), then:
+Install the framework first ([install guide](install.md)), then:
 
 ```bash
 spa doctor
@@ -112,11 +112,16 @@ flowchart TD
 | Color that transcript | `spa logs --last --ansible-output --color` |
 | Show native Ansible output during a run | `spa deploy --yes --ansible-output` |
 | Increase Ansible verbosity and show native output | `spa deploy --yes -v` through `-vvvv` |
-| Create or repair the Python venv | `spa venv create --shared --yes` (see [install](install.md) for `upgrade` / `rebuild`) |
 
 Provider selection comes from `terraform.aws` or `virtualbox:` in config. Do not remove a live host from config and run `spa provision`; the current Terraform flow can terminate it. See [AWS](aws.md) for cloud decisions and [Upgrade](upgrade.md) for the ordered distributed-upgrade workflow.
 
 Mutating Ansible/Terraform work writes a timestamped JSONL transcript under `$SPA_ENV_DIR/logs/`. On a TTY, humans see **one live line per named group that actually runs** (for example `Deploy  App deployment · Search Head Cluster apps`), with the active host and task while work is running and compact counters when it settles. Rolling upgrade groups settle once per host and include installed and target Splunk versions when reported by the playbook. There is no `[3/10]` index; unused topology simply never appears. `spa run` of every first-party playbook uses the same compact grouping, with play-name fallback for work outside known roles and functions. Failures print immediately. `NO_COLOR` / piped stderr stay uncolored. Agents keep a small JSON envelope on stdout plus `data.log`; they must not ingest the transcript unless you asked to debug a failure. Terraform instance changes (`instance_type`, disk) fold into the provision plan/apply line. On VirtualBox, provisioning shows one line per VM (`Provision  VM idx1`) built from Vagrant's output, and a Vagrant error is printed before the group closes as `failed`.
+
+## Complete commands in the shell
+
+Press Tab twice to list matches for every `spa` command, subcommand, and flag. Tab also lists local values for the argument being typed, such as host names, config paths, playbooks, environments, and run ids. `spa shell` then Tab lists host names from the local config. Agents use `spa agent schema`.
+
+Load the function from [Install](install.md#shell-completion).
 
 ## Work with hosts and apps
 

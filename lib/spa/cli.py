@@ -74,7 +74,7 @@ _HIDDEN_ALIASES = {
 _VISIBLE_ALIAS = {"environment": frozenset({"env"})}
 # These must keep working without a venv: they are how an operator inspects or
 # builds one. Every other command reads YAML or runs Ansible, so it is gated.
-VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills"})
+VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills", "completion"})
 GLOBAL_OPTS_WITH_VALUE = ("--start-dir", "--env")
 HOSTS_FLAG_HELP = "only these hosts (names or roles from this env)"
 AGENT_EXAMPLES = """examples:
@@ -497,6 +497,33 @@ def _reject(message: str, as_agent: bool) -> int:
     """Usage failure: human text on stderr, one agent JSON error, no catalog payload."""
     emit(False, error=message, as_agent=as_agent)
     return 2
+
+
+def _print_completion_candidates(session, extra: Sequence[str]) -> int:
+    """One candidate per line. Empty output is success so the shell stays quiet."""
+    if not extra:
+        return 0
+    if extra[0] == "line":
+        if len(extra) < 3:
+            return 0
+        try:
+            point = int(extra[1])
+        except (TypeError, ValueError):
+            return 0
+        from spa.completion import words_from_line
+
+        words, index = words_from_line(extra[2], point)
+        result = session.complete(words, index)
+    else:
+        try:
+            index = int(extra[0])
+        except (TypeError, ValueError):
+            return 0
+        result = session.complete(list(extra[1:]), index)
+    candidates = list((result.data or {}).get("candidates") or [])
+    if candidates:
+        sys.stdout.write("\n".join(str(item) for item in candidates) + "\n")
+    return 0
 
 
 CONFIG_SCHEMA_NEEDS_MARKDOWN = (
@@ -1065,6 +1092,10 @@ def _run(argv: Sequence[str]) -> int:
                     message = HOSTS_NEEDS_ACTION
             elif "invalid choice" in message and ("'features'" in message or "'feat'" in message):
                 message = FEATURES_REMOVED
+            elif "invalid choice" in message and self.prog.rstrip().endswith("completion"):
+                from spa.completion import COMPLETION_AGENT, COMPLETION_NEEDS_SHELL
+
+                message = COMPLETION_AGENT if parse_as_agent else COMPLETION_NEEDS_SHELL
             elif message.startswith("the following arguments are required:"):
                 missing = message.split(":", 1)[1].strip()
                 named = _MISSING_OPERAND.get((self.prog, missing))
@@ -1869,6 +1900,28 @@ def _run(argv: Sequence[str]) -> int:
         add_help=False, accept_mode_flags=False,
     )
 
+    p_completion = _add_command(
+        sub,
+        "completion",
+        help="Print a bash or zsh completion function",
+        description=None,
+        epilog=None,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    from spa.completion import INSTALL_PAGE
+
+    p_completion.description = INSTALL_PAGE
+    p_completion.formatter_class = argparse.RawDescriptionHelpFormatter
+    completion_sub = p_completion.add_subparsers(dest="completion_cmd", metavar="SHELL")
+    for shell_name, shell_help in (
+        ("bash", "Print a bash completion function"),
+        ("zsh", "Print a zsh completion function"),
+    ):
+        shell_parser = _add_action(completion_sub, shell_name, help=shell_help)
+        shell_parser.description = INSTALL_PAGE
+        shell_parser.formatter_class = argparse.RawDescriptionHelpFormatter
+        _add_mode_flags(shell_parser)
+
     p_agent = _add_command(
         sub,
         "agent",
@@ -1936,6 +1989,21 @@ def _run(argv: Sequence[str]) -> int:
         parser.print_help()
         return 0
 
+    if args.command == "completion":
+        from spa.completion import COMPLETION_AGENT, COMPLETION_NEEDS_SHELL
+
+        if as_agent:
+            return _reject(COMPLETION_AGENT, True)
+        if extra:
+            return _print_completion_candidates(session, extra)
+        shell_name = _action(args, "completion_cmd")
+        if shell_name not in {"bash", "zsh"}:
+            return _reject(COMPLETION_NEEDS_SHELL, False)
+        result = session.completion_script(shell_name)
+        script = str((result.data or {}).get("script") or "")
+        sys.stdout.write(script if script.endswith("\n") else script + "\n")
+        return 0
+
     native_help_only = invoked in NATIVE_FLAG_COMMANDS and set(native) <= {"-h", "--help"}
     apps_cmd = getattr(args, "apps_cmd", None)
     config_without_env = (
@@ -1944,7 +2012,7 @@ def _run(argv: Sequence[str]) -> int:
     )
     apps_without_env = args.command == "apps" and apps_cmd in {"search", "snippet"}
     if (
-        args.command not in {"init", "agent", "environment", "doctor", "venv", "skills"}
+        args.command not in {"init", "agent", "environment", "doctor", "venv", "skills", "completion"}
         and not native_help_only
         and not apps_without_env
         and not config_without_env

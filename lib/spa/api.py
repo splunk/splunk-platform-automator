@@ -311,6 +311,10 @@ class SpaSession(Protocol):
 
     def shell_list(self, verbose: bool = False, hosts: Optional[Sequence[str]] = None) -> CommandResult: ...
 
+    def completion_script(self, shell: str) -> CommandResult: ...
+
+    def complete(self, words: Sequence[str], index: int) -> CommandResult: ...
+
 
 class LocalSpaSession:
     """In-process backend against SPA_HOME / SPA_ENV_DIR on this machine."""
@@ -1762,6 +1766,67 @@ class LocalSpaSession:
         self, verbose: bool = False, hosts: Optional[Sequence[str]] = None
     ) -> CommandResult:
         return self.hosts_list(status=verbose, hosts=hosts)
+
+    def completion_script(self, shell: str) -> CommandResult:
+        from spa.completion import COMPLETION_NEEDS_SHELL, completion_script
+
+        if shell not in {"bash", "zsh"}:
+            return CommandResult(ok=False, error=COMPLETION_NEEDS_SHELL, code=2)
+        return CommandResult(ok=True, data={"shell": shell, "script": completion_script(shell)})
+
+    def complete(self, words: Sequence[str], index: int) -> CommandResult:
+        from spa.completion import complete
+        from spa.preflight import load_config_mapping
+
+        paths = self._paths_for_completion(words, index)
+        config = None
+        try:
+            if paths.config_file.is_file():
+                loaded = load_config_mapping(paths.config_file)
+                config = loaded or None
+        except Exception:
+            config = None
+        try:
+            candidates = complete(list(words), index, config=config, paths=paths)
+        except Exception:
+            candidates = []
+        return CommandResult(ok=True, data={"candidates": candidates})
+
+    def _paths_for_completion(self, words: Sequence[str], index: int):
+        """Honor --env and --start-dir typed on the line being completed."""
+        from spa.paths import resolve_spa_paths
+
+        tokens = [str(item) for item in words]
+        limit = min(max(index, 0), len(tokens))
+        cursor = 1 if tokens and (tokens[0] == "spa" or tokens[0].endswith("/spa")) else 0
+        env_name = None
+        start_dir = None
+        while cursor < limit:
+            token = tokens[cursor]
+            if token in {"--env", "--start-dir"} and cursor + 1 < limit:
+                value = tokens[cursor + 1]
+                if token == "--env":
+                    env_name = value
+                else:
+                    start_dir = value
+                cursor += 2
+                continue
+            if token.startswith("-"):
+                cursor += 1
+                continue
+            cursor += 1
+        if env_name is None and start_dir is None:
+            return self.paths
+        try:
+            import os
+
+            start = Path(start_dir).expanduser().resolve() if start_dir else None
+            environ = os.environ.copy()
+            # The session already exported the default env's config path.
+            environ.pop("SPLUNK_CONFIG_FILE", None)
+            return resolve_spa_paths(start_dir=start, env_selector=env_name, environ=environ)
+        except Exception:
+            return self.paths
 
 
 def open_session(

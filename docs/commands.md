@@ -497,6 +497,10 @@ Requires confirmation: yes (`--yes`).
 | `-y`, `--yes` | Confirm deleting the env directory |
 | `--force` | Allow deleting a dir that looks deployed (local only) |
 
+| Argument | Required | Description |
+| --- | --- | --- |
+| `NAME` | yes | Registered environment name |
+
 ## `environment`
 
 Environment family (alias: env). spa resolves cwd or --env itself; --export is for external tools
@@ -621,6 +625,10 @@ spa hosts list --status
 
 SSH using inventory
 
+| Argument | Required | Description |
+| --- | --- | --- |
+| `NAME` | yes | Inventory hostname or role |
+
 Example:
 
 ```bash
@@ -640,6 +648,10 @@ spa hosts copy local.txt idx1:/tmp/
 ## `shell`
 
 Alias of spa hosts ssh
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `NAME` | no | Inventory hostname or role |
 
 ## `aws`
 
@@ -734,6 +746,10 @@ Run a playbook by stem. Discover: spa --agent run list then spa run NAME --help.
 | `--color` | Color --ansible-output. Live runs use Ansible color; stored logs are recolored |
 | `-v`, `--verbose` | Increase Ansible verbosity and show native output; repeat through -vvvv |
 
+| Argument | Required | Description |
+| --- | --- | --- |
+| `NAME` | no | Playbook stem from spa run list |
+
 Example:
 
 ```bash
@@ -765,6 +781,10 @@ List or show per-environment run transcripts under $SPA_ENV_DIR/logs (newest fir
 | `--ansible-output` | Show captured Ansible output live or from stored logs (not in agent output) |
 | `--timestamps` | Prefix --ansible-output lines with their stored event time |
 | `--color` | Color --ansible-output. Live runs use Ansible color; stored logs are recolored |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `RUN_ID` | no | Run id from spa logs list |
 
 Example:
 
@@ -923,4 +943,34 @@ Example:
 
 ```bash
 spa --no-agent agent schema --markdown
+```
+
+## `completion`
+
+Print a bash or zsh completion function. Human shell setup. Bare spa completion exits 2. Agents use spa agent schema.
+
+Example:
+
+```bash
+spa completion zsh
+```
+
+## `completion bash`
+
+Print a bash function for eval. Does not edit the shell startup file. Agents use spa agent schema.
+
+Example:
+
+```bash
+spa completion bash
+```
+
+## `completion zsh`
+
+Print a zsh function for eval. Does not edit the shell startup file. Agents use spa agent schema.
+
+Example:
+
+```bash
+spa completion zsh
 ```

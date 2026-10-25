@@ -6,15 +6,14 @@ Start framework changes with the [architecture and contributor standards](archit
 
 ## Development setup
 
-Clone the repository as `SPA_HOME`, then create or activate the shared environment:
+Clone the repository and create the shared venv as in [Develop SPA](install.md#develop-spa-git-clone). Then activate it and run the local suite:
 
 ```bash
-bin/spa venv create --shared --yes
 source bin/spa_venv.sh
 ./tests/run_local_tests.sh
 ```
 
-`spa venv` installs the pinned Python and Ansible dependencies plus collections (`bin/spa_venv.sh` is the implementation). Do not rely on Homebrew/system Ansible. If the host Python is outside the controller range supported by the bundled Ansible, install a supported Python with pyenv or a private prefix and pass that interpreter to `spa venv create --python` or `spa init --python`. Ansible 2.21 supports Python 3.9 through 3.14; when `python3` is 3.15 or newer, `spa venv` uses the newest supported `python3.X` on `PATH`. Creation and runtime probe the actual Ansible CLI imports so later dependency changes fail with a repair instruction rather than a traceback.
+Do not rely on Homebrew or system Ansible.
 
 Use `tests/README.md` for suites and app-scope scenarios. Release steps are in [RELEASE.md](../RELEASE.md).
 
@@ -127,7 +126,7 @@ Commands that read or write `splunk_config.yml` also follow the
 6. Extend `tests/test_spa_cli_contract.py` so the help surface and `COMMAND_SCHEMA` stay equal, list flags are not advertised on the parent, and a parent that requires an action rejects a bare call with the agent envelope above. Run `./tests/run_cli_tests.sh`. A parser change does not need an AWS or live-Splunk run. `./tests/run_local_tests.sh` is the broader local gate.
 7. Choose one command class from [CLI UX and output conventions](architecture.md#cli-ux-and-output-conventions): catalog or search, selected definition, current value, mutation, validation, or long-running. Return a `CommandResult`. Add one human test and one agent test for that class. Do not add a second renderer unless two commands in the class are changing to the same rule.
 8. Support agent mode. When an agent is detected, `spa COMMAND --help` is that one `COMMAND_SCHEMA` entry, not argparse text. Examples use the full command name and `--agent`. `--json` stays a synonym. A short alias, if one already exists, appears only on that command's `Aliases:` line.
-9. Stay completable for [#107](https://github.com/splunk/splunk-platform-automator/issues/107). One schema entry per action, canonical names only, and static choices on the schema flags. Do not add a command other than the later `spa completion`, and do not restore a removed one.
+9. Stay completable. One schema entry per action, canonical names only. On a flag or positional, set `choices` for a closed set, `takes_value` when the flag consumes the next token, and `completes_from` when the values come from a local list command such as `run list` or `environment list`. A command is not done until `spa completion` can offer it. Do not add a command whose arguments can only be discovered by reading help, and do not restore a removed command.
 10. A required operand's missing-argument and unknown-value errors name the legal values, or say what the operand is, name the command that lists the values, and give one example. Human stderr and the agent `error` string use those sentences. Put the same sentence on the positional help. A non-TTY mutation exits 2 and names `-y/--yes` without saying "agent mode".
 
 Examples, help, errors, and schema descriptions never contain passwords, tokens, private keys, or certificates. Use `lookup('env', ...)`.
@@ -138,6 +137,9 @@ Examples, help, errors, and schema descriptions never contain passwords, tokens,
 - Other documentation uses lowercase kebab-case.
 - Commands are `spa`-first; raw backend commands belong only in implementation/test context.
 - Prefer links to `spa --help`, `spa config explain`, `spa apps`, schema, and upstream Splunk docs over duplicated reference tables.
+- The user guide explains how to use spa after it is installed. Framework install, uninstall, shell completion setup, controller Python, VirtualBox, and WSL belong in [install.md](install.md). Link there. Do not copy those commands.
+- A development clone is installed from [Develop SPA](install.md#develop-spa-git-clone). This page owns the test and authoring loop.
+- One procedure lives on one page.
 - New `splunk_config.yml` keys and `spa config explain` records follow [Adding a configuration feature](#adding-a-configuration-feature).
 - New `spa` commands follow [Adding a spa command](#adding-a-spa-command).
 - Never add credentials, private keys, certificates, or decrypted values to examples.

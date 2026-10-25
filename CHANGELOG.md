@@ -11,6 +11,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Added
 
+- **Shell completion**: `spa completion bash` and `spa completion zsh` print a function for every command. `--help` shows how to load it. spa does not edit the shell startup file. Tab lists commands, flags, config paths, local hosts, and local catalog values. Agent mode exits 2 and names `spa agent schema`.
+
 - **AWS config region**: `spa aws` uses `--region`, then `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `region` in `~/.aws/config`. Reading that config region does not require boto3. Text output names the source on stderr. `spa aws regions list` marks that region. `--json` and `--agent` print only JSON, with `region_source` in the body, and JSON error text is redacted. `spa aws list KIND` exits 2 and names `spa aws KIND list`. Lifecycle commands still require `terraform.aws.region`.
 
 - **Agent output stays JSON**: `--agent` and `--json` print one JSON object and do not add a human sentence on stdout or stderr. `spa aws` and `spa licenses` usage errors are that command's JSON (`ok` and `error` only). `spa apps content-packs list` no longer prints its cache or download notice in that mode. A provision failure from `spa hosts ssh` or `spa hosts copy` uses the same envelope.
