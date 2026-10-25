@@ -1093,9 +1093,9 @@ def _run(argv: Sequence[str]) -> int:
             elif "invalid choice" in message and ("'features'" in message or "'feat'" in message):
                 message = FEATURES_REMOVED
             elif "invalid choice" in message and self.prog.rstrip().endswith("completion"):
-                from spa.completion import COMPLETION_NEEDS_SHELL
+                from spa.completion import COMPLETION_AGENT, COMPLETION_NEEDS_SHELL
 
-                message = COMPLETION_NEEDS_SHELL
+                message = COMPLETION_AGENT if parse_as_agent else COMPLETION_NEEDS_SHELL
             elif message.startswith("the following arguments are required:"):
                 missing = message.split(":", 1)[1].strip()
                 named = _MISSING_OPERAND.get((self.prog, missing))

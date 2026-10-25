@@ -2,12 +2,14 @@
 
 import json
 import os
+import stat
 import subprocess
+import sys
 
 import pytest
 
 from spa.completion import complete, words_from_line
-from spa_testutil import PROJECT_ROOT, run_spa, write_min_env
+from spa_testutil import PROJECT_ROOT, SPA, run_spa, write_min_env
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -20,6 +22,7 @@ def test_completion_zsh_prints_a_callback_and_not_the_schema():
     assert "compdef _spa spa" in result.stdout
     assert '[[ "${funcstack[1]-}" == _spa ]]' in result.stdout
     assert "compadd -Q" not in result.stdout
+    assert "_files -/" in result.stdout
     assert "hosts ssh" not in result.stdout
     assert "COMMAND_SCHEMA" not in result.stdout
     assert "splunk_hosts" not in result.stdout
@@ -64,7 +67,8 @@ def test_completion_bash_prints_a_callback():
     result = run_spa(["completion", "bash"])
     assert result.returncode == 0, result.stderr
     assert 'spa --no-agent completion -- line "$COMP_POINT" "$COMP_LINE"' in result.stdout
-    assert "COMP_WORDS" not in result.stdout
+    assert "compgen -d" in result.stdout
+    assert "${COMP_WORDS[@]}" not in result.stdout
     assert "hosts ssh" not in result.stdout
 
 
@@ -83,6 +87,7 @@ def test_completion_help_is_the_install_page():
     assert 'eval "$(spa --no-agent completion zsh)"' in result.stdout
     assert "~/.zsh/completions/_spa" in result.stdout
     assert "compinit" in result.stdout
+    assert "bash-completion 2" in result.stdout
     assert "does not edit" in result.stdout
 
 
@@ -106,6 +111,23 @@ def test_bare_completion_is_an_agent_usage_error():
     assert payload["ok"] is False
     assert "data" not in payload
     assert "spa completion zsh" in payload["error"]
+    assert "spa agent schema" in payload["error"]
+
+
+def test_unknown_shell_in_agent_mode_names_the_schema():
+    result = run_spa(["--agent", "completion", "fish"])
+    assert result.returncode == 2
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert "data" not in payload
+    assert "spa agent schema" in payload["error"]
+    assert "spa completion zsh" in payload["error"]
+
+
+def test_no_agent_completion_prints_when_an_agent_is_detected():
+    result = run_spa(["--no-agent", "completion", "zsh"], extra_env={"CURSOR_AGENT": "1"})
+    assert result.returncode == 0, result.stderr
+    assert "compdef _spa spa" in result.stdout
 
 
 def test_completion_offers_canonical_names_only():
@@ -282,3 +304,103 @@ def test_typed_env_completes_that_environments_hosts(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "from-other" in result.stdout.splitlines()
     assert "from-default" not in result.stdout.splitlines()
+
+
+def test_start_dir_is_a_root_flag_and_does_not_offer_commands():
+    assert "--start-dir" in complete(["spa", "--"], 1)
+    values = complete(["spa", "--start-dir", ""], 2)
+    assert values == []
+    assert "deploy" not in values
+
+
+def test_bash_function_completes_a_command_and_a_directory(tmp_path):
+    import shutil
+    import stat
+
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("bash is not installed")
+    wrapper = tmp_path / "bin"
+    wrapper.mkdir()
+    spa = wrapper / "spa"
+    spa.write_text(
+        "#!/bin/sh\nexec %s %s \"$@\"\n" % (sys.executable, SPA),
+        encoding="utf-8",
+    )
+    spa.chmod(spa.stat().st_mode | stat.S_IEXEC)
+    folder = tmp_path / "mydir"
+    folder.mkdir()
+    script = run_spa(["completion", "bash"]).stdout
+    program = """
+set -e
+source '%s'
+line='spa dep'
+COMP_LINE="$line"
+COMP_POINT=${#line}
+COMP_WORDS=(spa dep)
+COMP_CWORD=1
+_spa_completion
+printf '%%s\\n' "${COMPREPLY[@]}"
+COMP_LINE='spa --start-dir my'
+COMP_POINT=${#COMP_LINE}
+COMP_WORDS=(spa --start-dir my)
+COMP_CWORD=2
+_spa_completion
+printf '%%s\\n' "${COMPREPLY[@]}"
+""" % (tmp_path / "spa.bash")
+    (tmp_path / "spa.bash").write_text(script, encoding="utf-8")
+    (tmp_path / "run.bash").write_text(program, encoding="utf-8")
+    loaded = subprocess.run(
+        [bash, str(tmp_path / "run.bash")],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PATH": str(wrapper) + os.pathsep + os.environ.get("PATH", "")},
+    )
+    assert loaded.returncode == 0, loaded.stderr
+    assert "deploy" in loaded.stdout.splitlines()
+    assert "mydir" in loaded.stdout.splitlines()
+
+
+def test_schema_flag_values_match_command_help():
+    """Every flag shown in help takes a value only when completion says it does."""
+    import re
+
+    from spa.agent import COMMAND_SCHEMA
+    from spa.completion import _takes_value
+
+    def option_takes_value(text, flag):
+        for line in text.splitlines():
+            if not re.match(r"^  -\S", line):
+                continue
+            tokens = line.strip().split()
+            if flag not in tokens:
+                continue
+            index = tokens.index(flag)
+            if index + 1 >= len(tokens):
+                return False
+            nxt = tokens[index + 1]
+            if nxt.startswith("-"):
+                return False
+            if nxt.startswith("{") or re.fullmatch(r"[A-Z0-9_.-]+", nxt):
+                return True
+            return False
+        return None
+
+    mismatches = []
+    checked = 0
+    for row in COMMAND_SCHEMA["commands"]:
+        flags = [flag for flag in (row.get("flags") or []) if flag.get("long")]
+        if not flags:
+            continue
+        result = run_spa([*str(row["name"]).split(), "--help"])
+        text = result.stdout + "\n" + result.stderr
+        for flag in flags:
+            seen = option_takes_value(text, str(flag["long"]))
+            if seen is None:
+                continue
+            checked += 1
+            if seen != _takes_value(flag):
+                mismatches.append((row["name"], flag["long"], seen, _takes_value(flag)))
+    assert checked > 100
+    assert mismatches == []

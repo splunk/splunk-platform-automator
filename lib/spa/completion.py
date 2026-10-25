@@ -43,6 +43,8 @@ Or save a static file. zsh needs the directory on fpath before compinit:
   mkdir -p ~/.local/share/bash-completion/completions
   spa --no-agent completion bash > ~/.local/share/bash-completion/completions/spa
 
+The bash file is read by bash-completion 2.
+
 Fish and PowerShell are not supported. Agents use spa agent schema, not shell completion.
 """
 
@@ -50,6 +52,13 @@ _BASH = """\
 # bash completion for spa
 _spa_completion() {
   local reply candidate
+  if [[ ${COMP_CWORD:-0} -gt 0 && ${COMP_WORDS[COMP_CWORD-1]} == --start-dir ]]; then
+    COMPREPLY=()
+    while IFS= read -r candidate; do
+      [[ -n "$candidate" ]] && COMPREPLY+=("$candidate")
+    done < <(compgen -d -- "${COMP_WORDS[COMP_CWORD]}")
+    return 0
+  fi
   local IFS=$'\\n'
   COMPREPLY=()
   reply="$(spa --no-agent completion -- line "$COMP_POINT" "$COMP_LINE")" || return 0
@@ -66,6 +75,10 @@ complete -o default -F _spa_completion spa
 _ZSH = """\
 #compdef spa
 _spa() {
+  if [[ ${words[CURRENT-1]} == --start-dir ]]; then
+    _files -/
+    return
+  fi
   local -a candidates
   candidates=(${(f)"$(spa --no-agent completion -- "$((CURRENT - 1))" "${words[@]}")"})
   compadd -a candidates
@@ -298,8 +311,12 @@ def _takes_value(flag: Mapping[str, Any]) -> bool:
 def _flags(entry: Mapping[str, Any]) -> List[Mapping[str, Any]]:
     rows = list(entry.get("flags") or [])
     rows.extend(
-        {"long": name, "takes_value": name == "--env", "completes_from": "environment list" if name == "--env" else ""}
-        for name in ("--env",)
+        {
+            "long": name,
+            "takes_value": True,
+            "completes_from": "environment list" if name == "--env" else "",
+        }
+        for name in ("--env", "--start-dir")
     )
     return rows
 
@@ -356,7 +373,7 @@ def _secret_value(rest: Sequence[str]) -> bool:
 
 def _flag_names(entry: Mapping[str, Any]) -> List[str]:
     names = list(_ROOT_BOOL)
-    names.append("--env")
+    names.extend(["--env", "--start-dir"])
     for flag in entry.get("flags") or []:
         if flag.get("long"):
             names.append(str(flag["long"]))
@@ -372,7 +389,7 @@ def _flag_values(
     paths: Any,
 ) -> List[str]:
     long = str(flag.get("long") or "")
-    if long == "--from-env":
+    if long in {"--from-env", "--start-dir"}:
         return []
     if long == "--hosts" or flag.get("completes_from") == "hosts":
         return _filter(_hosts(config, ""), current)

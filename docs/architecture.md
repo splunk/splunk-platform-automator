@@ -2,6 +2,8 @@
 
 This page is for contributors changing the Splunk Platform Automator framework. Operators should use the [user guide](user-guide.md). Command and setting reference material is generated in [commands.md](commands.md) and [config.md](config.md); do not duplicate or hand-edit it.
 
+The user guide explains how to use spa after it is installed. Install, uninstall, shell completion setup, controller Python, VirtualBox, and WSL belong in [install.md](install.md); do not copy those commands.
+
 Related guides cover [installation](install.md), [migration](migrate.md), [apps](apps.md), [AWS](aws.md), [secrets](secrets.md), the normative [config-editing.md](config-editing.md) contract, and detailed [contributing procedures](contributing.md). Future product work belongs in the [ROADMAP](../ROADMAP.md).
 
 ## Current execution architecture

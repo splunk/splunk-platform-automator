@@ -56,9 +56,7 @@ spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
 spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
 ```
 
-That writes `${XDG_CONFIG_HOME:-~/.config}/spa/paths.yml` (directories only, not secrets). `spa init --software-dir` does the same and also copies `software_dir` / `baseconfig_dir` into the env `.spa.yml`. When a shared-path key is still unset, init stores the first explicit or discovered directory; it never replaces an established global with a later one-off init option. Optional: `--baseconfig-dir` (defaults to `--software-dir`). The installer does not create `~/.config/spa`. `spa validate` and `spa deploy` fail if those directories (and, for local apps, each named source) are still missing.
-
-What to put in `Software/`: [Prepare Software](user-guide.md#prepare-software) (Linux tgz installers, PS baseconfig apps, optional `Splunk_Enterprise.lic`). Splunk / Cisco employees can download baseconfig apps from [https://go2.cisco.com/baseconfigs](https://go2.cisco.com/baseconfigs).
+What belongs in that directory, and how shared path defaults work: [Prepare Software](user-guide.md#prepare-software).
 
 ## Shell completion
 

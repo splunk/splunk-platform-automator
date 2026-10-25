@@ -6,15 +6,14 @@ Start framework changes with the [architecture and contributor standards](archit
 
 ## Development setup
 
-Clone the repository as `SPA_HOME`, then create or activate the shared environment:
+Clone the repository and create the shared venv as in [Develop SPA](install.md#develop-spa-git-clone). Then activate it and run the local suite:
 
 ```bash
-bin/spa venv create --shared --yes
 source bin/spa_venv.sh
 ./tests/run_local_tests.sh
 ```
 
-`spa venv` installs the pinned Python and Ansible dependencies plus collections (`bin/spa_venv.sh` is the implementation). Do not rely on Homebrew/system Ansible. If the host Python is outside the controller range supported by the bundled Ansible, install a supported Python with pyenv or a private prefix and pass that interpreter to `spa venv create --python` or `spa init --python`. Ansible 2.21 supports Python 3.9 through 3.14; when `python3` is 3.15 or newer, `spa venv` uses the newest supported `python3.X` on `PATH`. Creation and runtime probe the actual Ansible CLI imports so later dependency changes fail with a repair instruction rather than a traceback.
+Do not rely on Homebrew or system Ansible.
 
 Use `tests/README.md` for suites and app-scope scenarios. Release steps are in [RELEASE.md](../RELEASE.md).
 
@@ -138,6 +137,9 @@ Examples, help, errors, and schema descriptions never contain passwords, tokens,
 - Other documentation uses lowercase kebab-case.
 - Commands are `spa`-first; raw backend commands belong only in implementation/test context.
 - Prefer links to `spa --help`, `spa config explain`, `spa apps`, schema, and upstream Splunk docs over duplicated reference tables.
+- The user guide explains how to use spa after it is installed. Framework install, uninstall, shell completion setup, controller Python, VirtualBox, and WSL belong in [install.md](install.md). Link there. Do not copy those commands.
+- A development clone is installed from [Develop SPA](install.md#develop-spa-git-clone). This page owns the test and authoring loop.
+- One procedure lives on one page.
 - New `splunk_config.yml` keys and `spa config explain` records follow [Adding a configuration feature](#adding-a-configuration-feature).
 - New `spa` commands follow [Adding a spa command](#adding-a-spa-command).
 - Never add credentials, private keys, certificates, or decrypted values to examples.

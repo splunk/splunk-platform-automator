@@ -4,7 +4,7 @@ SPA installs and configures Splunk Enterprise for testing, training, staging, an
 
 ## Start here
 
-Install the framework first ([README](../README.md#install) or the commands in [install.md](install.md)), then:
+Install the framework first ([install guide](install.md)), then:
 
 ```bash
 spa doctor
@@ -112,7 +112,6 @@ flowchart TD
 | Color that transcript | `spa logs --last --ansible-output --color` |
 | Show native Ansible output during a run | `spa deploy --yes --ansible-output` |
 | Increase Ansible verbosity and show native output | `spa deploy --yes -v` through `-vvvv` |
-| Create or repair the Python venv | `spa venv create --shared --yes` (see [install](install.md) for `upgrade` / `rebuild`) |
 
 Provider selection comes from `terraform.aws` or `virtualbox:` in config. Do not remove a live host from config and run `spa provision`; the current Terraform flow can terminate it. See [AWS](aws.md) for cloud decisions and [Upgrade](upgrade.md) for the ordered distributed-upgrade workflow.
 
@@ -120,7 +119,7 @@ Mutating Ansible/Terraform work writes a timestamped JSONL transcript under `$SP
 
 ## Complete commands in the shell
 
-Press Tab twice to list matches. `spa shell` then Tab lists host names from the local config. Agents use `spa agent schema`.
+Press Tab twice to list matches for every `spa` command, subcommand, and flag. Tab also lists local values for the argument being typed, such as host names, config paths, playbooks, environments, and run ids. `spa shell` then Tab lists host names from the local config. Agents use `spa agent schema`.
 
 Load the function from [Install](install.md#shell-completion).
 
