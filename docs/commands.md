@@ -212,7 +212,7 @@ spa --agent config merge --file fragment.yml
 
 ## `config topology`
 
-Replace topology-owned config sections from an example template
+List catalog topology ids, or replace topology-owned sections from one
 
 | Flag | Description |
 | --- | --- |
@@ -224,7 +224,7 @@ Replace topology-owned config sections from an example template
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `TOPOLOGY` | yes | A topology feature id or an example stem. List them: spa init list. Example: spa config topology cm_2idxc_sh |
+| `TOPOLOGY` | no | A topology feature id or an example stem. List them: spa init list. Example: spa config topology topology.c1 |
 
 Example:
 

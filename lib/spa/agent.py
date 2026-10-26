@@ -277,12 +277,12 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "config topology",
-            "summary": "Replace topology-owned config sections from an example template",
+            "summary": "List catalog topology ids, or replace topology-owned sections from one",
             "idempotent": True,
             "positionals": [
                 {
                     "name": "TOPOLOGY",
-                    "required": True,
+                    "required": False,
                     "help": TOPOLOGY_HELP,
                     "completes_from": "init list",
                 }

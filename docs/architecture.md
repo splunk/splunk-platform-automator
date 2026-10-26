@@ -184,7 +184,7 @@ One command language for humans and agents. The CLI parses and renders. `SpaSess
 
 Successful data goes to stdout. Diagnostics, warnings, progress, and errors go to stderr. Usage errors exit 2. Runtime failures exit 1. Help exits 0. Name the legal command and a next action.
 
-A usage error must name the legal values when the set is small (`aws` or `virtualbox`), or say what the operand is, name the command that lists the values, and give one example. `spa config topology` points at `spa init list` (the same catalog as `spa environment init list`) and shows an example such as `spa config topology cm_2idxc_sh`. An unknown topology or provider points at that list and does not stop at a filesystem path. Do not paste an open-ended catalog into the error. Human stderr and the agent `error` string carry the same sentences.
+A usage error must name the legal values when the set is small (`aws` or `virtualbox`), or say what the operand is, name the command that lists the values, and give one example. `spa config topology` with no operand lists each `topology.*` id and the template it loads. An unknown topology points at `spa init list` (the same catalog as `spa environment init list`) and shows an example such as `spa config topology topology.c1`. An unknown topology or provider points at that list and does not stop at a filesystem path. Do not paste an open-ended catalog into the error. Human stderr and the agent `error` string carry the same sentences.
 
 When stdin is not a terminal and the process is not in agent mode, do not prompt. Exit 2 with an error that names `-y/--yes` and does not say "agent mode". A human TTY still gets `Proceed?`. An agent missing `--yes`, and a declined TTY prompt, stay exit 1.
 

@@ -112,6 +112,8 @@ def test_init_list_examples():
     out = result.stdout
     assert "single_node" in out
     assert "cm_2idxc_sh" in out
+    assert "topology.c1  cm_2idxc_sh" in out
+    assert "topology.d11  2idx_sh_es" in out
     assert "virtualbox" in out
     assert "aws" in out
     assert "cm_2idxc_sh_aws.yml" not in out
@@ -259,6 +261,9 @@ def test_init_list_json_has_no_addons():
     joined = " ".join(ids)
     assert "single_node" in joined
     assert "aws" in joined
+    catalog = {item["id"]: item["template"] for item in data["catalog"]}
+    assert catalog["topology.c1"] == "cm_2idxc_sh"
+    assert catalog["topology.m14"] == "cm_4idxc2site_stretched_2x3shc_ds"
     assert "itsi" not in joined
     assert "SmartStore" not in joined
     assert "apps" not in joined

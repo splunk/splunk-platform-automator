@@ -495,7 +495,6 @@ def test_accepted_global_positions(argv, expect):
         ["config", "set"],
         ["config", "add"],
         ["config", "unset"],
-        ["config", "topology"],
         ["config", "provider"],
         ["apps", "remove"],
     ],
@@ -514,12 +513,26 @@ def test_required_operands_say_how_to_find_a_legal_value(argv, mode):
         text = result.stderr
         assert result.stdout.strip() == ""
     assert "the following arguments are required" not in text
-    if argv[-1] == "topology":
-        assert "spa init list" in text
-        assert "spa config topology cm_2idxc_sh" in text
     if argv[-1] == "provider":
         assert "spa init list" in text
         assert "spa config provider aws" in text
+
+
+def test_config_topology_without_operand_lists_catalog_links():
+    result = run_spa(["config", "topology"])
+    assert result.returncode == 0, result.stderr
+    assert "topology.c1  cm_2idxc_sh" in result.stdout
+    assert "topology.d11  2idx_sh_es" in result.stdout
+
+
+def test_config_topology_without_operand_json_lists_catalog_links():
+    result = run_spa(["--json", "config", "topology"])
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    catalog = {item["id"]: item["template"] for item in payload["data"]["catalog"]}
+    assert catalog["topology.c1"] == "cm_2idxc_sh"
+    assert catalog["topology.m3"] == "cm_4idxc2site_2x3shc_ds"
 
 
 def test_apps_add_help_names_kinds_flags_and_the_next_action():

@@ -473,6 +473,26 @@ def run_doctor(dest: Path, spa_home: Path, skip: bool) -> None:
         )
 
 
+def list_catalog_topologies(spa_home: Path) -> List[Dict[str, str]]:
+    """Catalog topology ids and the example stem each one loads."""
+    from spa.catalog import load_features
+
+    try:
+        features = load_features(spa_home)
+    except (FileNotFoundError, ValueError, OSError):
+        return []
+    rows = []
+    for item in features:
+        if item.get("kind") != "topology":
+            continue
+        ident = item.get("id")
+        template = item.get("template")
+        if not ident or not template:
+            continue
+        rows.append({"id": str(ident), "template": str(template)})
+    return rows
+
+
 def list_examples(spa_home: Path) -> Dict[str, Any]:
     topologies = []
     providers = []
@@ -484,11 +504,27 @@ def list_examples(spa_home: Path) -> Dict[str, Any]:
     if prov_dir.is_dir():
         for path in sorted(prov_dir.glob("*.yml")):
             providers.append({"id": path.stem, "file": str(path.relative_to(spa_home))})
-    return {"topologies": topologies, "providers": providers}
+    return {
+        "catalog": list_catalog_topologies(spa_home),
+        "topologies": topologies,
+        "providers": providers,
+    }
+
+
+def format_catalog_list(rows: List[Dict[str, str]]) -> str:
+    lines = ["Catalog:"]
+    for item in rows:
+        lines.append("  %s  %s" % (item["id"], item["template"]))
+    lines.append("Apply: spa config topology ID")
+    lines.append("Create: spa init --example ID --provider aws|virtualbox NAME")
+    return "\n".join(lines)
 
 
 def format_example_list(data: Dict[str, Any]) -> str:
-    lines = ["Topologies:"]
+    lines = ["Catalog:"]
+    for item in data.get("catalog") or []:
+        lines.append("  %s  %s" % (item["id"], item["template"]))
+    lines.append("Topologies:")
     for item in data.get("topologies") or []:
         lines.append("  %s" % item["id"])
     lines.append("Providers:")
