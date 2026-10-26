@@ -1155,9 +1155,43 @@ class HostIteration(BaseModel):
     )
 
 
+class ExternalConfig(BaseModel):
+    """Bring-your-own SSH provider. Holds no settings of its own."""
+    model_config = ConfigDict(extra='forbid')
+
+
 class CustomConfig(BaseModel):
     """Custom/arbitrary settings (for ansible connection vars, etc.)."""
     model_config = ConfigDict(extra='allow')
+
+
+_PASSWORD_KEYS = (
+    "ansible_password",
+    "ansible_ssh_pass",
+    "ansible_ssh_password",
+    "ansible_become_pass",
+    "ansible_become_password",
+)
+
+
+def _drop_password_keys(mapping: Dict[str, Any]) -> bool:
+    """Remove password keys from this mapping so a validation error cannot echo them."""
+    rejected = False
+    for key in _PASSWORD_KEYS:
+        if key in mapping:
+            mapping.pop(key)
+            rejected = True
+    custom = mapping.get("custom")
+    if isinstance(custom, dict):
+        rejected = _drop_password_keys(custom) or rejected
+    return rejected
+
+
+def _copy_without_password_keys(mapping: Dict[str, Any]) -> tuple:
+    """Return a shallow copy and whether a password key was removed."""
+    copied = dict(mapping)
+    rejected = _drop_password_keys(copied)
+    return copied, rejected
 
 
 class SplunkHost(BaseModel):
@@ -1178,11 +1212,10 @@ class SplunkHost(BaseModel):
         description="Generated hostnames from a numeric range. Holds no value itself.",
     )
     
-    # Required
-    roles: List[AllowedRole] = Field(
-        ...,
-        min_length=1,
-        description="Splunk roles for this host. Required.",
+    # Required for a managed host. External hosts may omit it.
+    roles: Optional[List[AllowedRole]] = Field(
+        None,
+        description="Splunk roles for this host. Required unless the host is external. No default. Omit the key when an external host has no Splunk role.",
     )
     
     # Optional settings
@@ -1211,7 +1244,7 @@ class SplunkHost(BaseModel):
         None,
         description="Guest IPv4 when you assign it yourself. No default. Omit the key to let the provider assign the address.",
     )
-    
+
     # Host-level overrides
     splunk_version: Optional[str] = Field(
         None,
@@ -1253,13 +1286,17 @@ class SplunkHost(BaseModel):
         None,
         description="Guest OS settings for this host only. Holds no value itself.",
     )
+    external: Optional[ExternalConfig] = Field(
+        None,
+        description="Bring-your-own SSH block for this host only. Holds no value itself. No default. Set this on one host inside a terraform or virtualbox env. Omit the key when a root external: block covers every host.",
+    )
     virtualbox: Optional[VirtualBoxConfig] = Field(
         None,
         description="VirtualBox settings for this host only. Holds no value itself.",
     )
     custom: Optional[CustomConfig] = Field(
         None,
-        description="Ansible connection variables for this host only, such as ansible_user and ansible_port. No default. Omit the key when SPA provisions the host.",
+        description="Extra Ansible variables for this host only, such as ansible_port. No default. Address, user, and key for an external host belong in inventory/hosts.",
     )
     terraform: Optional[TerraformConfig] = Field(
         None,
@@ -1272,6 +1309,50 @@ class SplunkHost(BaseModel):
         if isinstance(data, dict) and "aws" in data:
             raise ValueError(DEPRECATED_AWS)
         return data
+
+    @model_validator(mode='before')
+    @classmethod
+    def coerce_host_external(cls, data: Any) -> Any:
+        """A bare ``external:`` is an empty block. ``provider`` is not a host key."""
+        if not isinstance(data, dict):
+            return data
+        if "provider" in data:
+            raise ValueError("use external: on a host. provider is not a host setting.")
+        if "external" in data and data.get("external") is None:
+            data = dict(data)
+            data["external"] = {}
+        return data
+
+    @model_validator(mode='before')
+    @classmethod
+    def strip_rejected_passwords(cls, data: Any) -> Any:
+        """Drop password keys so a rejection message cannot echo the value."""
+        if not isinstance(data, dict):
+            return data
+        if _drop_password_keys(data):
+            data["__spa_reject_password"] = True
+        return data
+
+    @model_validator(mode='after')
+    def validate_external_connection(self) -> 'SplunkHost':
+        """External hosts use a name. SSH lives in inventory/hosts. Managed hosts still need roles."""
+        extra = dict(self.__pydantic_extra__ or {})
+        rejected = bool(extra.pop("__spa_reject_password", False))
+        if "__spa_reject_password" in (self.__pydantic_extra__ or {}):
+            self.__pydantic_extra__.pop("__spa_reject_password", None)
+        if self.external is not None:
+            if self.name is None:
+                raise ValueError("external requires name, not list or iter")
+            if rejected:
+                raise ValueError("passwords are not accepted")
+            if not self.roles:
+                self.roles = []
+            return self
+        if rejected:
+            raise ValueError("passwords are not accepted")
+        if not self.roles:
+            raise ValueError("roles is required")
+        return self
 
     @model_validator(mode='after')
     def validate_host_identifier(self) -> 'SplunkHost':
@@ -1291,7 +1372,8 @@ class SplunkHost(BaseModel):
         """Ensure 'site' is only used with allowed roles."""
         if self.site is not None:
             allowed_site_roles = {AllowedRole.indexer, AllowedRole.search_head, AllowedRole.cluster_manager}
-            if not any(role in allowed_site_roles for role in self.roles):
+            roles = self.roles or []
+            if not any(role in allowed_site_roles for role in roles):
                 allowed_names = ', '.join(r.value for r in allowed_site_roles)
                 raise ValueError(f"'site' is only allowed for roles: {allowed_names}")
         return self
@@ -1299,14 +1381,14 @@ class SplunkHost(BaseModel):
     @model_validator(mode='after')
     def validate_cluster_manager_has_idxcluster(self) -> 'SplunkHost':
         """Ensure cluster_manager role has idxcluster specified."""
-        if AllowedRole.cluster_manager in self.roles and not self.idxcluster:
+        if AllowedRole.cluster_manager in (self.roles or []) and not self.idxcluster:
             raise ValueError("'idxcluster' must be specified for hosts with role 'cluster_manager'")
         return self
 
     @model_validator(mode='after')
     def validate_deployer_has_shcluster(self) -> 'SplunkHost':
         """Ensure deployer role has shcluster specified."""
-        if AllowedRole.deployer in self.roles and not self.shcluster:
+        if AllowedRole.deployer in (self.roles or []) and not self.shcluster:
             raise ValueError("'shcluster' must be specified for hosts with role 'deployer'")
         return self
 
@@ -1336,6 +1418,21 @@ def _host_label(host: SplunkHost) -> str:
     if host.iter:
         return "%s[%s]%s" % (host.iter.prefix or "", host.iter.numbers, host.iter.postfix or "")
     return "unnamed host"
+
+
+def _raw_external_only(data: Dict[str, Any]) -> bool:
+    """Root ``external:`` with no terraform provider mapping and no virtualbox."""
+    if "external" not in data:
+        return False
+    value = data.get("external")
+    if value is not None and not isinstance(value, dict):
+        return False
+    if "virtualbox" in data:
+        return False
+    terraform = data.get("terraform") or {}
+    if isinstance(terraform, dict) and any(isinstance(item, dict) for item in terraform.values()):
+        return False
+    return True
 
 
 class SplunkConfig(BaseModel):
@@ -1369,7 +1466,7 @@ class SplunkConfig(BaseModel):
     )
     custom: Optional[CustomConfig] = Field(
         None,
-        description="Ansible connection variables for hosts SPA did not provision, such as ansible_user and ansible_port. No default. Omit the block when SPA provisions the hosts.",
+        description="Extra Ansible variables merged into host vars, such as ansible_port. No default. Do not put SSH passwords or private keys here.",
     )
     os: Optional[OsConfig] = Field(
         None,
@@ -1378,6 +1475,10 @@ class SplunkConfig(BaseModel):
     virtualbox: Optional[VirtualBoxConfig] = Field(
         None,
         description="VirtualBox guest size and network for Vagrant. Holds no value itself.",
+    )
+    external: Optional[ExternalConfig] = Field(
+        None,
+        description="Bring-your-own SSH provider. Holds no value itself. No default. Set this when no terraform.aws or virtualbox block is present.",
     )
     terraform: Optional[TerraformConfig] = Field(
         None,
@@ -1439,12 +1540,84 @@ class SplunkConfig(BaseModel):
             raise ValueError(DEPRECATED_AWS)
         return data
 
+    @model_validator(mode='before')
+    @classmethod
+    def coerce_external_blocks(cls, data: Any) -> Any:
+        """A bare ``external:`` selects the provider. An external-only env covers every host."""
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        if "external" in data and data.get("external") is None:
+            data["external"] = {}
+        hosts = data.get("splunk_hosts")
+        if not isinstance(hosts, list):
+            return data
+        external_only = _raw_external_only(data)
+        copied = []
+        for host in hosts:
+            if not isinstance(host, dict):
+                copied.append(host)
+                continue
+            host = dict(host)
+            if external_only and "external" not in host:
+                host["external"] = {}
+            elif "external" in host and host.get("external") is None:
+                host["external"] = {}
+            copied.append(host)
+        data["splunk_hosts"] = copied
+        return data
+
     @field_validator('plugin')
     @classmethod
     def validate_plugin_name(cls, v: str) -> str:
         if v != 'splunk-platform-automator':
             raise ValueError(f"Invalid plugin: '{v}'. Must be 'splunk-platform-automator'")
         return v
+
+    @model_validator(mode='before')
+    @classmethod
+    def strip_root_passwords(cls, data: Any) -> Any:
+        """Drop password keys from the root custom block without mutating the caller."""
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        custom = data.get("custom")
+        if isinstance(custom, dict):
+            custom, rejected = _copy_without_password_keys(custom)
+            data["custom"] = custom
+            if rejected:
+                data["__spa_reject_password"] = True
+        return data
+
+    @model_validator(mode='after')
+    def reject_root_passwords(self) -> 'SplunkConfig':
+        extra = self.__pydantic_extra__ or {}
+        if extra.pop("__spa_reject_password", False):
+            raise ValueError("passwords are not accepted")
+        return self
+
+    @model_validator(mode='after')
+    def validate_external_env(self) -> 'SplunkConfig':
+        """External-only envs need the root block and cannot also name a managed provider."""
+        hosts = self.splunk_hosts or []
+        if not hosts or not all(host.external is not None for host in hosts):
+            return self
+        managed = self.virtualbox is not None or (
+            self.terraform is not None
+            and (
+                self.terraform.aws is not None
+                or bool(self.terraform.__pydantic_extra__)
+            )
+        )
+        if managed and self.external is not None:
+            raise ValueError("an external-only env cannot also set terraform or virtualbox")
+        if managed:
+            raise ValueError("a mixed env needs at least one host without external:")
+        if self.external is None:
+            raise ValueError(
+                "external hosts require a root external: block when terraform.aws and virtualbox are absent"
+            )
+        return self
 
     @model_validator(mode='after')
     def validate_deployer_requires_shc(self) -> 'SplunkConfig':

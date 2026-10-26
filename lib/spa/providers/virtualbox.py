@@ -13,7 +13,6 @@ from spa.paths import SpaPaths
 from spa.providers import (
     ProviderError,
     ProvisionState,
-    expected_hostnames,
     inventory_hostnames_from_file,
     load_deployment_config,
 )
@@ -21,6 +20,15 @@ from spa.runlog import PROVIDER_SOURCE, VAGRANT_GROUP
 
 _RUNNING = frozenset({"running"})
 _ABSENT = frozenset({"not_created", "not created"})
+
+
+def owned_machine_names(states: Dict[str, str]) -> set:
+    """Vagrant names that exist. ``not_created`` is not an owned machine."""
+    return {
+        name
+        for name, state in (states or {}).items()
+        if name and state not in _ABSENT
+    }
 
 
 def parse_machine_readable_status(text: str) -> Dict[str, str]:
@@ -250,10 +258,19 @@ class Provider:
         return result.returncode
 
     def provision_state(self) -> ProvisionState:
-        expected = expected_hostnames(load_deployment_config(self.paths))
+        from spa.providers.classify import classify_hostnames
+
+        document = load_deployment_config(self.paths)
+        managed, external = classify_hostnames(document)
         inventory = set(inventory_hostnames_from_file(self.paths))
-        missing_inv = tuple(sorted(set(expected) - inventory))
+        missing_external = tuple(name for name in external if name not in inventory)
+        missing_managed_inv = tuple(name for name in managed if name not in inventory)
+        missing_inv = missing_managed_inv + missing_external
         hint = "spa provision --yes"
+        if not missing_managed_inv and missing_external:
+            from spa.providers.external import _register_sentence
+
+            hint = _register_sentence(missing_external[0]).split("Run: ", 1)[-1]
         try:
             states = self._machine_states()
         except ProviderError:
@@ -263,7 +280,7 @@ class Provider:
             missing_vm = tuple(
                 sorted(
                     name
-                    for name in expected
+                    for name in managed
                     if states.get(name, "not_created") in _ABSENT
                 )
             )

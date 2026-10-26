@@ -32,7 +32,7 @@ plugin: splunk-platform-automator
 | --- | --- | --- | --- |
 | `general` | object | optional | Settings for the lab index page written after deploy. Holds no value itself. |
 | `general.url_locale` | string | optional; default='en-GB'; pattern=^[a-z]{2}[_-][A-Z]{2}$ | Language segment in the Splunk Web links on the lab index page, such as en-GB. |
-| `custom` | CustomConfig | optional | Ansible connection variables for hosts SPA did not provision, such as ansible_user and ansible_port. No default. Omit the block when SPA provisions the hosts. |
+| `custom` | CustomConfig | optional | Extra Ansible variables merged into host vars, such as ansible_port. No default. Do not put SSH passwords or private keys here. |
 
 ### Snippets
 
@@ -51,13 +51,11 @@ general:
 
 `custom`
 
-Bring-your-own hosts (SSH already works; SPA did not provision them). Sets ansible_user, ansible_port, ansible_ssh_private_key_file, and similar connection variables for the inventory. Per-host custom: under splunk_hosts[].custom. Not a substitute for terraform.aws.ssh_username on AWS-provisioned labs.
+Extra Ansible variables, such as ansible_port. External hosts do not store the address, user, or key in splunk_config.yml. Register them with spa hosts register; those values are written only to inventory/hosts.
 
 ```yaml
 custom:
-  ansible_user: ansible
-  ansible_port: 22
-  ansible_ssh_private_key_file: ~/.ssh/ansible_id_rsa
+  ansible_port: 2222
 ```
 
 ## OS
@@ -131,6 +129,7 @@ os:
 | `virtualbox.synced_folder` | list[object] | optional | Folders mounted from the Ansible controller into the guest. Holds no value itself. |
 | `virtualbox.synced_folder[].source` | string | required | Path on the Ansible controller to mount into the guest. Required. |
 | `virtualbox.synced_folder[].target` | string | required | Path inside the guest where the controller folder is mounted. Required. |
+| `external` | ExternalConfig | optional | Bring-your-own SSH provider. Holds no value itself. No default. Set this when no terraform.aws or virtualbox block is present. |
 
 ### Snippets
 
@@ -531,7 +530,8 @@ splunk_systemd: {}
 | --- | --- | --- | --- |
 | `splunk_hosts` | list[object] | required; min_length=1 | Hosts that spa provision and spa deploy act on. Holds no value itself. |
 | `splunk_hosts[].cname` | string | optional | DNS alias published for this host. No default. Omit the key to publish none. |
-| `splunk_hosts[].custom` | CustomConfig | optional | Ansible connection variables for this host only, such as ansible_user and ansible_port. No default. Omit the key when SPA provisions the host. |
+| `splunk_hosts[].custom` | CustomConfig | optional | Extra Ansible variables for this host only, such as ansible_port. No default. Address, user, and key for an external host belong in inventory/hosts. |
+| `splunk_hosts[].external` | ExternalConfig | optional | Bring-your-own SSH block for this host only. Holds no value itself. No default. Set this on one host inside a terraform or virtualbox env. Omit the key when a root external: block covers every host. |
 | `splunk_hosts[].idxcluster` | string | optional | Indexer cluster name. Required when roles includes cluster_manager. No default for other roles. Omit the key when the host is not in an indexer cluster. Also associates indexer peers with that cluster. |
 | `splunk_hosts[].ip_addr` | string | optional | Guest IPv4 when you assign it yourself. No default. Omit the key to let the provider assign the address. |
 | `splunk_hosts[].iter` | object | optional | Generated hostnames from a numeric range. Holds no value itself. |
@@ -552,7 +552,7 @@ splunk_systemd: {}
 | `splunk_hosts[].os.ssh_keys` | list[string] | optional; default=[] | Per-host override of `os.ssh_keys`: Public key files on the Ansible controller, appended to the login user's authorized_keys. |
 | `splunk_hosts[].os.time_zone` | string | optional | Per-host override of `os.time_zone`: IANA time zone set on the guest. Default is the Ansible controller's zone. Omit the key to keep that. |
 | `splunk_hosts[].os.update_hosts_file` | boolean | optional; default=True | Per-host override of `os.update_hosts_file`: When true, write every lab host into /etc/hosts. |
-| `splunk_hosts[].roles` | list[enum] | required; allowed=cluster_manager\|deployer\|deployment_server\|heavy_forwarder\|indexer\|license_manager\|monitoring_console\|search_head\|universal_forwarder\|universal_forwarder_windows; min_length=1 | Splunk roles for this host. Required. Windows UF is a schema role; VirtualBox Windows images are not a documented lab. |
+| `splunk_hosts[].roles` | list[enum] | optional; allowed=cluster_manager\|deployer\|deployment_server\|heavy_forwarder\|indexer\|license_manager\|monitoring_console\|search_head\|universal_forwarder\|universal_forwarder_windows | Splunk roles for this host. Required unless the host is external. No default. Omit the key when an external host has no Splunk role. Windows UF is a schema role; VirtualBox Windows images are not a documented lab. |
 | `splunk_hosts[].shcluster` | string | optional | Search head cluster name. Required when roles includes deployer. No default for other roles. Omit the key when the host is not in a search head cluster. Also associates search heads with that cluster. |
 | `splunk_hosts[].site` | string | optional; pattern=^site\d+$ | Multisite label such as site1. Allowed only for indexer, search_head, or cluster_manager. No default. Omit the key for a single-site lab. |
 | `splunk_hosts[].splunk_admin_password` | string | optional | Per-host override of splunk_defaults.splunk_admin_password. No default. Omit the key to inherit the global password. Use an env lookup when you set it. |

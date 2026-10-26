@@ -12,9 +12,12 @@ TOPOLOGY_HELP = (
     "Example: spa config topology cm_2idxc_sh_uf"
 )
 PROVIDER_HELP = (
-    "aws or virtualbox, or a provider feature id. "
+    "aws, virtualbox, or external, or a provider feature id. "
     "List them: spa init list. "
     "Example: spa config provider aws"
+)
+INIT_PROVIDER_HELP = (
+    "Provider example: aws, virtualbox, or external (default: aws, or providers.yml)"
 )
 SET_PATH_HELP = (
     "A config path. Find one: spa config search QUERY. "

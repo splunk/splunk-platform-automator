@@ -211,7 +211,6 @@ HELP_CONTRACTS = [
             "-y",
             "--yes",
             "--hosts",
-            "--allow-unprovisioned",
             "--ansible-output",
             "-v",
             "required in agent mode",
@@ -247,7 +246,7 @@ HELP_CONTRACTS = [
     ),
     (
         ["hosts", "--help"],
-        ["usage: spa hosts", "ACTION", "list", "ssh", "copy", "spa hosts list [--status]"],
+        ["usage: spa hosts", "ACTION", "list", "ssh", "copy", "register", "unregister", "check", "spa hosts check"],
     ),
     (
         ["hosts", "list", "--help"],
@@ -266,6 +265,20 @@ HELP_CONTRACTS = [
             "HOST:PATH",
             "spa hosts copy app.tgz idx1:/tmp/",
         ],
+    ),
+    (
+        ["hosts", "register", "--help"],
+        [
+            "IP, hostname, or FQDN. Must be reachable by SSH.",
+            "--address",
+            "--user",
+            "--key",
+            "--role",
+        ],
+    ),
+    (
+        ["hosts", "check", "--help"],
+        ["spa deploy", "Does not deploy", "--hosts"],
     ),
     (
         ["shell", "--help"],
@@ -320,6 +333,12 @@ HELP_CONTRACTS = [
         ],
     ),
 ]
+
+
+def test_hosts_ping_names_check():
+    result = run_spa(["--no-agent", "hosts", "ping"])
+    assert result.returncode == 2
+    assert "spa hosts check" in result.stderr
 
 
 @pytest.mark.parametrize(
@@ -957,7 +976,12 @@ def test_agent_schema_is_complete_and_documented():
 
     bare_parents = {
         "config": ("spa config search QUERY", "spa config explain PATH", "spa config get [PATH]"),
-        "hosts": ("spa hosts list", "spa hosts ssh NAME", "spa hosts copy SRC DST"),
+        "hosts": (
+            "spa hosts list",
+            "spa hosts ssh NAME",
+            "spa hosts copy SRC DST",
+            "spa hosts register NAME --address ADDRESS --user USER --key PATH --yes",
+        ),
         "apps": ("spa apps search QUERY", "spa apps snippet APP_ID", "spa apps download APP_ID --yes"),
         "environment": (
             "spa environment list",

@@ -29,6 +29,7 @@ tags = {{ terraform.aws.tags | default(default_config.terraform.aws.tags | defau
 host_configs = {
 {% set ns = namespace(count=0) %}
 {% for host in splunk_hosts %}
+{%   if host.external is not defined %}
 {%   if host.name is defined %}
 {%     set ns.count = ns.count + 1 %}
 {%   elif host.list is defined %}
@@ -39,9 +40,11 @@ host_configs = {
 {%     set end_num = range_parts[1] %}
 {%     set ns.count = ns.count + (end_num | int - start_num | int + 1) %}
 {%   endif %}
+{%   endif %}
 {% endfor %}
 {% set ns2 = namespace(current=0) %}
 {% for host in splunk_hosts %}
+{%   if host.external is not defined %}
 {%   if host.name is defined %}
 {%     set hostnames = [host.name] %}
 {%   elif host.list is defined %}
@@ -104,6 +107,7 @@ host_configs = {
 {% endif %}
   }{{ "" if ns2.current == ns.count else "," }}
 {%   endfor %}
+{%   endif %}
 {% endfor %}
 }
 

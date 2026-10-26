@@ -14,10 +14,32 @@ from spa.playbooks import resolve, run_playbook
 from spa.providers import (
     ProviderError,
     ProvisionState,
-    expected_hostnames,
     inventory_hostnames_from_file,
     load_deployment_config,
 )
+
+
+def terraform_instance_names(state_path: Path) -> set:
+    """Names still present as aws_instance.splunk index keys. Unreadable state is empty."""
+    if not state_path.is_file():
+        return set()
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return set()
+    names = set()
+    resources = payload.get("resources") if isinstance(payload, dict) else None
+    if not isinstance(resources, list):
+        return set()
+    for resource in resources:
+        if not isinstance(resource, dict):
+            continue
+        if resource.get("type") != "aws_instance" or resource.get("name") != "splunk":
+            continue
+        for instance in resource.get("instances") or []:
+            if isinstance(instance, dict) and instance.get("index_key"):
+                names.add(str(instance["index_key"]))
+    return names
 
 
 class Provider:
@@ -48,40 +70,49 @@ class Provider:
         return rc
 
     def provision_state(self) -> ProvisionState:
-        """Offline: Terraform state plus every config hostname in inventory/hosts."""
-        expected = expected_hostnames(load_deployment_config(self.paths))
+        """Offline: Terraform state for managed hosts, inventory lines for every host."""
+        from spa.providers.classify import classify_hostnames
+
+        document = load_deployment_config(self.paths)
+        managed, external = classify_hostnames(document)
         inventory = set(inventory_hostnames_from_file(self.paths))
-        missing = tuple(sorted(set(expected) - inventory))
+        missing_external = tuple(name for name in external if name not in inventory)
         hint_provision = "spa provision --yes"
         hint_resume = "spa provision --yes (spa resume --yes if instances are stopped)"
         state_path = self.state_dir / "terraform.tfstate"
-        if not state_path.is_file():
+
+        def blocked(reason: str, missing: tuple, hint: str) -> ProvisionState:
             return ProvisionState(
                 provider=self.name,
                 provisioned=False,
-                reason="No Terraform state for this AWS env: %s" % self.state_dir,
-                hint=hint_provision,
-                missing=tuple(sorted(expected)),
+                reason=reason,
+                hint=hint,
+                missing=missing,
+            )
+
+        if not state_path.is_file():
+            return blocked(
+                "No Terraform state for this AWS env: %s" % self.state_dir,
+                tuple(managed) + missing_external,
+                hint_provision,
             )
         try:
             payload = json.loads(state_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-            return ProvisionState(
-                provider=self.name,
-                provisioned=False,
-                reason="Cannot read Terraform state: %s" % state_path,
-                hint=hint_provision,
-                missing=tuple(sorted(expected)),
+            return blocked(
+                "Cannot read Terraform state: %s" % state_path,
+                tuple(managed) + missing_external,
+                hint_provision,
             )
         resources = payload.get("resources") if isinstance(payload, dict) else None
         if not isinstance(resources, list) or not resources:
-            return ProvisionState(
-                provider=self.name,
-                provisioned=False,
-                reason="Terraform state has no resources: %s" % state_path,
-                hint=hint_provision,
-                missing=tuple(sorted(expected)),
+            return blocked(
+                "Terraform state has no resources: %s" % state_path,
+                tuple(managed) + missing_external,
+                hint_provision,
             )
+        missing_managed = tuple(name for name in managed if name not in inventory)
+        missing = missing_managed + missing_external
         if missing:
             shown = list(missing)
             extra = ""
@@ -89,12 +120,15 @@ class Provider:
             if len(shown) > cap:
                 extra = ", +%d more" % (len(shown) - cap)
                 shown = shown[:cap]
-            return ProvisionState(
-                provider=self.name,
-                provisioned=False,
-                reason="hosts not in inventory: %s%s" % (", ".join(shown), extra),
-                hint=hint_resume,
-                missing=missing,
+            hint = hint_resume
+            if not missing_managed and missing_external:
+                from spa.providers.external import _register_sentence
+
+                hint = _register_sentence(missing_external[0]).split("Run: ", 1)[-1]
+            return blocked(
+                "hosts not in inventory: %s%s" % (", ".join(shown), extra),
+                missing,
+                hint,
             )
         return ProvisionState(provider=self.name, provisioned=True)
 

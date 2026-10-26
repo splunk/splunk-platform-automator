@@ -70,11 +70,39 @@ def is_old_clone_tree(root: Path) -> bool:
 
 
 def ensure_env_dirs(dest: Path) -> None:
-    for rel in ("config", "inventory", "terraform/aws"):
+    for rel in ("config", "inventory"):
         (dest / rel).mkdir(parents=True, exist_ok=True)
     hosts = dest / "inventory" / "hosts"
     if not hosts.exists():
         hosts.write_text("", encoding="utf-8")
+
+
+def _config_has_terraform(dest: Path) -> bool:
+    cfg = dest / "config" / "splunk_config.yml"
+    if not cfg.is_file():
+        return False
+    try:
+        data = _load_yaml_mapping(cfg)
+    except InitError:
+        return False
+    terraform = data.get("terraform")
+    return isinstance(terraform, dict) and any(isinstance(value, dict) for value in terraform.values())
+
+
+def _tree_has_terraform_state(root: Path) -> bool:
+    return (root / "terraform" / "aws" / "terraform.tfstate").is_file()
+
+
+def _bare_external_keys(text: str) -> str:
+    """``external:`` is enough. An empty mapping or null is the same block."""
+    import re
+
+    return re.sub(
+        r"^([ \t]*)external:[ \t]+(?:\{\}|null)[ \t]*$",
+        r"\1external:",
+        text,
+        flags=re.M,
+    )
 
 
 def _first_existing(*candidates: Path) -> str:
@@ -224,6 +252,12 @@ def migrate_state(
                 pass
     src_tf = src / "terraform" / "aws"
     dest_tf = dest / "terraform" / "aws"
+    keep_links = (
+        _tree_has_terraform_state(src)
+        or _tree_has_terraform_state(dest)
+        or _config_has_terraform(src)
+        or _config_has_terraform(dest)
+    )
     for name in (
         "terraform.tfvars",
         "terraform.tfstate",
@@ -239,7 +273,8 @@ def migrate_state(
     src_vagrant = src / ".vagrant"
     if src_vagrant.exists():
         transfer_path(src_vagrant, dest / ".vagrant", keep_source)
-    link_terraform_modules(dest, spa_home)
+    if keep_links:
+        link_terraform_modules(dest, spa_home)
     drop_inventory_group_vars_link(dest)
     write_spa_yml(dest, spa_home, **(yml_opts or {}))
 
@@ -459,7 +494,7 @@ def format_example_list(data: Dict[str, Any]) -> str:
     lines.append("Providers:")
     for item in data.get("providers") or []:
         lines.append("  %s" % item["id"])
-    lines.append("Compose: spa init --example TOPOLOGY [--provider aws|virtualbox] NAME")
+    lines.append("Compose: spa init --example TOPOLOGY [--provider aws|virtualbox|external] NAME")
     return "\n".join(lines)
 
 
@@ -556,9 +591,9 @@ def dump_splunk_config(data: Dict[str, Any]) -> str:
         raise InitError("PyYAML is required to compose examples")
     from spa.catalog import format_config_text, order_config_roots
 
-    return format_config_text(
+    return _bare_external_keys(format_config_text(
         yaml.safe_dump(order_config_roots(data), sort_keys=False, default_flow_style=False)
-    )
+    ))
 
 
 def _provider_ami_comment(provider_text: str) -> Optional[str]:
@@ -749,7 +784,8 @@ def _init_env(
             # refresh pointer files only; do not copy config from source over dest
             ensure_env_dirs(dest)
             _write()
-            link_terraform_modules(dest, spa_home)
+            if _config_has_terraform(dest) or _tree_has_terraform_state(dest):
+                link_terraform_modules(dest, spa_home)
             create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
             run_doctor(dest, spa_home, skip_doctor)
             _say("Refreshed env pointer files at %s (splunk_config.yml kept)" % dest)
@@ -783,18 +819,20 @@ def _init_env(
     if force and (has_config(dest) or is_spa_env(dest)):
         ensure_env_dirs(dest)
         _write()
-        link_terraform_modules(dest, spa_home)
+        if _config_has_terraform(dest) or _tree_has_terraform_state(dest):
+            link_terraform_modules(dest, spa_home)
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
         run_doctor(dest, spa_home, skip_doctor)
         _say("Refreshed env at %s (splunk_config.yml kept)" % dest)
         return 0
 
-    # Fresh env, default topology + VirtualBox (same as former single_node.yml)
+    # Fresh env. Default topology is single_node. --provider wins; otherwise
+    # the default is aws, or default in ~/.config/spa/providers.yml.
     if config_dest.exists() or (dest / ".spa.yml").exists():
         raise InitError("Env already exists (%s). Use --force to refresh .spa.yml." % dest)
     ensure_env_dirs(dest)
     topology_id, provider_id = write_composed_config(
-        config_dest, spa_home, "single_node", "virtualbox"
+        config_dest, spa_home, example or "single_node", provider
     )
     _write()
     create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)

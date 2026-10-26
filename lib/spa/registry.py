@@ -34,6 +34,7 @@ PROVIDER_ALIASES = {
     "virtualbox": "virtualbox",
     "vbox": "virtualbox",
     "vb": "virtualbox",
+    "external": "external",
 }
 
 
@@ -215,7 +216,7 @@ def canonicalize_provider(value: Optional[str]) -> str:
         return DEFAULT_PROVIDER
     if raw not in PROVIDER_ALIASES:
         raise RegistryError(
-            "Unknown provider %r (use aws or virtualbox)" % value
+            "Unknown provider %r (use aws, virtualbox, or external)" % value
         )
     return PROVIDER_ALIASES[raw]
 

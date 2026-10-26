@@ -32,7 +32,7 @@ Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 | Host tools | `spa doctor` |
 | Validate | `spa validate` |
 | Provision + deploy | `spa provision --yes && spa deploy --yes` |
-| Deploy only | `spa deploy --yes` (`--hosts`; `--allow-unprovisioned` only if the operator asked) |
+| Deploy only | `spa deploy --yes` (`--hosts` checks only those hosts) |
 | Run a playbook | `spa run list` / `NAME --help` / `--yes` |
 | Run logs | `spa logs list` / `spa logs RUN_ID` / `spa logs --last` (open `data.log` only when debugging a failure). Do not pass `-v` (unredacted Ansible stdout). |
 | Power | `spa suspend --yes` / `spa resume --yes` |

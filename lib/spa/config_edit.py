@@ -48,7 +48,7 @@ _APP_IDENTITY_LISTS = {
     ("splunk_app_deployment", "apps"),
     ("splunk_app_deployment", "apps", "content_pack_apps"),
 }
-_PROVIDER_ROOTS = ("terraform", "virtualbox", "aws")
+_PROVIDER_ROOTS = ("terraform", "virtualbox", "aws", "external")
 _TOPOLOGY_ROOTS = ("splunk_hosts", "splunk_idxclusters", "splunk_shclusters", "splunk_environments")
 _MISSING = object()
 
@@ -1330,6 +1330,23 @@ def config_topology(
     return result
 
 
+def _inventory_names(env_dir: Path) -> set:
+    """Host names already present in inventory/hosts."""
+    path = env_dir / "inventory" / "hosts"
+    if not path.is_file():
+        return set()
+    names = set()
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return set()
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            names.add(stripped.split()[0])
+    return names
+
+
 def config_provider(
     config_path: Path,
     spa_home: Path,
@@ -1355,17 +1372,45 @@ def config_provider(
         provider = str(feature["template"])
     _, provider_id = resolve_example_pair(Path(spa_home), "single_node", provider)
     example = _load_yaml_mapping(Path(spa_home) / "examples" / "providers" / ("%s.yml" % provider_id))
+    env_dir = Path(config_path).resolve().parent.parent
+    if provider_id == "external" and (
+        (env_dir / "terraform" / "aws" / "terraform.tfstate").is_file()
+        or (env_dir / ".vagrant").exists()
+    ):
+        raise ConfigEditError(
+            "Terraform or Vagrant state still exists. Run spa destroy --yes before switching this env to external."
+        )
 
     def mutate(document: MutableMapping[str, Any], warnings: List[str]) -> None:
         for key in _PROVIDER_ROOTS:
             document.pop(key, None)
+        registered = _inventory_names(env_dir)
+        if provider_id == "external":
+            from spa.providers.external import _register_sentence
+
+            document["external"] = None
+            for host in document.get("splunk_hosts") or []:
+                if not isinstance(host, dict) or not host.get("name"):
+                    continue
+                name = str(host["name"])
+                if name not in registered:
+                    warnings.append(_register_sentence(name))
+            return
+        for host in document.get("splunk_hosts") or []:
+            if not isinstance(host, dict):
+                continue
+            if str(host.get("name") or "") in registered:
+                continue
+            host.pop("external", None)
+            host.pop("provider", None)
         for key, value in example.items():
             if key != "plugin" and value is not None:
                 document[key] = copy.deepcopy(value)
 
     result = _transact(
         Path(config_path), Path(spa_home), mutate,
-        dry_run=dry_run, expect_revision=expect_revision, validate=validate,
+        dry_run=dry_run, expect_revision=expect_revision,
+        validate=False if provider_id == "external" else validate,
         resolve=resolve, resolve_file=resolve_file, stdin_text=stdin_text,
     )
     result["provider"] = provider_id

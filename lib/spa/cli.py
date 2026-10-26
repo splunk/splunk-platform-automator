@@ -21,6 +21,7 @@ from spa.paths import env_dir_required_error, resolve_spa_paths
 from spa.usage import (
     APP_ID_HELP,
     MISSING_OPERAND,
+    INIT_PROVIDER_HELP,
     PROVIDER_HELP,
     SELECTOR_HELP,
     SET_PATH_HELP,
@@ -284,7 +285,10 @@ HOSTS_NEEDS_ACTION = (
     "spa hosts needs an action.\n"
     "List hosts: spa hosts list [--status]\n"
     "SSH:        spa hosts ssh NAME\n"
-    "Copy:       spa hosts copy SRC DST"
+    "Copy:       spa hosts copy SRC DST\n"
+    "Register:   spa hosts register NAME --address ADDRESS --user USER --key PATH --yes\n"
+    "Unregister: spa hosts unregister NAME --yes\n"
+    "Check:      spa hosts check"
 )
 LOGS_NEEDS_RUN = (
     "spa logs needs a run.\n"
@@ -735,7 +739,7 @@ def _add_init_arguments(parser) -> None:
     parser.add_argument(
         "--provider",
         metavar="NAME",
-        help="Provider example: aws or virtualbox (default: aws, or providers.yml)",
+        help=INIT_PROVIDER_HELP,
     )
     parser.add_argument("--from", dest="from_dir", metavar="DIR", help="Migrate an existing SPA environment")
     parser.add_argument("--migrate", action="store_true", help="Migrate the source environment into ENV_DIR")
@@ -1090,6 +1094,8 @@ def _run(argv: Sequence[str]) -> int:
                     message = "spa config --markdown requires: spa config schema --markdown"
                 elif "--status" in message or message.rstrip().endswith("-s"):
                     message = HOSTS_NEEDS_ACTION
+            elif "invalid choice" in message and "'ping'" in message and self.prog.rstrip().endswith("hosts"):
+                message = "spa hosts check"
             elif "invalid choice" in message and ("'features'" in message or "'feat'" in message):
                 message = FEATURES_REMOVED
             elif "invalid choice" in message and self.prog.rstrip().endswith("completion"):
@@ -1714,7 +1720,7 @@ def _run(argv: Sequence[str]) -> int:
         "--provider",
         dest="set_provider",
         metavar="NAME",
-        help="Default provider for init (aws is implicit; virtualbox writes providers.yml)",
+        help="Default provider for init: aws, virtualbox, or external (aws is implicit; any other value is saved in providers.yml)",
     )
     p_env_remove = _add_action(
         env_sub,
@@ -1756,12 +1762,6 @@ def _run(argv: Sequence[str]) -> int:
         action="store_true",
         default=argparse.SUPPRESS,
         help="Confirm deploy (required in agent mode)",
-    )
-    p_deploy.add_argument(
-        "--allow-unprovisioned",
-        action="store_true",
-        help="Skip the check that every config host is in inventory "
-        "(e.g. spa deploy --yes --hosts idx1 --allow-unprovisioned)",
     )
     _add_hosts_option(p_deploy)
     _add_env_selector(p_deploy)
@@ -1888,6 +1888,67 @@ def _run(argv: Sequence[str]) -> int:
     )
     # Python 3.11 marks REMAINDER positionals required. The copy action checks the count.
     copy_paths.required = False
+
+    p_hosts_register = _add_action(
+        hosts_sub,
+        "register",
+        help="Register an existing Linux host over SSH",
+    )
+    _add_mode_flags(p_hosts_register)
+    p_hosts_register.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Confirm register",
+    )
+    p_hosts_register.add_argument("name", help="Inventory hostname")
+    p_hosts_register.add_argument(
+        "--address",
+        required=True,
+        help="IP, hostname, or FQDN. Must be reachable by SSH.",
+    )
+    p_hosts_register.add_argument("--user", required=True, help="SSH login user")
+    p_hosts_register.add_argument("--key", required=True, help="Path to the SSH private key")
+    p_hosts_register.add_argument("--port", type=int, default=22, help="SSH port")
+    p_hosts_register.add_argument(
+        "--role",
+        action="append",
+        default=[],
+        choices=[
+            "cluster_manager",
+            "deployer",
+            "deployment_server",
+            "heavy_forwarder",
+            "indexer",
+            "license_manager",
+            "monitoring_console",
+            "search_head",
+            "universal_forwarder",
+            "universal_forwarder_windows",
+        ],
+        help="Splunk role. Repeat to add more. Omit to leave roles unchanged or unset.",
+    )
+    p_hosts_unregister = _add_action(
+        hosts_sub,
+        "unregister",
+        help="Remove one external host from inventory. The config entry stays.",
+    )
+    _add_mode_flags(p_hosts_unregister)
+    p_hosts_unregister.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Confirm unregister",
+    )
+    p_hosts_unregister.add_argument("name", help="Inventory hostname")
+    p_hosts_check = _add_action(
+        hosts_sub,
+        "check",
+        help="Ansible ping with become to root, then compare splunk_architecture with the host. The check spa deploy runs. Does not deploy.",
+        description="Ansible ping with become to root, then compare splunk_architecture with the host. The check spa deploy runs. Does not deploy.",
+    )
+    _add_mode_flags(p_hosts_check)
+    _add_hosts_option(p_hosts_check)
 
     # Flags for these are parsed by the wrapped tool (see _split_native).
     _add_command(
@@ -2396,6 +2457,8 @@ def _run(argv: Sequence[str]) -> int:
             return _emit_result(result, True)
         if result.error:
             print(result.error, file=sys.stderr)
+        elif (result.data or {}).get("note"):
+            print(result.data["note"])
         return result.code
 
     if args.command == "deploy":
@@ -2406,7 +2469,6 @@ def _run(argv: Sequence[str]) -> int:
             hosts=getattr(args, "hosts", None),
             confirm=args.yes,
             agent=as_agent,
-            skip_provision_check=bool(getattr(args, "allow_unprovisioned", False)),
             ansible_output=_want_ansible_output(args),
             native_output=_want_native_output(args),
             verbosity=_verbosity(args),
@@ -2414,8 +2476,11 @@ def _run(argv: Sequence[str]) -> int:
             color=_transcript_color(args),
         )
         if as_agent:
+            if isinstance(result.data, dict):
+                result.data.pop("host_check_reported", None)
             return _emit_result(result, True)
-        if result.error:
+        reported = bool((result.data or {}).get("host_check_reported"))
+        if result.error and not reported:
             print(result.error, file=sys.stderr)
         return result.code
 
@@ -2574,6 +2639,51 @@ def _run(argv: Sequence[str]) -> int:
                 return 1
             except SystemExit as exc:
                 return exc.code if isinstance(exc.code, int) else 1
+            return 0
+        if hosts_cmd == "register":
+            result = session.hosts_register(
+                name=args.name,
+                address=args.address,
+                user=args.user,
+                key=args.key,
+                port=args.port,
+                roles=getattr(args, "role", None),
+                confirm=bool(getattr(args, "yes", False)),
+                agent=as_agent,
+            )
+            if as_agent:
+                return _emit_result(result, True)
+            if result.error:
+                print(result.error, file=sys.stderr)
+                return result.code
+            data = result.data or {}
+            print(
+                "registered %s ansible_host=%s user=%s key=%s"
+                % (data.get("name"), data.get("ansible_host"), data.get("ansible_user"), data.get("key"))
+            )
+            return 0
+        if hosts_cmd == "unregister":
+            result = session.hosts_unregister(
+                args.name,
+                confirm=bool(getattr(args, "yes", False)),
+                agent=as_agent,
+            )
+            if as_agent:
+                return _emit_result(result, True)
+            if result.error:
+                print(result.error, file=sys.stderr)
+                return result.code
+            print("unregistered %s" % args.name)
+            return 0
+        if hosts_cmd == "check":
+            result = session.hosts_check(hosts=getattr(args, "hosts", None))
+            if as_agent:
+                return _emit_result(result, True)
+            if result.error:
+                print(result.error, file=sys.stderr)
+                return result.code
+            for row in (result.data or {}).get("hosts") or []:
+                print("%s %s" % (row.get("name"), "ok" if row.get("ok") else "failed"))
             return 0
         parser.print_help()
         return 1

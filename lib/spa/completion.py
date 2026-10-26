@@ -107,7 +107,6 @@ _BOOLEAN = frozenset(
         "--overwrite",
         "--no-install",
         "--no-wait",
-        "--allow-unprovisioned",
         "--ansible-output",
         "--timestamps",
         "--color",
@@ -477,7 +476,7 @@ def _catalog_values(kind: str, config: Optional[Mapping[str, Any]], paths: Any) 
         key = "providers" if kind == "providers" else "topologies"
         values = [str(item.get("id")) for item in data.get(key) or [] if item.get("id")]
         if kind == "providers":
-            values.extend(["aws", "virtualbox"])
+            values.extend(["aws", "external", "virtualbox"])
         return values
     if kind == "run list":
         from spa.paths import resolve_spa_paths

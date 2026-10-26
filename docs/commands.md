@@ -10,7 +10,7 @@ and `spa run NAME --help`.
 
 ## `init`
 
-Alias of spa environment init (spa init --example TOPOLOGY [--provider aws|virtualbox] NAME)
+Alias of spa environment init (spa init --example TOPOLOGY [--provider aws|virtualbox|external] NAME)
 
 ## `init list`
 
@@ -246,7 +246,7 @@ Replace provider-owned config sections from an example template
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `PROVIDER` | yes | aws or virtualbox, or a provider feature id. List them: spa init list. Example: spa config provider aws |
+| `PROVIDER` | yes | aws, virtualbox, or external, or a provider feature id. List them: spa init list. Example: spa config provider aws |
 
 Example:
 
@@ -445,7 +445,7 @@ Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Plat
 | Flag | Description |
 | --- | --- |
 | `--example` | Topology example id |
-| `--provider` | aws or virtualbox (default aws, or providers.yml) |
+| `--provider` | Provider example: aws, virtualbox, or external (default: aws, or providers.yml) |
 | `--env-dir` | One-off parent (requires --name); does not change the default parent |
 | `--name` | Registry name (default: folder basename) |
 | `--force` | Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example) |
@@ -478,7 +478,7 @@ User-level defaults in paths.yml (env parent, Software, baseconfig, apps) and pr
 | `--baseconfig-dir` | PS baseconfig apps directory |
 | `--apps-dir` | Local apps directory |
 | `--default` | Registered environment used when cwd does not select one |
-| `--provider` | Default provider (aws\|virtualbox) |
+| `--provider` | Default provider for init: aws, virtualbox, or external |
 
 Example:
 
@@ -537,7 +537,7 @@ spa provision --yes && spa deploy --yes
 
 ## `deploy`
 
-Deploy Splunk (deploy_site.yml); requires Software/baseconfig and local app sources
+Deploy Splunk (deploy_site.yml). After you confirm, ping with become before the playbook. Requires Software/baseconfig and local app sources
 
 Requires confirmation: yes (`--yes`).
 
@@ -545,7 +545,6 @@ Requires confirmation: yes (`--yes`).
 | --- | --- |
 | `-y`, `--yes` | Confirm deploy (required in agent mode) |
 | `--hosts` | only these hosts (names or roles from this env) |
-| `--allow-unprovisioned` | Skip the check that every config host is in inventory |
 | `--ansible-output` | Show captured Ansible output live or from stored logs (not in agent output) |
 | `--timestamps` | Prefix --ansible-output lines with their stored event time |
 | `--color` | Color --ansible-output. Live runs use Ansible color; stored logs are recolored |
@@ -643,6 +642,65 @@ Example:
 
 ```bash
 spa hosts copy local.txt idx1:/tmp/
+```
+
+## `hosts register`
+
+Register an existing Linux host over SSH. Does not create the machine.
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `-y`, `--yes` | Confirm register |
+| `--address` | IP, hostname, or FQDN. Must be reachable by SSH. |
+| `--user` | SSH login user |
+| `--key` | Path to the SSH private key |
+| `--port` | SSH port |
+| `--role` | Splunk role. Repeat to add more. |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `NAME` | yes | Inventory hostname |
+
+Example:
+
+```bash
+spa hosts register NAME --address ADDRESS --user USER --key PATH --yes
+```
+
+## `hosts unregister`
+
+Remove one external host from inventory. The config entry stays. Does not shut the machine down.
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `-y`, `--yes` | Confirm unregister |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `NAME` | yes | Inventory hostname |
+
+Example:
+
+```bash
+spa hosts unregister NAME --yes
+```
+
+## `hosts check`
+
+Ansible ping with become to root, then compare splunk_architecture with the host. The check spa deploy runs. Does not deploy.
+
+| Flag | Description |
+| --- | --- |
+| `--hosts` | only these hosts (names or roles from this env) |
+
+Example:
+
+```bash
+spa hosts check
 ```
 
 ## `shell`

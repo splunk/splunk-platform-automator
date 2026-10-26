@@ -52,78 +52,147 @@ def get_host_vars(inventory, hostname):
     
     return {}
 
-def check_ansible_status(hosts, paths=None):
-    """Checks Ansible connectivity for a list of hosts using ping."""
-    status_map = {}
-    if not hosts:
-        return status_map
+def _ansible_message(data):
+    """First line of an Ansible result, with key material left out."""
+    if not isinstance(data, dict):
+        return ""
+    for key in ("msg", "module_stderr", "stderr"):
+        value = data.get(key)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        line = value.strip().splitlines()[0].strip()
+        if "PRIVATE KEY" in line or "BEGIN " in line:
+            return ""
+        return line[:200]
+    return ""
 
-    import tempfile
+
+def _ping_row(name, data, become):
+    """One host result. ``become`` is None when this ping did not request sudo."""
+    become_value = False if become else None
+    message = _ansible_message(data)
+    if not isinstance(data, dict):
+        return {"name": name, "ok": False, "ssh": False, "become": become_value, "message": ""}
+    if data.get("unreachable"):
+        return {"name": name, "ok": False, "ssh": False, "become": become_value, "message": message}
+    if data.get("failed") or data.get("ping") != "pong":
+        return {"name": name, "ok": False, "ssh": True, "become": become_value, "message": message}
+    return {
+        "name": name,
+        "ok": True,
+        "ssh": True,
+        "become": True if become else None,
+        "message": "",
+    }
+
+
+def _ansible_tree(hosts, module, module_args=None, become=False, paths=None, run=None):
+    """Run one ad-hoc module and return ``({name: result or None}, problem)``."""
+    names = [str(host) for host in hosts or []]
+    if not names:
+        return {}, None
+
     import shutil
+    import tempfile
 
     from spa.executil import ToolNotFound, tool_path
     from spa.paths import resolve_spa_paths
 
-    # ansible lives in the spa venv, not necessarily on PATH (same as
-    # ansible-inventory / ansible-playbook).
     try:
         ansible_bin = tool_path(paths or resolve_spa_paths(), "ansible")
     except ToolNotFound as exc:
-        print("Warning: %s" % exc, file=sys.stderr)
-        return status_map
+        return {}, str(exc)
 
-    temp_dir = tempfile.mkdtemp(prefix='spash_ansible_')
-    
+    temp_dir = tempfile.mkdtemp(prefix="spash_ansible_")
     try:
-        # Use --limit to rely on the inventory but restrict to specific hosts
-        # hosts is a list of hostnames
-        limit_pattern = ':'.join(hosts)
-        
-        # If list is too long, we might hit CLI limits, but for typical use reasonable.
-        # Fallback to 'all' if empty or issues? No, if empty we returned above.
-        
-        cmd = [ansible_bin, 'all', '--limit', limit_pattern, '-m', 'ping', '--tree', temp_dir]
-        
-        print("Checking Ansible connectivity...", file=sys.stderr)
-        # We don't care about stdout/stderr much, but capture to keep clean
-        subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True
-        )
-        
-        # Read results from temp_dir
-        if os.path.exists(temp_dir):
-            for filename in os.listdir(temp_dir):
-                host = filename
-                filepath = os.path.join(temp_dir, filename)
+        cmd = [ansible_bin, "all", "--limit", ":".join(names), "-m", module]
+        if module_args:
+            cmd.extend(["-a", module_args])
+        cmd.extend(["--tree", temp_dir])
+        if become:
+            cmd.extend(["-b", "--become-user", "root"])
+        try:
+            if run is not None:
+                run(cmd, temp_dir)
+            else:
+                subprocess.run(cmd, capture_output=True, text=True, check=False)
+        except FileNotFoundError:
+            return {}, "%s not found. Repair it: spa venv rebuild --shared --yes" % ansible_bin
+        parsed = {}
+        for name in names:
+            filepath = os.path.join(temp_dir, name)
+            data = None
+            if os.path.isfile(filepath):
                 try:
-                    with open(filepath, 'r') as f:
-                        data = json.load(f)
-                        
-                    # Structure: { "ping": "pong", ... } or { "unreachable": true, ... }
-                    if data.get('unreachable'):
-                        status_map[host] = 'Unreachable'
-                    elif data.get('failed'):
-                        status_map[host] = 'Failed'
-                    elif data.get('ping') == 'pong':
-                        status_map[host] = 'Success'
-                    else:
-                        status_map[host] = 'Unknown'
+                    with open(filepath, encoding="utf-8") as handle:
+                        data = json.load(handle)
                 except (json.JSONDecodeError, OSError):
-                    status_map[host] = 'Error'
-                    
-    except FileNotFoundError:
-        print(
-            "Warning: %s not found. Repair it: spa venv rebuild --shared --yes" % ansible_bin,
-            file=sys.stderr,
-        )
-    except Exception as e:
-        print(f"Error running ansible ping: {e}", file=sys.stderr)
+                    data = None
+            parsed[name] = data
+        return parsed, None
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
-        
-    return status_map
+
+
+def _architecture_fact(data):
+    if not isinstance(data, dict) or data.get("unreachable") or data.get("failed"):
+        return None
+    facts = data.get("ansible_facts")
+    if isinstance(facts, dict) and facts.get("ansible_architecture"):
+        return str(facts["ansible_architecture"])
+    if data.get("ansible_architecture"):
+        return str(data["ansible_architecture"])
+    return None
+
+
+def ansible_ping(hosts, paths=None, become=False, run=None):
+    """Ansible ping for these hosts. Captures Ansible output and prints nothing.
+
+    Returns ``(rows, problem)``. ``problem`` is set when Ansible itself cannot
+    start. Each row is ``name``, ``ok``, ``ssh``, ``become``, and ``message``.
+    """
+    names = [str(host) for host in hosts or []]
+    parsed, problem = _ansible_tree(names, "ping", become=become, paths=paths, run=run)
+    if problem:
+        return [], problem
+    return [_ping_row(name, parsed.get(name), become) for name in names], None
+
+
+def ansible_architecture(hosts, paths=None, run=None):
+    """Machine ``ansible_architecture`` for these hosts. Does not use become.
+
+    Returns ``({name: architecture or None}, problem)``.
+    """
+    names = [str(host) for host in hosts or []]
+    parsed, problem = _ansible_tree(
+        names,
+        "setup",
+        module_args="filter=ansible_architecture",
+        paths=paths,
+        run=run,
+    )
+    if problem:
+        return {}, problem
+    return {name: _architecture_fact(parsed.get(name)) for name in names}, None
+
+
+def check_ansible_status(hosts, paths=None):
+    """Ansible ping without become, as the words ``spa hosts list --status`` shows."""
+    if not hosts:
+        return {}
+    rows, problem = ansible_ping(hosts, paths=paths, become=False)
+    if problem:
+        print("Warning: %s" % problem, file=sys.stderr)
+        return {}
+    status = {}
+    for row in rows:
+        if row["ok"]:
+            status[row["name"]] = "Success"
+        elif row["ssh"]:
+            status[row["name"]] = "Failed"
+        else:
+            status[row["name"]] = "Unreachable"
+    return status
 
 def get_provider_status(paths=None):
     """Return provider status without coupling shell UX to a cloud SDK."""
@@ -143,9 +212,23 @@ def get_provider_status(paths=None):
             "error": "%s provider does not expose host status." % provider.name,
         }
     try:
-        return {"name": provider.name, "hosts": status_fn(), "error": None}
+        hosts = status_fn()
     except ProviderError as exc:
         return {"name": provider.name, "hosts": {}, "error": str(exc)}
+    try:
+        from spa.providers import load_deployment_config
+        from spa.providers.classify import classify_hostnames
+        from spa.providers.external import Provider as ExternalProvider
+
+        _managed, external = classify_hostnames(load_deployment_config(paths))
+        if external:
+            external_provider = ExternalProvider(paths, {})
+            for name in external:
+                if name not in hosts:
+                    hosts[name] = external_provider.host_status(name)
+    except Exception:
+        pass
+    return {"name": provider.name, "hosts": hosts, "error": None}
 
 
 def _provider_record(host, inventory, provider_hosts):

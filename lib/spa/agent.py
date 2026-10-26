@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 
 from spa.usage import (
     APP_ID_HELP,
+    INIT_PROVIDER_HELP,
     PROVIDER_HELP,
     SELECTOR_HELP,
     SET_PATH_HELP,
@@ -96,7 +97,7 @@ COMMAND_SCHEMA = {
     "name": "spa",
     "schema_version": SCHEMA_VERSION,
     "commands": [
-        {"name": "init", "summary": "Alias of spa environment init (spa init --example TOPOLOGY [--provider aws|virtualbox] NAME)"},
+        {"name": "init", "summary": "Alias of spa environment init (spa init --example TOPOLOGY [--provider aws|virtualbox|external] NAME)"},
         {
             "name": "init list",
             "summary": "List topology examples. Bare spa init still scaffolds; it does not list.",
@@ -260,7 +261,6 @@ COMMAND_SCHEMA = {
                     "name": "PROVIDER",
                     "required": True,
                     "help": PROVIDER_HELP,
-                    "choices": ["aws", "virtualbox"],
                     "completes_from": "providers",
                 }
             ],
@@ -402,9 +402,9 @@ COMMAND_SCHEMA = {
                 {"long": "--example", "help": "Topology example id", "takes_value": True, "completes_from": "init list"},
                 {
                     "long": "--provider",
-                    "help": "aws or virtualbox (default aws, or providers.yml)",
+                    "help": INIT_PROVIDER_HELP,
                     "takes_value": True,
-                    "choices": ["aws", "virtualbox"],
+                    "completes_from": "providers",
                 },
                 {"long": "--env-dir", "help": "One-off parent (requires --name); does not change the default parent"},
                 {"long": "--name", "help": "Registry name (default: folder basename)"},
@@ -434,9 +434,9 @@ COMMAND_SCHEMA = {
                 },
                 {
                     "long": "--provider",
-                    "help": "Default provider (aws|virtualbox)",
+                    "help": "Default provider for init: aws, virtualbox, or external",
                     "takes_value": True,
-                    "choices": ["aws", "virtualbox"],
+                    "completes_from": "providers",
                 },
             ],
             "example": "spa environment set --software-dir ~/Software --apps-dir ~/labs/apps",
@@ -479,15 +479,11 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "deploy",
-            "summary": "Deploy Splunk (deploy_site.yml); requires Software/baseconfig and local app sources",
+            "summary": "Deploy Splunk (deploy_site.yml). After you confirm, ping with become before the playbook. Requires Software/baseconfig and local app sources",
             "requires_confirmation": True,
             "flags": [
                 {"long": "--yes", "short": "-y", "help": "Confirm deploy (required in agent mode)"},
                 {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
-                {
-                    "long": "--allow-unprovisioned",
-                    "help": "Skip the check that every config host is in inventory",
-                },
                 _FLAG_ANSIBLE_OUTPUT,
                 _FLAG_TIMESTAMPS,
                 _FLAG_COLOR,
@@ -549,6 +545,63 @@ COMMAND_SCHEMA = {
         },
         {"name": "hosts ssh", "summary": "SSH using inventory", "positionals": [{"name": "NAME", "required": True, "help": "Inventory hostname or role", "completes_from": "hosts"}], "example": "spa hosts ssh idx1"},
         {"name": "hosts copy", "summary": "Copy files with scp: SRC DST, remote side HOST:PATH (-r for directories)", "example": "spa hosts copy local.txt idx1:/tmp/"},
+        {
+            "name": "hosts register",
+            "summary": "Register an existing Linux host over SSH. Does not create the machine.",
+            "requires_confirmation": True,
+            "positionals": [
+                {"name": "NAME", "required": True, "help": "Inventory hostname", "completes_from": "hosts"},
+            ],
+            "flags": [
+                {"long": "--yes", "short": "-y", "help": "Confirm register"},
+                {
+                    "long": "--address",
+                    "help": "IP, hostname, or FQDN. Must be reachable by SSH.",
+                    "takes_value": True,
+                },
+                {"long": "--user", "help": "SSH login user", "takes_value": True},
+                {"long": "--key", "help": "Path to the SSH private key", "takes_value": True},
+                {"long": "--port", "help": "SSH port", "takes_value": True},
+                {
+                    "long": "--role",
+                    "help": "Splunk role. Repeat to add more.",
+                    "takes_value": True,
+                    "choices": [
+                        "cluster_manager",
+                        "deployer",
+                        "deployment_server",
+                        "heavy_forwarder",
+                        "indexer",
+                        "license_manager",
+                        "monitoring_console",
+                        "search_head",
+                        "universal_forwarder",
+                        "universal_forwarder_windows",
+                    ],
+                },
+            ],
+            "example": "spa hosts register NAME --address ADDRESS --user USER --key PATH --yes",
+        },
+        {
+            "name": "hosts unregister",
+            "summary": "Remove one external host from inventory. The config entry stays. Does not shut the machine down.",
+            "requires_confirmation": True,
+            "positionals": [
+                {"name": "NAME", "required": True, "help": "Inventory hostname", "completes_from": "hosts"},
+            ],
+            "flags": [
+                {"long": "--yes", "short": "-y", "help": "Confirm unregister"},
+            ],
+            "example": "spa hosts unregister NAME --yes",
+        },
+        {
+            "name": "hosts check",
+            "summary": "Ansible ping with become to root, then compare splunk_architecture with the host. The check spa deploy runs. Does not deploy.",
+            "flags": [
+                {"long": "--hosts", "help": "only these hosts (names or roles from this env)"},
+            ],
+            "example": "spa hosts check",
+        },
         {"name": "shell", "summary": "Alias of spa hosts ssh", "positionals": [{"name": "NAME", "required": False, "help": "Inventory hostname or role", "completes_from": "hosts"}]},
         {"name": "aws", "summary": "AWS discovery for terraform.aws. Catalogs are spa aws regions list and the other resource list commands."},
         {

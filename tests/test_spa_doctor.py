@@ -81,6 +81,35 @@ def test_doctor_skips_vagrant_without_virtualbox(tmp_path):
     assert "vagrant is on PATH" not in out
 
 
+def test_doctor_external_requires_ssh_not_terraform(tmp_path):
+    dest = tmp_path / "env"
+    run_spa_init(
+        ["--example", "single_node", "--provider", "aws", "--skip-doctor", str(dest)]
+    )
+    config = dest / "config" / "splunk_config.yml"
+    config.write_text(
+        "---\nexternal: {}\nsplunk_hosts:\n  - name: shidx\n    roles: [indexer]\n",
+        encoding="utf-8",
+    )
+    empty = tmp_path / "no-ssh"
+    empty.mkdir()
+    env = spa_env()
+    env["PATH"] = str(empty)
+    result = run_spa(
+        ["doctor", "--spa-home", str(PROJECT_ROOT), "--env", str(dest)], env=env
+    )
+    out = result.stdout + result.stderr
+    assert "required for terraform.aws" not in out
+    assert "ssh required for external hosts" in out
+
+
+def test_config_providers_ignores_commented_external():
+    from spa.doctor import _config_providers
+
+    assert "external" not in _config_providers("# external: {}\nvirtualbox: {}\n")
+    assert _config_providers("external: {}\n") == {"external"}
+
+
 def test_doctor_checks_env_provider_without_env_flag(tmp_path):
     """spa doctor from an env dir must check that env's provider tools."""
     dest = tmp_path / "env"

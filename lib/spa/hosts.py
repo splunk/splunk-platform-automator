@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 
 class HostsError(ValueError):
-    """A --hosts token did not match inventory names or roles."""
+    """A host check or --hosts selection failed."""
+
+    def __init__(self, message: str = "", rows: Optional[Sequence[dict]] = None):
+        super().__init__(message)
+        self.rows = list(rows or [])
 
 
 def parse_host_tokens(values: Optional[Sequence[str]]) -> List[str]:
@@ -148,3 +152,116 @@ def with_ansible_limit(extra: Optional[Iterable[str]], hostnames: Optional[Seque
     if "--limit" in args:
         return args
     return ["--limit", ":".join(hostnames), *args]
+
+
+def _ping_failure_text(rows: Sequence[dict]) -> str:
+    """One line per host. A become failure says SSH worked and sudo did not."""
+    lines = []
+    for row in rows:
+        name = row["name"]
+        if row.get("ok"):
+            lines.append("%s ok" % name)
+            continue
+        message = str(row.get("message") or "").strip()
+        if row.get("ssh") and row.get("become") is False:
+            line = "SSH works for %s, but passwordless sudo to root failed." % name
+        elif not row.get("ssh"):
+            line = "SSH failed for %s." % name
+        else:
+            line = "Ansible ping failed for %s." % name
+        if message:
+            line = "%s %s" % (line, message)
+        lines.append(line)
+    return "\n".join(lines)
+
+
+_ARCH_MACHINE = {
+    "amd64": "x86_64",
+    "x86_64": "x86_64",
+    "arm64": "aarch64",
+    "aarch64": "aarch64",
+}
+
+
+def _normalize_architecture(value) -> str:
+    return _ARCH_MACHINE.get(str(value or "").strip(), "")
+
+
+def _expected_architecture(document: dict, name: str) -> str:
+    """Host override, then splunk_defaults, then the role default amd64."""
+    from spa.providers.classify import _expand_host
+
+    for host in document.get("splunk_hosts") or []:
+        if isinstance(host, dict) and name in _expand_host(host):
+            override = host.get("splunk_architecture")
+            if override:
+                return str(override)
+            break
+    defaults = document.get("splunk_defaults") or {}
+    if isinstance(defaults, dict) and defaults.get("splunk_architecture"):
+        return str(defaults["splunk_architecture"])
+    return "amd64"
+
+
+def _architecture_failure_text(rows: Sequence[dict]) -> str:
+    lines = []
+    for row in rows:
+        name = row["name"]
+        if row.get("ok"):
+            lines.append("%s ok" % name)
+            continue
+        actual = row.get("architecture")
+        if not actual:
+            lines.append("%s architecture was not reported" % name)
+            continue
+        lines.append(
+            "%s architecture mismatch: config %s, host %s"
+            % (name, row.get("expected_architecture"), actual)
+        )
+    return "\n".join(lines)
+
+
+def ping_hosts(
+    paths,
+    hosts: Optional[Sequence[str]] = None,
+    run=None,
+) -> Dict[str, Any]:
+    """Become ping, then compare splunk_architecture with the machine.
+
+    Does not write config or inventory and does not deploy.
+    """
+    from spa.providers import inventory_hostnames_from_file, load_deployment_config
+    from spa.providers.classify import classify_hostnames
+    from spa.providers.external import _register_sentence
+    from spa.shell import ansible_architecture, ansible_ping
+
+    document = load_deployment_config(paths)
+    managed, external = classify_hostnames(document)
+    selected = list(hosts) if hosts else [*managed, *external]
+    present = set(inventory_hostnames_from_file(paths))
+    missing = [name for name in selected if name not in present]
+    if missing:
+        name = missing[0]
+        if name in external:
+            raise HostsError(_register_sentence(name))
+        raise HostsError(
+            "hosts not provisioned: %s\nRun: spa provision --yes" % ", ".join(missing)
+        )
+    rows, problem = ansible_ping(selected, paths=paths, become=True, run=run)
+    if problem:
+        raise HostsError(problem)
+    if any(not row.get("ok") for row in rows):
+        raise HostsError(_ping_failure_text(rows))
+    facts, problem = ansible_architecture(selected, paths=paths, run=run)
+    if problem:
+        raise HostsError(problem)
+    for row in rows:
+        expected = _expected_architecture(document, row["name"])
+        actual = facts.get(row["name"])
+        row["expected_architecture"] = expected
+        row["architecture"] = actual or ""
+        if _normalize_architecture(expected) != _normalize_architecture(actual):
+            row["ok"] = False
+    if any(not row.get("ok") for row in rows):
+        raise HostsError(_architecture_failure_text(rows), rows)
+    return {"hosts": rows}

@@ -27,6 +27,13 @@ def test_init_help():
     assert "splunk_config.yml" in result.stdout
 
 
+def test_init_provider_help_names_external():
+    result = run_spa(["init", "--help"])
+    assert result.returncode == 0
+    assert "aws, virtualbox, or external" in result.stdout
+    assert "aws or virtualbox" not in result.stdout
+
+
 def test_init_list_examples():
     result = run_spa(["init", "list"])
     assert result.returncode == 0
@@ -47,7 +54,7 @@ def test_scaffold_creates_env_without_ansible(tmp_path):
     assert (dest / ".spa.yml").is_file()
     assert (dest / "inventory").is_dir()
     assert (dest / "inventory" / "hosts").is_file()
-    assert (dest / "terraform" / "aws").is_dir()
+    assert not (dest / "terraform" / "aws").exists()
     assert not (dest / "saved_base_config_apps").exists()
     assert not (dest / "ansible").exists()
     assert "aws_ec2.yml" not in (result.stderr + result.stdout)

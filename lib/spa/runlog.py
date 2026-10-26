@@ -52,6 +52,7 @@ PROVIDER_SOURCE = "provider"
 NOTE_KIND = "note"
 
 GROUP_TITLES: Dict[str, str] = {
+    "host_check": "Host check",
     "preflight": "Preflight / readiness",
     "os": "OS and host prep",
     "linkpage": "Host link page",
@@ -993,6 +994,7 @@ class RunLog:
         self._live_open = False
         self._live_width = 0
         self._tasks: set = set()
+        self._host_check_summary = ""
         self._hosts: set = set()
         self._results = 0
         self._changed = 0
@@ -1081,6 +1083,48 @@ class RunLog:
 
         self._hb_thread = threading.Thread(target=_loop, name="spa-run-heartbeat", daemon=True)
         self._hb_thread.start()
+
+    def emit_host_check(self, rows: Sequence[Dict[str, Any]]) -> None:
+        """Record the pre-playbook SSH and sudo check in this run's transcript."""
+        if rows and all(row.get("ok") for row in rows):
+            self._host_check_summary = "SSH ok, sudo ok"
+            arches = [str(row.get("architecture") or "") for row in rows]
+            if arches and all(arches) and len(set(arches)) == 1:
+                self._host_check_summary = "SSH ok, sudo ok, architecture %s" % arches[0]
+        for row in rows:
+            task = "SSH and passwordless sudo"
+            if row.get("ok"):
+                status = "ok"
+                message = "SSH ok, sudo ok"
+                if row.get("architecture"):
+                    message = "%s, architecture %s" % (message, row["architecture"])
+            elif row.get("expected_architecture") and row.get("ssh") and row.get("become") is True:
+                status = "failed"
+                task = "Architecture"
+                actual = row.get("architecture")
+                if not actual:
+                    message = "architecture was not reported"
+                else:
+                    message = "config %s, host %s" % (row["expected_architecture"], actual)
+            elif row.get("ssh") and row.get("become") is False:
+                status = "failed"
+                message = "SSH ok, sudo failed"
+            else:
+                status = "unreachable" if not row.get("ssh") else "failed"
+                message = "SSH failed"
+            detail = str(row.get("message") or "").strip()
+            if detail and detail not in message and task != "Architecture":
+                message = "%s. %s" % (message, detail)
+            self.emit(
+                {
+                    "phase": "host_check",
+                    "kind": "host_result",
+                    "status": status,
+                    "host": row.get("name") or "",
+                    "task": task,
+                    "msg": message,
+                }
+            )
 
     def emit(self, raw: Dict[str, Any]) -> Dict[str, Any]:
         with self._lock:
@@ -1315,7 +1359,7 @@ class RunLog:
         if note:
             # Native output and warnings are not steps: they must not open or close a group.
             phase = phase or self._current_phase
-        elif not phase or status not in {"heartbeat", "phase_end"}:
+        elif phase != "host_check" and (not phase or status not in {"heartbeat", "phase_end"}):
             mapped = map_phase(
                 command=self.command,
                 playbook=playbook,
@@ -1534,6 +1578,8 @@ class RunLog:
         skipped = "skipped %s" % self._skipped if self._skipped else ""
         failed = "failed %s" % self._failed if self._failed else ""
         counters: List[str] = []
+        if (self._current_phase or "") == "host_check" and self._host_check_summary:
+            counters.append(self._host_check_summary)
         if self._tasks:
             counters.append("Tasks %s" % len(self._tasks))
         if self._hosts:

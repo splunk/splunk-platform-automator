@@ -66,6 +66,10 @@ spa hosts list --status
 spa logs --last
 ```
 
+`spa deploy` runs an Ansible ping with become for the selected hosts after you confirm and before the playbook, then compares `splunk_architecture` with the machine. `spa hosts check` is that check on its own. `spa provision` does not run it. Before `spa run` of a playbook that needs root, run `spa hosts check`.
+
+`external` hosts are registered with `spa hosts register`, which checks SSH and writes the address, user, and key only in `inventory/hosts`. The config only needs `external:`. `spa validate` stays the local config check. `spa deploy` pings with become and compares `splunk_architecture` with the machine before the playbook for AWS, VirtualBox, and external hosts. `spa hosts check` is that check without deploying. Run it before `spa run` when the playbook needs root. Provision and destroy do not create or terminate external hosts. Suspend and resume report that SPA does not own power for those hosts.
+
 ## Anti-patterns
 
 Import `spa.api`; answer `Proceed?`; invent playbook names; dump full Ansible logs into the model context (use `spa logs` / `data.log` only when the user asked to debug); put installers inside `SPA_HOME`.

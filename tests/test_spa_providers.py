@@ -1,6 +1,7 @@
 """Provider selection and AWS lifecycle tests (no cloud calls)."""
 
 import json
+import os
 import sys
 from dataclasses import replace
 from types import SimpleNamespace
@@ -84,7 +85,17 @@ def test_virtualbox_cli_accepts_env_dir(tmp_path, monkeypatch):
     )
     from spa.cli import main
 
-    rc = main(["--no-agent", "suspend", "--yes"])
+    config = tmp_path / "config" / "splunk_config.yml"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text("virtualbox: {}\nsplunk_hosts:\n  - name: idx1\n    roles: [indexer]\n")
+    monkeypatch.setenv("SPA_ENV_DIR", str(tmp_path))
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    before = dict(os.environ)
+    try:
+        rc = main(["--no-agent", "suspend", "--yes"])
+    finally:
+        os.environ.clear()
+        os.environ.update(before)
     assert rc == 0
     assert called.get("yes") is True
 
