@@ -430,10 +430,16 @@ class LocalSpaSession:
 
         tokens = parse_host_tokens(hosts)
         managed, external = self._classified_hosts()
-        known = set(managed) | set(external)
         if not tokens:
             return self._require_provisioned()
-        selected = [token for token in tokens if token in known]
+        from spa.providers import load_deployment_config
+        from spa.providers.classify import hostnames_for_tokens
+
+        try:
+            document = load_deployment_config(self.paths)
+        except Exception:
+            document = {}
+        selected = hostnames_for_tokens(document, tokens)
         if not selected:
             return None
         missing = [name for name in state.missing if name in selected]
@@ -1537,21 +1543,7 @@ class LocalSpaSession:
 
         state = self.paths.terraform_state_dir.resolve()
         modules = self.paths.terraform_modules_dir.resolve()
-        generated = (
-            "terraform.tfstate",
-            "terraform.tfstate.backup",
-            "terraform.tfvars",
-            "tfplan",
-            ".terraform",
-            ".terraform.lock.hcl",
-        )
         if state == modules:
-            for name in generated:
-                target = state / name
-                if target.is_dir():
-                    shutil.rmtree(target)
-                elif target.is_file():
-                    target.unlink()
             return
         if state.is_dir():
             shutil.rmtree(state)

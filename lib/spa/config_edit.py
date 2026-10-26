@@ -1410,7 +1410,7 @@ def config_provider(
     result = _transact(
         Path(config_path), Path(spa_home), mutate,
         dry_run=dry_run, expect_revision=expect_revision,
-        validate=False if provider_id == "external" else validate,
+        validate=validate,
         resolve=resolve, resolve_file=resolve_file, stdin_text=stdin_text,
     )
     result["provider"] = provider_id

@@ -53,6 +53,33 @@ def _expand_host(host: Mapping[str, Any]) -> List[str]:
     ]
 
 
+def hostnames_for_tokens(config: Mapping[str, Any], tokens: List[str]) -> List[str]:
+    """Config hostnames for these tokens. A role expands to every host that has it."""
+    managed, external = classify_hostnames(config)
+    known = set(managed) | set(external)
+    blocks = [host for host in (config.get("splunk_hosts") or []) if isinstance(host, dict)]
+    selected: List[str] = []
+    seen = set()
+
+    def add(name: str) -> None:
+        if name not in seen:
+            seen.add(name)
+            selected.append(name)
+
+    for token in tokens:
+        if token in known:
+            add(token)
+            continue
+        role = token.replace("-", "_").lower()
+        for host in blocks:
+            roles = [str(item).replace("-", "_").lower() for item in (host.get("roles") or [])]
+            if role not in roles:
+                continue
+            for name in _expand_host(host):
+                add(name)
+    return selected
+
+
 def classify_hostnames(config: Mapping[str, Any]) -> Tuple[List[str], List[str]]:
     """Return (managed, external) hostnames in config order."""
     managed: List[str] = []

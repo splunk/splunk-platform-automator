@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
 from spa.agent import agent_mode, emit, format_schema_markdown
+from spa.hosts import allowed_role_names
 from spa.api import CommandResult, open_session
 from spa.apps import SEARCH_KINDS, SEARCH_TYPES
 from spa.executil import (
@@ -1914,18 +1915,7 @@ def _run(argv: Sequence[str]) -> int:
         "--role",
         action="append",
         default=[],
-        choices=[
-            "cluster_manager",
-            "deployer",
-            "deployment_server",
-            "heavy_forwarder",
-            "indexer",
-            "license_manager",
-            "monitoring_console",
-            "search_head",
-            "universal_forwarder",
-            "universal_forwarder_windows",
-        ],
+        choices=allowed_role_names(),
         help="Splunk role. Repeat to add more. Omit to leave roles unchanged or unset.",
     )
     p_hosts_unregister = _add_action(

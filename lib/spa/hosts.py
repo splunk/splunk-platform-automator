@@ -5,6 +5,29 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 
+def allowed_role_names() -> List[str]:
+    """Role ids from ``AllowedRole`` in schema.py, in source order.
+
+    Reads the file. Importing schema needs pydantic, and ``spa`` must still
+    start when that module is not installed yet.
+    """
+    import ast
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "ansible" / "plugins" / "inventory" / "schema.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef) or node.name != "AllowedRole":
+            continue
+        names: List[str] = []
+        for item in node.body:
+            value = item.value if isinstance(item, (ast.Assign, ast.AnnAssign)) else None
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                names.append(value.value)
+        return names
+    return []
+
+
 class HostsError(ValueError):
     """A host check or --hosts selection failed."""
 
@@ -187,16 +210,43 @@ def _normalize_architecture(value) -> str:
     return _ARCH_MACHINE.get(str(value or "").strip(), "")
 
 
+def _environment_architecture(document: dict, host: dict) -> str:
+    """Architecture on the splunk_environments entry this host belongs to."""
+    environments = document.get("splunk_environments") or []
+    if not isinstance(environments, list):
+        return ""
+    defaults = document.get("splunk_defaults") or {}
+    default_name = "splk"
+    if isinstance(defaults, dict) and defaults.get("splunk_env_name"):
+        default_name = str(defaults["splunk_env_name"])
+    named = host.get("splunk_env")
+    wanted = str(named) if named and str(named) != default_name else default_name
+    for environment in environments:
+        if not isinstance(environment, dict):
+            continue
+        if str(environment.get("splunk_env_name") or "") != wanted:
+            continue
+        value = environment.get("splunk_architecture")
+        return str(value) if value else ""
+    return ""
+
+
 def _expected_architecture(document: dict, name: str) -> str:
-    """Host override, then splunk_defaults, then the role default amd64."""
+    """Host override, then that host's environment, then splunk_defaults, then amd64."""
     from spa.providers.classify import _expand_host
 
+    matched = None
     for host in document.get("splunk_hosts") or []:
         if isinstance(host, dict) and name in _expand_host(host):
+            matched = host
             override = host.get("splunk_architecture")
             if override:
                 return str(override)
             break
+    if matched is not None:
+        environment = _environment_architecture(document, matched)
+        if environment:
+            return environment
     defaults = document.get("splunk_defaults") or {}
     if isinstance(defaults, dict) and defaults.get("splunk_architecture"):
         return str(defaults["splunk_architecture"])
@@ -227,6 +277,9 @@ def ping_hosts(
     run=None,
 ) -> Dict[str, Any]:
     """Become ping, then compare splunk_architecture with the machine.
+
+    Expected architecture is the host override, then that host's
+    splunk_environments entry, then splunk_defaults, then amd64.
 
     Does not write config or inventory and does not deploy.
     """

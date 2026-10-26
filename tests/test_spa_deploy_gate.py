@@ -196,7 +196,45 @@ def test_deploy_does_not_run_playbook_when_partial(tmp_path, monkeypatch):
     assert "--allow-unprovisioned" not in result.error
 
 
-def test_deploy_allow_unprovisioned_runs_playbook(tmp_path, monkeypatch):
+def test_deploy_hosts_role_checks_unprovisioned_members(tmp_path, monkeypatch):
+    called = []
+    monkeypatch.setattr(
+        "spa.playbooks.run_playbook", lambda *a, **k: called.append(True) or 0
+    )
+    monkeypatch.setattr("spa.playbooks.resolve", lambda *a, **k: "deploy_site.yml")
+    monkeypatch.setattr("spa.hosts.ping_hosts", lambda *a, **k: {"hosts": []})
+    monkeypatch.setattr(
+        "spa.shell.get_inventory_data",
+        lambda: {
+            "_meta": {"hostvars": {"idx1": {}, "sh1": {}}},
+            "all": {"hosts": ["idx1", "sh1"]},
+            "role_indexer": {"hosts": ["idx1"]},
+            "role_search_head": {"hosts": ["sh1"]},
+        },
+    )
+    config = """
+terraform:
+  aws:
+    region: eu-central-1
+splunk_hosts:
+  - name: idx1
+    roles: [indexer]
+  - name: idx2
+    roles: [indexer]
+  - name: sh1
+    roles: [search_head]
+"""
+    paths, session = _session_env(tmp_path, config)
+    _write_state(paths)
+    _write_inventory(paths, "idx1", "sh1")
+    result = session.deploy(confirm=True, hosts=["indexer"])
+    assert result.ok is False
+    assert not called
+    assert "idx2" in result.error
+    assert "sh1" not in result.error
+
+
+def test_deploy_named_host_runs_when_that_host_is_provisioned(tmp_path, monkeypatch):
     called = []
     monkeypatch.setattr(
         "spa.playbooks.run_playbook", lambda *a, **k: called.append(True) or 0
@@ -277,7 +315,7 @@ def test_cli_agent_unprovisioned_json(tmp_path):
     assert "idx2" in payload["data"]["missing"]
 
 
-def test_cli_allow_unprovisioned_invokes_playbook(tmp_path, monkeypatch):
+def test_cli_rejects_allow_unprovisioned_and_deploys_one_host(tmp_path, monkeypatch):
     called = []
     monkeypatch.setattr(
         "spa.playbooks.run_playbook", lambda *a, **k: called.append(True) or 0
@@ -307,7 +345,7 @@ def test_cli_allow_unprovisioned_invokes_playbook(tmp_path, monkeypatch):
     assert called
 
 
-def test_help_and_schema_include_allow_unprovisioned():
+def test_help_and_schema_omit_allow_unprovisioned():
     help_result = run_spa(["deploy", "--help"])
     assert help_result.returncode == 0
     assert "--allow-unprovisioned" not in help_result.stdout
