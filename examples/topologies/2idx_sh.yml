@@ -1,0 +1,33 @@
+---
+# Topology only — compose with: spa init --example 2idx_sh --provider aws|virtualbox ENV
+# SVA: D1
+# Lab: Two standalone indexers + one search head. No indexer cluster.
+# Do not add virtualbox:, terraform:, os:, or apps here.
+plugin: splunk-platform-automator
+
+
+# Splunk default settings
+splunk_defaults:
+  # splunk_env_name: splk
+  # splunk_version: '8.2.3'
+  # splunk_architecture: amd64
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  # splunk_license_file: Splunk_Enterprise.lic
+  # splunk_indexes:
+  #   test1:
+  #   test2_metrics:
+  #     datatype: metric
+
+# Splunk hosts with its settings
+splunk_hosts:
+  # Standalone indexers
+  - iter:
+      prefix: idx
+      numbers: 1..2
+    roles:
+      - indexer
+
+  # Search Head
+  - name: sh
+    roles:
+      - search_head

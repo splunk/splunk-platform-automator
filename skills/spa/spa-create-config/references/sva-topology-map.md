@@ -5,21 +5,27 @@ SVA codes describe **topology**, not sizing. Lab configs may diverge from full S
 | SVA code | SPA topology | Pattern |
 |----------|-------------|---------|
 | S1 | `examples/topologies/single_node.yml` | Single host: indexer + search_head (+ optional LM) |
-| D1 | `examples/topologies/idx_sh_uf.yml` | Standalone indexers + SH |
-| C1 / C11 | `examples/topologies/cm_2idxc_sh_uf.yml` | CM + indexers + standalone SH. Compose: `spa init --example cm_2idxc_sh_uf --provider aws\|virtualbox` |
-| C3 / C13 | `examples/topologies/cm_2idxc1site_3shc_uf.yml` | CM + indexers + SHC + deployer |
-| M2 / M12 | `examples/topologies/4idxc2site_sh.yml` | Multisite IDXC + SH (standalone) |
-| M3 / M13 | `examples/topologies/cm_4idxc2site_3shc_ds_uf.yml` | Multisite IDXC + SHC per site |
-| M4 / M14 | SVA documentation | Stretched SHC — escalate to SVA + PS |
+| D1 | `examples/topologies/2idx_sh.yml` | Standalone indexers + SH |
+| D11 | `examples/topologies/2idx_sh_es.yml` | D1 plus a dedicated ES search head |
+| C1 | `examples/topologies/cm_2idxc_sh.yml` | CM + indexers + standalone SH. Compose: `spa init --example cm_2idxc_sh --provider aws\|virtualbox` |
+| C11 | `examples/topologies/cm_2idxc_sh_es.yml` | C1 plus a dedicated ES search head |
+| C3 | `examples/topologies/cm_2idxc_3shc_ds.yml` | CM + indexers + SHC + deployer |
+| C13 | `examples/topologies/cm_2idxc_2x3shc_ds.yml` | C3 plus a dedicated ES search head cluster |
+| M2 | `examples/topologies/4idxc2site_2sh.yml` | Multisite IDXC + one search head per site |
+| M12 | `examples/topologies/4idxc2site_2sh_es.yml` | M2 plus a dedicated ES search head on each site |
+| M3 | `examples/topologies/cm_4idxc2site_2x3shc_ds.yml` | Multisite IDXC + SHC per site |
+| M13 | `examples/topologies/cm_4idxc2site_4x3shc_ds.yml` | M3 plus a dedicated ES search head cluster on each site |
+| M4 | SVA documentation | Stretched SHC without a dedicated ES tier — escalate to SVA + PS |
+| M14 | `examples/topologies/cm_4idxc2site_stretched_2x3shc_ds.yml` | Stretched SHCs plus a dedicated ES search tier |
 
 ## Multisite IDXC defaults (lab)
 
-Typical from `examples/topologies/4idxc2site_sh.yml`:
+Typical from `examples/topologies/4idxc2site_2sh.yml`:
 
 ```yaml
 splunk_idxclusters:
   - idxc_name: idxc1
-    idxc_password: splunkidxc
+    idxc_password: "{{ lookup('env', 'SPLUNK_IDXC_PASSWORD') }}"
     idxc_replication_port: 9887
     idxc_site_rf: 'origin:2, total:3'
     idxc_site_sf: 'origin:1, total:2'
@@ -37,13 +43,15 @@ Use integer factors on `splunk_idxclusters` (not `idxc_site_*`).
 
 | SVA code | Lab RF | Lab SF | Min indexer peers | Copy from |
 |----------|--------|--------|-------------------|-----------|
-| C1 / C11 | `2` | `2` | **2** (`idxc_rf` ≤ peer count) | `examples/topologies/cm_2idxc_sh_uf.yml` |
-| C3 / C13 | `2` | `2` | **2** (add SHC separately) | `examples/topologies/cm_2idxc1site_3shc_uf.yml` |
+| C1 | `2` | `2` | **2** (`idxc_rf` ≤ peer count) | `examples/topologies/cm_2idxc_sh.yml` |
+| C11 | `2` | `2` | **2** (`idxc_rf` ≤ peer count) | `examples/topologies/cm_2idxc_sh_es.yml` |
+| C3 | `2` | `2` | **2** (integer `idxc_rf` / `idxc_sf`, plus one SHC) | `examples/topologies/cm_2idxc_3shc_ds.yml` |
+| C13 | `2` | `2` | **2** (integer `idxc_rf` / `idxc_sf`, plus the ES SHC) | `examples/topologies/cm_2idxc_2x3shc_ds.yml` |
 
 ```yaml
 splunk_idxclusters:
   - idxc_name: idxc1
-    idxc_password: splunkidxc
+    idxc_password: "{{ lookup('env', 'SPLUNK_IDXC_PASSWORD') }}"
     idxc_replication_port: 9887
     idxc_rf: 2
     idxc_sf: 2
@@ -60,14 +68,17 @@ Use string factors: `'origin:N, total:M'` (comma-separated pairs).
 
 | SVA code | Lab site RF | Lab site SF | Min indexers per data site | Min sites with indexers | Copy from |
 |----------|-------------|-------------|----------------------------|-------------------------|-----------|
-| M2 / M12 | `origin:2, total:3` | `origin:1, total:2` | **2** per site (supports `origin:2`) | **2** (typical lab) | `examples/topologies/4idxc2site_sh.yml` |
-| M3 / M13 | `origin:2, total:3` | `origin:1, total:2` | **2** per site | **2** (+ SHC per site in full SVA) | `examples/topologies/cm_4idxc2site_3shc_ds_uf.yml` |
-| M4 / M14 | Escalate | Escalate | Stretched SHC — not a lab copy-paste | SVA + PS | — |
+| M2 | `origin:2, total:3` | `origin:1, total:2` | **2** per site (supports `origin:2`) | **2** (typical lab) | `examples/topologies/4idxc2site_2sh.yml` |
+| M12 | `origin:2, total:3` | `origin:1, total:2` | **2** per site (supports `origin:2`) | **2** (typical lab) | `examples/topologies/4idxc2site_2sh_es.yml` |
+| M3 | `origin:2, total:3` | `origin:1, total:2` | **2** per site | **2** (+ SHC per site) | `examples/topologies/cm_4idxc2site_2x3shc_ds.yml` |
+| M13 | `origin:2, total:3` | `origin:1, total:2` | **2** per site | **2** (+ ES SHC per site) | `examples/topologies/cm_4idxc2site_4x3shc_ds.yml` |
+| M4 | Escalate | Escalate | Stretched SHC without a dedicated ES tier | SVA + PS | — |
+| M14 | `origin:2, total:3` | `origin:1, total:2` | **2** per site | **2** (stretched SHC, `shc_site: site0`) | `examples/topologies/cm_4idxc2site_stretched_2x3shc_ds.yml` |
 
 ```yaml
 splunk_idxclusters:
   - idxc_name: idxc1
-    idxc_password: splunkidxc
+    idxc_password: "{{ lookup('env', 'SPLUNK_IDXC_PASSWORD') }}"
     idxc_replication_port: 9887
     idxc_site_rf: 'origin:2, total:3'
     idxc_site_sf: 'origin:1, total:2'
@@ -87,7 +98,7 @@ Use during **Phase 5** after SVA code and indexer counts are chosen:
 4. **Search factor:** `idxc_site_sf` / `idxc_sf` must be achievable with the same peer layout (lab defaults above match the example host counts).
 5. **Multisite lab with 2 peers/site:** add `idxc_rf: 2` when `total` is 2–3 (avoids manager default `replication_factor: 3` startup errors) — see [rf-sf-sizing.md](rf-sf-sizing.md).
 6. **Intent:** config-test labs may use minimal peers; **production-like** or strict RTO/RPO → use [rf-sf-sizing.md](rf-sf-sizing.md) + SVA; confirm with PS for production.
-7. **Record in header** if lab compromises differ from SVA (e.g. single shared SH on multisite IDXC, fewer sites than DR target).
+7. **Record in header** if lab compromises differ from SVA (e.g. fewer sites than the DR target). SVA M2 is one search head per site.
 
 ### Not covered (standalone indexers)
 
@@ -95,11 +106,12 @@ Use during **Phase 5** after SVA code and indexer counts are chosen:
 |----------|---------|-------|
 | S1 | N/A | Single node — no IDXC block |
 | D1 | N/A | Standalone indexers — no `splunk_idxclusters` |
+| D11 | N/A | D1 plus a dedicated ES search head — no `splunk_idxclusters` |
 
 ## Lab compromises (document in header)
 
 | Compromise | SVA gap |
 |------------|---------|
-| Single shared SH on multisite IDXC | Per-site search affinity / DR behavior |
+| Single shared SH on multisite IDXC | Removed. SVA M2 is one search head per site (`4idxc2site_2sh.yml`) |
 | No MC / LM / DS | Management tier not SVA-aligned |
 | CM co-located with DS + deployer | Acceptable for small labs only |

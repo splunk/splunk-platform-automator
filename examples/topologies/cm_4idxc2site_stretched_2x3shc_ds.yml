@@ -1,0 +1,108 @@
+---
+# Topology only — compose with: spa init --example cm_4idxc2site_stretched_2x3shc_ds --provider aws|virtualbox ENV
+# SVA: M14
+# Lab: Multisite IDXC + two stretched SHCs (shc1 and shc_es), each with members on site1 and site2. No ES app.
+# Do not add virtualbox:, terraform:, os:, or apps here.
+plugin: splunk-platform-automator
+
+
+# Splunk default settings
+splunk_defaults:
+  # splunk_env_name: splk
+  # splunk_version: '8.2.3'
+  # splunk_architecture: amd64
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  # splunk_license_file: Splunk_Enterprise.lic
+  # splunk_indexes:
+  #   test1:
+  #   test2_metrics:
+  #     datatype: metric
+
+# Indexer Cluster settings
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: "{{ lookup('env', 'SPLUNK_IDXC_PASSWORD') }}"
+    idxc_replication_port: 9887
+    idxc_site_rf: 'origin:2, total:3'
+    idxc_site_sf: 'origin:1, total:2'
+
+# Search Head Cluster settings
+splunk_shclusters:
+  - shc_name: shc1
+    shc_site: site0
+    shc_password: "{{ lookup('env', 'SPLUNK_SHC_PASSWORD') }}"
+    shc_replication_port: 9887
+  - shc_name: shc_es
+    shc_site: site0
+    shc_password: "{{ lookup('env', 'SPLUNK_ES_SHC_PASSWORD') }}"
+    shc_replication_port: 9887
+
+# Splunk hosts with its settings
+splunk_hosts:
+  # Deployment server and deployer for the stretched SHC
+  - name: ds
+    roles:
+      - deployment_server
+      - deployer
+    shcluster: shc1
+
+  # Deployer for the stretched ES search head cluster
+  - name: esds
+    roles:
+      - deployer
+    shcluster: shc_es
+
+  # Cluster Manager
+  - name: cm
+    roles:
+      - cluster_manager
+      - monitoring_console
+      #- license_manager
+    idxcluster: idxc1
+    site: site0
+
+  # Cluster Indexers (site1)
+  - iter:
+      prefix: idx
+      numbers: 1..2
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site1
+
+  # Cluster Indexers (site2)
+  - iter:
+      prefix: idx
+      numbers: 3..4
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site2
+
+  # Stretched SHC members: two on site1, one on site2
+  - iter:
+      prefix: sh
+      numbers: 1..2
+    roles:
+      - search_head
+    shcluster: shc1
+    site: site1
+  - name: sh3
+    roles:
+      - search_head
+    shcluster: shc1
+    site: site2
+
+  # Stretched ES SHC members: two on site1, one on site2
+  - iter:
+      prefix: es
+      numbers: 1..2
+    roles:
+      - search_head
+    shcluster: shc_es
+    site: site1
+  - name: es3
+    roles:
+      - search_head
+    shcluster: shc_es
+    site: site2

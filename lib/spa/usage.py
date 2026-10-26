@@ -9,7 +9,7 @@ from __future__ import annotations
 TOPOLOGY_HELP = (
     "A topology feature id or an example stem. "
     "List them: spa init list. "
-    "Example: spa config topology cm_2idxc_sh_uf"
+    "Example: spa config topology cm_2idxc_sh"
 )
 PROVIDER_HELP = (
     "aws, virtualbox, or external, or a provider feature id. "

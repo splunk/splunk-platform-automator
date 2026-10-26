@@ -36,7 +36,7 @@ That installs the latest GitHub Release into `~/.local/share/spa` and puts `spa`
 
 ```bash
 spa doctor
-spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
+spa init --example cm_2idxc_sh --provider aws ~/envs/my-env
 cd ~/envs/my-env
 spa validate
 spa provision --yes && spa deploy --yes

@@ -15,7 +15,7 @@ features:
     sva: S1
     when_to_use: Config-test or a single host with indexer and search_head together.
     when_not_to_use: Clustered or production-like labs; use C1 or D1.
-    suggest: spa init --example single_node --provider virtualbox|aws ENV
+    suggest: spa init --example topology.s1 --provider virtualbox|aws ENV
     keys: [splunk_hosts]
     snippet: |
       # topology file examples/topologies/single_node.yml
@@ -24,50 +24,111 @@ features:
   - id: topology.d1
     title: D1 standalone indexer and search head
     kind: topology
-    template: idx_sh_uf
+    template: 2idx_sh
     sva: D1
     when_to_use: Separate indexer and SH without clustering.
     when_not_to_use: Need indexer cluster (C1) or SHC (C3).
-    suggest: spa init --example idx_sh_uf --provider virtualbox|aws ENV
+    suggest: spa init --example topology.d1 --provider virtualbox|aws ENV
+    keys: [splunk_hosts]
+
+  - id: topology.d11
+    title: D11 standalone indexers and dedicated ES search head
+    kind: topology
+    template: 2idx_sh_es
+    sva: D11
+    when_to_use: D1 plus a dedicated Enterprise Security search head.
+    when_not_to_use: Need an indexer cluster (C11) or a search head cluster.
+    suggest: spa init --example topology.d11 --provider virtualbox|aws ENV
     keys: [splunk_hosts]
 
   - id: topology.c1
     title: C1 cluster manager and indexer cluster
     kind: topology
-    template: cm_2idxc_sh_uf
-    sva: C1 / C11
+    template: cm_2idxc_sh
+    sva: C1
     when_to_use: Single-site IDXC with a standalone search head.
-    when_not_to_use: Need SHC (C3) or multisite (M2/M3). M4/M14 stretched SHC is not a lab file.
-    suggest: spa init --example cm_2idxc_sh_uf --provider virtualbox|aws ENV
+    when_not_to_use: Need SHC (C3) or multisite (M2/M3). Stretched SHC is M14.
+    suggest: spa init --example topology.c1 --provider virtualbox|aws ENV
+    keys: [splunk_hosts, splunk_idxclusters]
+    constraints: "Lab idxc_rf/idxc_sf 2; at least 2 indexer peers."
+
+  - id: topology.c11
+    title: C11 indexer cluster and dedicated ES search head
+    kind: topology
+    template: cm_2idxc_sh_es
+    sva: C11
+    when_to_use: C1 plus a dedicated Enterprise Security search head on the indexer cluster.
+    when_not_to_use: Need a search head cluster (C13) or multisite search (M12).
+    suggest: spa init --example topology.c11 --provider virtualbox|aws ENV
     keys: [splunk_hosts, splunk_idxclusters]
     constraints: "Lab idxc_rf/idxc_sf 2; at least 2 indexer peers."
 
   - id: topology.c3
     title: C3 indexer cluster and search head cluster
     kind: topology
-    template: cm_2idxc1site_3shc_uf
-    sva: C3 / C13
+    template: cm_2idxc_3shc_ds
+    sva: C3
     when_to_use: IDXC plus a 3-member SHC.
-    suggest: spa init --example cm_2idxc1site_3shc_uf --provider virtualbox|aws ENV
+    suggest: spa init --example topology.c3 --provider virtualbox|aws ENV
+    keys: [splunk_hosts, splunk_idxclusters, splunk_shclusters]
+
+  - id: topology.c13
+    title: C13 indexer cluster and dedicated ES search head cluster
+    kind: topology
+    template: cm_2idxc_2x3shc_ds
+    sva: C13
+    when_to_use: C3 plus a dedicated Enterprise Security search head cluster.
+    when_not_to_use: Need multisite indexers (M13) or a stretched search tier (M14).
+    suggest: spa init --example topology.c13 --provider virtualbox|aws ENV
     keys: [splunk_hosts, splunk_idxclusters, splunk_shclusters]
 
   - id: topology.m2
     title: M2 multisite indexer cluster
     kind: topology
-    template: 4idxc2site_sh
-    sva: M2 / M12
-    when_to_use: Two indexer sites and a shared search head.
-    when_not_to_use: Need per-site search (M3). Lab compromise is a single SH.
-    suggest: spa init --example 4idxc2site_sh --provider virtualbox|aws ENV
+    template: 4idxc2site_2sh
+    sva: M2
+    when_to_use: Two indexer sites with one search head on each site.
+    when_not_to_use: Need a search head cluster per site (M3) or a dedicated ES search tier (M12).
+    suggest: spa init --example topology.m2 --provider virtualbox|aws ENV
+    keys: [splunk_hosts, splunk_idxclusters]
+
+  - id: topology.m12
+    title: M12 multisite indexers and dedicated ES search heads
+    kind: topology
+    template: 4idxc2site_2sh_es
+    sva: M12
+    when_to_use: One search head per site plus a dedicated Enterprise Security search head on each site.
+    when_not_to_use: Need a search head cluster per site (M13).
+    suggest: spa init --example topology.m12 --provider virtualbox|aws ENV
     keys: [splunk_hosts, splunk_idxclusters]
 
   - id: topology.m3
     title: M3 multisite IDXC and SHC
     kind: topology
-    template: cm_4idxc2site_3shc_ds_uf
-    sva: M3 / M13
-    when_to_use: Multisite indexers plus search head cluster.
-    suggest: spa init --example cm_4idxc2site_3shc_ds_uf --provider virtualbox|aws ENV
+    template: cm_4idxc2site_2x3shc_ds
+    sva: M3
+    when_to_use: Multisite indexers plus a search head cluster on each site.
+    suggest: spa init --example topology.m3 --provider virtualbox|aws ENV
+    keys: [splunk_hosts, splunk_idxclusters, splunk_shclusters]
+
+  - id: topology.m13
+    title: M13 multisite search clusters and dedicated ES tier
+    kind: topology
+    template: cm_4idxc2site_4x3shc_ds
+    sva: M13
+    when_to_use: A search head cluster per site plus a dedicated Enterprise Security search head cluster on each site.
+    when_not_to_use: Need one stretched search tier across sites (M14).
+    suggest: spa init --example topology.m13 --provider virtualbox|aws ENV
+    keys: [splunk_hosts, splunk_idxclusters, splunk_shclusters]
+
+  - id: topology.m14
+    title: M14 stretched search clusters and dedicated ES tier
+    kind: topology
+    template: cm_4idxc2site_stretched_2x3shc_ds
+    sva: M14
+    when_to_use: Stretched search head clusters with a dedicated Enterprise Security search tier across sites.
+    when_not_to_use: Need a search head cluster pinned to each indexer site (M13).
+    suggest: spa init --example topology.m14 --provider virtualbox|aws ENV
     keys: [splunk_hosts, splunk_idxclusters, splunk_shclusters]
 
   - id: provider.virtualbox
@@ -566,7 +627,7 @@ features:
     when_not_to_use: >-
       Local-disk volumes only; use splunk_defaults.splunk_indexer_volumes.
       Indexer cluster RF must equal SF when SmartStore is enabled.
-    suggest: spa init --example idx_sh_uf --provider aws ENV then merge this snippet
+    suggest: spa init --example 2idx_sh --provider aws ENV then merge this snippet
     keys:
       - path: splunk_defaults.splunk_indexer_volumes.<volume>.path
         note: For SmartStore use an s3://bucket/prefix, not a local filesystem path.

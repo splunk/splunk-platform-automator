@@ -133,8 +133,14 @@ def test_explain_c1():
     result = run_spa(["config", "explain", "topology.c1"])
     assert result.returncode == 0, result.stderr
     assert "C1" in result.stdout
-    assert "cm_2idxc_sh_uf" in result.stdout
+    assert "spa init --example topology.c1" in result.stdout
     assert "keys:" not in result.stdout
+
+
+def test_explain_d11_suggests_the_catalog_id():
+    result = run_spa(["config", "explain", "topology.d11"])
+    assert result.returncode == 0, result.stderr
+    assert "spa init --example topology.d11" in result.stdout
 
 
 def test_explain_host_roles_includes_schema_metadata():

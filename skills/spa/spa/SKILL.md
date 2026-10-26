@@ -40,7 +40,7 @@ spa environment set --env-dir ~/work/spa-envs          # persist default parent 
 spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
 spa environment set --default my-lab                   # fallback when cwd does not select an env
 spa environment set --provider virtualbox              # providers.yml; aws is implicit (no file)
-spa environment init --example cm_2idxc_sh_uf my-lab   # name-only under default parent
+spa environment init --example cm_2idxc_sh my-lab   # name-only under default parent
 spa environment init --env-dir /custom --name my-lab   # one-off; does not change default parent
 spa init /custom/my-lab                                # same dest as the line above
 spa env init my-lab --force                            # adopt an existing env (cwd or default parent) into the list

@@ -1,7 +1,7 @@
 ---
-# Topology only — compose with: spa init --example cm_2idxc1site_3shc_uf --provider aws|virtualbox ENV
-# SVA: C3 / C13
-# Lab: CM + IDXC + SHC (3) + deployer/DS + UF.
+# Topology only — compose with: spa init --example cm_2idxc_2x3shc_ds --provider aws|virtualbox ENV
+# SVA: C13
+# Lab: C3 plus a dedicated ES search head cluster. Lab RF/SF 2/2. No ES app.
 # Do not add virtualbox:, terraform:, os:, or apps here.
 plugin: splunk-platform-automator
 
@@ -23,8 +23,8 @@ splunk_idxclusters:
   - idxc_name: idxc1
     idxc_password: "{{ lookup('env', 'SPLUNK_IDXC_PASSWORD') }}"
     idxc_replication_port: 9887
-    idxc_site_rf: 'origin:2, total:2'
-    idxc_site_sf: 'origin:2, total:2'
+    idxc_rf: 2
+    idxc_sf: 2
 
 # Search Head Cluster settings
 splunk_shclusters:
@@ -32,29 +32,28 @@ splunk_shclusters:
     shc_site: site0
     shc_password: "{{ lookup('env', 'SPLUNK_SHC_PASSWORD') }}"
     shc_replication_port: 9887
+  - shc_name: shc_es
+    shc_site: site0
+    shc_password: "{{ lookup('env', 'SPLUNK_ES_SHC_PASSWORD') }}"
+    shc_replication_port: 9887
 
 # Splunk hosts with its settings
 splunk_hosts:
   # Cluster Manager
   - name: cm
     roles:
-      - deployment_server
-      - deployer
       - cluster_manager
       - monitoring_console
       #- license_manager
     idxcluster: idxc1
-    shcluster: shc1
-    site: site0
 
-  # Cluster Indexers (site1)
+  # Cluster Indexers
   - iter:
       prefix: idx
       numbers: 1..2
     roles:
       - indexer
     idxcluster: idxc1
-    site: site1
 
   # Search Heads
   - iter:
@@ -64,7 +63,23 @@ splunk_hosts:
       - search_head
     shcluster: shc1
 
-  # Universal Forwarder
-  - name: uf
+  # Dedicated ES search heads
+  - iter:
+      prefix: es
+      numbers: 1..3
     roles:
-      - universal_forwarder
+      - search_head
+    shcluster: shc_es
+
+  # Deployment server and deployer
+  - name: ds
+    roles:
+      - deployment_server
+      - deployer
+    shcluster: shc1
+
+  # Deployer for the ES search head cluster
+  - name: esds
+    roles:
+      - deployer
+    shcluster: shc_es

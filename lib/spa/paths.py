@@ -64,7 +64,7 @@ class EnvDirRequired(RuntimeError):
 
 ENV_DIR_REQUIRED_HINT = (
     "spa requires an environment directory, not the framework prefix (clone or install).\n"
-    "Create one:  spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env\n"
+    "Create one:  spa init --example cm_2idxc_sh --provider aws ~/envs/my-env\n"
     "Then:        cd ~/envs/my-env\n"
     "Or run:      spa --env my-env COMMAND"
 )

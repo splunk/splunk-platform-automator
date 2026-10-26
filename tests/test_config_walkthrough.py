@@ -76,8 +76,8 @@ def test_walkthrough_replay_builds_the_clustered_config(tmp_path):
             script_parts.append(block)
     script = "\n".join(script_parts)
     script = script.replace(
-        "spa init --example cm_2idxc1site_3shc_uf --provider aws ./itsi-lab",
-        "spa init --example cm_2idxc1site_3shc_uf --provider aws --skip-doctor ./itsi-lab",
+        "spa init --example cm_2idxc_3shc_ds --provider aws ./itsi-lab",
+        "spa init --example cm_2idxc_3shc_ds --provider aws --skip-doctor ./itsi-lab",
     )
     script = re.sub(r"(?m)^spa ", "%s " % _SPA, script)
     software = seed_software_dir(tmp_path / "data")
@@ -133,21 +133,19 @@ def test_walkthrough_replay_builds_the_clustered_config(tmp_path):
     by_prefix = {
         host["iter"]["prefix"]: host for host in hosts if isinstance(host.get("iter"), dict)
     }
-    assert set(by_name) == {"cm", "uf", "shs", "lm"}
+    assert set(by_name) == {"cm", "ds", "shs", "lm"}
     assert set(by_prefix) == {"idx", "sh"}
     for prefix in ("idx", "sh"):
         sized = by_prefix[prefix]["terraform"]["aws"]
         assert "ami_id" not in sized
         assert sized["instance_type"] == "c5.4xlarge"
-    for name in ("cm", "uf", "lm", "shs"):
+    for name in ("cm", "ds", "lm", "shs"):
         assert "terraform" not in by_name[name]
     assert "license_manager" not in by_name["cm"]["roles"]
-    assert by_name["lm"]["roles"] == [
-        "license_manager",
-        "deployment_server",
-        "deployer",
-    ]
-    assert by_name["lm"]["shcluster"] == "shc1"
+    assert by_name["lm"]["roles"] == ["license_manager"]
+    assert "shcluster" not in by_name["lm"]
+    assert by_name["ds"]["roles"] == ["deployment_server", "deployer"]
+    assert by_name["ds"]["shcluster"] == "shc1"
     assert by_name["cm"]["roles"] == ["cluster_manager", "monitoring_console"]
     assert "shcluster" not in by_name["cm"]
     text = config_path.read_text(encoding="utf-8")

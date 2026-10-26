@@ -516,7 +516,7 @@ def test_required_operands_say_how_to_find_a_legal_value(argv, mode):
     assert "the following arguments are required" not in text
     if argv[-1] == "topology":
         assert "spa init list" in text
-        assert "spa config topology cm_2idxc_sh_uf" in text
+        assert "spa config topology cm_2idxc_sh" in text
     if argv[-1] == "provider":
         assert "spa init list" in text
         assert "spa config provider aws" in text

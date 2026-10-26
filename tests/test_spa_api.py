@@ -247,7 +247,7 @@ def test_session_list_examples_no_stdout(capsys):
     assert result.ok
     ids = [item["id"] for item in result.data["topologies"]]
     assert "single_node" in ids
-    assert "cm_2idxc_sh_uf" in ids
+    assert "cm_2idxc_sh" in ids
     providers = [item["id"] for item in result.data["providers"]]
     assert "aws" in providers
     assert "virtualbox" in providers

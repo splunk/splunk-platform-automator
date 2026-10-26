@@ -1,7 +1,7 @@
 ---
-# Topology only — compose with: spa init --example idx_sh_uf --provider aws|virtualbox ENV
-# SVA: D1
-# Lab: Standalone indexer + search head + UF.
+# Topology only — compose with: spa init --example 2idx_sh_es --provider aws|virtualbox ENV
+# SVA: D11
+# Lab: D1 plus one dedicated ES search head. No indexer cluster. No ES app.
 # Do not add virtualbox:, terraform:, os:, or apps here.
 plugin: splunk-platform-automator
 
@@ -20,8 +20,10 @@ splunk_defaults:
 
 # Splunk hosts with its settings
 splunk_hosts:
-  # Indexer
-  - name: idx
+  # Standalone indexers
+  - iter:
+      prefix: idx
+      numbers: 1..2
     roles:
       - indexer
 
@@ -30,7 +32,7 @@ splunk_hosts:
     roles:
       - search_head
 
-   # Universal Forwarder
-  - name: uf
+  # Dedicated ES search head
+  - name: es
     roles:
-      - universal_forwarder
+      - search_head

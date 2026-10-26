@@ -1,7 +1,7 @@
 ---
-# Topology only — compose with: spa init --example 4idxc2site_sh --provider aws|virtualbox ENV
-# SVA: M2 / M12
-# Lab: Multisite IDXC (2 sites x 2 idx) + shared SH. Lab compromise: not per-site search.
+# Topology only — compose with: spa init --example 4idxc2site_2sh --provider aws|virtualbox ENV
+# SVA: M2
+# Lab: Multisite IDXC (2 sites x 2 idx) + one search head per site.
 # Do not add virtualbox:, terraform:, os:, or apps here.
 plugin: splunk-platform-automator
 
@@ -58,8 +58,16 @@ splunk_hosts:
     idxcluster: idxc1
     site: site2
 
-  # Single Search Head
-  - name: sh
+  # Search head on site1
+  - name: sh1
     roles:
       - search_head
     idxcluster: idxc1
+    site: site1
+
+  # Search head on site2
+  - name: sh2
+    roles:
+      - search_head
+    idxcluster: idxc1
+    site: site2

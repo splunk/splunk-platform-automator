@@ -773,7 +773,7 @@ class TestLayoutContract:
         """CFG-LAYOUT-002 CFG-LAYOUT-003 CFG-LAYOUT-005."""
         path = _config(tmp_path)
         config_set(path, PROJECT_ROOT, "splunk_defaults.splunk_version", "9.4.0", validate=False)
-        config_topology(path, PROJECT_ROOT, "cm_2idxc_sh_uf", validate=False)
+        config_topology(path, PROJECT_ROOT, "cm_2idxc_sh", validate=False)
         data = _load(path)
         assert data["splunk_defaults"]["splunk_version"] == "9.4.0"
         indexers = next(host for host in data["splunk_hosts"] if "indexer" in host["roles"])
@@ -782,7 +782,7 @@ class TestLayoutContract:
     def test_topology_switch_to_single_node_removes_stale_cluster_roots(self, tmp_path):
         """CFG-LAYOUT-003."""
         path = _config(tmp_path)
-        config_topology(path, PROJECT_ROOT, "cm_2idxc_sh_uf", validate=False)
+        config_topology(path, PROJECT_ROOT, "cm_2idxc_sh", validate=False)
         config_topology(path, PROJECT_ROOT, "single_node", validate=False)
         data = _load(path)
         assert "splunk_idxclusters" not in data
@@ -792,7 +792,7 @@ class TestLayoutContract:
         """CFG-LAYOUT-002."""
         path = _config(tmp_path)
         assert config_provider(path, PROJECT_ROOT, "provider.aws")["provider"] == "aws"
-        assert config_topology(path, PROJECT_ROOT, "topology.c1", validate=False)["topology"] == "cm_2idxc_sh_uf"
+        assert config_topology(path, PROJECT_ROOT, "topology.c1", validate=False)["topology"] == "cm_2idxc_sh"
 
     def test_all_clustered_topology_examples_use_iter_for_member_ranges(self):
         """CFG-LAYOUT-005."""
@@ -1267,7 +1267,7 @@ splunk_hosts:
         features = load_features(PROJECT_ROOT)
         topology = resolve_feature(features, "topology.c1")
         public = public_feature(topology, features, include_keys=True)
-        assert public["template"] == "cm_2idxc_sh_uf"
+        assert public["template"] == "cm_2idxc_sh"
         assert "apply" not in public
         assert all("merge" not in feature for feature in features)
 
