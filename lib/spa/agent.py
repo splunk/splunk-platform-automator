@@ -7,6 +7,7 @@ import os
 import sys
 from typing import Any, Dict, Optional
 
+from spa.hosts import allowed_role_names
 from spa.usage import (
     APP_ID_HELP,
     INIT_PROVIDER_HELP,
@@ -566,18 +567,7 @@ COMMAND_SCHEMA = {
                     "long": "--role",
                     "help": "Splunk role. Repeat to add more.",
                     "takes_value": True,
-                    "choices": [
-                        "cluster_manager",
-                        "deployer",
-                        "deployment_server",
-                        "heavy_forwarder",
-                        "indexer",
-                        "license_manager",
-                        "monitoring_console",
-                        "search_head",
-                        "universal_forwarder",
-                        "universal_forwarder_windows",
-                    ],
+                    "choices": allowed_role_names(),
                 },
             ],
             "example": "spa hosts register NAME --address ADDRESS --user USER --key PATH --yes",

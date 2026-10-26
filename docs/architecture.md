@@ -289,9 +289,16 @@ steps until it passes an independent whole-change review:
 4. Fix every confirmed finding with a new red-green-refactor cycle and rerun
    the required local gates.
 5. Report the review to the user before any commit. For each finding, say what
-   was found, what was fixed, and what was left out. Do not commit until the user confirms the left-out items.
+   was found, what was fixed, and what was left out. Discuss that report with
+   the user. Do not commit until the user confirms the left-out items.
 6. Continue to the ship steps only after the user confirms the left-out items.
    A request to fix a left-out item returns to step 4.
+
+Saying the feature is complete does not replace that report. If the user
+already said the feature is complete, concluded, or ready to ship, still stop
+and discuss the review and what was left out.
+A completion request that arrived before the report is not that confirmation.
+After the user confirms the left-out items, the ship steps do not need to be enumerated again.
 
 ## Feature development lifecycle
 
@@ -311,7 +318,14 @@ scope. Complete the [feature completion review](#feature-completion-review),
 including the user's confirmation of what was left out, before starting the
 ship steps below.
 
-When the user says the feature is complete, concluded, or ready to ship, finish it without requiring them to enumerate the integration steps:
+When the user says the feature is complete, concluded, or ready to ship, that
+authorizes the ship steps below and does not require the user to enumerate
+them. It does not skip the review report. If that report has not been
+discussed, or the user has not confirmed what was left out, stop and have that
+discussion first.
+A completion request that arrived before the report is not that confirmation.
+
+After that confirmation:
 
 1. Run the required local test gate and fix failures.
 2. Commit all intended changes only after commit authorization, then push and open a pull request against the recorded base branch.

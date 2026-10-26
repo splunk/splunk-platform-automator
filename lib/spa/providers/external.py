@@ -186,6 +186,15 @@ def _load_document(path: Path):
     return yaml, document
 
 
+def _restore_bytes(path: Path, payload: Optional[bytes]) -> None:
+    if payload is None:
+        if path.is_file():
+            path.unlink()
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
+
+
 def _dump_document(yaml, document, path: Path) -> None:
     from spa.init import _bare_external_keys
 
@@ -247,10 +256,17 @@ def register_host(paths: SpaPaths, spec: RegisterSpec, run: SshRunner) -> Dict[s
         target["external"] = None
     if spec.roles:
         target["roles"] = list(spec.roles)
-    _dump_document(yaml, document, paths.config_file)
     line = inventory_line(spec.name, spec.address, spec.user, str(key), spec.port)
     destination = paths.inventory_dir / "hosts"
-    upsert_inventory(destination, spec.name, line)
+    config_bytes = paths.config_file.read_bytes() if paths.config_file.is_file() else None
+    inventory_bytes = destination.read_bytes() if destination.is_file() else None
+    try:
+        upsert_inventory(destination, spec.name, line)
+        _dump_document(yaml, document, paths.config_file)
+    except Exception:
+        _restore_bytes(paths.config_file, config_bytes)
+        _restore_bytes(destination, inventory_bytes)
+        raise
     return {
         "name": spec.name,
         "ansible_host": spec.address,
@@ -293,7 +309,9 @@ class Provider:
         def _default(argv: Sequence[str]) -> int:
             import subprocess
 
-            completed = subprocess.run(list(argv), check=False)
+            completed = subprocess.run(
+                list(argv), check=False, capture_output=True, text=True
+            )
             return completed.returncode
 
         return _default
@@ -306,35 +324,13 @@ class Provider:
         return _external_host_records(document)
 
     def provision(self, extra: Optional[Sequence[str]] = None, **kwargs: Any) -> Dict[str, Any]:
+        """External hosts are not created here. SSH stays on spa hosts check and deploy."""
         del extra, kwargs
-        hosts_file = self.paths.inventory_dir / "hosts"
-        previous = _inventory_lines(hosts_file)
-        written: List[str] = []
-        try:
-            for host in self._hosts():
-                name = str(host["name"])
-                recorded = connection_from_inventory(hosts_file, name)
-                address = recorded.get("ansible_host")
-                user = recorded.get("ansible_user")
-                key_path = recorded.get("ansible_ssh_private_key_file")
-                if not (address and user and key_path):
-                    raise ProviderError(_register_sentence(name))
-                port = int(recorded.get("ansible_port") or 22)
-                probe_ssh(str(address), str(user), str(key_path), port, self._runner())
-                upsert_inventory(
-                    hosts_file,
-                    name,
-                    inventory_line(name, str(address), str(user), str(key_path), port),
-                )
-                written.append(name)
-        except Exception:
-            for name in written:
-                if name in previous:
-                    upsert_inventory(hosts_file, name, previous[name])
-                else:
-                    _drop_inventory_name(hosts_file, name)
-            raise
-        return {"provider": self.name, "action": "provision"}
+        return {
+            "provider": self.name,
+            "action": "provision",
+            "note": "SPA does not provision external hosts.",
+        }
 
     def provision_state(self) -> ProvisionState:
         try:

@@ -184,6 +184,10 @@ def test_development_docs_require_tdd_and_feature_review():
     assert "## Feature completion review" in architecture
     assert "what was left out" in architecture
     assert "until the user confirms the left-out items" in architecture
+    assert "Saying the feature is complete does not replace that report." in architecture
+    assert "A completion request that arrived before the report is not that confirmation." in architecture
+    assert "even when the user already said the feature is complete" in agents
+    assert "A completion request that arrived before the report is not that confirmation." in agents
     assert "architecture.md#test-driven-development" in contributing
     assert "architecture.md#feature-completion-review" in contributing
     assert "docs/architecture.md#test-driven-development" in agents

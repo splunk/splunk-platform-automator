@@ -388,29 +388,51 @@ def test_probe_uses_batchmode_without_reading_the_key(tmp_path):
     assert "not-read" not in " ".join(seen[0])
 
 
-def test_failed_probe_does_not_write_inventory(tmp_path):
-    from spa.providers import ProviderError
-    from spa.providers.external import Provider
+def test_external_provision_does_not_ssh(tmp_path):
+    from spa.providers.external import Provider, inventory_line
 
     key = tmp_path / "id_ed25519"
     key.write_text("not-read")
     hosts = tmp_path / "inventory" / "hosts"
     hosts.parent.mkdir()
-    from spa.providers.external import inventory_line
-
     hosts.write_text(
-        'keepme ansible_host="10.0.0.1"\n%s\n' % inventory_line("byo1", "10.0.0.8", "splunk", str(key), 22)
+        inventory_line("byo1", "10.0.0.8", "splunk", str(key), 22) + "\n"
     )
     before = hosts.read_bytes()
     paths = _external_paths(tmp_path, host="byo1", key=str(key))
+    seen = []
 
     def run(argv):
-        return 1
+        seen.append(list(argv))
+        return 0
 
-    provider = Provider(paths, {}, run=run)
-    with pytest.raises(ProviderError, match="ssh failed for splunk@10.0.0.8"):
-        provider.provision([])
+    result = Provider(paths, {}, run=run).provision([])
+    assert seen == []
     assert hosts.read_bytes() == before
+    assert result["action"] == "provision"
+
+
+def test_external_status_captures_ssh_stderr(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from spa.providers.external import Provider, inventory_line
+
+    key = tmp_path / "id_ed25519"
+    key.write_text("not-read")
+    hosts = tmp_path / "inventory" / "hosts"
+    hosts.parent.mkdir()
+    hosts.write_text(inventory_line("byo1", "10.0.0.8", "splunk", str(key), 22) + "\n")
+    paths = _external_paths(tmp_path, host="byo1", key=str(key))
+    seen = {}
+
+    def fake_run(argv, **kwargs):
+        seen["kwargs"] = kwargs
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    status = Provider(paths, {}).host_status("byo1")
+    assert seen["kwargs"].get("capture_output") is True
+    assert status["reachable"] is True
 
 
 def test_external_suspend_and_destroy_do_not_call_ssh(tmp_path):
@@ -522,6 +544,58 @@ def test_register_human_line_and_failed_probe_leaves_files(tmp_path):
     )
     assert ok.returncode == 0, ok.stderr
     assert ok.stdout.strip() == "registered byo1 ansible_host=10.0.0.8 user=splunk key=set"
+
+
+def test_register_leaves_config_when_the_inventory_write_fails(tmp_path, monkeypatch):
+    from spa.providers.external import RegisterSpec, register_host
+
+    key = tmp_path / "id_ed25519"
+    key.write_text("not-read")
+    paths = _paths(tmp_path, "external: {}\nsplunk_hosts: []\n")
+    paths.inventory_dir.mkdir(parents=True, exist_ok=True)
+    inventory = paths.inventory_dir / "hosts"
+    inventory.write_text("# keep\n")
+    config_before = paths.config_file.read_bytes()
+    inventory_before = inventory.read_bytes()
+
+    def boom(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("spa.providers.external.upsert_inventory", boom)
+    with pytest.raises(OSError, match="disk full"):
+        register_host(
+            paths,
+            RegisterSpec("byo1", "10.0.0.8", "splunk", str(key), 22, ("search_head",)),
+            lambda _argv: 0,
+        )
+    assert paths.config_file.read_bytes() == config_before
+    assert inventory.read_bytes() == inventory_before
+
+
+def test_register_leaves_inventory_when_the_config_write_fails(tmp_path, monkeypatch):
+    from spa.providers.external import RegisterSpec, register_host
+
+    key = tmp_path / "id_ed25519"
+    key.write_text("not-read")
+    paths = _paths(tmp_path, "external: {}\nsplunk_hosts: []\n")
+    paths.inventory_dir.mkdir(parents=True, exist_ok=True)
+    inventory = paths.inventory_dir / "hosts"
+    inventory.write_text("# keep\n")
+    config_before = paths.config_file.read_bytes()
+    inventory_before = inventory.read_bytes()
+
+    def boom(*_args, **_kwargs):
+        raise OSError("config disk full")
+
+    monkeypatch.setattr("spa.providers.external._dump_document", boom)
+    with pytest.raises(OSError, match="config disk full"):
+        register_host(
+            paths,
+            RegisterSpec("byo1", "10.0.0.8", "splunk", str(key), 22, ()),
+            lambda _argv: 0,
+        )
+    assert paths.config_file.read_bytes() == config_before
+    assert inventory.read_bytes() == inventory_before
 
 
 def test_register_refuses_a_managed_name(tmp_path):
@@ -946,6 +1020,41 @@ def test_hosts_check_uses_architecture_on_a_listed_host_block(tmp_path):
         ping_hosts(paths, ["idx1"], run)
 
 
+def test_hosts_check_uses_the_environment_architecture(tmp_path):
+    from spa.hosts import ping_hosts
+
+    paths = _paths(
+        tmp_path,
+        "external: {}\n"
+        "splunk_defaults:\n"
+        "  splunk_env_name: splk\n"
+        "  splunk_architecture: amd64\n"
+        "splunk_environments:\n"
+        "  - splunk_env_name: lab\n"
+        "    splunk_architecture: arm64\n"
+        "splunk_hosts:\n"
+        "  - name: byo1\n"
+        "    splunk_env: lab\n"
+        "    roles: [search_head]\n",
+    )
+    hosts = paths.inventory_dir / "hosts"
+    hosts.parent.mkdir(parents=True, exist_ok=True)
+    hosts.write_text('byo1 ansible_host="10.0.0.8"\n')
+
+    def run(argv, tree):
+        module = argv[argv.index("-m") + 1]
+        with open(os.path.join(tree, "byo1"), "w", encoding="utf-8") as handle:
+            if module == "ping":
+                handle.write('{"ping": "pong"}')
+            else:
+                handle.write('{"ansible_facts": {"ansible_architecture": "aarch64"}}')
+        return 0
+
+    data = ping_hosts(paths, ["byo1"], run)
+    assert data["hosts"][0]["ok"] is True
+    assert data["hosts"][0]["expected_architecture"] == "arm64"
+
+
 def _ping_paths(tmp_path):
     key = tmp_path / "id_ed25519"
     key.write_text("not-read")
@@ -1100,6 +1209,39 @@ def test_destroy_keeps_terraform_when_another_directory_remains(tmp_path, monkey
     assert not paths.terraform_state_dir.exists()
     assert paths.terraform_state_dir.parent.is_dir()
     assert (other / "keep.txt").read_text(encoding="utf-8") == "keep\n"
+
+
+def test_in_repo_destroy_leaves_framework_terraform_files(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    def fake_destroy(self, extra, **kwargs):
+        hosts = self.paths.inventory_dir / "hosts"
+        if hosts.exists():
+            hosts.unlink()
+        return 0
+
+    monkeypatch.setattr("spa.providers.aws.Provider.destroy", fake_destroy)
+    paths = _paths(
+        tmp_path,
+        "terraform:\n"
+        "  aws:\n"
+        "    region: eu-central-1\n"
+        "splunk_hosts:\n"
+        "  - name: idx1\n"
+        "    roles: [indexer]\n",
+    )
+    shared = tmp_path / "framework" / "terraform" / "aws"
+    shared.mkdir(parents=True)
+    (shared / "main.tf").write_text("# tracked\n", encoding="utf-8")
+    (shared / "terraform.tfstate").write_text("{}\n", encoding="utf-8")
+    (shared / "terraform.tfvars").write_text('region = "eu-central-1"\n', encoding="utf-8")
+    paths = replace(paths, terraform_state_dir=shared, terraform_modules_dir=shared)
+    _write_named_inventory(paths, {"idx1": 'ansible_host="10.0.0.1"'})
+    result = _ready_session(paths, monkeypatch).destroy(confirm=True)
+    assert result.ok, result.error
+    assert (shared / "main.tf").read_text(encoding="utf-8") == "# tracked\n"
+    assert (shared / "terraform.tfstate").is_file()
+    assert (shared / "terraform.tfvars").is_file()
 
 
 def test_failed_mixed_destroy_keeps_managed_inventory_lines(tmp_path, monkeypatch):
@@ -1263,6 +1405,29 @@ def test_vagrant_refuses_a_created_external_name(tmp_path, monkeypatch):
     assert not called
 
 
+def test_register_role_choices_match_allowed_role():
+    import sys
+
+    from spa.hosts import allowed_role_names
+    from spa_testutil import PROJECT_ROOT, run_spa
+
+    plugin = str(PROJECT_ROOT / "ansible" / "plugins" / "inventory")
+    if plugin not in sys.path:
+        sys.path.insert(0, plugin)
+    from schema import AllowedRole
+
+    names = allowed_role_names()
+    assert names == [role.value for role in AllowedRole]
+    help_result = run_spa(["hosts", "register", "--help"])
+    assert help_result.returncode == 0, help_result.stderr
+    for name in names:
+        assert name in help_result.stdout
+    schema = json.loads(run_spa(["agent", "schema"]).stdout)
+    register = next(row for row in schema["data"]["commands"] if row["name"] == "hosts register")
+    role = next(flag for flag in register["flags"] if flag["long"] == "--role")
+    assert role["choices"] == names
+
+
 def test_user_guide_registers_existing_servers():
     from spa_testutil import PROJECT_ROOT
 
@@ -1271,6 +1436,7 @@ def test_user_guide_registers_existing_servers():
     assert "does not create, shut down, or terminate" in text
     assert "spa hosts check" in text
     assert "before the playbook" in text
+    assert "splunk_environments" in text
     assert "--allow-unprovisioned" not in text
 
 

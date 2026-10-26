@@ -761,6 +761,14 @@ class TestLayoutContract:
         assert "virtualbox" in data and "terraform" not in data
         assert data["custom"]["keep"] == "value"
 
+    def test_provider_switch_to_external_validates(self, tmp_path):
+        path = _config(tmp_path)
+        result = config_provider(path, PROJECT_ROOT, "external")
+        assert result["validation"] == "ok"
+        data = _load(path)
+        assert "external" in data
+        assert "terraform" not in data
+
     def test_topology_switch_replaces_owned_sections_and_keeps_defaults(self, tmp_path):
         """CFG-LAYOUT-002 CFG-LAYOUT-003 CFG-LAYOUT-005."""
         path = _config(tmp_path)
