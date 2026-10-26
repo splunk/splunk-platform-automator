@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import contextvars
 import json
 import os
 import sys
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 from spa.hosts import allowed_role_names
 from spa.usage import (
@@ -20,6 +21,14 @@ from spa.usage import (
 
 
 SCHEMA_VERSION = 1
+
+# Bound for the duration of one command that accepts --env. emit() reads it
+# when the caller does not pass identity, so every success path (including
+# direct emit() in venv and logs) shares one value. Failures ignore it.
+_ACTIVE_IDENTITY: contextvars.ContextVar[Optional[Mapping[str, Any]]] = contextvars.ContextVar(
+    "spa_envelope_identity",
+    default=None,
+)
 
 # Human playbook output. Agents stay on compact progress / spa logs JSONL.
 _FLAG_ANSIBLE_OUTPUT = {
@@ -66,8 +75,19 @@ def agent_mode(force_agent: bool = False, force_human: bool = False) -> bool:
     return detect_agent()
 
 
-def envelope(ok: bool, data: Any = None, error: Optional[str] = None) -> Dict[str, Any]:
+def envelope(
+    ok: bool,
+    data: Any = None,
+    error: Optional[str] = None,
+    identity: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
     payload: Dict[str, Any] = {"ok": ok, "schema_version": SCHEMA_VERSION}
+    # Failures stay {ok, schema_version, error} plus any command data already
+    # present. Identity is a success-only prefix, immediately before data.
+    if ok and identity is not None:
+        payload["resolved_env_name"] = identity.get("resolved_env_name")
+        payload["env_dir"] = identity.get("env_dir")
+        payload["config_file"] = identity.get("config_file")
     if data is not None:
         payload["data"] = data
     if error:
@@ -75,15 +95,29 @@ def envelope(ok: bool, data: Any = None, error: Optional[str] = None) -> Dict[st
     return payload
 
 
-def emit(ok: bool, data: Any = None, error: Optional[str] = None, as_agent: bool = False) -> None:
+def emit(
+    ok: bool,
+    data: Any = None,
+    error: Optional[str] = None,
+    as_agent: bool = False,
+    identity: Optional[Mapping[str, Any]] = None,
+) -> None:
     if error:
         from spa.runlog import redact
 
         error = str(redact(error))
     if as_agent:
+        bound = identity
+        if bound is None:
+            bound = _ACTIVE_IDENTITY.get()
         # Compact: agents parse it, and indentation is a third of the payload.
         sys.stdout.write(
-            json.dumps(envelope(ok, data, error), separators=(",", ":"), default=str) + "\n"
+            json.dumps(
+                envelope(ok, data, error, identity=bound),
+                separators=(",", ":"),
+                default=str,
+            )
+            + "\n"
         )
         return
     if error:
@@ -92,6 +126,15 @@ def emit(ok: bool, data: Any = None, error: Optional[str] = None, as_agent: bool
         print(json.dumps(data, indent=2, default=str))
     elif isinstance(data, str):
         print(data)
+
+
+def bind_envelope_identity(identity: Optional[Mapping[str, Any]]):
+    """Install success-envelope identity for the current command."""
+    return _ACTIVE_IDENTITY.set(identity)
+
+
+def clear_envelope_identity() -> None:
+    _ACTIVE_IDENTITY.set(None)
 
 
 COMMAND_SCHEMA = {

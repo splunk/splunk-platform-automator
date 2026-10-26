@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from spa.agent import agent_mode, emit, format_schema_markdown
+from spa.agent import (
+    agent_mode,
+    bind_envelope_identity,
+    clear_envelope_identity,
+    emit,
+    format_schema_markdown,
+)
 from spa.hosts import allowed_role_names
 from spa.api import CommandResult, open_session
 from spa.apps import SEARCH_KINDS, SEARCH_TYPES
@@ -134,8 +141,35 @@ def _start_dir_from_head(head: Sequence[str]) -> Optional[str]:
     return _value_from_head(head, "--start-dir")
 
 
+def _env_values_from_head(head: Sequence[str]) -> List[str]:
+    tokens = list(head)
+    values: List[str] = []
+    index = 0
+    while index < len(tokens):
+        if tokens[index] == "--env" and index + 1 < len(tokens):
+            values.append(tokens[index + 1])
+            index += 2
+            continue
+        index += 1
+    return values
+
+
 def _env_selector_from_head(head: Sequence[str]) -> Optional[str]:
-    return _value_from_head(head, "--env")
+    values = _env_values_from_head(head)
+    if not values:
+        return None
+    return values[0]
+
+
+def _env_conflict_from_head(head: Sequence[str]) -> Optional[str]:
+    """Usage error when run --help sees two different --env values."""
+    seen: List[str] = []
+    for value in _env_values_from_head(head):
+        if value not in seen:
+            seen.append(value)
+    if len(seen) < 2:
+        return None
+    return _conflicting_env_message(seen[0], seen[1], "run NAME --help")
 
 
 def _print_catalog(rows: List[dict], paths) -> None:
@@ -707,12 +741,44 @@ def _want_native_output(args) -> bool:
 
 
 def _add_env_selector(parser) -> None:
+    # A separate dest: a subparser default of None can overwrite the
+    # global --env even when the subcommand omits the flag.
+    # Marker default (not the flag dest) so success envelopes know this command
+    # accepts --env even when the flag itself is omitted (argparse.SUPPRESS).
+    parser.set_defaults(accepts_env_selector=True)
     parser.add_argument(
         "--env",
-        dest="env_selector",
+        dest="command_env_selector",
+        default=argparse.SUPPRESS,
         metavar="NAME",
         help="Registered environment name or dest path",
     )
+
+
+def _conflicting_env_message(first: str, second: str, command: str) -> str:
+    return (
+        "conflicting --env values: %s and %s.\n"
+        "Pass --env once: spa --env %s %s"
+        % (first, second, first, command)
+    )
+
+
+def _env_selector_conflict(args) -> Optional[str]:
+    """Usage error when the global and subcommand --env values differ."""
+    if not hasattr(args, "command_env_selector"):
+        return None
+    global_selector = getattr(args, "env_selector", None)
+    command_selector = args.command_env_selector
+    if global_selector is None or global_selector == command_selector:
+        return None
+    return _conflicting_env_message(global_selector, command_selector, args.command)
+
+
+def _resolved_env_selector(args) -> Optional[str]:
+    """The subcommand --env when present, otherwise the global --env."""
+    if hasattr(args, "command_env_selector"):
+        return args.command_env_selector
+    return getattr(args, "env_selector", None)
 
 
 def _add_init_arguments(parser) -> None:
@@ -790,8 +856,88 @@ def _paths(start_dir: Optional[str] = None, env_selector: Optional[str] = None):
     return paths
 
 
-def _emit_result(result: CommandResult, as_agent: bool) -> int:
-    emit(result.ok, data=result.data, error=result.error, as_agent=as_agent)
+def _paths_for_config_owner(start_dir: Optional[str], env_dir: Path):
+    """Resolve an owned config's env without an inherited config-file override."""
+    start = Path(start_dir).resolve() if start_dir else None
+    environ = os.environ.copy()
+    environ.pop("SPLUNK_CONFIG_FILE", None)
+    paths = resolve_spa_paths(
+        start_dir=start,
+        env_selector=str(env_dir),
+        environ=environ,
+    )
+    apply_paths_env(paths)
+    return paths
+
+
+def _envelope_identity(paths) -> Dict[str, Any]:
+    from spa.registry import env_name_for_path
+
+    return {
+        "resolved_env_name": env_name_for_path(paths.spa_env_dir),
+        "env_dir": str(paths.spa_env_dir),
+        "config_file": str(paths.config_file),
+    }
+
+
+def _resolved_config_argument(config: str, paths) -> Path:
+    from spa.validate import resolve_config_path
+
+    return resolve_config_path(config, paths)
+
+
+def _config_env_mismatch(config: str, paths) -> Optional[str]:
+    """Usage error when explicit --env and --config name different files."""
+    given = _resolved_config_argument(config, paths)
+    expected = Path(paths.config_file).resolve()
+    if given == expected:
+        return None
+    configured = (os.environ.get("SPLUNK_CONFIG_FILE") or "").strip()
+    expected_source = (
+        " from SPLUNK_CONFIG_FILE" if configured and expected == Path(configured).expanduser().resolve() else ""
+    )
+    return (
+        "--config %s is not the config file for this --env (expected%s: %s).\n"
+        "Drop --config, or use --config %s."
+        % (given, expected_source, expected, expected)
+    )
+
+
+def _config_owner(config: str, paths) -> Optional[Path]:
+    resolved = _resolved_config_argument(config, paths)
+    if resolved.name != "splunk_config.yml" or resolved.parent.name != "config":
+        return None
+    env_dir = resolved.parent.parent
+    from spa.registry import env_name_for_path
+
+    if env_name_for_path(env_dir) is None and not (env_dir / ".spa.yml").is_file():
+        return None
+    return env_dir
+
+
+def _identity_following_config(config: str, paths) -> Optional[Dict[str, Any]]:
+    """Identity of the env that owns ``config``, or None when nothing owns it.
+
+    The owner is the parent of ``config/splunk_config.yml`` when that directory
+    is registered or contains ``.spa.yml``.
+    """
+    env_dir = _config_owner(config, paths)
+    if env_dir is None:
+        return None
+    from types import SimpleNamespace
+
+    resolved = _resolved_config_argument(config, paths)
+    return _envelope_identity(SimpleNamespace(spa_env_dir=env_dir, config_file=resolved))
+
+
+def _emit_result(result: CommandResult, as_agent: bool, identity=None) -> int:
+    emit(
+        result.ok,
+        data=result.data,
+        error=result.error,
+        as_agent=as_agent,
+        identity=identity,
+    )
     return result.code
 
 
@@ -1013,22 +1159,25 @@ def _error_agent_mode(argv: List[str]) -> bool:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
     try:
-        return _run(raw)
-    except ToolNotFound as exc:
-        emit(False, error=str(exc), as_agent=_error_agent_mode(raw))
-        return 1
-    except ModuleNotFoundError as exc:
-        # A requirement spa imports lazily (boto3, lxml, jmespath, ...). Report
-        # the venv to build instead of a traceback from deep in a subcommand.
-        if (exc.name or "") not in REQUIREMENT_DISTRIBUTIONS:
-            raise
-        paths = resolve_spa_paths(start_dir=None)
-        emit(
-            False,
-            error=venv_setup_message(paths, [exc.name]),
-            as_agent=_error_agent_mode(raw),
-        )
-        return 2
+        try:
+            return _run(raw)
+        except ToolNotFound as exc:
+            emit(False, error=str(exc), as_agent=_error_agent_mode(raw))
+            return 1
+        except ModuleNotFoundError as exc:
+            # A requirement spa imports lazily (boto3, lxml, jmespath, ...). Report
+            # the venv to build instead of a traceback from deep in a subcommand.
+            if (exc.name or "") not in REQUIREMENT_DISTRIBUTIONS:
+                raise
+            paths = resolve_spa_paths(start_dir=None)
+            emit(
+                False,
+                error=venv_setup_message(paths, [exc.name]),
+                as_agent=_error_agent_mode(raw),
+            )
+            return 2
+    finally:
+        clear_envelope_identity()
 
 
 def _run(argv: Sequence[str]) -> int:
@@ -1049,6 +1198,9 @@ def _run(argv: Sequence[str]) -> int:
             force_agent="--agent" in head or "--json" in head,
             force_human="--no-agent" in head,
         )
+        conflict = _env_conflict_from_head(head)
+        if conflict:
+            return _reject(conflict, as_agent)
         paths = _paths(_start_dir_from_head(head), _env_selector_from_head(head))
         session = open_session(start_dir=str(paths.spa_env_dir))
         if help_name == "":
@@ -1062,12 +1214,13 @@ def _run(argv: Sequence[str]) -> int:
                         },
                     ),
                     True,
+                    _envelope_identity(paths),
                 )
             _print_run_usage()
             return 0
         result = session.describe_playbook(help_name)
         if as_agent:
-            return _emit_result(result, True)
+            return _emit_result(result, True, _envelope_identity(paths) if result.ok else None)
         if result.error:
             print(result.error, file=sys.stderr)
             return result.code
@@ -2028,13 +2181,21 @@ def _run(argv: Sequence[str]) -> int:
     if invoked in NATIVE_FLAG_COMMANDS and not args.agent:
         as_agent = agent_mode(force_agent=False, force_human=args.no_agent)
 
+    conflict = _env_selector_conflict(args)
+    if conflict:
+        return _reject(conflict, as_agent)
+    env_selector = _resolved_env_selector(args)
     try:
-        paths = _paths(args.start_dir, getattr(args, "env_selector", None))
+        paths = _paths(args.start_dir, env_selector)
     except Exception as exc:
         emit(False, error=str(exc), as_agent=as_agent)
         return 1
 
     session = open_session(paths=paths)
+    identity = (
+        _envelope_identity(paths) if getattr(args, "accepts_env_selector", False) else None
+    )
+    bind_envelope_identity(identity)
 
     if args.command is None:
         parser.print_help()
@@ -2301,6 +2462,17 @@ def _run(argv: Sequence[str]) -> int:
     if args.command == "validate":
         from spa.validate import format_validate_text
 
+        if env_selector is not None and getattr(args, "config", None):
+            mismatch = _config_env_mismatch(args.config, paths)
+            if mismatch:
+                return _reject(mismatch, as_agent)
+        elif getattr(args, "config", None):
+            owner = _config_owner(args.config, paths)
+            if owner is not None:
+                paths = _paths_for_config_owner(args.start_dir, owner)
+                session = open_session(paths=paths)
+            bind_envelope_identity(_identity_following_config(args.config, paths))
+
         result = session.validate(
             config=args.config,
             check_licenses=args.check_licenses,
@@ -2326,7 +2498,7 @@ def _run(argv: Sequence[str]) -> int:
 
         result = session.doctor(
             spa_home=args.spa_home,
-            env_dir=_doctor_env_dir(getattr(args, "env_selector", None), args.start_dir),
+            env_dir=_doctor_env_dir(env_selector, args.start_dir),
             aws=args.aws,
             virtualbox=args.virtualbox,
             strict=args.strict,

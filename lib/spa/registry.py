@@ -427,6 +427,28 @@ def register_environment(
     save_environments(data, environ)
 
 
+def env_name_for_path(path, environ: Optional[Dict[str, str]] = None) -> Optional[str]:
+    """Registry name whose path resolves to ``path``, or None when unregistered."""
+    if path is None or not str(path).strip():
+        return None
+    try:
+        resolved = Path(path).expanduser().resolve()
+    except OSError:
+        return None
+    for row in list_environments(environ):
+        raw = str((row or {}).get("path") or "").strip()
+        if not raw:
+            continue
+        try:
+            candidate = Path(raw).expanduser().resolve()
+        except OSError:
+            continue
+        if candidate == resolved:
+            name = str(row.get("name") or "").strip()
+            return name or None
+    return None
+
+
 def list_environments(environ: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
     data = load_environments(environ)
     default = (data.get("default") or "").strip()
