@@ -475,11 +475,11 @@ def run_doctor(dest: Path, spa_home: Path, skip: bool) -> None:
 
 def list_catalog_topologies(spa_home: Path) -> List[Dict[str, str]]:
     """Catalog topology ids and the example stem each one loads."""
-    from spa.catalog import load_features
-
     try:
+        from spa.catalog import load_features
+
         features = load_features(spa_home)
-    except (FileNotFoundError, ValueError, OSError):
+    except (FileNotFoundError, ValueError, OSError, ImportError):
         return []
     rows = []
     for item in features:
@@ -521,9 +521,12 @@ def format_catalog_list(rows: List[Dict[str, str]]) -> str:
 
 
 def format_example_list(data: Dict[str, Any]) -> str:
-    lines = ["Catalog:"]
-    for item in data.get("catalog") or []:
-        lines.append("  %s  %s" % (item["id"], item["template"]))
+    lines = []
+    catalog = data.get("catalog") or []
+    if catalog:
+        lines.append("Catalog:")
+        for item in catalog:
+            lines.append("  %s  %s" % (item["id"], item["template"]))
     lines.append("Topologies:")
     for item in data.get("topologies") or []:
         lines.append("  %s" % item["id"])
