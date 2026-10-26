@@ -8,7 +8,7 @@ Install the framework first ([install guide](install.md)), then:
 
 ```bash
 spa doctor
-spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
+spa init --example cm_2idxc_sh --provider aws ~/envs/my-env
 cd ~/envs/my-env
 spa validate
 spa provision --yes && spa deploy --yes
@@ -40,7 +40,7 @@ For an existing server, `spa init --example TOPOLOGY --provider external ENV`, t
 Keep Splunk installers, Professional Services baseconfig apps, and license files **out of** `SPA_HOME`. Point every env at one shared directory:
 
 ```bash
-spa init --software-dir ~/Software --example cm_2idxc_sh_uf my-lab
+spa init --software-dir ~/Software --example cm_2idxc_sh my-lab
 ```
 
 `spa validate` and `spa deploy` fail if that directory is missing or incomplete.

@@ -1411,11 +1411,11 @@ def test_hidden_alias_expands_after_a_flag():
         "search",
         "region",
     ]
-    assert _expand_hidden_aliases(["config", "--yes", "top", "cm_2idxc_sh_uf"]) == [
+    assert _expand_hidden_aliases(["config", "--yes", "top", "cm_2idxc_sh"]) == [
         "config",
         "--yes",
         "topology",
-        "cm_2idxc_sh_uf",
+        "cm_2idxc_sh",
     ]
 
 

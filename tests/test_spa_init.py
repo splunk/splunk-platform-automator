@@ -15,10 +15,82 @@ def test_explicit_aws_provider_is_not_described_as_virtualbox():
     from spa.init import resolve_example_pair
 
     topology, provider = resolve_example_pair(
-        PROJECT_ROOT, "cm_2idxc1site_3shc_uf", "aws"
+        PROJECT_ROOT, "cm_2idxc_3shc_ds", "aws"
     )
-    assert topology == "cm_2idxc1site_3shc_uf"
+    assert topology == "cm_2idxc_3shc_ds"
     assert provider == "aws"
+
+
+def test_init_example_accepts_topology_c1():
+    from spa.init import resolve_example_pair
+
+    stem, provider = resolve_example_pair(PROJECT_ROOT, "topology.c1", "aws")
+    assert stem == "cm_2idxc_sh"
+    assert provider == "aws"
+
+
+def test_init_example_unknown_topology_id():
+    from spa.init import InitError, resolve_example_pair
+
+    with pytest.raises(InitError) as exc:
+        resolve_example_pair(PROJECT_ROOT, "topology.nope", "aws")
+    assert exc.value.code == 2
+
+
+def test_catalog_id_composes_the_same_config_as_its_stem():
+    from spa.init import compose_example_config, resolve_example_pair
+
+    expected = {
+        "topology.s1": "single_node",
+        "topology.d1": "2idx_sh",
+        "topology.d11": "2idx_sh_es",
+        "topology.c1": "cm_2idxc_sh",
+        "topology.c11": "cm_2idxc_sh_es",
+        "topology.c3": "cm_2idxc_3shc_ds",
+        "topology.c13": "cm_2idxc_2x3shc_ds",
+        "topology.m2": "4idxc2site_2sh",
+        "topology.m12": "4idxc2site_2sh_es",
+        "topology.m3": "cm_4idxc2site_2x3shc_ds",
+        "topology.m13": "cm_4idxc2site_4x3shc_ds",
+        "topology.m14": "cm_4idxc2site_stretched_2x3shc_ds",
+    }
+    for topology_id, stem in expected.items():
+        resolved, provider = resolve_example_pair(PROJECT_ROOT, topology_id, "aws")
+        assert resolved == stem
+        assert compose_example_config(PROJECT_ROOT, resolved, provider) == compose_example_config(
+            PROJECT_ROOT, stem, "aws"
+        )
+
+
+def test_init_topology_c1_writes_the_catalog_template(tmp_path):
+    dest = tmp_path / "lab"
+    result = run_spa_init(["--example", "topology.c1", "--provider", "aws", str(dest)])
+    assert result.returncode == 0, result.stderr
+    cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
+    names = [host.get("name") for host in cfg["splunk_hosts"] if "name" in host]
+    assert "cm" in names
+    assert "uf" not in names
+    assert "terraform" in cfg and "aws" in cfg["terraform"]
+
+
+def test_init_topology_d11_adds_an_es_search_head(tmp_path):
+    dest = tmp_path / "d11"
+    result = run_spa_init(["--example", "topology.d11", "--provider", "aws", str(dest)])
+    assert result.returncode == 0, result.stderr
+    cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
+    blob = str(cfg)
+    assert "universal_forwarder" not in blob
+    search_heads = [
+        host for host in cfg["splunk_hosts"] if "search_head" in (host.get("roles") or [])
+    ]
+    assert any(str(host.get("name", "")).startswith("es") for host in search_heads)
+
+
+def test_init_unknown_topology_does_not_create_an_env(tmp_path):
+    dest = tmp_path / "nope"
+    result = run_spa_init(["--example", "topology.nope", "--provider", "aws", str(dest)])
+    assert result.returncode == 2
+    assert not dest.exists()
 
 
 def test_init_help():
@@ -39,10 +111,12 @@ def test_init_list_examples():
     assert result.returncode == 0
     out = result.stdout
     assert "single_node" in out
-    assert "cm_2idxc_sh_uf" in out
+    assert "cm_2idxc_sh" in out
+    assert "topology.c1  cm_2idxc_sh" in out
+    assert "topology.d11  2idx_sh_es" in out
     assert "virtualbox" in out
     assert "aws" in out
-    assert "cm_2idxc_sh_uf_aws.yml" not in out
+    assert "cm_2idxc_sh_aws.yml" not in out
     assert "--provider" in out
 
 
@@ -79,7 +153,7 @@ def test_scaffold_creates_env_without_ansible(tmp_path):
 
 def test_example_flag(tmp_path):
     dest = tmp_path / "c1"
-    result = run_spa_init(["--example", "cm_2idxc_sh_uf", str(dest)])
+    result = run_spa_init(["--example", "cm_2idxc_sh", str(dest)])
     assert result.returncode == 0, result.stderr
     cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
     names = [h.get("name") for h in cfg["splunk_hosts"] if "name" in h]
@@ -91,7 +165,7 @@ def test_example_flag(tmp_path):
 
 def test_example_with_aws_provider(tmp_path):
     dest = tmp_path / "c1-aws"
-    result = run_spa_init(["--example", "cm_2idxc_sh_uf", "--provider", "aws", str(dest)])
+    result = run_spa_init(["--example", "cm_2idxc_sh", "--provider", "aws", str(dest)])
     assert result.returncode == 0, result.stderr
     cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
     assert "terraform" in cfg
@@ -104,10 +178,10 @@ def test_example_with_aws_provider(tmp_path):
 
 def test_legacy_example_filename_is_rejected(tmp_path):
     dest = tmp_path / "legacy"
-    result = run_spa_init(["--example", "cm_2idxc_sh_uf_aws.yml", str(dest)])
+    result = run_spa_init(["--example", "cm_2idxc_sh_aws.yml", str(dest)])
     text = result.stderr + result.stdout
     assert result.returncode != 0
-    assert "cm_2idxc_sh_uf_aws" in text
+    assert "cm_2idxc_sh_aws" in text
     assert "Alias" not in text
 
 
@@ -187,6 +261,9 @@ def test_init_list_json_has_no_addons():
     joined = " ".join(ids)
     assert "single_node" in joined
     assert "aws" in joined
+    catalog = {item["id"]: item["template"] for item in data["catalog"]}
+    assert catalog["topology.c1"] == "cm_2idxc_sh"
+    assert catalog["topology.m14"] == "cm_4idxc2site_stretched_2x3shc_ds"
     assert "itsi" not in joined
     assert "SmartStore" not in joined
     assert "apps" not in joined
@@ -780,3 +857,103 @@ def test_init_software_dir_writes_user_and_env_yml(tmp_path):
     assert second.returncode == 0, second.stderr + second.stdout
     spa2 = yaml.safe_load((dest2 / ".spa.yml").read_text())
     assert Path(spa2["software_dir"]).resolve() == software.resolve()
+
+
+def _role_count(hosts, role):
+    total = 0
+    for host in hosts:
+        if role not in (host.get("roles") or []):
+            continue
+        numbers = (host.get("iter") or {}).get("numbers")
+        if numbers and ".." in str(numbers):
+            start, end = str(numbers).split("..")
+            total += int(end) - int(start) + 1
+        else:
+            total += 1
+    return total
+
+
+def _composed(stem):
+    from spa.init import compose_example_config
+
+    return compose_example_config(PROJECT_ROOT, stem, "aws")
+
+
+def test_catalog_topologies_match_sva_shape():
+    text = (PROJECT_ROOT / "examples" / "catalog" / "features.yml").read_text()
+    # Stems are the catalog template values after this task. Compose the stem.
+    expected = {
+        "single_node": "s1",
+        "2idx_sh": "d1",
+        "2idx_sh_es": "d11",
+        "cm_2idxc_sh": "c1",
+        "cm_2idxc_sh_es": "c11",
+        "cm_2idxc_3shc_ds": "c3",
+        "cm_2idxc_2x3shc_ds": "c13",
+        "4idxc2site_2sh": "m2",
+        "4idxc2site_2sh_es": "m12",
+        "cm_4idxc2site_2x3shc_ds": "m3",
+        "cm_4idxc2site_4x3shc_ds": "m13",
+        "cm_4idxc2site_stretched_2x3shc_ds": "m14",
+    }
+    for stem in expected:
+        config = _composed(stem)
+        blob = str(config)
+        assert "universal_forwarder" not in blob
+        assert "storageType" not in blob
+        assert "s3://" not in blob
+        assert "remotePath" not in blob
+        hosts = config["splunk_hosts"]
+        if stem == "single_node":
+            assert _role_count(hosts, "indexer") == 1
+            assert _role_count(hosts, "search_head") == 1
+            assert "splunk_idxclusters" not in config
+        elif stem == "2idx_sh":
+            assert _role_count(hosts, "indexer") == 2
+            assert _role_count(hosts, "search_head") == 1
+            assert "splunk_idxclusters" not in config
+        elif stem == "2idx_sh_es":
+            assert _role_count(hosts, "indexer") == 2
+            assert _role_count(hosts, "search_head") == 2
+            assert "splunk_idxclusters" not in config
+        elif stem == "cm_2idxc_sh":
+            assert _role_count(hosts, "cluster_manager") == 1
+            assert _role_count(hosts, "indexer") == 2
+            assert _role_count(hosts, "search_head") == 1
+            assert config["splunk_idxclusters"][0]["idxc_rf"] == 2
+            assert "idxc_site_rf" not in config["splunk_idxclusters"][0]
+            assert "splunk_shclusters" not in config
+        elif stem == "cm_2idxc_sh_es":
+            assert _role_count(hosts, "search_head") == 2
+            assert "splunk_shclusters" not in config
+        elif stem == "cm_2idxc_3shc_ds":
+            assert _role_count(hosts, "indexer") == 2
+            assert _role_count(hosts, "search_head") == 3
+            assert _role_count(hosts, "deployer") == 1
+            assert config["splunk_idxclusters"][0]["idxc_rf"] == 2
+            assert len(config["splunk_shclusters"]) == 1
+        elif stem == "cm_2idxc_2x3shc_ds":
+            assert _role_count(hosts, "search_head") == 6
+            assert _role_count(hosts, "deployer") == 2
+            assert len(config["splunk_shclusters"]) == 2
+        elif stem == "4idxc2site_2sh":
+            assert _role_count(hosts, "indexer") == 4
+            assert _role_count(hosts, "search_head") == 2
+            sites = {host.get("site") for host in hosts if "search_head" in host["roles"]}
+            assert sites == {"site1", "site2"}
+            assert "splunk_shclusters" not in config
+        elif stem == "4idxc2site_2sh_es":
+            assert _role_count(hosts, "search_head") == 4
+            assert "splunk_shclusters" not in config
+        elif stem == "cm_4idxc2site_2x3shc_ds":
+            assert _role_count(hosts, "search_head") == 6
+            assert _role_count(hosts, "deployer") == 2
+            assert {row["shc_site"] for row in config["splunk_shclusters"]} == {"site1", "site2"}
+        elif stem == "cm_4idxc2site_4x3shc_ds":
+            assert _role_count(hosts, "search_head") == 12
+            assert _role_count(hosts, "deployer") == 4
+            assert len(config["splunk_shclusters"]) == 4
+        elif stem == "cm_4idxc2site_stretched_2x3shc_ds":
+            assert _role_count(hosts, "search_head") == 6
+            assert _role_count(hosts, "deployer") == 2
+            assert {row["shc_site"] for row in config["splunk_shclusters"]} == {"site0"}

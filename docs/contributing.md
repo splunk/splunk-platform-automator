@@ -90,7 +90,7 @@ A **setting** (`kind: setting`) has a `selector` that is one of its own schema p
 
 A key `note` is only for a constraint the schema sentence does not already say (Java 21 on the ITSI host, gp3, AMI login user). Notes attach to leaves. A note that mostly repeats the description is dropped. Do not use a note to name children of a container.
 
-A **layout** is an SVA topology (`topology.s1`, `topology.d1`, `topology.c1`, `topology.c3`, `topology.m2`, `topology.m3`) or an implemented provider (`provider.aws`, `provider.virtualbox`). It has `kind: topology` or `kind: provider`, no `selector`, schema-backed `keys`, and a `suggest` line with the `spa init --example` or `--provider` command. Layouts have no `apply` object. Other `spa init --example` files stay on disk; do not add another `topology.*` row for them. A future skill can own extra topology design.
+A **layout** is an SVA topology (`topology.s1`, `topology.d1`, `topology.d11`, `topology.c1`, `topology.c11`, `topology.c3`, `topology.c13`, `topology.m2`, `topology.m12`, `topology.m3`, `topology.m13`, `topology.m14`) or an implemented provider (`provider.aws`, `provider.virtualbox`). It has `kind: topology` or `kind: provider`, no `selector`, schema-backed `keys`, and a `suggest` line with the `spa init --example` or `--provider` command. Layouts have no `apply` object. Other `spa init --example` files stay on disk; do not add another `topology.*` row for them. A future skill can own extra topology design.
 
 Do not add a record with no schema paths. Those rows are unsupported and `spa config explain` is only for settings and layouts that can be written. Command help that is not a config key belongs in the operator docs (`docs/apps.md` for `spa apps`).
 

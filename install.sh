@@ -339,7 +339,7 @@ fi
 echo "SPA_HOME=${PREFIX}"
 echo "Installed wrapper: ${BINDIR}/spa"
 if ! echo ":${PATH}:" | grep -q ":${BINDIR}:"; then
-    echo "Add ${BINDIR} to PATH, then: spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env"
+    echo "Add ${BINDIR} to PATH, then: spa init --example cm_2idxc_sh --provider aws ~/envs/my-env"
 else
-    echo "Next: spa init --example cm_2idxc_sh_uf_aws.yml ~/envs/my-env"
+    echo "Next: spa init --example cm_2idxc_sh --provider aws ~/envs/my-env"
 fi

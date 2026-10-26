@@ -473,6 +473,26 @@ def run_doctor(dest: Path, spa_home: Path, skip: bool) -> None:
         )
 
 
+def list_catalog_topologies(spa_home: Path) -> List[Dict[str, str]]:
+    """Catalog topology ids and the example stem each one loads."""
+    try:
+        from spa.catalog import load_features
+
+        features = load_features(spa_home)
+    except (FileNotFoundError, ValueError, OSError, ImportError):
+        return []
+    rows = []
+    for item in features:
+        if item.get("kind") != "topology":
+            continue
+        ident = item.get("id")
+        template = item.get("template")
+        if not ident or not template:
+            continue
+        rows.append({"id": str(ident), "template": str(template)})
+    return rows
+
+
 def list_examples(spa_home: Path) -> Dict[str, Any]:
     topologies = []
     providers = []
@@ -484,11 +504,30 @@ def list_examples(spa_home: Path) -> Dict[str, Any]:
     if prov_dir.is_dir():
         for path in sorted(prov_dir.glob("*.yml")):
             providers.append({"id": path.stem, "file": str(path.relative_to(spa_home))})
-    return {"topologies": topologies, "providers": providers}
+    return {
+        "catalog": list_catalog_topologies(spa_home),
+        "topologies": topologies,
+        "providers": providers,
+    }
+
+
+def format_catalog_list(rows: List[Dict[str, str]]) -> str:
+    lines = ["Catalog:"]
+    for item in rows:
+        lines.append("  %s  %s" % (item["id"], item["template"]))
+    lines.append("Apply: spa config topology ID")
+    lines.append("Create: spa init --example ID --provider aws|virtualbox NAME")
+    return "\n".join(lines)
 
 
 def format_example_list(data: Dict[str, Any]) -> str:
-    lines = ["Topologies:"]
+    lines = []
+    catalog = data.get("catalog") or []
+    if catalog:
+        lines.append("Catalog:")
+        for item in catalog:
+            lines.append("  %s  %s" % (item["id"], item["template"]))
+    lines.append("Topologies:")
     for item in data.get("topologies") or []:
         lines.append("  %s" % item["id"])
     lines.append("Providers:")
@@ -516,6 +555,14 @@ def resolve_example_pair(
         provider_id = "aws"
     raw = _normalize_example_name((example or "single_node.yml").strip())
     topology_id = Path(raw).stem
+    if topology_id.startswith("topology."):
+        from spa.catalog import load_features, resolve_feature
+        from spa.usage import unknown_topology
+
+        feature = resolve_feature(load_features(spa_home), topology_id)
+        if not feature or feature.get("kind") != "topology" or not feature.get("template"):
+            raise InitError(unknown_topology(topology_id), code=2)
+        topology_id = str(feature["template"])
     if provider_id is None:
         from spa.registry import load_default_provider
 
@@ -727,6 +774,8 @@ def _init_env(
     pip_pkgs = list(pip_pkgs or [])
     dest = dest.resolve()
     spa_home = spa_home.resolve()
+    if example_set:
+        resolve_example_pair(spa_home, example, provider)
     dest.mkdir(parents=True, exist_ok=True)
     source = (from_dir or spa_home).resolve()
     config_dest = dest / "config" / "splunk_config.yml"

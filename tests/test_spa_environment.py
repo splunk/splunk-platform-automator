@@ -487,7 +487,7 @@ def test_resolve_init_dest_force_prefers_existing_cwd(tmp_path):
 
 def test_default_init_provider_is_aws(tmp_path):
     dest = tmp_path / "aws-default"
-    result = run_spa_init(["--example", "cm_2idxc_sh_uf", str(dest)], extra_env=_xdg(tmp_path))
+    result = run_spa_init(["--example", "cm_2idxc_sh", str(dest)], extra_env=_xdg(tmp_path))
     assert result.returncode == 0, result.stderr
     cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
     assert "terraform" in cfg

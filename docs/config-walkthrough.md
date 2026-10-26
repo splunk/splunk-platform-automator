@@ -35,7 +35,7 @@ The error lists variable names only.
 ## 1. Create the AWS environment
 
 ```bash
-spa init --example cm_2idxc1site_3shc_uf --provider aws ./itsi-lab
+spa init --example cm_2idxc_3shc_ds --provider aws ./itsi-lab
 cd itsi-lab
 ```
 
@@ -46,7 +46,7 @@ does not include `acl` or PolicyKit. The block
 also copies key pair `aws_key`, private key `~/.ssh/aws_key.pem`, security
 group `Splunk_Basic`, instance type `t3.medium`, and a 50 GB `gp3` volume.
 It does not call AWS. The hosts are `cm`, indexers `idx1` and `idx2`, search
-heads `sh1` through `sh3` in `shc1`, and universal forwarder `uf`.
+heads `sh1` through `sh3` in `shc1`, and `ds`, which is the deployment server and the deployer.
 
 ## 2. Set the image and size the indexers and search-head cluster
 
@@ -77,7 +77,7 @@ can describe that id, the same command replaces the comment with the image
 name and description. Without credentials the id is still saved and the old
 image comment is removed. The second sets `c5.4xlarge` on the `shc1`
 members. The fragment does the same for the
-indexer range. Both ranges use the global image. `cm`, `uf`, and the
+indexer range. Both ranges use the global image. `cm`, `ds`, and the
 standalone search head added later keep `t3.medium`.
 
 ## 3. Look up packages and hosts
@@ -155,22 +155,15 @@ splunk_hosts:
   - name: lm
     roles:
       - license_manager
-      - deployment_server
-      - deployer
-    shcluster: shc1
 EOF
-spa config set 'splunk_hosts[name=cm].roles' '["cluster_manager","monitoring_console"]' --resolve-file fragments/management-host.yml --resolve splunk_defaults.splunk_license_file Splunk_Enterprise.lic --yes
-spa config unset 'splunk_hosts[name=cm].shcluster' --yes
+spa config merge --file fragments/management-host.yml --resolve splunk_defaults.splunk_license_file Splunk_Enterprise.lic --yes
 ```
 
-`cm` starts as the deployment server and the deployer for `shc1`. Those two
-roles move onto `lm`, which also becomes the license manager. The move is
-one write: `shc1` cannot be left without a deployer, and it cannot have two.
-The `set` replaces `cm`'s roles with `cluster_manager` and
-`monitoring_console`. The resolve file appends `lm` in the same transaction,
-with `name` first. The license manager cannot be saved without a license
-file, so the Enterprise filename is supplied on that command. After `cm` is
-no longer the deployer, `unset` removes its `shcluster`.
+`ds` is already the deployment server and the only deployer for `shc1`. `lm`
+is added as the license manager and does not take the deployer role: `shc1`
+cannot have two. The license manager cannot be saved without a license
+file, so the Enterprise filename is supplied on that command. `cm` stays
+the cluster manager and monitoring console.
 
 ## 7. Add the ITSI license and Java
 

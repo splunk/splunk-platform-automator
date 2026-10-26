@@ -1424,7 +1424,7 @@ def _run(argv: Sequence[str]) -> int:
 
     p_config_topology = _add_action(config_sub, "topology", aliases=["top"], help="Replace topology-owned sections")
     _config_mutation_flags(p_config_topology)
-    p_config_topology.add_argument("operand", metavar="TOPOLOGY", help=TOPOLOGY_HELP)
+    p_config_topology.add_argument("operand", nargs="?", metavar="TOPOLOGY", help=TOPOLOGY_HELP)
 
     p_config_provider = _add_action(config_sub, "provider", aliases=["pro"], help="Replace provider-owned sections")
     _config_mutation_flags(p_config_provider)
@@ -2272,6 +2272,14 @@ def _run(argv: Sequence[str]) -> int:
             sys.stdout.write(format_config_markdown(paths.spa_home))
             return 0
         operand = getattr(args, "operand", None)
+        if action == "topology" and not operand:
+            from spa.init import format_catalog_list, list_catalog_topologies
+
+            rows = list_catalog_topologies(paths.spa_home)
+            if as_agent:
+                return _emit_result(CommandResult(ok=True, data={"catalog": rows}), True)
+            print(format_catalog_list(rows))
+            return 0
         merge_file = getattr(args, "file", None) if action == "merge" else None
         stdin_text = None
         if merge_file == "-" or getattr(args, "resolve_file", None) == "-":

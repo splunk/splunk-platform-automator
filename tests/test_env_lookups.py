@@ -139,7 +139,7 @@ def test_init_reports_readiness_without_values_or_failure(tmp_path, monkeypatch)
     session = LocalSpaSession(paths=resolve_spa_paths(start_dir=PROJECT_ROOT))
     result = session.init(
         str(tmp_path / "env"),
-        example="cm_2idxc1site_3shc_uf",
+        example="cm_2idxc_3shc_ds",
         example_set=True,
         provider="aws",
         skip_doctor=True,

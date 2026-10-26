@@ -50,7 +50,7 @@ def test_doctor_aws_strict_fails_without_terraform():
 def test_init_runs_doctor_by_default(tmp_path):
     dest = tmp_path / "env"
     result = run_spa(
-        ["init", "--example", "cm_2idxc_sh_uf", "--provider", "aws", str(dest)],
+        ["init", "--example", "cm_2idxc_sh", "--provider", "aws", str(dest)],
         extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
     )
     out = result.stderr + result.stdout
@@ -69,7 +69,7 @@ def test_init_skip_doctor(tmp_path):
 def test_doctor_skips_vagrant_without_virtualbox(tmp_path):
     dest = tmp_path / "env"
     run_spa_init(
-        ["--example", "cm_2idxc_sh_uf", "--provider", "aws", "--skip-doctor", str(dest)]
+        ["--example", "cm_2idxc_sh", "--provider", "aws", "--skip-doctor", str(dest)]
     )
     env = spa_env()
     env["PATH"] = "/usr/bin:/bin"
@@ -156,7 +156,7 @@ def test_config_providers_ignores_comments_and_nested_keys():
 def test_doctor_env_provider_terraform_aws(tmp_path):
     dest = tmp_path / "env"
     run_spa_init(
-        ["--example", "cm_2idxc_sh_uf", "--provider", "aws", "--skip-doctor", str(dest)]
+        ["--example", "cm_2idxc_sh", "--provider", "aws", "--skip-doctor", str(dest)]
     )
     env = spa_env({"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(dest)})
     env["PATH"] = "/usr/bin:/bin"

@@ -53,7 +53,7 @@ Splunk installers and PS baseconfig apps stay **out of** `SPA_HOME` (`install.sh
 
 ```bash
 spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
-spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
+spa init --example cm_2idxc_sh --provider aws ~/envs/my-env
 ```
 
 What belongs in that directory, and how shared path defaults work: [Prepare Software](user-guide.md#prepare-software).
@@ -84,7 +84,7 @@ mkdir -p ~/src/spa && tar -xzf spa-framework-X.Y.Z.tar.gz -C ~/src/spa
 export SPA_HOME=~/src/spa
 "$SPA_HOME/bin/spa" venv create --shared --yes
 export PATH="$SPA_HOME/bin:$PATH"
-spa init --example cm_2idxc_sh_uf --provider aws ~/envs/my-env
+spa init --example cm_2idxc_sh --provider aws ~/envs/my-env
 ```
 
 `bin/spa` resolves the framework from its own path, so a symlink to `$SPA_HOME/bin/spa` is enough if that tree stays put. The installer wrapper also sets `SPA_HOME` and prefers the prefix venv.

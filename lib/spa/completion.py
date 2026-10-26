@@ -475,6 +475,10 @@ def _catalog_values(kind: str, config: Optional[Mapping[str, Any]], paths: Any) 
         data = list_examples(_home(paths))
         key = "providers" if kind == "providers" else "topologies"
         values = [str(item.get("id")) for item in data.get(key) or [] if item.get("id")]
+        if kind == "init list":
+            values.extend(
+                str(item.get("id")) for item in data.get("catalog") or [] if item.get("id")
+            )
         if kind == "providers":
             values.extend(["aws", "external", "virtualbox"])
         return values

@@ -38,7 +38,7 @@ Reference: `tests/configs/2site-idxc_shc_mc_ds_hf_uf.yml`
 | CM + LM | `cm` | `cluster_manager`, `license_manager` | catalog `splunk_defaults.splunk_license_server` | Needs license file |
 | MC + LM | `mc` | `monitoring_console`, `license_manager` | 2site test configs | CM stays dedicated |
 | DS + deployer | `ds` | `deployment_server`, `deployer` | Most SHC examples | SVA-acceptable |
-| Ultra-minimal SHC | `cm` | `cluster_manager`, `deployment_server`, `deployer` | `examples/topologies/cm_2idxc1site_3shc_uf.yml` | Small labs only |
+| C3 SHC | `cm`, `ds` | `cm`: `cluster_manager`, `monitoring_console`. `ds`: `deployment_server`, `deployer` | `examples/topologies/cm_2idxc_3shc_ds.yml` | SVA C3 lab |
 | S1 all-in-one | `shidx` | `indexer`, `search_head`, `license_manager` | `examples/topologies/single_node.yml` | Not clustered |
 
 ## Placement questions (ask only if topology requires)

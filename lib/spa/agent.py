@@ -277,12 +277,12 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "config topology",
-            "summary": "Replace topology-owned config sections from an example template",
+            "summary": "List catalog topology ids, or replace topology-owned sections from one",
             "idempotent": True,
             "positionals": [
                 {
                     "name": "TOPOLOGY",
-                    "required": True,
+                    "required": False,
                     "help": TOPOLOGY_HELP,
                     "completes_from": "init list",
                 }
@@ -455,7 +455,7 @@ COMMAND_SCHEMA = {
                 {"long": "--force", "help": "Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example)"},
                 {"long": "--software-dir", "help": "Shared installers directory (saved in paths.yml)"},
             ],
-            "example": "spa environment init --example cm_2idxc_sh_uf my-lab",
+            "example": "spa environment init --example cm_2idxc_sh my-lab",
         },
         {
             "name": "environment init list",

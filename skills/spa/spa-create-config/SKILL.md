@@ -143,7 +143,7 @@ Ask scale-out vs scale-up; default **scale out** for Splunk.
 |------|--------|
 | User knows SVA code | Confirm code → [sva-topology-map.md](references/sva-topology-map.md) then `spa init --example TOPOLOGY --provider aws\|virtualbox ENV` |
 | Needs help | [sva-questionnaire.md](references/sva-questionnaire.md) then `spa --agent config search` |
-| Config test only | Minimal topology (`single_node` or `cm_2idxc_sh_uf`) |
+| Config test only | Minimal topology (`single_node` or `cm_2idxc_sh`) |
 
 **Exit:** SVA code or lab compromise; topology id from `spa init list` (not a mixed `_aws` file).
 

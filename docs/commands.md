@@ -212,7 +212,7 @@ spa --agent config merge --file fragment.yml
 
 ## `config topology`
 
-Replace topology-owned config sections from an example template
+List catalog topology ids, or replace topology-owned sections from one
 
 | Flag | Description |
 | --- | --- |
@@ -224,7 +224,7 @@ Replace topology-owned config sections from an example template
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `TOPOLOGY` | yes | A topology feature id or an example stem. List them: spa init list. Example: spa config topology cm_2idxc_sh_uf |
+| `TOPOLOGY` | no | A topology feature id or an example stem. List them: spa init list. Example: spa config topology topology.c1 |
 
 Example:
 
@@ -454,7 +454,7 @@ Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Plat
 Example:
 
 ```bash
-spa environment init --example cm_2idxc_sh_uf my-lab
+spa environment init --example cm_2idxc_sh my-lab
 ```
 
 ## `environment init list`
