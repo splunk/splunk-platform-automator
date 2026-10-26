@@ -192,7 +192,7 @@ When stdin is not a terminal and the process is not in agent mode, do not prompt
 
 `--agent` is the documented selector. `--json` stays a working synonym of the same envelope. Failure is `{"ok":false,"schema_version":1,"error":"..."}` with no `data`. Omit absent `data` and `error`. When agent mode is on, including auto-detect without `--agent`, `--help` returns that envelope: `spa --help` is an index of names and summaries, and `spa COMMAND --help` is that one `COMMAND_SCHEMA` entry. `--no-agent --help` stays human text. `spa agent schema` remains the full catalog.
 
-Agent mode prints one JSON object on stdout and does not print a human sentence on stdout or stderr. That includes progress and cache notices. A human sees those sentences; `--agent` and `--json` do not. Long-running commands may write progress to stderr only as one JSON object per line. `spa shell`, and an SSH or SCP session started by `spa hosts ssh` or `spa hosts copy`, stay native text. A provision failure from those hosts commands is still the JSON envelope.
+Agent mode prints one JSON object on stdout and does not print a human sentence on stdout or stderr. That includes progress and cache notices. A human sees those sentences; `--agent` and `--json` do not. Successful envelopes from commands that resolve an environment carry `resolved_env_name`, `env_dir`, and `config_file` after `schema_version`. Long-running commands may write progress to stderr only as one JSON object per line. `spa shell`, and an SSH or SCP session started by `spa hosts ssh` or `spa hosts copy`, stay native text. A provision failure from those hosts commands is still the JSON envelope.
 
 ### Command classes
 

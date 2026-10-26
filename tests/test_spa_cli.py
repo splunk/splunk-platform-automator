@@ -7,7 +7,15 @@ from pathlib import Path
 
 import pytest
 
-from spa_testutil import PROJECT_ROOT, LIB, run_spa, run_spa_init, satisfy_env_lookups, spa_env
+from spa_testutil import (
+    PROJECT_ROOT,
+    LIB,
+    run_spa,
+    run_spa_init,
+    satisfy_env_lookups,
+    spa_env,
+    write_min_env,
+)
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -227,7 +235,10 @@ def test_run_help_uses_selected_environment(monkeypatch, argv):
     def fake_paths(start_dir, env_selector=None):
         captured["start_dir"] = start_dir
         captured["env_selector"] = env_selector
-        return SimpleNamespace(spa_env_dir=Path("/selected-env"))
+        return SimpleNamespace(
+            spa_env_dir=Path("/selected-env"),
+            config_file=Path("/selected-env/config/splunk_config.yml"),
+        )
 
     class FakeSession:
         def describe_playbook(self, name):
@@ -238,6 +249,518 @@ def test_run_help_uses_selected_environment(monkeypatch, argv):
 
     assert cli.main(argv) == 0
     assert captured == {"start_dir": None, "env_selector": "lab"}
+
+
+def test_run_help_rejects_conflicting_env(monkeypatch, capsys):
+    """spa run NAME --help exits 2 when two --env values differ."""
+    from types import SimpleNamespace
+
+    from spa.api import CommandResult
+    from spa import cli
+
+    captured = {}
+
+    def fake_paths(start_dir, env_selector=None):
+        captured["env_selector"] = env_selector
+        return SimpleNamespace(
+            spa_env_dir=Path("/selected-env"),
+            config_file=Path("/selected-env/config/splunk_config.yml"),
+        )
+
+    class FakeSession:
+        def describe_playbook(self, name):
+            return CommandResult(ok=True, data={"name": name})
+
+    monkeypatch.setattr(cli, "_paths", fake_paths)
+    monkeypatch.setattr(cli, "open_session", lambda **_kwargs: FakeSession())
+
+    assert (
+        cli.main(["--json", "--env", "one", "run", "--env", "two", "splunk_cli", "--help"])
+        == 2
+    )
+    assert "env_selector" not in captured
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["schema_version"] == 1
+    assert "data" not in payload
+    assert "one" in payload["error"]
+    assert "two" in payload["error"]
+    assert "spa --env one run NAME --help" in payload["error"]
+
+
+def test_global_env_reaches_validate(monkeypatch):
+    """spa --env lab validate must resolve lab when the subcommand omits --env."""
+    from types import SimpleNamespace
+
+    from spa.api import CommandResult
+    from spa import cli
+
+    captured = {}
+
+    def fake_paths(start_dir, env_selector=None):
+        captured["env_selector"] = env_selector
+        return SimpleNamespace(
+            spa_env_dir=Path("/lab"),
+            spa_home=Path("/spa"),
+            pre3_cwd=None,
+            config_file=Path("/lab/config/splunk_config.yml"),
+        )
+
+    class FakeSession:
+        def validate(self, **_kwargs):
+            return CommandResult(ok=True)
+
+    monkeypatch.setattr(cli, "_paths", fake_paths)
+    monkeypatch.setattr(cli, "open_session", lambda **_kwargs: FakeSession())
+
+    assert cli.main(["--env", "lab", "validate", "--json"]) == 0
+    assert captured["env_selector"] == "lab"
+
+
+def _stub_validate_success(monkeypatch):
+    """Keep path resolution real and skip schema/ansible validation."""
+    from spa.api import CommandResult, open_session
+    from spa import cli
+
+    # apply_paths_env setdefaults SPLUNK_CONFIG_FILE. Track it so a prior
+    # in-process spa command cannot pin the next test's config_file.
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", "")
+    monkeypatch.delenv("SPLUNK_CONFIG_FILE")
+
+    def fake_open(**kwargs):
+        session = open_session(**kwargs)
+
+        def validate(**_kwargs):
+            return CommandResult(ok=True, data={"steps": []})
+
+        session.validate = validate
+        return session
+
+    monkeypatch.setattr(cli, "open_session", fake_open)
+
+
+def test_agent_validate_envelope_identifies_registered_env(tmp_path, monkeypatch, capsys):
+    """spa --agent --env lab validate puts registry identity before data."""
+    from spa.registry import register_environment
+    from spa import cli
+
+    dest = write_min_env(tmp_path / "lab")
+    register_environment("lab", dest)
+    _stub_validate_success(monkeypatch)
+
+    assert cli.main(["--agent", "--env", "lab", "validate"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert list(payload) == [
+        "ok",
+        "schema_version",
+        "resolved_env_name",
+        "env_dir",
+        "config_file",
+        "data",
+    ]
+    assert payload["ok"] is True
+    assert payload["resolved_env_name"] == "lab"
+    assert Path(payload["env_dir"]) == dest.resolve()
+    assert Path(payload["config_file"]) == (dest / "config" / "splunk_config.yml").resolve()
+
+
+def test_agent_validate_unregistered_env_dir_identity_name_is_null(tmp_path, monkeypatch, capsys):
+    """A directory that is not in the registry still reports identity, with a null name."""
+    from spa import cli
+
+    dest = write_min_env(tmp_path / "loose")
+    _stub_validate_success(monkeypatch)
+
+    assert cli.main(["--agent", "--env", str(dest), "validate"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert list(payload) == [
+        "ok",
+        "schema_version",
+        "resolved_env_name",
+        "env_dir",
+        "config_file",
+        "data",
+    ]
+    assert payload["resolved_env_name"] is None
+    assert Path(payload["env_dir"]) == dest.resolve()
+    assert Path(payload["config_file"]) == (dest / "config" / "splunk_config.yml").resolve()
+
+
+def test_agent_skills_success_omits_env_identity(monkeypatch, capsys):
+    """Commands that do not accept --env omit the identity keys."""
+    from spa import cli
+
+    monkeypatch.setattr(
+        "spa.skills.install_skills",
+        lambda **_kwargs: {"installed": []},
+    )
+
+    assert cli.main(["--agent", "skills", "install"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert "resolved_env_name" not in payload
+    assert "env_dir" not in payload
+    assert "config_file" not in payload
+
+
+def test_agent_unknown_env_omits_identity(capsys):
+    """A missing environment is a failure envelope with no data and no identity."""
+    from spa import cli
+
+    assert cli.main(["--agent", "--env", "missing-lab", "validate"]) != 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert list(payload) == ["ok", "schema_version", "error"]
+    assert "data" not in payload
+    assert "missing-lab" in payload["error"]
+
+
+def test_conflicting_env_exits_2(monkeypatch, capsys):
+    """spa --env one validate --env two exits 2 and names both values."""
+    from types import SimpleNamespace
+
+    from spa.api import CommandResult
+    from spa import cli
+
+    resolved = {}
+
+    def fake_paths(start_dir, env_selector=None):
+        resolved["env_selector"] = env_selector
+        return SimpleNamespace(
+            spa_env_dir=Path("/lab"),
+            spa_home=Path("/spa"),
+            pre3_cwd=None,
+            config_file=Path("/lab/config/splunk_config.yml"),
+        )
+
+    class FakeSession:
+        def validate(self, **_kwargs):
+            return CommandResult(ok=True)
+
+    monkeypatch.setattr(cli, "_paths", fake_paths)
+    monkeypatch.setattr(cli, "open_session", lambda **_kwargs: FakeSession())
+
+    assert cli.main(["--env", "one", "validate", "--env", "two", "--json"]) == 2
+    assert "env_selector" not in resolved
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["schema_version"] == 1
+    assert "data" not in payload
+    assert "one" in payload["error"]
+    assert "two" in payload["error"]
+    assert "spa --env one validate" in payload["error"]
+
+
+def test_agent_identity_does_not_leak_between_cli_main_calls(tmp_path, monkeypatch, capsys):
+    """The active identity is cleared after each cli.main invocation."""
+    from spa.registry import register_environment
+    from spa import cli
+
+    lab = write_min_env(tmp_path / "lab")
+    register_environment("lab", lab)
+    _stub_validate_success(monkeypatch)
+
+    assert cli.main(["--agent", "--env", "lab", "validate"]) == 0
+    first = json.loads(capsys.readouterr().out)
+    assert first["resolved_env_name"] == "lab"
+
+    assert cli.main(["--agent", "--help"]) == 0
+    second = json.loads(capsys.readouterr().out)
+    assert second["ok"] is True
+    assert "resolved_env_name" not in second
+    assert "env_dir" not in second
+    assert "config_file" not in second
+
+
+def _write_env_config(dest: Path) -> Path:
+    path = dest / "config" / "splunk_config.yml"
+    path.write_text("{}\n", encoding="utf-8")
+    return path
+
+
+def test_agent_validate_config_mismatch_exits_2(tmp_path, monkeypatch, capsys):
+    """--env plus a different --config is a usage error and does not validate."""
+    from spa.registry import register_environment
+    from spa.api import CommandResult, open_session
+    from spa import cli
+
+    lab = write_min_env(tmp_path / "lab")
+    other = write_min_env(tmp_path / "other")
+    lab_config = _write_env_config(lab)
+    other_config = _write_env_config(other)
+    register_environment("lab", lab)
+    register_environment("other", other)
+
+    called = {}
+
+    def fake_open(**kwargs):
+        session = open_session(**kwargs)
+
+        def validate(**validate_kwargs):
+            called["config"] = validate_kwargs.get("config")
+            called["splunk_config_file"] = os.environ.get("SPLUNK_CONFIG_FILE")
+            return CommandResult(ok=True, data={"steps": []})
+
+        session.validate = validate
+        return session
+
+    monkeypatch.setattr(cli, "open_session", fake_open)
+    monkeypatch.delenv("SPLUNK_CONFIG_FILE", raising=False)
+
+    for argv in (
+        ["--agent", "--env", "lab", "validate", "--config", str(other_config)],
+        ["--agent", "validate", "--env", "lab", "--config", str(other_config)],
+    ):
+        called.clear()
+        assert cli.main(argv) == 2
+        assert called == {}
+        assert os.environ.get("SPLUNK_CONFIG_FILE") != str(other_config.resolve())
+        payload = json.loads(capsys.readouterr().out)
+        assert payload == {
+            "ok": False,
+            "schema_version": 1,
+            "error": payload["error"],
+        }
+        error = payload["error"]
+        assert str(other_config.resolve()) in error
+        assert str(lab_config.resolve()) in error
+        assert "Drop --config" in error
+        assert "validated" not in error.lower()
+
+
+def test_agent_validate_config_mismatch_names_shell_config_source(
+    tmp_path, monkeypatch, capsys
+):
+    """A shell-selected expected config is identified as SPLUNK_CONFIG_FILE."""
+    from spa.registry import register_environment
+    from spa import cli
+
+    lab = write_min_env(tmp_path / "lab")
+    lab_config = _write_env_config(lab)
+    other = write_min_env(tmp_path / "other")
+    other_config = _write_env_config(other)
+    register_environment("lab", lab)
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(lab_config))
+    _stub_validate_success(monkeypatch)
+
+    assert (
+        cli.main(
+            ["--agent", "--env", "lab", "validate", "--config", str(other_config)]
+        )
+        == 2
+    )
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert "from SPLUNK_CONFIG_FILE" in error
+    assert str(lab_config.resolve()) in error
+
+
+def test_config_argument_falls_back_to_spa_home(tmp_path, monkeypatch):
+    """CLI matching and validation use the same fallback for a relative config."""
+    from types import SimpleNamespace
+
+    from spa.cli import _resolved_config_argument
+    from spa.validate import resolve_config_path
+
+    spa_home = tmp_path / "spa-home"
+    config = spa_home / "relative.yml"
+    config.parent.mkdir(parents=True)
+    config.write_text("{}\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    paths = SimpleNamespace(spa_home=spa_home)
+
+    assert resolve_config_path("relative.yml", paths) == config.resolve()
+    assert _resolved_config_argument("relative.yml", paths) == config.resolve()
+
+
+def test_agent_validate_matching_config_keeps_env_identity(tmp_path, monkeypatch, capsys):
+    """--env and --config of that env's file succeed with that env's identity."""
+    from spa.registry import register_environment
+    from spa import cli
+
+    lab = write_min_env(tmp_path / "lab")
+    lab_config = _write_env_config(lab)
+    register_environment("lab", lab)
+    _stub_validate_success(monkeypatch)
+
+    assert (
+        cli.main(["--agent", "--env", "lab", "validate", "--config", str(lab_config)])
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["resolved_env_name"] == "lab"
+    assert Path(payload["env_dir"]) == lab.resolve()
+    assert Path(payload["config_file"]) == lab_config.resolve()
+
+    monkeypatch.chdir(lab)
+    assert (
+        cli.main(
+            ["--agent", "--env", "lab", "validate", "--config", "config/splunk_config.yml"]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["resolved_env_name"] == "lab"
+    assert Path(payload["config_file"]) == lab_config.resolve()
+
+
+def test_agent_validate_config_without_env_follows_file_env(tmp_path, monkeypatch, capsys):
+    """Without --env, validate --config reports the env that owns the file."""
+    from spa.registry import register_environment
+    from spa import cli
+
+    neutral = tmp_path / "cwd"
+    neutral.mkdir()
+    monkeypatch.chdir(neutral)
+    monkeypatch.delenv("SPA_ENV_DIR", raising=False)
+
+    other = write_min_env(tmp_path / "other")
+    _write_env_config(other)
+    register_environment("other", other)
+    lab = write_min_env(tmp_path / "lab")
+    lab_config = _write_env_config(lab)
+    (lab / ".spa.yml").unlink()
+    register_environment("lab", lab)
+    _stub_validate_success(monkeypatch)
+
+    assert cli.main(["--agent", "validate", "--config", str(lab_config)]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["resolved_env_name"] == "lab"
+    assert Path(payload["env_dir"]) == lab.resolve()
+    assert Path(payload["config_file"]) == lab_config.resolve()
+    assert Path(payload["env_dir"]) != other.resolve()
+
+
+def _validate_paths_seen(monkeypatch):
+    """Capture validate_env's re-resolved paths without stubbing session.validate."""
+    from types import SimpleNamespace
+
+    from spa import validate
+
+    seen = []
+    original_resolve = validate.resolve_spa_paths
+
+    def capture_resolve(*args, **kwargs):
+        paths = original_resolve(*args, **kwargs)
+        seen.append(paths.spa_env_dir)
+        return paths
+
+    monkeypatch.setattr(validate, "resolve_spa_paths", capture_resolve)
+    monkeypatch.setattr("spa.cli.venv_required_error", lambda _paths: None)
+    monkeypatch.setattr(validate, "tool_path", lambda _paths, tool: tool)
+    monkeypatch.setattr(
+        validate.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=1, stdout="", stderr="schema stopped"),
+    )
+    return seen
+
+
+def test_agent_validate_config_owner_selects_owner_for_validation(tmp_path, monkeypatch, capsys):
+    """A file-owned config validates against its owner, not the registered default."""
+    from spa.registry import register_environment
+    from spa import cli
+
+    default = write_min_env(tmp_path / "default")
+    _write_env_config(default)
+    register_environment("default", default)
+    lab = write_min_env(tmp_path / "lab")
+    lab_config = _write_env_config(lab)
+    register_environment("lab", lab)
+    monkeypatch.delenv("SPA_ENV_DIR", raising=False)
+    monkeypatch.delenv("SPLUNK_CONFIG_FILE", raising=False)
+    seen = _validate_paths_seen(monkeypatch)
+
+    assert cli.main(["--agent", "validate", "--config", str(lab_config)]) == 1
+    assert seen == [lab.resolve()]
+    assert json.loads(capsys.readouterr().out)["error"] == "schema stopped"
+
+
+def test_agent_validate_explicit_env_selects_env_for_validation(tmp_path, monkeypatch, capsys):
+    """An explicit --env keeps validation on that env despite shell defaults."""
+    from spa.registry import register_environment
+    from spa import cli
+
+    default = write_min_env(tmp_path / "default")
+    _write_env_config(default)
+    register_environment("default", default)
+    lab = write_min_env(tmp_path / "lab")
+    lab_config = _write_env_config(lab)
+    register_environment("lab", lab)
+    monkeypatch.setenv("SPA_ENV_DIR", str(default))
+    monkeypatch.delenv("SPLUNK_CONFIG_FILE", raising=False)
+    seen = _validate_paths_seen(monkeypatch)
+
+    assert (
+        cli.main(["--agent", "--env", "lab", "validate", "--config", str(lab_config)])
+        == 1
+    )
+    assert seen == [lab.resolve()]
+    assert json.loads(capsys.readouterr().out)["error"] == "schema stopped"
+
+
+def test_agent_validate_config_without_env_follows_unregistered_spa_yml(
+    tmp_path, monkeypatch, capsys
+):
+    """An unregistered directory with .spa.yml still owns its config file."""
+    from spa.registry import register_environment
+    from spa import cli
+
+    neutral = tmp_path / "cwd"
+    neutral.mkdir()
+    monkeypatch.chdir(neutral)
+    monkeypatch.delenv("SPA_ENV_DIR", raising=False)
+
+    other = write_min_env(tmp_path / "other")
+    _write_env_config(other)
+    register_environment("other", other)
+    loose = write_min_env(tmp_path / "loose")
+    loose_config = _write_env_config(loose)
+    _stub_validate_success(monkeypatch)
+
+    assert cli.main(["--agent", "validate", "--config", str(loose_config)]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["resolved_env_name"] is None
+    assert Path(payload["env_dir"]) == loose.resolve()
+    assert Path(payload["config_file"]) == loose_config.resolve()
+    assert "data" in payload
+
+
+def test_agent_validate_unowned_config_omits_identity(tmp_path, monkeypatch, capsys):
+    """Without --env, a config file with no owning env omits identity."""
+    from spa.registry import register_environment
+    from spa import cli
+
+    neutral = tmp_path / "cwd"
+    neutral.mkdir()
+    monkeypatch.chdir(neutral)
+    monkeypatch.delenv("SPA_ENV_DIR", raising=False)
+
+    other = write_min_env(tmp_path / "other")
+    _write_env_config(other)
+    register_environment("other", other)
+    orphan = tmp_path / "orphan"
+    (orphan / "config").mkdir(parents=True)
+    orphan_config = orphan / "config" / "splunk_config.yml"
+    orphan_config.write_text("{}\n", encoding="utf-8")
+    _stub_validate_success(monkeypatch)
+
+    assert cli.main(["--agent", "validate", "--config", str(orphan_config)]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert "resolved_env_name" not in payload
+    assert "env_dir" not in payload
+    assert "config_file" not in payload
+    assert "data" in payload
+
+    plain = tmp_path / "loose.yml"
+    plain.write_text("{}\n", encoding="utf-8")
+    assert cli.main(["--agent", "validate", "--config", str(plain)]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert "resolved_env_name" not in payload
+    assert "env_dir" not in payload
+    assert "config_file" not in payload
 
 
 def test_provision_help_includes_yes():

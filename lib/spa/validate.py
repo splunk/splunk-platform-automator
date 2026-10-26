@@ -96,6 +96,15 @@ def custom_playbook_dirs_error(playbook_dirs: List[Dict[str, Any]], env_dir: Any
     return "\n".join(lines)
 
 
+def resolve_config_path(config: str, paths: Optional[SpaPaths] = None) -> Path:
+    """Resolve a --config argument like validate_env will consume it."""
+    cfg = Path(config).expanduser()
+    if not cfg.is_absolute():
+        cwd = Path.cwd() / cfg
+        cfg = cwd if cwd.is_file() else ((paths or resolve_spa_paths()).spa_home / cfg)
+    return cfg.resolve()
+
+
 def validate_env(
     paths: Optional[SpaPaths] = None,
     *,
@@ -107,13 +116,11 @@ def validate_env(
 ) -> CommandResult:
     """Run validation steps and return structured results (no printing)."""
     if config:
-        cfg = Path(config).expanduser()
-        if not cfg.is_absolute():
-            cwd = Path.cwd() / cfg
-            cfg = cwd if cwd.is_file() else (resolve_spa_paths().spa_home / cfg)
-        config_path = cfg.resolve()
+        config_path = resolve_config_path(config, paths)
         overlay = os.environ.copy()
         overlay["SPLUNK_CONFIG_FILE"] = str(config_path)
+        if paths is not None:
+            overlay["SPA_ENV_DIR"] = str(paths.spa_env_dir)
         paths = resolve_spa_paths(environ=overlay)
     else:
         paths = paths or resolve_spa_paths()
