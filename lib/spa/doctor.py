@@ -201,6 +201,8 @@ def _config_providers(text: str) -> set:
             top = line.split(":", 1)[0].strip()
             if top == "virtualbox":
                 providers.add("virtualbox")
+            elif top == "external":
+                providers.add("external")
             continue
         if top == "terraform" and line.strip().split(":", 1)[0].strip() == "aws":
             providers.add("aws")
@@ -250,6 +252,9 @@ def collect_checks(
         providers = _config_providers(cfg.read_text(encoding="utf-8", errors="replace"))
         require_aws = require_aws or "aws" in providers
         require_vbox = require_vbox or "virtualbox" in providers
+        require_external = "external" in providers
+    else:
+        require_external = False
 
     ok: List[Dict[str, str]] = []
     warns: List[Dict[str, str]] = []
@@ -389,7 +394,13 @@ def collect_checks(
         for name, wanted in (("terraform.aws", require_aws), ("virtualbox", require_vbox))
         if wanted
     ]
-    if selected:
+    if require_external and not require_aws and not require_vbox:
+        rec(
+            "ok",
+            "provider",
+            "provider tools checked for: external (%s)" % (cfg if cfg else "external"),
+        )
+    elif selected:
         rec(
             "ok",
             "provider",
@@ -412,6 +423,17 @@ def collect_checks(
                 "terraform",
                 "terraform required for terraform.aws (not on PATH)",
                 _terraform_install_hint(),
+            )
+
+    if require_external:
+        if shutil.which("ssh"):
+            rec("ok", "ssh", "ssh is on PATH")
+        else:
+            rec(
+                "error",
+                "ssh",
+                "ssh required for external hosts",
+                "install the OpenSSH client",
             )
 
     software = None

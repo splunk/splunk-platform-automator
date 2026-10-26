@@ -65,6 +65,75 @@ except ImportError:
     resolve_spa_paths = None
     resolve_shared_data_dir = None
 
+_OS_MASK_KEYS = (
+    "set_hostname",
+    "update_hosts_file",
+    "disable_selinux",
+    "disable_apparmor",
+    "splunk_user_create",
+    "splunk_group_create",
+)
+_HOST_VAR_SKIP = (
+    "name", "list", "iter", "splunk_env", "roles", "virtualbox", "external",
+    "idxcluster", "shcluster", "site", "cname",
+)
+
+
+def _host_is_external(host, config=None):
+    """Host ``external:`` block, or every host when the env is external-only."""
+    if not isinstance(host, dict):
+        return False
+    if "external" in host:
+        return True
+    if not isinstance(config, dict) or "external" not in config or "virtualbox" in config:
+        return False
+    terraform = config.get("terraform") or {}
+    if isinstance(terraform, dict) and any(isinstance(value, dict) for value in terraform.values()):
+        return False
+    value = config.get("external")
+    return value is None or isinstance(value, dict)
+
+
+def external_os_mask(host, config=None):
+    """OS flags forced off for an external host, unless that host sets the key."""
+    if not _host_is_external(host, config):
+        return {}
+    own = host.get("os") if isinstance(host.get("os"), dict) else {}
+    return {key: False for key in _OS_MASK_KEYS if key not in own}
+
+
+def _connection_address(host):
+    if not isinstance(host, dict):
+        return None
+    if host.get("ansible_host"):
+        return host.get("ansible_host")
+    custom = host.get("custom") if isinstance(host.get("custom"), dict) else {}
+    if custom.get("ansible_host"):
+        return custom.get("ansible_host")
+    return host.get("ip_addr")
+
+
+def publish_host_vars(inventory, hostname, splunkhost, all_vars=None, config=None):
+    """Publish connection and OS variables. First-class ansible_host wins."""
+    all_vars = all_vars or {}
+    for key, value in external_os_mask(splunkhost, config).items():
+        inventory.set_variable(hostname, key, value)
+    for key, val in splunkhost.items():
+        if key in _HOST_VAR_SKIP:
+            continue
+        if key in ("os", "custom"):
+            for section_key, section_val in (splunkhost.get(key) or {}).items():
+                all_group_val = all_vars.get(section_key)
+                if isinstance(all_group_val, list) and isinstance(section_val, list):
+                    section_val = list(dict.fromkeys(all_group_val + section_val))
+                inventory.set_variable(hostname, section_key, section_val)
+        else:
+            inventory.set_variable(hostname, key, val)
+    address = _connection_address(splunkhost)
+    if address:
+        inventory.set_variable(hostname, "ansible_host", address)
+
+
 class InventoryModule(BaseInventoryPlugin):
     NAME = 'splunk-platform-automator'
 
@@ -352,7 +421,6 @@ class InventoryModule(BaseInventoryPlugin):
                     raise AnsibleParserError('Cannot populate settings for shcluster. Error: {}'.format(e))
 
         #TODO: Verify volume definitions in splunk_indexer_volumes. If other names in homePath coldPath are used. Remove primary from the settings
-        #TODO: set ansible_host: self.inventory.set_variable(hostname, 'ansible_host', data['Mgmt IP'])
         
         # Get allowed roles from schema (used for creating role groups)
         allowed_roles = [r.value for r in AllowedRole]
@@ -415,7 +483,7 @@ class InventoryModule(BaseInventoryPlugin):
                     self.environments[splunk_env]['search_peer'][splunk_search_peers] = {'targets':{}, 'hosts':[]}
 
                 # Work through the given roles (validation handled by schema.py)
-                for role in splunkhost['roles']:
+                for role in splunkhost.get("roles") or []:
                     # Check license file exists for license_manager role (runtime filesystem check)
                     # Note: The required splunk_license_file variable check is handled by schema.py
                     if role == "license_manager":
@@ -539,30 +607,14 @@ class InventoryModule(BaseInventoryPlugin):
                 # Set site if available (validation handled by schema.py)
                 if 'site' in splunkhost:
                     self.inventory.set_variable(hostname, 'site', splunkhost['site'])
-                
 
-                # Add the rest of the host variables
-                for key, val in splunkhost.items():
-                    if key in ['name','list','iter','splunk_env','roles','virtualbox']:
-                        # Ignore those ones. Either not relevant or already worked on
-                        continue
-                    if key in ['idxcluster','shcluster']:
-                        #TODO: Handle special vars
-                        continue
-                    if key in ['site', 'cname']:
-                        #TODO: Handle special vars (site is done already)
-                        continue
-                    #print("Addind key: %s with values %s" % (key, val))
-
-                    # Extract section variables to add them directly (validation handled by schema.py)
-                    if key in ['os','custom']:
-                        for section_key, section_val in splunkhost.get(key).items():
-                            all_group_val = self.groups['all'].get(section_key)
-                            if isinstance(all_group_val, list) and isinstance(section_val, list):
-                                section_val = list(dict.fromkeys(all_group_val + section_val))
-                            self.inventory.set_variable(hostname, section_key, section_val)
-                    else:
-                        self.inventory.set_variable(hostname, key, val)
+                publish_host_vars(
+                    self.inventory,
+                    hostname,
+                    splunkhost,
+                    self.groups.get("all") or {},
+                    self.configfiles,
+                )
 
         # Check the archive availability for all versions needed
         for splunk_env, versions_combs in self.versions.items():
@@ -674,6 +726,8 @@ class InventoryModule(BaseInventoryPlugin):
             configfiles[section] = resolved_config[section]
         for section in optional_sections:
             configfiles[section] = resolved_config.get(section)
+        if "external" in resolved_config:
+            configfiles["external"] = resolved_config.get("external")
         setattr(self, 'configfiles', configfiles)
 
         # Create empty inventory, to make other plugins happy

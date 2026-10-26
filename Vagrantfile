@@ -120,6 +120,7 @@ end
 host_vars = {}
 splunk_host_list = []
 settings['splunk_hosts'].each do |splunk_host|
+  next if splunk_host.key?('external')
   hostnames = []
   if !splunk_host['name'].nil?
     hostnames.append(splunk_host['name'])

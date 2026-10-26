@@ -95,7 +95,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [x] `spa aws` uses `--region`, then `AWS_REGION`, `AWS_DEFAULT_REGION`, or `~/.aws/config`, names that source, and marks it in `spa aws regions list`
 - [x] VirtualBox spa provider (`spa provision` / `destroy` / suspend-resume via Vagrant) — [#56](https://github.com/splunk/splunk-platform-automator/issues/56)
 - [ ] Shared network access groups (provider-agnostic CLI; AWS first; SPA_HOME state; env destroy does not delete) — [#58](https://github.com/splunk/splunk-platform-automator/issues/58)
-- [ ] External / BYO SSH hosts (register only; mixed with managed; never terminate the real machine) — [#57](https://github.com/splunk/splunk-platform-automator/issues/57). `spa deploy --allow-unprovisioned` is the interim escape hatch until BYO hosts are first-class.
+- [x] External / BYO SSH hosts (register only; mixed with managed; never terminate the real machine) — [#57](https://github.com/splunk/splunk-platform-automator/issues/57).
 - [ ] Splunk Operator for Kubernetes: `splunk_config.yml` → Operator CRs (IndexerCluster, SearchHeadCluster, ClusterManager, LicenseManager, MonitoringConsole, Standalone) plus namespace, storage, and image settings
 - [ ] Windows Universal Forwarder on AWS (AMI + WinRM); VirtualBox UF role exists but needs a supported SPA workflow (background in [docs/contributing.md](docs/contributing.md#windows-box-maintenance))
 

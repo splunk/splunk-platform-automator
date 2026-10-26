@@ -14,6 +14,8 @@ spa validate
 spa provision --yes && spa deploy --yes
 ```
 
+`spa deploy` runs an Ansible ping with become for the selected hosts after you confirm and before the playbook, then compares `splunk_architecture` with the machine. `spa hosts check` is that check on its own. `spa provision` does not run it. Before `spa run` of a playbook that needs root, run `spa hosts check`.
+
 Use `--provider virtualbox` with a topology such as `single_node` for local VMs. Before production, review the deployment-intent work tracked in [ROADMAP #80](../ROADMAP.md); default examples are intentionally permissive.
 
 ## Understand the paths
@@ -31,7 +33,7 @@ flowchart LR
 
 `spa` resolves an environment by `--env NAME`, `SPA_ENV_DIR`, walking up from cwd to `.spa.yml`, then the registered default, and applies that environment to the command. Many environments can share one framework install. `spa environment list` shows registered names; use `spa environment set --default NAME` for commands run outside an env, or pass `spa --env NAME`. An older lab that already has `config/splunk_config.yml` or `.spa.yml` is registered with `spa env init NAME --force` from that directory or its parent (config is kept unless you also pass `--example`).
 
-For existing servers, describe the hosts and SSH settings in `splunk_config.yml`, then use `spa deploy --yes --allow-unprovisioned`. Use that bypass only when you intentionally did not provision those hosts with SPA.
+For an existing server, `spa init --example TOPOLOGY --provider external ENV`, then `spa hosts register NAME --address ADDRESS --user USER --key PATH --yes`. Registration checks SSH and writes the address, user, and key only in `inventory/hosts`. The config only needs `external:`. `spa validate` checks the config only. `spa deploy --yes` pings with become and compares `splunk_architecture` with the machine before the playbook. `spa hosts check` is that check without deploying. SPA does not create, shut down, or terminate an external machine. `spa provision` in an external-only environment says so and does not ask to proceed. In a mixed environment it still asks, because the managed hosts change, and it names the external hosts it leaves alone.
 
 ## Prepare Software
 

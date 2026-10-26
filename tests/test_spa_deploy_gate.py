@@ -193,7 +193,7 @@ def test_deploy_does_not_run_playbook_when_partial(tmp_path, monkeypatch):
     assert not called
     assert result.data["missing"] == ["idx2"]
     assert "spa provision" in result.error
-    assert "--allow-unprovisioned" in result.error
+    assert "--allow-unprovisioned" not in result.error
 
 
 def test_deploy_allow_unprovisioned_runs_playbook(tmp_path, monkeypatch):
@@ -202,14 +202,18 @@ def test_deploy_allow_unprovisioned_runs_playbook(tmp_path, monkeypatch):
         "spa.playbooks.run_playbook", lambda *a, **k: called.append(True) or 0
     )
     monkeypatch.setattr("spa.playbooks.resolve", lambda *a, **k: "deploy_site.yml")
+    monkeypatch.setattr("spa.hosts.ping_hosts", lambda *a, **k: {"hosts": []})
+    monkeypatch.setattr(
+        "spa.shell.get_inventory_data",
+        lambda: {"_meta": {"hostvars": {"idx1": {}}}, "all": {"hosts": ["idx1"]}},
+    )
     paths, session = _session_env(tmp_path)
     _write_state(paths)
     _write_inventory(paths, "idx1")
-    result = session.deploy(confirm=True, skip_provision_check=True)
+    result = session.deploy(confirm=True, hosts=["idx1"])
     assert result.ok
     assert called
-    assert result.data["provision_check_skipped"] is True
-    assert result.data["missing"] == ["idx2"]
+    assert "provision_check_skipped" not in result.data
 
 
 def test_allow_unprovisioned_without_yes_still_requires_confirmation(tmp_path, monkeypatch):
@@ -219,7 +223,8 @@ def test_allow_unprovisioned_without_yes_still_requires_confirmation(tmp_path, m
     )
     paths, session = _session_env(tmp_path)
     _write_state(paths)
-    result = session.deploy(confirm=False, agent=True, skip_provision_check=True)
+    _write_inventory(paths, "idx1", "idx2")
+    result = session.deploy(confirm=False, agent=True)
     assert result.ok is False
     assert not called
     assert "requires -y/--yes" in result.error
@@ -234,7 +239,7 @@ def test_deploy_fails_when_software_missing(tmp_path, monkeypatch):
     session = LocalSpaSession(
         paths=replace(paths, software_dir=tmp_path / "missing-sw", baseconfig_dir=tmp_path / "missing-sw")
     )
-    result = session.deploy(confirm=True, skip_provision_check=True)
+    result = session.deploy(confirm=True)
     assert result.ok is False
     assert not called
     assert "Software directory not found" in result.error
@@ -278,6 +283,11 @@ def test_cli_allow_unprovisioned_invokes_playbook(tmp_path, monkeypatch):
         "spa.playbooks.run_playbook", lambda *a, **k: called.append(True) or 0
     )
     monkeypatch.setattr("spa.playbooks.resolve", lambda *a, **k: "deploy_site.yml")
+    monkeypatch.setattr("spa.hosts.ping_hosts", lambda *a, **k: {"hosts": []})
+    monkeypatch.setattr(
+        "spa.shell.get_inventory_data",
+        lambda: {"_meta": {"hostvars": {"idx1": {}}}, "all": {"hosts": ["idx1"]}},
+    )
     paths = _paths(tmp_path, AWS_TWO_HOSTS)
     _write_state(paths)
     _write_inventory(paths, "idx1")
@@ -288,7 +298,11 @@ def test_cli_allow_unprovisioned_invokes_playbook(tmp_path, monkeypatch):
     monkeypatch.setenv("SPA_BASECONFIG_DIR", str(paths.baseconfig_dir))
     from spa.cli import main
 
-    rc = main(["--no-agent", "deploy", "--yes", "--allow-unprovisioned"])
+    with pytest.raises(SystemExit) as exc:
+        main(["--no-agent", "deploy", "--yes", "--allow-unprovisioned"])
+    assert exc.value.code == 2
+    assert not called
+    rc = main(["--no-agent", "deploy", "--yes", "--hosts", "idx1"])
     assert rc == 0
     assert called
 
@@ -296,8 +310,8 @@ def test_cli_allow_unprovisioned_invokes_playbook(tmp_path, monkeypatch):
 def test_help_and_schema_include_allow_unprovisioned():
     help_result = run_spa(["deploy", "--help"])
     assert help_result.returncode == 0
-    assert "--allow-unprovisioned" in help_result.stdout
+    assert "--allow-unprovisioned" not in help_result.stdout
     schema = json.loads(run_spa(["agent", "schema"]).stdout)
     deploy = next(row for row in schema["data"]["commands"] if row["name"] == "deploy")
     flags = [item["long"] for item in deploy.get("flags") or []]
-    assert "--allow-unprovisioned" in flags
+    assert "--allow-unprovisioned" not in flags

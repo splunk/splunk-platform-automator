@@ -184,7 +184,7 @@ def test_provision_and_deploy_stop_before_later_work(tmp_path, monkeypatch):
     monkeypatch.setattr("spa.playbooks.run_playbook", playbook)
 
     provision = session.provision(confirm=True)
-    deploy = session.deploy(confirm=True, skip_provision_check=True)
+    deploy = session.deploy(confirm=True)
     for result in (provision, deploy):
         assert result.ok is False
         assert result.error == (

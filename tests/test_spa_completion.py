@@ -157,6 +157,15 @@ def test_flags_belong_to_the_command_being_typed():
 def test_provider_and_search_choices_come_from_the_schema():
     assert "virtualbox" in complete(["spa", "init", "--provider", "v"], 3)
     assert "aws" in complete(["spa", "environment", "set", "--provider", ""], 4)
+
+
+def test_init_provider_tab_lists_shipped_providers():
+    names = complete(["spa", "init", "--provider", ""], 3)
+    assert "aws" in names
+    assert "virtualbox" in names
+    assert "external" in names
+    assert "external" in complete(["spa", "environment", "init", "--provider", ""], 4)
+    assert "external" in complete(["spa", "environment", "set", "--provider", ""], 4)
     kinds = complete(["spa", "apps", "search", "--kind", ""], 4)
     assert "ta" in kinds
     assert "premium_itsi" in kinds

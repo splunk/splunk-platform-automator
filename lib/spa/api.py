@@ -24,6 +24,14 @@ class HostLookupError(RuntimeError):
     """--hosts did not resolve against this env's inventory."""
 
 
+def _subprocess_runner(argv: Sequence[str]) -> int:
+    import subprocess
+
+    return subprocess.run(
+        list(argv), check=False, capture_output=True, text=True
+    ).returncode
+
+
 class RemoteSessionNotImplemented(RuntimeError):
     """open_session(url=...) is reserved for a future controller daemon."""
 
@@ -243,7 +251,6 @@ class SpaSession(Protocol):
         hosts: Optional[Sequence[str]] = None,
         confirm: bool = False,
         agent: bool = False,
-        skip_provision_check: bool = False,
         ansible_output: bool = False,
         native_output: bool = False,
         verbosity: int = 0,
@@ -308,6 +315,22 @@ class SpaSession(Protocol):
     def hosts_list(
         self, status: bool = False, hosts: Optional[Sequence[str]] = None
     ) -> CommandResult: ...
+
+    def hosts_register(
+        self,
+        name: str,
+        address: str,
+        user: str,
+        key: str,
+        port: int = 22,
+        roles: Optional[Sequence[str]] = None,
+        confirm: bool = False,
+        agent: bool = False,
+    ) -> CommandResult: ...
+
+    def hosts_unregister(self, name: str, confirm: bool = False, agent: bool = False) -> CommandResult: ...
+
+    def hosts_check(self, hosts: Optional[Sequence[str]] = None) -> CommandResult: ...
 
     def shell_list(self, verbose: bool = False, hosts: Optional[Sequence[str]] = None) -> CommandResult: ...
 
@@ -396,6 +419,56 @@ class LocalSpaSession:
             code=1,
             error=state.message(extra_line),
             data=state.payload(),
+        )
+
+    def _scoped_provision_block(self, hosts: Optional[Sequence[str]]) -> Optional[CommandResult]:
+        """A full deploy checks every host. ``--hosts`` checks only those names."""
+        state = self._provision_state()
+        if state is None or state.provisioned:
+            return None
+        from spa.hosts import parse_host_tokens
+
+        tokens = parse_host_tokens(hosts)
+        managed, external = self._classified_hosts()
+        known = set(managed) | set(external)
+        if not tokens:
+            return self._require_provisioned()
+        selected = [token for token in tokens if token in known]
+        if not selected:
+            return None
+        missing = [name for name in state.missing if name in selected]
+        if not missing:
+            return None
+        external_missing = [name for name in missing if name in external]
+        if external_missing and len(external_missing) == len(missing):
+            from spa.providers.external import _register_sentence
+
+            hint = _register_sentence(external_missing[0]).split("Run: ", 1)[-1]
+            lines = [
+                "hosts not provisioned: %s" % ", ".join(missing),
+                "provider: %s" % state.provider,
+                "Run: %s" % hint,
+            ]
+            return CommandResult(
+                ok=False,
+                code=1,
+                error="\n".join(lines),
+                data=state.payload(),
+            )
+        from spa.providers import ProvisionState
+
+        narrowed = ProvisionState(
+            provider=state.provider,
+            provisioned=False,
+            reason=state.reason,
+            hint="spa provision --yes",
+            missing=tuple(missing),
+        )
+        return CommandResult(
+            ok=False,
+            code=1,
+            error=narrowed.message(),
+            data=narrowed.payload(),
         )
 
     def _progress(self, event: Dict[str, Any]) -> None:
@@ -1272,6 +1345,27 @@ class LocalSpaSession:
             return blocked
         from spa.providers import ProviderError, get_provider
 
+        try:
+            provider = get_provider(self.paths)
+        except ProviderError as exc:
+            return CommandResult(ok=False, error=str(exc), code=getattr(exc, "code", 1) or 1)
+        managed, external = self._classified_hosts()
+        if action == "provision" and provider.name == "external":
+            return CommandResult(
+                ok=True,
+                data={
+                    "provider": provider.name,
+                    "action": action,
+                    "note": "SPA does not provision external hosts.",
+                },
+            )
+        if action == "provision" and external and not agent:
+            import sys
+
+            print(
+                "SPA does not provision external hosts: %s" % ", ".join(external),
+                file=sys.stderr,
+            )
         blocked = self._confirm_gate(
             action,
             confirm=confirm,
@@ -1284,8 +1378,15 @@ class LocalSpaSession:
         log = None
         rc = 1
         try:
-            provider = get_provider(self.paths)
-            if provider.name == "aws":
+            blocked = self._refuse_owned_external(provider, external)
+            if blocked:
+                return blocked
+            snapshot = self._inventory_snapshot()
+            if provider.name == "virtualbox" and external:
+                args = [*args, *managed]
+            if provider.name == "external":
+                playbook = "external_%s" % action
+            elif provider.name == "aws":
                 playbook = "aws_provision" if action == "provision" else "aws_destroy"
             else:
                 playbook = "vagrant_up" if action == "provision" else "vagrant_destroy"
@@ -1300,7 +1401,7 @@ class LocalSpaSession:
                 timestamps=timestamps,
                 color=color,
             )
-            rc = getattr(provider, action)(
+            outcome = getattr(provider, action)(
                 args,
                 run_log=log,
                 agent=agent,
@@ -1311,6 +1412,22 @@ class LocalSpaSession:
                 color=color,
                 command=action,
             )
+            if isinstance(outcome, dict):
+                log.finish(0)
+                data = {"provider": provider.name, "action": action}
+                data.update(outcome)
+                data.update(log.envelope_fields())
+                return CommandResult(ok=True, data=data)
+            rc = outcome
+            if provider.name in {"aws", "virtualbox"} and external and action == "provision":
+                self._merge_external_lines(snapshot, external)
+            if provider.name in {"aws", "virtualbox"} and action == "destroy":
+                if rc == 0:
+                    self._write_external_lines(snapshot, external)
+                    if provider.name == "aws":
+                        self._remove_terraform_tree()
+                elif external:
+                    self._merge_external_lines(snapshot, external)
         except ProviderError as exc:
             data = log.envelope_fields() if log is not None else None
             code = getattr(exc, "code", 1) or 1
@@ -1319,6 +1436,8 @@ class LocalSpaSession:
             return CommandResult(ok=False, error=str(exc), code=code, data=data)
         log.finish(rc)
         data = {"provider": provider.name, "action": action}
+        if action == "provision" and external:
+            data["skipped_external"] = list(external)
         data.update(log.envelope_fields())
         return CommandResult(
             ok=rc == 0,
@@ -1326,6 +1445,125 @@ class LocalSpaSession:
             data=data,
             error=None if rc == 0 else "%s failed" % action,
         )
+
+    def _classified_hosts(self):
+        from spa.providers import load_deployment_config
+        from spa.providers.classify import classify_hostnames
+
+        try:
+            document = load_deployment_config(self.paths)
+        except Exception:
+            return [], []
+        return classify_hostnames(document)
+
+    def _refuse_owned_external(self, provider, external):
+        if provider.name not in {"aws", "virtualbox"} or not external:
+            return None
+        if provider.name == "aws":
+            from spa.providers.aws import terraform_instance_names
+
+            owned = terraform_instance_names(provider.state_dir / "terraform.tfstate")
+            label = "aws"
+        else:
+            from spa.providers.virtualbox import owned_machine_names
+
+            try:
+                states = provider._machine_states()
+            except Exception:
+                states = {}
+            owned = owned_machine_names(states)
+            label = "virtualbox"
+        hit = [name for name in external if name in owned]
+        if not hit:
+            return None
+        return CommandResult(
+            ok=False,
+            code=1,
+            error=(
+                "host %s is still managed by %s. SPA will not destroy it. "
+                "Run spa destroy --yes before marking it external."
+                % (hit[0], label)
+            ),
+        )
+
+    def _inventory_snapshot(self) -> str:
+        path = self.paths.inventory_dir / "hosts"
+        if path.is_file():
+            return path.read_text(encoding="utf-8")
+        return ""
+
+    @staticmethod
+    def _external_line_list(snapshot: str, external) -> List[str]:
+        names = set(external)
+        kept = []
+        for line in snapshot.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if stripped.split()[0] in names:
+                kept.append(line)
+        return kept
+
+    def _write_external_lines(self, snapshot: str, external) -> None:
+        if not external:
+            return
+        path = self.paths.inventory_dir / "hosts"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lines = self._external_line_list(snapshot, external)
+        text = "\n".join(lines)
+        if text and not text.endswith("\n"):
+            text += "\n"
+        path.write_text(text, encoding="utf-8")
+
+    def _merge_external_lines(self, snapshot: str, external) -> None:
+        path = self.paths.inventory_dir / "hosts"
+        names = set(external)
+        current = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+        kept = []
+        for line in current:
+            stripped = line.strip()
+            token = stripped.split()[0] if stripped and not stripped.startswith("#") else ""
+            if token not in names:
+                kept.append(line)
+        lines = kept + self._external_line_list(snapshot, external)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = "\n".join(lines)
+        if text and not text.endswith("\n"):
+            text += "\n"
+        path.write_text(text, encoding="utf-8")
+
+    def _remove_terraform_tree(self) -> None:
+        import shutil
+
+        state = self.paths.terraform_state_dir.resolve()
+        modules = self.paths.terraform_modules_dir.resolve()
+        generated = (
+            "terraform.tfstate",
+            "terraform.tfstate.backup",
+            "terraform.tfvars",
+            "tfplan",
+            ".terraform",
+            ".terraform.lock.hcl",
+        )
+        if state == modules:
+            for name in generated:
+                target = state / name
+                if target.is_dir():
+                    shutil.rmtree(target)
+                elif target.is_file():
+                    target.unlink()
+            return
+        if state.is_dir():
+            shutil.rmtree(state)
+        parent = state.parent
+        framework = modules.parent
+        if (
+            parent.name == "terraform"
+            and parent.is_dir()
+            and parent != framework
+            and not any(parent.iterdir())
+        ):
+            parent.rmdir()
 
     def _resolve_hosts(self, hosts: Optional[Sequence[str]]) -> Optional[List[str]]:
         from spa.hosts import HostsError, parse_host_tokens, resolve_hosts
@@ -1347,7 +1585,6 @@ class LocalSpaSession:
         hosts: Optional[Sequence[str]] = None,
         confirm: bool = False,
         agent: bool = False,
-        skip_provision_check: bool = False,
         ansible_output: bool = False,
         native_output: bool = False,
         verbosity: int = 0,
@@ -1378,13 +1615,9 @@ class LocalSpaSession:
                 },
             )
 
-        provision = self._provision_state()
-        if not skip_provision_check:
-            blocked = self._require_provisioned(
-                "Or: spa deploy --yes --allow-unprovisioned"
-            )
-            if blocked:
-                return blocked
+        blocked = self._scoped_provision_block(hosts)
+        if blocked:
+            return blocked
 
         try:
             resolved = self._resolve_hosts(hosts)
@@ -1399,14 +1632,11 @@ class LocalSpaSession:
         )
         if blocked:
             return blocked
-        args = with_ansible_limit(extra, resolved)
-        try:
-            playbook = resolve("deploy_site", self.paths)
-        except PlaybookError as exc:
-            return CommandResult(ok=False, error=str(exc), code=1)
+        from spa.hosts import HostsError, ping_hosts
+
         log = self._run_log(
             "deploy",
-            str(playbook),
+            "deploy_site.yml",
             agent,
             ansible_output or verbose,
             native_output,
@@ -1414,6 +1644,34 @@ class LocalSpaSession:
             timestamps=timestamps,
             color=color,
         )
+        try:
+            checked = ping_hosts(self.paths, resolved)
+        except HostsError as exc:
+            if exc.rows:
+                log.emit_host_check(exc.rows)
+            else:
+                log.emit(
+                    {
+                        "phase": "host_check",
+                        "kind": "host_result",
+                        "status": "failed",
+                        "task": "SSH and passwordless sudo",
+                        "msg": str(exc),
+                    }
+                )
+            log.finish(1)
+            data = log.envelope_fields()
+            data["host_check_reported"] = True
+            return CommandResult(ok=False, error=str(exc), code=1, data=data)
+        log.emit_host_check(checked.get("hosts") or [])
+        args = with_ansible_limit(extra, resolved)
+        try:
+            playbook = resolve("deploy_site", self.paths)
+        except PlaybookError as exc:
+            log.finish(1)
+            return CommandResult(
+                ok=False, error=str(exc), code=1, data=log.envelope_fields()
+            )
         rc = run_playbook(
             playbook,
             self.paths,
@@ -1433,13 +1691,6 @@ class LocalSpaSession:
         data.update(log.envelope_fields())
         if resolved:
             data["hosts"] = resolved
-        if skip_provision_check:
-            data["provision_check_skipped"] = True
-            if provision is not None:
-                data["provisioned"] = provision.provisioned
-                data["provider"] = provision.provider
-                if provision.missing:
-                    data["missing"] = list(provision.missing)
         return CommandResult(
             ok=rc == 0,
             code=rc,
@@ -1516,11 +1767,22 @@ class LocalSpaSession:
             provider = get_provider(self.paths)
         except ProviderError as exc:
             return CommandResult(ok=False, error=str(exc), code=getattr(exc, "code", 1) or 1)
+        managed, external = self._classified_hosts()
+        selected = list(resolved) if resolved else [*managed, *external]
+        external_selected = [name for name in selected if name in external]
+        managed_selected = [name for name in selected if name not in set(external)]
+        if external_selected and not managed_selected:
+            return CommandResult(
+                ok=False,
+                code=1,
+                error="SPA does not own power for external hosts: %s" % ", ".join(external_selected),
+            )
+        call_hosts = managed_selected if external else resolved
         log = self._run_log(action, action, agent, ansible_output, provider=provider.name)
         log.emit({"status": "ok", "phase": "power", "task": action})
         try:
             data = getattr(provider, action)(
-                yes=True, agent=agent, wait=wait, hosts=resolved, run_log=log
+                yes=True, agent=agent, wait=wait, hosts=call_hosts, run_log=log
             )
         except ProviderError as exc:
             code = getattr(exc, "code", 1) or 1
@@ -1533,7 +1795,9 @@ class LocalSpaSession:
         payload["action"] = action
         payload.update(log.envelope_fields())
         if resolved:
-            payload["hosts"] = resolved
+            payload["hosts"] = list(managed_selected) if external else resolved
+        if external_selected:
+            payload["skipped_external"] = external_selected
         return CommandResult(ok=True, data=payload)
 
     def run(
@@ -1716,6 +1980,67 @@ class LocalSpaSession:
         except shell_mod.ShellError as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
         return CommandResult(ok=True, data=report)
+
+    def hosts_register(
+        self,
+        name: str,
+        address: str,
+        user: str,
+        key: str,
+        port: int = 22,
+        roles: Optional[Sequence[str]] = None,
+        confirm: bool = False,
+        agent: bool = False,
+    ) -> CommandResult:
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
+        blocked = self._confirm_gate("register", confirm=confirm, agent=agent, risk="mutating")
+        if blocked:
+            return blocked
+        from spa.providers import ProviderError
+        from spa.providers.external import RegisterSpec, register_host
+
+        spec = RegisterSpec(name, address, user, key, port, tuple(roles or ()))
+        try:
+            data = register_host(self.paths, spec, _subprocess_runner)
+        except ProviderError as exc:
+            return CommandResult(ok=False, error=str(exc), code=1)
+        return CommandResult(ok=True, data=data)
+
+    def hosts_unregister(
+        self, name: str, confirm: bool = False, agent: bool = False
+    ) -> CommandResult:
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
+        blocked = self._confirm_gate("unregister", confirm=confirm, agent=agent, risk="mutating")
+        if blocked:
+            return blocked
+        from spa.providers import ProviderError
+        from spa.providers.external import unregister_host
+
+        try:
+            data = unregister_host(self.paths, name)
+        except ProviderError as exc:
+            return CommandResult(ok=False, error=str(exc), code=1)
+        return CommandResult(ok=True, data=data)
+
+    def hosts_check(self, hosts: Optional[Sequence[str]] = None) -> CommandResult:
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
+        from spa.hosts import HostsError, ping_hosts
+
+        try:
+            resolved = self._resolve_hosts(hosts)
+        except HostLookupError as exc:
+            return CommandResult(ok=False, error=str(exc), code=1)
+        try:
+            data = ping_hosts(self.paths, resolved)
+        except HostsError as exc:
+            return CommandResult(ok=False, error=str(exc), code=1)
+        return CommandResult(ok=True, data=data)
 
     def logs(
         self,

@@ -157,6 +157,22 @@ features:
           tags:
             SPADirName: "{{ spa_env_dir | basename }}"
 
+  - id: provider.external
+    title: External SSH provider
+    kind: provider
+    template: external
+    when_to_use: >-
+      The machine already exists. SPA only needs SSH to reach it and does not create,
+      power, or destroy it.
+    when_not_to_use: >-
+      AWS and VirtualBox still own machines SPA creates.
+    suggest: spa init --example TOPOLOGY --provider external ENV
+    keys:
+      - external
+      - "splunk_hosts[].external"
+    snippet: |
+      external:
+
   - id: setting.splunk_defaults
     selector: splunk_defaults
     title: splunk_defaults section
@@ -200,17 +216,14 @@ features:
     title: Custom Ansible connection vars
     kind: setting
     when_to_use: >-
-      Bring-your-own hosts (SSH already works; SPA did not provision them). Sets ansible_user,
-      ansible_port, ansible_ssh_private_key_file, and similar connection variables for the
-      inventory. Per-host custom: under splunk_hosts[].custom. Not a substitute for
-      terraform.aws.ssh_username on AWS-provisioned labs.
-    when_not_to_use: AWS or VirtualBox labs that spa provision created; those get connection data from inventory after provision.
+      Extra Ansible variables, such as ansible_port. External hosts do not store the address,
+      user, or key in splunk_config.yml. Register them with spa hosts register; those values
+      are written only to inventory/hosts.
+    when_not_to_use: Do not put SSH passwords or private keys in custom.
     keys: [custom, "splunk_hosts[].custom"]
     snippet: |
       custom:
-        ansible_user: ansible
-        ansible_port: 22
-        ansible_ssh_private_key_file: ~/.ssh/ansible_id_rsa
+        ansible_port: 2222
 
   - id: setting.os
     selector: os

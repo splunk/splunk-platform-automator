@@ -163,6 +163,8 @@ def check_provisioned(paths: SpaPaths) -> ProvisionState:
             return get_provider(paths).provision_state()
     if "virtualbox" in config:
         return get_provider(paths).provision_state()
+    if "external" in config:
+        return get_provider(paths).provision_state()
     return ProvisionState(provider="none", provisioned=True)
 
 
@@ -170,6 +172,7 @@ def check_provisioned(paths: SpaPaths) -> ProvisionState:
 PROVIDER_MODULES = {
     "aws": "spa.providers.aws",
     "virtualbox": "spa.providers.virtualbox",
+    "external": "spa.providers.external",
 }
 
 
@@ -215,6 +218,11 @@ def detect_provider(paths: SpaPaths) -> ProviderSelection:
         if vbox is not None and not isinstance(vbox, dict):
             raise ProviderError("virtualbox must be a mapping in %s" % paths.config_file)
         return ProviderSelection(name="virtualbox", config=vbox or {})
+    if "external" in config:
+        external = config.get("external")
+        if external is not None and not isinstance(external, dict):
+            raise ProviderError("external must be a mapping in %s" % paths.config_file)
+        return ProviderSelection(name="external", config=external or {})
     raise ProviderError(
         "No managed deployment provider found in %s "
         "(expected terraform.<provider> or virtualbox; implemented: terraform.aws, virtualbox)."

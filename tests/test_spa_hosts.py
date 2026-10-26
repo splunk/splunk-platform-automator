@@ -124,6 +124,7 @@ def test_session_deploy_injects_limit(monkeypatch):
 
     monkeypatch.setattr("spa.playbooks.resolve", lambda *a, **k: "deploy_site.yml")
     monkeypatch.setattr("spa.playbooks.run_playbook", fake_run)
+    monkeypatch.setattr("spa.hosts.ping_hosts", lambda *a, **k: {"hosts": []})
     from spa.providers import ProvisionState
 
     monkeypatch.setattr(
