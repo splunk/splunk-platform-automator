@@ -65,6 +65,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 ## Config and validation
 
 - [x] Pydantic schema + `spa validate` (idxc / role pairing; supersedes a Vagrantfile-only idxc check)
+- [ ] Version `splunk_config.yml` with `config_version` so schema checks follow that version. A missing key is version 1, and `spa validate` fails until `spa config set config_version 1`. A later incompatible change ships a migration. — [#117](https://github.com/splunk/splunk-platform-automator/issues/117)
 - [ ] `spa validate` checks Splunk installers in Software for the provider and architecture in use — [#74](https://github.com/splunk/splunk-platform-automator/issues/74)
 - [x] Host ranges (`iter.numbers: "1..N"`)
 - [x] Index definitions including `datatype: metric` (`splunk_indexes`)
