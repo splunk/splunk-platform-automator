@@ -343,6 +343,7 @@ COMMAND_SCHEMA = {
             "summary": "Validate splunk_config.yml (schema, Software/baseconfig/local apps, inventory)",
             "flags": [
                 {"long": "--config", "help": "Validate this file instead of the environment config"},
+                {"long": "--details", "help": "Include the full license inventory", "takes_value": False},
             ],
             "example": "spa --agent validate",
         },
@@ -657,7 +658,13 @@ COMMAND_SCHEMA = {
             "example": "spa hosts check",
         },
         {"name": "shell", "summary": "Alias of spa hosts ssh", "positionals": [{"name": "NAME", "required": False, "help": "Inventory hostname or role", "completes_from": "hosts"}]},
-        {"name": "aws", "summary": "AWS discovery for terraform.aws. Catalogs are spa aws regions list and the other resource list commands."},
+        {
+            "name": "aws",
+            "summary": "AWS discovery for terraform.aws. Catalogs are spa aws regions list and the other resource list commands.",
+            "flags": [
+                {"long": "--details", "help": "Include the full validation checks", "takes_value": False},
+            ],
+        },
         {
             "name": "aws regions list",
             "summary": "List enabled regions. Marks the region from --region, AWS_REGION, AWS_DEFAULT_REGION, or ~/.aws/config.",
@@ -715,6 +722,9 @@ COMMAND_SCHEMA = {
         {
             "name": "licenses",
             "summary": "Inspect license type, expiration and ITSI/ES entitlements",
+            "flags": [
+                {"long": "--details", "help": "Include the full license inventory", "takes_value": False},
+            ],
         },
         {
             "name": "run",

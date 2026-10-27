@@ -272,3 +272,126 @@ def test_parse_security_groups():
     assert aws.parse_security_groups(None) is None
     assert aws.parse_security_groups("") is None
     assert aws.parse_security_groups("Splunk_Basic, extra ; other") == ["Splunk_Basic", "extra", "other"]
+
+
+class _FakeValidateSts:
+    def get_caller_identity(self):
+        return {"Account": "000000000000", "Arn": "arn:aws:iam::000000000000:user/example"}
+
+
+class _FakeValidateEc2:
+    def describe_security_groups(self):
+        return {
+            "SecurityGroups": [
+                {
+                    "GroupId": "sg-lab",
+                    "GroupName": "lab",
+                    "Description": "lab",
+                    "IpPermissions": [{"IpProtocol": "-1", "IpRanges": [{"CidrIp": "10.0.0.0/8"}]}],
+                }
+            ]
+        }
+
+
+class _FakeValidateSession:
+    def client(self, service, region_name=None):
+        if service == "sts":
+            return _FakeValidateSts()
+        return _FakeValidateEc2()
+
+
+class _WorldOpenEc2(_FakeValidateEc2):
+    def describe_security_groups(self):
+        return {
+            "SecurityGroups": [
+                {
+                    "GroupId": "sg-lab",
+                    "GroupName": "lab",
+                    "Description": "lab",
+                    "IpPermissions": [
+                        {
+                            "IpProtocol": "tcp",
+                            "FromPort": 22,
+                            "ToPort": 22,
+                            "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+                        },
+                        {
+                            "IpProtocol": "tcp",
+                            "FromPort": 8000,
+                            "ToPort": 8089,
+                            "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+                        },
+                    ],
+                }
+            ]
+        }
+
+
+class _WorldOpenSession(_FakeValidateSession):
+    def client(self, service, region_name=None):
+        if service == "sts":
+            return _FakeValidateSts()
+        return _WorldOpenEc2()
+
+
+def test_aws_validate_warns_when_a_group_is_open_to_the_world(monkeypatch, capsys):
+    monkeypatch.setattr(aws, "_session", lambda region=None: _WorldOpenSession())
+
+    assert aws.main(
+        ["--region", "eu-central-1", "--validate", "--security-groups", "lab"],
+        as_agent=True,
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["checks"]["security_groups"] == {"ok": True}
+    assert payload["warnings"] == [
+        "security group lab allows 0.0.0.0/0 to ports 22, 8000, 8088, 8089"
+    ]
+    assert "IpPermissions" not in json.dumps(payload)
+
+    assert aws.main(["--region", "eu-central-1", "--validate", "--security-groups", "lab"]) == 0
+    human = capsys.readouterr()
+    assert "Warning: security group lab allows 0.0.0.0/0 to ports 22, 8000, 8088, 8089" in human.out
+    assert human.out.startswith("{") is False
+
+
+def test_agent_aws_validate_is_one_ok_per_check(monkeypatch, capsys):
+    monkeypatch.setattr(aws, "_session", lambda region=None: _FakeValidateSession())
+
+    assert aws.main(["--region", "eu-central-1", "--validate", "--security-groups", "lab"]) == 0
+    human = capsys.readouterr()
+    assert human.out.startswith("{") is False
+    assert "security_groups: ok" in human.out
+
+    assert aws.main(
+        ["--region", "eu-central-1", "--validate", "--security-groups", "lab"],
+        as_agent=True,
+    ) == 0
+    present = json.loads(capsys.readouterr().out)
+    assert present["checks"]["auth"] == {"ok": True}
+    assert present["checks"]["security_groups"] == {"ok": True}
+    assert "ami" not in present["checks"]
+    assert "warnings" not in present
+    present_text = json.dumps(present)
+    assert "IpPermissions" not in present_text
+    assert '"items"' not in present_text
+    assert '"group_id"' not in present_text
+
+    assert aws.main(
+        ["--region", "eu-central-1", "--validate", "--security-groups", "lab,missing"],
+        as_agent=True,
+    ) == 1
+    missing = json.loads(capsys.readouterr().out)
+    assert missing["ok"] is False
+    assert missing["checks"]["security_groups"] == {"ok": False}
+    missing_text = json.dumps(missing)
+    assert "IpPermissions" not in missing_text
+    assert '"items"' not in missing_text
+    assert '"group_id"' not in missing_text
+
+    assert aws.main(
+        ["--region", "eu-central-1", "--validate", "--security-groups", "lab", "--details"],
+        as_agent=True,
+    ) == 0
+    detailed = json.loads(capsys.readouterr().out)
+    assert detailed["checks"]["security_groups"]["items"][0]["group_id"] == "sg-lab"
+    assert "IpPermissions" not in json.dumps(detailed)

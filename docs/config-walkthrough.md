@@ -138,8 +138,9 @@ spa config set splunk_defaults.splunk_ssl.inputs.enable true --yes
 spa config set splunk_defaults.splunk_ssl.outputs.enable true --yes
 ```
 
-Boolean values are JSON, so `true` and `false` are unquoted. Download fetches
-the Enterprise and universal-forwarder archives into Software during deploy.
+Boolean values are JSON, so `true` and `false` are unquoted. With both flags
+true, each host downloads its tarball during deploy. A false flag means the
+controller uploads that archive from Software.
 The hostname settings write the inventory name into Splunk `serverName` and
 the default event host. The login page does not print the admin password.
 TLS is enabled for Splunk Web, receiving inputs, and forwarding outputs.

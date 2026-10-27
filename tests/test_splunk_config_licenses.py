@@ -306,6 +306,70 @@ def test_licenses_human_output_stays_out_of_json(monkeypatch, capsys):
     assert json.loads(agent.out)["software_dir"] == "/tmp/Software"
 
 
+def _keys(value):
+    found = set()
+    if isinstance(value, dict):
+        found.update(value)
+        for item in value.values():
+            found.update(_keys(item))
+    elif isinstance(value, list):
+        for item in value:
+            found.update(_keys(item))
+    return found
+
+
+def test_agent_licenses_are_compact_until_details(monkeypatch, capsys):
+    scan = {
+        "ok": True,
+        "software_dir": "/tmp/Software",
+        "software_dir_exists": True,
+        "discovered_files": [
+            {
+                "basename": "Splunk_Enterprise.lic",
+                "path": "/tmp/Software/Splunk_Enterprise.lic",
+                "size_bytes": 120,
+                "license_type": "enterprise",
+                "status": "valid",
+                "expires_at": "2099-01-01",
+                "addons": ["itsi"],
+                "capabilities": ["enterprise", "itsi"],
+            }
+        ],
+        "proposed_splunk_license_file": ["Splunk_Enterprise.lic"],
+        "yaml_snippet": "splunk_license_file: Splunk_Enterprise.lic",
+        "warnings": [],
+        "license_validation": {"errors": [], "warnings": []},
+    }
+    monkeypatch.setattr(licenses, "scan_licenses", lambda *args, **kwargs: scan)
+
+    assert licenses.main([]) == 0
+    human = capsys.readouterr()
+    assert human.err == ""
+    assert human.out == licenses.format_licenses_text(scan)
+    assert "enterprise" in human.out
+    assert "/tmp/Software/Splunk_Enterprise.lic" not in human.out
+
+    assert licenses.main([], as_agent=True) == 0
+    agent = capsys.readouterr()
+    assert agent.err == ""
+    payload = json.loads(agent.out)
+    assert payload["software_dir"] == "/tmp/Software"
+    assert payload["licenses"] == [
+        {
+            "basename": "Splunk_Enterprise.lic",
+            "status": "valid",
+            "expiration": "2099-01-01",
+        }
+    ]
+    assert "path" not in _keys(payload)
+    assert "licenses_detail" not in payload
+
+    assert licenses.main(["--details"], as_agent=True) == 0
+    detailed = json.loads(capsys.readouterr().out)
+    assert detailed["licenses"] == payload["licenses"]
+    assert detailed["licenses_detail"][0]["path"] == "/tmp/Software/Splunk_Enterprise.lic"
+
+
 def test_build_yaml_snippet():
     assert "Splunk_Enterprise.lic" in licenses.build_yaml_snippet([])
     assert licenses.build_yaml_snippet(["A.lic"]) == "splunk_license_file: A.lic"

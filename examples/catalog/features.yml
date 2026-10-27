@@ -431,9 +431,9 @@ features:
     title: Download Splunk archives from splunk.com
     kind: setting
     when_to_use: >-
-      Optional fetch of the Enterprise or Universal Forwarder tarball into Software during
-      deploy. You still need the archive (or a prior download) in the Software directory
-      because the installer license agreement is accepted from that file. Incomplete (#65).
+      The host downloads the Enterprise or Universal Forwarder tarball when splunk or
+      splunkforwarder is true. The controller uploads the archive from Software when
+      that flag is false.
     keys: [splunk_defaults.splunk_download, splunk_defaults.splunk_download.splunk, splunk_defaults.splunk_download.splunkforwarder]
     related: ["#65", "setting.dirs"]
     snippet: |

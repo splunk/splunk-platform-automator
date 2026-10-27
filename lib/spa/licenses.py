@@ -782,7 +782,47 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not mention optional licenses when ITSI is not in config",
     )
+    p.add_argument(
+        "--details",
+        action="store_true",
+        help="Include the full license inventory",
+    )
     return p
+
+
+def _compact_license_row(record: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "basename": record.get("basename"),
+        "status": record.get("status"),
+        "expiration": record.get("expires_at"),
+    }
+
+
+def project_license_scan(scan: Dict[str, Any]) -> Dict[str, Any]:
+    """Drop filesystem paths from a check-licenses scan. Rows stay basename, status, expiration."""
+    projected = {key: value for key, value in scan.items() if key != "software_dir"}
+    rows = []
+    for record in scan.get("discovered_files") or []:
+        if isinstance(record, dict):
+            rows.append(_compact_license_row(record))
+    projected["discovered_files"] = rows
+    return projected
+
+
+def _agent_license_payload(result: Dict[str, Any], details: bool) -> Dict[str, Any]:
+    """Short license rows for agent JSON. Full records only with --details."""
+    payload = {key: value for key, value in result.items() if key != "discovered_files"}
+    rows = []
+    full = []
+    for record in result.get("discovered_files") or []:
+        if not isinstance(record, dict):
+            continue
+        rows.append(_compact_license_row(record))
+        full.append(dict(record))
+    payload["licenses"] = rows
+    if details:
+        payload["licenses_detail"] = full
+    return payload
 
 
 def main(argv: Optional[List[str]] = None, as_agent: bool = False) -> int:
@@ -818,7 +858,8 @@ def main(argv: Optional[List[str]] = None, as_agent: bool = False) -> int:
             _err(str(exc))
         return 1
 
-    _output(result, as_json)
+    shown = _agent_license_payload(result, details=bool(args.details)) if as_json else result
+    _output(shown, as_json)
     return 0 if result.get("software_dir_exists") or result.get("discovered_files") else 0
 
 

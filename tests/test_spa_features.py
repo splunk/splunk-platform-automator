@@ -36,6 +36,35 @@ def test_os_guidance_says_what_the_block_provides():
     assert "id" not in data
 
 
+def test_splunk_download_explain_says_host_downloads_or_controller_uploads():
+    from spa.config_tree import explain_config
+
+    text = explain_config("splunk_defaults.splunk_download")["when_to_use"].lower()
+    assert "host downloads" in text
+    assert "splunk" in text and "splunkforwarder" in text
+    assert "true" in text
+    assert "controller uploads" in text
+    assert "from software" in text
+    assert "false" in text
+    assert "into software" not in text
+
+
+def test_splunk_download_schema_says_host_or_controller():
+    from spa.catalog import schema_key_details
+
+    schema = schema_key_details()
+    for path in (
+        "splunk_defaults.splunk_download",
+        "splunk_defaults.splunk_download.splunk",
+        "splunk_defaults.splunk_download.splunkforwarder",
+    ):
+        text = str(schema[path]["description"]).lower()
+        assert "host downloads" in text
+        assert "controller uploads" in text
+        assert "already in software" not in text
+        assert "into software" not in text
+
+
 def test_implemented_settings_have_operator_guidance():
     """Records that write YAML must say what they do, not only a title."""
     from spa.catalog import load_features

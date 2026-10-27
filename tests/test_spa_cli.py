@@ -364,6 +364,149 @@ def test_agent_validate_envelope_identifies_registered_env(tmp_path, monkeypatch
     assert Path(payload["config_file"]) == (dest / "config" / "splunk_config.yml").resolve()
 
 
+def test_agent_validate_check_licenses_hides_filesystem_paths(tmp_path, monkeypatch, capsys):
+    """Six license files stay as basename, status, and expiration unless --details."""
+    import copy
+
+    from spa.api import CommandResult, open_session
+    from spa.registry import register_environment
+    from spa import cli
+
+    files = [
+        {
+            "basename": "license-%d.lic" % index,
+            "path": "/tmp/Software/license-%d.lic" % index,
+            "size_bytes": 100 + index,
+            "license_type": "enterprise",
+            "status": "valid",
+            "expires_at": "2099-01-%02d" % index,
+            "addons": [],
+            "capabilities": ["enterprise"],
+        }
+        for index in range(1, 7)
+    ]
+    scan = {
+        "ok": True,
+        "software_dir": "/tmp/Software",
+        "software_dir_exists": True,
+        "discovered_files": files,
+    }
+    summary = {
+        "configured_splunk_license_file": ["license-1.lic"],
+        "license_manager_in_config": True,
+        "itsi_in_config": False,
+        "es_in_config": False,
+        "files_found": 6,
+    }
+    data = {
+        "config_file": "/lab/config/splunk_config.yml",
+        "steps": [{"id": "license_files", "ok": True, "message": "License check OK"}],
+        "licenses": summary,
+        "license_scan": scan,
+        "license_validation": {"errors": [], "warnings": []},
+    }
+
+    def fake_open(**kwargs):
+        session = open_session(**kwargs)
+
+        def validate(**_kwargs):
+            assert _kwargs.get("check_licenses") is True
+            return CommandResult(ok=True, data=copy.deepcopy(data))
+
+        session.validate = validate
+        return session
+
+    dest = write_min_env(tmp_path / "lab")
+    register_environment("lab", dest)
+    monkeypatch.setattr(cli, "open_session", fake_open)
+
+    assert cli.main(["--no-agent", "--env", "lab", "validate", "--check-licenses"]) == 0
+    human = capsys.readouterr()
+    assert "/tmp/Software/license-1.lic" in human.out
+    assert "License check OK" in human.out
+
+    assert cli.main(["--agent", "--env", "lab", "validate", "--check-licenses"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    body = payload["data"]
+    assert body["licenses"] == summary
+    encoded = json.dumps(body["license_scan"])
+    assert "software_dir" not in body["license_scan"]
+    assert "/tmp/Software/license-" not in encoded
+    assert '"path"' not in encoded
+    assert body["license_scan"]["discovered_files"] == [
+        {
+            "basename": "license-%d.lic" % index,
+            "status": "valid",
+            "expiration": "2099-01-%02d" % index,
+        }
+        for index in range(1, 7)
+    ]
+
+    assert cli.main(["--agent", "--env", "lab", "validate", "--check-licenses", "--details"]) == 0
+    detailed = json.loads(capsys.readouterr().out)
+    assert detailed["data"]["license_scan"]["software_dir"] == "/tmp/Software"
+    assert detailed["data"]["license_scan"]["discovered_files"][0]["path"] == "/tmp/Software/license-1.lic"
+
+
+def test_detected_agent_uses_json_for_licenses_and_aws(monkeypatch):
+    """A detected agent gets the JSON payload. --no-agent stays text. Shell stays text."""
+    from types import SimpleNamespace
+
+    from spa import cli
+
+    seen = {}
+
+    def fake_licenses(argv=None, as_agent=False):
+        seen["licenses"] = as_agent
+        return 0
+
+    def fake_aws(argv=None, as_agent=False):
+        seen["aws"] = as_agent
+        return 0
+
+    def fake_shell(argv=None, as_agent=False):
+        seen["shell"] = as_agent
+        return 0
+
+    for name in (
+        "SPA_AGENT",
+        "CLAUDECODE",
+        "CLAUDE_CODE",
+        "CURSOR_AGENT",
+        "CURSOR_TRACE_ID",
+        "CODEX_THREAD_ID",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("SPA_AGENT", "1")
+    monkeypatch.setattr(
+        cli,
+        "_paths",
+        lambda *args, **kwargs: SimpleNamespace(
+            spa_env_dir=Path("/lab"),
+            config_file=Path("/lab/config/splunk_config.yml"),
+        ),
+    )
+    monkeypatch.setattr(cli, "open_session", lambda **kwargs: object())
+    monkeypatch.setattr(cli, "_envelope_identity", lambda paths: None)
+    monkeypatch.setattr(cli, "env_dir_required_error", lambda paths: None)
+    monkeypatch.setattr(cli, "venv_required_error", lambda paths: None)
+    monkeypatch.setattr("spa.licenses.main", fake_licenses)
+    monkeypatch.setattr("spa.aws.main", fake_aws)
+    monkeypatch.setattr("spa.shell.main", fake_shell)
+
+    assert cli.main(["licenses"]) == 0
+    assert seen["licenses"] is True
+    assert cli.main(["aws", "--region", "eu-central-1", "--validate"]) == 0
+    assert seen["aws"] is True
+    assert cli.main(["--no-agent", "licenses"]) == 0
+    assert seen["licenses"] is False
+
+    seen.clear()
+    monkeypatch.delenv("SPA_AGENT", raising=False)
+    assert cli.main(["licenses"]) == 0
+    assert seen["licenses"] is False
+
+
 def test_agent_validate_unregistered_env_dir_identity_name_is_null(tmp_path, monkeypatch, capsys):
     """A directory that is not in the registry still reports identity, with a null name."""
     from spa import cli

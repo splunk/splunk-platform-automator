@@ -1802,6 +1802,11 @@ def _run(argv: Sequence[str]) -> int:
     )
     p_val.add_argument("--check-licenses", action="store_true", help="Validate configured license files")
     p_val.add_argument(
+        "--details",
+        action="store_true",
+        help="Include the full license inventory",
+    )
+    p_val.add_argument(
         "--splunk-config-aws",
         action="store_true",
         help="Include legacy splunk_config_aws compatibility checks",
@@ -2273,9 +2278,8 @@ def _run(argv: Sequence[str]) -> int:
     if args.command == "logs" and verbosity:
         parser.error("verbosity is only valid while executing a command")
     as_agent = agent_mode(force_agent=args.agent or args.json, force_human=args.no_agent)
-    # These print their own output (aws/licenses have a native --json); an
-    # envelope would only apply to a path-resolution failure below.
-    if invoked in NATIVE_FLAG_COMMANDS and not args.agent:
+    # Shell stays human text. aws and licenses use the detected agent mode.
+    if invoked in ("shell", "sh") and not args.agent:
         as_agent = agent_mode(force_agent=False, force_human=args.no_agent)
 
     conflict = _env_selector_conflict(args)
@@ -2593,6 +2597,13 @@ def _run(argv: Sequence[str]) -> int:
             agent=as_agent,
         )
         if as_agent:
+            scan = (result.data or {}).get("license_scan") if isinstance(result.data, dict) else None
+            if not args.details and isinstance(scan, dict):
+                from spa.licenses import project_license_scan
+
+                data = dict(result.data)
+                data["license_scan"] = project_license_scan(scan)
+                result.data = data
             return _emit_result(result, True)
         text = format_validate_text(result)
         sys.stdout.write(text)
@@ -2980,7 +2991,7 @@ def _run(argv: Sequence[str]) -> int:
         from spa import aws as aws_mod
 
         try:
-            return aws_mod.main([*native, *extra], as_agent=bool(args.agent or args.json))
+            return aws_mod.main([*native, *extra], as_agent=as_agent)
         except SystemExit as exc:
             return exc.code if isinstance(exc.code, int) else 1
 
@@ -2988,7 +2999,7 @@ def _run(argv: Sequence[str]) -> int:
         from spa import licenses as licenses_mod
 
         try:
-            return licenses_mod.main([*native, *extra], as_agent=bool(args.agent or args.json))
+            return licenses_mod.main([*native, *extra], as_agent=as_agent)
         except SystemExit as exc:
             return exc.code if isinstance(exc.code, int) else 1
 

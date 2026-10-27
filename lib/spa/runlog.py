@@ -1719,12 +1719,19 @@ class RunLog:
         kind = str(event.get("kind") or status or "")
         if self.agent:
             if status == "phase_start":
-                self._write_stderr(json.dumps(self._progress_payload(event, "running"), default=str))
+                title = str(
+                    event.get("phase_title") or group_title(str(event.get("phase") or "")) or ""
+                ).strip()
+                if title:
+                    self._write_stderr(title)
             elif status == "heartbeat":
-                self._write_stderr(json.dumps(self._progress_payload(event, "running"), default=str))
+                return
             elif status == "phase_end":
-                state = "failed" if event.get("ok") is False or self._failed else "ok"
-                self._write_stderr(json.dumps(self._progress_payload(event, state), default=str))
+                if event.get("ok") is False or self._failed:
+                    self._write_stderr(
+                        json.dumps(self._progress_payload(event, "failed"), default=str)
+                    )
+                return
             elif status == "tf_changes":
                 self._write_stderr(json.dumps(self._progress_payload(event, "running"), default=str))
             elif status in {"failed", "unreachable"}:
