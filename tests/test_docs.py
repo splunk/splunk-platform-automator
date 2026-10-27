@@ -366,6 +366,15 @@ class TestSpaSkill:
         entry = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
         assert "spa --agent config explain PATH" in entry
 
+    def test_entry_skill_waits_on_phase_sentences(self):
+        text = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
+        assert "Creating HOST." in text
+        assert "Downloading Splunk on HOST." in text
+        assert "Configuring Splunk." in text
+        assert "Installing apps on HOST." in text
+        assert "terraform apply" not in text
+        assert "Apply complete" not in text
+
     def test_create_config_phase7_sets_header_by_command(self):
         skill = PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md"
         text = skill.read_text(encoding="utf-8")

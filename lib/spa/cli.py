@@ -2703,6 +2703,8 @@ def _run(argv: Sequence[str]) -> int:
             payload.pop("replay", None)
             emit(result.ok, data=payload or None, error=result.error, as_agent=True)
             return result.code
+        if result.code == 130:
+            return 130
         if not result.ok:
             print(result.error or "logs failed", file=sys.stderr)
             return result.code

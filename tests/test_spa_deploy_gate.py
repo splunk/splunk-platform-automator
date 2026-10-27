@@ -1,7 +1,9 @@
 """spa deploy refuses until every config host is in the provisioned inventory."""
 
+import fcntl
 import json
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -12,7 +14,7 @@ from spa.providers import (
     expected_hostnames,
     inventory_hostnames_from_file,
 )
-from spa_testutil import PROJECT_ROOT, run_spa, seed_software_dir
+from spa_testutil import PROJECT_ROOT, min_env_vars, run_spa, seed_software_dir
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -343,6 +345,58 @@ def test_cli_rejects_allow_unprovisioned_and_deploys_one_host(tmp_path, monkeypa
     rc = main(["--no-agent", "deploy", "--yes", "--hosts", "idx1"])
     assert rc == 0
     assert called
+
+
+def test_lifecycle_commands_block_each_other_until_the_process_ends(tmp_path):
+    paths = resolve_spa_paths(environ={**min_env_vars(tmp_path)})
+    lock_dir = Path(paths.spa_env_dir) / "logs"
+    lock_dir.mkdir(parents=True)
+    held = (lock_dir / ".lifecycle.lock").open("a+")
+    held.write("provision\n")
+    held.flush()
+    fcntl.flock(held.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    session = LocalSpaSession(paths=paths)
+    for start in (session.deploy, session.provision, session.destroy):
+        refused = start(confirm=True, agent=True)
+        assert refused.to_dict() == {
+            "ok": False,
+            "schema_version": 1,
+            "error": "A provision is already running.",
+        }
+    assert list(lock_dir.glob("*deploy*.jsonl")) == []
+    held.close()
+    from spa.runlog import claim_lifecycle_lock
+
+    again = claim_lifecycle_lock(paths, "destroy")
+    again.seek(0)
+    assert again.read().strip() == "destroy"
+    again.close()
+
+
+def test_lifecycle_lock_is_refused_before_confirmation(tmp_path, monkeypatch):
+    paths = resolve_spa_paths(environ={**min_env_vars(tmp_path)})
+    lock_dir = Path(paths.spa_env_dir) / "logs"
+    lock_dir.mkdir(parents=True)
+    held = (lock_dir / ".lifecycle.lock").open("a+")
+    held.write("deploy\n")
+    held.flush()
+    fcntl.flock(held.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def fail_if_prompted(_prompt=""):
+        raise AssertionError("prompted")
+
+    monkeypatch.setattr("builtins.input", fail_if_prompted)
+    session = LocalSpaSession(paths=paths)
+    for start in (session.deploy, session.provision, session.destroy):
+        without_yes = start(confirm=False, agent=False)
+        with_yes = start(confirm=True, agent=True)
+        for refused in (without_yes, with_yes):
+            assert refused.to_dict() == {
+                "ok": False,
+                "schema_version": 1,
+                "error": "A deploy is already running.",
+            }
+    held.close()
 
 
 def test_help_and_schema_omit_allow_unprovisioned():
