@@ -320,11 +320,12 @@ class SpaSession(Protocol):
     def hosts_register(
         self,
         name: str,
-        address: str,
+        ssh_host: str,
         user: str,
         key: str,
-        port: int = 22,
+        ssh_port: int = 22,
         roles: Optional[Sequence[str]] = None,
+        ip_addr: Optional[str] = None,
         confirm: bool = False,
         agent: bool = False,
     ) -> CommandResult: ...
@@ -1999,11 +2000,12 @@ class LocalSpaSession:
     def hosts_register(
         self,
         name: str,
-        address: str,
+        ssh_host: str,
         user: str,
         key: str,
-        port: int = 22,
+        ssh_port: int = 22,
         roles: Optional[Sequence[str]] = None,
+        ip_addr: Optional[str] = None,
         confirm: bool = False,
         agent: bool = False,
     ) -> CommandResult:
@@ -2016,7 +2018,7 @@ class LocalSpaSession:
         from spa.providers import ProviderError
         from spa.providers.external import RegisterSpec, register_host
 
-        spec = RegisterSpec(name, address, user, key, port, tuple(roles or ()))
+        spec = RegisterSpec(name, ssh_host, user, key, ssh_port, tuple(roles or ()), ip_addr)
         try:
             data = register_host(self.paths, spec, _subprocess_runner)
         except ProviderError as exc:

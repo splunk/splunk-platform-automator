@@ -621,13 +621,18 @@ COMMAND_SCHEMA = {
             "flags": [
                 {"long": "--yes", "short": "-y", "help": "Confirm register"},
                 {
-                    "long": "--address",
+                    "long": "--ssh-host",
                     "help": "IP, hostname, or FQDN. Must be reachable by SSH.",
+                    "takes_value": True,
+                },
+                {"long": "--ssh-port", "help": "SSH port", "takes_value": True},
+                {
+                    "long": "--ip-addr",
+                    "help": "Address other Splunk hosts use. Omit to use the SSH host.",
                     "takes_value": True,
                 },
                 {"long": "--user", "help": "SSH login user", "takes_value": True},
                 {"long": "--key", "help": "Path to the SSH private key", "takes_value": True},
-                {"long": "--port", "help": "SSH port", "takes_value": True},
                 {
                     "long": "--role",
                     "help": "Splunk role. Repeat to add more.",
@@ -635,7 +640,7 @@ COMMAND_SCHEMA = {
                     "choices": allowed_role_names(),
                 },
             ],
-            "example": "spa hosts register NAME --address ADDRESS --user USER --key PATH --yes",
+            "example": "spa hosts register NAME --ssh-host HOST --user USER --key PATH --yes",
         },
         {
             "name": "hosts unregister",

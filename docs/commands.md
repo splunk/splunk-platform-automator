@@ -681,10 +681,11 @@ Requires confirmation: yes (`--yes`).
 | Flag | Description |
 | --- | --- |
 | `-y`, `--yes` | Confirm register |
-| `--address` | IP, hostname, or FQDN. Must be reachable by SSH. |
+| `--ssh-host` | IP, hostname, or FQDN. Must be reachable by SSH. |
+| `--ssh-port` | SSH port |
+| `--ip-addr` | Address other Splunk hosts use. Omit to use the SSH host. |
 | `--user` | SSH login user |
 | `--key` | Path to the SSH private key |
-| `--port` | SSH port |
 | `--role` | Splunk role. Repeat to add more. |
 
 | Argument | Required | Description |
@@ -694,7 +695,7 @@ Requires confirmation: yes (`--yes`).
 Example:
 
 ```bash
-spa hosts register NAME --address ADDRESS --user USER --key PATH --yes
+spa hosts register NAME --ssh-host HOST --user USER --key PATH --yes
 ```
 
 ## `hosts unregister`

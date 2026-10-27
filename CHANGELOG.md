@@ -11,6 +11,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Added
 
+- **External register addresses**: `spa hosts register` takes `--ssh-host` and `--ssh-port` for the SSH connection, and optional `--ip-addr` for the address other Splunk hosts use. The SSH host, port, user, key, and any `--ip-addr` are written only in `inventory/hosts`. Omit `--ip-addr` to use the SSH host for both. Omit `--ssh-port` to use port 22. The host link page keeps the public DNS name or the SSH host in the URL.
+
 - **Agent results** ([#67](https://github.com/splunk/splunk-platform-automator/issues/67)): `spa licenses` and `spa aws --validate` return a short JSON result when an agent is detected, and the full objects with `--details`. `spa aws --validate` warns when a named security group allows `0.0.0.0/0` or `::/0` to ports 22, 80, 8000, 8088, or 8089. An agent run prints one plain line when the phase changes and does not repeat it on the heartbeat. `splunk_download` says the host downloads the tarball when the flag is true and the controller uploads it from Software when the flag is false.
 
 - **Config header** ([#67](https://github.com/splunk/splunk-platform-automator/issues/67)): `spa config header set` replaces the leading comment on `splunk_config.yml`. The fields are `--intent`, `--requirements`, `--sva`, `--placement`, `--license`, `--installer`, `--os`, `--aws`, and `--deploy`. Omitted fields are removed. A line break or a secret-shaped value is refused and the file is left unchanged. Agent mode, including `--dry-run`, requires `--yes`. The create-config skill calls this command instead of pasting the header template.

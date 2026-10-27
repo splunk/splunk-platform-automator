@@ -318,6 +318,63 @@ def test_inventory_sets_ansible_host_and_does_not_mask_managed_hosts():
     assert inventory.hosts["idx1"]["ansible_host"] == "10.9.9.9"
 
 
+def test_hosts_entries_use_ansible_host_when_external_hosts_have_no_ip_addr():
+    import yaml
+    from ansible.parsing.dataloader import DataLoader
+    from ansible.template import Templar, trust_as_template
+
+    from spa_testutil import PROJECT_ROOT
+
+    data = yaml.safe_load(
+        (PROJECT_ROOT / "ansible" / "group_vars" / "all" / "dynamic.yml").read_text(encoding="utf-8")
+    )
+    templar = Templar(
+        loader=DataLoader(),
+        variables={
+            "hostvars": {
+                "shidx": {"ansible_host": "10.1.2.3"},
+                "idx1": {"ip_addr": "10.9.9.9", "ansible_host": "203.0.113.5"},
+            }
+        },
+    )
+    rendered = str(templar.template(trust_as_template(data["splunk_hosts_entries"])))
+    assert "10.1.2.3 shidx" in rendered
+    assert "10.9.9.9 idx1" in rendered
+    assert "203.0.113.5" not in rendered
+
+
+def test_link_page_uses_ansible_host_when_dns_and_ip_addr_are_absent():
+    from ansible.parsing.dataloader import DataLoader
+    from ansible.template import Templar, trust_as_template
+
+    from spa_testutil import PROJECT_ROOT
+
+    text = (
+        PROJECT_ROOT / "ansible" / "roles" / "splunk_control" / "templates" / "config" / "index.html.j2"
+    ).read_text(encoding="utf-8")
+    templar = Templar(
+        loader=DataLoader(),
+        variables={
+            "groups": {
+                "splunk_env_lab": ["shidx"],
+                "role_search_head": ["shidx"],
+            },
+            "hostvars": {
+                "shidx": {
+                    "splunk_env_name": "lab",
+                    "ansible_host": "10.1.2.3",
+                    "splunk_ssl": {"web": {"enable": True}},
+                }
+            },
+            "url_locale": "en-GB",
+        },
+    )
+    rendered = str(templar.template(trust_as_template(text)))
+    assert "https://10.1.2.3:8000/" in rendered
+    assert "https://unknown:" not in rendered
+    assert "IP Addr: 10.1.2.3" in rendered
+
+
 def test_tfvars_omits_external_hosts():
     from ansible.parsing.dataloader import DataLoader
     from ansible.template import Templar, trust_as_template
@@ -490,6 +547,116 @@ def _cli_env(dest, path):
     return {"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(dest), "PATH": path}
 
 
+def test_register_ssh_port_writes_ansible_port(tmp_path):
+    from spa_testutil import run_spa
+
+    key = tmp_path / "id_ed25519"
+    key.write_text("not-read")
+    dest = _external_env(tmp_path)
+    result = run_spa(
+        [
+            "--agent", "hosts", "register", "byo1",
+            "--ssh-host", "203.0.113.10",
+            "--ssh-port", "2222",
+            "--user", "splunk",
+            "--key", str(key),
+            "--yes",
+        ],
+        env=_cli_env(dest, _fake_ssh(tmp_path)),
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["data"]["ansible_port"] == 2222
+    listed = (dest / "inventory" / "hosts").read_text(encoding="utf-8")
+    assert "ansible_port=2222" in listed
+    help_result = run_spa(["hosts", "register", "--help"])
+    assert "--ssh-port" in help_result.stdout
+    assert "--port" not in help_result.stdout
+    text = help_result.stdout
+    assert text.index("--ssh-host") < text.index("--ssh-port") < text.index("--ip-addr")
+
+
+def test_register_ssh_host_and_optional_ip_addr(tmp_path):
+    from spa_testutil import run_spa
+
+    key = tmp_path / "id_ed25519"
+    key.write_text("not-read")
+    dest = _external_env(tmp_path)
+    env = _cli_env(dest, _fake_ssh(tmp_path))
+    with_addr = run_spa(
+        [
+            "--agent", "hosts", "register", "byo1",
+            "--ssh-host", "203.0.113.10",
+            "--ip-addr", "10.0.0.10",
+            "--user", "splunk",
+            "--key", str(key),
+            "--yes",
+        ],
+        env=env,
+    )
+    assert with_addr.returncode == 0, with_addr.stderr
+    payload = json.loads(with_addr.stdout)
+    assert payload["data"]["ansible_host"] == "203.0.113.10"
+    assert payload["data"]["ip_addr"] == "10.0.0.10"
+    listed = (dest / "inventory" / "hosts").read_text(encoding="utf-8")
+    assert 'ansible_host="203.0.113.10"' in listed
+    assert 'ip_addr="10.0.0.10"' in listed
+    config_text = (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8")
+    assert "ip_addr" not in config_text
+    assert "ansible_host" not in config_text
+
+    plain = run_spa(
+        [
+            "--agent", "hosts", "register", "byo2",
+            "--ssh-host", "203.0.113.11",
+            "--user", "splunk",
+            "--key", str(key),
+            "--yes",
+        ],
+        env=env,
+    )
+    assert plain.returncode == 0, plain.stderr
+    plain_data = json.loads(plain.stdout)["data"]
+    assert plain_data["ansible_host"] == "203.0.113.11"
+    assert "ip_addr" not in plain_data
+    listed = (dest / "inventory" / "hosts").read_text(encoding="utf-8")
+    byo2 = next(line for line in listed.splitlines() if line.startswith("byo2 "))
+    assert "ip_addr" not in byo2
+
+
+def test_link_page_keeps_the_ssh_host_when_ip_addr_is_internal():
+    from ansible.parsing.dataloader import DataLoader
+    from ansible.template import Templar, trust_as_template
+
+    from spa_testutil import PROJECT_ROOT
+
+    text = (
+        PROJECT_ROOT / "ansible" / "roles" / "splunk_control" / "templates" / "config" / "index.html.j2"
+    ).read_text(encoding="utf-8")
+    templar = Templar(
+        loader=DataLoader(),
+        variables={
+            "groups": {
+                "splunk_env_lab": ["shidx"],
+                "role_search_head": ["shidx"],
+            },
+            "hostvars": {
+                "shidx": {
+                    "splunk_env_name": "lab",
+                    "ansible_host": "203.0.113.10",
+                    "ip_addr": "10.0.0.10",
+                    "splunk_ssl": {"web": {"enable": True}},
+                }
+            },
+            "url_locale": "en-GB",
+        },
+    )
+    rendered = str(templar.template(trust_as_template(text)))
+    assert "https://203.0.113.10:8000/" in rendered
+    assert "https://10.0.0.10:8000/" not in rendered
+    assert "IP Addr: 10.0.0.10" in rendered
+
+
 def test_register_writes_inventory_and_agent_json_hides_the_key_body(tmp_path):
     from spa_testutil import run_spa
 
@@ -500,7 +667,7 @@ def test_register_writes_inventory_and_agent_json_hides_the_key_body(tmp_path):
     result = run_spa(
         [
             "--agent", "hosts", "register", "byo1",
-            "--address", "10.0.0.8", "--user", "splunk",
+            "--ssh-host", "10.0.0.8", "--user", "splunk",
             "--key", str(key), "--role", "search_head", "--yes",
         ],
         env=_cli_env(dest, _fake_ssh(tmp_path)),
@@ -531,7 +698,7 @@ def test_register_human_line_and_failed_probe_leaves_files(tmp_path):
     failed = run_spa(
         [
             "--no-agent", "hosts", "register", "byo1",
-            "--address", "10.0.0.8", "--user", "splunk",
+            "--ssh-host", "10.0.0.8", "--user", "splunk",
             "--key", str(key), "--yes",
         ],
         env=_cli_env(dest, _fake_ssh(tmp_path, code=1)),
@@ -543,7 +710,7 @@ def test_register_human_line_and_failed_probe_leaves_files(tmp_path):
     ok = run_spa(
         [
             "--no-agent", "hosts", "register", "byo1",
-            "--address", "10.0.0.8", "--user", "splunk",
+            "--ssh-host", "10.0.0.8", "--user", "splunk",
             "--key", str(key), "--yes",
         ],
         env=_cli_env(dest, _fake_ssh(tmp_path / "okssh", code=0)),
@@ -643,7 +810,7 @@ def test_register_refuses_a_managed_name(tmp_path):
     result = run_spa(
         [
             "--no-agent", "hosts", "register", "shidx",
-            "--address", "10.0.0.8", "--user", "splunk",
+            "--ssh-host", "10.0.0.8", "--user", "splunk",
             "--key", str(key), "--yes",
         ],
         env=_cli_env(dest, _fake_ssh(tmp_path)),
@@ -653,7 +820,7 @@ def test_register_refuses_a_managed_name(tmp_path):
     added = run_spa(
         [
             "--no-agent", "hosts", "register", "byo1",
-            "--address", "10.0.0.8", "--user", "splunk",
+            "--ssh-host", "10.0.0.8", "--user", "splunk",
             "--key", str(key), "--role", "search_head", "--yes",
         ],
         env=_cli_env(dest, _fake_ssh(tmp_path / "okssh")),
@@ -681,7 +848,7 @@ def test_register_without_role_and_unregister_last_host(tmp_path):
     added = run_spa(
         [
             "--agent", "hosts", "register", "util1",
-            "--address", "10.0.0.9", "--user", "splunk",
+            "--ssh-host", "10.0.0.9", "--user", "splunk",
             "--key", str(key), "--yes",
         ],
         env=env,
@@ -1517,7 +1684,7 @@ def test_user_guide_registers_existing_servers():
     from spa_testutil import PROJECT_ROOT
 
     text = (PROJECT_ROOT / "docs" / "user-guide.md").read_text(encoding="utf-8")
-    assert "spa hosts register NAME --address ADDRESS --user USER --key PATH --yes" in text
+    assert "spa hosts register NAME --ssh-host HOST --user USER --key PATH --yes" in text
     assert "does not create, shut down, or terminate" in text
     assert "spa hosts check" in text
     assert "before the playbook" in text
