@@ -1356,7 +1356,45 @@ class LocalSpaSession:
             color=color,
         )
 
+    def _begin_lifecycle(self, command: str):
+        from spa.runlog import LifecycleInProgress, claim_lifecycle_lock
+
+        try:
+            return None, claim_lifecycle_lock(self.paths, command)
+        except LifecycleInProgress as exc:
+            return CommandResult(ok=False, error=str(exc), code=1), None
+
     def _lifecycle_playbook(
+        self,
+        action: str,
+        extra: Optional[List[str]],
+        confirm: bool,
+        agent: bool,
+        ansible_output: bool = False,
+        native_output: bool = False,
+        verbosity: int = 0,
+        timestamps: bool = False,
+        color: bool = False,
+    ) -> CommandResult:
+        blocked, lifecycle_lock = self._begin_lifecycle(action)
+        if blocked:
+            return blocked
+        try:
+            return self._run_lifecycle_playbook(
+                action,
+                extra,
+                confirm,
+                agent,
+                ansible_output=ansible_output,
+                native_output=native_output,
+                verbosity=verbosity,
+                timestamps=timestamps,
+                color=color,
+            )
+        finally:
+            lifecycle_lock.close()
+
+    def _run_lifecycle_playbook(
         self,
         action: str,
         extra: Optional[List[str]],
@@ -1613,6 +1651,38 @@ class LocalSpaSession:
         blocked = self._env_lookup_gate()
         if blocked:
             return blocked
+        blocked, lifecycle_lock = self._begin_lifecycle("deploy")
+        if blocked:
+            return blocked
+        try:
+            return self._deploy_holding_lock(
+                extra,
+                verbose=verbose,
+                hosts=hosts,
+                confirm=confirm,
+                agent=agent,
+                ansible_output=ansible_output,
+                native_output=native_output,
+                verbosity=verbosity,
+                timestamps=timestamps,
+                color=color,
+            )
+        finally:
+            lifecycle_lock.close()
+
+    def _deploy_holding_lock(
+        self,
+        extra: Optional[List[str]] = None,
+        verbose: bool = False,
+        hosts: Optional[Sequence[str]] = None,
+        confirm: bool = False,
+        agent: bool = False,
+        ansible_output: bool = False,
+        native_output: bool = False,
+        verbosity: int = 0,
+        timestamps: bool = False,
+        color: bool = False,
+    ) -> CommandResult:
         from spa.hosts import with_ansible_limit
         from spa.playbooks import PlaybookError, resolve, run_playbook
         from spa.preflight import check_controller_data, controller_data_error
@@ -2089,13 +2159,15 @@ class LocalSpaSession:
 
         log_path = Path(str(target.get("log") or ""))
         if follow:
-            follow_jsonl(
+            interrupted = follow_jsonl(
                 log_path,
                 idle_passes=-1,
                 ansible_output=ansible_output,
                 timestamps=timestamps,
                 color=color,
             )
+            if interrupted:
+                return CommandResult(ok=False, code=interrupted, data=target)
             return CommandResult(ok=True, data=target)
         target = dict(target)
         if ansible_output:

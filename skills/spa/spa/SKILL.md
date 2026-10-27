@@ -48,7 +48,7 @@ spa --env my-lab validate
 spa environment remove my-lab --yes                    # not spa destroy; --force if it looks deployed
 ```
 
-`--name` is the registry key (default: folder basename). `spa` resolves `--env`, cwd, or the registered default and applies the required environment internally. `spa environment --export` is the canonical form for external tools. `spa env --export` remains the human alias.
+`--name` is the registry key (default: folder basename). `spa` resolves `--env`, `SPA_ENV_DIR`, the current directory, then the registered default, and applies that environment internally. When the current directory is the environment, run `spa` with no `--env` and do not run `spa environment list`. `spa environment --export` is the canonical form for external tools. `spa env --export` remains the human alias.
 
 ## Software
 
@@ -65,6 +65,14 @@ spa provision --yes && spa deploy --yes
 spa hosts list --status
 spa logs --last
 ```
+
+## Long runs
+
+`provision`, `deploy`, `destroy`, and `spa run` write one sentence to stderr when the phase or host changes. The 20-second heartbeat writes nothing. Stdout is the final JSON envelope. When the current directory is the environment, start `spa --agent provision --yes` there, and the same form for `deploy`, `destroy`, and `run NAME`. Do not pass `--env`, and do not run `spa environment list`. From any other directory, pass `--env NAME` on that same command. Do not pass `-v` or `--ansible-output`. Do not read `.spa.yml`, the terminal folder, `lib/spa`, or docs. Do not grep the repo. Do not list tools, and do not open a todo list.
+
+Start that command once. Provision, deploy, and destroy share one lock. While one of them is running, the others are refused. The error names the running command, for example `A deploy is already running.` Report that sentence and stop. Do not start one of the other two. The lock ends when that process ends, including when it is aborted. Wait in one call until `"ok":` or the process exits. Do not poll every second, and do not put the sentence list into the wait pattern. If a sentence is already visible on the command, repeat that exact line once. Do not read the terminal file, and do not call other tools. Do not run `spa validate` unless the user asked for it. The heartbeat writes nothing. When the process exits, report the envelope in one sentence. Do not wait on the word `phase` or a Terraform banner.
+
+Provision and destroy: `Planning the infrastructure.`, `Creating HOST.`, `HOST is up.`, `Destroying HOST.` Deploy: `Host is prepared.`, `Hosts are already prepared.`, `Downloading Splunk on HOST.`, `Splunk is already downloaded on HOST.`, `Extracting Splunk on HOST.`, `Splunk is already extracted on HOST.`, `Configuring the cluster manager.`, `The cluster manager is already configured.`, `Configuring Splunk.`, `Installing cluster manager apps.`, `Installing ITSI.`, `Installing apps on HOST.` A role's already-configured sentence is printed when that role's own tasks finish with nothing changed. Opening checks do not count, and baseconfig between those tasks does not finish the role. A role play with no matching hosts is silent. `spa run` uses those same sentences, plus `Upgrading indexer HOST.`, `Restarting Splunk on HOST.`, and `Running TITLE.` for any other playbook.
 
 `spa deploy` runs an Ansible ping with become for the selected hosts after you confirm and before the playbook, then compares `splunk_architecture` with the machine. The expected value is the host override, then that host's `splunk_environments` entry, then `splunk_defaults`, then `amd64`. `spa hosts check` is that check on its own. `spa deploy --hosts ROLE` includes every config host in that role, including one that is not provisioned yet. `spa provision` does not run the check. Before `spa run` of a playbook that needs root, run `spa hosts check`.
 

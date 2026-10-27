@@ -6,6 +6,7 @@ wall time with a numeric UTC offset (never naive, never ``Z``-only).
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import re
@@ -16,7 +17,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, TextIO
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, TextIO
 
 from spa.paths import SpaPaths
 from spa.tfchanges import compact_tf_host_bits, format_tf_replay, load_tf_plan_json
@@ -311,6 +312,41 @@ def redact(value: Any) -> Any:
 
 def logs_dir(paths: SpaPaths) -> Path:
     return Path(paths.spa_env_dir) / "logs"
+
+
+class LifecycleInProgress(Exception):
+    """A provision, deploy, or destroy process holds the environment lock."""
+
+
+_LIFECYCLE_COMMANDS = frozenset({"provision", "deploy", "destroy"})
+
+
+def claim_lifecycle_lock(paths: SpaPaths, command: str):
+    """Hold provision, deploy, or destroy until the returned file is closed.
+
+    The lock is the open file. Aborting or killing the process releases it.
+    The file may stay behind. A log with an empty end time does not hold it.
+    """
+    if command not in _LIFECYCLE_COMMANDS:
+        raise ValueError(command)
+    folder = logs_dir(paths)
+    folder.mkdir(parents=True, exist_ok=True)
+    handle = (folder / ".lifecycle.lock").open("a+")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.seek(0)
+        text = handle.read().strip()
+        handle.close()
+        running = text.split()[0] if text else ""
+        if running not in _LIFECYCLE_COMMANDS:
+            running = "command"
+        raise LifecycleInProgress("A %s is already running." % running)
+    handle.seek(0)
+    handle.truncate()
+    handle.write(command + "\n")
+    handle.flush()
+    return handle
 
 
 def _stem(path: str) -> str:
@@ -807,6 +843,181 @@ def format_elapsed(seconds: float) -> str:
     return "%dm%02ds" % (total // 60, total % 60)
 
 
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1"})
+_RUNNING_HOST = re.compile(r"^\s*-\s+(\S+):\s+running\b")
+
+
+def _managed_config_hosts(paths: SpaPaths) -> List[str]:
+    """Managed host names from splunk_config.yml. External hosts are skipped."""
+    import yaml
+
+    path = paths.config_file
+    if not path.is_file():
+        return []
+    try:
+        document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return []
+    if not isinstance(document, dict):
+        return []
+    from spa.providers.classify import classify_hostnames
+
+    managed, _external = classify_hostnames(document)
+    return [name for name in managed if name not in _LOCAL_HOSTS]
+
+_ROLE_SENTENCES = {
+    "role_deployment_server": "Configuring the deployment server.",
+    "role_license_manager": "Configuring the license manager.",
+    "role_cluster_manager": "Configuring the cluster manager.",
+    "role_indexer": "Configuring indexers.",
+    "role_deployer": "Configuring the deployer.",
+    "role_search_head": "Configuring search heads.",
+    "role_monitoring_console": "Configuring the monitoring console.",
+    "role_heavy_forwarder": "Configuring heavy forwarders.",
+    "role_universal_forwarder": "Configuring universal forwarders.",
+}
+
+# Printed when the role's own tasks finish with nothing changed.
+# Opening checks (splunk_common, "Start role tasks") do not count.
+_ALREADY_ROLE_SENTENCES = {
+    "role_deployment_server": "The deployment server is already configured.",
+    "role_license_manager": "The license manager is already configured.",
+    "role_cluster_manager": "The cluster manager is already configured.",
+    "role_indexer": "The indexers are already configured.",
+    "role_deployer": "The deployer is already configured.",
+    "role_search_head": "The search heads are already configured.",
+    "role_monitoring_console": "The monitoring console is already configured.",
+    "role_heavy_forwarder": "The heavy forwarders are already configured.",
+    "role_universal_forwarder": "The universal forwarders are already configured.",
+}
+
+# These phases sit inside a role play. Leaving for one of them does not
+# mean the role is finished.
+_ROLE_PAUSE_PHASES = frozenset(
+    {
+        "baseconfig",
+        "apps_premium_itsi",
+        "apps_content_packs",
+        "apps_cp_api",
+    }
+)
+
+_PHASE_SENTENCES = {
+    "conf": "Configuring Splunk.",
+    "other_roles": "Configuring helper roles.",
+    "baseconfig": "Installing baseconfig apps.",
+    "apps_ds": "Installing deployment server apps.",
+    "apps_cm": "Installing cluster manager apps.",
+    "apps_shc": "Installing search head cluster apps.",
+    "apps_premium_itsi": "Installing ITSI.",
+    "apps_content_packs": "Installing content packs.",
+    "apps_cp_api": "Installing content packs.",
+    "apps": "Installing apps.",
+    "apps_remove": "Removing apps.",
+}
+
+_RUN_PLAYBOOK_SENTENCES = {
+    "splunk_start": "Starting Splunk on %s.",
+    "splunk_stop": "Stopping Splunk on %s.",
+    "splunk_restart": "Restarting Splunk on %s.",
+    "splunk_remove": "Removing Splunk on %s.",
+    "splunk_license": "Installing the license on %s.",
+    "splunk_certs_web": "Installing certificates on %s.",
+    "splunk_certs_inputs": "Installing certificates on %s.",
+    "splunk_backup_etc": "Backing up %s.",
+    "splunk_backup_cleanup": "Cleaning up backups on %s.",
+}
+
+# Short bookkeeping. A phase_start here is not an agent sentence.
+_SILENT_PHASES = frozenset(
+    {
+        "preflight",
+        "linkpage",
+        "apps_precheck",
+        "apps_clients",
+        "apps_post_restart",
+        "apps_summary",
+        "host_check",
+        "tf_init",
+        "tf_plan",
+        "wait_ssh",
+        "power",
+    }
+)
+
+
+def _role_body_task(task: str) -> bool:
+    """True for a role's own task. Shared checks and the role banner are not it."""
+    text = task.lower()
+    if not text.strip():
+        return False
+    if "splunk_common" in text:
+        return False
+    if "start role tasks" in text:
+        return False
+    return True
+
+
+def _running_host_names(event: Mapping[str, Any]) -> List[str]:
+    """Host names from a readiness message. Addresses in that message stay out."""
+    msg = event.get("msg")
+    lines = msg if isinstance(msg, list) else str(msg or "").splitlines()
+    names: List[str] = []
+    for line in lines:
+        match = _RUNNING_HOST.match(str(line))
+        if match:
+            names.append(match.group(1))
+    return names
+
+
+def _event_host(event: Mapping[str, Any]) -> str:
+    host = str(event.get("host") or "").strip()
+    if host in _LOCAL_HOSTS:
+        return ""
+    return host
+
+
+def _event_phase(event: Mapping[str, Any]) -> str:
+    return str(event.get("phase") or event.get("phase_id") or "")
+
+
+def _event_task(event: Mapping[str, Any]) -> str:
+    return str(event.get("task") or "")
+
+
+def _playbook_stem(playbook: str) -> str:
+    return Path(str(playbook or "")).stem
+
+
+def _upgrade_host(phase: str, prefix: str, host: str) -> str:
+    if host:
+        return host
+    rest = phase[len(prefix) :]
+    name, _sep, _step = rest.partition(":")
+    return name
+
+
+def _upgrade_sentence(phase: str, host: str) -> Optional[str]:
+    if phase.startswith("upgrade_idxc_peers:"):
+        target = _upgrade_host(phase, "upgrade_idxc_peers:", host)
+        if target:
+            return "Upgrading indexer %s." % target
+    if phase.startswith("upgrade_shc_members:"):
+        target = _upgrade_host(phase, "upgrade_shc_members:", host)
+        if target:
+            return "Upgrading search head %s." % target
+    if phase.startswith("upgrade_distributed_sh:"):
+        target = _upgrade_host(phase, "upgrade_distributed_sh:", host)
+        if target:
+            return "Upgrading search head %s." % target
+    if phase == "upgrade_distributed_cm" or phase.startswith("upgrade_distributed_cm:"):
+        return "Upgrading the cluster manager."
+    if phase == "upgrade_splunk" or phase.startswith("upgrade_step:") or phase.startswith("upgrade_splunk:"):
+        if host:
+            return "Upgrading Splunk on %s." % host
+    return None
+
+
 def _infer_kind(raw: Dict[str, Any], status: str) -> str:
     kind = str(raw.get("kind") or "")
     if kind:
@@ -1013,6 +1224,14 @@ class RunLog:
         self._upgrade_from = ""
         self._upgrade_to = ""
         self._upgrade_current = False
+        self._last_phase_sentence: Optional[str] = None
+        self._sentences_said: set = set()
+        self._open_role: Optional[str] = None
+        self._role_outcome: Dict[str, Dict[str, Any]] = {}
+        self._up_event: Optional[int] = None
+        self._up_queue: List[str] = []
+        self._phase_hosts_said: set = set()
+        self._pending_summary_host = ""
         self._write_meta(rc=None, ended=None)
 
     @property
@@ -1275,6 +1494,8 @@ class RunLog:
         if self._hb_thread is not None:
             self._hb_thread.join(timeout=1)
         ended = now_local(self._clock)
+        if self._open_role:
+            self._close_role(self._open_role)
         if self._current_phase:
             self.emit(
                 {
@@ -1416,6 +1637,14 @@ class RunLog:
             self._results += 1
             if status == "changed":
                 self._changed += 1
+            if phase in _ALREADY_ROLE_SENTENCES:
+                outcome = self._role_outcome.setdefault(
+                    str(phase), {"changed": 0, "body": False}
+                )
+                if _role_body_task(task) and status in {"ok", "changed"}:
+                    outcome["body"] = True
+                if status == "changed":
+                    outcome["changed"] += 1
             if status == "skipped":
                 self._skipped += 1
         # A provider CLI can fail without naming a host (bad Vagrantfile,
@@ -1484,6 +1713,43 @@ class RunLog:
                 return i
         return None
 
+    def _consider_role_progress(self, previous: Optional[str], nxt: Optional[str]) -> None:
+        """Close a role when its play moves on. Baseconfig between tasks does not."""
+        if not nxt or nxt == previous:
+            return
+        if previous in _ALREADY_ROLE_SENTENCES and nxt not in _ROLE_PAUSE_PHASES:
+            self._close_role(previous)
+        elif (
+            nxt in _ALREADY_ROLE_SENTENCES
+            and self._open_role
+            and self._open_role != nxt
+            and previous in _ROLE_PAUSE_PHASES
+        ):
+            self._close_role(self._open_role)
+        if nxt in _ALREADY_ROLE_SENTENCES:
+            self._open_role = str(nxt)
+        elif nxt not in _ROLE_PAUSE_PHASES and self._open_role and self._open_role != nxt:
+            self._close_role(self._open_role)
+
+    def _close_role(self, phase: Optional[str]) -> None:
+        if not phase or phase not in _ALREADY_ROLE_SENTENCES:
+            return
+        if self._open_role == phase:
+            self._open_role = None
+        outcome = self._role_outcome.get(phase)
+        if not outcome or outcome.get("closed"):
+            return
+        outcome["closed"] = True
+        if not self.agent or self._failed:
+            return
+        if not outcome.get("body") or outcome.get("changed", 0):
+            return
+        sentence = _ALREADY_ROLE_SENTENCES[phase]
+        if sentence in self._sentences_said:
+            return
+        self._sentences_said.add(sentence)
+        self._write_stderr(sentence)
+
     def _maybe_phase_change(self, phase: Optional[str], stamp: datetime) -> None:
         if not phase or phase == self._current_phase:
             return
@@ -1498,6 +1764,7 @@ class RunLog:
         ):
             return
         previous = self._current_phase
+        self._consider_role_progress(previous, phase)
         if previous:
             self._write_phase_marker(
                 "phase_end",
@@ -1714,26 +1981,186 @@ class RunLog:
             self._live_open = False
             self._live_width = 0
 
+    def phase_sentence(self, event: Mapping[str, Any]) -> Optional[str]:
+        """One agent stderr sentence, or None when this event changes nothing."""
+        status = str(event.get("status") or "")
+        if status in {"heartbeat", "failed", "unreachable"}:
+            return None
+        self._pending_summary_host = ""
+        sentence = self._milestone_sentence(event)
+        if not sentence or sentence in self._sentences_said:
+            return None
+        self._sentences_said.add(sentence)
+        if self._pending_summary_host:
+            self._phase_hosts_said.add(self._pending_summary_host)
+        else:
+            host = _event_host(event)
+            if host:
+                self._phase_hosts_said.add(host)
+        self._last_phase_sentence = sentence
+        return sentence
+
+    def _milestone_sentence(self, event: Mapping[str, Any]) -> Optional[str]:
+        command = str(event.get("command") or self.command)
+        phase = _event_phase(event)
+        task = _event_task(event).lower()
+        host = _event_host(event)
+        status = str(event.get("status") or "")
+        kind = str(event.get("kind") or "")
+        start = status in {"running", "phase_start"} or kind in {
+            "host_start",
+            "task_start",
+            "phase_start",
+        }
+        if command == "provision" and start and "terraform plan" in task:
+            return "Planning the infrastructure."
+        if status in {"ok", "changed"} and "instance readiness" in task:
+            target = self._next_running_host(event)
+            if target:
+                return "%s is up." % target
+        if command == "destroy" or "destroy terraform" in task:
+            if start and (phase == "tf_apply" or "destroy" in task):
+                target = host or self._next_destroy_host()
+                if target:
+                    return "Destroying %s." % target
+            return None
+        if command == "provision" and start and "destroy" not in task:
+            if phase == "tf_apply" or "apply" in task:
+                target = host or self._next_summary_host("create")
+                if target:
+                    return "Creating %s." % target
+        if status in {"ok", "changed"} and host:
+            if phase == "wait_ssh" or ("ssh" in task and "wait" in task):
+                return "%s is up." % host
+        if (
+            phase == "os"
+            and status == "phase_end"
+            and event.get("ok") is not False
+            and not self._failed
+        ):
+            if event.get("changed") == 0:
+                return "Hosts are already prepared."
+            return "Host is prepared."
+        if host and "splunk archive" in task and not start:
+            if status == "ok" and "extract" in task:
+                return "Splunk is already extracted on %s." % host
+            if status == "ok" and ("download" in task or "upload" in task):
+                return "Splunk is already downloaded on %s." % host
+        if start and host and "splunk archive" in task:
+            if "extract" in task:
+                return "Extracting Splunk on %s." % host
+            if "download" in task or "upload" in task:
+                return "Downloading Splunk on %s." % host
+        if phase in _ROLE_SENTENCES:
+            if not host:
+                return None
+            return _ROLE_SENTENCES[phase]
+        if phase in _PHASE_SENTENCES:
+            return _PHASE_SENTENCES[phase]
+        if phase == "apps_direct" and host:
+            return "Installing apps on %s." % host
+        upgrade = _upgrade_sentence(phase, host)
+        if upgrade:
+            return upgrade
+        playbook = _playbook_stem(str(event.get("playbook") or self.playbook or ""))
+        template = _RUN_PLAYBOOK_SENTENCES.get(playbook)
+        if template:
+            if host:
+                return template % host
+            return None
+        if (
+            command == "run"
+            and status == "phase_start"
+            and phase not in _SILENT_PHASES
+            and phase not in _ROLE_SENTENCES
+            and phase not in _PHASE_SENTENCES
+        ):
+            title = str(event.get("phase_title") or group_title(phase) or "").strip()
+            if title:
+                return "Running %s." % title
+        return None
+
+    def _next_running_host(self, event: Mapping[str, Any]) -> str:
+        if self._up_event != id(event):
+            self._up_event = id(event)
+            self._up_queue = _running_host_names(event)
+        while self._up_queue:
+            name = self._up_queue.pop(0)
+            if not name or name in _LOCAL_HOSTS:
+                continue
+            if ("%s is up." % name) in self._sentences_said:
+                continue
+            self._pending_summary_host = name
+            return name
+        return ""
+
+    def _write_phase_sentences(self, event: Mapping[str, Any]) -> None:
+        while True:
+            sentence = self.phase_sentence(event)
+            if not sentence:
+                return
+            self._write_stderr(sentence)
+
+    def _next_destroy_host(self) -> str:
+        """Next host Terraform destroy will remove.
+
+        A plan summary wins when it lists deletes. Otherwise the names are
+        the inventory, then the managed hosts in the config. The destroy
+        task itself runs on localhost.
+        """
+        summary = self._tf_summary or {}
+        if any(
+            str(row.get("action") or "") == "delete" for row in (summary.get("hosts") or [])
+        ):
+            return self._next_summary_host("delete")
+        for name in self._configured_destroy_hosts():
+            if name not in self._phase_hosts_said:
+                self._pending_summary_host = name
+                return name
+        return ""
+
+    def _configured_destroy_hosts(self) -> List[str]:
+        cached = getattr(self, "_destroy_targets", None)
+        if cached is not None:
+            return cached
+        from spa.providers import inventory_hostnames_from_file
+
+        names = [
+            name
+            for name in inventory_hostnames_from_file(self.paths)
+            if name not in _LOCAL_HOSTS
+        ]
+        if not names:
+            names = _managed_config_hosts(self.paths)
+        self._destroy_targets = names
+        return names
+
+    def _next_summary_host(self, action: str) -> str:
+        summary = self._tf_summary or {}
+        for row in summary.get("hosts") or []:
+            if str(row.get("action") or "") != action:
+                continue
+            host = str(row.get("host") or "")
+            if host and host not in self._phase_hosts_said:
+                self._pending_summary_host = host
+                return host
+        return ""
+
     def _render(self, event: Dict[str, Any]) -> None:
         status = event.get("status")
         kind = str(event.get("kind") or status or "")
         if self.agent:
-            if status == "phase_start":
-                title = str(
-                    event.get("phase_title") or group_title(str(event.get("phase") or "")) or ""
-                ).strip()
-                if title:
-                    self._write_stderr(title)
-            elif status == "heartbeat":
+            if status == "heartbeat":
                 return
-            elif status == "phase_end":
+            self._write_phase_sentences(event)
+            if status == "phase_end":
                 if event.get("ok") is False or self._failed:
                     self._write_stderr(
                         json.dumps(self._progress_payload(event, "failed"), default=str)
                     )
                 return
             elif status == "tf_changes":
-                self._write_stderr(json.dumps(self._progress_payload(event, "running"), default=str))
+                return
             elif status in {"failed", "unreachable"}:
                 payload = {
                     "type": "progress",
@@ -1902,75 +2329,78 @@ def follow_jsonl(
             return False
         return isinstance(payload, dict) and payload.get("rc") is not None
 
-    while True:
-        if path.is_file():
-            with path.open("r", encoding="utf-8") as handle:
-                handle.seek(offset)
-                chunk = handle.read()
-                offset = handle.tell()
-            if chunk:
-                if ansible_output:
-                    leftover += chunk
-                    lines = leftover.split("\n")
-                    leftover = lines[-1]
-                    events = []
-                    for line in lines[:-1]:
-                        text = line.strip()
-                        if not text.startswith("{"):
-                            continue
-                        try:
-                            row = json.loads(text)
-                        except json.JSONDecodeError:
-                            continue
-                        if isinstance(row, dict):
-                            events.append(row)
-                    structured_events.extend(
-                        row for row in events if row.get("kind") != "ansible_output"
-                    )
-                    native_events = [
-                        row for row in events if row.get("kind") == "ansible_output"
-                    ]
-                    if native_events:
-                        if not native_seen:
-                            structured_events.clear()
-                        native_seen = True
-                    rendered = (
-                        render_replay_text(
-                            native_events, timestamps=timestamps, color=color
+    try:
+        while True:
+            if path.is_file():
+                with path.open("r", encoding="utf-8") as handle:
+                    handle.seek(offset)
+                    chunk = handle.read()
+                    offset = handle.tell()
+                if chunk:
+                    if ansible_output:
+                        leftover += chunk
+                        lines = leftover.split("\n")
+                        leftover = lines[-1]
+                        events = []
+                        for line in lines[:-1]:
+                            text = line.strip()
+                            if not text.startswith("{"):
+                                continue
+                            try:
+                                row = json.loads(text)
+                            except json.JSONDecodeError:
+                                continue
+                            if isinstance(row, dict):
+                                events.append(row)
+                        structured_events.extend(
+                            row for row in events if row.get("kind") != "ansible_output"
                         )
-                        if native_events
-                        else ""
-                    )
-                    if rendered:
-                        out.write(rendered)
+                        native_events = [
+                            row for row in events if row.get("kind") == "ansible_output"
+                        ]
+                        if native_events:
+                            if not native_seen:
+                                structured_events.clear()
+                            native_seen = True
+                        rendered = (
+                            render_replay_text(
+                                native_events, timestamps=timestamps, color=color
+                            )
+                            if native_events
+                            else ""
+                        )
+                        if rendered:
+                            out.write(rendered)
+                            out.flush()
+                    else:
+                        out.write(chunk)
                         out.flush()
+                    idle = 0
                 else:
-                    out.write(chunk)
-                    out.flush()
-                idle = 0
+                    idle += 1
             else:
                 idle += 1
-        else:
-            idle += 1
-        should_render_legacy = (
-            ansible_output
-            and not native_seen
-            and not legacy_rendered
-            and structured_events
-            and (
-                run_finished()
-                or (idle_passes >= 0 and idle >= idle_passes)
+            should_render_legacy = (
+                ansible_output
+                and not native_seen
+                and not legacy_rendered
+                and structured_events
+                and (
+                    run_finished()
+                    or (idle_passes >= 0 and idle >= idle_passes)
+                )
             )
-        )
-        if should_render_legacy:
-            rendered = render_replay_text(
-                structured_events, timestamps=timestamps, color=color
-            )
-            if rendered:
-                out.write(rendered)
-                out.flush()
-            legacy_rendered = True
-            structured_events.clear()
-        if idle_passes >= 0 and idle >= idle_passes:
-            return 0
-        time.sleep(sleep_s)
+            if should_render_legacy:
+                rendered = render_replay_text(
+                    structured_events, timestamps=timestamps, color=color
+                )
+                if rendered:
+                    out.write(rendered)
+                    out.flush()
+                legacy_rendered = True
+                structured_events.clear()
+            if idle_passes >= 0 and idle >= idle_passes:
+                return 0
+            time.sleep(sleep_s)
+    except KeyboardInterrupt:
+        return 130
