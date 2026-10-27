@@ -177,6 +177,12 @@ def with_ansible_limit(extra: Optional[Iterable[str]], hostnames: Optional[Seque
     return ["--limit", ":".join(hostnames), *args]
 
 
+def _interpreter_failure(message: str) -> bool:
+    """Ansible could not execute a module because the remote Python path is missing."""
+    text = message.lower()
+    return "module interpreter" in text or ("interpreter" in text and "not found" in text)
+
+
 def _ping_failure_text(rows: Sequence[dict]) -> str:
     """One line per host. A become failure says SSH worked and sudo did not."""
     lines = []
@@ -186,8 +192,10 @@ def _ping_failure_text(rows: Sequence[dict]) -> str:
             lines.append("%s ok" % name)
             continue
         message = str(row.get("message") or "").strip()
-        if row.get("ssh") and row.get("become") is False:
+        if row.get("ssh") and row.get("become") is False and not _interpreter_failure(message):
             line = "SSH works for %s, but passwordless sudo to root failed." % name
+        elif row.get("ssh") and _interpreter_failure(message):
+            line = "SSH works for %s, but the remote module interpreter was not found." % name
         elif not row.get("ssh"):
             line = "SSH failed for %s." % name
         else:
@@ -286,7 +294,7 @@ def ping_hosts(
     from spa.providers import inventory_hostnames_from_file, load_deployment_config
     from spa.providers.classify import classify_hostnames
     from spa.providers.external import _register_sentence
-    from spa.shell import ansible_architecture, ansible_ping
+    from spa.shell import ansible_architecture, ansible_ping, drop_discovered_interpreter_cache
 
     document = load_deployment_config(paths)
     managed, external = classify_hostnames(document)
@@ -300,6 +308,7 @@ def ping_hosts(
         raise HostsError(
             "hosts not provisioned: %s\nRun: spa provision --yes" % ", ".join(missing)
         )
+    drop_discovered_interpreter_cache(selected, paths)
     rows, problem = ansible_ping(selected, paths=paths, become=True, run=run)
     if problem:
         raise HostsError(problem)

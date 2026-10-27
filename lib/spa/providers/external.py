@@ -218,7 +218,11 @@ def _managed_owner(document: Dict[str, Any], name: str) -> Optional[str]:
 
 
 def register_host(paths: SpaPaths, spec: RegisterSpec, run: SshRunner) -> Dict[str, Any]:
-    """Probe SSH, then write the host and one inventory line."""
+    """Probe SSH, then write the host and one inventory line.
+
+    A successful register drops that hostname's cached Ansible interpreter
+    in this environment's fact cache.
+    """
     key = _expanded_key(spec.key_path)
     if not key.is_file():
         raise ProviderError("key file not found: %s" % key)
@@ -267,6 +271,9 @@ def register_host(paths: SpaPaths, spec: RegisterSpec, run: SshRunner) -> Dict[s
         _restore_bytes(paths.config_file, config_bytes)
         _restore_bytes(destination, inventory_bytes)
         raise
+    from spa.shell import drop_discovered_interpreter_cache
+
+    drop_discovered_interpreter_cache([spec.name], paths)
     return {
         "name": spec.name,
         "ansible_host": spec.address,

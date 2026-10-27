@@ -354,6 +354,10 @@ class SpaPaths:
         parts = [str(self.config_file), str(self.inventory_dir)]
         return ",".join(parts)
 
+    def fact_cache_dir(self) -> Path:
+        """Jsonfile fact cache for this environment. Hostnames are not unique across envs."""
+        return self.spa_env_dir / "ansible_facts"
+
     def export_env(self) -> Dict[str, str]:
         """Environment overlay for validate, spa shell, and ansible-playbook."""
         return {
@@ -366,6 +370,7 @@ class SpaPaths:
             "ANSIBLE_INVENTORY_PLUGINS": str(self.spa_home / "ansible" / "plugins" / "inventory"),
             "ANSIBLE_LOOKUP_PLUGINS": str(self.spa_home / "ansible" / "plugins" / "lookup"),
             "ANSIBLE_VARS_PLUGINS": str(self.spa_home / "ansible" / "plugins" / "vars"),
+            "ANSIBLE_CACHE_PLUGIN_CONNECTION": str(self.fact_cache_dir()),
             "SPA_SOFTWARE_DIR": str(self.software_dir),
             "SPA_BASECONFIG_DIR": str(self.baseconfig_dir),
             "SPA_APPS_DIR": str(self.apps_dir),

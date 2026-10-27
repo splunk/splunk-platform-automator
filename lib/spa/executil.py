@@ -19,7 +19,7 @@ from spa.paths import SpaPaths
 def apply_paths_env(paths: SpaPaths, overwrite: bool = False) -> Dict[str, str]:
     exported = paths.export_env()
     for key, value in exported.items():
-        if overwrite:
+        if overwrite or key == "ANSIBLE_CACHE_PLUGIN_CONNECTION":
             os.environ[key] = value
         else:
             os.environ.setdefault(key, value)

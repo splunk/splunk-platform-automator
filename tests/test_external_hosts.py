@@ -11,6 +11,12 @@ from pydantic import ValidationError
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
+
+@pytest.fixture(autouse=True)
+def _isolate_ansible_fact_cache(tmp_path, monkeypatch):
+    """Keep ping tests off the operator's real /tmp/ansible_facts cache."""
+    monkeypatch.setenv("ANSIBLE_CACHE_PLUGIN_CONNECTION", str(tmp_path / "unused-fact-cache"))
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "ansible", "plugins", "inventory"))
 
 from schema import SplunkConfig  # noqa: E402
@@ -598,6 +604,31 @@ def test_register_leaves_inventory_when_the_config_write_fails(tmp_path, monkeyp
     assert inventory.read_bytes() == inventory_before
 
 
+def test_register_drops_the_shared_interpreter_cache_for_that_hostname(tmp_path, monkeypatch):
+    from spa.providers.external import RegisterSpec, register_host
+
+    key = tmp_path / "id_ed25519"
+    key.write_text("not-read")
+    paths = _paths(tmp_path, "external: {}\nsplunk_hosts: []\n")
+    cache = tmp_path / "facts"
+    cache.mkdir()
+    stale = {
+        "__payload__": json.dumps(
+            {"discovered_interpreter_python": "/usr/bin/python3.12"}
+        )
+    }
+    (cache / "s1_byo1").write_text(json.dumps(stale), encoding="utf-8")
+    (cache / "s1_other").write_text(json.dumps(stale), encoding="utf-8")
+    monkeypatch.setenv("ANSIBLE_CACHE_PLUGIN_CONNECTION", str(cache))
+    register_host(
+        paths,
+        RegisterSpec("byo1", "10.0.0.8", "splunk", str(key), 22, ()),
+        lambda _argv: 0,
+    )
+    assert not (cache / "s1_byo1").exists()
+    assert (cache / "s1_other").exists()
+
+
 def test_register_refuses_a_managed_name(tmp_path):
     from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init
 
@@ -1079,6 +1110,60 @@ def test_become_ping_reports_ssh_ok_when_sudo_fails(tmp_path, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""
+
+
+def test_become_ping_does_not_blame_sudo_for_a_missing_interpreter(tmp_path, capsys):
+    from spa.hosts import HostsError, ping_hosts
+
+    def run(argv, tree):
+        with open(os.path.join(tree, "byo1"), "w", encoding="utf-8") as handle:
+            handle.write(
+                '{"rc": 127, "msg": "The module interpreter \'/usr/bin/python3.12\' was not found."}'
+            )
+        return 2
+
+    with pytest.raises(HostsError, match="module interpreter '/usr/bin/python3.12' was not found") as exc:
+        ping_hosts(_ping_paths(tmp_path), ["byo1"], run)
+    assert "passwordless sudo" not in str(exc.value)
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_ping_drops_stale_discovered_interpreter_before_ansible(tmp_path, monkeypatch):
+    from spa.hosts import ping_hosts
+
+    cache = tmp_path / "facts"
+    cache.mkdir()
+    (cache / "s1_byo1").write_text(
+        json.dumps(
+            {
+                "__payload__": json.dumps(
+                    {
+                        "discovered_interpreter_python": "/usr/bin/python3.12",
+                        "ansible_architecture": "x86_64",
+                    }
+                )
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ANSIBLE_CACHE_PLUGIN_CONNECTION", str(cache))
+    seen = {}
+
+    def run(argv, tree):
+        seen["module"] = argv[argv.index("-m") + 1]
+        seen["cache_left"] = (cache / "s1_byo1").exists()
+        with open(os.path.join(tree, "byo1"), "w", encoding="utf-8") as handle:
+            if seen["module"] == "ping":
+                handle.write('{"ping": "pong"}')
+            else:
+                handle.write('{"ansible_facts": {"ansible_architecture": "x86_64"}}')
+        return 0
+
+    data = ping_hosts(_ping_paths(tmp_path), ["byo1"], run)
+    assert seen["cache_left"] is False
+    assert data["hosts"][0]["ok"] is True
 
 
 def test_become_ping_reports_ssh_failure_without_blaming_sudo(tmp_path, capsys):

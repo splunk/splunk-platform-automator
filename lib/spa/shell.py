@@ -52,6 +52,68 @@ def get_host_vars(inventory, hostname):
     
     return {}
 
+
+def _fact_cache_directory(paths=None) -> str:
+    """Directory of Ansible's jsonfile fact cache. Env overrides ansible.cfg."""
+    configured = (os.environ.get("ANSIBLE_CACHE_PLUGIN_CONNECTION") or "").strip()
+    if configured:
+        return configured
+    cfg_path = (os.environ.get("ANSIBLE_CONFIG") or "").strip()
+    if not cfg_path and paths is not None:
+        home = getattr(paths, "spa_home", None)
+        if home:
+            cfg_path = os.path.join(str(home), "ansible.cfg")
+    if cfg_path and os.path.isfile(cfg_path):
+        import configparser
+
+        parser = configparser.ConfigParser()
+        parser.read(cfg_path)
+        if parser.has_option("defaults", "fact_caching_connection"):
+            return parser.get("defaults", "fact_caching_connection").strip()
+    return "/tmp/ansible_facts"
+
+
+def _cache_file_is_host(filename: str, hostname: str) -> bool:
+    """True for ``hostname`` and Ansible's schema-prefixed ``s1_hostname``."""
+    if not hostname or not filename.endswith(hostname):
+        return False
+    prefix = filename[: -len(hostname)]
+    return prefix == "" or prefix.endswith("_")
+
+
+def drop_discovered_interpreter_cache(hosts, paths=None) -> None:
+    """Drop cached ``discovered_interpreter_python`` so the next module rediscovers it.
+
+    Ansible 2.21 stores that fact as ``s<schema>_<hostname>`` under the jsonfile
+    cache. A later host with the same inventory name otherwise keeps the old
+    interpreter path, and ``ansible`` ping never looks again.
+    """
+    directory = _fact_cache_directory(paths)
+    if not directory or not os.path.isdir(directory):
+        return
+    for name in hosts or []:
+        hostname = str(name)
+        try:
+            filenames = os.listdir(directory)
+        except OSError:
+            return
+        for filename in filenames:
+            if not _cache_file_is_host(filename, hostname):
+                continue
+            path = os.path.join(directory, filename)
+            try:
+                with open(path, encoding="utf-8") as handle:
+                    text = handle.read()
+            except OSError:
+                continue
+            if "discovered_interpreter_python" not in text:
+                continue
+            try:
+                os.remove(path)
+            except OSError:
+                continue
+
+
 def _ansible_message(data):
     """First line of an Ansible result, with key material left out."""
     if not isinstance(data, dict):
