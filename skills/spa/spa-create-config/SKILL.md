@@ -262,7 +262,7 @@ Use `spa --agent config explain splunk_defaults.splunk_license_server` or the li
 **Do not enter** while plan mode is active and plan is still draft.
 
 1. Scaffold with `spa init --example TOPOLOGY --provider aws|virtualbox ENV` (topology + provider only). Do not invent `--addon` or OS flags on init.
-2. Header from [assets/config-header-template.md](assets/config-header-template.md)
+2. After the operator confirms, run `spa --agent config header set` (`spa config header set`) to replace the leading comment. Include `--intent`, `--requirements`, `--sva`, `--placement`, `--license`, `--installer`, `--os`, `--aws`, and `--deploy` only when the operator supplied that value. Omitted fields are removed. Pass `--yes`.
 3. For OS, SSL, licenses, RF/SF, and other settings: choose with `spa --agent config search QUERY`, then `spa --agent config explain PATH`. Use the one command on that page. That is `spa --agent config set PATH VALUE` for an existing scalar or map, or `spa --agent config add SELECTOR JSON_OBJECT` for a new non-app identity. Use one intentional `spa --agent config merge --file FILE` for a multi-setting fragment. Never paste a feature snippet. For **apps**, load [spa-apps](../spa-apps/SKILL.md), search, and call `spa --agent apps add`. ITSI is app_id 1841, not 5403.
 4. Global `terraform.aws` already comes from `--provider aws`; add **`ssh_username`** / AMI from catalog + discovery.
 5. Matching global `os:` from selector `os` (not from the topology file).

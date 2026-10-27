@@ -365,3 +365,13 @@ class TestSpaSkill:
         assert "spa aws list regions" not in text
         entry = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
         assert "spa --agent config explain PATH" in entry
+
+    def test_create_config_phase7_sets_header_by_command(self):
+        skill = PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        _before, marker, after_phase7 = text.partition("## Phase 7 — Write config")
+        assert marker
+        phase7_body, phase8, _rest = after_phase7.partition("## Phase 8")
+        assert phase8
+        assert "spa config header set" in phase7_body
+        assert "config-header-template.md" not in phase7_body

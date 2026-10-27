@@ -43,6 +43,7 @@ CONSEQUENCE = {
     "local": "will change the Python environment for this framework",
     "local_destructive": "will delete and recreate the Python environment for this framework",
     "skills_remove": "will remove SPA skills from the IDE skill directory",
+    "config_edit": "will change splunk_config.yml",
 }
 
 

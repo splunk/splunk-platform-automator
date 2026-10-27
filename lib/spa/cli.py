@@ -85,6 +85,20 @@ _VISIBLE_ALIAS = {"environment": frozenset({"env"})}
 # builds one. Every other command reads YAML or runs Ansible, so it is gated.
 VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills", "completion"})
 GLOBAL_OPTS_WITH_VALUE = ("--start-dir", "--env")
+# Header flags take a value. Their value must not be read as a command word,
+# so `config header --intent set` stays `config header` and not `config header set`.
+_COMMAND_WORD_VALUE_FLAGS = GLOBAL_OPTS_WITH_VALUE + (
+    "--intent",
+    "--requirements",
+    "--sva",
+    "--placement",
+    "--license",
+    "--installer",
+    "--os",
+    "--aws",
+    "--deploy",
+    "--expect-revision",
+)
 HOSTS_FLAG_HELP = "only these hosts (names or roles from this env)"
 AGENT_EXAMPLES = """examples:
   spa agent schema       command schema (name, summary, flags, requires_confirmation)
@@ -247,12 +261,12 @@ def _run_help_target(head: Sequence[str]) -> Optional[str]:
 
 
 def _positional_tokens(head: Sequence[str]) -> List[str]:
-    """Command words, skipping flags and the values of global options."""
+    """Command words, skipping flags and the values of options that take one."""
     tokens: List[str] = []
     index = 0
     while index < len(head):
         token = head[index]
-        if token in GLOBAL_OPTS_WITH_VALUE:
+        if token in _COMMAND_WORD_VALUE_FLAGS:
             index += 2
             continue
         if token.startswith("-"):
@@ -631,6 +645,21 @@ CONFIG_NEEDS_ACTION = (
     "Write:             set, add, unset, merge, topology, or provider\n"
     "Coverage:          spa config keys\n"
     "Docs dump:         spa config schema --markdown"
+)
+HEADER_NEEDS_ACTION = (
+    "spa config header needs an action.\n"
+    "Set: spa config header set --intent TEXT"
+)
+_HEADER_FIELDS = (
+    "intent",
+    "requirements",
+    "sva",
+    "placement",
+    "license",
+    "installer",
+    "os",
+    "aws",
+    "deploy",
 )
 ENVIRONMENT_NEEDS_ACTION = (
     "spa environment needs an action.\n"
@@ -1240,8 +1269,21 @@ def _run(argv: Sequence[str]) -> int:
         """Keep parse failures machine-readable when an agent invokes spa."""
 
         def error(self, message):
-            # Python 3.14 returns a subparser's unknown flags to this top-level parser.
-            if "unrecognized arguments" in message:
+            # Python 3.14 returns a subparser's unknown flags to this top-level parser,
+            # whose prog is "spa", so the command has to be read from argv.
+            prog = self.prog.rstrip()
+            command_words = _positional_tokens(head)
+            if command_words[:3] == ["config", "header", "set"]:
+                named = "spa config header set"
+                # The set parser's own prog already names the command. Prefixing
+                # that message would print the name twice on the human line.
+                if named not in message and (
+                    parse_as_agent or not prog.endswith("config header set")
+                ):
+                    message = "%s: %s" % (named, message)
+            elif command_words[:2] == ["config", "header"] or prog.endswith("config header"):
+                message = HEADER_NEEDS_ACTION
+            elif "unrecognized arguments" in message:
                 if "--command" in message or "--keys" in message:
                     message = "spa config explain PATH shows one level. A deeper level is a longer path."
                 elif "--markdown" in message:
@@ -1429,6 +1471,61 @@ def _run(argv: Sequence[str]) -> int:
     p_config_provider = _add_action(config_sub, "provider", aliases=["pro"], help="Replace provider-owned sections")
     _config_mutation_flags(p_config_provider)
     p_config_provider.add_argument("operand", metavar="PROVIDER", help=PROVIDER_HELP)
+
+    p_config_header = _add_action(
+        config_sub,
+        "header",
+        help="Replace the leading comment on splunk_config.yml",
+        epilog=HEADER_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    header_sub = p_config_header.add_subparsers(dest="header_cmd", metavar="ACTION")
+    _header_set_help = (
+        "Replace the leading comment on splunk_config.yml. Omitted fields are removed."
+    )
+    p_config_header_set = _add_action(
+        header_sub,
+        "set",
+        help=_header_set_help,
+        description=_header_set_help,
+    )
+    p_config_header_set.set_defaults(canonical_action="header-set")
+    _add_mode_flags(p_config_header_set)
+    _HEADER_FLAG_HELP = (
+        ("intent", "Why this environment exists"),
+        ("requirements", "Constraints the design must meet"),
+        ("sva", "SVA target for this environment"),
+        ("placement", "Where the deployment runs"),
+        ("license", "How Splunk is licensed"),
+        ("installer", "Installer used for Splunk"),
+        ("os", "Operating system for the hosts"),
+        ("aws", "AWS placement notes"),
+        ("deploy", "Command that deploys this environment"),
+    )
+    for _header_name, _header_help in _HEADER_FLAG_HELP:
+        p_config_header_set.add_argument(
+            "--%s" % _header_name,
+            dest="header_%s" % _header_name,
+            metavar="TEXT",
+            help=_header_help,
+        )
+    p_config_header_set.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate and preview without writing",
+    )
+    p_config_header_set.add_argument(
+        "--expect-revision",
+        metavar="SHA256",
+        help="Fail if the current content revision differs",
+    )
+    p_config_header_set.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm the header write (required in agent mode)",
+    )
 
     p_apps = _add_command(
         sub,
@@ -2258,6 +2355,8 @@ def _run(argv: Sequence[str]) -> int:
         action = _action(args, "config_cmd")
         if not action:
             return _reject(CONFIG_NEEDS_ACTION, as_agent)
+        if action == "header":
+            return _reject(HEADER_NEEDS_ACTION, as_agent)
         if action == "keys" and getattr(args, "config_extra", None):
             return _reject(CONFIG_KEYS_NO_ARG, as_agent)
         if action == "schema" and getattr(args, "rejected_path", None):
@@ -2308,6 +2407,11 @@ def _run(argv: Sequence[str]) -> int:
             stdin_text=stdin_text,
             confirm=args.yes,
             agent=as_agent,
+            header_fields={
+                name: getattr(args, "header_%s" % name)
+                for name in _HEADER_FIELDS
+                if getattr(args, "header_%s" % name, None) is not None
+            },
         )
         if as_agent:
             return _emit_result(result, True)
@@ -2369,7 +2473,8 @@ def _run(argv: Sequence[str]) -> int:
         state = "would change" if getattr(args, "dry_run", False) and data.get("changed") else (
             "changed" if data.get("changed") else "unchanged"
         )
-        print("Config %s: %s" % (action, state))
+        shown = "header set" if action == "header-set" else action
+        print("Config %s: %s" % (shown, state))
         for warning in data.get("warnings") or []:
             print("Warning: %s" % warning, file=sys.stderr)
         print("Run spa validate after the final edit.")

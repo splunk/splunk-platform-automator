@@ -189,6 +189,7 @@ class SpaSession(Protocol):
         stdin_text: Optional[str] = None,
         confirm: bool = False,
         agent: bool = False,
+        header_fields: Optional[Dict[str, str]] = None,
     ) -> CommandResult: ...
 
     def apps(
@@ -612,6 +613,7 @@ class LocalSpaSession:
         stdin_text: Optional[str] = None,
         confirm: bool = False,
         agent: bool = False,
+        header_fields: Optional[Dict[str, str]] = None,
     ) -> CommandResult:
         from spa.init import InitError
         from spa.usage import MISSING_OPERAND
@@ -619,6 +621,7 @@ class LocalSpaSession:
             ConfigEditError,
             config_add,
             config_get,
+            config_header_set,
             config_merge,
             merge_operand,
             config_provider,
@@ -650,12 +653,30 @@ class LocalSpaSession:
                         full=full,
                     ),
                 )
-            if action not in {"set", "add", "unset", "merge", "topology", "provider"}:
+            if action not in {"set", "add", "unset", "merge", "topology", "provider", "header-set"}:
                 return CommandResult(
                     ok=False,
                     error="Unknown spa config action: %s" % action,
                     code=2,
                 )
+            if action == "header-set":
+                if agent or not dry_run:
+                    blocked = self._confirm_gate(
+                        "spa config header set",
+                        confirm=confirm,
+                        agent=agent,
+                        details=["config: %s" % config_path],
+                        risk="config_edit",
+                    )
+                    if blocked:
+                        return blocked
+                data = config_header_set(
+                    config_path,
+                    dict(header_fields or {}),
+                    dry_run=dry_run,
+                    expect_revision=expect_revision,
+                )
+                return CommandResult(ok=True, data=data)
             if action == "topology":
                 if not operand:
                     raise ConfigEditError(MISSING_OPERAND[("spa config topology", "TOPOLOGY")])
@@ -779,6 +800,8 @@ class LocalSpaSession:
                     "Unknown topology",
                     "strict JSON",
                     "Provide exactly",
+                    "Config header field",
+                    "Unknown config header field",
                 )
             )
             return CommandResult(ok=False, error=text, code=2 if usage else 1)

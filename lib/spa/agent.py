@@ -318,6 +318,27 @@ COMMAND_SCHEMA = {
             "example": "spa --agent config provider aws",
         },
         {
+            "name": "config header set",
+            "summary": "Replace the leading comment on splunk_config.yml. Omitted fields are removed.",
+            "idempotent": True,
+            "requires_confirmation": True,
+            "flags": [
+                {"long": "--intent", "help": "Why this environment exists", "takes_value": True},
+                {"long": "--requirements", "help": "Constraints the design must meet", "takes_value": True},
+                {"long": "--sva", "help": "SVA target for this environment", "takes_value": True},
+                {"long": "--placement", "help": "Where the deployment runs", "takes_value": True},
+                {"long": "--license", "help": "How Splunk is licensed", "takes_value": True},
+                {"long": "--installer", "help": "Installer used for Splunk", "takes_value": True},
+                {"long": "--os", "help": "Operating system for the hosts", "takes_value": True},
+                {"long": "--aws", "help": "AWS placement notes", "takes_value": True},
+                {"long": "--deploy", "help": "Command that deploys this environment", "takes_value": True},
+                {"long": "--dry-run", "help": "Preview without writing"},
+                {"long": "--expect-revision", "help": "Require the current SHA-256 revision", "takes_value": True},
+                {"long": "--yes", "short": "-y", "help": "Confirm the header write (required in agent mode)"},
+            ],
+            "example": 'spa --agent config header set --intent config-test --deploy "spa provision --yes && spa deploy --yes" --yes',
+        },
+        {
             "name": "validate",
             "summary": "Validate splunk_config.yml (schema, Software/baseconfig/local apps, inventory)",
             "flags": [
