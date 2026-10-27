@@ -200,9 +200,9 @@ splunk_shclusters:
 | `splunk_defaults.splunk_admin_password` | string | required | Password for the Splunk admin user. Required. A literal password or an env lookup. |
 | `splunk_defaults.splunk_architecture` | string | optional; default='amd64'; pattern=^(amd64\|x86_64\|arm64)$ | CPU suffix of the Splunk tarball: amd64, x86_64, or arm64. This is not the machine running spa. |
 | `splunk_defaults.splunk_conf` | map[string, map[string, any]] | optional | Extra Splunk conf stanzas: file name, then stanza, then key. No default. Omit the key to add none. |
-| `splunk_defaults.splunk_download` | object | optional | Whether installers are fetched instead of using a tarball already in Software. Holds no value itself. |
-| `splunk_defaults.splunk_download.splunk` | boolean | optional; default=False | When true, download the Splunk Enterprise tarball instead of using one already in Software. |
-| `splunk_defaults.splunk_download.splunkforwarder` | boolean | optional; default=False | When true, download the universal forwarder tarball instead of using one already in Software. |
+| `splunk_defaults.splunk_download` | object | optional | Whether the host downloads installers or the controller uploads them from Software. Holds no value itself. |
+| `splunk_defaults.splunk_download.splunk` | boolean | optional; default=False | When true, the host downloads the Splunk Enterprise tarball. When false, the controller uploads the archive from Software. |
+| `splunk_defaults.splunk_download.splunkforwarder` | boolean | optional; default=False | When true, the host downloads the universal forwarder tarball. When false, the controller uploads the archive from Software. |
 | `splunk_defaults.splunk_env_name` | string | optional; default='splk' | Short name for this Splunk environment. |
 | `splunk_defaults.splunk_fips` | boolean | optional; default=False | When true, install Splunk in FIPS mode. |
 | `splunk_defaults.splunk_group` | string | optional; default='splunk' | Primary OS group for the Splunk account. |
@@ -308,7 +308,7 @@ splunk_defaults:
 
 `splunk_defaults.splunk_download`
 
-Optional fetch of the Enterprise or Universal Forwarder tarball into Software during deploy. You still need the archive (or a prior download) in the Software directory because the installer license agreement is accepted from that file. Incomplete (#65).
+The host downloads the Enterprise or Universal Forwarder tarball when splunk or splunkforwarder is true. The controller uploads the archive from Software when that flag is false.
 
 ```yaml
 splunk_defaults:

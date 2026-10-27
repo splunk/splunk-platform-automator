@@ -288,6 +288,7 @@ Validate splunk_config.yml (schema, Software/baseconfig/local apps, inventory)
 | Flag | Description |
 | --- | --- |
 | `--config` | Validate this file instead of the environment config |
+| `--details` | Include the full license inventory |
 
 Example:
 
@@ -742,6 +743,10 @@ Alias of spa hosts ssh
 
 AWS discovery for terraform.aws. Catalogs are spa aws regions list and the other resource list commands.
 
+| Flag | Description |
+| --- | --- |
+| `--details` | Include the full validation checks |
+
 ## `aws regions list`
 
 List enabled regions. Marks the region from --region, AWS_REGION, AWS_DEFAULT_REGION, or ~/.aws/config.
@@ -816,6 +821,10 @@ spa aws security-groups list --region eu-central-1
 ## `licenses`
 
 Inspect license type, expiration and ITSI/ES entitlements
+
+| Flag | Description |
+| --- | --- |
+| `--details` | Include the full license inventory |
 
 ## `run`
 

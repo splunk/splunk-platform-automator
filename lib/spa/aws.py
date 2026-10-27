@@ -160,6 +160,8 @@ def format_aws_text(data: Any) -> str:
                 lines.append("%s: %s%s" % (name, state, ("  %s" % detail) if detail else ""))
             else:
                 lines.append("%s: %s" % (name, entry))
+    for warning in data.get("warnings") or []:
+        lines.append("Warning: %s" % warning)
     if not lines:
         lines.append("ok" if data.get("ok", True) else "failed")
     return "\n".join(lines) + "\n"
@@ -821,6 +823,50 @@ def list_key_pairs(session: Any, region: str) -> Dict[str, Any]:
         return {"ok": False, "error": str(exc), "items": []}
 
 
+_SENSITIVE_PORTS = (22, 80, 8000, 8088, 8089)
+
+
+def _permission_ports(permission: Dict[str, Any]) -> set:
+    protocol = str(permission.get("IpProtocol") or "")
+    if protocol == "-1":
+        return set(_SENSITIVE_PORTS)
+    start = permission.get("FromPort")
+    if start is None:
+        return set()
+    end = permission.get("ToPort")
+    if end is None:
+        end = start
+    return {port for port in _SENSITIVE_PORTS if start <= port <= end}
+
+
+def _exposure_warnings(group_name: str, permissions: Any) -> List[str]:
+    """Name a group that allows the world onto Splunk or SSH ports. No rule dump."""
+    by_cidr: Dict[str, set] = {}
+    for permission in permissions or []:
+        if not isinstance(permission, dict):
+            continue
+        cidrs = []
+        for row in permission.get("IpRanges") or []:
+            cidr = row.get("CidrIp") if isinstance(row, dict) else None
+            if cidr == "0.0.0.0/0":
+                cidrs.append(cidr)
+        for row in permission.get("Ipv6Ranges") or []:
+            cidr = row.get("CidrIpv6") if isinstance(row, dict) else None
+            if cidr == "::/0":
+                cidrs.append(cidr)
+        ports = _permission_ports(permission)
+        for cidr in cidrs:
+            by_cidr.setdefault(cidr, set()).update(ports)
+    warnings = []
+    for cidr, ports in by_cidr.items():
+        if not ports:
+            continue
+        listed = ", ".join(str(port) for port in sorted(ports))
+        label = "port" if len(ports) == 1 else "ports"
+        warnings.append("security group %s allows %s to %s %s" % (group_name, cidr, label, listed))
+    return warnings
+
+
 def list_security_groups(session: Any, region: str) -> Dict[str, Any]:
     ec2 = session.client("ec2", region_name=region)
     try:
@@ -870,14 +916,30 @@ def validate_selections(
         if not kp_ok:
             all_ok = False
 
+    warnings: List[str] = []
     if security_groups:
-        sg_resp = list_security_groups(session, region)
-        by_name = {i["group_name"]: i for i in sg_resp.get("items", [])}
+        described: List[Dict[str, Any]] = []
+        try:
+            ec2 = session.client("ec2", region_name=region)
+            resp = ec2.describe_security_groups()
+            described = list(resp.get("SecurityGroups") or [])
+        except (ClientError, BotoCoreError):
+            described = []
+        by_name = {sg.get("GroupName"): sg for sg in described}
         sg_checks = []
         for name in security_groups:
-            found = name in by_name
-            sg_checks.append({"group_name": name, "ok": found, "group_id": by_name.get(name, {}).get("group_id")})
-            if not found:
+            group = by_name.get(name)
+            found = isinstance(group, dict)
+            sg_checks.append(
+                {
+                    "group_name": name,
+                    "ok": found,
+                    "group_id": (group or {}).get("GroupId") if found else None,
+                }
+            )
+            if found:
+                warnings.extend(_exposure_warnings(name, group.get("IpPermissions") or []))
+            else:
                 all_ok = False
         checks["security_groups"] = {"ok": all(s["ok"] for s in sg_checks), "items": sg_checks}
 
@@ -893,7 +955,10 @@ def validate_selections(
         if not it_ok:
             all_ok = False
 
-    return {"ok": all_ok, "region": region, "checks": checks}
+    result = {"ok": all_ok, "region": region, "checks": checks}
+    if warnings:
+        result["warnings"] = warnings
+    return result
 
 
 def survey(session: Any, region: str) -> Dict[str, Any]:
@@ -1029,6 +1094,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--describe-ami", action="store_true", help="Describe one AMI")
     p.add_argument("--ami-id", help="AMI ID for describe or validate")
     p.add_argument("--validate", action="store_true", help="Validate selections")
+    p.add_argument(
+        "--details",
+        action="store_true",
+        help="Include the full validation checks",
+    )
     p.add_argument("--key-name", help="Key pair name for validate")
     p.add_argument("--security-groups", help="Comma-separated security group names for validate")
     p.add_argument("--instance-type", help="Instance type for validate")
@@ -1288,6 +1358,20 @@ def _retired_list_message(argv: Sequence[str]) -> Optional[str]:
     return _listing_menu()
 
 
+def _compact_validate_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+    """One ok per check that validate_selections returned. No nested objects."""
+    checks = data.get("checks")
+    if not isinstance(checks, dict):
+        return data
+    projected = dict(data)
+    compact = {}
+    for name, entry in checks.items():
+        ok = entry.get("ok") if isinstance(entry, dict) else bool(entry)
+        compact[name] = {"ok": bool(ok)}
+    projected["checks"] = compact
+    return projected
+
+
 def execute_argv(argv: Optional[List[str]] = None):
     raw = list(sys.argv[1:] if argv is None else argv)
     retired = _retired_list_message(raw)
@@ -1314,8 +1398,16 @@ def main(argv: Optional[List[str]] = None, as_agent: bool = False) -> int:
         args = build_parser().parse_args(raw)
         result = execute(args)
         as_json = bool(args.json or as_agent)
-        if result.data is not None:
-            _output(result.data, as_json)
+        shown = result.data
+        if (
+            as_json
+            and getattr(args, "validate", False)
+            and not getattr(args, "details", False)
+            and isinstance(shown, dict)
+        ):
+            shown = _compact_validate_payload(shown)
+        if shown is not None:
+            _output(shown, as_json)
         elif result.error:
             if as_json:
                 from spa.runlog import redact

@@ -207,11 +207,11 @@ class SplunkDownloadConfig(BaseModel):
     """Splunk download settings."""
     splunk: Optional[bool] = Field(
         None,
-        description="When true, download the Splunk Enterprise tarball instead of using one already in Software. Default false. Omit the key to keep that.",
+        description="When true, the host downloads the Splunk Enterprise tarball. When false, the controller uploads the archive from Software. Default false. Omit the key to keep that.",
     )
     splunkforwarder: Optional[bool] = Field(
         None,
-        description="When true, download the universal forwarder tarball instead of using one already in Software. Default false. Omit the key to keep that.",
+        description="When true, the host downloads the universal forwarder tarball. When false, the controller uploads the archive from Software. Default false. Omit the key to keep that.",
     )
 
 
@@ -328,7 +328,7 @@ class SplunkDefaultsConfig(BaseModel):
     )
     splunk_download: Optional[SplunkDownloadConfig] = Field(
         None,
-        description="Whether installers are fetched instead of using a tarball already in Software. Holds no value itself.",
+        description="Whether the host downloads installers or the controller uploads them from Software. Holds no value itself.",
     )
     splunk_admin_password: str = Field(
         ...,

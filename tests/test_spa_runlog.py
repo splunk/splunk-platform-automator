@@ -536,6 +536,46 @@ def test_runlog_marks_the_phase_failed_without_a_host(tmp_path):
     assert text.rstrip().endswith("failed")
 
 
+def test_agent_phase_change_is_one_plain_line(tmp_path):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+    stderr = StringIO()
+    log = RunLog(
+        paths,
+        "deploy",
+        "",
+        agent=True,
+        heartbeat_seconds=0,
+        stream=stderr,
+    )
+    log.emit(
+        {
+            "play": "Install the splunk software",
+            "kind": "host_start",
+            "task": "Install package",
+            "host": "idx1",
+            "status": "running",
+        }
+    )
+    log.emit({"kind": "heartbeat", "status": "heartbeat"})
+    log.emit({"kind": "heartbeat", "status": "heartbeat"})
+    log.emit(
+        {
+            "play": "Prepare the operating system",
+            "kind": "host_start",
+            "task": "Install package",
+            "host": "idx1",
+            "status": "running",
+        }
+    )
+    lines = [line for line in stderr.getvalue().splitlines() if line.strip()]
+    assert lines == [
+        "Install the splunk software",
+        "Prepare the operating system",
+    ]
+    assert all(not line.startswith("{") for line in lines)
+
+
 def test_runlog_agent_stderr_is_sparse(tmp_path):
     extra = min_env_vars(tmp_path)
     paths = resolve_spa_paths(environ={**extra})
@@ -574,15 +614,12 @@ def test_runlog_agent_stderr_is_sparse(tmp_path):
     err = stderr.getvalue()
     assert "PLAY" not in err
     assert "password=secret" not in err
+    plain = [line for line in err.splitlines() if line.strip() and not line.startswith("{")]
+    assert plain[0] == "Splunk install"
+    assert plain.count("Splunk install") == 1
     events = [json.loads(line) for line in err.splitlines() if line.startswith("{")]
     kinds = [row.get("status") for row in events]
-    assert "running" in kinds
-    assert any("tasks" in row for row in events if row.get("status") == "running")
-    assert any(
-        row.get("host") == "idx1" and row.get("task") == "Install package"
-        for row in events
-        if row.get("status") == "running"
-    )
+    assert "running" not in kinds
     assert "failed" in kinds
     assert any(row.get("host") == "idx1" and row.get("task") == "Boom" for row in events)
     transcript = log.jsonl_path.read_text(encoding="utf-8")
