@@ -50,6 +50,23 @@ _APP_IDENTITY_LISTS = {
 }
 _PROVIDER_ROOTS = ("terraform", "virtualbox", "aws", "external")
 _TOPOLOGY_ROOTS = ("splunk_hosts", "splunk_idxclusters", "splunk_shclusters", "splunk_environments")
+_HEADER_FIELDS = (
+    "intent",
+    "requirements",
+    "sva",
+    "placement",
+    "license",
+    "installer",
+    "os",
+    "aws",
+    "deploy",
+)
+# Marker shapes only. A PEM body is covered by the BEGIN marker.
+_HEADER_SECRET = re.compile(
+    r"-----BEGIN|<license|password:"
+    r"|eyJ[^\s.]*\.[^\s.]+\.[^\s.]+"
+    r"|AKIA|ghp_|sk_live_|sk_test_"
+)
 _MISSING = object()
 
 
@@ -610,6 +627,95 @@ def _transact(
         finally:
             if temp_path.exists():
                 temp_path.unlink()
+
+
+def _header_comment(fields: Mapping[str, str]) -> str:
+    unknown = [str(key) for key in fields if key not in _HEADER_FIELDS]
+    if unknown:
+        raise ConfigEditError("Unknown config header field: %s" % ", ".join(unknown))
+    lines = []
+    for name in _HEADER_FIELDS:
+        if name not in fields:
+            continue
+        value = fields[name]
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            raise ConfigEditError("Config header field %s must be text" % name)
+        text = value.strip()
+        if not text:
+            continue
+        if "\n" in text or "\r" in text:
+            raise ConfigEditError("Config header field %s cannot contain a line break" % name)
+        if _HEADER_SECRET.search(text):
+            raise ConfigEditError(
+                "Config header field %s cannot contain a secret-shaped value" % name
+            )
+        lines.append("# %s: %s" % (name, text))
+    if not lines:
+        return ""
+    return "\n".join(lines) + "\n"
+
+
+def _leading_preamble_end(raw: bytes) -> int:
+    """Byte offset of the first line that is not blank, ``---``, or a comment."""
+    position = 0
+    length = len(raw)
+    while position < length:
+        newline = raw.find(b"\n", position)
+        line_end = length if newline < 0 else newline
+        line = raw[position:line_end]
+        if line.endswith(b"\r"):
+            line = line[:-1]
+        stripped = line.strip()
+        if stripped and stripped != b"---" and not stripped.startswith(b"#"):
+            return position
+        if newline < 0:
+            return length
+        position = newline + 1
+    return length
+
+
+def _replace_bytes(path: Path, raw: bytes) -> None:
+    fd, temp_name = tempfile.mkstemp(
+        prefix=".%s." % path.name,
+        suffix=".tmp",
+        dir=str(path.parent),
+    )
+    os.close(fd)
+    temp_path = Path(temp_name)
+    try:
+        temp_path.write_bytes(raw)
+        os.chmod(temp_path, stat.S_IMODE(path.stat().st_mode))
+        os.replace(temp_path, path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
+def config_header_set(
+    config_path: Path,
+    fields: Mapping[str, str],
+    *,
+    dry_run: bool = False,
+    expect_revision: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Replace the leading comment. The YAML mapping bytes after it stay unchanged."""
+    header = _header_comment(fields)
+    config_path = Path(config_path)
+    with _locked(config_path):
+        raw, _parsed = _read(config_path)
+        current = _revision(raw)
+        if expect_revision is not None and expect_revision != current:
+            raise ConfigEditError(
+                "Config revision conflict: expected %s, current %s"
+                % (expect_revision, current)
+            )
+        updated = header.encode("utf-8") + raw[_leading_preamble_end(raw):]
+        changed = updated != raw
+        if changed and not dry_run:
+            _replace_bytes(config_path, updated)
+        return {"changed": changed, "header": header}
 
 
 def config_set(

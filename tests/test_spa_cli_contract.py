@@ -149,6 +149,23 @@ HELP_CONTRACTS = [
         ["usage: spa config set", "PATH", "VALUE", "--value-file", "--from-env", "--dry-run", "--expect-revision", "--resolve"],
     ),
     (
+        ["config", "header", "set", "--help"],
+        [
+            "usage: spa config header set",
+            "--intent",
+            "--requirements",
+            "--sva",
+            "--placement",
+            "--license",
+            "--installer",
+            "--os",
+            "--aws",
+            "--deploy",
+            "--yes",
+            "Omitted fields are removed.",
+        ],
+    ),
+    (
         ["config", "add", "--help"],
         ["usage: spa config add", "SELECTOR", "JSON_OBJECT", "--value-file", "--from-env", "--dry-run", "--resolve"],
     ),
@@ -911,6 +928,12 @@ def _help_action_names():
                 assert nested.returncode == 0, nested.stderr
                 for nested_name, _nested_alias in _command_rows(nested.stdout):
                     names.add("apps content-packs %s" % nested_name)
+                continue
+            if parent == "config" and name == "header":
+                nested = run_spa(["--no-agent", "config", "header", "--help"])
+                assert nested.returncode == 0, nested.stderr
+                for nested_name, _nested_alias in _command_rows(nested.stdout):
+                    names.add("config header %s" % nested_name)
                 continue
             names.add("%s %s" % (parent, name))
     catalogs = (

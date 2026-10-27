@@ -254,6 +254,33 @@ Example:
 spa --agent config provider aws
 ```
 
+## `config header set`
+
+Replace the leading comment on splunk_config.yml. Omitted fields are removed.
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `--intent` | Why this environment exists |
+| `--requirements` | Constraints the design must meet |
+| `--sva` | SVA target for this environment |
+| `--placement` | Where the deployment runs |
+| `--license` | How Splunk is licensed |
+| `--installer` | Installer used for Splunk |
+| `--os` | Operating system for the hosts |
+| `--aws` | AWS placement notes |
+| `--deploy` | Command that deploys this environment |
+| `--dry-run` | Preview without writing |
+| `--expect-revision` | Require the current SHA-256 revision |
+| `-y`, `--yes` | Confirm the header write (required in agent mode) |
+
+Example:
+
+```bash
+spa --agent config header set --intent config-test --deploy "spa provision --yes && spa deploy --yes" --yes
+```
+
 ## `validate`
 
 Validate splunk_config.yml (schema, Software/baseconfig/local apps, inventory)

@@ -1469,3 +1469,149 @@ def test_human_env_playbook_prompt_mentions_missing_metadata(tmp_path, monkeypat
     assert not called
     assert seen == [prompt_text("run custom/foo", risk=None)]
     assert "no playbook metadata" in seen[0]
+
+
+def test_agent_config_header_set_replaces_the_comment_and_drops_omitted_fields(tmp_path):
+    """A header set replaces the leading comment; a later set drops omitted fields."""
+    dest = write_min_env(tmp_path / "env")
+    config = dest / "config" / "splunk_config.yml"
+    config.write_text(
+        "# intent: previous\n# requirements: previous\n# notes: retire this line\nsplunk_hosts: []\n",
+        encoding="utf-8",
+    )
+    env = {"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(dest)}
+    first = run_spa(
+        [
+            "--agent",
+            "config",
+            "header",
+            "set",
+            "--intent",
+            "config-test",
+            "--deploy",
+            "spa provision --yes && spa deploy --yes",
+            "--yes",
+        ],
+        env=env,
+    )
+    assert first.returncode == 0, first.stdout + first.stderr
+    assert first.stderr == ""
+    payload = json.loads(first.stdout)
+    assert payload["ok"] is True
+    assert "data" in payload
+    text = config.read_text(encoding="utf-8")
+    assert text == (
+        "# intent: config-test\n"
+        "# deploy: spa provision --yes && spa deploy --yes\n"
+        "splunk_hosts: []\n"
+    )
+
+    second = run_spa(
+        ["--agent", "config", "header", "set", "--intent", "other", "--yes"],
+        env=env,
+    )
+    assert second.returncode == 0, second.stdout + second.stderr
+    assert second.stderr == ""
+    payload = json.loads(second.stdout)
+    assert payload["ok"] is True
+    assert list(second.stdout.splitlines()) == [second.stdout.strip()]
+    text = config.read_text(encoding="utf-8")
+    assert "# deploy:" not in text
+    assert text == "# intent: other\nsplunk_hosts: []\n"
+
+
+def test_human_config_header_set_unknown_flag_names_the_command_once():
+    """Human stderr names spa config header set once."""
+    result = run_spa(["--no-agent", "config", "header", "set", "--not-a-flag"])
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert result.stdout == ""
+    error_lines = [line for line in result.stderr.splitlines() if ": error:" in line]
+    assert error_lines == [
+        "spa: error: spa config header set: unrecognized arguments: --not-a-flag"
+    ]
+    assert error_lines[0].count("spa config header set") == 1
+
+
+def test_config_header_flag_value_set_is_not_the_action():
+    """A value of set after config header is not the set action."""
+    result = run_spa(["--no-agent", "config", "header", "--intent", "set"])
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "spa config header needs an action" in result.stderr
+    assert "spa config header set:" not in result.stderr
+
+
+def test_human_config_header_set_prompt_names_the_config_file(tmp_path, monkeypatch):
+    """The human prompt says the command changes splunk_config.yml and does not write."""
+    dest = write_min_env(tmp_path / "env")
+    config = dest / "config" / "splunk_config.yml"
+    original = "splunk_hosts: []\n"
+    config.write_text(original, encoding="utf-8")
+    seen = []
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(dest))
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt="": seen.append(prompt) or "n")
+    from spa.cli import main
+
+    rc = main(["--no-agent", "config", "header", "set", "--intent", "config-test"])
+    assert rc != 0
+    assert len(seen) == 1
+    assert "will change splunk_config.yml" in seen[0]
+    assert "host" not in seen[0]
+    assert config.read_text(encoding="utf-8") == original
+
+
+def test_agent_config_header_set_unknown_flag_names_the_command():
+    """An unknown flag on header set exits 2 and names spa config header set."""
+    result = run_spa(["--agent", "config", "header", "set", "--not-a-flag"])
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert result.stderr == ""
+    assert list(result.stdout.splitlines()) == [result.stdout.strip()]
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert "data" not in payload
+    assert payload["schema_version"] == 1
+    assert payload["error"] == "spa config header set: unrecognized arguments: --not-a-flag"
+
+
+def test_agent_config_header_set_dry_run_requires_yes_and_does_not_write(tmp_path):
+    """Agent dry-run still requires --yes, and --yes does not write the file."""
+    dest = write_min_env(tmp_path / "env")
+    config = dest / "config" / "splunk_config.yml"
+    original = "# intent: previous\nsplunk_hosts: []\n"
+    config.write_text(original, encoding="utf-8")
+    env = {"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(dest)}
+
+    refused = run_spa(
+        ["--agent", "config", "header", "set", "--intent", "config-test", "--dry-run"],
+        env=env,
+    )
+    assert refused.returncode != 0, refused.stdout + refused.stderr
+    assert refused.stderr == ""
+    assert list(refused.stdout.splitlines()) == [refused.stdout.strip()]
+    body = json.loads(refused.stdout)
+    assert body == {
+        "ok": False,
+        "schema_version": 1,
+        "error": "spa config header set requires -y/--yes in agent mode.",
+    }
+    assert config.read_text(encoding="utf-8") == original
+
+    preview = run_spa(
+        [
+            "--agent",
+            "config",
+            "header",
+            "set",
+            "--intent",
+            "config-test",
+            "--dry-run",
+            "--yes",
+        ],
+        env=env,
+    )
+    assert preview.returncode == 0, preview.stdout + preview.stderr
+    assert preview.stderr == ""
+    body = json.loads(preview.stdout)
+    assert body["ok"] is True
+    assert config.read_text(encoding="utf-8") == original

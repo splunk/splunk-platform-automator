@@ -19,6 +19,7 @@ from spa.config_edit import (
     config_app_add,
     config_app_remove,
     config_get,
+    config_header_set,
     config_merge,
     config_provider,
     config_set,
@@ -2217,3 +2218,137 @@ splunk_hosts:
             for path in [*PROJECT_ROOT.joinpath("docs").glob("*.md"), *PROJECT_ROOT.joinpath("examples").rglob("*.yml")]
         ]
         assert all("-----BEGIN CERTIFICATE-----" not in text for text in texts)
+
+
+def test_config_header_set_replaces_leading_comment(tmp_path):
+    """A header set replaces the leading comment and leaves the mapping unchanged."""
+    path = _config(
+        tmp_path,
+        """\
+# intent: previous
+# requirements: previous
+# notes: retire this line
+splunk_hosts: []
+""",
+    )
+    original = _load(path)
+    result = config_header_set(path, {"intent": "config-test", "deploy": "site"})
+    text = path.read_text(encoding="utf-8")
+    assert "# intent: config-test" in text
+    assert "# deploy: site" in text
+    assert "# notes: retire this line" not in text
+    assert text == (
+        "# intent: config-test\n"
+        "# deploy: site\n"
+        "splunk_hosts: []\n"
+    )
+    assert _load(path) == original
+    assert result["changed"] is True
+    assert result["header"] == "# intent: config-test\n# deploy: site\n"
+
+
+def test_config_header_set_rejects_a_line_break_without_writing(tmp_path):
+    """An internal line break is refused and the original file bytes stay put."""
+    path = _config(
+        tmp_path,
+        """\
+# intent: previous
+splunk_hosts: []
+""",
+    )
+    before = path.read_bytes()
+    try:
+        with pytest.raises(ConfigEditError, match="line break"):
+            config_header_set(path, {"intent": "config\ntest"})
+    finally:
+        assert path.read_bytes() == before
+
+
+def test_config_header_set_rejects_a_carriage_return_without_writing(tmp_path):
+    """An internal carriage return is refused and the original file bytes stay put."""
+    path = _config(
+        tmp_path,
+        """\
+# intent: previous
+splunk_hosts: []
+""",
+    )
+    before = path.read_bytes()
+    try:
+        with pytest.raises(ConfigEditError, match="line break"):
+            config_header_set(path, {"intent": "config\rtest"})
+    finally:
+        assert path.read_bytes() == before
+
+
+def _assert_header_rejected(path: Path, fields: dict[str, str]) -> None:
+    before = path.read_bytes()
+    try:
+        with pytest.raises(ConfigEditError, match="secret-shaped"):
+            config_header_set(path, fields)
+    finally:
+        assert path.read_bytes() == before
+
+
+def test_config_header_set_rejects_a_certificate_marker_without_writing(tmp_path):
+    """A license value containing the certificate marker is refused and the file stays put."""
+    path = _config(
+        tmp_path,
+        """\
+# intent: previous
+splunk_hosts: []
+""",
+    )
+    _assert_header_rejected(path, {"license": "-----BEGIN CERTIFICATE-----"})
+
+
+def test_config_header_set_rejects_a_license_marker_without_writing(tmp_path):
+    """A header value containing the license-document marker is refused and the file stays put."""
+    path = _config(
+        tmp_path,
+        """\
+# intent: previous
+splunk_hosts: []
+""",
+    )
+    _assert_header_rejected(path, {"license": "<license"})
+
+
+def test_config_header_set_rejects_a_password_marker_without_writing(tmp_path):
+    """A header value containing the password marker is refused and the file stays put."""
+    path = _config(
+        tmp_path,
+        """\
+# intent: previous
+splunk_hosts: []
+""",
+    )
+    _assert_header_rejected(path, {"requirements": "password:"})
+
+
+def test_config_header_set_rejects_a_token_marker_without_writing(tmp_path):
+    """A header value containing a token-shaped marker is refused and the file stays put."""
+    path = _config(
+        tmp_path,
+        """\
+# intent: previous
+splunk_hosts: []
+""",
+    )
+    _assert_header_rejected(path, {"aws": "eyJmarker.not-a-token.segment"})
+
+
+@pytest.mark.parametrize(
+    "marker",
+    ["AKIAmarker", "ghp_marker", "sk_live_marker", "sk_test_marker"],
+)
+def test_config_header_set_rejects_credential_prefixes_without_writing(tmp_path, marker):
+    """Each credential prefix is refused. The fixture is a marker, not a credential."""
+    path = _config(
+        tmp_path,
+        """\
+# intent: previous
+splunk_hosts: []
+""",
+    )
+    _assert_header_rejected(path, {"aws": marker})

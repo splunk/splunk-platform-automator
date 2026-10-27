@@ -209,6 +209,13 @@ def test_prompt_text_names_command_and_risk():
     assert "no playbook metadata" in unknown
 
 
+def test_prompt_text_for_config_edit_names_the_config_file():
+    """A config edit changes splunk_config.yml."""
+    text = prompt_text("spa config header set", risk="config_edit")
+    assert "will change splunk_config.yml" in text
+    assert "host" not in text
+
+
 def test_prompt_text_for_local_risks_never_mentions_hosts():
     """A venv is this machine's toolchain; it cannot touch a Splunk host."""
     local = prompt_text("upgrade the shared SPA venv", risk="local")
