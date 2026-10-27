@@ -335,7 +335,7 @@ HOSTS_NEEDS_ACTION = (
     "List hosts: spa hosts list [--status]\n"
     "SSH:        spa hosts ssh NAME\n"
     "Copy:       spa hosts copy SRC DST\n"
-    "Register:   spa hosts register NAME --address ADDRESS --user USER --key PATH --yes\n"
+    "Register:   spa hosts register NAME --ssh-host HOST --user USER --key PATH --yes\n"
     "Unregister: spa hosts unregister NAME --yes\n"
     "Check:      spa hosts check"
 )
@@ -2159,13 +2159,17 @@ def _run(argv: Sequence[str]) -> int:
     )
     p_hosts_register.add_argument("name", help="Inventory hostname")
     p_hosts_register.add_argument(
-        "--address",
+        "--ssh-host",
         required=True,
         help="IP, hostname, or FQDN. Must be reachable by SSH.",
     )
+    p_hosts_register.add_argument("--ssh-port", type=int, default=22, help="SSH port")
+    p_hosts_register.add_argument(
+        "--ip-addr",
+        help="Address other Splunk hosts use. Omit to use the SSH host.",
+    )
     p_hosts_register.add_argument("--user", required=True, help="SSH login user")
     p_hosts_register.add_argument("--key", required=True, help="Path to the SSH private key")
-    p_hosts_register.add_argument("--port", type=int, default=22, help="SSH port")
     p_hosts_register.add_argument(
         "--role",
         action="append",
@@ -2929,11 +2933,12 @@ def _run(argv: Sequence[str]) -> int:
         if hosts_cmd == "register":
             result = session.hosts_register(
                 name=args.name,
-                address=args.address,
+                ssh_host=args.ssh_host,
                 user=args.user,
                 key=args.key,
-                port=args.port,
+                ssh_port=args.ssh_port,
                 roles=getattr(args, "role", None),
+                ip_addr=getattr(args, "ip_addr", None),
                 confirm=bool(getattr(args, "yes", False)),
                 agent=as_agent,
             )
@@ -2943,10 +2948,15 @@ def _run(argv: Sequence[str]) -> int:
                 print(result.error, file=sys.stderr)
                 return result.code
             data = result.data or {}
-            print(
-                "registered %s ansible_host=%s user=%s key=%s"
-                % (data.get("name"), data.get("ansible_host"), data.get("ansible_user"), data.get("key"))
+            line = "registered %s ansible_host=%s user=%s key=%s" % (
+                data.get("name"),
+                data.get("ansible_host"),
+                data.get("ansible_user"),
+                data.get("key"),
             )
+            if data.get("ip_addr"):
+                line += " ip_addr=%s" % data.get("ip_addr")
+            print(line)
             return 0
         if hosts_cmd == "unregister":
             result = session.hosts_unregister(

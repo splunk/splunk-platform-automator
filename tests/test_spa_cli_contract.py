@@ -287,9 +287,11 @@ HELP_CONTRACTS = [
         ["hosts", "register", "--help"],
         [
             "IP, hostname, or FQDN. Must be reachable by SSH.",
-            "--address",
+            "--ssh-host",
+            "--ip-addr",
             "--user",
             "--key",
+            "--ssh-port",
             "--role",
         ],
     ),
@@ -1016,7 +1018,7 @@ def test_agent_schema_is_complete_and_documented():
             "spa hosts list",
             "spa hosts ssh NAME",
             "spa hosts copy SRC DST",
-            "spa hosts register NAME --address ADDRESS --user USER --key PATH --yes",
+            "spa hosts register NAME --ssh-host HOST --user USER --key PATH --yes",
         ),
         "apps": ("spa apps search QUERY", "spa apps snippet APP_ID", "spa apps download APP_ID --yes"),
         "environment": (

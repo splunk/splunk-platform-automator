@@ -29,7 +29,7 @@ _CONNECTION_KEYS = (
 def _register_sentence(name: str) -> str:
     return (
         "host %s has no SSH inventory line. "
-        "Run: spa hosts register %s --address ADDRESS --user USER --key PATH --yes"
+        "Run: spa hosts register %s --ssh-host HOST --user USER --key PATH --yes"
         % (name, name)
     )
 
@@ -70,7 +70,14 @@ def probe_ssh(
         raise ProviderError("ssh failed for %s@%s" % (user, address))
 
 
-def inventory_line(name: str, address: str, user: str, key_path: str, port: int) -> str:
+def inventory_line(
+    name: str,
+    address: str,
+    user: str,
+    key_path: str,
+    port: int,
+    ip_addr: Optional[str] = None,
+) -> str:
     key = str(_expanded_key(key_path))
     parts = [
         name,
@@ -80,6 +87,8 @@ def inventory_line(name: str, address: str, user: str, key_path: str, port: int)
     ]
     if int(port or 22) != 22:
         parts.append("ansible_port=%s" % json.dumps(int(port)))
+    if ip_addr:
+        parts.append("ip_addr=%s" % json.dumps(ip_addr))
     return " ".join(parts)
 
 
@@ -162,18 +171,20 @@ class RegisterSpec:
     def __init__(
         self,
         name: str,
-        address: str,
+        ssh_host: str,
         user: str,
         key_path: str,
         port: int = 22,
         roles: Sequence[str] = (),
+        ip_addr: Optional[str] = None,
     ) -> None:
         self.name = name
-        self.address = address
+        self.ssh_host = ssh_host
         self.user = user
         self.key_path = key_path
         self.port = int(port or 22)
         self.roles = tuple(roles)
+        self.ip_addr = ip_addr or None
 
 
 def _load_document(path: Path):
@@ -233,7 +244,7 @@ def register_host(paths: SpaPaths, spec: RegisterSpec, run: SshRunner) -> Dict[s
             "%s is managed by %s. SPA does not take over a managed host."
             % (spec.name, owner)
         )
-    probe_ssh(spec.address, spec.user, str(key), spec.port, run)
+    probe_ssh(spec.ssh_host, spec.user, str(key), spec.port, run)
     terraform = document.get("terraform") or {}
     has_terraform = isinstance(terraform, dict) and any(
         isinstance(value, dict) for value in terraform.values()
@@ -260,7 +271,9 @@ def register_host(paths: SpaPaths, spec: RegisterSpec, run: SshRunner) -> Dict[s
         target["external"] = None
     if spec.roles:
         target["roles"] = list(spec.roles)
-    line = inventory_line(spec.name, spec.address, spec.user, str(key), spec.port)
+    line = inventory_line(
+        spec.name, spec.ssh_host, spec.user, str(key), spec.port, spec.ip_addr
+    )
     destination = paths.inventory_dir / "hosts"
     config_bytes = paths.config_file.read_bytes() if paths.config_file.is_file() else None
     inventory_bytes = destination.read_bytes() if destination.is_file() else None
@@ -274,15 +287,18 @@ def register_host(paths: SpaPaths, spec: RegisterSpec, run: SshRunner) -> Dict[s
     from spa.shell import drop_discovered_interpreter_cache
 
     drop_discovered_interpreter_cache([spec.name], paths)
-    return {
+    data = {
         "name": spec.name,
-        "ansible_host": spec.address,
+        "ansible_host": spec.ssh_host,
         "ansible_user": spec.user,
         "ansible_port": spec.port,
         "ansible_ssh_private_key_file": str(key),
         "key": "set",
         "inventory": str(destination),
     }
+    if spec.ip_addr:
+        data["ip_addr"] = spec.ip_addr
+    return data
 
 
 def unregister_host(paths: SpaPaths, name: str) -> Dict[str, Any]:
