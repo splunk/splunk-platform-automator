@@ -226,6 +226,8 @@ def test_list_regions_reports_the_aws_config_region_beside_the_environment_regio
 
 
 def test_list_regions_reports_a_missing_profile_as_json_not_a_traceback(monkeypatch, capsys, tmp_path):
+    # Needs real botocore to raise ProfileNotFound; CI images without boto3 cannot exercise it.
+    pytest.importorskip("boto3")
     _aws_config(monkeypatch, tmp_path, "eu-central-1")
     monkeypatch.setenv("AWS_PROFILE", "no-such-profile")
 
