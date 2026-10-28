@@ -2048,6 +2048,18 @@ splunk_app_deployment:
         assert any(app.get("app_id") == 1841 for app in apps)
         assert any(app.get("app_id") == 5391 for app in apps)
 
+    def test_content_library_install_all_writes_top_level_install_all_apps(self):
+        """The install-all policy is top-level install_all_apps, the key the apps_itsi_content_pack role reads."""
+        library = {
+            "uid": 5391,
+            "appid": "DA-ITSI-ContentLibrary",
+            "title": "Content Pack for Splunk App for Content Packs",
+        }
+        built = build_entry(5391, install_all_content_packs=True, client=self._client(library))
+        assert built["entry"]["install_all_apps"] is True
+        assert "content_pack_api" not in built["entry"]
+        assert "content_pack_apps" not in built["entry"]
+
     def test_content_pack_kind_and_policy_combinations_are_enforced(self):
         """CFG-APP-005 CFG-APP-006."""
         library = {
@@ -2088,7 +2100,7 @@ splunk_app_deployment:
                 "name": "DA-ITSI-ContentLibrary",
                 "app_id": 5391,
                 "itsi_content_pack": True,
-                "content_pack_api": {"install_all_apps": True},
+                "install_all_apps": True,
             },
             validate=False,
         )

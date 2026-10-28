@@ -417,6 +417,7 @@ _APP_ENTRY_FIELD_TYPES = {
     "sc_blacklist": "list[string]",
     "premium_app": "string",
     "itsi_content_pack": "boolean",
+    "install_all_apps": "boolean",
     "content_pack_apps": "list[map]",
     "content_pack_api": "map",
     "customizations": "map",
@@ -424,7 +425,6 @@ _APP_ENTRY_FIELD_TYPES = {
 _APP_ENTRY_NESTED_FIELD_TYPES = {
     "content_pack_api.enabled": "boolean",
     "content_pack_api.install_all": "boolean",
-    "content_pack_api.install_all_apps": "boolean",
     "customizations.remove": "list[string]",
     "customizations.local_configs": "map",
     "customizations.run_playbook": "string",

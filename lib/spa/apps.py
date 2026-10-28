@@ -571,7 +571,7 @@ def build_entry(
     elif kind == "itsi_content_library":
         entry["itsi_content_pack"] = True
         if install_all_content_packs:
-            entry["content_pack_api"] = {"install_all_apps": True}
+            entry["install_all_apps"] = True
         else:
             entry["content_pack_apps"] = [
                 {"name": str(pack)} for pack in (content_packs or [])
