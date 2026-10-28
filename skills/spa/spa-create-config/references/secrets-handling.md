@@ -17,7 +17,7 @@ Do **not** paste resolved lookup results if a command or playbook prints them.
 
 ## AWS API credentials (Phase 4 / validate)
 
-Used by `spa aws`, Terraform provision, and optional `--splunk-config-aws`.
+Used by `spa aws`, Terraform provision, and optional `spa validate --splunk-config aws`.
 
 | Variable / item | Show in chat? | Notes |
 |-----------------|---------------|-------|

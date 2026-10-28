@@ -6,6 +6,7 @@ SPA provisions and deploys Splunk Enterprise (AWS Linux + Terraform, or VirtualB
 
 - **`SPA_HOME`**: framework (prefix or clone). **`SPA_ENV_DIR`**: one environment. Operator `spa` needs `spa init` first. Path diagram: [user guide](docs/user-guide.md#understand-the-paths).
 - Call **`bin/spa`** only (`spa agent schema`, `spa --agent config search QUERY`, `spa --agent apps`). Load **`/spa`** first ([skills/spa/spa/SKILL.md](skills/spa/spa/SKILL.md)). Do not import `spa.api`. Do not start a daemon. Flag catalog: [docs/commands.md](docs/commands.md).
+- Do not hand-edit `splunk_config.yml`. Change it with `spa config ...` (skill `/spa-create-config`) and add apps with `spa apps ...` (skill `/spa-apps`).
 - Mutating commands need **`--yes`**. Never auto-run provision, deploy, suspend, resume, or destroy. Never answer `Proceed?` interactively.
 - Never print secrets (Splunkbase, AWS keys, vault). Report env vars as **set / not set**. YAML: `lookup('env', ...)`. Do not pass `-v` on provision/deploy/run (unredacted Ansible stdout).
 - Full command names (`spa hosts ssh`, `spa validate`), not `spa sh` / `spa val`.
@@ -17,14 +18,14 @@ Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 
 | Task | Command / path |
 | --- | --- |
-| Config | `$SPA_ENV_DIR/config/splunk_config.yml` via `spa init --example` |
+| Config | `$SPA_ENV_DIR/config/splunk_config.yml` via `spa init --example TOPOLOGY --provider aws|virtualbox|external NAME` |
 | Schema vs catalog | Pydantic (`spa validate`); `spa config search` then `spa config explain PATH` |
 | New config key | [docs/contributing.md](docs/contributing.md#adding-a-configuration-feature) |
 | All settings | [docs/config.md](docs/config.md) (`spa --no-agent config schema --markdown`) |
 | CLI flags | [docs/commands.md](docs/commands.md) (`spa --no-agent agent schema --markdown`) |
 | Guided design | [docs/user-guide.md](docs/user-guide.md#configure-an-environment) · `spa config search` then `spa config explain` |
 | 2.x → 3.0 | [docs/migrate.md](docs/migrate.md) |
-| New env | `spa environment init --example cm_2idxc_sh NAME` then `spa --env NAME …`, `spa environment set --default NAME`, or `cd` into it |
+| New env | `spa environment init --example cm_2idxc_sh --provider aws NAME` then `spa --env NAME …`, `spa environment set --default NAME`, or `cd` into it |
 | Features / apps | `spa --agent config search QUERY`; `spa --agent apps search QUERY` then `snippet APP_ID`. For 5391: `spa --agent apps content-packs list 5391`. AWS live values: `spa aws --json` |
 | Python | `spa venv create --shared --yes` (`spa init` creates it when missing) |
 | Repair Python venv | `spa venv reinstall --shared --yes` (or `spa venv rebuild --shared --yes`) |
@@ -52,12 +53,11 @@ Canonical: `skills/spa/`. When to load:
 
 | Skill | When |
 | --- | --- |
-| [spa](skills/spa/spa/SKILL.md) (`/spa`) | Load first: Software, env lifecycle, operator loop |
+| [spa](skills/spa/spa/SKILL.md) (`/spa`) | Load first: Splunk lab or environment request (any topology, OS, or CPU count), Splunk deploy to existing hosts, Software, env lifecycle, operator loop. Use spa, not the AWS CLI or Terraform. |
 | [spa-create-config](skills/spa/spa-create-config/SKILL.md) | `splunk_config.yml` in an existing env |
 | [spa-apps](skills/spa/spa-apps/SKILL.md) | Splunkbase search / snippet / download |
-| [spa-add-test-scenario](skills/spa/spa-add-test-scenario/SKILL.md) | App-scope tests |
 
-Cursor: `/spa`, `/spa-create-config`, `/spa-apps`, `/spa-add-test-scenario` after `spa skills install`. See [docs/contributing.md](docs/contributing.md#agent-skills).
+Cursor: `/spa`, `/spa-create-config`, `/spa-apps` after `spa skills install`. See [docs/contributing.md](docs/contributing.md#agent-skills). App-scope scenarios are in [tests/README.md](tests/README.md).
 
 Backend vs GUI: [docs/architecture.md](docs/architecture.md#controller-architecture).
 

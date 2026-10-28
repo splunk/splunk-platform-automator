@@ -221,28 +221,30 @@ def canonicalize_provider(value: Optional[str]) -> str:
     return PROVIDER_ALIASES[raw]
 
 
-def load_default_provider(environ: Optional[Dict[str, str]] = None) -> str:
+def explicit_default_provider(environ: Optional[Dict[str, str]] = None) -> Optional[str]:
+    """The provider saved by `spa environment set --provider`, or None when none was saved."""
     data = _load_mapping(user_providers_yml(environ))
     raw = data.get("default")
     if not raw:
-        return DEFAULT_PROVIDER
+        return None
     try:
         return canonicalize_provider(str(raw))
     except RegistryError:
-        return DEFAULT_PROVIDER
+        return None
 
 
-def set_default_provider(value: str, environ: Optional[Dict[str, str]] = None) -> Optional[Path]:
+def load_default_provider(environ: Optional[Dict[str, str]] = None) -> str:
+    return explicit_default_provider(environ) or DEFAULT_PROVIDER
+
+
+def set_default_provider(value: str, environ: Optional[Dict[str, str]] = None) -> Path:
+    """Save the default provider. aws is saved too, so it counts as an explicit choice."""
     canon = canonicalize_provider(value)
     path = user_providers_yml(environ)
-    if canon == DEFAULT_PROVIDER:
-        if path.is_file():
-            path.unlink()
-        return None
     path.parent.mkdir(parents=True, exist_ok=True)
     body = (
         "# Splunk Platform Automator default provider (not secrets).\n"
-        "# Omit this file when the default is aws.\n"
+        "# spa init uses this provider when --provider is not given.\n"
         + _dump_yaml({"default": canon})
     )
     path.write_text(body, encoding="utf-8")
@@ -447,6 +449,28 @@ def env_name_for_path(path, environ: Optional[Dict[str, str]] = None) -> Optiona
             name = str(row.get("name") or "").strip()
             return name or None
     return None
+
+
+def missing_environments(environ: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
+    """Registered environments whose directory no longer exists."""
+    return [row for row in list_environments(environ) if not row["exists"]]
+
+
+def cleanup_missing_environments(environ: Optional[Dict[str, str]] = None) -> List[Dict[str, str]]:
+    """Drop registry entries whose directory is missing. Never deletes a directory."""
+    missing = missing_environments(environ)
+    if not missing:
+        return []
+    data = load_environments(environ)
+    envs: Dict[str, Any] = dict(data.get("environments") or {})
+    removed_names = {row["name"] for row in missing}
+    for name in removed_names:
+        envs.pop(name, None)
+    data["environments"] = envs
+    if (data.get("default") or "") in removed_names:
+        data["default"] = next(iter(sorted(envs)), "")
+    save_environments(data, environ)
+    return [{"name": row["name"], "path": row["path"]} for row in missing]
 
 
 def list_environments(environ: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:

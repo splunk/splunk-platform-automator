@@ -120,7 +120,7 @@ terraform:
 
 ## AMI → ssh_username heuristic
 
-`spa aws --describe-ami` suggests username from AMI name:
+`spa aws --region REGION --describe-ami --ami-id AMI_ID` suggests username from AMI name:
 
 - Contains `ubuntu` → `ubuntu`
 - Contains `debian` → `admin`

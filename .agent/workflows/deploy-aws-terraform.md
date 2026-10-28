@@ -27,6 +27,8 @@ This generates `terraform/aws/terraform.tfvars`, runs `terraform init` / `plan`,
 
 ## Step 3: Provision Infrastructure
 
+Ask in chat and wait. Name the env and that provision creates the hosts. The request in the same message is not the yes. After that confirmation:
+
 ```bash
 spa provision --yes
 ```

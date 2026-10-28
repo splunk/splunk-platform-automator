@@ -366,6 +366,41 @@ class TestSpaSkill:
         entry = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
         assert "spa --agent config explain PATH" in entry
 
+    def test_spa_skill_confirms_before_destroy(self):
+        skill_root = PROJECT_ROOT / "skills" / "spa" / "spa"
+        skill = (skill_root / "SKILL.md").read_text(encoding="utf-8")
+        lifecycle = (skill_root / "references" / "lifecycle.md").read_text(
+            encoding="utf-8"
+        )
+        prerequisites = (skill_root / "references" / "prerequisites.md").read_text(
+            encoding="utf-8"
+        )
+        for text in (skill, lifecycle, prerequisites):
+            assert "ansible-playbook" not in text
+        assert "Ask in chat and wait" in skill or "Ask in chat and wait" in lifecycle
+        assert "The request in the same message is not the yes." in lifecycle
+        assert "keeps the registered env" in lifecycle
+        assert "splunk_config.yml" in lifecycle
+        assert "environment remove" in lifecycle
+        assert "drops the registry entry" in lifecycle
+        assert "spa-create-config" in skill
+        assert "spa-apps" in skill
+        assert "spa-add-test-scenario" not in skill
+        assert "spa hosts check" in lifecycle
+        assert "spa hosts check --hosts" in lifecycle
+        assert "--ami-id" not in lifecycle
+        assert "https://www.splunk.com/en_us/download/splunk-enterprise.html" in prerequisites
+        assert (
+            "https://www.splunk.com/en_us/download/universal-forwarder.html"
+            in prerequisites
+        )
+        assert "SPLUNKBASE_USERNAME" in prerequisites
+        assert "SPLUNKBASE_PASSWORD" in prerequisites
+        assert "AWS_PROFILE" in prerequisites
+        assert "AWS_ACCESS_KEY_ID" in prerequisites
+        assert "set" in prerequisites and "not set" in prerequisites
+        assert "${!v}" not in prerequisites
+
     def test_entry_skill_waits_on_phase_sentences(self):
         text = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
         assert "Creating HOST." in text
@@ -374,6 +409,29 @@ class TestSpaSkill:
         assert "Installing apps on HOST." in text
         assert "terraform apply" not in text
         assert "Apply complete" not in text
+
+    def test_create_config_asks_location_name_and_summary_before_init(self):
+        skill = PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md"
+        text = skill.read_text(encoding="utf-8")
+        gate_heading = "## Environment location, name, and summary (mandatory before init)"
+        assert gate_heading in text
+        gate_start = text.index(gate_heading)
+        phase1 = text.index("## Phase 1 — Topology path")
+        assert gate_start < phase1, "the location gate must come before the first init"
+        gate = text[gate_start:phase1]
+        # Location: current directory is the recommended default; registered environments are alternatives.
+        assert "current directory" in gate
+        assert "spa --agent environment list" in gate
+        assert "AskQuestion" in gate
+        # Name: one recommended name, derived from the design, checked against the registry.
+        assert "recommend" in gate.lower()
+        # Summary and explicit yes before the init command runs.
+        assert "summary" in gate.lower()
+        assert "PARENT/NAME" in gate and "--example" in gate
+        assert "--name" in gate  # optional: only when the registry name differs from the folder
+        assert "wait" in gate.lower()
+        # After init, the flow continues with the config and app steps.
+        assert "Phase 2" in gate or "Phase 6" in gate
 
     def test_create_config_phase7_sets_header_by_command(self):
         skill = PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md"
@@ -384,3 +442,174 @@ class TestSpaSkill:
         assert phase8
         assert "spa config header set" in phase7_body
         assert "config-header-template.md" not in phase7_body
+
+    def test_config_skills_never_hand_edit_splunk_config(self):
+        skills = PROJECT_ROOT / "skills" / "spa"
+        paths = [
+            skills / "spa" / "SKILL.md",
+            skills / "spa-create-config" / "SKILL.md",
+            skills / "spa-apps" / "SKILL.md",
+        ]
+        for path in paths:
+            text = path.read_text(encoding="utf-8")
+            assert "never edit" in text.lower(), path.name
+            assert "spa config" in text, path.name
+
+        agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        assert "Do not hand-edit" in agents
+        assert "spa config" in agents
+
+    def test_config_skills_hand_off_to_each_other(self):
+        skills = PROJECT_ROOT / "skills" / "spa"
+        spa = (skills / "spa" / "SKILL.md").read_text(encoding="utf-8")
+        create = (skills / "spa-create-config" / "SKILL.md").read_text(encoding="utf-8")
+        apps = (skills / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
+        assert "/spa-create-config" in spa and "/spa-apps" in spa
+        assert "/spa-apps" in create and "/spa" in create
+        assert "/spa-create-config" in apps and "/spa" in apps
+
+    def test_config_skills_use_the_current_validate_flag(self):
+        skills_root = PROJECT_ROOT / "skills" / "spa"
+        for path in skills_root.rglob("*.md"):
+            text = path.read_text(encoding="utf-8")
+            assert "--splunk-config-aws" not in text, path
+
+    def test_create_config_header_asset_names_the_command(self):
+        template = (
+            PROJECT_ROOT
+            / "skills"
+            / "spa"
+            / "spa-create-config"
+            / "assets"
+            / "config-header-template.md"
+        ).read_text(encoding="utf-8")
+        assert "spa --agent config header set" in template
+        assert "--intent" in template and "--deploy" in template
+        assert "do not paste" in template.lower()
+
+    def test_entry_points_and_skill_selection_guide(self):
+        skills = PROJECT_ROOT / "skills" / "spa"
+        create = (skills / "spa-create-config" / "SKILL.md").read_text(encoding="utf-8")
+        entry = (skills / "spa" / "SKILL.md").read_text(encoding="utf-8")
+        refs = skills / "spa-create-config" / "references"
+        decision = refs / "workflow-decision-tree.md"
+        best = refs / "config-header-best-practices.md"
+
+        assert "## Entry points" in create
+        for phrase in ("Brand new environment", "Modify existing config", "Lifecycle"):
+            assert phrase in create, phrase
+        assert "workflow-decision-tree.md" in create
+        assert "config-header-best-practices.md" in create
+
+        assert "## Skill selection" in entry
+        assert "Load one skill at a time" in entry
+        assert "Load ONE skill" not in entry
+        assert "Load ONE skill" not in create
+
+        assert decision.is_file(), decision
+        tree = decision.read_text(encoding="utf-8")
+        for route in ("/spa-create-config", "/spa-apps", "/spa"):
+            assert route in tree, route
+
+        assert best.is_file(), best
+        header = best.read_text(encoding="utf-8")
+        assert "spa config header set" in header
+        assert "--yes" in header
+        assert "--sva" in header
+
+    def test_init_examples_name_a_provider(self):
+        """Every operator-facing init example names --provider, since init requires one."""
+        pattern = re.compile(r"\b(?:spa|bin/spa) (?:environment |env )?init --example\b")
+        paths = [
+            PROJECT_ROOT / "AGENTS.md",
+            PROJECT_ROOT / "README.md",
+            PROJECT_ROOT / "docs" / "user-guide.md",
+            PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md",
+            PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md",
+        ]
+        for path in paths:
+            text = path.read_text(encoding="utf-8")
+            for number, line in enumerate(text.splitlines(), 1):
+                if pattern.search(line):
+                    assert "--provider" in line, "%s:%d: %s" % (path.name, number, line)
+            assert "aws is implicit" not in text, path.name
+            assert "aws is the implicit default" not in text, path.name
+
+    def test_skill_aws_discovery_commands_pass_region(self):
+        """AMI and survey lookups must search the region the config uses, so every skill line names --region."""
+        skills = PROJECT_ROOT / "skills" / "spa"
+        triggers = ("--latest-ami", "--survey", "--describe-ami", "amis list")
+        offenders = []
+        for path in sorted(skills.rglob("*.md")):
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if "spa aws" in line and any(t in line for t in triggers) and "--region" not in line:
+                    offenders.append("%s:%d" % (path.relative_to(PROJECT_ROOT), number))
+        assert offenders == [], offenders
+
+    def test_entry_skill_names_environment_cleanup(self):
+        skill = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
+        line = next(ln for ln in skill.splitlines() if "spa environment cleanup" in ln)
+        assert "--yes" in line
+
+    def test_skill_descriptions_route_lab_requests_to_spa(self):
+        import yaml
+
+        def description(path: Path) -> str:
+            front = path.read_text(encoding="utf-8").split("---", 2)[1]
+            meta = yaml.safe_load(front)
+            return " ".join(str(meta["description"]).split())
+
+        entry = description(PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md")
+        for phrase in (
+            "Splunk lab",
+            "Splunk environment",
+            "AWS CLI",
+            "Redhat",
+            "single-node",
+            "provision",
+            "deploy",
+            "destroy",
+            "existing hosts",
+            "hosts register",
+        ):
+            assert phrase in entry, phrase
+
+        body = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        routing = next(
+            line for line in body.splitlines() if line.startswith("- **Routing:**")
+        )
+        assert "existing hosts" in routing, routing
+
+        config = description(
+            PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md"
+        )
+        for phrase in ("Splunk lab", "Splunk environment", "AWS", "single-node", "Redhat"):
+            assert phrase in config, phrase
+
+        agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        assert "Splunk lab" in agents
+        assert "AWS CLI" in agents
+
+    def test_operator_skills_omit_add_test_scenario(self):
+        readme = (PROJECT_ROOT / "skills" / "spa" / "README.md").read_text(
+            encoding="utf-8"
+        )
+        agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
+        for text in (readme, agents, contributing):
+            assert "spa-create-config" in text
+            assert "spa-apps" in text
+            assert "spa-add-test-scenario" not in text
+        tests_readme = (PROJECT_ROOT / "tests" / "README.md").read_text(encoding="utf-8")
+        assert "tests/configs/app_scope/<name>/" in tests_readme
+        assert "UPDATE_SCOPE_SNAPSHOTS=1" in tests_readme
+        assert "./tests/run_app_scope_scenarios_tests.sh" in tests_readme
+        user_guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+        assert "wait for a yes in chat" in user_guide
+        assert "spa destroy --hosts" in user_guide
+        retired = (
+            PROJECT_ROOT / "skills" / "spa" / "spa-add-test-scenario" / "SKILL.md"
+        )
+        assert not retired.exists()

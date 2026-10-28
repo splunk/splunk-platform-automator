@@ -546,6 +546,47 @@ def _normalize_example_name(name: str) -> str:
     return name
 
 
+INIT_PROVIDER_REQUIRED = (
+    "spa init needs --provider: choose aws, virtualbox, or external.\n"
+    "Or save a default once: spa environment set --provider NAME"
+)
+
+
+def required_init_provider(provider: Optional[str]) -> str:
+    """Explicit --provider, else the default saved by spa environment set. Never a silent default."""
+    from spa.registry import explicit_default_provider
+
+    chosen = (provider or "").strip().lower()
+    if chosen:
+        return chosen
+    saved = explicit_default_provider()
+    if saved:
+        return saved
+    raise InitError(INIT_PROVIDER_REQUIRED, code=2)
+
+
+def _composes_config(
+    dest: Path,
+    source: Path,
+    example_set: bool,
+    migrate_set: bool,
+    from_dir: Optional[Path],
+    force: bool,
+) -> bool:
+    """True when this init writes a new splunk_config.yml from a topology and provider."""
+    if example_set:
+        return True
+    if migrate_set:
+        return False
+    if is_old_clone_tree(dest) and from_dir is None:
+        return False
+    if source != dest and has_config(source):
+        return False
+    if force and (has_config(dest) or is_spa_env(dest)):
+        return False
+    return True
+
+
 def resolve_example_pair(
     spa_home: Path, example: Optional[str], provider: Optional[str]
 ) -> Tuple[str, str]:
@@ -774,6 +815,8 @@ def _init_env(
     pip_pkgs = list(pip_pkgs or [])
     dest = dest.resolve()
     spa_home = spa_home.resolve()
+    if _composes_config(dest, (from_dir or spa_home).resolve(), example_set, migrate_set, from_dir, force):
+        provider = required_init_provider(provider)
     if example_set:
         resolve_example_pair(spa_home, example, provider)
     dest.mkdir(parents=True, exist_ok=True)

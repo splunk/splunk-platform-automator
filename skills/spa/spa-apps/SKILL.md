@@ -27,6 +27,10 @@ Agents call `bin/spa` only. Never auto-run `spa deploy`. Use `spa --agent apps a
 - Single-app deploy/remove on hosts → not shipped yet (#68)
 - `premium_app: es` → not valid (#60)
 
+## Config boundary (mandatory)
+
+Never edit `config/splunk_config.yml` by hand for apps. `spa --agent apps add` and `spa --agent apps remove` write `splunk_app_deployment` for you. Any other setting (SVA, OS, AWS, licenses, the header) goes through `spa config` with [spa-create-config](../spa-create-config/SKILL.md). Validation, provision, and deploy stay in [/spa](../spa/SKILL.md), which waits for your yes.
+
 ## Secrets
 
 Follow [secrets-handling.md](../spa-create-config/references/secrets-handling.md). Report Splunkbase env vars as **set** / **not set**. Never print passwords. YAML creds stay `lookup('env', ...)`.

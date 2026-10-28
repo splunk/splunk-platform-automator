@@ -9,7 +9,18 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux packages and Homebrew are later, not part of 3.0.
 
+### Changed
+
+- **terraform.aws rejects unknown keys**: a misspelled key such as `ami` next to `ami_id` now fails validation instead of being ignored.
+- **AWS discovery uses the environment region**: `spa aws` without `--region` searches `terraform.aws.region` from the environment config before `AWS_REGION`, `AWS_DEFAULT_REGION`, or `~/.aws/config`. The skills pass `--region` on every AMI and survey lookup.
+
+- **Environment cleanup**: `spa environment cleanup` lists the registered environments whose directory is missing and removes only their registry entries after a yes (`--yes`, or a prompt on a terminal). It deletes no directories. With `--yes` it prints each entry it removed. A removed default moves to the first remaining environment.
+
+- **Init needs a provider**: `spa init` and `spa environment init` require `--provider aws|virtualbox|external` unless a default is saved with `spa environment set --provider NAME`. With neither, init stops before it writes anything and names the three choices. Saving `aws` as the default now writes `providers.yml` (it used to delete the file), so an explicit `aws` counts as a choice. In agent mode, a failed init returns `ok` false and `error` only, with no `data`.
+
 ### Added
+
+- **Skills pack** ([#67](https://github.com/splunk/splunk-platform-automator/issues/67)): three operator skills (`spa`, `spa-create-config`, `spa-apps`). Agents ask in chat and wait before provision, deploy, destroy, suspend, resume, and environment remove. `spa validate --splunk-config aws` checks that provider from the environment config. App-scope scenario steps live in `tests/README.md`.
 
 - **External register addresses**: `spa hosts register` takes `--ssh-host` and `--ssh-port` for the SSH connection, and optional `--ip-addr` for the address other Splunk hosts use. The SSH host, port, user, key, and any `--ip-addr` are written only in `inventory/hosts`. Omit `--ip-addr` to use the SSH host for both. Omit `--ssh-port` to use port 22. The host link page keeps the public DNS name or the SSH host in the URL.
 

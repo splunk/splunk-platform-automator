@@ -1,11 +1,12 @@
 ---
 name: spa-create-config
 description: >-
-  Use when creating or updating splunk_config.yml, designing Splunk Enterprise lab
-  topology, multisite IDXC, SHC layout, architecture plan before config, or AWS
-  Terraform block for SPA. Guides interactive design on AWS Linux: deployment intent,
-  SVA topology, role placement, OS/SSH, spa aws discovery, licenses,
-  apps, validation. In Cursor invoke with /spa-create-config.
+  Use when a Splunk lab, pro lab, or Splunk environment is requested on AWS or
+  VirtualBox, and when creating or updating splunk_config.yml: single-node,
+  multisite IDXC, SHC layout, architecture plan, Redhat or other OS, CPU and instance
+  size, or the AWS Terraform block for SPA. Guides interactive design on AWS Linux:
+  deployment intent, SVA topology, role placement, OS/SSH, spa aws discovery, licenses,
+  apps, validation. Use spa, not the AWS CLI. In Cursor invoke with /spa-create-config.
 license: Proprietary
 compatibility: Requires SPA_HOME (install prefix `${XDG_DATA_HOME:-~/.local/share}/spa`, or a git clone with ansible.cfg and bin/). Env dirs from spa init are valid working directories. Boto3 is required for AWS discovery and suspend/resume.
 metadata:
@@ -32,11 +33,33 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 
 ## When NOT to Use
 
-- App-scope test distillation → [spa-add-test-scenario](../spa-add-test-scenario/SKILL.md)
+- App-scope test distillation → [tests/README.md](../../../tests/README.md)
 - Splunkbase search / TA lookup → load [spa-apps](../spa-apps/SKILL.md) (`spa --agent apps search` then one `spa --agent apps add`)
 - Flat deployment test configs under `tests/configs/*.yml` only
 - Production sizing / PS engagement (guidance only; no auto-sizing)
 - Auto-running provision/deploy (user runs `spa provision` / `spa deploy` after validation)
+
+## Entry points
+
+Use this skill for a new environment or a change to an existing config. Load [/spa](../spa/SKILL.md) for lifecycle (init, validate, provision, deploy, destroy). Route tree: [workflow-decision-tree.md](references/workflow-decision-tree.md).
+
+- **Brand new environment** ("I need a Splunk lab or environment..."): start here at Phase 0a in plan mode. Init runs at Phase 1, only after the location, name, and summary gate below. Phase 7 writes the config. Show the plan, get approval, write the config, validate, then hand off to `/spa`.
+- **Modify existing config** ("add ITSI", "change the OS"): skip the greenfield phases and use "Add / change a setting" below.
+- **Lifecycle** ("destroy", "status", "deploy", "logs"): load `/spa` directly. No design is needed.
+- **Apps** ("add a TA", "install a content pack"): load `/spa-apps`.
+
+The design phases exist so the first `--example` template is not accepted blindly: intent (0a), requirements (0b), topology (1), sizing (2), OS (3), AWS (4), counts and placement (5, 5b), apps and licenses (6, 6b), plan (6c), write (7), validate (8), handoff (9).
+
+**Provider:** `spa init` requires `--provider aws|virtualbox|external` unless the operator has saved a default with `spa environment set --provider NAME`. Ask the operator which provider to use before any init, then record it with `--aws` in the header when it is AWS. See [config-header-best-practices.md](references/config-header-best-practices.md).
+
+## Never edit by hand (mandatory)
+
+Never edit `config/splunk_config.yml` yourself: no editor, no shell write, no YAML patch, no pasted block. Every change goes through `spa config`:
+
+- Read: `spa --agent config search QUERY`, `spa --agent config explain PATH`, `spa --agent config get [PATH]`
+- Write: `spa --agent config set PATH VALUE`, `add`, `unset`, `merge --file FILE`, `topology`, `provider`, and `header set`
+
+App entries go to [spa-apps](../spa-apps/SKILL.md) (`spa --agent apps add`). Validation, provision, deploy, and destroy stay in [/spa](../spa/SKILL.md), which waits for your yes.
 
 ## Secrets — never display credential values (mandatory)
 
@@ -78,7 +101,9 @@ Follow [secrets-handling.md](references/secrets-handling.md) for the full list.
 | Licenses | [references/licenses.md](references/licenses.md) |
 | RF / SF & sizing | [references/rf-sf-sizing.md](references/rf-sf-sizing.md) |
 | Validate / deploy | [references/validation.md](references/validation.md) |
-| Header template | [assets/config-header-template.md](assets/config-header-template.md) |
+| Header fields (set with `spa config header set`) | [assets/config-header-template.md](assets/config-header-template.md) |
+| Header best practices | [references/config-header-best-practices.md](references/config-header-best-practices.md) |
+| Which skill for which request | [references/workflow-decision-tree.md](references/workflow-decision-tree.md) |
 | Architecture plan | [assets/architecture-plan-template.md](assets/architecture-plan-template.md) |
 | Secrets / env vars | [references/secrets-handling.md](references/secrets-handling.md) |
 
@@ -106,7 +131,7 @@ Repo keys: for every requested capability, use this loop. Call `bin/spa` JSON. D
 3. Target path: default `config/splunk_config.yml` (for write mode or post-approval).
 4. If file exists and **mode=write** (or approving plan): **merge vs overwrite** — AskQuestion if available, otherwise ask in chat, before destructive write. Skip in **plan** mode until Phase 7.
 5. **AWS API probe** — `spa aws --check-auth --json` (needs `boto3`; no region required). Record result:
-   - **Available** → Phase 4 uses API discovery; optional `--splunk-config-aws` at validate.
+   - **Available** → Phase 4 uses API discovery; optional `spa validate --splunk-config aws` at validate.
    - **Unavailable** → follow [aws-without-credentials.md](references/aws-without-credentials.md); do not block the workflow.
 6. Read existing config if merging or revising an existing plan from prior config.
 7. Optional inventory: `spa licenses --json` — note what exists in the shared Software directory ([Prepare Software](../../../docs/user-guide.md#prepare-software)).
@@ -135,13 +160,37 @@ Ask scale-out vs scale-up; default **scale out** for Splunk.
 
 **Exit:** Short requirements summary for header.
 
+## Environment location, name, and summary (mandatory before init)
+
+Run this before the first `spa init` or `spa environment init` for a new environment. Skip it when the operator names an existing environment to change (see "Add / change a setting").
+
+1. **Gather facts (read-only).**
+   - Current directory: `pwd`.
+   - Registered environments: `spa --agent environment list`. Each row has `name`, `path`, `default`, and `exists`.
+   - If the current directory is the SPA framework checkout (it contains `bin/spa` and `ansible.cfg`) or lies inside `SPA_HOME`, do not recommend it. Recommend the default parent from `spa environment list` instead, and say why.
+
+2. **Ask the location** with AskQuestion, or in chat if AskQuestion is not available. Offer these options, in this order:
+   - `<current directory>/<NAME>`: **recommended default**.
+   - The parent folder of each registered environment whose `exists` is true. Show each parent once, with its path.
+   - A new path that the operator types.
+
+3. **Recommend a name.** Derive one name from the design so far (topology, OS, sizing), for example `rhel10-single`, `cm-2idx-sh-aws`, or `itsi-lab-vbox`. Use lowercase letters, digits, and hyphens. The folder name is the registry name by default. Use `--name` only when the operator wants a registry name that differs from the folder. The name must not match a `name` in `spa environment list`; if it does, add a suffix. Ask the operator to accept it or type another name.
+
+4. **Summarize and wait for yes.** Show exactly what will run:
+   - Name, full path (parent plus name), provider, topology example, and whether the parent is already registered.
+   - The command: `spa environment init PARENT/NAME --example TOPOLOGY --provider PROVIDER`. Add `--name REGISTRY_NAME` only when the registry name differs from the folder name.
+   - What it does: creates the folder, scaffolds `config/splunk_config.yml`, and registers the name.
+   - Wait for an explicit yes in chat. A request in the same message is not the yes.
+
+5. **Run init only after the yes.** Then continue with the config steps (Phase 2 onward) and the app step (Phase 6).
+
 ## Phase 1 — Topology path
 
 **Entry:** Requirements known or skipped for config-test.
 
 | Path | Action |
 |------|--------|
-| User knows SVA code | Confirm code → [sva-topology-map.md](references/sva-topology-map.md) then `spa init --example TOPOLOGY --provider aws\|virtualbox ENV` |
+| User knows SVA code | Confirm code → [sva-topology-map.md](references/sva-topology-map.md) → the gate above → `spa environment init PARENT/NAME --example TOPOLOGY --provider aws\|virtualbox` |
 | Needs help | [sva-questionnaire.md](references/sva-questionnaire.md) then `spa --agent config search` |
 | Config test only | Minimal topology (`single_node` or `cm_2idxc_sh`) |
 
@@ -172,15 +221,15 @@ Set global `os:` block, expected `ssh_username`, and **polkit** (`polkit` on AL/
 **With creds:** Run `spa aws --json` — see [aws-baseline.md](references/aws-baseline.md). Agents pass `--json` so the result is JSON.
 
 1. Region (`spa aws --json regions list` or confirm)
-2. AMI — if unknown, `spa aws --json --latest-ami --os <rhel|ubuntu|amazon_linux|debian>` or `spa aws --json --survey` → user picks from `recommended_amis` (preference: RHEL first)
-3. `ssh_username` (`spa aws --json --describe-ami`)
+2. AMI — if unknown, `spa aws --region REGION --json --latest-ami --os <rhel|ubuntu|amazon_linux|debian>` or `spa aws --region REGION --json --survey` → user picks from `recommended_amis` (preference: RHEL first). REGION is the Phase 4 region, the same as `terraform.aws.region`; every AMI lookup names it.
+3. `ssh_username` (`spa aws --region REGION --json --describe-ami --ami-id AMI_ID`)
 4. Instance type (`spa aws --json instance-types list --family t3`; suggest `t3.medium` for config tests)
 5. Key pair (`spa aws --json key-pairs list`)
 6. Security groups (`spa aws --json security-groups list`)
 7. Local: `ssh_private_key_file`, tags, volume size
 8. `--validate` before write
 
-**Without creds:** [aws-without-credentials.md](references/aws-without-credentials.md) — static matrix, example AMIs, user-supplied key/SG names; **warn AMIs may be stale**; header note `AWS API: not available`. Do **not** run `--splunk-config-aws`.
+**Without creds:** [aws-without-credentials.md](references/aws-without-credentials.md) — static matrix, example AMIs, user-supplied key/SG names; **warn AMIs may be stale**; header note `AWS API: not available`. Do **not** run `spa validate --splunk-config aws`.
 
 Cap displayed API results (~10–15 AMIs, ~5 instance types).
 
@@ -195,7 +244,7 @@ Determine roles and node counts (not host mapping yet):
 - Standalone SH vs SHC (min 3)
 - MC, LM, DS, HF, UF needed?
 
-Copy `splunk_idxclusters` / `splunk_shclusters` from closest example; apply RF/SF table from topology map when not copying verbatim.
+Start from the example chosen at Phase 1 (already scaffolded; do not run init again), then set `splunk_idxclusters` / `splunk_shclusters` counts with `spa --agent config set` or `add`. Apply the RF/SF table from the topology map.
 
 **Exit:** Tier counts documented; RF/SF match peer counts per checklist.
 
@@ -261,8 +310,8 @@ Use `spa --agent config explain splunk_defaults.splunk_license_server` or the li
 
 **Do not enter** while plan mode is active and plan is still draft.
 
-1. Scaffold with `spa init --example TOPOLOGY --provider aws|virtualbox ENV` (topology + provider only). Do not invent `--addon` or OS flags on init.
-2. After the operator confirms, run `spa --agent config header set` (`spa config header set`) to replace the leading comment. Include `--intent`, `--requirements`, `--sva`, `--placement`, `--license`, `--installer`, `--os`, `--aws`, and `--deploy` only when the operator supplied that value. Omitted fields are removed. Pass `--yes`.
+1. The environment is already scaffolded by the Phase 1 init after the location, name, and summary gate. Do not run init again here. Do not invent `--addon` or OS flags on init.
+2. After the operator confirms, run `spa --agent config header set` (`spa config header set`) to replace the leading comment. Include `--intent`, `--requirements`, `--sva`, `--placement`, `--license`, `--installer`, `--os`, `--aws`, and `--deploy` only when the operator supplied that value. Omitted fields are removed. Pass `--yes`. The field list and examples are in `spa config header set --help`.
 3. For OS, SSL, licenses, RF/SF, and other settings: choose with `spa --agent config search QUERY`, then `spa --agent config explain PATH`. Use the one command on that page. That is `spa --agent config set PATH VALUE` for an existing scalar or map, or `spa --agent config add SELECTOR JSON_OBJECT` for a new non-app identity. Use one intentional `spa --agent config merge --file FILE` for a multi-setting fragment. Never paste a feature snippet. For **apps**, load [spa-apps](../spa-apps/SKILL.md), search, and call `spa --agent apps add`. ITSI is app_id 1841, not 5403.
 4. Global `terraform.aws` already comes from `--provider aws`; add **`ssh_username`** / AMI from catalog + discovery.
 5. Matching global `os:` from selector `os` (not from the topology file).
@@ -279,12 +328,12 @@ spa validate --config config/splunk_config.yml
 
 This always runs schema validation, inventory load, **license file ↔ license_manager pairing**, and playbook syntax-check. Fix any failure before handoff.
 
-**Without AWS credentials:** default validate above is enough for handoff. **Do not** use `--splunk-config-aws` (it will fail). Note in header; user re-validates with API before provision — see [aws-without-credentials.md](references/aws-without-credentials.md).
+**Without AWS credentials:** default validate above is enough for handoff. **Do not** use `spa validate --splunk-config aws` (it will fail). Note in header; user re-validates with API before provision — see [aws-without-credentials.md](references/aws-without-credentials.md).
 
 With AWS creds:
 
 ```bash
-spa validate --splunk-config-aws --config config/splunk_config.yml
+spa validate --splunk-config aws --config config/splunk_config.yml
 ```
 
 Optional: verify license files exist, parse as valid XML, are not expired, and
@@ -314,7 +363,7 @@ Pause AWS compute while retaining Terraform state and EBS volumes:
 `spa suspend --yes`. Resume and refresh changed inventory addresses:
 `spa resume --yes`. Retained resources continue to incur charges.
 
-Optional: distill app-scope tests via [spa-add-test-scenario](../spa-add-test-scenario/SKILL.md).
+App-scope scenarios: [tests/README.md](../../../tests/README.md).
 
 ## Terminology
 

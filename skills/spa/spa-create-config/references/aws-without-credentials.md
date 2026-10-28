@@ -10,7 +10,7 @@ spa aws --check-auth --json
 
 | Result | Meaning | Skill path |
 |--------|---------|------------|
-| `ok: true` + `account` | Credentials work | Phase 4 **with creds** (`--survey`, `--latest-ami`, optional `--splunk-config-aws`). Report account ID only — see [secrets-handling.md](secrets-handling.md) |
+| `ok: true` + `account` | Credentials work | Phase 4 **with creds** (`--survey`, `--latest-ami`, optional `spa validate --splunk-config aws`). Report account ID only — see [secrets-handling.md](secrets-handling.md) |
 | `ok: false`, error mentions credentials | No AWS creds / expired session | Phase 4 **without creds** (this doc) |
 | Exit 2, `boto3 is required` | boto3 not installed | `pip install boto3`; until then, **without creds** path |
 | `ok: false`, other API error | Profile/region/permission issue | Fix AWS setup or fall back **without creds** and note in header |
@@ -36,8 +36,8 @@ Record in config header comment when API was not used:
 | Command | Without credentials |
 |---------|---------------------|
 | `--check-auth` | `ok: false`, error (e.g. Unable to locate credentials) |
-| `spa aws regions list`, `--survey`, `--latest-ami`, `--validate` | `ok: false` in JSON or non-zero exit |
-| `spa validate --splunk-config-aws` | **Fails** if validate runs and AWS rejects the call — **do not use** without creds |
+| `spa aws --region REGION` with `--survey`, `--latest-ami`, or `--validate` (`regions list` needs no region) | `ok: false` in JSON or non-zero exit |
+| `spa validate --splunk-config aws` | **Fails** if validate runs and AWS rejects the call — **do not use** without creds |
 
 Provision/deploy (`ap ansible/aws_provision.yml`) **requires** working AWS credentials at run time — building config offline is fine, but user must configure creds before provision.
 
@@ -66,9 +66,9 @@ Optional (no AWS):
 spa validate --check-licenses --config config/splunk_config.yml
 ```
 
-**Skip** `--splunk-config-aws` until credentials work.
+**Skip** `spa validate --splunk-config aws` until credentials work.
 
-Handoff note: user should run `--check-auth` and `--splunk-config-aws` (or `--validate`) before first provision.
+Handoff note: user should run `--check-auth` and `spa validate --splunk-config aws` (or `--validate`) before first provision.
 
 ## After credentials become available
 

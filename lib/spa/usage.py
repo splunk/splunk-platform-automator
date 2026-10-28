@@ -17,7 +17,8 @@ PROVIDER_HELP = (
     "Example: spa config provider aws"
 )
 INIT_PROVIDER_HELP = (
-    "Provider example: aws, virtualbox, or external (default: aws, or providers.yml)"
+    "aws, virtualbox, or external. Required unless a default is saved "
+    "(spa environment set --provider NAME)"
 )
 SET_PATH_HELP = (
     "A config path. Find one: spa config search QUERY. "

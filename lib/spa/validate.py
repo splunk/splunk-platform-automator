@@ -110,11 +110,13 @@ def validate_env(
     *,
     config: Optional[str] = None,
     check_licenses: bool = False,
-    splunk_config_aws: bool = False,
+    splunk_config: Optional[str] = None,
     on_progress: Optional[ProgressCallback] = None,
     agent: bool = False,
 ) -> CommandResult:
     """Run validation steps and return structured results (no printing)."""
+    if splunk_config is not None and splunk_config != "aws":
+        return CommandResult(ok=False, error="spa validate --splunk-config aws", code=2)
     if config:
         config_path = resolve_config_path(config, paths)
         overlay = os.environ.copy()
@@ -326,7 +328,7 @@ except ConfigValidationError as e:
             return CommandResult(ok=False, error=msg, data=data, code=1)
         steps.append({"id": "license_files", "ok": True, "message": "License check OK"})
 
-    if splunk_config_aws:
+    if splunk_config == "aws":
         try:
             import yaml
         except ImportError:
@@ -407,7 +409,12 @@ def run(argv: Optional[List[str]] = None) -> int:
 
     parser = argparse.ArgumentParser(description="Validate splunk_config.yml")
     parser.add_argument("--check-licenses", action="store_true")
-    parser.add_argument("--splunk-config-aws", action="store_true")
+    parser.add_argument(
+        "--splunk-config",
+        metavar="PROVIDER",
+        choices=["aws"],
+        help="Check this provider's selections from the environment config. aws today.",
+    )
     parser.add_argument(
         "--config",
         metavar="FILE",
@@ -417,7 +424,7 @@ def run(argv: Optional[List[str]] = None) -> int:
     result = validate_env(
         config=args.config,
         check_licenses=args.check_licenses,
-        splunk_config_aws=args.splunk_config_aws,
+        splunk_config=args.splunk_config,
     )
     text = format_validate_text(result)
     sys.stdout.write(text)

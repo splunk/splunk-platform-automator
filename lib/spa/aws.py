@@ -242,10 +242,30 @@ def _region_from_aws_config() -> _ResolvedRegion:
     return _ResolvedRegion(None, None)
 
 
-def resolve_region(explicit: Optional[str] = None) -> _ResolvedRegion:
-    """Prefer --region, then AWS_REGION, then AWS_DEFAULT_REGION, then the AWS config."""
+def environment_config_region(config_file: Any) -> Optional[str]:
+    """terraform.aws.region from an environment's splunk_config.yml, or None. Never raises."""
+    try:
+        from spa.preflight import load_config_mapping
+        from pathlib import Path
+
+        path = os.fspath(config_file)
+        if not os.path.isfile(path):
+            return None
+        data = load_config_mapping(Path(path))
+    except Exception:
+        return None
+    block = (data.get("terraform") or {}).get("aws") if isinstance(data, dict) else None
+    value = block.get("region") if isinstance(block, dict) else None
+    text = str(value).strip() if value else ""
+    return text or None
+
+
+def resolve_region(explicit: Optional[str] = None, environment_region: Optional[str] = None) -> _ResolvedRegion:
+    """Prefer --region, then the environment's terraform.aws.region, then AWS_REGION, AWS_DEFAULT_REGION, the AWS config."""
     if explicit:
         return _ResolvedRegion(explicit, "--region")
+    if environment_region:
+        return _ResolvedRegion(environment_region, "terraform.aws.region")
     for name in ("AWS_REGION", "AWS_DEFAULT_REGION"):
         value = os.environ.get(name, "").strip()
         if value:
@@ -258,6 +278,8 @@ def region_notice(resolved: _ResolvedRegion) -> str:
         return ""
     if resolved.source == "--region":
         return "Using region %s from --region." % resolved.region
+    if resolved.source == "terraform.aws.region":
+        return "Using region %s from terraform.aws.region in the environment config." % resolved.region
     if resolved.source in ("AWS_REGION", "AWS_DEFAULT_REGION"):
         return "Using region %s from %s." % (resolved.region, resolved.source)
     profile = resolved.profile or "default"
@@ -1202,7 +1224,7 @@ def _list_amis_result(session: Any, args: Any):
     )
 
 
-def execute(args: Any):
+def execute(args: Any, environment_region: Optional[str] = None):
     from spa.api import CommandResult
 
     kind = getattr(args, "aws_list_kind", None)
@@ -1239,13 +1261,13 @@ def execute(args: Any):
         return _aws_result(check_auth(_session()))
 
     if kind == "regions":
-        resolved = resolve_region(getattr(args, "region", None))
+        resolved = resolve_region(getattr(args, "region", None), environment_region)
         data = list_regions(_session(), selected_region=resolved.region)
         _stamp_region(data, resolved)
         return _aws_result(data)
 
     if kind in {"amis", "instance-types", "key-pairs", "security-groups"}:
-        resolved = resolve_region(getattr(args, "region", None))
+        resolved = resolve_region(getattr(args, "region", None), environment_region)
         if not resolved.region:
             return CommandResult(
                 ok=False,
@@ -1272,7 +1294,7 @@ def execute(args: Any):
             return _finish(_aws_result(list_key_pairs(session, args.region)), resolved)
         return _finish(_aws_result(list_security_groups(session, args.region)), resolved)
 
-    resolved = resolve_region(getattr(args, "region", None))
+    resolved = resolve_region(getattr(args, "region", None), environment_region)
     if not resolved.region:
         return CommandResult(
             ok=False,
@@ -1372,17 +1394,17 @@ def _compact_validate_payload(data: Dict[str, Any]) -> Dict[str, Any]:
     return projected
 
 
-def execute_argv(argv: Optional[List[str]] = None):
+def execute_argv(argv: Optional[List[str]] = None, environment_region: Optional[str] = None):
     raw = list(sys.argv[1:] if argv is None else argv)
     retired = _retired_list_message(raw)
     if retired:
         from spa.api import CommandResult
 
         return CommandResult(ok=False, error=retired, code=2)
-    return execute(build_parser().parse_args(raw))
+    return execute(build_parser().parse_args(raw), environment_region=environment_region)
 
 
-def main(argv: Optional[List[str]] = None, as_agent: bool = False) -> int:
+def main(argv: Optional[List[str]] = None, as_agent: bool = False, environment_region: Optional[str] = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
     AwsArgumentParser.json_errors = bool(as_agent or "--json" in raw)
     try:
@@ -1396,7 +1418,7 @@ def main(argv: Optional[List[str]] = None, as_agent: bool = False) -> int:
                 _err(retired)
             return 2
         args = build_parser().parse_args(raw)
-        result = execute(args)
+        result = execute(args, environment_region=environment_region)
         as_json = bool(args.json or as_agent)
         shown = result.data
         if (

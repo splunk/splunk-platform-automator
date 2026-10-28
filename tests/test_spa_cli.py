@@ -109,6 +109,15 @@ def test_spa_validate_from_clone_requires_env_dir():
     assert "spa init" in combined
 
 
+def test_validate_splunk_config_rejects_an_unknown_provider(tmp_path):
+    result = run_spa(["validate", "--splunk-config", "gcp"], cwd=tmp_path)
+    assert result.returncode == 2
+    assert "aws" in result.stderr
+    help_result = run_spa(["validate", "--help"])
+    assert "--splunk-config" in help_result.stdout
+    assert "--splunk-config-aws" not in help_result.stdout
+
+
 def test_shell_help_is_the_shell_parser():
     """spa shell -h must reach shell.py, not the spa dispatcher."""
     result = run_spa(["shell", "--help"])
@@ -461,7 +470,7 @@ def test_detected_agent_uses_json_for_licenses_and_aws(monkeypatch):
         seen["licenses"] = as_agent
         return 0
 
-    def fake_aws(argv=None, as_agent=False):
+    def fake_aws(argv=None, as_agent=False, environment_region=None):
         seen["aws"] = as_agent
         return 0
 
@@ -1682,6 +1691,47 @@ def test_config_header_flag_value_set_is_not_the_action():
     assert result.returncode == 2, result.stdout + result.stderr
     assert "spa config header needs an action" in result.stderr
     assert "spa config header set:" not in result.stderr
+
+
+HEADER_FIELD_NAMES = (
+    "intent",
+    "requirements",
+    "sva",
+    "placement",
+    "license",
+    "installer",
+    "os",
+    "aws",
+    "deploy",
+)
+
+
+def test_config_header_help_lists_every_header_field():
+    """spa config header --help says which header fields header set accepts."""
+    result = run_spa(["--no-agent", "config", "header", "--help"])
+    assert result.returncode == 0, result.stdout + result.stderr
+    for name in HEADER_FIELD_NAMES:
+        assert "--%s" % name in result.stdout, name
+    assert "Example:" in result.stdout
+    assert "spa config header set --intent config-test" in result.stdout
+
+
+def test_config_header_without_action_lists_every_header_field():
+    """A bare spa config header names every field, not only --intent."""
+    result = run_spa(["--no-agent", "config", "header"])
+    assert result.returncode == 2, result.stdout + result.stderr
+    for name in HEADER_FIELD_NAMES:
+        assert "--%s" % name in result.stderr, name
+
+
+def test_config_header_set_help_explains_each_header_field():
+    """header set --help gives a value example for each header field."""
+    result = run_spa(["--no-agent", "config", "header", "set", "--help"])
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Header fields" in result.stdout
+    assert "Omitted fields are removed" in result.stdout
+    assert "config-test | app-lab | production-like" in result.stdout
+    assert "Example:" in result.stdout
 
 
 def test_human_config_header_set_prompt_names_the_config_file(tmp_path, monkeypatch):

@@ -186,6 +186,15 @@ Scenario-based tests for app scope (no SSH or real hosts). Each scenario under `
 
 Requires `ansible-playbook`, `ansible-core`, `jmespath`, and `lxml` in the test venv (installed by the run script). Output: `tests/configs/app_scope/output/<scenario>_scope.json`.
 
+### Adding an app-scope scenario
+
+App-scope scenarios live under `tests/configs/app_scope/<name>/`. Each has a distilled `splunk_config.yml` and usually `expected_scope.json`. A flat `tests/configs/*.yml` file is a deployment config for `test_deployment.py`, not an app-scope scenario.
+
+1. Scan existing `# Scenario:` headers under `tests/configs/app_scope/` so the pattern is not already covered.
+2. Create `tests/configs/app_scope/<name>/splunk_config.yml` with a header comment (scenario name, topology, what it verifies). Distill the source config: keep the active parts, remove vault values and commented blocks, and keep infrastructure minimal.
+3. Run `./tests/run_app_scope_scenarios_tests.sh -k "<name>" -v`. After the first run, update the snapshot with `UPDATE_SCOPE_SNAPSHOTS=1 ./tests/run_app_scope_scenarios_tests.sh -k "snapshot and <name>" -v`. Review the diff before committing.
+4. Add scenario-specific assertions in `test_app_scope_scenarios.py` when the snapshot is not enough.
+
 ## Running Tests
 
 ### Run SPA CLI Release Tests
