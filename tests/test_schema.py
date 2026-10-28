@@ -40,6 +40,330 @@ def validate_config(config):
     return _schema_validate(data)
 
 
+def _library_config(*apps):
+    """Valid config with ITSI installed, followed by the given app entries."""
+    return {
+        "plugin": "splunk-platform-automator",
+        "os": {"packages": ["java-21-openjdk"]},
+        "splunk_hosts": [
+            {"name": "h1", "roles": ["search_head"]},
+            {"name": "idx1", "roles": ["indexer"]},
+            {"name": "lm", "roles": ["license_manager"]},
+        ],
+        "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
+        "splunk_app_deployment": {
+            "apps": [
+                {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
+                *apps,
+            ]
+        },
+    }
+
+
+def _library_entry(**overrides):
+    """Content Library 5391 entry as the operator writes it (splunkbase, app_id 5391)."""
+    entry = {
+        "name": "DA-ITSI-ContentLibrary",
+        "source": "splunkbase",
+        "app_id": 5391,
+        "itsi_content_pack": True,
+        "content_pack_apps": [
+            {
+                "name": "DA-ITSI-CP-nix",
+                "content_pack_install": True,
+                "content_pack_api": {"enabled": True},
+                "customizations": {
+                    "run_playbook_after_restart": "ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml",
+                    "force_run_playbook_after_restart": False,
+                },
+            }
+        ],
+    }
+    entry.update(overrides)
+    return entry
+
+
+class TestContentLibrary5391Rules:
+    """Content Library 5391 entries: identity by app_id or local folder name, and a closed key set."""
+
+    def test_5391_with_local_source_is_rejected(self):
+        """app_id 5391 identifies the Splunkbase library, so a local source with that app_id must raise."""
+        entry = _library_entry(source="local", path="content_packs.spl")
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "app_id 5391" in str(exc_info.value)
+
+    def test_5391_without_itsi_content_pack_flag_is_rejected(self):
+        """app_id 5391 must set itsi_content_pack: true; without it the entry is not a content pack."""
+        entry = _library_entry()
+        del entry["itsi_content_pack"]
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "itsi_content_pack" in str(exc_info.value)
+
+    def test_library_entry_rejects_unknown_top_level_key(self):
+        """The Content Library entry takes only its documented keys; anything else must raise."""
+        entry = _library_entry(foo_bar=True)
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "foo_bar" in str(exc_info.value)
+
+    def test_library_accepts_update_mode(self):
+        """update_mode is honored by the apps_itsi_content_pack role, so the library entry must accept it."""
+        entry = _library_entry(update_mode="clean")
+        result = validate_config(_library_config(entry))
+        assert result.splunk_app_deployment.apps[1]["update_mode"] == "clean"
+
+    def test_install_all_apps_must_be_bool(self):
+        """install_all_apps is a bool; the string "true" must not be treated as install-all alongside named packs."""
+        entry = _library_entry(install_all_apps="true")
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "install_all_apps" in str(exc_info.value)
+
+    def test_install_all_with_empty_pack_list_is_rejected(self):
+        """install_all_apps: true with content_pack_apps present (even empty) breaks the either/or rule."""
+        entry = _library_entry(install_all_apps=True, content_pack_apps=[])
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        msg = str(exc_info.value)
+        assert "install_all_apps" in msg
+        assert "content_pack_apps" in msg
+
+    def test_content_pack_install_null_is_rejected(self):
+        """A null content_pack_install is not omitted: the role would read it as false and skip the pack."""
+        entry = _library_entry()
+        entry["content_pack_apps"][0]["content_pack_install"] = None
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "content_pack_install" in str(exc_info.value)
+
+    def test_force_flag_null_is_rejected(self):
+        """force_run_playbook_after_restart must be a bool when present, including null."""
+        entry = _library_entry()
+        entry["content_pack_apps"][0]["customizations"]["force_run_playbook_after_restart"] = None
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "force_run_playbook_after_restart" in str(exc_info.value)
+
+    def test_folder_name_on_splunkbase_app_is_rejected_without_itsi_flag(self):
+        """The reserved folder name cannot be used by a non-ITSI Splunkbase app, even without itsi_content_pack."""
+        entry = {"name": "DA-ITSI-ContentLibrary", "source": "splunkbase", "app_id": 1234, "target_roles": ["search_head"]}
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        msg = str(exc_info.value)
+        assert "DA-ITSI-ContentLibrary" in msg
+        assert "5391" in msg
+
+    def test_folder_name_on_local_app_is_rejected_without_itsi_flag(self):
+        """A local app named DA-ITSI-ContentLibrary without itsi_content_pack is not a library and must raise."""
+        entry = {"name": "DA-ITSI-ContentLibrary", "source": "local", "path": "content_packs.spl", "target_roles": ["search_head"]}
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "DA-ITSI-ContentLibrary" in str(exc_info.value)
+
+    def test_local_library_rejects_app_id(self):
+        """app_id is for Splunkbase; a local library entry must not set it."""
+        entry = _library_entry(source="local", path="content_packs.spl", app_id=1234)
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "app_id" in str(exc_info.value)
+
+    def test_local_library_path_must_be_non_empty_string(self):
+        """path, when set on a local library, is a non-empty string naming the archive."""
+        entry = _library_entry(source="local", path="")
+        del entry["app_id"]
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "path" in str(exc_info.value)
+
+    def test_pack_name_with_trailing_space_counts_as_duplicate(self):
+        """Pack names are compared without surrounding whitespace."""
+        entry = _library_entry()
+        entry["content_pack_apps"].append({"name": "DA-ITSI-CP-nix "})
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "duplicate" in str(exc_info.value).lower()
+
+    def test_pack_repeating_library_name_with_trailing_space_is_rejected(self):
+        """A pack that repeats the library name is rejected even with surrounding whitespace."""
+        entry = _library_entry()
+        entry["content_pack_apps"].append({"name": "DA-ITSI-ContentLibrary "})
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "repeats" in str(exc_info.value)
+
+    def test_pack_item_that_is_not_an_object_is_rejected(self):
+        """Guard: a content_pack_apps item given as a string is reported by the generic content-pack checks."""
+        entry = _library_entry()
+        entry["content_pack_apps"] = ["DA-ITSI-CP-nix"]
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "object" in str(exc_info.value)
+
+    def test_library_source_defaults_to_splunkbase(self):
+        """Guard: an entry without source is Splunkbase, so app_id 5391 still identifies the library."""
+        entry = _library_entry()
+        del entry["source"]
+        result = validate_config(_library_config(entry))
+        assert result.splunk_app_deployment.apps[1]["app_id"] == 5391
+
+    def test_install_all_apps_is_a_known_catalog_key(self):
+        """install_all_apps must be a catalog key so spa config explain and set can resolve it."""
+        from spa.catalog import app_entry_field_detail
+
+        detail = app_entry_field_detail("install_all_apps")
+        assert detail is not None
+        assert detail["type"] == "boolean"
+
+    def test_library_rejects_both_install_policies(self):
+        """content_pack_apps and install_all_apps: true are mutually exclusive."""
+        entry = _library_entry(install_all_apps=True)
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        msg = str(exc_info.value)
+        assert "install_all_apps" in msg
+        assert "content_pack_apps" in msg
+
+    def test_library_pack_item_rejects_unknown_key(self):
+        """Each content_pack_apps item takes only name, content_pack_install, content_pack_api, customizations."""
+        entry = _library_entry()
+        entry["content_pack_apps"][0]["extra"] = True
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "extra" in str(exc_info.value)
+
+    def test_library_does_not_list_itself_as_a_pack(self):
+        """The library folder is the top-level name; listing it inside content_pack_apps must raise."""
+        entry = _library_entry()
+        entry["content_pack_apps"].append({"name": "DA-ITSI-ContentLibrary"})
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        msg = str(exc_info.value)
+        assert "DA-ITSI-ContentLibrary" in msg
+        assert "library" in msg.lower()
+
+    def test_library_rejects_duplicate_pack_names(self):
+        """Each pack appears once in content_pack_apps."""
+        entry = _library_entry()
+        entry["content_pack_apps"].append({"name": "DA-ITSI-CP-nix"})
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "duplicate" in str(exc_info.value).lower()
+
+    def test_library_pack_api_rejects_unknown_key_when_install_flag_omitted(self):
+        """content_pack_install defaults to true, so content_pack_api keys are checked even when the flag is omitted."""
+        entry = _library_entry()
+        entry["content_pack_apps"] = [
+            {"name": "DA-ITSI-CP-nix", "content_pack_api": {"install_all_apps": True}},
+        ]
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        msg = str(exc_info.value)
+        assert "content_pack_api" in msg
+        assert "install_all_apps" in msg
+
+    def test_library_pack_api_value_types_are_checked(self):
+        """content_pack_api values are typed: enabled is a bool, so the string "yes" must raise."""
+        entry = _library_entry()
+        entry["content_pack_apps"] = [
+            {"name": "DA-ITSI-CP-nix", "content_pack_api": {"enabled": "yes"}},
+        ]
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        msg = str(exc_info.value)
+        assert "enabled" in msg
+        assert "bool" in msg.lower()
+
+    def test_library_customizations_reject_unknown_key(self):
+        """A typo such as force_run_playbook_after_restrt must raise, not be silently ignored."""
+        entry = _library_entry()
+        entry["content_pack_apps"][0]["customizations"] = {
+            "run_playbook_after_restart": "ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml",
+            "force_run_playbook_after_restrt": False,
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "force_run_playbook_after_restrt" in str(exc_info.value)
+
+    def test_library_force_flag_must_be_bool(self):
+        """force_run_playbook_after_restart is a bool; the string "no" is truthy and must raise."""
+        entry = _library_entry()
+        entry["content_pack_apps"][0]["customizations"]["force_run_playbook_after_restart"] = "no"
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        msg = str(exc_info.value)
+        assert "force_run_playbook_after_restart" in msg
+        assert "bool" in msg.lower()
+
+    def test_library_content_pack_install_must_be_bool(self):
+        """content_pack_install is a bool; a string such as "no" would be truthy and must raise."""
+        entry = _library_entry()
+        entry["content_pack_apps"][0]["content_pack_install"] = "no"
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        msg = str(exc_info.value)
+        assert "content_pack_install" in msg
+        assert "bool" in msg.lower()
+
+    def test_operator_library_example_is_accepted(self):
+        """Guard: the library entry exactly as the operator writes it stays valid (passes before and after the change)."""
+        entry = _library_entry(
+            version="2.5.0",
+            content_pack_apps=[
+                {
+                    "name": "DA-ITSI-CP-monitoring-alerting",
+                    "content_pack_install": True,
+                    "content_pack_api": {
+                        "install_all": True,
+                        "enabled": False,
+                        "saved_search_action": "disable",
+                        "backfill": False,
+                        "resolution": "overwrite",
+                        "prefix": "",
+                    },
+                    "customizations": {
+                        "run_playbook_after_restart": "ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml",
+                        "force_run_playbook_after_restart": False,
+                    },
+                },
+                {
+                    "name": "DA-ITSI-CP-nix",
+                    "content_pack_install": True,
+                    "content_pack_api": {"enabled": True},
+                    "customizations": {
+                        "run_playbook_after_restart": "ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml",
+                        "force_run_playbook_after_restart": False,
+                    },
+                },
+            ],
+        )
+        result = validate_config(_library_config(entry))
+        assert result.splunk_app_deployment.apps[1]["app_id"] == 5391
+
+    def test_local_library_without_path_uses_default_location(self):
+        """Guard: path is optional for a local library; without it the default repo location applies."""
+        entry = _library_entry(source="local")
+        del entry["app_id"]
+        result = validate_config(_library_config(entry))
+        assert result.splunk_app_deployment.apps[1]["source"] == "local"
+
+    def test_splunkbase_library_rejects_path(self):
+        """path points at a local archive; a Splunkbase library downloads from Splunkbase and must not set it."""
+        entry = _library_entry(path="content_packs.spl")
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "path" in str(exc_info.value)
+
+    def test_library_folder_name_on_another_splunkbase_app_is_rejected(self):
+        """DA-ITSI-ContentLibrary is reserved for Content Library 5391 (Splunkbase) or a local library archive."""
+        entry = _library_entry(app_id=1234)
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(entry))
+        assert "DA-ITSI-ContentLibrary" in str(exc_info.value)
+        assert "5391" in str(exc_info.value)
+
+
 class TestValidConfigurations:
     """Test valid configuration scenarios."""
 
@@ -1331,8 +1655,8 @@ class TestAppDeploymentConfig:
             validate_config(config)
         assert "library_app" in str(exc_info.value).lower()
 
-    def test_itsi_content_pack_library_name_without_content_pack_apps_is_single_app(self):
-        """Top-level name without content_pack_apps is single-app mode (even if name is a library folder)."""
+    def test_itsi_content_pack_library_name_without_content_pack_apps_raises(self):
+        """A local entry named DA-ITSI-ContentLibrary is the library; it needs content_pack_apps or install_all_apps."""
         config = {
             "plugin": "splunk-platform-automator",
             "os": {"packages": ["java-21-openjdk"]},
@@ -1356,10 +1680,10 @@ class TestAppDeploymentConfig:
                 ]
             },
         }
-        result = validate_config(config)
-        cp = result.splunk_app_deployment.apps[1]
-        assert cp.get("itsi_content_pack") is True
-        assert cp.get("content_pack_apps") in (None, [])
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "content_pack_apps" in str(exc_info.value)
+        assert "install_all_apps" in str(exc_info.value)
 
     def test_itsi_content_pack_content_pack_apps_name_only_valid(self):
         """content_pack_apps item with only name (content_pack_install omitted) is accepted."""

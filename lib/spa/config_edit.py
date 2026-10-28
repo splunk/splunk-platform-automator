@@ -1595,8 +1595,8 @@ def config_app_add(
             apps.append(copy.deepcopy(entry))
             return
         if entry.get("app_id") == 5391:
-            current_all = bool((match.get("content_pack_api") or {}).get("install_all_apps"))
-            incoming_all = bool((entry.get("content_pack_api") or {}).get("install_all_apps"))
+            current_all = match.get("install_all_apps") is True
+            incoming_all = entry.get("install_all_apps") is True
             current_named = bool(match.get("content_pack_apps"))
             incoming_named = bool(entry.get("content_pack_apps"))
             if (current_all and incoming_named) or (current_named and incoming_all):

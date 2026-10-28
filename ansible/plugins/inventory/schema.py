@@ -438,6 +438,153 @@ ALLOWED_DEPLOYMENT_TARGETS = ("direct", "auto")
 ALLOWED_APP_STATES = ("installed", "absent")
 ALLOWED_UPDATE_MODES = ("clean", "merge")
 ALLOWED_PREMIUM_APPS = ("itsi",)  # Premium apps: target_roles not required; deployment is role-based
+CONTENT_LIBRARY_APP_ID = 5391  # Splunk Content Library for ITSI (Splunkbase)
+CONTENT_LIBRARY_FOLDER = "DA-ITSI-ContentLibrary"  # On-disk folder of the library, also its name for a local archive
+
+
+def _app_id_value(app: Dict[str, Any]) -> Optional[int]:
+    """Return app_id as an int when it is an integer or digit string, else None."""
+    raw = app.get("app_id")
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, str) and raw.strip().isdigit():
+        return int(raw.strip())
+    return None
+
+
+def _is_content_library_entry(app: Dict[str, Any]) -> bool:
+    """Splunkbase app_id 5391 (any name), or a local entry named DA-ITSI-ContentLibrary."""
+    if app.get("source", "splunkbase") == "splunkbase":
+        return _app_id_value(app) == CONTENT_LIBRARY_APP_ID
+    return app.get("source") == "local" and app.get("name") == CONTENT_LIBRARY_FOLDER
+
+
+CONTENT_PACK_ITEM_KEYS = ("name", "content_pack_install", "content_pack_api", "customizations")
+# Value type per content_pack_api key, as the apps_itsi_content_pack role reads them.
+CONTENT_PACK_API_TYPES = {
+    "install_all": bool,
+    "saved_search_action": str,
+    "backfill": bool,
+    "resolution": str,
+    "enabled": bool,
+    "prefix": str,
+}
+
+CONTENT_PACK_CUSTOMIZATION_KEYS = ("run_playbook_after_restart", "force_run_playbook_after_restart", "extra_vars")
+
+CONTENT_LIBRARY_ENTRY_KEYS = (
+    "name",
+    "source",
+    "app_id",
+    "path",
+    "itsi_content_pack",
+    "version",
+    "state",
+    "install_all_apps",
+    "content_pack_apps",
+    "update_mode",
+)
+
+
+def _validate_content_library_entry(app: Dict[str, Any], i: int, name: str) -> None:
+    """Closed key set for the Content Library entry. Pack-level rules are added separately."""
+    unknown = sorted(str(key) for key in app if key not in CONTENT_LIBRARY_ENTRY_KEYS)
+    if unknown:
+        raise ValueError(
+            f"splunk_app_deployment.apps[{i}] (name={name!r}): the Content Library entry does not allow {unknown}. "
+            f"Allowed keys: {list(CONTENT_LIBRARY_ENTRY_KEYS)}"
+        )
+    if "install_all_apps" in app and not isinstance(app["install_all_apps"], bool):
+        raise ValueError(
+            f"splunk_app_deployment.apps[{i}] (name={name!r}): install_all_apps must be true or false, "
+            f"got {type(app['install_all_apps']).__name__}"
+        )
+    if app.get("install_all_apps") is True and "content_pack_apps" in app:
+        raise ValueError(
+            f"splunk_app_deployment.apps[{i}] (name={name!r}): set either content_pack_apps or install_all_apps: true, not both"
+        )
+    if app.get("source", "splunkbase") == "splunkbase" and "path" in app:
+        raise ValueError(
+            f"splunk_app_deployment.apps[{i}] (name={name!r}): 'path' is only for a local Content Library archive; "
+            "a splunkbase library (app_id 5391) downloads from Splunkbase and must not set path"
+        )
+    if app.get("source") == "local":
+        if "app_id" in app:
+            raise ValueError(
+                f"splunk_app_deployment.apps[{i}] (name={name!r}): a local Content Library archive does not take app_id; "
+                "app_id is for Splunkbase downloads"
+            )
+        if "path" in app and not (isinstance(app["path"], str) and app["path"].strip()):
+            raise ValueError(
+                f"splunk_app_deployment.apps[{i}] (name={name!r}): 'path' must be a non-empty string naming the local archive"
+            )
+    packs = app.get("content_pack_apps")
+    if isinstance(packs, list):
+        seen_pack_names: set = set()
+        for j, item in enumerate(packs):
+            if not isinstance(item, dict):
+                continue  # the generic content-pack checks report non-object items
+            if "content_pack_install" in item and not isinstance(item["content_pack_install"], bool):
+                raise ValueError(
+                    f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].content_pack_install must be a bool, "
+                    f"got {type(item['content_pack_install']).__name__}"
+                )
+            pack_name = item.get("name")
+            if isinstance(pack_name, str):
+                pack_key = pack_name.strip()
+                if pack_key in seen_pack_names:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}] duplicate name {pack_name!r}; "
+                        "each pack may appear once"
+                    )
+                seen_pack_names.add(pack_key)
+            unknown_item = sorted(str(key) for key in item if key not in CONTENT_PACK_ITEM_KEYS)
+            if unknown_item:
+                raise ValueError(
+                    f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}] does not allow {unknown_item}. "
+                    f"Allowed keys: {list(CONTENT_PACK_ITEM_KEYS)}"
+                )
+            api_opts = item.get("content_pack_api")
+            if api_opts is not None:
+                if not isinstance(api_opts, dict):
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].content_pack_api must be a dictionary"
+                    )
+                unknown_api = sorted(str(key) for key in api_opts if key not in CONTENT_PACK_API_TYPES)
+                if unknown_api:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].content_pack_api does not allow "
+                        f"{unknown_api}. Allowed keys: {list(CONTENT_PACK_API_TYPES)}"
+                    )
+                for api_key, api_value in api_opts.items():
+                    expected = CONTENT_PACK_API_TYPES[api_key]
+                    if not isinstance(api_value, expected):
+                        raise ValueError(
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].content_pack_api.{api_key} "
+                            f"must be a {expected.__name__}, got {type(api_value).__name__}"
+                        )
+            cust_opts = item.get("customizations")
+            if isinstance(cust_opts, dict):
+                unknown_cust = sorted(str(key) for key in cust_opts if key not in CONTENT_PACK_CUSTOMIZATION_KEYS)
+                if unknown_cust:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations does not allow "
+                        f"{unknown_cust}. Allowed keys: {list(CONTENT_PACK_CUSTOMIZATION_KEYS)}"
+                    )
+                if "force_run_playbook_after_restart" in cust_opts and not isinstance(
+                    cust_opts["force_run_playbook_after_restart"], bool
+                ):
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations."
+                        f"force_run_playbook_after_restart must be a bool, got {type(cust_opts['force_run_playbook_after_restart']).__name__}"
+                    )
+            if isinstance(pack_name, str) and pack_name.strip() == str(app.get("name", "")).strip():
+                raise ValueError(
+                    f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}] repeats the library {app.get('name')!r}. "
+                    "The library is the top-level name; list only the additional packs in content_pack_apps"
+                )
 
 
 class SplunkAppDeploymentConfig(BaseModel):
@@ -564,6 +711,29 @@ class SplunkAppDeploymentConfig(BaseModel):
             # Normal apps (no premium_app, no itsi_content_pack) must specify target_roles.
             is_premium = premium_app and isinstance(premium_app, str) and premium_app.strip()
             is_itsi_content_pack = itsi_content_pack is True or (isinstance(itsi_content_pack, bool) and itsi_content_pack)
+            if _app_id_value(app) == CONTENT_LIBRARY_APP_ID:
+                if app.get("source", "splunkbase") != "splunkbase":
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): app_id {CONTENT_LIBRARY_APP_ID} (Content Library) "
+                        f"requires source 'splunkbase'. A local library is named {CONTENT_LIBRARY_FOLDER!r} and uses a path to its archive."
+                    )
+                if not is_itsi_content_pack:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): app_id {CONTENT_LIBRARY_APP_ID} (Content Library) "
+                        "requires itsi_content_pack: true"
+                    )
+            if app.get("name") == CONTENT_LIBRARY_FOLDER and not (is_itsi_content_pack and _is_content_library_entry(app)):
+                raise ValueError(
+                    f"splunk_app_deployment.apps[{i}] (name={name!r}): {CONTENT_LIBRARY_FOLDER!r} is reserved for "
+                    f"Content Library app_id {CONTENT_LIBRARY_APP_ID} (splunkbase) or a local library archive"
+                )
+            if is_itsi_content_pack and _is_content_library_entry(app):
+                _validate_content_library_entry(app, i, name)
+                if not app.get("content_pack_apps") and app.get("install_all_apps") is not True:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): the Content Library requires content_pack_apps "
+                        "(a non-empty list) or install_all_apps: true"
+                    )
             if not is_premium and not is_itsi_content_pack and (target_roles is None or not isinstance(target_roles, list) or len(target_roles) == 0):
                 raise ValueError(
                     f"splunk_app_deployment.apps[{i}] (name={name!r}): 'target_roles' is required for normal apps (must be a non-empty list)"
