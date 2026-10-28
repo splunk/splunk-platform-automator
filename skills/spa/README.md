@@ -7,9 +7,8 @@ Framework-neutral [Agent Skills](https://agentskills.io/specification.md) packag
 | Skill | Purpose |
 |-------|---------|
 | [spa](spa/) | Product entry (`/spa`): Software, environments, operator loop |
-| [spa-create-config](spa-create-config/) | Design and write `config/splunk_config.yml` (plan mode, SVA topology, AWS, licenses, validation) |
+| [spa-create-config](spa-create-config/) | Design `config/splunk_config.yml` through `spa config` commands only, never by hand (plan mode, SVA topology, AWS, licenses, header, validation) |
 | [spa-apps](spa-apps/) | Splunkbase search, kind-aware apps[] snippets, optional download |
-| [spa-add-test-scenario](spa-add-test-scenario/) | Distill app-scope scenario tests under `tests/configs/app_scope/` |
 
 Human guide: [docs/user-guide.md](../../docs/user-guide.md). Repo index: [AGENTS.md](../../AGENTS.md).
 
@@ -31,7 +30,7 @@ Install prefers a symlink to `$SPA_HOME/skills/spa/<name>`. An existing director
 
 ## Other agents
 
-Load `skills/spa/spa/SKILL.md` first, then a task skill when the user works on `splunk_config.yml`, Splunkbase apps, or app-scope tests. Follow `references/` on demand.
+Load `skills/spa/spa/SKILL.md` first, then a task skill when the user works on `splunk_config.yml` or Splunkbase apps. Follow `references/` on demand. App-scope scenarios are documented in [tests/README.md](../../tests/README.md).
 
 ## Validation (optional)
 
@@ -41,5 +40,4 @@ If you have the Agent Skills reference tooling installed:
 skills-ref validate ./skills/spa/spa
 skills-ref validate ./skills/spa/spa-create-config
 skills-ref validate ./skills/spa/spa-apps
-skills-ref validate ./skills/spa/spa-add-test-scenario
 ```

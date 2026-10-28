@@ -96,7 +96,7 @@ class SpaSession(Protocol):
         self,
         config: Optional[str] = None,
         check_licenses: bool = False,
-        splunk_config_aws: bool = False,
+        splunk_config: Optional[str] = None,
         agent: bool = False,
     ) -> CommandResult: ...
 
@@ -168,6 +168,8 @@ class SpaSession(Protocol):
     def environment_remove(
         self, name: str, confirm: bool = False, force: bool = False
     ) -> CommandResult: ...
+
+    def environment_cleanup(self, confirm: bool = False, agent: bool = False) -> CommandResult: ...
 
     def config(
         self,
@@ -995,7 +997,7 @@ class LocalSpaSession:
         self,
         config: Optional[str] = None,
         check_licenses: bool = False,
-        splunk_config_aws: bool = False,
+        splunk_config: Optional[str] = None,
         agent: bool = False,
     ) -> CommandResult:
         blocked = self._env_gate()
@@ -1007,7 +1009,7 @@ class LocalSpaSession:
             self.paths,
             config=config,
             check_licenses=check_licenses,
-            splunk_config_aws=splunk_config_aws,
+            splunk_config=splunk_config,
             on_progress=self.on_progress,
             agent=agent,
         )
@@ -1256,10 +1258,37 @@ class LocalSpaSession:
             if provider:
                 prov_path = set_default_provider(provider)
                 data["provider"] = provider
-                data["providers_yml"] = str(prov_path) if prov_path else None
+                data["providers_yml"] = str(prov_path)
         except RegistryError as exc:
             return CommandResult(ok=False, error=str(exc), code=exc.code)
         return CommandResult(ok=True, data=data)
+
+    def environment_cleanup(self, confirm: bool = False, agent: bool = False) -> CommandResult:
+        """List registry entries with no directory; remove them only with confirm (--yes)."""
+        from spa.registry import RegistryError, cleanup_missing_environments, missing_environments
+
+        try:
+            missing = missing_environments()
+            if not missing:
+                return CommandResult(ok=True, data={"removed": []})
+            listing = ["missing: %s  %s" % (row["name"], row["path"]) for row in missing]
+            gate = self._confirm_gate(
+                "spa environment cleanup",
+                confirm=confirm,
+                agent=agent,
+                details=listing,
+                risk="registry_cleanup",
+            )
+            if gate is not None:
+                return CommandResult(
+                    ok=False,
+                    error="Missing environments:\n%s\n%s" % ("\n".join(listing), gate.error),
+                    code=gate.code,
+                )
+            removed = cleanup_missing_environments()
+        except RegistryError as exc:
+            return CommandResult(ok=False, error=str(exc), code=exc.code)
+        return CommandResult(ok=True, data={"removed": removed})
 
     def environment_remove(
         self, name: str, confirm: bool = False, force: bool = False
@@ -1999,7 +2028,10 @@ class LocalSpaSession:
             return blocked
         from spa import aws as aws_mod
 
-        return aws_mod.execute_argv(list(argv or []))
+        return aws_mod.execute_argv(
+            list(argv or []),
+            environment_region=aws_mod.environment_config_region(self.paths.config_file),
+        )
 
     def licenses(
         self,

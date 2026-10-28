@@ -289,11 +289,12 @@ Validate splunk_config.yml (schema, Software/baseconfig/local apps, inventory)
 | --- | --- |
 | `--config` | Validate this file instead of the environment config |
 | `--details` | Include the full license inventory |
+| `--splunk-config` | Check this provider's selections from the environment config. aws today. |
 
 Example:
 
 ```bash
-spa --agent validate
+spa validate --splunk-config aws
 ```
 
 ## `doctor`
@@ -473,7 +474,7 @@ Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Plat
 | Flag | Description |
 | --- | --- |
 | `--example` | Topology example id |
-| `--provider` | Provider example: aws, virtualbox, or external (default: aws, or providers.yml) |
+| `--provider` | aws, virtualbox, or external. Required unless a default is saved (spa environment set --provider NAME) |
 | `--env-dir` | One-off parent (requires --name); does not change the default parent |
 | `--name` | Registry name (default: folder basename) |
 | `--force` | Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example) |
@@ -482,7 +483,7 @@ Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Plat
 Example:
 
 ```bash
-spa environment init --example cm_2idxc_sh my-lab
+spa environment init --example cm_2idxc_sh --provider aws my-lab
 ```
 
 ## `environment init list`
@@ -497,7 +498,7 @@ spa environment init list
 
 ## `environment set`
 
-User-level defaults in paths.yml (env parent, Software, baseconfig, apps) and providers.yml (only when not aws)
+User-level defaults in paths.yml (env parent, Software, baseconfig, apps) and the default provider for init in providers.yml
 
 | Flag | Description |
 | --- | --- |
@@ -506,12 +507,28 @@ User-level defaults in paths.yml (env parent, Software, baseconfig, apps) and pr
 | `--baseconfig-dir` | PS baseconfig apps directory |
 | `--apps-dir` | Local apps directory |
 | `--default` | Registered environment used when cwd does not select one |
-| `--provider` | Default provider for init: aws, virtualbox, or external |
+| `--provider` | Save the default provider for init: aws, virtualbox, or external. Saved even for aws, so init then accepts no --provider |
 
 Example:
 
 ```bash
 spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
+```
+
+## `environment cleanup`
+
+Remove registry entries whose env directory is missing. Lists them first; no directories are deleted
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `-y`, `--yes` | Remove the listed registry entries (no directories are deleted) |
+
+Example:
+
+```bash
+spa environment cleanup --yes
 ```
 
 ## `environment remove`

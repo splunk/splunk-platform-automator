@@ -812,6 +812,7 @@ def test_ansible_pin_passed_to_venv(tmp_path, monkeypatch):
         PROJECT_ROOT,
         example="single_node.yml",
         example_set=True,
+        provider="aws",
         env_venv=True,
         ansible="2.17.8",
         skip_doctor=True,
@@ -957,3 +958,77 @@ def test_catalog_topologies_match_sva_shape():
             assert _role_count(hosts, "search_head") == 6
             assert _role_count(hosts, "deployer") == 2
             assert {row["shc_site"] for row in config["splunk_shclusters"]} == {"site0"}
+
+
+def _init_no_provider(dest, **extra_env):
+    return run_spa(
+        ["--no-agent", "environment", "init", "--skip-doctor", "--example", "single_node.yml", str(dest)],
+        extra_env=extra_env,
+    )
+
+
+def test_init_requires_provider_when_no_default_is_saved(tmp_path):
+    """init without --provider and no saved default names the three providers and writes nothing."""
+    dest = tmp_path / "lab"
+    result = _init_no_provider(dest, XDG_CONFIG_HOME=str(tmp_path / "xdg"))
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "--provider" in result.stderr
+    for name in ("aws", "virtualbox", "external"):
+        assert name in result.stderr, name
+    assert "spa environment set --provider NAME" in result.stderr
+    assert not dest.exists()
+
+
+def test_init_agent_error_requires_provider_without_data(tmp_path):
+    """Agent mode returns ok false with the provider choice and no data."""
+    import json
+
+    dest = tmp_path / "lab"
+    result = run_spa(
+        ["--agent", "environment", "init", "--skip-doctor", "--example", "single_node.yml", str(dest)],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert "--provider" in payload["error"]
+    assert "data" not in payload
+    assert not dest.exists()
+
+
+def test_init_uses_saved_virtualbox_default(tmp_path):
+    """A default saved with environment set --provider is used when init omits --provider."""
+    xdg = str(tmp_path / "xdg")
+    saved = run_spa(["environment", "set", "--provider", "virtualbox"], extra_env={"XDG_CONFIG_HOME": xdg})
+    assert saved.returncode == 0, saved.stderr
+    dest = tmp_path / "lab"
+    result = _init_no_provider(dest, XDG_CONFIG_HOME=xdg)
+    assert result.returncode == 0, result.stdout + result.stderr
+    config = (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8")
+    assert "virtualbox" in config
+    assert "terraform:" not in config
+
+
+def test_init_uses_saved_aws_default_when_set_explicitly(tmp_path):
+    """Setting aws explicitly is kept, so init does not ask for --provider again."""
+    xdg = str(tmp_path / "xdg")
+    saved = run_spa(["environment", "set", "--provider", "aws"], extra_env={"XDG_CONFIG_HOME": xdg})
+    assert saved.returncode == 0, saved.stderr
+    assert (tmp_path / "xdg" / "spa" / "providers.yml").is_file()
+    dest = tmp_path / "lab"
+    result = _init_no_provider(dest, XDG_CONFIG_HOME=xdg)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "terraform:" in (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8")
+
+
+def test_explicit_provider_flag_wins_over_saved_default(tmp_path):
+    xdg = str(tmp_path / "xdg")
+    run_spa(["environment", "set", "--provider", "virtualbox"], extra_env={"XDG_CONFIG_HOME": xdg})
+    dest = tmp_path / "lab"
+    result = run_spa(
+        ["--no-agent", "environment", "init", "--skip-doctor", "--example", "single_node.yml",
+         "--provider", "aws", str(dest)],
+        extra_env={"XDG_CONFIG_HOME": xdg},
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "terraform:" in (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8")

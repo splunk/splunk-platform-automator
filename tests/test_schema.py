@@ -2760,6 +2760,28 @@ class TestSchemaOwnedTypes:
         assert result.splunk_hosts[0].splunk_architecture == "arm64"
 
 
+class TestTerraformAwsUnknownKeys:
+    """terraform.aws holds only known keys. A misspelled key such as ami must not pass silently."""
+
+    def test_unknown_key_under_terraform_aws_is_rejected(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "terraform": {"aws": {"region": "eu-central-1", "ami": "ami-016793dd57ccbf03f"}},
+            "splunk_hosts": [{"name": "shidx", "roles": ["indexer", "search_head"]}],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "ami" in str(exc_info.value)
+
+    def test_known_terraform_aws_keys_are_still_accepted(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "terraform": {"aws": {"region": "eu-central-1", "ami_id": "ami-016793dd57ccbf03f"}},
+            "splunk_hosts": [{"name": "shidx", "roles": ["indexer", "search_head"]}],
+        }
+        validate_config(config)
+
+
 class TestDeprecatedAwsBlock:
     """A top-level or per-host aws key is rejected. terraform.aws stays valid."""
 

@@ -150,7 +150,10 @@ def run_spa(args: Sequence[str], env=None, cwd=None, extra_env=None, stdin=None)
 
 
 def run_spa_init(args: Sequence[str], env=None, cwd=None, extra_env=None):
+    """Run spa init. Tests pass --provider aws unless they pass one, since init requires a provider."""
     argv = list(args)
     if "--skip-doctor" not in argv:
         argv.insert(0, "--skip-doctor")
+    if "--provider" not in argv:
+        argv[0:0] = ["--provider", "aws"]
     return run_spa(["init", *argv], env=env, cwd=cwd, extra_env=extra_env)

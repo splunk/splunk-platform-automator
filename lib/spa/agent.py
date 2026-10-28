@@ -344,8 +344,13 @@ COMMAND_SCHEMA = {
             "flags": [
                 {"long": "--config", "help": "Validate this file instead of the environment config"},
                 {"long": "--details", "help": "Include the full license inventory", "takes_value": False},
+                {
+                    "long": "--splunk-config",
+                    "help": "Check this provider's selections from the environment config. aws today.",
+                    "takes_value": True,
+                },
             ],
-            "example": "spa --agent validate",
+            "example": "spa validate --splunk-config aws",
         },
         {"name": "doctor", "summary": "Host prerequisite checks"},
         {
@@ -477,7 +482,7 @@ COMMAND_SCHEMA = {
                 {"long": "--force", "help": "Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example)"},
                 {"long": "--software-dir", "help": "Shared installers directory (saved in paths.yml)"},
             ],
-            "example": "spa environment init --example cm_2idxc_sh my-lab",
+            "example": "spa environment init --example cm_2idxc_sh --provider aws my-lab",
         },
         {
             "name": "environment init list",
@@ -486,7 +491,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "environment set",
-            "summary": "User-level defaults in paths.yml (env parent, Software, baseconfig, apps) and providers.yml (only when not aws)",
+            "summary": "User-level defaults in paths.yml (env parent, Software, baseconfig, apps) and the default provider for init in providers.yml",
             "flags": [
                 {"long": "--env-dir", "help": "Default parent for name-only init"},
                 {"long": "--software-dir", "help": "Shared installers directory (also sets baseconfig_dir if unset)"},
@@ -500,12 +505,21 @@ COMMAND_SCHEMA = {
                 },
                 {
                     "long": "--provider",
-                    "help": "Default provider for init: aws, virtualbox, or external",
+                    "help": "Save the default provider for init: aws, virtualbox, or external. Saved even for aws, so init then accepts no --provider",
                     "takes_value": True,
                     "completes_from": "providers",
                 },
             ],
             "example": "spa environment set --software-dir ~/Software --apps-dir ~/labs/apps",
+        },
+        {
+            "name": "environment cleanup",
+            "summary": "Remove registry entries whose env directory is missing. Lists them first; no directories are deleted",
+            "requires_confirmation": True,
+            "flags": [
+                {"long": "--yes", "short": "-y", "help": "Remove the listed registry entries (no directories are deleted)"},
+            ],
+            "example": "spa environment cleanup --yes",
         },
         {
             "name": "environment remove",

@@ -26,7 +26,6 @@ Canonical skills live only under `skills/spa/`:
 | Load SPA first (Software, envs, operator loop) | `spa` (`/spa`) |
 | Design `splunk_config.yml` | `spa-create-config` |
 | Find and configure Splunkbase apps | `spa-apps` |
-| Add app-scope test scenarios | `spa-add-test-scenario` |
 
 Cursor symlinks are not part of this repo. Install the packages into the user IDE directory with `spa skills install` (see [`skills/spa/README.md`](../skills/spa/README.md)). Do not duplicate skill content.
 

@@ -646,9 +646,27 @@ CONFIG_NEEDS_ACTION = (
     "Coverage:          spa config keys\n"
     "Docs dump:         spa config schema --markdown"
 )
+_HEADER_FIELDS_HELP = """\
+Header fields (each optional; an omitted field is removed):
+  --intent TEXT        Why this environment exists: config-test | app-lab | production-like
+  --requirements TEXT  Constraints the design must meet: ingest=<band>; users=<band>; DR=<none|multisite>
+  --sva TEXT           SVA target and lab compromises, e.g. S1 (single node) or M2 (lab gaps listed)
+  --placement TEXT     Where roles run: SVA-aligned | lab-minimal | hybrid, with a host summary
+  --license TEXT       How Splunk is licensed: trial, or the license file set in splunk_defaults
+  --installer TEXT     Installer used for Splunk, e.g. the Linux tgz in the Software directory
+  --os TEXT            Operating system for the hosts, e.g. RHEL 10
+  --aws TEXT           AWS placement notes: region, AMI, instance type, or AWS API not available
+  --deploy TEXT        Command that deploys this environment, e.g. spa provision --yes && spa deploy --yes
+
+Each value is one line of text. A line break, a certificate or license marker, or a secret-shaped value is refused.
+
+Example:
+  spa config header set --intent config-test --sva S1 --os "RHEL 10" --deploy "spa provision --yes && spa deploy --yes" --yes
+"""
 HEADER_NEEDS_ACTION = (
     "spa config header needs an action.\n"
-    "Set: spa config header set --intent TEXT"
+    "Set the leading comment: spa config header set --intent TEXT [FIELD TEXT ...] --yes\n\n"
+    + _HEADER_FIELDS_HELP
 )
 _HEADER_FIELDS = (
     "intent",
@@ -1067,10 +1085,13 @@ def _run_init(args, session, as_agent: bool) -> int:
         registry_name=registry_name,
     )
     if as_agent:
+        if not result.ok:
+            emit(False, error=result.error, as_agent=True)
+            return result.code
         payload = dict(result.data or {})
         payload["env_dir"] = str(dest.resolve())
         payload["name"] = registry_name
-        emit(result.ok, data=payload, error=result.error, as_agent=True)
+        emit(True, data=payload, as_agent=True)
         return result.code
     _print_init_messages(result)
     if result.error:
@@ -1127,12 +1148,26 @@ def _run_environment(args, session, paths, as_agent: bool, env_parser) -> int:
             print("Updated %s" % data["paths_yml"])
         if data.get("environments_yml"):
             print("Default environment is %s" % data["default"])
-        if "providers_yml" in data:
-            if data.get("providers_yml"):
-                print("Updated %s" % data["providers_yml"])
-            else:
-                print("Default provider is aws (providers.yml removed)")
+        if data.get("providers_yml"):
+            print("Updated %s (default provider: %s)" % (data["providers_yml"], data.get("provider")))
         return result.code
+    if action == "cleanup":
+        result = session.environment_cleanup(
+            confirm=bool(getattr(args, "yes", False)),
+            agent=as_agent,
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+            return result.code
+        removed = (result.data or {}).get("removed") or []
+        if not removed:
+            print("No missing environments.")
+            return 0
+        for row in removed:
+            print("Removed %s (%s)" % (row.get("name"), row.get("path")))
+        return 0
     if action == "remove":
         result = session.environment_remove(
             args.name,
@@ -1488,6 +1523,8 @@ def _run(argv: Sequence[str]) -> int:
         "set",
         help=_header_set_help,
         description=_header_set_help,
+        epilog=_HEADER_FIELDS_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_config_header_set.set_defaults(canonical_action="header-set")
     _add_mode_flags(p_config_header_set)
@@ -1807,9 +1844,10 @@ def _run(argv: Sequence[str]) -> int:
         help="Include the full license inventory",
     )
     p_val.add_argument(
-        "--splunk-config-aws",
-        action="store_true",
-        help="Include legacy splunk_config_aws compatibility checks",
+        "--splunk-config",
+        metavar="PROVIDER",
+        choices=["aws"],
+        help="Check this provider's selections from the environment config. aws today.",
     )
     _add_env_selector(p_val)
 
@@ -1976,7 +2014,20 @@ def _run(argv: Sequence[str]) -> int:
         "--provider",
         dest="set_provider",
         metavar="NAME",
-        help="Default provider for init: aws, virtualbox, or external (aws is implicit; any other value is saved in providers.yml)",
+        help="Save the default provider for init (aws, virtualbox, or external) in providers.yml, so init does not need --provider",
+    )
+    p_env_cleanup = _add_action(
+        env_sub,
+        "cleanup",
+        help="Remove registry entries whose env directory is missing. Lists them; confirm with --yes",
+    )
+    _add_mode_flags(p_env_cleanup)
+    p_env_cleanup.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Remove the listed registry entries (no directories are deleted)",
     )
     p_env_remove = _add_action(
         env_sub,
@@ -2597,7 +2648,7 @@ def _run(argv: Sequence[str]) -> int:
         result = session.validate(
             config=args.config,
             check_licenses=args.check_licenses,
-            splunk_config_aws=args.splunk_config_aws,
+            splunk_config=args.splunk_config,
             agent=as_agent,
         )
         if as_agent:
@@ -3002,8 +3053,10 @@ def _run(argv: Sequence[str]) -> int:
     if args.command == "aws":
         from spa import aws as aws_mod
 
+        paths = getattr(session, "paths", None)
+        env_region = aws_mod.environment_config_region(paths.config_file) if paths else None
         try:
-            return aws_mod.main([*native, *extra], as_agent=as_agent)
+            return aws_mod.main([*native, *extra], as_agent=as_agent, environment_region=env_region)
         except SystemExit as exc:
             return exc.code if isinstance(exc.code, int) else 1
 

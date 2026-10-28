@@ -9,7 +9,24 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux packages and Homebrew are later, not part of 3.0.
 
+### Changed
+
+- **Validate flag renamed**: `spa validate --splunk-config-aws` is now `spa validate --splunk-config aws`. The old flag is removed, so scripts that pass it must switch to the new form.
+
+- **Skill gate for new environments**: `/spa-create-config` no longer writes config until the location, name, and summary gate passes. A new-environment request never selects an existing environment, and a write to a registered environment needs that environment named first. Each config or apps write checks `resolved_env_name` in its response. Provision, deploy, host check, destroy, suspend, resume, and logs now run from `/spa` after Phase 9 option A hands off there.
+
+- **ITSI search groups results**: `spa apps search itsi` in human mode groups hits into "Core ITSI" (1841), "Content packs (from Library 5391)", "Single content packs", and "Other apps". The library section shows the `content-packs list 5391` and `--content-pack NAME` commands, and each single pack shows its add command and that Core ITSI 1841 is added first when missing. Library 5391 is pinned for ITSI queries, so its row appears even when the page omits it. Agent output and non-ITSI searches are unchanged.
+
+- **terraform.aws rejects unknown keys**: a misspelled key such as `ami` next to `ami_id` now fails validation instead of being ignored.
+- **AWS discovery uses the environment region**: `spa aws` without `--region` searches `terraform.aws.region` from the environment config before `AWS_REGION`, `AWS_DEFAULT_REGION`, or `~/.aws/config`. The skills pass `--region` on every AMI and survey lookup.
+
+- **Environment cleanup**: `spa environment cleanup` lists the registered environments whose directory is missing and removes only their registry entries after a yes (`--yes`, or a prompt on a terminal). It deletes no directories. With `--yes` it prints each entry it removed. A removed default moves to the first remaining environment.
+
+- **Init needs a provider**: `spa init` and `spa environment init` require `--provider aws|virtualbox|external` unless a default is saved with `spa environment set --provider NAME`. With neither, init stops before it writes anything and names the three choices. Saving `aws` as the default now writes `providers.yml` (it used to delete the file), so an explicit `aws` counts as a choice. In agent mode, a failed init returns `ok` false and `error` only, with no `data`.
+
 ### Added
+
+- **Skills pack** ([#67](https://github.com/splunk/splunk-platform-automator/issues/67)): three operator skills (`spa`, `spa-create-config`, `spa-apps`). Agents ask in chat and wait before provision, deploy, destroy, suspend, resume, and environment remove. `spa validate --splunk-config aws` checks that provider from the environment config. App-scope scenario steps live in `tests/README.md`.
 
 - **External register addresses**: `spa hosts register` takes `--ssh-host` and `--ssh-port` for the SSH connection, and optional `--ip-addr` for the address other Splunk hosts use. The SSH host, port, user, key, and any `--ip-addr` are written only in `inventory/hosts`. Omit `--ip-addr` to use the SSH host for both. Omit `--ssh-port` to use port 22. The host link page keeps the public DNS name or the SSH host in the URL.
 

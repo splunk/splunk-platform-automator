@@ -40,7 +40,7 @@ For an existing server, `spa init --example TOPOLOGY --provider external ENV`, t
 Keep Splunk installers, Professional Services baseconfig apps, and license files **out of** `SPA_HOME`. Point every env at one shared directory:
 
 ```bash
-spa init --software-dir ~/Software --example cm_2idxc_sh my-lab
+spa init --software-dir ~/Software --example cm_2idxc_sh --provider aws my-lab
 ```
 
 `spa validate` and `spa deploy` fail if that directory is missing or incomplete.
@@ -61,7 +61,7 @@ spa init --software-dir ~/Software --example cm_2idxc_sh my-lab
 ~/Software/Splunk_Enterprise.lic
 ```
 
-User-level defaults live in `~/.config/spa/paths.yml` (not secrets). `spa environment set --env-dir DIR` changes the parent for name-only init (omit when it is `~/Splunk-Platform-Automator`). `spa environment set --software-dir DIR` / `--baseconfig-dir DIR` / `--apps-dir DIR` set the shared installer, PS baseconfig, and local-apps trees for every env. `--software-dir` also sets `baseconfig_dir` when you do not pass `--baseconfig-dir`. If a path key has never been set, `spa init` stores the first directory it is given or discovers; later one-off init options remain specific to that env and do not replace an established global. `spa environment set --default NAME` selects a registered environment. `spa environment set --provider virtualbox` writes `~/.config/spa/providers.yml`; aws is the implicit default and does not create that file. One-off dest (`spa init /my/custom/folder/my-lab` or `--env-dir` + `--name`) does not change the default parent.
+User-level defaults live in `~/.config/spa/paths.yml` (not secrets). `spa environment set --env-dir DIR` changes the parent for name-only init (omit when it is `~/Splunk-Platform-Automator`). `spa environment set --software-dir DIR` / `--baseconfig-dir DIR` / `--apps-dir DIR` set the shared installer, PS baseconfig, and local-apps trees for every env. `--software-dir` also sets `baseconfig_dir` when you do not pass `--baseconfig-dir`. If a path key has never been set, `spa init` stores the first directory it is given or discovers; later one-off init options remain specific to that env and do not replace an established global. `spa environment set --default NAME` selects a registered environment. `spa environment set --provider NAME` writes `~/.config/spa/providers.yml` with the default provider for init (aws, virtualbox, or external). Once it is saved, `spa init` uses it when `--provider` is omitted. With no saved default, `spa init` stops and asks for `--provider`. One-off dest (`spa init /my/custom/folder/my-lab` or `--env-dir` + `--name`) does not change the default parent.
 
 Later per-env knobs on `spa environment set --env NAME` will write that env’s `.spa.yml`, not `paths.yml`.
 
@@ -115,7 +115,7 @@ flowchart TD
 | Show native Ansible output during a run | `spa deploy --yes --ansible-output` |
 | Increase Ansible verbosity and show native output | `spa deploy --yes -v` through `-vvvv` |
 
-Provider selection comes from `terraform.aws` or `virtualbox:` in config. Do not remove a live host from config and run `spa provision`; the current Terraform flow can terminate it. See [AWS](aws.md) for cloud decisions and [Upgrade](upgrade.md) for the ordered distributed-upgrade workflow.
+Provider selection comes from `terraform.aws` or `virtualbox:` in config. Provision, deploy, destroy, suspend, resume, and environment remove wait for a yes in chat. `spa destroy --hosts` does not exist. Do not delete a live host from config and run `spa provision`; the current Terraform flow can terminate it. See [AWS](aws.md) for cloud decisions and [Upgrade](upgrade.md) for the ordered distributed-upgrade workflow.
 
 Mutating Ansible/Terraform work writes a timestamped JSONL transcript under `$SPA_ENV_DIR/logs/`. On a TTY, humans see **one live line per named group that actually runs** (for example `Deploy  App deployment · Search Head Cluster apps`), with the active host and task while work is running and compact counters when it settles. Rolling upgrade groups settle once per host and include installed and target Splunk versions when reported by the playbook. There is no `[3/10]` index; unused topology simply never appears. `spa run` of every first-party playbook uses the same compact grouping, with play-name fallback for work outside known roles and functions. Failures print immediately. `NO_COLOR` / piped stderr stay uncolored. Agents keep a small JSON envelope on stdout plus `data.log`; they must not ingest the transcript unless you asked to debug a failure. Terraform instance changes (`instance_type`, disk) fold into the provision plan/apply line. On VirtualBox, provisioning shows one line per VM (`Provision  VM idx1`) built from Vagrant's output, and a Vagrant error is printed before the group closes as `failed`.
 

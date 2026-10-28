@@ -38,7 +38,7 @@ def test_one_off_init_does_not_write_env_dir(tmp_path):
             "environment",
             "init",
             "--skip-doctor",
-            "--example",
+            "--provider", "aws", "--example",
             "single_node.yml",
             "--env-dir",
             str(parent),
@@ -58,7 +58,7 @@ def test_one_off_init_does_not_write_env_dir(tmp_path):
             "environment",
             "init",
             "--skip-doctor",
-            "--example",
+            "--provider", "aws", "--example",
             "single_node.yml",
             str(tmp_path / "custom2" / "other"),
         ],
@@ -66,7 +66,7 @@ def test_one_off_init_does_not_write_env_dir(tmp_path):
     )
     assert b.returncode == 0, b.stderr + b.stdout
     c = run_spa_init(
-        ["--example", "single_node.yml", str(tmp_path / "custom3" / "third")],
+        ["--provider", "aws", "--example", "single_node.yml", str(tmp_path / "custom3" / "third")],
         extra_env=extra,
     )
     assert c.returncode == 0, c.stderr + c.stdout
@@ -84,7 +84,7 @@ def test_positional_name_override(tmp_path):
         [
             "init",
             "--skip-doctor",
-            "--example",
+            "--provider", "aws", "--example",
             "single_node.yml",
             "--name",
             "prod",
@@ -113,14 +113,15 @@ def test_set_env_dir_then_name_only_init(tmp_path):
     data = yaml.safe_load((tmp_path / "xdg" / "spa" / "paths.yml").read_text())
     assert Path(data["env_dir"]).resolve() == parent.resolve()
     init = run_spa(
-        ["environment", "init", "--skip-doctor", "--example", "single_node.yml", "alpha"],
+        ["environment", "init", "--skip-doctor", "--provider", "aws", "--example", "single_node.yml", "alpha"],
         extra_env=extra,
     )
     assert init.returncode == 0, init.stderr + init.stdout
     assert (parent / "alpha" / ".spa.yml").is_file()
 
 
-def test_set_provider_virtualbox_creates_file_aws_removes(tmp_path):
+def test_set_provider_saves_virtualbox_and_aws_defaults(tmp_path):
+    """Each provider choice is saved, so init can tell an explicit aws from no default."""
     extra = _xdg(tmp_path)
     prov = tmp_path / "xdg" / "spa" / "providers.yml"
     set_vb = run_spa(["environment", "set", "--provider", "vbox"], extra_env=extra)
@@ -130,7 +131,8 @@ def test_set_provider_virtualbox_creates_file_aws_removes(tmp_path):
     assert body["default"] == "virtualbox"
     set_aws = run_spa(["environment", "set", "--provider", "aws"], extra_env=extra)
     assert set_aws.returncode == 0, set_aws.stderr
-    assert not prov.is_file()
+    assert prov.is_file()
+    assert yaml.safe_load(prov.read_text())["default"] == "aws"
 
 
 def test_set_software_paths(tmp_path):
@@ -175,7 +177,7 @@ def test_init_seeds_only_missing_global_paths(tmp_path):
     apps.mkdir()
     first = run_spa_init(
         [
-            "--example",
+            "--provider", "aws", "--example",
             "single_node.yml",
             "--software-dir",
             str(software),
@@ -196,7 +198,7 @@ def test_init_seeds_only_missing_global_paths(tmp_path):
     other.mkdir()
     second = run_spa_init(
         [
-            "--example",
+            "--provider", "aws", "--example",
             "single_node.yml",
             "--software-dir",
             str(other),
@@ -218,7 +220,7 @@ def test_init_persists_discovered_global_paths(tmp_path):
     software.mkdir()
     apps.mkdir()
     result = run_spa_init(
-        ["--example", "single_node.yml", str(tmp_path / "lab")],
+        ["--provider", "aws", "--example", "single_node.yml", str(tmp_path / "lab")],
         extra_env=extra,
     )
     assert result.returncode == 0, result.stderr + result.stdout
@@ -256,8 +258,8 @@ def test_set_default_environment(tmp_path):
     extra = _xdg(tmp_path)
     one = tmp_path / "one"
     two = tmp_path / "two"
-    assert run_spa_init(["--example", "single_node.yml", str(one)], extra_env=extra).returncode == 0
-    assert run_spa_init(["--example", "single_node.yml", str(two)], extra_env=extra).returncode == 0
+    assert run_spa_init(["--provider", "aws", "--example", "single_node.yml", str(one)], extra_env=extra).returncode == 0
+    assert run_spa_init(["--provider", "aws", "--example", "single_node.yml", str(two)], extra_env=extra).returncode == 0
     result = run_spa(["environment", "set", "--default", "two"], extra_env=extra)
     assert result.returncode == 0, result.stderr
     listed = run_spa(["--json", "environment", "list"], extra_env=extra)
@@ -281,7 +283,7 @@ def test_set_without_flags_errors(tmp_path):
 
 def test_env_dir_without_name_errors(tmp_path):
     result = run_spa(
-        ["init", "--skip-doctor", "--example", "single_node.yml", "--env-dir", str(tmp_path / "p")],
+        ["init", "--skip-doctor", "--provider", "aws", "--example", "single_node.yml", "--env-dir", str(tmp_path / "p")],
         extra_env=_xdg(tmp_path),
     )
     assert result.returncode != 0
@@ -291,7 +293,7 @@ def test_env_dir_without_name_errors(tmp_path):
 def test_select_env_by_registry_name(tmp_path):
     extra = _xdg(tmp_path)
     dest = tmp_path / "lab1"
-    assert run_spa_init(["--example", "single_node.yml", str(dest)], extra_env=extra).returncode == 0
+    assert run_spa_init(["--provider", "aws", "--example", "single_node.yml", str(dest)], extra_env=extra).returncode == 0
     result = run_spa(
         ["--json", "--env", dest.name, "environment", "list"],
         extra_env=extra,
@@ -307,7 +309,7 @@ def test_select_env_by_registry_name(tmp_path):
 def test_remove_requires_yes(tmp_path):
     extra = _xdg(tmp_path)
     dest = tmp_path / "gone"
-    assert run_spa_init(["--example", "single_node.yml", str(dest)], extra_env=extra).returncode == 0
+    assert run_spa_init(["--provider", "aws", "--example", "single_node.yml", str(dest)], extra_env=extra).returncode == 0
     refused = run_spa(["environment", "remove", dest.name], extra_env=extra)
     assert refused.returncode != 0
     assert dest.is_dir()
@@ -319,7 +321,7 @@ def test_remove_requires_yes(tmp_path):
 def test_remove_refuses_deployed_without_force(tmp_path):
     extra = _xdg(tmp_path)
     dest = tmp_path / "live"
-    assert run_spa_init(["--example", "single_node.yml", str(dest)], extra_env=extra).returncode == 0
+    assert run_spa_init(["--provider", "aws", "--example", "single_node.yml", str(dest)], extra_env=extra).returncode == 0
     (dest / "inventory" / "hosts").write_text("idx1 ansible_host=10.0.0.1\n", encoding="utf-8")
     refused = run_spa(["environment", "remove", dest.name, "--yes"], extra_env=extra)
     assert refused.returncode != 0
@@ -336,7 +338,7 @@ def test_test_runs_never_touch_the_user_registry(tmp_path):
     user_config = Path(os.environ.get("HOME") or Path.home()).resolve() / ".config" / "spa"
     ambient = user_environments_yml().resolve()
     assert user_config not in ambient.parents and ambient.parent != user_config
-    assert run_spa_init(["--example", "single_node.yml", str(tmp_path / "env")]).returncode == 0
+    assert run_spa_init(["--provider", "aws", "--example", "single_node.yml", str(tmp_path / "env")]).returncode == 0
     listed = run_spa(["--json", "environment", "list"])
     rows = json.loads(listed.stdout)["data"]["environments"]
     assert [row["name"] for row in rows] == ["env"]
@@ -487,8 +489,103 @@ def test_resolve_init_dest_force_prefers_existing_cwd(tmp_path):
 
 def test_default_init_provider_is_aws(tmp_path):
     dest = tmp_path / "aws-default"
-    result = run_spa_init(["--example", "cm_2idxc_sh", str(dest)], extra_env=_xdg(tmp_path))
+    result = run_spa_init(["--provider", "aws", "--example", "cm_2idxc_sh", str(dest)], extra_env=_xdg(tmp_path))
     assert result.returncode == 0, result.stderr
     cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
     assert "terraform" in cfg
     assert "virtualbox" not in cfg
+
+
+def _register_pair(tmp_path):
+    """One env whose directory exists and one registry entry whose directory is gone."""
+    from spa import registry
+
+    env = {"XDG_CONFIG_HOME": str(tmp_path / "xdg")}
+    keep = tmp_path / "labs" / "keep"
+    keep.mkdir(parents=True)
+    registry.register_environment("keep", keep, env)
+    registry.register_environment("gone", tmp_path / "labs" / "gone", env)
+    return env, keep
+
+
+def _registry_names(tmp_path):
+    data = yaml.safe_load((tmp_path / "xdg" / "spa" / "environments.yml").read_text())
+    return set((data or {}).get("environments", {}).keys()), data
+
+
+def test_cleanup_without_yes_lists_missing_and_removes_nothing(tmp_path):
+    env, keep = _register_pair(tmp_path)
+    result = run_spa(["--no-agent", "environment", "cleanup"], extra_env=env)
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "gone" in result.stderr
+    assert str(tmp_path / "labs" / "gone") in result.stderr
+    assert "missing: keep" not in result.stderr
+    names, _ = _registry_names(tmp_path)
+    assert names == {"keep", "gone"}
+    assert keep.is_dir()
+
+
+def test_cleanup_agent_without_yes_fails_and_names_missing(tmp_path):
+    import json
+
+    env, _keep = _register_pair(tmp_path)
+    result = run_spa(["--agent", "environment", "cleanup"], extra_env=env)
+    assert result.returncode != 0
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert "gone" in payload["error"]
+    assert "data" not in payload
+    names, _ = _registry_names(tmp_path)
+    assert names == {"keep", "gone"}
+
+
+def test_cleanup_with_yes_removes_only_missing_and_prints_them(tmp_path):
+    env, keep = _register_pair(tmp_path)
+    result = run_spa(["--no-agent", "environment", "cleanup", "--yes"], extra_env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Removed gone" in result.stdout
+    assert str(tmp_path / "labs" / "gone") in result.stdout
+    names, _ = _registry_names(tmp_path)
+    assert names == {"keep"}
+    assert keep.is_dir()
+
+
+def test_cleanup_agent_with_yes_reports_removed_rows(tmp_path):
+    import json
+
+    env, _keep = _register_pair(tmp_path)
+    result = run_spa(["--agent", "environment", "cleanup", "--yes"], extra_env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert [row["name"] for row in payload["data"]["removed"]] == ["gone"]
+    assert payload["data"]["removed"][0]["path"] == str(tmp_path / "labs" / "gone")
+
+
+def test_cleanup_when_nothing_is_missing_says_so(tmp_path):
+    from spa import registry
+
+    env = {"XDG_CONFIG_HOME": str(tmp_path / "xdg")}
+    keep = tmp_path / "labs" / "keep"
+    keep.mkdir(parents=True)
+    registry.register_environment("keep", keep, env)
+    result = run_spa(["--no-agent", "environment", "cleanup"], extra_env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "No missing environments" in result.stdout
+
+
+def test_cleanup_moves_default_off_a_removed_entry(tmp_path):
+    from spa import registry
+
+    env = {"XDG_CONFIG_HOME": str(tmp_path / "xdg")}
+    keep = tmp_path / "labs" / "keep"
+    keep.mkdir(parents=True)
+    registry.register_environment("keep", keep, env)
+    registry.register_environment("gone", tmp_path / "labs" / "gone", env)
+    data = registry.load_environments(env)
+    data["default"] = "gone"
+    registry.save_environments(data, env)
+    result = run_spa(["--no-agent", "environment", "cleanup", "--yes"], extra_env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    _, data = _registry_names(tmp_path)
+    assert data["default"] == "keep"

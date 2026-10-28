@@ -40,7 +40,7 @@ spa licenses --config config/splunk_config.yml --json
 When credentials are available:
 
 ```bash
-spa validate --splunk-config-aws --config config/splunk_config.yml
+spa validate --splunk-config aws --config config/splunk_config.yml
 ```
 
 Parses `terraform.aws` from the YAML and runs `spa aws --validate`.

@@ -74,7 +74,7 @@ HELP_CONTRACTS = [
     ),
     (
         ["validate", "--help"],
-        ["usage: spa validate", "--config", "--check-licenses", "--splunk-config-aws"],
+        ["usage: spa validate", "--config", "--check-licenses", "--splunk-config"],
     ),
     (
         ["doctor", "--help"],

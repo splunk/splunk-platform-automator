@@ -129,6 +129,8 @@ def test_install_from_tarball_and_extract_anywhere(tmp_path):
             str(extract / "bin" / "spa"),
             "init",
             "--skip-doctor",
+            "--provider",
+            "aws",
             "--example",
             "single_node.yml",
             str(dest),

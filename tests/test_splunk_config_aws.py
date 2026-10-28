@@ -213,6 +213,35 @@ def test_list_regions_uses_aws_default_region(monkeypatch, capsys, tmp_path):
     assert "Using region" not in captured.out
 
 
+def test_list_regions_reports_the_aws_config_region_beside_the_environment_region(monkeypatch, capsys, tmp_path):
+    _aws_config(monkeypatch, tmp_path, "us-east-1")
+    monkeypatch.setattr(aws, "_session", lambda region=None: _FakeRegionSession())
+
+    assert aws.main(["regions", "list", "--json"], environment_region="eu-central-1") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["region"] == "eu-central-1"
+    assert payload["region_source"] == "terraform.aws.region"
+    assert payload["aws_config_region"] == "us-east-1"
+    assert payload["aws_config_profile"] == "default"
+
+
+def test_list_regions_reports_a_missing_profile_as_json_not_a_traceback(monkeypatch, capsys, tmp_path):
+    # Needs real botocore to raise ProfileNotFound; CI images without boto3 cannot exercise it.
+    pytest.importorskip("boto3")
+    _aws_config(monkeypatch, tmp_path, "eu-central-1")
+    monkeypatch.setenv("AWS_PROFILE", "no-such-profile")
+
+    code = aws.main(["regions", "list", "--json"], environment_region="eu-central-1")
+    captured = capsys.readouterr()
+    assert code == 1
+    payload = json.loads(captured.out)
+    assert payload["ok"] is False
+    assert "no-such-profile" in payload["error"]
+    assert payload["region"] == "eu-central-1"
+    assert payload["items"] == []
+    assert "Traceback" not in captured.err
+
+
 def test_regional_aws_command_uses_the_config_region_and_names_the_source(monkeypatch, capsys, tmp_path):
     _aws_config(monkeypatch, tmp_path, "eu-central-1")
     seen = {}
@@ -395,3 +424,38 @@ def test_agent_aws_validate_is_one_ok_per_check(monkeypatch, capsys):
     detailed = json.loads(capsys.readouterr().out)
     assert detailed["checks"]["security_groups"]["items"][0]["group_id"] == "sg-lab"
     assert "IpPermissions" not in json.dumps(detailed)
+
+
+def test_environment_config_region_beats_aws_environment_variables(monkeypatch, capsys, tmp_path):
+    _aws_config(monkeypatch, tmp_path, "eu-central-1")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    seen = {}
+
+    def fake_list(session, region, name_filter=None, owners=None, max_results=15):
+        seen["region"] = region
+        return {"ok": True, "region": region, "items": []}
+
+    monkeypatch.setattr(aws, "list_amis", fake_list)
+    monkeypatch.setattr(aws, "_session", lambda region=None: object())
+
+    assert aws.main(["amis", "list"], environment_region="eu-west-1") == 0
+    captured = capsys.readouterr()
+    assert seen["region"] == "eu-west-1"
+    assert "Using region eu-west-1 from terraform.aws.region in the environment config." in captured.err
+
+    assert aws.main(["amis", "list", "--json"], environment_region="eu-west-1") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["region_source"] == "terraform.aws.region"
+
+    assert aws.main(["amis", "list", "--region", "us-west-2"], environment_region="eu-west-1") == 0
+    assert seen["region"] == "us-west-2"
+
+
+def test_environment_config_region_is_read_from_terraform_aws(tmp_path):
+    config = tmp_path / "splunk_config.yml"
+    config.write_text("terraform:\n  aws:\n    region: eu-west-1\n", encoding="utf-8")
+    assert aws.environment_config_region(config) == "eu-west-1"
+
+    config.write_text("terraform:\n  aws:\n    ami_id: ami-016793dd57ccbf03f\n", encoding="utf-8")
+    assert aws.environment_config_region(config) is None
+    assert aws.environment_config_region(tmp_path / "missing.yml") is None

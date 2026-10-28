@@ -4,7 +4,7 @@ Canonical scripts live in the **repository** `bin/` directory. Run from project 
 
 | Script | Purpose |
 |--------|---------|
-| `spa aws` | AWS discovery: `--check-auth`, `--latest-ami`, `--survey`, `--validate` |
+| `spa aws --region REGION` | AWS discovery: `--check-auth`, `--latest-ami`, `--survey`, `--validate` (`regions list` and `--check-auth` need no region) |
 | `spa licenses` | Scan Software for `.lic` files; propose `splunk_license_file` (ITSI-aware with `--config`) |
 | `spa validate` | Schema + inventory + playbook syntax-check; optional `--check-licenses` |
 
@@ -12,7 +12,7 @@ Do not duplicate logic in this skill folder. See [references/aws-baseline.md](..
 
 ## SPA skill naming
 
-Canonical skills live under `skills/spa/` ([Agent Skills spec](https://agentskills.io/specification.md)). Install them with `spa skills install`. Use the **`spa-`** prefix (`spa-create-config`, `spa-add-test-scenario`) for `/` command names.
+Canonical skills live under `skills/spa/` ([Agent Skills spec](https://agentskills.io/specification.md)). Install them with `spa skills install`. Use the **`spa-`** prefix (`spa-create-config`, `spa-apps`) for `/` command names.
 
 ## Dependencies
 

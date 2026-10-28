@@ -29,7 +29,7 @@ SESSION_API_PARAMETERS = {
     "env": (),
     "catalog": ("extra_dir",),
     "describe_playbook": ("name", "extra_dir"),
-    "validate": ("config", "check_licenses", "splunk_config_aws", "agent"),
+    "validate": ("config", "check_licenses", "splunk_config", "agent"),
     "doctor": ("spa_home", "env_dir", "aws", "virtualbox", "strict"),
     "skills": ("action", "platform", "name", "all_packages", "confirm", "agent"),
     "venv": ("action", "environment", "python", "no_install", "confirm", "agent"),
@@ -64,6 +64,7 @@ SESSION_API_PARAMETERS = {
         "default",
     ),
     "environment_remove": ("name", "confirm", "force"),
+    "environment_cleanup": ("confirm", "agent"),
     "config": (
         "action",
         "paths",
@@ -331,6 +332,7 @@ def test_session_init_messages(tmp_path, capsys, monkeypatch):
         str(dest),
         example="single_node.yml",
         example_set=True,
+        provider="aws",
         skip_doctor=True,
     )
     assert result.ok, result.error

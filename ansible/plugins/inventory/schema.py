@@ -96,7 +96,7 @@ class VirtualBoxConfig(BaseModel):
 
 class AwsTerraformConfig(BaseModel):
     """AWS configuration for Terraform provisioning."""
-    model_config = ConfigDict(extra='allow')
+    model_config = ConfigDict(extra='forbid')
     
     region: Optional[str] = Field(None, description="AWS region Terraform uses. Default eu-central-1. Omit the key to keep that.")
     ami_id: Optional[str] = Field(

@@ -65,7 +65,7 @@ spa aws --region eu-central-1 --validate \
 spa aws --survey --region eu-central-1 --json
 ```
 
-`--region` wins. When it is omitted, `spa aws` uses `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `region` in `~/.aws/config` for the active profile. Text output names that source, and `spa aws regions list` marks the region with `selected`. `--json` and `--agent` print only JSON, including `region_source`. Provision and the other lifecycle commands still read `terraform.aws.region` from the environment config.
+`--region` wins. When it is omitted, `spa aws` uses `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `region` in `~/.aws/config` for the active profile. Text output names that source, and `spa aws regions list` marks the region with `selected`. `--json` and `--agent` print only JSON, including `region_source`. `regions list --json` also returns `aws_config_region` and `aws_config_profile` from `~/.aws/config`, even when an environment config sets the region first. Provision and the other lifecycle commands still read `terraform.aws.region` from the environment config.
 
 ## Prerequisites checklist
 

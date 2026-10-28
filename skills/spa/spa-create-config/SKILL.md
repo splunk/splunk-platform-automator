@@ -1,11 +1,12 @@
 ---
 name: spa-create-config
 description: >-
-  Use when creating or updating splunk_config.yml, designing Splunk Enterprise lab
-  topology, multisite IDXC, SHC layout, architecture plan before config, or AWS
-  Terraform block for SPA. Guides interactive design on AWS Linux: deployment intent,
-  SVA topology, role placement, OS/SSH, spa aws discovery, licenses,
-  apps, validation. In Cursor invoke with /spa-create-config.
+  Use when a Splunk lab, pro lab, or Splunk environment is requested on AWS or
+  VirtualBox, and when creating or updating splunk_config.yml: single-node,
+  multisite IDXC, SHC layout, architecture plan, Redhat or other OS, CPU and instance
+  size, or the AWS Terraform block for SPA. Guides interactive design on AWS Linux:
+  deployment intent, SVA topology, role placement, OS/SSH, spa aws discovery, licenses,
+  apps, validation. Use spa, not the AWS CLI. In Cursor invoke with /spa-create-config.
 license: Proprietary
 compatibility: Requires SPA_HOME (install prefix `${XDG_DATA_HOME:-~/.local/share}/spa`, or a git clone with ansible.cfg and bin/). Env dirs from spa init are valid working directories. Boto3 is required for AWS discovery and suspend/resume.
 metadata:
@@ -32,11 +33,33 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 
 ## When NOT to Use
 
-- App-scope test distillation → [spa-add-test-scenario](../spa-add-test-scenario/SKILL.md)
+- App-scope test distillation → [tests/README.md](../../../tests/README.md)
 - Splunkbase search / TA lookup → load [spa-apps](../spa-apps/SKILL.md) (`spa --agent apps search` then one `spa --agent apps add`)
 - Flat deployment test configs under `tests/configs/*.yml` only
 - Production sizing / PS engagement (guidance only; no auto-sizing)
-- Auto-running provision/deploy (user runs `spa provision` / `spa deploy` after validation)
+- Running provision/deploy without an explicit yes in chat for that run (Phase 9 asks first)
+
+## Entry points
+
+Use this skill for a new environment or a change to an existing config. Load [/spa](../spa/SKILL.md) for lifecycle (init, validate, provision, deploy, destroy). Route tree: [workflow-decision-tree.md](references/workflow-decision-tree.md).
+
+- **Brand new environment** ("I need a Splunk lab or environment..."): start here at Phase 0a, even when registered environments already exist. A new-environment request never selects an existing environment. The plan-or-write mode is asked at the gate, after the minimum requirements. Nothing writes until the gate passes (see the write barrier in the gate). Then init, the config writes, validate, and hand off to `/spa`.
+- **Modify existing config** ("add ITSI", "change the OS"): skip the greenfield phases and use "Add / change a setting" below. Name the target environment before any write. If the operator did not name one, ask which registered environment to change (AskQuestion), and show its path.
+- **Lifecycle** ("destroy", "status", "deploy", "logs"): load `/spa` directly. No design is needed.
+- **Apps** ("add a TA", "install a content pack"): load `/spa-apps`.
+
+The design phases exist so the first `--example` template is not accepted blindly: intent (0a), requirements (0b), topology (1), sizing (2), OS (3), AWS (4), counts and placement (5, 5b), apps and licenses (6, 6b), plan (6c), write (7), validate (8), handoff (9).
+
+**Provider:** `spa init` requires `--provider aws|virtualbox|external` unless the operator has saved a default with `spa environment set --provider NAME`. Ask the operator which provider to use before any init, then record it with `--aws` in the header when it is AWS. See [config-header-best-practices.md](references/config-header-best-practices.md).
+
+## Never edit by hand (mandatory)
+
+Never edit `config/splunk_config.yml` yourself: no editor, no shell write, no YAML patch, no pasted block. Every change goes through `spa config`:
+
+- Read: `spa --agent config search QUERY`, `spa --agent config explain PATH`, `spa --agent config get [PATH]`
+- Write: `spa --agent config set PATH VALUE`, `add`, `unset`, `merge --file FILE`, `topology`, `provider`, and `header set`
+
+App entries go to [spa-apps](../spa-apps/SKILL.md) (`spa --agent apps add`). Validation, provision, deploy, and destroy stay in [/spa](../spa/SKILL.md), which waits for your yes.
 
 ## Secrets — never display credential values (mandatory)
 
@@ -78,7 +101,9 @@ Follow [secrets-handling.md](references/secrets-handling.md) for the full list.
 | Licenses | [references/licenses.md](references/licenses.md) |
 | RF / SF & sizing | [references/rf-sf-sizing.md](references/rf-sf-sizing.md) |
 | Validate / deploy | [references/validation.md](references/validation.md) |
-| Header template | [assets/config-header-template.md](assets/config-header-template.md) |
+| Header fields (set with `spa config header set`) | [assets/config-header-template.md](assets/config-header-template.md) |
+| Header best practices | [references/config-header-best-practices.md](references/config-header-best-practices.md) |
+| Which skill for which request | [references/workflow-decision-tree.md](references/workflow-decision-tree.md) |
 | Architecture plan | [assets/architecture-plan-template.md](assets/architecture-plan-template.md) |
 | Secrets / env vars | [references/secrets-handling.md](references/secrets-handling.md) |
 
@@ -99,19 +124,33 @@ Repo keys: for every requested capability, use this loop. Call `bin/spa` JSON. D
 **Actions:**
 
 1. Confirm **project root** (contains `ansible.cfg`, `bin/`).
-2. **Mode** — AskQuestion if available, otherwise ask in chat, unless user already stated intent:
+2. **Mode** — not asked here. The plan-or-write question is asked in the gate, after the minimum requirements (topology, provider, OS) are defined and before init. If the user already stated intent, note it now and confirm it at the gate:
    - **plan** — Phases 0a–6b + architecture plan; **no** `splunk_config.yml` write until user approves.
    - **write** — Full flow through Phase 7–9 (or continue after approved plan).
    Infer **plan** from phrases like “design”, “discuss”, “plan architecture”; infer **write** from “create config”, “write yaml”, “approve and write”.
-3. Target path: default `config/splunk_config.yml` (for write mode or post-approval).
-4. If file exists and **mode=write** (or approving plan): **merge vs overwrite** — AskQuestion if available, otherwise ask in chat, before destructive write. Skip in **plan** mode until Phase 7.
+3. Target: the environment chosen at the gate, or the named existing environment under "Add / change a setting". Its config is `<env path>/config/splunk_config.yml`. Never assume the current directory or the registry default is the target.
+4. If the target config already exists and **mode=write** (or approving plan): **merge vs overwrite** — AskQuestion if available, otherwise ask in chat, before any write. Skip in **plan** mode until Phase 7.
 5. **AWS API probe** — `spa aws --check-auth --json` (needs `boto3`; no region required). Record result:
-   - **Available** → Phase 4 uses API discovery; optional `--splunk-config-aws` at validate.
+   - **Available** → Phase 4 uses API discovery; optional `spa validate --splunk-config aws` at validate.
    - **Unavailable** → follow [aws-without-credentials.md](references/aws-without-credentials.md); do not block the workflow.
 6. Read existing config if merging or revising an existing plan from prior config.
-7. Optional inventory: `spa licenses --json` — note what exists in the shared Software directory ([Prepare Software](../../../docs/user-guide.md#prepare-software)).
+7. Licenses are not scanned here. Phase 6b scans the Software directory once, after the apps decision.
+8. **Architecture input (optional).** If the user gives a path to a JSON file with architecture decisions (from another skill or CI), follow [architecture-input.md](references/architecture-input.md): validate it, record each phase's source, and skip the collection phases it covers. Phases 6 and 6b are always asked, even when `confirmed` is true.
 
-**Exit:** **Mode recorded**; target path known; merge policy clear when applicable; **AWS API status recorded**; Software licenses noted if scanned.
+**Exit:** Intent noted (mode is confirmed at the gate); target path known; merge policy clear when applicable; **AWS API status recorded**; architecture input validated if one was given.
+
+## Pre-Phase Checkpoint — user input classification
+
+After Step 0, classify what the user has already specified. Phases marked "Can skip" need no question when the value is clear. Phases marked "Must reconfirm" are always asked.
+
+| User Specified | Can Skip | Must Reconfirm |
+|---|---|---|
+| Topology only | 0b, 5b | 6, 6b |
+| Topology + OS | 0b, 3, 5b | 6, 6b |
+| Topology + OS + sizing | 0b, 2, 3, 5b | 6, 6b |
+| All four (topology, OS, sizing, provider) | 0b, 2, 3, 4, 5b | **6, 6b (MANDATORY)** |
+
+**MANDATORY:** Phase 6 (apps) and Phase 6b (licenses) are asked every time before Phase 7. Skipping a phase is recorded in the reconfirmation table before Phase 7.
 
 ## Phase 0a — Deployment intent
 
@@ -141,7 +180,7 @@ Ask scale-out vs scale-up; default **scale out** for Splunk.
 
 | Path | Action |
 |------|--------|
-| User knows SVA code | Confirm code → [sva-topology-map.md](references/sva-topology-map.md) then `spa init --example TOPOLOGY --provider aws\|virtualbox ENV` |
+| User knows SVA code | Confirm code → [sva-topology-map.md](references/sva-topology-map.md) → record the topology id. Init runs at the location, name, and summary gate after Phase 3. |
 | Needs help | [sva-questionnaire.md](references/sva-questionnaire.md) then `spa --agent config search` |
 | Config test only | Minimal topology (`single_node` or `cm_2idxc_sh`) |
 
@@ -167,20 +206,59 @@ Set global `os:` block, expected `ssh_username`, and **polkit** (`polkit` on AL/
 
 **Exit:** OS family chosen; `os:` template ready.
 
+## Environment location, name, and summary (mandatory before init)
+
+Run this before the first `spa init` or `spa environment init` for a new environment. Skip it when the operator names an existing environment to change (see "Add / change a setting").
+
+**Minimum requirements first:** the topology (Phase 1), the provider, and the OS (Phase 3) must be chosen before this gate. Sizing (Phase 2) and AWS settings (Phase 4) are set after init with `spa config set`, so they do not block the name.
+
+1. **Mode** — ask plan or write (see Step 0, item 2). Use AskQuestion if available, otherwise ask in chat, unless the user already chose one. Do not ask this before the minimum requirements above are defined. **Plan:** stop here. Every `spa config set|add|merge` and `spa apps add` that Phases 2–6 would run becomes a recorded value in the plan. Steps 2–6 and those writes run at the start of Phase 7, after the plan is approved. **Write:** continue with steps 2–6 now.
+
+2. **Gather facts (read-only).**
+   - Current directory: `pwd`.
+   - Registered environments: `spa --agent environment list`. Each row has `name`, `path`, `default`, and `exists`.
+   - If the current directory is the SPA framework checkout (it contains `bin/spa` and `ansible.cfg`) or lies inside `SPA_HOME`, do not recommend it. Recommend the default parent from `spa environment list` instead, and say why.
+   - Existing target: a proposed `PARENT/NAME` whose folder exists, or whose name is already registered, is not a new environment. Do not init it or write to it. Write to it only when the operator names it as the environment to change ("Add / change a setting"), and only after a merge-vs-overwrite answer.
+
+3. **Ask the location** with AskQuestion, or in chat if AskQuestion is not available. Offer these options, in this order:
+   - `<current directory>/<NAME>`: **recommended default**.
+   - The parent folder of each registered environment whose `exists` is true. Show each parent once, with its path.
+   - A new path that the operator types.
+
+4. **Recommend a name.** Derive one name from topology and OS, for example `rhel10-single`, `cm-2idx-sh-aws`, or `itsi-lab-vbox`. Use lowercase letters, digits, and hyphens. The folder name is the registry name by default. Use `--name` only when the operator wants a registry name that differs from the folder. The name must not match a `name` in `spa environment list`; if it does, add a suffix. Ask the operator to accept it or type another name.
+
+5. **Summarize and wait for yes.** Show exactly what will run:
+   - Name, full path (parent plus name), provider, topology example, OS, and whether the parent is already registered.
+   - The command: `spa environment init PARENT/NAME --example TOPOLOGY --provider PROVIDER`. Add `--name REGISTRY_NAME` only when the registry name differs from the folder name.
+   - What it does: creates the folder, scaffolds `config/splunk_config.yml`, and registers the name. Every later write goes to this environment only.
+   - Wait for an explicit yes in chat. A request in the same message is not the yes.
+
+6. **Run init only after the yes.** Then continue with Phase 4 (AWS settings) and the later config steps, and the app step (Phase 6).
+
+**Write barrier.** Until step 6 has run, no writing command runs: no `spa init`, `spa environment init`, `spa config set|add|unset|merge|topology|provider|header set`, or `spa apps add|remove`. These stay allowed: `spa --agent config search|explain|get`, `spa aws ...`, `spa --agent environment list`, `spa licenses`, and `spa --agent apps search|snippet`.
+
+**Target check (every write).** Pass `--env NAME` on each write, or run it from the target directory. Config and apps success envelopes include `resolved_env_name`, `env_dir`, and `config_file`. After each write, confirm they match the step 5 target. If they do not, stop, report the mismatch, and do not run another write. Never write to the registry default by accident.
+
 ## Phase 4 — AWS settings
 
 **With creds:** Run `spa aws --json` — see [aws-baseline.md](references/aws-baseline.md). Agents pass `--json` so the result is JSON.
 
-1. Region (`spa aws --json regions list` or confirm)
-2. AMI — if unknown, `spa aws --json --latest-ami --os <rhel|ubuntu|amazon_linux|debian>` or `spa aws --json --survey` → user picks from `recommended_amis` (preference: RHEL first)
-3. `ssh_username` (`spa aws --json --describe-ami`)
+1. **Region.** Run `spa aws --json regions list` and ask with AskQuestion:
+   - Option 1 is `aws_config_region` from the output, first, marked as the default, and labelled with its source: "`<region>` (from AWS config, profile `<aws_config_profile>`)". If `aws_config_region` is null, put no region first and say so.
+   - Then up to four other names from `items`, common regions first (`us-east-1`, `us-west-2`, `eu-central-1`, `ap-southeast-1` when present), and "Other: type a region".
+   - If `ok` is false, `items` is empty. Still show option 1 from `aws_config_region`, and offer "Other".
+   - Do not pick the default from `region` or `region_source`. In a new environment, `terraform.aws.region` is the scaffold value from `examples/providers/aws.yml`, not a choice.
+   - If `aws_config_region` is null, show no default. Ask with no region marked. Never choose a default from your own knowledge (for example `us-east-1`).
+   - Use the "Recommended" label only on option 1, and only when it came from `aws_config_region`.
+2. AMI — if unknown, `spa aws --region REGION --json --latest-ami --os <rhel|ubuntu|amazon_linux|debian>` or `spa aws --region REGION --json --survey` → user picks from `recommended_amis` (preference: RHEL first). REGION is the Phase 4 region, the same as `terraform.aws.region`; every AMI lookup names it.
+3. `ssh_username` (`spa aws --region REGION --json --describe-ami --ami-id AMI_ID`)
 4. Instance type (`spa aws --json instance-types list --family t3`; suggest `t3.medium` for config tests)
 5. Key pair (`spa aws --json key-pairs list`)
 6. Security groups (`spa aws --json security-groups list`)
 7. Local: `ssh_private_key_file`, tags, volume size
 8. `--validate` before write
 
-**Without creds:** [aws-without-credentials.md](references/aws-without-credentials.md) — static matrix, example AMIs, user-supplied key/SG names; **warn AMIs may be stale**; header note `AWS API: not available`. Do **not** run `--splunk-config-aws`.
+**Without creds:** [aws-without-credentials.md](references/aws-without-credentials.md) — static matrix, example AMIs, user-supplied key/SG names; **warn AMIs may be stale**; header note `AWS API: not available`. Do **not** run `spa validate --splunk-config aws`.
 
 Cap displayed API results (~10–15 AMIs, ~5 instance types).
 
@@ -195,7 +273,7 @@ Determine roles and node counts (not host mapping yet):
 - Standalone SH vs SHC (min 3)
 - MC, LM, DS, HF, UF needed?
 
-Copy `splunk_idxclusters` / `splunk_shclusters` from closest example; apply RF/SF table from topology map when not copying verbatim.
+Start from the example chosen at Phase 1 (scaffolded by init at the gate; do not run init again). Set `splunk_idxclusters` / `splunk_shclusters` counts with `spa --agent config set` or `add`, in write mode after the gate or in plan mode at Phase 7. Apply the RF/SF table from the topology map.
 
 **Exit:** Tier counts documented; RF/SF match peer counts per checklist.
 
@@ -209,15 +287,30 @@ Summarize hosts before YAML write.
 
 **Exit:** Host ↔ role map; strategy for header.
 
-## Phase 6 — Apps (optional)
+**Next:** Phase 6 (apps). Do not skip to 6b, 6c, or 7 until Phase 6 has an answer, even when the user did not mention apps.
 
-[apps-questionnaire.md](references/apps-questionnaire.md). Skip entire `splunk_app_deployment` if no.
+## Phase 6 — Apps (mandatory reconfirmation)
 
-**Exit:** App block ready or explicitly skipped.
+Always ask, even when the user did not mention apps. Use AskQuestion if available, otherwise ask in chat:
+
+- **Yes, add apps:** follow [apps-questionnaire.md](references/apps-questionnaire.md) and load [/spa-apps](../spa-apps/SKILL.md) to search and add each app.
+- **No, trial-only:** reconfirm once: "Confirmed: no apps for this environment. Continue?" Leave out `splunk_app_deployment` only after that yes.
+
+**Loop (when the answer is yes):**
+
+1. Search and add one app with [spa-apps](../spa-apps/SKILL.md) (search, pick the ID and roles, `spa --agent apps add`).
+1b. **ITSI (1841) first.** If the app just added is ITSI (1841), ask about content packs before the next question. Run `spa --agent apps content-packs list 5391`, ask with AskQuestion which packs to add (include "None"), and add each chosen pack with `spa --agent apps add 5391 --content-pack NAME`. Then go to step 2.
+2. After each add, ask with AskQuestion: **"Add another app?"** Options: Yes, add another; No, done with apps.
+3. On yes, repeat from step 1 until the operator answers no. Do not skip the question after any add.
+4. On no, show the current list with `spa --agent config get splunk_app_deployment` and confirm it is right. Then move on to Phase 6b.
+
+The loop ends only when the operator answers no. Apps added in this session go into the reconfirmation table with source "User input (chat)". In plan mode, record each app ID and its roles in the plan. Run `spa --agent apps add` only in Phase 7, after the environment gate.
+
+**Exit:** App list confirmed in the loop (at least one app added, or trial-only confirmed).
 
 ## Phase 6b — Licenses
 
-[licenses.md](references/licenses.md). Run **after Phase 6** so ITSI detection is accurate.
+[licenses.md](references/licenses.md). Run **after Phase 6** so ITSI detection is accurate. Always ask, even when no license file is found: a trial-only decision is reconfirmed before Phase 7.
 
 ```bash
 spa licenses --config config/splunk_config.yml --json
@@ -226,18 +319,20 @@ spa licenses --config config/splunk_config.yml --json
 1. Scan the Software directory for `*.lic` / `*.License` and inspect sanitized parsed
    metadata: `license_type`, `group_id`, `addons`, `capabilities`, `expires_at`,
    and `status`. Never expose raw license XML, signatures, or GUIDs.
-2. If `proposed_splunk_license_file` is non-empty, ask (AskQuestion if available): add to `splunk_defaults`? (especially for lab / app lab intent).
-3. **If user accepts license file** → add `license_manager` role on a host in Phase 5b (typical lab: co-locate on `cm` or dedicated `mc`).
+2. Always ask (AskQuestion if available), after showing the scan. This step runs whether or not a file was proposed:
+   - **Files found:** add the proposed file, pick another from the list, or stay trial-only.
+   - **No usable file:** stay trial-only, or add a license file to the Software directory before deploy.
+   Trial-only is reconfirmed once: "Confirmed: trial-only license. Continue?"
+3. **If user accepts a license file** → add `license_manager` role on a host in Phase 5b (typical lab: co-locate on `cm` or dedicated `mc`).
 4. **ITSI in config** → require parsed `enterprise` + `itsi` capabilities; ensure `license_manager` role (Phase 5b). Do not infer capability from filenames.
 5. **Enterprise Security in config** (app ID `263` or exact ES name) → require parsed `enterprise` + `es` capabilities. `premium_app: es` is not supported by the deployment schema; do not add it.
 6. **License manager role** → `splunk_license_file` is required (schema). **License file in config** → `license_manager` role is required (schema).
 7. Reject configured files that are missing, invalid, expired, or do not collectively satisfy the selected premium apps. Warn for expiration within 30 days or an unknown expiration.
-8. **Trial-only labs** → omit both `splunk_license_file` and `license_manager`; do not add license file from Software scan alone.
-9. No usable files in Software → warn (trial only or add licenses before deploy).
+8. **Trial-only, after the reconfirmation in step 2** → omit both `splunk_license_file` and `license_manager`. Do not add a license file from the Software scan alone.
 
 Use `spa --agent config explain splunk_defaults.splunk_license_server` or the licenses result's `proposed_splunk_license_file`, then author it under `splunk_defaults` in Phase 7 with `spa --agent config set`.
 
-**Exit:** License list decided or explicitly skipped; LM + ITSI/ES warnings addressed.
+**Exit:** License decision confirmed (a file added, or trial-only after reconfirmation); LM + ITSI/ES warnings addressed.
 
 ## Phase 6c — Architecture plan (plan mode)
 
@@ -245,7 +340,12 @@ Use `spa --agent config explain splunk_defaults.splunk_license_server` or the li
 
 **Actions:**
 
-1. Fill [architecture-plan-template.md](assets/architecture-plan-template.md) from phase exits (0a–6b).
+1. Fill [architecture-plan-template.md](assets/architecture-plan-template.md) from phase exits (0a–6b). The plan must show:
+   - **Infrastructure:** provider, region, instance type, OS, storage size.
+   - **Splunk topology:** each host and its roles, and the SVA target.
+   - **Apps:** the count, and which are premium (ITSI, content packs).
+   - **License:** the file name, or trial-only.
+   - **Environment variables:** `SPLUNKBASE_USERNAME`, `SPLUNKBASE_PASSWORD`, and the AWS profile or key variables, each as set / not set only.
 2. Present the plan in chat. Offer optional file: `docs/plans/<short-name>-architecture-plan.md`.
 3. End with: *Revise anything, or say **approve and write config** to continue to Phase 7.*
 
@@ -255,14 +355,48 @@ Use `spa --agent config explain splunk_defaults.splunk_license_server` or the li
 
 **Do not run Phase 7–9** until user explicitly approves (treat approval as `mode=write` for remainder of session).
 
+## Reconfirmation Checkpoint (before Phase 7)
+
+Show one table of every decision and where it came from:
+
+| Phase | Source | Value | Status |
+|---|---|---|---|
+| 0a Intent | User input (chat) | e.g. Feature / app lab | Confirmed |
+| 0b Requirements | Auto-skip or default | e.g. moderate workload | Confirmed |
+| 1 Topology | User input (chat) or architecture file | e.g. `single_node` | Confirmed |
+| 2 Sizing | User input (chat) or architecture file | e.g. `t3.xlarge` | Confirmed |
+| 3 OS | User input (chat) or architecture file | e.g. RHEL 10 | Confirmed |
+| 4 Provider | User input (chat) or architecture file | e.g. AWS `eu-central-1` | Confirmed |
+| 5b Placement | Auto-skip (fully specified) | e.g. all roles co-located | Confirmed |
+| 6 Apps | User input (chat) | none, or app IDs | Reconfirm now if not yet answered |
+| 6b Licenses | Software scan | file, or trial-only | Reconfirm now if not yet answered |
+
+Sources: `User input (chat)`, `Architecture file`, `Auto-skip (fully specified)`, `Default`. Status: `Confirmed` or `Reconfirm now`.
+
+Answer every `Reconfirm now` row first. Then ask: "Confirm all values and write the config?" Wait for an explicit yes in chat. Phase 7 does not start without it. A request in the same message is not the yes.
+
 ## Phase 7 — Write config
 
-**Entry:** `mode=write` OR user said **approve and write config** (or equivalent).
+**Entry:** `mode=write` OR user said **approve and write config** (or equivalent), and the reconfirmation table is confirmed.
 
 **Do not enter** while plan mode is active and plan is still draft.
 
-1. Scaffold with `spa init --example TOPOLOGY --provider aws|virtualbox ENV` (topology + provider only). Do not invent `--addon` or OS flags on init.
-2. After the operator confirms, run `spa --agent config header set` (`spa config header set`) to replace the leading comment. Include `--intent`, `--requirements`, `--sva`, `--placement`, `--license`, `--installer`, `--os`, `--aws`, and `--deploy` only when the operator supplied that value. Omitted fields are removed. Pass `--yes`.
+1. **Gate check.** Before the first write, confirm the environment gate passed in this session: step 6 ran init for the target, or the operator named an existing environment under "Add / change a setting". In plan mode, run steps 2–6 here first. If neither holds, STOP and run the gate. Do not run init again here. Do not invent `--addon` or OS flags on init.
+2. Header values are captured as each phase closes, not reconstructed at write time:
+
+   | Phase | Header flag |
+   |---|---|
+   | 0a Intent | `--intent` |
+   | 0b and 2 Requirements and sizing | `--requirements` |
+   | 1 Topology | `--sva` |
+   | 3 OS | `--os` |
+   | 4 AWS | `--aws` (API-verified, or the unverified note) |
+   | 5b Placement | `--placement` |
+   | 6b License | `--license` |
+   | Operator-named installer | `--installer` |
+   | 9 Deploy command | `--deploy` |
+
+   After the operator confirms, run `spa --agent config header set` (`spa config header set`) with those values. Include a flag only when its phase produced a value. Omitted fields are removed, so a missing value is an open question for the operator, not a blank. Pass `--yes`. The field list and examples are in `spa config header set --help`.
 3. For OS, SSL, licenses, RF/SF, and other settings: choose with `spa --agent config search QUERY`, then `spa --agent config explain PATH`. Use the one command on that page. That is `spa --agent config set PATH VALUE` for an existing scalar or map, or `spa --agent config add SELECTOR JSON_OBJECT` for a new non-app identity. Use one intentional `spa --agent config merge --file FILE` for a multi-setting fragment. Never paste a feature snippet. For **apps**, load [spa-apps](../spa-apps/SKILL.md), search, and call `spa --agent apps add`. ITSI is app_id 1841, not 5403.
 4. Global `terraform.aws` already comes from `--provider aws`; add **`ssh_username`** / AMI from catalog + discovery.
 5. Matching global `os:` from selector `os` (not from the topology file).
@@ -274,17 +408,17 @@ Use `spa --agent config explain splunk_defaults.splunk_license_server` or the li
 ## Phase 8 — Validate (quality gate)
 
 ```bash
-spa validate --config config/splunk_config.yml
+spa --agent validate
 ```
 
-This always runs schema validation, inventory load, **license file ↔ license_manager pairing**, and playbook syntax-check. Fix any failure before handoff.
+Run it from the target environment directory, or pass `--env NAME`. This always runs schema validation, inventory load, **license file ↔ license_manager pairing**, and playbook syntax-check. Fix any failure before handoff.
 
-**Without AWS credentials:** default validate above is enough for handoff. **Do not** use `--splunk-config-aws` (it will fail). Note in header; user re-validates with API before provision — see [aws-without-credentials.md](references/aws-without-credentials.md).
+**Without AWS credentials:** default validate above is enough for handoff. **Do not** use `spa validate --splunk-config aws` (it will fail). Note in header; user re-validates with API before provision — see [aws-without-credentials.md](references/aws-without-credentials.md).
 
 With AWS creds:
 
 ```bash
-spa validate --splunk-config-aws --config config/splunk_config.yml
+spa validate --splunk-config aws --config config/splunk_config.yml
 ```
 
 Optional: verify license files exist, parse as valid XML, are not expired, and
@@ -298,23 +432,27 @@ Optional: `./tests/run_schema_tests.sh -q`
 
 Do not hand off until validation passes. See [validation.md](references/validation.md).
 
+**On failure:** quote the failing check and the config path it names. Then ask (AskQuestion if available): **Fix and retry**, **Show config** (`spa --agent config get PATH`), or **Stop**. After each fix, run `spa --agent validate` again. Never hand off on a failed run.
+
 **Exit:** Scripts exit 0.
 
 ## Phase 9 — Handoff
 
-User runs (skill does **not** auto-provision):
+Validation passed. Ask which way to continue (AskQuestion if available):
+
+- **A) Hand off to `/spa`:** load [/spa](../spa/SKILL.md) and run provision, then deploy, under its gates ("Handoff from spa-create-config" there). This skill runs no lifecycle command.
+- **B) Show me the command:** print the commands below; you run them.
+- **C) Wait:** stop here; you run them later.
 
 ```bash
 spa provision --yes && spa deploy --yes
 ```
 
-Destroy: `spa destroy --yes`
+Each run waits for its own explicit yes in chat. A request earlier in the chat is not that yes. Provision, deploy, `spa hosts check`, destroy, suspend, resume, and logs belong to `/spa`. Do not run them from this skill.
 
-Pause AWS compute while retaining Terraform state and EBS volumes:
-`spa suspend --yes`. Resume and refresh changed inventory addresses:
-`spa resume --yes`. Retained resources continue to incur charges.
+**B and C:** print the commands and the log command (`spa logs --last`), then stop.
 
-Optional: distill app-scope tests via [spa-add-test-scenario](../spa-add-test-scenario/SKILL.md).
+App-scope scenarios: [tests/README.md](../../../tests/README.md).
 
 ## Terminology
 
@@ -326,7 +464,7 @@ Use consistently: `cluster_manager`, `terraform.aws`, `splunk_hosts`, `plugin: s
 - [ ] Description third person with trigger terms
 - [ ] SKILL.md under 500 lines; details in `references/`
 - [ ] When to Use / When NOT to Use present
-- [ ] Step 0 mode (`plan` vs `write`) recorded; plan mode skips YAML until approval
+- [ ] Mode (`plan` vs `write`) asked at the gate after the minimum requirements; plan mode skips YAML until approval
 - [ ] Step 0 and phase exit criteria followed
 - [ ] `bin/*` invoked from project root
 - [ ] Secrets: Splunkbase and AWS credential env values never shown in chat or terminal output
