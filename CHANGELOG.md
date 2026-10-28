@@ -11,6 +11,12 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **Validate flag renamed**: `spa validate --splunk-config-aws` is now `spa validate --splunk-config aws`. The old flag is removed, so scripts that pass it must switch to the new form.
+
+- **Skill gate for new environments**: `/spa-create-config` no longer writes config until the location, name, and summary gate passes. A new-environment request never selects an existing environment, and a write to a registered environment needs that environment named first. Each config or apps write checks `resolved_env_name` in its response. Provision, deploy, host check, destroy, suspend, resume, and logs now run from `/spa` after Phase 9 option A hands off there.
+
+- **ITSI search groups results**: `spa apps search itsi` in human mode groups hits into "Core ITSI" (1841), "Content packs (from Library 5391)", "Single content packs", and "Other apps". The library section shows the `content-packs list 5391` and `--content-pack NAME` commands, and each single pack shows its add command and that Core ITSI 1841 is added first when missing. Library 5391 is pinned for ITSI queries, so its row appears even when the page omits it. Agent output and non-ITSI searches are unchanged.
+
 - **terraform.aws rejects unknown keys**: a misspelled key such as `ami` next to `ami_id` now fails validation instead of being ignored.
 - **AWS discovery uses the environment region**: `spa aws` without `--region` searches `terraform.aws.region` from the environment config before `AWS_REGION`, `AWS_DEFAULT_REGION`, or `~/.aws/config`. The skills pass `--region` on every AMI and survey lookup.
 

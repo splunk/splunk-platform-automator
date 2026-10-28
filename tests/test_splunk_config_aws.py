@@ -213,6 +213,33 @@ def test_list_regions_uses_aws_default_region(monkeypatch, capsys, tmp_path):
     assert "Using region" not in captured.out
 
 
+def test_list_regions_reports_the_aws_config_region_beside_the_environment_region(monkeypatch, capsys, tmp_path):
+    _aws_config(monkeypatch, tmp_path, "us-east-1")
+    monkeypatch.setattr(aws, "_session", lambda region=None: _FakeRegionSession())
+
+    assert aws.main(["regions", "list", "--json"], environment_region="eu-central-1") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["region"] == "eu-central-1"
+    assert payload["region_source"] == "terraform.aws.region"
+    assert payload["aws_config_region"] == "us-east-1"
+    assert payload["aws_config_profile"] == "default"
+
+
+def test_list_regions_reports_a_missing_profile_as_json_not_a_traceback(monkeypatch, capsys, tmp_path):
+    _aws_config(monkeypatch, tmp_path, "eu-central-1")
+    monkeypatch.setenv("AWS_PROFILE", "no-such-profile")
+
+    code = aws.main(["regions", "list", "--json"], environment_region="eu-central-1")
+    captured = capsys.readouterr()
+    assert code == 1
+    payload = json.loads(captured.out)
+    assert payload["ok"] is False
+    assert "no-such-profile" in payload["error"]
+    assert payload["region"] == "eu-central-1"
+    assert payload["items"] == []
+    assert "Traceback" not in captured.err
+
+
 def test_regional_aws_command_uses_the_config_region_and_names_the_source(monkeypatch, capsys, tmp_path):
     _aws_config(monkeypatch, tmp_path, "eu-central-1")
     seen = {}

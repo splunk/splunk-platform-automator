@@ -1262,8 +1262,20 @@ def execute(args: Any, environment_region: Optional[str] = None):
 
     if kind == "regions":
         resolved = resolve_region(getattr(args, "region", None), environment_region)
-        data = list_regions(_session(), selected_region=resolved.region)
+        try:
+            session = _session()
+        except Exception as exc:  # e.g. botocore ProfileNotFound for a missing AWS_PROFILE; SystemExit from a missing boto3 still exits
+            from spa.runlog import redact
+
+            data = {"ok": False, "error": redact(str(exc)), "items": []}
+        else:
+            data = list_regions(session, selected_region=resolved.region)
         _stamp_region(data, resolved)
+        if isinstance(data, dict):
+            # The region in ~/.aws/config, even when an environment config overrides it.
+            config_region = _region_from_aws_config()
+            data["aws_config_region"] = config_region.region
+            data["aws_config_profile"] = config_region.profile
         return _aws_result(data)
 
     if kind in {"amis", "instance-types", "key-pairs", "security-groups"}:

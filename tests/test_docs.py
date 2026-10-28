@@ -417,21 +417,27 @@ class TestSpaSkill:
         assert gate_heading in text
         gate_start = text.index(gate_heading)
         phase1 = text.index("## Phase 1 — Topology path")
-        assert gate_start < phase1, "the location gate must come before the first init"
-        gate = text[gate_start:phase1]
+        phase3 = text.index("## Phase 3 — Linux OS")
+        phase4 = text.index("## Phase 4 — AWS settings")
+        assert phase1 < phase3 < gate_start < phase4, (
+            "the gate comes after topology and OS are chosen, and before init and AWS settings"
+        )
+        assert "spa environment init" not in text[phase1:phase3], "topology and OS must not run init"
+        gate = text[gate_start:phase4]
         # Location: current directory is the recommended default; registered environments are alternatives.
         assert "current directory" in gate
         assert "spa --agent environment list" in gate
         assert "AskQuestion" in gate
-        # Name: one recommended name, derived from the design, checked against the registry.
+        # Name: one recommended name, derived from topology and OS (both chosen before the gate), checked against the registry.
         assert "recommend" in gate.lower()
+        assert "topology and OS" in gate
         # Summary and explicit yes before the init command runs.
         assert "summary" in gate.lower()
         assert "PARENT/NAME" in gate and "--example" in gate
         assert "--name" in gate  # optional: only when the registry name differs from the folder
         assert "wait" in gate.lower()
-        # After init, the flow continues with the config and app steps.
-        assert "Phase 2" in gate or "Phase 6" in gate
+        # After init, the flow continues with the AWS settings, which set values with spa config set.
+        assert "Phase 4" in gate
 
     def test_create_config_phase7_sets_header_by_command(self):
         skill = PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md"
@@ -442,6 +448,156 @@ class TestSpaSkill:
         assert phase8
         assert "spa config header set" in phase7_body
         assert "config-header-template.md" not in phase7_body
+
+    def test_create_config_apps_and_licenses_are_mandatory_gates(self):
+        text = (PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        assert "## Phase 6 — Apps (optional)" not in text
+        assert "Skip entire `splunk_app_deployment` if no." not in text
+        phase6 = text[text.index("## Phase 6 — Apps"):text.index("## Phase 6b")]
+        assert "AskQuestion" in phase6
+        assert "reconfirm" in phase6.lower()
+        phase6b = text[text.index("## Phase 6b"):text.index("## Phase 6c")]
+        assert "AskQuestion" in phase6b
+        assert "reconfirm" in phase6b.lower()
+        assert "Confirmed: trial-only license. Continue?" in phase6b
+        assert "If `proposed_splunk_license_file` is non-empty, ask" not in phase6b
+        assert "No usable files in Software → warn" not in phase6b
+        assert "spa licenses --config config/splunk_config.yml --json" in phase6b
+        step0 = text[text.index("## Step 0"):text.index("## Pre-Phase Checkpoint")]
+        assert "spa licenses" not in step0, "licenses are scanned once, in Phase 6b"
+
+    def test_create_config_classifies_user_input_before_phases(self):
+        text = (PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        assert "## Pre-Phase Checkpoint" in text
+        step0_end = text.index("## Phase 0a — Deployment intent")
+        assert text.index("## Step 0") < text.index("## Pre-Phase Checkpoint") < step0_end
+        block = text[text.index("## Pre-Phase Checkpoint"):step0_end]
+        assert "| User Specified | Can Skip | Must Reconfirm |" in block
+        assert "6, 6b" in block
+        assert "MANDATORY" in block
+
+    def test_create_config_asks_mode_only_after_minimum_requirements(self):
+        text = (PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        step0 = text[text.index("## Step 0"):text.index("## Pre-Phase Checkpoint")]
+        assert "AskQuestion if available, otherwise ask in chat, unless user already stated intent" not in step0, (
+            "the plan-or-write question must wait for the minimum requirements"
+        )
+        gate_start = text.index("## Environment location, name, and summary (mandatory before init)")
+        phase4 = text.index("## Phase 4 — AWS settings")
+        gate = text[gate_start:phase4]
+        assert "**Minimum requirements first:**" in gate
+        assert "**Mode**" in gate, "the mode question is asked in the gate, before init"
+        assert gate.index("**Minimum requirements first:**") < gate.index("**Mode**") < gate.index("**Ask the location**"), (
+            "minimum requirements, then mode, then location"
+        )
+
+    def test_create_config_shows_reconfirmation_table_before_write(self):
+        text = (PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        start = text.index("## Reconfirmation Checkpoint")
+        phase7 = text.index("## Phase 7 — Write config")
+        assert start < phase7
+        block = text[start:phase7]
+        assert "| Phase | Source | Value | Status |" in block
+        for row in ("2 Sizing", "3 OS", "4 Provider", "5b Placement"):
+            assert row in block, row
+        assert "explicit yes" in block.lower()
+
+    def test_create_config_phase9_asks_before_running_provision_and_deploy(self):
+        text = (PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        phase9 = text[text.index("## Phase 9 — Handoff"):]
+        assert "spa provision --yes && spa deploy --yes" in phase9
+        assert "Show me the command" in phase9 or "print" in phase9.lower()
+        assert "explicit yes" in phase9
+        assert "does **not** auto-provision" not in phase9
+        assert "- Auto-running provision/deploy" not in text
+        agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        assert "spa-create-config" in agents and "Phase 9" in agents
+
+    def test_create_config_accepts_architecture_input_as_json_file(self):
+        skill_dir = PROJECT_ROOT / "skills" / "spa" / "spa-create-config"
+        create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+        ref = skill_dir / "references" / "architecture-input.md"
+        assert ref.is_file(), ref
+        assert "references/architecture-input.md" in create
+        assert "--architecture-file" not in create
+        assert "--architecture-stdin" not in create
+        contract = ref.read_text(encoding="utf-8")
+        for key in ('"confirmed"', '"phase_1"', '"phase_2"', '"phase_3"', '"phase_4"', '"phase_6"', '"phase_6b"'):
+            assert key in contract, key
+        assert "still asked" in contract.lower()
+        assert "secret" in contract.lower()
+
+    def test_create_config_region_question_puts_aws_config_region_first(self):
+        text = (PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        phase4 = text[text.index("## Phase 4 — AWS settings"):text.index("## Phase 5 — Topology counts")]
+        assert "spa aws --json regions list" in phase4
+        assert "aws_config_region" in phase4
+        assert "aws_config_profile" in phase4
+        assert "first" in phase4.lower()
+        assert "from AWS config" in phase4
+        assert "AskQuestion" in phase4
+        assert "scaffold" in phase4
+
+    def test_create_config_apps_loop_asks_for_more_after_each_add(self):
+        skills = PROJECT_ROOT / "skills" / "spa"
+        create = (skills / "spa-create-config" / "SKILL.md").read_text(encoding="utf-8")
+        phase6 = create[create.index("## Phase 6 — Apps"):create.index("## Phase 6b")]
+        assert "Add another app?" in phase6
+        assert "after each" in phase6.lower()
+        assert "until" in phase6.lower() and "no" in phase6.lower()
+        assert "spa --agent config get splunk_app_deployment" in phase6
+        assert "reconfirm" in phase6.lower()
+
+        apps = (skills / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
+        workflow = apps[apps.index("## Workflow"):apps.index("ITSI / ITE Work")]
+        assert "Add another app?" in workflow
+        assert "after every add" in workflow.lower()
+
+    def test_create_config_asks_content_packs_after_itsi_before_more_apps(self):
+        skills = PROJECT_ROOT / "skills" / "spa"
+        create = (skills / "spa-create-config" / "SKILL.md").read_text(encoding="utf-8")
+        phase6 = create[create.index("## Phase 6 — Apps"):create.index("## Phase 6b")]
+        loop = phase6[phase6.index("**Loop"):]
+        assert "ITSI (1841)" in loop
+        assert "content-packs list 5391" in loop
+        assert loop.index("content-packs list 5391") < loop.index("Add another app?"), (
+            "after ITSI, content packs are asked before the add-another question"
+        )
+
+        apps = (skills / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
+        step8 = apps[apps.index("8. **After every add"):apps.index("9. `spa --agent validate`")]
+        assert "1841" in step8
+        assert "content-packs list 5391" in step8
+        assert step8.index("content-packs list 5391") < step8.index("Add another app?")
+
+    def test_region_default_never_comes_from_agent_knowledge(self):
+        skills = PROJECT_ROOT / "skills" / "spa" / "spa-create-config"
+        create = (skills / "SKILL.md").read_text(encoding="utf-8")
+        phase4 = create[create.index("## Phase 4 — AWS settings"):create.index("## Phase 5 — Topology counts")]
+        assert "from your own knowledge" in phase4
+        assert "null" in phase4
+        without_creds = (skills / "references" / "aws-without-credentials.md").read_text(encoding="utf-8")
+        assert "do not call `spa aws regions list`" not in without_creds
+        assert "aws_config_region" in without_creds
+        assert "ok: false" in without_creds
+
+    def test_create_config_skill_stays_under_500_lines(self):
+        text = (PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        assert len(text.splitlines()) < 500
 
     def test_config_skills_never_hand_edit_splunk_config(self):
         skills = PROJECT_ROOT / "skills" / "spa"
@@ -613,3 +769,66 @@ class TestSpaSkill:
             PROJECT_ROOT / "skills" / "spa" / "spa-add-test-scenario" / "SKILL.md"
         )
         assert not retired.exists()
+
+
+def _operator_text_paths():
+    """Every markdown file an operator or agent reads for commands."""
+    paths = [PROJECT_ROOT / "README.md", PROJECT_ROOT / "AGENTS.md"]
+    paths += sorted((_docs_dir()).glob("*.md"))
+    paths += sorted((PROJECT_ROOT / "skills").rglob("*.md"))
+    paths += sorted((PROJECT_ROOT / ".agent").rglob("*.md"))
+    return paths
+
+
+class TestReviewFindings67:
+    """Contracts from the #67 completion review. Each was red before its fix."""
+
+    def test_every_operator_init_example_names_a_provider_even_with_flags_before_it(self):
+        offenders = []
+        pattern = re.compile(r"\bspa (?:environment |env )?init\b")
+        for path in _operator_text_paths():
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                # Prose that names the flag or negates a topology (not a command) is not an operator example.
+                negated = "not `spa init" in line or "not a spa init" in line or "`--example`" in line
+                if pattern.search(line) and "--example" in line and "--provider" not in line and not negated:
+                    offenders.append("%s:%d: %s" % (path.relative_to(PROJECT_ROOT), number, line.strip()))
+        assert offenders == [], offenders
+
+    def test_spa_apps_hands_deploy_to_the_chat_gate_not_a_bare_command(self):
+        text = (PROJECT_ROOT / "skills" / "spa" / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
+        assert "(`spa deploy --yes`)" not in text
+        assert "Deploy only after the operator's yes in chat" in text
+
+    def test_no_agent_facing_file_uses_a_non_existent_playbook_or_typo_command(self):
+        offenders = []
+        for path in _operator_text_paths():
+            if "ap ansible/" in path.read_text(encoding="utf-8"):
+                offenders.append(str(path.relative_to(PROJECT_ROOT)))
+        assert offenders == [], offenders
+
+    def test_legacy_aws_runbook_points_to_the_skills_and_drops_the_unsafe_steps(self):
+        path = PROJECT_ROOT / ".agent" / "workflows" / "deploy-aws-terraform.md"
+        text = path.read_text(encoding="utf-8")
+        head = "\n".join(text.splitlines()[:6])
+        assert "/spa" in head and "legacy" in head.lower(), head
+        assert "spa sh " not in text
+        assert "-- -v" not in text
+        assert "Edit `config/splunk_config.yml`" not in text
+        assert "Non-interactive (agents / CI)" not in text
+
+    def test_every_gate_list_names_environment_cleanup_as_well_as_remove(self):
+        skills = PROJECT_ROOT / "skills" / "spa"
+        for path in (
+            skills / "spa" / "references" / "lifecycle.md",
+            skills / "spa" / "SKILL.md",
+            skills / "spa-create-config" / "references" / "workflow-decision-tree.md",
+        ):
+            text = path.read_text(encoding="utf-8")
+            assert "environment remove" in text, path.name
+            assert "environment cleanup" in text, path.name
+
+    def test_changelog_records_the_validate_flag_rename(self):
+        text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
+        assert "--splunk-config-aws" in unreleased
+        assert "--splunk-config aws" in unreleased

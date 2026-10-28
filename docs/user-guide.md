@@ -40,7 +40,7 @@ For an existing server, `spa init --example TOPOLOGY --provider external ENV`, t
 Keep Splunk installers, Professional Services baseconfig apps, and license files **out of** `SPA_HOME`. Point every env at one shared directory:
 
 ```bash
-spa init --software-dir ~/Software --example cm_2idxc_sh my-lab
+spa init --software-dir ~/Software --example cm_2idxc_sh --provider aws my-lab
 ```
 
 `spa validate` and `spa deploy` fail if that directory is missing or incomplete.

@@ -741,6 +741,14 @@ def test_search_itsi_fetches_1841_when_missing_from_page():
     assert [row["app_id"] for row in data["apps"]].count(1841) == 1
 
 
+def test_search_itsi_fetches_library_5391_when_missing_from_page():
+    client = FakeClient(apps=[_itsi(), _pack()], by_id={5391: _library()})
+    data = search("itsi", limit=10, client=client)
+    ids = [row["app_id"] for row in data["apps"]]
+    assert ids[:2] == [1841, 5391]
+    assert ids.count(5391) == 1
+
+
 def test_search_unix_does_not_pin_itsi():
     data = search("unix", limit=10, client=FakeClient(apps=[_ta(), _itsi()]))
     assert [row["app_id"] for row in data["apps"]] == [833, 1841]
@@ -1381,6 +1389,85 @@ def test_snippet_customize_snow_uses_env_lookup_not_password():
     assert "lookup('env', 'SNOW_PASSWORD')" in data["snippet"]
     assert "not-a-real-password" not in data["snippet"]
     assert "snow_password:" in data["snippet"]
+
+
+def _itsi_hits():
+    return [
+        {
+            "app_id": 1841,
+            "name": "itsi",
+            "title": "Splunk IT Service Intelligence",
+            "type": "app",
+            "kind": "premium_itsi",
+            "version": "5.0.2",
+            "summary": "ITSI monitoring",
+        },
+        {
+            "app_id": 3598,
+            "name": "xmatters_itsi",
+            "title": "xMatters for Splunk ITSI",
+            "type": "app",
+            "kind": "ta",
+            "version": "1.7.4",
+            "summary": "xMatters integration",
+        },
+        {
+            "app_id": 5391,
+            "name": "DA-ITSI-ContentLibrary",
+            "title": "Splunk IT Service Intelligence Content Library",
+            "type": "app",
+            "kind": "itsi_content_library",
+            "version": "2.5.1",
+            "summary": "Content packs library",
+        },
+        {
+            "app_id": 7375,
+            "name": "DA-ITSI-CP-CUST-ATLAS-PFSENSE",
+            "title": "Atlas ITSI Content Pack for Pfsense",
+            "type": "addon",
+            "kind": "itsi_content_pack_single",
+            "version": "1.0.0",
+            "summary": "pfSense content pack",
+        },
+    ]
+
+
+def test_search_human_text_groups_itsi_hits_into_sections():
+    lines = format_search_text("itsi", _itsi_hits()).splitlines()
+    core = lines.index("Core ITSI")
+    library = lines.index("Content packs (from Library 5391)")
+    single = lines.index("Single content packs")
+    other = lines.index("Other apps")
+    assert core < library < single < other
+    assert lines[core + 1].startswith("1841 | ")
+    assert library < next(i for i, line in enumerate(lines) if line.startswith("5391 | "))
+    assert single < next(i for i, line in enumerate(lines) if line.startswith("7375 | "))
+    assert other < next(i for i, line in enumerate(lines) if line.startswith("3598 | "))
+
+
+def test_search_human_text_library_section_shows_pack_commands():
+    text = format_search_text("itsi", _itsi_hits())
+    library_part = text.split("Content packs (from Library 5391)", 1)[1].split("Single content packs", 1)[0]
+    assert "spa apps content-packs list 5391" in library_part
+    assert "spa apps add 5391 --content-pack NAME" in library_part
+
+
+def test_search_human_text_single_pack_names_core_itsi_dependency():
+    text = format_search_text("itsi", _itsi_hits())
+    single_part = text.split("Single content packs", 1)[1].split("Other apps", 1)[0]
+    assert "spa apps add 7375" in single_part
+    assert "1841" in single_part
+
+
+def test_search_human_text_without_itsi_hits_keeps_flat_list():
+    rows = [
+        {"app_id": 833, "name": "Splunk_TA_nix", "title": "Unix", "type": "addon", "kind": "ta"},
+        {"app_id": 1928, "name": "Splunk_TA_snow", "title": "ServiceNow", "type": "addon", "kind": "ta"},
+    ]
+    lines = format_search_text("unix", rows).splitlines()
+    assert lines[0].startswith("833 | ")
+    assert lines[1].startswith("1928 | ")
+    assert "Core ITSI" not in format_search_text("unix", rows)
 
 
 def test_search_marks_playbook_on_matching_hit():

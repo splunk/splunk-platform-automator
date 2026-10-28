@@ -39,11 +39,11 @@ Record in config header comment when API was not used:
 | `spa aws --region REGION` with `--survey`, `--latest-ami`, or `--validate` (`regions list` needs no region) | `ok: false` in JSON or non-zero exit |
 | `spa validate --splunk-config aws` | **Fails** if validate runs and AWS rejects the call — **do not use** without creds |
 
-Provision/deploy (`ap ansible/aws_provision.yml`) **requires** working AWS credentials at run time — building config offline is fine, but user must configure creds before provision.
+Provision and deploy (`spa provision --yes`, then `spa deploy --yes`, each after its own chat yes in `/spa`) **require** working AWS credentials at run time — building config offline is fine, but user must configure creds before provision.
 
 ## Without-creds Phase 4 workflow
 
-1. **Region** — user states org default (e.g. `eu-central-1`); do not call `spa aws regions list`.
+1. **Region** — run `spa aws --json regions list`. It works without credentials: `ok` is false and `items` is empty, but `aws_config_region` and `aws_config_profile` still come from `~/.aws/config`. Ask with AskQuestion: option 1 is `aws_config_region` (marked as the default), then "Other: type a region". If `aws_config_region` is null, show no default. Never choose a region from memory.
 2. **OS + SSH** — [aws-os-matrix.md](aws-os-matrix.md) templates (`ec2-user` / `ubuntu` / `admin`).
 3. **AMI** — copy from `examples/providers/aws.yml` or catalog `provider.aws`; add comment `# verify AMI in console or re-run spa aws when creds available`.
 4. **Instance type** — lab default `t3.medium` ([aws-baseline.md](aws-baseline.md)).

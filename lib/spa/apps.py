@@ -49,6 +49,7 @@ _WORD = re.compile(r"[a-z0-9]+")
 # Whole-word query tokens that pin a Splunkbase app_id first (fetch if missing).
 PINNED_SEARCH = (
     ("itsi", ITSI_ID, "app", "premium_itsi"),
+    ("itsi", CONTENT_LIBRARY_ID, "app", "itsi_content_library"),
     ("es", ES_ID, "app", "es_not_premium"),
 )
 
@@ -350,29 +351,80 @@ def project_hit(app: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return row
 
 
+_ITSI_SECTION_BY_KIND = {
+    "premium_itsi": "Core ITSI",
+    "itsi_content_library": "Content packs (from Library 5391)",
+    "itsi_content_pack_single": "Single content packs",
+}
+_OTHER_APPS_SECTION = "Other apps"
+_SECTION_ORDER = (
+    "Core ITSI",
+    "Content packs (from Library 5391)",
+    "Single content packs",
+    _OTHER_APPS_SECTION,
+)
+
+
+def _search_row_lines(row: Dict[str, Any]) -> List[str]:
+    name = row.get("name") or "-"
+    fields = [
+        str(row.get("app_id") or ""),
+        name,
+        row.get("type") or "",
+        row.get("kind") or "",
+        row.get("version") or "",
+        row.get("title") or "",
+    ]
+    first = " | ".join(fields)
+    if row.get("playbook"):
+        first = "%s | playbook" % first
+    lines = [first]
+    summary = row.get("summary") or ""
+    if summary:
+        indent = " " * (len(str(row.get("app_id") or "")) + len(" | "))
+        lines.append("%s%s" % (indent, summary))
+    return lines
+
+
+def _section_hint_lines(row: Dict[str, Any]) -> List[str]:
+    indent = " " * (len(str(row.get("app_id") or "")) + len(" | "))
+    kind = str(row.get("kind") or "")
+    if kind == "itsi_content_library":
+        return [
+            "%sList packs: spa apps content-packs list 5391" % indent,
+            "%sAdd one: spa apps add 5391 --content-pack NAME" % indent,
+        ]
+    if kind == "itsi_content_pack_single":
+        return [
+            "%sAdd: spa apps add %s (adds Core ITSI 1841 first if it is missing)"
+            % (indent, row.get("app_id") or "")
+        ]
+    return []
+
+
 def format_search_text(query: str, hits: Sequence[Dict[str, Any]]) -> str:
     if not hits:
         return "No Splunkbase apps matched %r\n" % query
-    lines = []
-    for row in hits:
-        name = row.get("name") or "-"
-        fields = [
-            str(row.get("app_id") or ""),
-            name,
-            row.get("type") or "",
-            row.get("kind") or "",
-            row.get("version") or "",
-            row.get("title") or "",
+    if not any(str(row.get("kind") or "") in _ITSI_SECTION_BY_KIND for row in hits):
+        lines: List[str] = []
+        for row in hits:
+            lines.extend(_search_row_lines(row))
+        return "\n".join(lines) + "\n"
+    blocks = []
+    for label in _SECTION_ORDER:
+        section_rows = [
+            row
+            for row in hits
+            if _ITSI_SECTION_BY_KIND.get(str(row.get("kind") or ""), _OTHER_APPS_SECTION) == label
         ]
-        first = " | ".join(fields)
-        if row.get("playbook"):
-            first = "%s | playbook" % first
-        lines.append(first)
-        summary = row.get("summary") or ""
-        if summary:
-            indent = " " * (len(str(row.get("app_id") or "")) + len(" | "))
-            lines.append("%s%s" % (indent, summary))
-    return "\n".join(lines) + "\n"
+        if not section_rows:
+            continue
+        block = [label]
+        for row in section_rows:
+            block.extend(_search_row_lines(row))
+            block.extend(_section_hint_lines(row))
+        blocks.append("\n".join(block))
+    return "\n\n".join(blocks) + "\n"
 
 
 def search(

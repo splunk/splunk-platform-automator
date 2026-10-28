@@ -1,122 +1,25 @@
 ---
-description: Deploy Splunk infrastructure to AWS using Terraform
+description: Legacy pointer. AWS Terraform deploy now runs through the /spa and /spa-create-config skills.
 ---
 
-# Deploy Splunk Infrastructure to AWS with Terraform
+# Deploy Splunk to AWS (legacy workflow)
 
-This workflow provisions AWS infrastructure using Terraform and deploys Splunk. Use **only `spa`** from an environment directory (`SPA_ENV_DIR`). Do not call `ansible-playbook` or `python3 bin/…` here.
+This file is a legacy runbook. The skills own the flow now. Agents use `/spa-create-config` to design and write `config/splunk_config.yml`, and `/spa` for every lifecycle command. Do not follow step lists from older copies of this file.
 
-## Prerequisites
+## Rules that apply
 
-1. **Environment selection:** use `spa --env NAME`, set a registered default, or `cd` into the env. The installed `spa` launcher is on `PATH`.
-2. **Host tools:** `spa doctor` (Terraform for AWS). Ansible collections come from `spa_venv` — do not run `ansible-galaxy` in this workflow.
-3. **AWS credentials:** `spa aws --check-auth --json`. Report set/not-set only; never print secret values.
-4. **Config:** `config/splunk_config.yml` with `terraform.aws` (security group, key pair, AMI in the target region).
+- Use only `spa` from the environment directory (`SPA_ENV_DIR`), or pass `--env NAME`. Do not call `ansible-playbook`, `terraform`, or `python3 bin/…` directly.
+- Never edit `config/splunk_config.yml` by hand. Change it with `spa config …`.
+- `provision`, `deploy`, `destroy`, `suspend`, `resume`, and `environment remove` each wait for an explicit yes in chat for that run. A request in the same message is not that yes. Then pass `--yes`.
+- Do not pass `-v` or `--ansible-output` to `provision`, `deploy`, or `run`.
+- Use full command names: `spa hosts ssh <host>`, not `spa sh`.
 
-## Step 1: Configure Infrastructure
+## Where each step lives
 
-Edit `config/splunk_config.yml` and add/update the `terraform.aws` section (see examples). Discover AMIs and resources with `spa aws --survey --region <region> --json` when credentials work.
-
-## Step 2: Preview Infrastructure Changes
-
-```bash
-spa provision --yes -- --tags plan
-```
-
-This generates `terraform/aws/terraform.tfvars`, runs `terraform init` / `plan`, and does **not** apply.
-
-## Step 3: Provision Infrastructure
-
-Ask in chat and wait. Name the env and that provision creates the hosts. The request in the same message is not the yes. After that confirmation:
-
-```bash
-spa provision --yes
-```
-
-Non-interactive (agents / CI): `spa provision --yes && spa deploy --yes`. `--yes` after the subcommand confirms the action (`-y` is the short form; `spa -y provision` also works). Agents must pass `--yes`; they never answer the human `Proceed? [y/N]` prompt.
-
-This will:
-
-1. Generate Terraform configuration
-2. Initialize Terraform
-3. Show the plan
-4. Prompt for confirmation unless `--yes`
-5. Create EC2 instances and `inventory/hosts`
-6. Wait for SSH by default
-
-Skip SSH wait: `spa provision --yes -- -e wait_for_ssh=false`.
-
-## Step 4: Verify Host Readiness (optional)
-
-```bash
-spa run aws_wait_hosts
-```
-
-SSH, Python, uptime, cloud-init. Success text in the playbook may mention deploy; continue with `spa deploy`.
-
-## Step 5: Deploy Splunk
-
-```bash
-spa deploy
-```
-
-## Step 6: Verify Deployment
-
-Open `$SPA_ENV_DIR/config/index.html`, or:
-
-```bash
-spa run create_linkpage
-```
-
-SSH: `spa hosts ssh <host>` or `spa sh <host>` when the host is in inventory.
-
-## Pause and Resume
-
-Stop EC2 compute while retaining Terraform state and EBS volumes:
-
-```bash
-spa suspend --yes
-```
-
-Resume waits for AWS instance health and rewrites `inventory/hosts` with the
-new public DNS names/IPs before returning:
-
-```bash
-spa resume --yes
-```
-
-This is not a destroy operation, but EBS volumes and other retained resources
-continue to incur charges. In agent mode both commands require `--yes`.
-
-## Troubleshooting
-
-- `spa doctor` and `spa aws --check-auth --json` first.
-- Verbose wait: `spa run aws_wait_hosts -- -v`
-- Longer SSH timeout: `spa run aws_wait_hosts -- -e ssh_timeout=600`
-
-## Cleanup
-
-```bash
-spa destroy
-```
-
-In agent mode, destroy requires `-y` / `--yes`. This permanently deletes EC2 instances.
-
-## Quick Reference
-
-| Command | Purpose |
-|---------|---------|
-| `spa doctor` | Host prerequisites |
-| `spa aws --check-auth --json` | Credential probe (no secret values) |
-| `spa provision --yes -- --tags plan` | Preview changes |
-| `spa provision --yes && spa deploy --yes` | Provision then deploy (stop if provision fails) |
-| `spa provision --yes` | Provision infrastructure only |
-| `spa run aws_wait_hosts` | Verify host readiness |
-| `spa deploy` | Deploy Splunk (hosts already provisioned); `--hosts` for a subset |
-| `spa suspend --yes` | Stop EC2 instances; keep state and disks; optional `--hosts` |
-| `spa resume --yes` | Start EC2 instances; wait and refresh inventory; optional `--hosts` |
-| `spa run create_linkpage` | Host link page |
-| `spa destroy` | Destroy infrastructure |
-| `spa hosts list --status` | Inventory names, roles, runtime state |
-| `spa hosts ssh <host>` / `spa sh <host>` | SSH via inventory |
-| `spa run list` | Playbook catalog |
+| Step | Owner |
+|------|-------|
+| Design, AWS settings, and config writes | `/spa-create-config` |
+| Credential probe | `spa aws --check-auth --json` (report set / not set only) |
+| Preview, provision, host check, deploy, suspend, resume, destroy | `/spa` |
+| Host status and SSH | `spa hosts list --status`, `spa hosts ssh <host>` |
+| Logs | `spa logs --last` |

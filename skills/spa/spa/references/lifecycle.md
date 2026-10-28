@@ -1,6 +1,6 @@
 # Lifecycle
 
-Ask in chat and wait before `provision`, `deploy`, `destroy`, `suspend`, `resume`, or `environment remove`. The request in the same message is not the yes. One yes covers provision and deploy when the question named both. `--yes` appears only after that follow-up confirmation. Config `set`, `init`, and `validate` stay ungated.
+Ask in chat and wait before `provision`, `deploy`, `destroy`, `suspend`, `resume`, `environment remove`, or `environment cleanup`. The request in the same message is not the yes. Provision and deploy each need their own yes, even when one question named both. `--yes` appears only after that follow-up confirmation. Config `set`, `init`, and `validate` stay ungated.
 
 The question names the env and the effect. Provision creates the hosts. Deploy installs Splunk on the existing hosts. Destroy removes provider resources and keeps the registered env, `splunk_config.yml`, and state. `environment remove` drops the registry entry and is not destroy. `spa destroy --hosts` does not exist. Do not delete a live host from config and run `spa provision`.
 
