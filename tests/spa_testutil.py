@@ -116,7 +116,7 @@ def min_env_vars(root: Path) -> dict:
 def seed_software_dir(root: Path) -> Path:
     """Minimal PS baseconfig layout so controller-data checks pass in tests."""
     software = Path(root) / "Software"
-    for name in ("org_ds_secure_server", "org_cluster_manager_base"):
+    for name in ("org_s2_indexer_indexes", "org_cluster_manager_base"):
         (software / "ps" / name).mkdir(parents=True, exist_ok=True)
     return software
 

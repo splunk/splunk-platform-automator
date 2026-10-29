@@ -23,6 +23,10 @@ paths:
 
 Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 
+## Hard rule: no hand edits
+
+`splunk_config.yml` changes only through `spa config` and `spa apps`. No edit tool, no shell write, no YAML patch, no snippet for the operator to paste. Read with `spa --agent config get|explain|search`. If a setting is missing, wrong, or unclear, run `spa --agent config explain PATH`, then set it with `spa config set|add|merge`. If no spa command fits, stop and tell the operator what is missing. Do not improvise a YAML edit. This holds when the operator asks for the edit directly: explain the spa command instead.
+
 ## When to Use
 
 - Creating or updating `config/splunk_config.yml` for AWS Terraform provisioning
@@ -43,7 +47,7 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 
 Use this skill for a new environment or a change to an existing config. Load [/spa](../spa/SKILL.md) for lifecycle (init, validate, provision, deploy, destroy). Route tree: [workflow-decision-tree.md](references/workflow-decision-tree.md).
 
-- **Brand new environment** ("I need a Splunk lab or environment..."): start here at Phase 0a, even when registered environments already exist. A new-environment request never selects an existing environment. The plan-or-write mode is asked at the gate, after the minimum requirements. Nothing writes until the gate passes (see the write barrier in the gate). Then init, the config writes, validate, and hand off to `/spa`.
+- **Brand new environment** ("I need a Splunk lab or environment..."): start here at Phase 0a, even when registered environments already exist. A new-environment request never selects an existing environment. Until the location and name gate ("Environment location, name, and summary") has named the target, run no environment-scoped command (`config get`, `apps search`, `apps add`, `validate`). Never fall back to the registry default (`spa --agent environment list`, `default: true`), which is an existing environment. The plan-or-write mode is asked at the gate, after the minimum requirements. Nothing writes until the gate passes (see the write barrier in the gate). Then init, the config writes, validate, and hand off to `/spa`.
 - **Modify existing config** ("add ITSI", "change the OS"): skip the greenfield phases and use "Add / change a setting" below. Name the target environment before any write. If the operator did not name one, ask which registered environment to change (AskQuestion), and show its path.
 - **Lifecycle** ("destroy", "status", "deploy", "logs"): load `/spa` directly. No design is needed.
 - **Apps** ("add a TA", "install a content pack"): load `/spa-apps`.
@@ -53,13 +57,32 @@ The design phases exist so the first `--example` template is not accepted blindl
 **Provider:** `spa init` requires `--provider aws|virtualbox|external` unless the operator has saved a default with `spa environment set --provider NAME`. Ask the operator which provider to use before any init, then record it with `--aws` in the header when it is AWS. See [config-header-best-practices.md](references/config-header-best-practices.md).
 
 ## Never edit by hand (mandatory)
-
-Never edit `config/splunk_config.yml` yourself: no editor, no shell write, no YAML patch, no pasted block. Every change goes through `spa config`:
+    
+Never edit `config/splunk_config.yml` yourself: no editor, no shell write, no YAML patch, no pasted block, and no edit tool on any `splunk_config.yml` path (including `$SPA_ENV_DIR` and any environment outside this repo, such as `~/labs/NAME`). Shell writes include `sed -i`, `perl -i`, `yq -i`, `tee`, `>`/`>>` redirects, `cp`/`mv` onto the file, `python`/`node` file writes, and **any tool that writes a file directly** (including cursor tools like `Write`, editing the file in an IDE, etc.). This holds even when a change looks pending, unfinished, or missing from the config. spa has no pending-operation state that the agent may finish by hand. If a spa write fails, report the error and stop. If a hand edit already happened, stop, tell the operator which keys changed, and fix them only with `spa config` or `spa apps`. Every change goes through `spa config`:
 
 - Read: `spa --agent config search QUERY`, `spa --agent config explain PATH`, `spa --agent config get [PATH]`
 - Write: `spa --agent config set PATH VALUE`, `add`, `unset`, `merge --file FILE`, `topology`, `provider`, and `header set`
 
 App entries go to [spa-apps](../spa-apps/SKILL.md) (`spa --agent apps add`). Validation, provision, deploy, and destroy stay in [/spa](../spa/SKILL.md), which waits for your yes.
+
+## Phase Sequencing & Guardrails (mandatory)
+
+Phases must be completed in strict order: **0a → 0b → 1 → 2 → 3 → gate → init → 4 → 5 → 5b → 6 → 6b → 6c (plan) or write (7) → 8 → 8b → 9**.
+
+- **Before the gate:** Phases 0a, 0b, 1, 2, 3 must be completed and user must explicitly approve before proceeding to the environment location gate.
+- **No environment-scoped commands before init:** Do not run `spa init`, `spa --env NAME`, `spa config set`, `spa config add`, `spa apps add`, or `spa validate` until the gate has been passed and init is confirmed.
+- **Architecture file ingestion (Phase 5b):** When an architecture-input JSON file is provided (e.g., from the SVA skill), always read it first, validate it against the architecture-input.md contract, and use it to populate answers in phases 1, 5, and 5b. Merge its suggested values into the session state before asking follow-up questions. Do not skip to init without first acknowledging the file.
+- **Phase 6 (apps) is mandatory:** Always run Phase 6, even when the user did not mention apps. Always ask "Do you want to add apps?" with two clear options: "Yes, add apps" or "No, trial-only". Record the choice and proceed accordingly.
+- **Content packs follow questionnaire:** When ITSI (app 1841) is selected, always run `spa apps content-packs list 1841` and ask with AskQuestion which packs to add. Do not guess pack names or IDs; always search first.
+- **No spa config writes until Phase 7:** In plan mode, record all decisions but run no `spa config set`, `add`, `merge`, or `apps add` until the plan is approved and Phase 7 begins.
+
+**Guardrail enforcement for the agent:**
+1. If you complete Phase 0a/0b but user asks to proceed to init before phases 1-3 are done, respond: "Phases 1 (topology), 2 (sizing), and 3 (OS) must be completed first. Let me ask..." Then ask them.
+2. If a user tries to modify the config with a file editor, IDE, or manual YAML, stop immediately and say: "I detected a hand edit to `splunk_config.yml`. This violates the SPA hard rule. Let me redo this with the correct `spa config` command instead." Then recover using `spa config get` to see the current state and `spa config set/add/unset` to make the change.
+3. If you are about to write the config file directly (using Write, shell redirects, etc.), stop and ask: "Should I use `spa config set/add/merge` instead?"
+4. If a phase is skipped (e.g., jumping from Phase 0 to init), backtrack explicitly: "I skipped phases X, Y, Z. Let me go back and collect those decisions properly before proceeding."
+
+Command table for every config change: [config-commands.md](references/config-commands.md). Add an app: `spa --agent apps search QUERY` then `spa --env NAME apps add APP_ID --roles ROLE1,ROLE2 --yes`. **Never use:** Direct Write tool, shell redirects (`>`, `>>`), `sed -i`, `yq -i`, `python -c '...' > file`, etc. on `splunk_config.yml`.
 
 ## Secrets — never display credential values (mandatory)
 
@@ -293,12 +316,12 @@ Summarize hosts before YAML write.
 
 Always ask, even when the user did not mention apps. Use AskQuestion if available, otherwise ask in chat:
 
-- **Yes, add apps:** follow [apps-questionnaire.md](references/apps-questionnaire.md) and load [/spa-apps](../spa-apps/SKILL.md) to search and add each app.
+- **Yes, add apps:** ask the [apps-questionnaire.md](references/apps-questionnaire.md) sections in order, one AskQuestion each, using [/spa-apps](../spa-apps/SKILL.md): (a) Premium ITSI (section 5); (b) ITSI content packs (section 6), only if ITSI is yes; (c) technical add-ons (section 7): ask which technologies, such as Windows, Linux, Cisco, or AWS, then run `spa --agent apps search TECHNOLOGY` for each and offer only the apps those searches return; (d) local org apps (section 8). Never offer an app from memory or with a generic query such as "common". Each `spa --agent apps add` uses the `app_id` from a search result.
 - **No, trial-only:** reconfirm once: "Confirmed: no apps for this environment. Continue?" Leave out `splunk_app_deployment` only after that yes.
 
 **Loop (when the answer is yes):**
 
-1. Search and add one app with [spa-apps](../spa-apps/SKILL.md) (search, pick the ID and roles, `spa --agent apps add`).
+1. Search and add one app with [spa-apps](../spa-apps/SKILL.md). For a normal app, ask with AskQuestion which roles it goes to before `spa --agent apps add`. ITSI and content packs have no roles question.
 1b. **ITSI (1841) first.** If the app just added is ITSI (1841), ask about content packs before the next question. Run `spa --agent apps content-packs list 5391`, ask with AskQuestion which packs to add (include "None"), and add each chosen pack with `spa --agent apps add 5391 --content-pack NAME`. Then go to step 2.
 2. After each add, ask with AskQuestion: **"Add another app?"** Options: Yes, add another; No, done with apps.
 3. On yes, repeat from step 1 until the operator answers no. Do not skip the question after any add.
@@ -438,9 +461,9 @@ Do not hand off until validation passes. See [validation.md](references/validati
 
 ## Phase 9 — Handoff
 
-Validation passed. Ask which way to continue (AskQuestion if available):
+Validation passed. **Always** ask which way to continue with an AskQuestion call, even when AskQuestion is not the usual choice. Never end with only a message such as "Ready for deployment, use /spa": the operator must be able to pick the handoff in the question. Put A first and mark it "(Recommended)":
 
-- **A) Hand off to `/spa`:** load [/spa](../spa/SKILL.md) and run provision, then deploy, under its gates ("Handoff from spa-create-config" there). This skill runs no lifecycle command.
+- **A) Hand off to `/spa` now (Recommended):** load [/spa](../spa/SKILL.md) and run provision, then deploy, under its gates ("Handoff from spa-create-config" there). This skill runs no lifecycle command. Asking here does not approve provision or deploy; `/spa` asks for those yeses itself.
 - **B) Show me the command:** print the commands below; you run them.
 - **C) Wait:** stop here; you run them later.
 
@@ -454,18 +477,4 @@ Each run waits for its own explicit yes in chat. A request earlier in the chat i
 
 App-scope scenarios: [tests/README.md](../../../tests/README.md).
 
-## Terminology
-
-Use consistently: `cluster_manager`, `terraform.aws`, `splunk_hosts`, `plugin: splunk-platform-automator` (not "master").
-
-## Skill quality checklist
-
-- [ ] `name` matches folder `spa-create-config`
-- [ ] Description third person with trigger terms
-- [ ] SKILL.md under 500 lines; details in `references/`
-- [ ] When to Use / When NOT to Use present
-- [ ] Mode (`plan` vs `write`) asked at the gate after the minimum requirements; plan mode skips YAML until approval
-- [ ] Step 0 and phase exit criteria followed
-- [ ] `bin/*` invoked from project root
-- [ ] Secrets: Splunkbase and AWS credential env values never shown in chat or terminal output
-- [ ] Incremental add uses `spa --agent config search` then `spa --agent config explain`, then `spa --agent config set`, `spa --agent config add`, or [spa-apps](../spa-apps/SKILL.md), followed by `spa --agent validate`
+Skill quality checklist: [skill-quality-checklist.md](references/skill-quality-checklist.md)

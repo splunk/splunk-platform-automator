@@ -156,7 +156,7 @@ def test_user_guide_does_not_repeat_install_steps():
     assert "do not copy those commands" in intro
 
     install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
-    assert "go2.cisco.com/baseconfigs" not in install
+    assert "go/baseconfigs" not in install
     assert "user-guide.md#prepare-software" in install
     assert "spa environment set --software-dir" in install
 
@@ -166,6 +166,46 @@ def test_user_guide_does_not_repeat_install_steps():
     assert "bin/spa venv create" not in setup
     assert "source bin/spa_venv.sh" in setup
     assert "Homebrew" in setup
+
+
+def test_baseconfig_link_is_the_short_go_link_and_the_changelog_names_no_link():
+    """The employee baseconfig link is http://go/baseconfigs. The CHANGELOG carries no link to it."""
+    for rel in ("skills/spa/spa/SKILL.md", "docs/user-guide.md"):
+        text = (PROJECT_ROOT / rel).read_text(encoding="utf-8")
+        assert "go2.cisco.com/baseconfigs" not in text, rel
+        assert "http://go/baseconfigs" in text, rel
+    changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "go2.cisco.com/baseconfigs" not in changelog
+    assert "go/baseconfigs" not in changelog
+
+
+def test_readme_and_user_guide_name_the_external_provider_for_existing_hosts():
+    """The README intro, Features, and Start here, and the user guide intro, all name existing hosts."""
+    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    intro = readme.split("\n## ", 1)[0]
+    assert "existing hosts" in intro
+    assert "external provider" in intro
+    features = readme.split("## Features", 1)[1].split("\n## ", 1)[0]
+    assert "Existing hosts" in features
+    assert "--provider external" in features
+    assert "spa hosts register" in features
+    start = readme.split("## Start here", 1)[1].split("\n## ", 1)[0]
+    assert "--provider external" in start
+    assert "spa hosts register" in start
+
+    guide_intro = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8").split("## Start here", 1)[0]
+    assert "existing hosts" in guide_intro
+
+
+def test_readme_opens_with_the_spa_pitch_before_support():
+    """The SPA pitch sits above the support notice, so a new reader sees the case before the caveats."""
+    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    assert "## Why SPA" in readme
+    assert readme.index("## Why SPA") < readme.index("## Support")
+    pitch = readme.split("## Why SPA", 1)[1].split("\n## ", 1)[0]
+    assert "**One file, the whole environment.**" in pitch
+    assert "**Agent-ready.**" in pitch
+    assert "spa skills install cursor" in pitch
 
 
 def test_architecture_documents_playbook_resolution_contract():
@@ -581,6 +621,35 @@ class TestSpaSkill:
         assert "1841" in step8
         assert "content-packs list 5391" in step8
         assert step8.index("content-packs list 5391") < step8.index("Add another app?")
+
+    def test_apps_skill_asks_roles_for_every_normal_app(self):
+        apps = (PROJECT_ROOT / "skills" / "spa" / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
+        workflow = apps[apps.index("## Workflow"):apps.index("ITSI / ITE Work")]
+        assert "One host with one role" not in workflow, "a single role must still be asked, not picked"
+        assert "even when the config has one host with one role" in workflow
+        assert "ITSI (1841) and content packs never ask this question" in workflow
+
+    def test_create_config_phase6_asks_roles_before_a_normal_app_add(self):
+        create = (PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md").read_text(encoding="utf-8")
+        phase6 = create[create.index("## Phase 6 — Apps"):create.index("## Phase 6b")]
+        loop = phase6[phase6.index("**Loop"):]
+        step1 = loop.split("\n1. ", 1)[1].split("\n1b.", 1)[0]
+        assert "pick the ID and roles" not in loop
+        assert "AskQuestion" in step1 and "roles" in step1
+        assert "no roles question" in step1
+
+    def test_create_config_app_table_uses_the_roles_flag(self):
+        create = (PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md").read_text(encoding="utf-8")
+        assert "apps add APP_ID --target-roles" not in create
+        assert "apps add APP_ID --roles ROLE1,ROLE2 --yes" in create
+
+    def test_apps_questionnaire_asks_roles_for_normal_apps_only(self):
+        questionnaire = (
+            PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "references" / "apps-questionnaire.md"
+        ).read_text(encoding="utf-8")
+        section4 = questionnaire[questionnaire.index("## 4. Target roles"):questionnaire.index("## 5. Premium ITSI?")]
+        assert "AskQuestion" in section4
+        assert "normal" in section4 and "not ask" in section4.lower()
 
     def test_region_default_never_comes_from_agent_knowledge(self):
         skills = PROJECT_ROOT / "skills" / "spa" / "spa-create-config"

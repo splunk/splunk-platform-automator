@@ -190,8 +190,8 @@ def test_export_gives_each_env_its_own_fact_cache(tmp_path):
 
     cache_a = exported(env_a)["ANSIBLE_CACHE_PLUGIN_CONNECTION"]
     cache_b = exported(env_b)["ANSIBLE_CACHE_PLUGIN_CONNECTION"]
-    assert cache_a == str(env_a.resolve() / "ansible_facts")
-    assert cache_b == str(env_b.resolve() / "ansible_facts")
+    assert cache_a == str(env_a.resolve() / ".ansible_facts")
+    assert cache_b == str(env_b.resolve() / ".ansible_facts")
     assert cache_a != cache_b
     assert cache_a != "/tmp/ansible_facts"
 
@@ -209,7 +209,7 @@ def test_apply_paths_env_replaces_a_stale_shared_fact_cache(tmp_path, monkeypatc
     for key in paths.export_env():
         monkeypatch.setenv(key, "/tmp/ansible_facts" if key == "ANSIBLE_CACHE_PLUGIN_CONNECTION" else "stale")
     apply_paths_env(paths)
-    assert os.environ["ANSIBLE_CACHE_PLUGIN_CONNECTION"] == str(dest.resolve() / "ansible_facts")
+    assert os.environ["ANSIBLE_CACHE_PLUGIN_CONNECTION"] == str(dest.resolve() / ".ansible_facts")
 
 
 def test_software_prefers_env_sibling(tmp_path):

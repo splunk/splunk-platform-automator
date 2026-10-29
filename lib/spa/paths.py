@@ -356,7 +356,7 @@ class SpaPaths:
 
     def fact_cache_dir(self) -> Path:
         """Jsonfile fact cache for this environment. Hostnames are not unique across envs."""
-        return self.spa_env_dir / "ansible_facts"
+        return self.spa_env_dir / ".ansible_facts"
 
     def export_env(self) -> Dict[str, str]:
         """Environment overlay for validate, spa shell, and ansible-playbook."""

@@ -74,7 +74,7 @@ spa environment cleanup                                # lists registry entries 
 
 ## Software
 
-One shared directory per machine, not inside `SPA_HOME` and not copied per env. Linux tgz installers, extracted PS baseconfig apps, optional `Splunk_Enterprise.lic`. Splunk / Cisco employees: [https://go2.cisco.com/baseconfigs](https://go2.cisco.com/baseconfigs). Others: Splunk PS. Checklist: [Prepare Software](../../../docs/user-guide.md#prepare-software).
+One shared directory per machine, not inside `SPA_HOME` and not copied per env. Linux tgz installers, extracted PS baseconfig apps, optional `Splunk_Enterprise.lic`. Splunk / Cisco employees: [http://go/baseconfigs](http://go/baseconfigs). Others: Splunk PS. Checklist: [Prepare Software](../../../docs/user-guide.md#prepare-software).
 
 ```bash
 spa environment set --software-dir ~/Software --apps-dir ~/labs/apps

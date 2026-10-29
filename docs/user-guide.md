@@ -1,6 +1,6 @@
 # Splunk Platform Automator user guide
 
-SPA installs and configures Splunk Enterprise for testing, training, staging, and production. The operator interface is **`spa`**. Ansible, Terraform, and Vagrant are implementation details, not alternate operator CLIs.
+SPA installs and configures Splunk Enterprise on AWS, VirtualBox, or existing hosts for testing, training, staging, and production. The operator interface is **`spa`**. Ansible, Terraform, and Vagrant are implementation details, not alternate operator CLIs.
 
 ## Start here
 
@@ -50,7 +50,7 @@ spa init --software-dir ~/Software --example cm_2idxc_sh --provider aws my-lab
    - [Splunk Enterprise](https://www.splunk.com/en_us/download/splunk-enterprise.html)
    - [Splunk Universal Forwarder](https://www.splunk.com/en_us/download/universal-forwarder.html)
    - Filenames look like `splunk-<version>-<build>-linux-amd64.tgz` and `splunkforwarder-<version>-<build>-linux-amd64.tgz`. The version must match `splunk_version` in config.
-3. Copy Splunk **Professional Services Best Practices baseconfig apps** into the same tree and extract them. They are not a public Splunk.com download. Splunk / Cisco employees can download them from [https://go2.cisco.com/baseconfigs](https://go2.cisco.com/baseconfigs). Everyone else: contact Splunk Professional Services. Typical layout: `Configurations - Base` and `Configurations - Index Replication`.
+3. Copy Splunk **Professional Services Best Practices baseconfig apps** into the same tree and extract them. They are not a public Splunk.com download. Splunk / Cisco employees can download them from [http://go/baseconfigs](http://go/baseconfigs). Everyone else: contact Splunk Professional Services. Typical layout: `Configurations - Base` and `Configurations - Index Replication`.
 4. If you have a Splunk license, place or symlink it as **`Splunk_Enterprise.lic`** in that directory (`spa licenses` lists basenames for config). Trial-only labs can omit licenses.
 
 ```text

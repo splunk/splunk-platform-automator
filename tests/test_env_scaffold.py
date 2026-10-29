@@ -12,7 +12,7 @@ pytestmark = pytest.mark.local
 
 
 def _ensure_software_stubs(stub_dir: Path) -> None:
-    (stub_dir / "spa_ci_stub" / "org_ds_secure_server").mkdir(parents=True, exist_ok=True)
+    (stub_dir / "spa_ci_stub" / "org_s2_indexer_indexes").mkdir(parents=True, exist_ok=True)
     (stub_dir / "spa_ci_stub" / "org_cluster_manager_base").mkdir(parents=True, exist_ok=True)
     for name in (
         "Splunk_Enterprise.lic",
