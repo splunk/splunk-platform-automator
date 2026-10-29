@@ -647,6 +647,11 @@ Examples:
 
 Then run spa validate. Deploy only when intended: spa deploy --yes
 """
+ARCHITECTURE_NEEDS_ACTION = (
+    "spa architecture needs an action.\n"
+    "Plan an SVA architecture file (read-only): spa architecture plan FILE [--write-fragment PATH]\n"
+)
+
 CONFIG_NEEDS_ACTION = (
     "spa config needs an action.\n"
     "Look up a setting: spa config search QUERY\n"
@@ -2278,6 +2283,32 @@ def _run(argv: Sequence[str]) -> int:
         add_help=False, accept_mode_flags=False,
     )
 
+    p_architecture = _add_command(
+        sub,
+        "architecture",
+        help="Plan an SVA architecture JSON file into config (read-only)",
+        epilog=ARCHITECTURE_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    architecture_sub = p_architecture.add_subparsers(dest="architecture_cmd", metavar="ACTION")
+    p_architecture_plan = _add_action(
+        architecture_sub,
+        "plan",
+        help="Validate the architecture file and print the config plan (writes nothing)",
+        description=(
+            "Read an architecture JSON file (phase_1, phase_5, phase_6b). "
+            "Print hosts, constraint errors, and extensions. "
+            "--write-fragment writes the merge input for spa config merge --file."
+        ),
+    )
+    _add_mode_flags(p_architecture_plan)
+    p_architecture_plan.add_argument("file", metavar="FILE", help="Architecture JSON file")
+    p_architecture_plan.add_argument(
+        "--write-fragment",
+        metavar="PATH",
+        help="Write the config fragment as JSON for spa config merge --file (never splunk_config.yml)",
+    )
+
     p_completion = _add_command(
         sub,
         "completion",
@@ -2426,6 +2457,23 @@ def _run(argv: Sequence[str]) -> int:
 
     if args.command == "init":
         return _run_init(args, session, as_agent)
+
+    if args.command == "architecture":
+        if not _action(args, "architecture_cmd"):
+            return _reject(ARCHITECTURE_NEEDS_ACTION, as_agent)
+        from spa import architecture as architecture_mod
+
+        result = session.architecture_plan(
+            args.file, write_fragment=getattr(args, "write_fragment", None)
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        if isinstance(result.data, dict):
+            sys.stdout.write(architecture_mod.format_plan_text(result.data))
+        if not result.ok:
+            sys.stderr.write((result.error or "architecture plan failed") + "\n")
+            return result.code or 1
+        return 0
 
     if args.command == "config":
         action = _action(args, "config_cmd")

@@ -26,7 +26,7 @@ Cross-check [architecture-requirements.md](architecture-requirements.md) first â
 | IDXC single site, SHC | C3 |
 | IDXC two+ sites, standalone SH | M2 |
 | IDXC two+ sites, SHC per site | M3 |
-| SHC across sites | M4 â€” escalate |
+| SHC across sites | M4 (no ES tier), or M14 (ES tier) |
 
 ## Config-test only path
 

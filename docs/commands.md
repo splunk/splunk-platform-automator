@@ -836,6 +836,34 @@ Example:
 spa aws security-groups list --region eu-central-1
 ```
 
+## `architecture`
+
+Architecture file actions. Plan an SVA JSON file into config (read-only). Bare spa architecture exits 2.
+
+Example:
+
+```bash
+spa --agent architecture plan ./m4-architecture.json
+```
+
+## `architecture plan`
+
+Validate an SVA architecture JSON file and plan the config (read-only). Writes nothing unless --write-fragment.
+
+| Flag | Description |
+| --- | --- |
+| `--write-fragment` | Write the config fragment as JSON for spa config merge --file (never splunk_config.yml) |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `FILE` | yes | Architecture JSON file |
+
+Example:
+
+```bash
+spa --agent architecture plan ./m4-architecture.json --write-fragment /tmp/m4-fragment.json
+```
+
 ## `licenses`
 
 Inspect license type, expiration and ITSI/ES entitlements

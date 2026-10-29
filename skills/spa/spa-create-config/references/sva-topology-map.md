@@ -15,7 +15,7 @@ SVA codes describe **topology**, not sizing. Lab configs may diverge from full S
 | M12 | `examples/topologies/4idxc2site_2sh_es.yml` | M2 plus a dedicated ES search head on each site |
 | M3 | `examples/topologies/cm_4idxc2site_2x3shc_ds.yml` | Multisite IDXC + SHC per site |
 | M13 | `examples/topologies/cm_4idxc2site_4x3shc_ds.yml` | M3 plus a dedicated ES search head cluster on each site |
-| M4 | SVA documentation | Stretched SHC without a dedicated ES tier — escalate to SVA + PS |
+| M4 | `examples/topologies/cm_4idxc2site_stretched_3shc_ds.yml` | Multisite IDXC + one stretched SHC, no dedicated ES tier |
 | M14 | `examples/topologies/cm_4idxc2site_stretched_2x3shc_ds.yml` | Stretched SHCs plus a dedicated ES search tier |
 
 ## Multisite IDXC defaults (lab)
@@ -72,7 +72,7 @@ Use string factors: `'origin:N, total:M'` (comma-separated pairs).
 | M12 | `origin:2, total:3` | `origin:1, total:2` | **2** per site (supports `origin:2`) | **2** (typical lab) | `examples/topologies/4idxc2site_2sh_es.yml` |
 | M3 | `origin:2, total:3` | `origin:1, total:2` | **2** per site | **2** (+ SHC per site) | `examples/topologies/cm_4idxc2site_2x3shc_ds.yml` |
 | M13 | `origin:2, total:3` | `origin:1, total:2` | **2** per site | **2** (+ ES SHC per site) | `examples/topologies/cm_4idxc2site_4x3shc_ds.yml` |
-| M4 | Escalate | Escalate | Stretched SHC without a dedicated ES tier | SVA + PS | — |
+| M4 | `origin:2, total:3` | `origin:1, total:2` | **2** per site | **2** (stretched SHC, `shc_site: site0`) | `examples/topologies/cm_4idxc2site_stretched_3shc_ds.yml` |
 | M14 | `origin:2, total:3` | `origin:1, total:2` | **2** per site | **2** (stretched SHC, `shc_site: site0`) | `examples/topologies/cm_4idxc2site_stretched_2x3shc_ds.yml` |
 
 ```yaml
