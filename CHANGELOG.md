@@ -36,6 +36,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Added
 
+- **Architecture file plan**: `spa architecture plan FILE [--write-fragment PATH]` reads the architecture file that `splunk-validated-architectures` writes (schema 0.3.0: `phase_1`, `phase_5` with `indexer_cluster`, `shcluster`, `optional_roles`, `env_lookups`, and `_extensions`). It checks site counts, replication factors, and SHC minimums, builds one host per indexer, search head, and optional role, and lists the secrets as set or not set. It ignores `apps_by_role`, since SPA decides the apps. It writes nothing to `splunk_config.yml`; `--write-fragment` writes the merge input for `spa config merge --file`.
+
 - **Skills pack** ([#67](https://github.com/splunk/splunk-platform-automator/issues/67)): three operator skills (`spa`, `spa-create-config`, `spa-apps`). Agents ask in chat and wait before provision, deploy, destroy, suspend, resume, and environment remove. `spa validate --splunk-config aws` checks that provider from the environment config. App-scope scenario steps live in `tests/README.md`.
 
 - **External register addresses**: `spa hosts register` takes `--ssh-host` and `--ssh-port` for the SSH connection, and optional `--ip-addr` for the address other Splunk hosts use. The SSH host, port, user, key, and any `--ip-addr` are written only in `inventory/hosts`. Omit `--ip-addr` to use the SSH host for both. Omit `--ssh-port` to use port 22. The host link page keeps the public DNS name or the SSH host in the URL.

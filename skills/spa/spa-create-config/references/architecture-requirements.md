@@ -20,7 +20,7 @@ Distilled from Lantern scalable architecture and related SF paths. See [referenc
 | RTO / RPO | Multisite, replication | `idxc_site_rf`, `idxc_site_sf`; M2 vs M4 — lab defaults in [sva-topology-map.md](sva-topology-map.md) |
 | Multi-site / multi-DC | Multisite IDXC, SH per site | `site:` on hosts |
 | HA search tier | SHC minimum 3 nodes | `splunk_shclusters`, deployer |
-| Cross-site KO sync | Stretched SHC (M4) | Complex SHC layout — escalate to SVA + PS |
+| Cross-site KO sync | Stretched SHC (M4, or M14 with an ES tier) | One SHC with `shc_site: site0` and members on both sites; see [sva-topology-map.md](sva-topology-map.md) |
 
 ## Data path
 

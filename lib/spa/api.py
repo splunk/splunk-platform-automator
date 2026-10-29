@@ -2063,6 +2063,35 @@ class LocalSpaSession:
             return CommandResult(ok=False, error=str(exc), code=1)
         return CommandResult(ok=True, data=data)
 
+    def architecture_plan(
+        self, path: str, write_fragment: Optional[str] = None
+    ) -> CommandResult:
+        """Read an SVA architecture JSON file and plan the config. Read-only unless write_fragment."""
+        import os
+
+        from spa import architecture as arch
+
+        try:
+            doc = arch.load_architecture_file(Path(path))
+        except arch.ArchitectureError as exc:
+            return CommandResult(ok=False, error=str(exc), code=1)
+        plan = arch.plan_architecture(doc, env=os.environ, spa_home=self.paths.spa_home)
+        if not plan["ok"]:
+            return CommandResult(
+                ok=False,
+                error="architecture file is not valid: " + "; ".join(plan["errors"]),
+                code=1,
+            )
+        if write_fragment:
+            try:
+                arch.write_fragment(Path(write_fragment), plan["fragment"])
+            except arch.ArchitectureError as exc:
+                return CommandResult(ok=False, error=str(exc), code=1)
+            except OSError as exc:
+                return CommandResult(ok=False, error="cannot write fragment: %s" % exc.strerror, code=1)
+            plan["fragment_file"] = str(Path(write_fragment))
+        return CommandResult(ok=True, data=plan)
+
     def hosts_list(
         self, status: bool = False, hosts: Optional[Sequence[str]] = None
     ) -> CommandResult:

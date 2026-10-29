@@ -1,0 +1,94 @@
+{
+  "metadata": {
+    "source_skill": "splunk-validated-architectures",
+    "version": "0.3.0",
+    "sva_code": "M4"
+  },
+  "environment": {
+    "name": "test-m4-lab"
+  },
+  "phase_1": {
+    "topology": "topology.m4",
+    "sva": "M4",
+    "sites": [
+      "site1",
+      "site2"
+    ],
+    "confirmed": false
+  },
+  "phase_5": {
+    "org_prefix": "test",
+    "total_host_count": 13,
+    "indexer_cluster": {
+      "name": "idxc1",
+      "sites": [
+        "site1",
+        "site2"
+      ],
+      "site_rf": "origin:2, total:3",
+      "site_sf": "origin:1, total:2",
+      "peers": 4,
+      "peers_by_site": {
+        "site1": 2,
+        "site2": 2
+      },
+      "replication_port": 9887
+    },
+    "shcluster": {
+      "name": "shc1",
+      "members": 3,
+      "members_by_site": {
+        "site1": 2,
+        "site2": 1
+      },
+      "shc_site": "site0",
+      "replication_port": 9887
+    },
+    "optional_roles": [
+      {
+        "name": "lm",
+        "role": "license_manager"
+      },
+      {
+        "name": "dsrv",
+        "role": "deployment_server"
+      },
+      {
+        "name": "mc",
+        "role": "monitoring_console"
+      },
+      {
+        "name": "uf",
+        "role": "universal_forwarder"
+      }
+    ],
+    "env_lookups": {
+      "admin": "SPLUNK_ADMIN_PASSWORD",
+      "idxc": "SPLUNK_IDXC_PASSWORD",
+      "shc": "SPLUNK_SHC_PASSWORD"
+    },
+    "_extensions": [
+      {
+        "field_name": "experimental_mode",
+        "value": "true",
+        "reason": "User-provided, not in standard schema",
+        "suggested_placement": "unknown",
+        "severity": "info"
+      }
+    ],
+    "confirmed": false
+  },
+  "phase_5b": {
+    "roles": [
+      "cluster_manager",
+      "indexer",
+      "search_head",
+      "deployer",
+      "license_manager",
+      "deployment_server",
+      "monitoring_console",
+      "universal_forwarder"
+    ],
+    "confirmed": false
+  }
+}

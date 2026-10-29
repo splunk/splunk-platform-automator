@@ -53,6 +53,7 @@ def test_catalog_id_composes_the_same_config_as_its_stem():
         "topology.m3": "cm_4idxc2site_2x3shc_ds",
         "topology.m13": "cm_4idxc2site_4x3shc_ds",
         "topology.m14": "cm_4idxc2site_stretched_2x3shc_ds",
+        "topology.m4": "cm_4idxc2site_stretched_3shc_ds",
     }
     for topology_id, stem in expected.items():
         resolved, provider = resolve_example_pair(PROJECT_ROOT, topology_id, "aws")
@@ -896,6 +897,7 @@ def test_catalog_topologies_match_sva_shape():
         "cm_4idxc2site_2x3shc_ds": "m3",
         "cm_4idxc2site_4x3shc_ds": "m13",
         "cm_4idxc2site_stretched_2x3shc_ds": "m14",
+        "cm_4idxc2site_stretched_3shc_ds": "m4",
     }
     for stem in expected:
         config = _composed(stem)
@@ -958,6 +960,15 @@ def test_catalog_topologies_match_sva_shape():
             assert _role_count(hosts, "search_head") == 6
             assert _role_count(hosts, "deployer") == 2
             assert {row["shc_site"] for row in config["splunk_shclusters"]} == {"site0"}
+        elif stem == "cm_4idxc2site_stretched_3shc_ds":
+            # SVA M4: multisite cluster manager, 3+ site peers, one stretched SHC of 3+ members, 1 deployer. No ES tier.
+            assert _role_count(hosts, "cluster_manager") == 1
+            assert _role_count(hosts, "indexer") == 4
+            assert _role_count(hosts, "search_head") == 3
+            assert _role_count(hosts, "deployer") == 1
+            assert len(config["splunk_shclusters"]) == 1
+            assert {row["shc_site"] for row in config["splunk_shclusters"]} == {"site0"}
+            assert {host.get("site") for host in hosts if "search_head" in host["roles"]} == {"site1", "site2"}
 
 
 def _init_no_provider(dest, **extra_env):

@@ -111,6 +111,16 @@ features:
     suggest: spa init --example topology.m3 --provider virtualbox|aws ENV
     keys: [splunk_hosts, splunk_idxclusters, splunk_shclusters]
 
+  - id: topology.m4
+    title: M4 multisite indexers and stretched search head cluster
+    kind: topology
+    template: cm_4idxc2site_stretched_3shc_ds
+    sva: M4
+    when_to_use: Multisite indexer cluster with one search head cluster stretched across both sites, and no dedicated ES tier.
+    when_not_to_use: Need an ES search tier (M14), or a search head cluster pinned to each site (M3).
+    suggest: spa init --example topology.m4 --provider virtualbox|aws ENV
+    keys: [splunk_hosts, splunk_idxclusters, splunk_shclusters]
+
   - id: topology.m13
     title: M13 multisite search clusters and dedicated ES tier
     kind: topology

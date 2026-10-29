@@ -739,6 +739,25 @@ COMMAND_SCHEMA = {
             "example": "spa aws security-groups list --region eu-central-1",
         },
         {
+            "name": "architecture",
+            "summary": "Architecture file actions. Plan an SVA JSON file into config (read-only). Bare spa architecture exits 2.",
+            "example": "spa --agent architecture plan ./m4-architecture.json",
+        },
+        {
+            "name": "architecture plan",
+            "summary": "Validate an SVA architecture JSON file and plan the config (read-only). Writes nothing unless --write-fragment.",
+            "positionals": [
+                {"name": "FILE", "required": True, "help": "Architecture JSON file"},
+            ],
+            "flags": [
+                {
+                    "long": "--write-fragment",
+                    "help": "Write the config fragment as JSON for spa config merge --file (never splunk_config.yml)",
+                },
+            ],
+            "example": "spa --agent architecture plan ./m4-architecture.json --write-fragment /tmp/m4-fragment.json",
+        },
+        {
             "name": "licenses",
             "summary": "Inspect license type, expiration and ITSI/ES entitlements",
             "flags": [

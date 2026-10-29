@@ -158,7 +158,7 @@ Repo keys: for every requested capability, use this loop. Call `bin/spa` JSON. D
    - **Unavailable** → follow [aws-without-credentials.md](references/aws-without-credentials.md); do not block the workflow.
 6. Read existing config if merging or revising an existing plan from prior config.
 7. Licenses are not scanned here. Phase 6b scans the Software directory once, after the apps decision.
-8. **Architecture input (optional).** If the user gives a path to a JSON file with architecture decisions (from another skill or CI), follow [architecture-input.md](references/architecture-input.md): validate it, record each phase's source, and skip the collection phases it covers. Phases 6 and 6b are always asked, even when `confirmed` is true.
+8. **Architecture input (optional).** If the user gives a path to a JSON file with architecture decisions (from another skill or CI), follow [architecture-input.md](references/architecture-input.md): run `spa --agent architecture plan FILE` (read-only) to validate it and build the host plan, and record each phase's source. Ask the operator for any phase the file does not contain. Phases 6 and 6b are always asked, even when `confirmed` is true.
 
 **Exit:** Intent noted (mode is confirmed at the gate); target path known; merge policy clear when applicable; **AWS API status recorded**; architecture input validated if one was given.
 
