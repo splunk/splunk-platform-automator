@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from spa.paths import DEFAULT_APPS_REL, DEFAULT_SOFTWARE_REL, SpaPaths, parse_flat_yaml, resolve_shared_data_dir
 
-BASECONFIG_MARKERS = ("org_ds_secure_server", "org_cluster_manager_base")
+BASECONFIG_MARKERS = ("org_s2_indexer_indexes", "org_cluster_manager_base")
 _HINT_SOFTWARE = "Point once with: spa init --software-dir DIR ENV"
 _HINT_APPS = "Point once with: spa init --apps-dir DIR ENV"
 _DEFAULTS = {
@@ -186,7 +186,7 @@ def check_controller_data(
             ok=False,
             reason=(
                 "Cannot find Splunk baseconfig apps in %s "
-                "(need */org_ds_secure_server and */org_cluster_manager_base)."
+                "(need */org_s2_indexer_indexes and */org_cluster_manager_base)."
                 % baseconfig_dir
             ),
             hint=_HINT_SOFTWARE,

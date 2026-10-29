@@ -926,7 +926,7 @@ spa --agent apps search unix
 
 ## `apps search`
 
-Search Splunkbase (compact rows: app_id, name, title, type, kind, version, summary)
+Search Splunkbase (compact rows: app_id, name, title, type, kind, version, summary). An itsi query lists Core ITSI 1841 and Content Library 5391 first. ITSI content packs are not in search rows: list the packs in 5391 with spa apps content-packs list 5391.
 
 | Flag | Description |
 | --- | --- |
@@ -937,12 +937,12 @@ Search Splunkbase (compact rows: app_id, name, title, type, kind, version, summa
 Example:
 
 ```bash
-spa --agent apps search unix
+spa --agent apps search itsi
 ```
 
 ## `apps content-packs list`
 
-Inspect Content Library 5391 from --archive, apps_dir, an existing install archive, or cached pack app.conf files. An install archive is left in place. --version selects the release (default latest).
+List ITSI content packs in Content Library 5391 from --archive, apps_dir, an existing install archive, or cached pack app.conf files. An install archive is left in place. --version selects the release (default latest).
 
 | Flag | Description |
 | --- | --- |

@@ -84,7 +84,7 @@ def _ensure_software_stubs(stub_dir: Path) -> None:
     Real Splunk tarballs are gitignored (*.tgz) and are not in CI. Empty
     placeholders are enough for existence checks during debug_app_scope.yml.
     """
-    (stub_dir / "spa_ci_stub" / "org_ds_secure_server").mkdir(parents=True, exist_ok=True)
+    (stub_dir / "spa_ci_stub" / "org_s2_indexer_indexes").mkdir(parents=True, exist_ok=True)
     (stub_dir / "spa_ci_stub" / "org_cluster_manager_base").mkdir(parents=True, exist_ok=True)
     for name in (
         "Splunk_Enterprise.lic",

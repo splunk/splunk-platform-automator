@@ -613,6 +613,16 @@ CONTENT_PACKS_NEEDS_ACTION = (
     "spa apps content-packs needs an action.\n"
     "List: spa apps content-packs list 5391"
 )
+APPS_SEARCH_EPILOG = """\
+ITSI content packs:
+  spa apps search itsi                       Core ITSI 1841 and Content Library 5391 come first
+  spa apps content-packs list 5391           List the packs inside Content Library 5391
+  spa apps add 5391 --content-pack NAME      Add one pack
+
+Kinds:
+  itsi_content_library      Content Library 5391; its packs come from content-packs list
+  itsi_content_pack_single  One pack with its own Splunkbase app ID; no --roles
+"""
 APPS_ADD_DESCRIPTION = """\
 Idempotently add or update one apps[] entry. This command edits splunk_config.yml but does not deploy software.
 
@@ -1573,7 +1583,14 @@ def _run(argv: Sequence[str]) -> int:
     )
     _add_env_selector(p_apps)
     apps_sub = p_apps.add_subparsers(dest="apps_cmd", metavar="ACTION")
-    p_apps_search = _add_action(apps_sub, "search", aliases=["sea"], help="Search Splunkbase (compact rows)")
+    p_apps_search = _add_action(
+        apps_sub,
+        "search",
+        aliases=["sea"],
+        help="Search Splunkbase (compact rows)",
+        epilog=APPS_SEARCH_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     _add_mode_flags(p_apps_search)
     p_apps_search.add_argument("query", nargs="+", help="Technology or app name keywords")
     p_apps_search.add_argument(
@@ -1598,7 +1615,7 @@ def _run(argv: Sequence[str]) -> int:
         apps_sub,
         "content-packs",
         aliases=["cp"],
-        help="Discover packs bundled in an ITSI Content Library archive",
+        help="Discover ITSI content packs in Content Library 5391",
         epilog=CONTENT_PACKS_NEEDS_ACTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

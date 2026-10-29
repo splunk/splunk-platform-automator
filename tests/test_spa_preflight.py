@@ -49,6 +49,29 @@ def test_software_without_baseconfig_apps_fails(tmp_path):
     assert "baseconfig apps" in state.reason
 
 
+def _baseconfig_software(tmp_path, names):
+    software = tmp_path / "Software"
+    for name in names:
+        (software / "ps" / name).mkdir(parents=True)
+    return software
+
+
+def test_baseconfig_check_accepts_the_s2_indexer_indexes_app(tmp_path):
+    software = _baseconfig_software(tmp_path, ("org_s2_indexer_indexes", "org_cluster_manager_base"))
+    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software)
+    state = check_controller_data(paths)
+    assert state.ok is True
+
+
+def test_baseconfig_check_no_longer_accepts_only_the_ds_secure_server_app(tmp_path):
+    software = _baseconfig_software(tmp_path, ("org_ds_secure_server", "org_cluster_manager_base"))
+    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software)
+    state = check_controller_data(paths)
+    assert state.ok is False
+    assert "org_s2_indexer_indexes" in state.reason
+    assert "org_ds_secure_server" not in state.reason
+
+
 def test_seeded_software_without_local_apps_ok(tmp_path):
     software = seed_software_dir(tmp_path)
     paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software)

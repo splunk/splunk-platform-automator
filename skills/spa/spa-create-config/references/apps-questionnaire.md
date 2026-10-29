@@ -31,9 +31,9 @@ See [docs/apps.md](../../../../docs/apps.md). Optional vault in config. Do not v
 
 ## 4. Target roles
 
-For **normal** apps, `target_roles`: `search_head`, `indexer`, `universal_forwarder`, `heavy_forwarder` (maps to deployer/CM/DS/direct per SPA). Pass `--roles` to `apps add`.
+For **normal** apps, `target_roles`: `search_head`, `indexer`, `universal_forwarder`, `heavy_forwarder` (maps to deployer/CM/DS/direct per SPA). Before `apps add` for a normal app, ask with AskQuestion which roles it goes to, even with one host and one role. Pass `--roles` to `apps add`.
 
-Do **not** set `target_roles` on `premium_app: itsi` or `itsi_content_pack: true` entries.
+Do **not** set `target_roles` on `premium_app: itsi` or `itsi_content_pack: true` entries. Do not ask for roles on those entries.
 
 ## 5. Premium ITSI?
 

@@ -342,7 +342,7 @@ class InventoryModule(BaseInventoryPlugin):
         splunk_baseconfig_dir = self._resolve_override_dir(
             lab_dir, self.groups['all']['splunk_baseconfig_dir'], 'SPA_BASECONFIG_DIR'
         )
-        check_base = glob.glob(os.path.join(splunk_baseconfig_dir, "*/org_ds_secure_server"))
+        check_base = glob.glob(os.path.join(splunk_baseconfig_dir, "*/org_s2_indexer_indexes"))
         check_cluster = glob.glob(os.path.join(splunk_baseconfig_dir, "*/org_cluster_manager_base"))
         if len(check_base) < 1 or len(check_cluster) < 1:
             lab_sw = os.path.normpath(os.path.join(lab_dir, '..', 'Software'))

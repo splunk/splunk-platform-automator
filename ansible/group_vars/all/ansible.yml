@@ -2,7 +2,7 @@
 # Ansible runtime settings used by SPA playbooks (see also ansible.cfg).
 
 # jsonfile fact cache. spa sets ANSIBLE_CACHE_PLUGIN_CONNECTION to
-# $SPA_ENV_DIR/ansible_facts so two environments can reuse a hostname.
+# $SPA_ENV_DIR/.ansible_facts so two environments can reuse a hostname.
 # The /tmp path is only the ansible.cfg fallback when that variable is unset.
 spa_ansible_fact_cache_dir: "{{ lookup('env', 'ANSIBLE_CACHE_PLUGIN_CONNECTION') | default('/tmp/ansible_facts', true) }}"
 
