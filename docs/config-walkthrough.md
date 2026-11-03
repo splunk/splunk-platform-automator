@@ -120,9 +120,10 @@ package are one edit. Java stays off the global `os` block.
 spa apps add 1841 --dry-run
 ```
 
-ITSI is not written yet. The output names the missing license manager,
-license file, and Java 21 package. This example already records the admin
-password lookup. If a config does not, run
+ITSI is not written yet. The command exits 1, names the missing license
+manager, license file, and Java 21 package, and does not change the file.
+This example already records the admin password lookup. If a config does
+not, run
 `spa config set splunk_defaults.splunk_admin_password --from-env SPLUNK_ADMIN_PASSWORD --yes`.
 
 ## 5. Download installers, name the hosts, and turn on TLS
@@ -275,9 +276,10 @@ EOF
 spa config merge --file fragments/shs.yml --yes
 ```
 
-This command exits 0, prints `itsi.search_tier`, and does not change the
-file. ITSI would otherwise target both `shc1` and standalone `shs`. The retry
-line names the filter to add.
+This command exits 1, prints `itsi.search_tier`, and does not change the
+file. Unresolved is not success: agents must not treat that result as
+persisted. ITSI would otherwise target both `shc1` and standalone `shs`.
+The retry line names the filter to add.
 
 ## 13. Keep ITSI on the search-head cluster
 

@@ -106,7 +106,7 @@ Follow [secrets-handling.md](references/secrets-handling.md) for the full list.
 2. `spa --agent config explain PATH` for the matching path. It returns one level, the decision, and one mutation command. It does not apply the command. A deeper level is a longer path. When `scope` is present, `applies_to` plus `per_host_path` or `global_path` is the other place that setting can go. `behavior` `merge` adds a per-host list to the global list. `replace` uses the host value instead of the global one. Omit `scope` means that path has no counterpart.
 3. Update one existing schema path with `spa --agent config set PATH VALUE`. Append a new host, indexer cluster, or search-head cluster with `spa --agent config add SELECTOR JSON_OBJECT`. Use `spa --agent config merge --file FILE` only for a deliberate multi-setting fragment.
 4. Do not invent YAML from leftover mixed example files or apply a catalog snippet. For Splunkbase TAs and packs, follow [spa-apps](../spa-apps/SKILL.md): search, choose the ID and roles, then use one `spa --agent apps add` transaction.
-5. `spa --agent validate` (Phase 8). Do not auto-run provision/deploy.
+5. After every write, inspect `changed` and `ready` (`ok: false` means nothing was written). Humans pass `--show-diff` for the hunk. `spa --agent config get` the identity (`found`), then `spa --agent validate` (Phase 8). Do not auto-run provision/deploy.
 
 ## Reference files (load on demand)
 
@@ -136,7 +136,7 @@ Repo keys: for every requested capability, use this loop. Call `bin/spa` JSON. D
 2. Compare the one-line description. Do not choose from the title alone.
 3. Inspect the selected schema path: `spa --agent config explain PATH`.
 4. Author the selected value with `spa --agent config set PATH VALUE`, or append a new non-app identity with `spa --agent config add SELECTOR JSON_OBJECT`. For several already-known paths, pass one sparse fragment to `spa --agent config merge --file -`.
-5. Run `spa --agent validate`. If search has no suitable result, report that the setting is unsupported. Do not invent a key.
+5. After every write, inspect `changed` and `ready`, `spa --agent config get` the identity (`found`), then `spa --agent validate`. If search has no suitable result, report that the setting is unsupported. Do not invent a key.
 
 `docs/config.md` stays the human browse fallback. Reselect layouts with `spa --agent config topology TOPOLOGY` and `spa --agent config provider PROVIDER`; those actions replace only their owned sections.
 
@@ -420,7 +420,7 @@ Answer every `Reconfirm now` row first. Then ask: "Confirm all values and write 
    | 9 Deploy command | `--deploy` |
 
    After the operator confirms, run `spa --agent config header set` (`spa config header set`) with those values. Include a flag only when its phase produced a value. Omitted fields are removed, so a missing value is an open question for the operator, not a blank. Pass `--yes`. The field list and examples are in `spa config header set --help`.
-3. For OS, SSL, licenses, RF/SF, and other settings: choose with `spa --agent config search QUERY`, then `spa --agent config explain PATH`. Use the one command on that page. That is `spa --agent config set PATH VALUE` for an existing scalar or map, or `spa --agent config add SELECTOR JSON_OBJECT` for a new non-app identity. Use one intentional `spa --agent config merge --file FILE` for a multi-setting fragment. Never paste a feature snippet. For **apps**, load [spa-apps](../spa-apps/SKILL.md), search, and call `spa --agent apps add`. ITSI is app_id 1841, not 5403.
+3. For OS, SSL, licenses, RF/SF, and other settings: choose with `spa --agent config search QUERY`, then `spa --agent config explain PATH`. Use the one command on that page. That is `spa --agent config set PATH VALUE` for an existing scalar or map, or `spa --agent config add SELECTOR JSON_OBJECT` for a new non-app identity. Use one intentional `spa --agent config merge --file FILE` for a multi-setting fragment. Never paste a feature snippet. For **apps**, load [spa-apps](../spa-apps/SKILL.md), search, and call `spa --agent apps add`. ITSI is app_id 1841, not 5403. After every write, inspect `changed` and `ready` (`ok: false` means nothing was written). Humans pass `--show-diff` for the hunk. `spa --agent config get` the identity (`found`), then Phase 8.
 4. Global `terraform.aws` already comes from `--provider aws`; add **`ssh_username`** / AMI from catalog + discovery.
 5. Matching global `os:` from selector `os` (not from the topology file).
 6. `splunk_defaults` (include `splunk_license_file` from Phase 6b when chosen).

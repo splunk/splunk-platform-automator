@@ -13,6 +13,16 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 - **Host roles and YAML quotes** ([#127](https://github.com/splunk/splunk-platform-automator/issues/127)): `spa validate` and post-write config checks reject the same role twice on one host, and reject double-quoted mapping keys and double-quoted role names. Quoted scalar values stay allowed. Distinct co-located roles are unchanged.
 
+- **Config write diff** ([#127](https://github.com/splunk/splunk-platform-automator/issues/127)): humans pass `--show-diff` on `spa config` and `spa apps` mutations to print the redacted unified diff after the status line, including unresolved and dry-run. Agent JSON already includes `data.diff`; `--agent --show-diff` is allowed and does not print a second human hunk.
+
+- **Config get found** ([#127](https://github.com/splunk/splunk-platform-automator/issues/127)): `spa config get` reports `found: true` on an identity hit and `found: false` with `reason` (for example `matched no items`) on a miss. A missing host or app is not reported as `schema_default`. Secret paths still use `authored: set|not set` and still set `found`.
+
+- **ITSI Java 21 examples** ([#127](https://github.com/splunk/splunk-platform-automator/issues/127)): `itsi.java` accepts both `java-21-openjdk` and `openjdk-21-jdk`. The unresolved error names those packages and includes example YAML for `splunk_hosts[].os.packages`.
+
+- **Verify after write** ([#127](https://github.com/splunk/splunk-platform-automator/issues/127)): after every `spa config` or `spa apps` write, inspect `changed` and `ready`, use `--show-diff` when a human needs the hunk, `config get` the identity (`found`), then `spa validate` before provision or deploy.
+
+- **Unresolved writes are not success** ([#127](https://github.com/splunk/splunk-platform-automator/issues/127)): `spa config` and `spa apps` mutations that cannot close dependencies return `ok: false`, `ready: false`, exit 1, and an `error` naming the requirements. `data` still carries planned operations and the redacted diff so an agent can retry with `--resolve`. Nothing is written.
+
 - **Content Library schema is closed**: the Content Library entry is either Splunkbase `app_id: 5391` (any name) or `source: local` named `DA-ITSI-ContentLibrary`. It needs `itsi_content_pack: true` and exactly one of `content_pack_apps` (key present, non-empty) or `install_all_apps: true`. `install_all_apps` and `content_pack_install` must be booleans when set, so a quoted `"true"` or a null is rejected. The entry accepts `update_mode` and rejects other keys. `content_pack_install`, `force_run_playbook_after_restart`, and each `content_pack_api` value are type-checked. A local entry takes no `app_id`, and its `path`, when set, is a non-empty string. The folder name `DA-ITSI-ContentLibrary` is reserved for the library, so no other app can use it. Pack names are compared without surrounding whitespace, and a pack cannot repeat the library name or another pack name. `spa apps add 5391 --install-all-content-packs` writes top-level `install_all_apps: true`, the key the Ansible role reads, instead of `content_pack_api.install_all_apps`.
 
 - **Validate flag renamed**: `spa validate --splunk-config-aws` is now `spa validate --splunk-config aws`. The old flag is removed, so scripts that pass it must switch to the new form.
@@ -37,6 +47,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 - **Baseconfig check looks for `org_s2_indexer_indexes`**: the Software check (`spa validate`, deploy preflight, and the Ansible inventory check) now requires `*/org_s2_indexer_indexes` and `*/org_cluster_manager_base`. A Software directory that has only `org_ds_secure_server` now fails the check.
 
 ### Added
+
+- **Config audit** ([#127](https://github.com/splunk/splunk-platform-automator/issues/127)): a successful spa write stamps `.splunk_config.yml.spa-stamp` next to the config with sha256, timestamp, and command (no file contents). `spa config audit --check-hand-edits` reports `ok`, `hand_edited`, or `unknown`. A missing stamp does not fail `spa validate`.
 
 - **Architecture file plan**: `spa architecture plan FILE [--write-fragment PATH]` reads the architecture file that `splunk-validated-architectures` writes (schema 0.3.0: `phase_1`, `phase_5` with `indexer_cluster`, `shcluster`, `optional_roles`, `env_lookups`, and `_extensions`). It checks site counts, replication factors, and SHC minimums, builds one host per indexer, search head, and optional role, and lists the secrets as set or not set. It ignores `apps_by_role`, since SPA decides the apps. It writes nothing to `splunk_config.yml`; `--write-fragment` writes the merge input for `spa config merge --file`.
 

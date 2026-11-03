@@ -84,6 +84,7 @@ SESSION_API_PARAMETERS = {
         "stdin_text",
         "confirm",
         "agent",
+        "check_hand_edits",
         "header_fields",
     ),
     "apps": (

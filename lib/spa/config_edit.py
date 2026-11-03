@@ -13,6 +13,7 @@ import re
 import stat
 import tempfile
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 
@@ -96,6 +97,19 @@ def _read(path: Path) -> Tuple[bytes, MutableMapping[str, Any]]:
 
 def _revision(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
+
+
+def _stamp_path(config_path: Path) -> Path:
+    return Path(config_path).with_name(".%s.spa-stamp" % Path(config_path).name)
+
+
+def _write_stamp(config_path: Path, sha256: str, command: str) -> None:
+    payload = {
+        "sha256": sha256,
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "command": command,
+    }
+    _stamp_path(config_path).write_text(json.dumps(payload) + "\n", encoding="utf-8")
 
 
 @contextmanager
@@ -542,6 +556,7 @@ def _transact(
     resolve: Optional[Sequence[Sequence[str]]] = None,
     resolve_file: Optional[str] = None,
     stdin_text: Optional[str] = None,
+    command: str = "config",
 ) -> Dict[str, Any]:
     config_path = Path(config_path)
     spa_home = Path(spa_home)
@@ -623,6 +638,7 @@ def _transact(
             if not dry_run:
                 os.replace(temp_path, config_path)
                 result["revision_after"] = _revision(candidate_raw)
+                _write_stamp(config_path, result["revision_after"], command)
             return result
         finally:
             if temp_path.exists():
@@ -715,6 +731,7 @@ def config_header_set(
         changed = updated != raw
         if changed and not dry_run:
             _replace_bytes(config_path, updated)
+            _write_stamp(config_path, _revision(updated), "config header set")
         return {"changed": changed, "header": header}
 
 
@@ -780,6 +797,7 @@ def config_set(
         resolve=resolve,
         resolve_file=resolve_file,
         stdin_text=stdin_text,
+        command="config set",
     )
     if omitted:
         result["omitted_defaults"] = [{"path": path, "value": _redacted_value(path, parsed)}]
@@ -1032,6 +1050,7 @@ def config_add(
         resolve=resolve,
         resolve_file=resolve_file,
         stdin_text=stdin_text,
+        command="config add",
     )
 
 
@@ -1088,6 +1107,7 @@ def config_unset(
         resolve=resolve,
         resolve_file=resolve_file,
         stdin_text=stdin_text,
+        command="config unset",
     )
 
 
@@ -1098,6 +1118,30 @@ def _safe_read_value(document: MutableMapping[str, Any], path: str) -> Any:
     if leaf not in parent:
         raise ConfigEditError("%s is unset" % path)
     return parent[leaf]
+
+
+def _identity_path(path: str) -> Optional[str]:
+    parsed = _segments(path)
+    last_selector = None
+    for index, (_name, key, _value) in enumerate(parsed):
+        if key:
+            last_selector = index
+    if last_selector is None:
+        return None
+    parts = []
+    for name, key, value in parsed[: last_selector + 1]:
+        if key:
+            parts.append("%s[%s=%s]" % (name, key, value))
+        else:
+            parts.append(name)
+    return ".".join(parts)
+
+
+def _selector_miss_reason(exc: ConfigEditError) -> str:
+    message = str(exc)
+    if "matched multiple items" in message:
+        return "matched multiple items"
+    return "matched no items"
 
 
 def _outline(document: Mapping[str, Any], revision: str) -> Dict[str, Any]:
@@ -1149,6 +1193,21 @@ def config_get(
             return {"revision": revision, "authored": redacted}
         return _outline(document, revision)
     detail = _schema_detail(path)
+    identity = _identity_path(path)
+    if identity:
+        try:
+            _safe_read_value(document, identity)
+        except ConfigEditError as exc:
+            missing = "not set" if _is_secret(path) else None
+            return {
+                "revision": revision,
+                "path": path,
+                "found": False,
+                "reason": _selector_miss_reason(exc),
+                "source": "unset",
+                "authored": missing if _is_secret(path) else None,
+                "effective": missing if _is_secret(path) else None,
+            }
     if _is_secret(path):
         try:
             _safe_read_value(document, path)
@@ -1158,6 +1217,7 @@ def config_get(
         return {
             "revision": revision,
             "path": path,
+            "found": state == "set",
             "source": "explicit" if state == "set" else "unset",
             "authored": state,
             "effective": state,
@@ -1167,26 +1227,68 @@ def config_get(
         return {
             "revision": revision,
             "path": path,
+            "found": True,
             "source": "explicit",
             "authored": value,
             "effective": value,
         }
     except ConfigEditError:
-        if effective and detail and "default" in detail:
-            return {
-                "revision": revision,
-                "path": path,
-                "source": "schema_default",
-                "authored": None,
-                "effective": copy.deepcopy(detail["default"]),
-            }
-        return {
+        payload = {
             "revision": revision,
             "path": path,
+            "found": identity is not None,
             "source": "unset",
             "authored": None,
             "effective": None,
         }
+        if effective and detail and "default" in detail:
+            payload["source"] = "schema_default"
+            payload["effective"] = copy.deepcopy(detail["default"])
+        return payload
+
+
+def config_audit(config_path: Path, *, check_hand_edits: bool = False) -> Dict[str, Any]:
+    if not check_hand_edits:
+        raise ConfigEditError(
+            "spa config audit needs --check-hand-edits.\n"
+            "Compare the config SHA-256 to the last spa write stamp: "
+            "spa config audit --check-hand-edits"
+        )
+    raw, _document = _read(Path(config_path))
+    current = _revision(raw)
+    stamp_file = _stamp_path(config_path)
+    if not stamp_file.is_file():
+        return {
+            "status": "unknown",
+            "revision": current,
+            "stamped_revision": None,
+        }
+    try:
+        stamp = json.loads(stamp_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {
+            "status": "unknown",
+            "revision": current,
+            "stamped_revision": None,
+        }
+    if not isinstance(stamp, Mapping):
+        return {
+            "status": "unknown",
+            "revision": current,
+            "stamped_revision": None,
+        }
+    stamped = stamp.get("sha256")
+    status = "ok" if stamped == current else "hand_edited"
+    result: Dict[str, Any] = {
+        "status": status,
+        "revision": current,
+        "stamped_revision": stamped,
+    }
+    if stamp.get("timestamp"):
+        result["stamped_at"] = stamp.get("timestamp")
+    if stamp.get("command"):
+        result["stamped_command"] = stamp.get("command")
+    return result
 
 
 def _redact_document(value: Any, path: str = "") -> None:
@@ -1391,6 +1493,7 @@ def config_merge(
         resolve=resolve,
         resolve_file=resolve_file,
         stdin_text=stdin_text,
+        command="config merge",
     )
     result["omitted_defaults"] = omitted_defaults
     return result
@@ -1440,6 +1543,7 @@ def config_topology(
         Path(config_path), Path(spa_home), mutate,
         dry_run=dry_run, expect_revision=expect_revision, validate=validate,
         resolve=resolve, resolve_file=resolve_file, stdin_text=stdin_text,
+        command="config topology",
     )
     result["topology"] = topology_id
     return result
@@ -1527,6 +1631,7 @@ def config_provider(
         dry_run=dry_run, expect_revision=expect_revision,
         validate=validate,
         resolve=resolve, resolve_file=resolve_file, stdin_text=stdin_text,
+        command="config provider",
     )
     result["provider"] = provider_id
     return result
@@ -1634,6 +1739,7 @@ def config_app_add(
         resolve=resolve,
         resolve_file=resolve_file,
         stdin_text=stdin_text,
+        command="apps add",
     )
     result["dependencies"] = dependencies
     return result
@@ -1694,6 +1800,7 @@ def config_app_remove(
         resolve=resolve,
         resolve_file=resolve_file,
         stdin_text=stdin_text,
+        command="apps remove",
     )
     result["note"] = "Configuration removed; already deployed app files are not uninstalled."
     return result

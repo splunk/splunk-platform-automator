@@ -95,6 +95,8 @@ _BOOLEAN = frozenset(
     {
         "--yes",
         "--dry-run",
+        "--show-diff",
+        "--check-hand-edits",
         "--explicit-default",
         "--full",
         "--effective",

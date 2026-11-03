@@ -658,8 +658,13 @@ CONFIG_NEEDS_ACTION = (
     "Then:              spa config explain PATH\n"
     "Read current:      spa config get [PATH]\n"
     "Write:             set, add, unset, merge, topology, or provider\n"
+    "Audit:             spa config audit --check-hand-edits\n"
     "Coverage:          spa config keys\n"
     "Docs dump:         spa config schema --markdown"
+)
+CONFIG_AUDIT_NEEDS_FLAG = (
+    "spa config audit needs --check-hand-edits.\n"
+    "Compare the config SHA-256 to the last spa write stamp: spa config audit --check-hand-edits"
 )
 _HEADER_FIELDS_HELP = """\
 Header fields (each optional; an omitted field is removed):
@@ -1009,6 +1014,15 @@ def _print_command_error(result: CommandResult, as_agent: bool = False) -> int:
     if result.error:
         print(result.error, file=sys.stderr)
     return result.code
+
+
+def _print_redacted_diff(args, data: Dict[str, Any]) -> None:
+    if not getattr(args, "show_diff", False):
+        return
+    diff = data.get("diff") or ""
+    if not diff:
+        return
+    sys.stdout.write(diff if diff.endswith("\n") else "%s\n" % diff)
 
 
 def _print_init_messages(result: CommandResult) -> None:
@@ -1418,6 +1432,11 @@ def _run(argv: Sequence[str]) -> int:
         config_parser.add_argument("--expect-revision", metavar="SHA256", help="Fail if the current content revision differs")
         config_parser.add_argument("--resolve", nargs=2, action="append", metavar=("PATH", "VALUE"), help="Supply one unresolved dependency value (repeatable)")
         config_parser.add_argument("--resolve-file", metavar="FILE", help="Sparse YAML/JSON dependency resolution fragment")
+        config_parser.add_argument(
+            "--show-diff",
+            action="store_true",
+            help="Print the redacted unified diff after the status line (no-op in agent mode)",
+        )
         config_parser.add_argument("-y", "--yes", action="store_true", default=argparse.SUPPRESS, help="Confirm without prompting")
         if explicit_default:
             config_parser.add_argument("--explicit-default", action="store_true", help="Author values equal to schema defaults")
@@ -1427,6 +1446,18 @@ def _run(argv: Sequence[str]) -> int:
     p_config_get.add_argument("path", nargs="?", metavar="PATH")
     p_config_get.add_argument("--effective", action="store_true", help="Include the schema default when the path is unset")
     p_config_get.add_argument("--full", action="store_true", help="Return the full redacted authored document")
+
+    p_config_audit = _add_action(
+        config_sub,
+        "audit",
+        help="Compare the config SHA-256 to the last spa write stamp",
+    )
+    _add_mode_flags(p_config_audit)
+    p_config_audit.add_argument(
+        "--check-hand-edits",
+        action="store_true",
+        help="Report ok, hand_edited, or unknown from the spa write stamp",
+    )
 
     p_config_templates = _add_action(
         config_sub,
@@ -1570,6 +1601,11 @@ def _run(argv: Sequence[str]) -> int:
         "--expect-revision",
         metavar="SHA256",
         help="Fail if the current content revision differs",
+    )
+    p_config_header_set.add_argument(
+        "--show-diff",
+        action="store_true",
+        help="Print the redacted unified diff after the status line (no-op in agent mode)",
     )
     p_config_header_set.add_argument(
         "-y",
@@ -1796,6 +1832,11 @@ def _run(argv: Sequence[str]) -> int:
         help="Supply unresolved dependencies from sparse YAML/JSON; use - for stdin",
     )
     p_apps_add.add_argument(
+        "--show-diff",
+        action="store_true",
+        help="Print the redacted unified diff after the status line (no-op in agent mode)",
+    )
+    p_apps_add.add_argument(
         "-y",
         "--yes",
         action="store_true",
@@ -1816,6 +1857,11 @@ def _run(argv: Sequence[str]) -> int:
     p_apps_remove.add_argument("--expect-revision", metavar="SHA256")
     p_apps_remove.add_argument("--resolve", nargs=2, action="append", metavar=("PATH", "VALUE"))
     p_apps_remove.add_argument("--resolve-file", metavar="FILE")
+    p_apps_remove.add_argument(
+        "--show-diff",
+        action="store_true",
+        help="Print the redacted unified diff after the status line (no-op in agent mode)",
+    )
     p_apps_remove.add_argument("-y", "--yes", action="store_true", default=argparse.SUPPRESS)
 
     p_apps_download = _add_action(
@@ -2489,6 +2535,8 @@ def _run(argv: Sequence[str]) -> int:
             return _reject(CONFIG_SCHEMA_AGENT, as_agent)
         if action == "schema" and not getattr(args, "markdown", False):
             return _reject(CONFIG_SCHEMA_NEEDS_MARKDOWN, as_agent)
+        if action == "audit" and not getattr(args, "check_hand_edits", False):
+            return _reject(CONFIG_AUDIT_NEEDS_FLAG, as_agent)
         if action == "schema":
             from spa.catalog import format_config_markdown
 
@@ -2531,6 +2579,7 @@ def _run(argv: Sequence[str]) -> int:
             stdin_text=stdin_text,
             confirm=args.yes,
             agent=as_agent,
+            check_hand_edits=bool(getattr(args, "check_hand_edits", False)),
             header_fields={
                 name: getattr(args, "header_%s" % name)
                 for name in _HEADER_FIELDS
@@ -2539,9 +2588,25 @@ def _run(argv: Sequence[str]) -> int:
         )
         if as_agent:
             return _emit_result(result, True)
+        data = result.data or {}
+        if data.get("ready") is False:
+            print("Config %s: unresolved; no changes written" % action)
+            for operation in data.get("planned_operations") or []:
+                print("Planned: %s %s" % (operation.get("op"), operation.get("path")))
+            for requirement in data.get("requirements") or []:
+                print(
+                    "Required [%s/%s]: %s"
+                    % (
+                        requirement.get("rule_id"),
+                        requirement.get("kind"),
+                        requirement.get("summary"),
+                    )
+                )
+                print("Retry: %s" % requirement.get("retry"))
+            _print_redacted_diff(args, data)
+            return result.code
         if not result.ok:
             return _print_command_error(result)
-        data = result.data or {}
         if action == "explain":
             from spa.config_tree import format_explain
 
@@ -2575,30 +2640,19 @@ def _run(argv: Sequence[str]) -> int:
             yaml.default_flow_style = False
             yaml.dump(data, sys.stdout)
             return 0
+        if action == "audit":
+            print("Config audit: %s" % (data.get("status") or "unknown"))
+            return 0
         if action == "templates":
             for row in data.get("templates") or []:
                 print("%s - %s" % (row["name"], row.get("summary") or ""))
-            return 0
-        if data.get("ready") is False:
-            print("Config %s: unresolved; no changes written" % action)
-            for operation in data.get("planned_operations") or []:
-                print("Planned: %s %s" % (operation.get("op"), operation.get("path")))
-            for requirement in data.get("requirements") or []:
-                print(
-                    "Required [%s/%s]: %s"
-                    % (
-                        requirement.get("rule_id"),
-                        requirement.get("kind"),
-                        requirement.get("summary"),
-                    )
-                )
-                print("Retry: %s" % requirement.get("retry"))
             return 0
         state = "would change" if getattr(args, "dry_run", False) and data.get("changed") else (
             "changed" if data.get("changed") else "unchanged"
         )
         shown = "header set" if action == "header-set" else action
         print("Config %s: %s" % (shown, state))
+        _print_redacted_diff(args, data)
         for warning in data.get("warnings") or []:
             print("Warning: %s" % warning, file=sys.stderr)
         print("Run spa validate after the final edit.")
@@ -2648,10 +2702,26 @@ def _run(argv: Sequence[str]) -> int:
         )
         if as_agent:
             return _emit_result(result, True)
+        data = result.data or {}
+        if action in {"add", "remove"} and data.get("ready") is False:
+            print("App %s: unresolved; no changes written" % action)
+            for operation in data.get("planned_operations") or []:
+                print("Planned: %s %s" % (operation.get("op"), operation.get("path")))
+            for requirement in data.get("requirements") or []:
+                print(
+                    "Required [%s/%s]: %s"
+                    % (
+                        requirement.get("rule_id"),
+                        requirement.get("kind"),
+                        requirement.get("summary"),
+                    )
+                )
+                print("Retry: %s" % requirement.get("retry"))
+            _print_redacted_diff(args, data)
+            return result.code
         if not result.ok:
             print(result.error or "apps failed", file=sys.stderr)
             return result.code
-        data = result.data or {}
         if action == "search":
             from spa.apps import format_search_text
 
@@ -2670,27 +2740,13 @@ def _run(argv: Sequence[str]) -> int:
                 print("Downloaded: %s" % (data.get("path") or ""))
             return 0
         if action in {"add", "remove"}:
-            if data.get("ready") is False:
-                print("App %s: unresolved; no changes written" % action)
-                for operation in data.get("planned_operations") or []:
-                    print("Planned: %s %s" % (operation.get("op"), operation.get("path")))
-                for requirement in data.get("requirements") or []:
-                    print(
-                        "Required [%s/%s]: %s"
-                        % (
-                            requirement.get("rule_id"),
-                            requirement.get("kind"),
-                            requirement.get("summary"),
-                        )
-                    )
-                    print("Retry: %s" % requirement.get("retry"))
-                return 0
             state = "would change" if getattr(args, "dry_run", False) and data.get("changed") else (
                 "changed" if data.get("changed") else "unchanged"
             )
             print("App %s: %s" % (action, state))
             if data.get("note"):
                 print(data["note"])
+            _print_redacted_diff(args, data)
             print("Run spa validate after the final edit.")
             return 0
         sys.stdout.write(data.get("snippet") or "")

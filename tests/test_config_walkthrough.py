@@ -32,6 +32,11 @@ def _fences(text: str) -> list[str]:
     ]
 
 
+def _expect_unresolved(block: str) -> str:
+    """Keep `set -e` while replaying documented unresolved (exit 1) steps."""
+    return "%s || test $? -eq 1" % block.rstrip()
+
+
 def test_walkthrough_documents_the_unset_lookup_error():
     """The documented error is produced without changing this process environment."""
     documented = _TEXT.search(_walkthrough()).group(1).strip()
@@ -66,12 +71,15 @@ print(unresolved_env_message({
 
 def test_walkthrough_replay_builds_the_clustered_config(tmp_path):
     text = _walkthrough()
+    assert "This command exits 1, prints `itsi.search_tier`" in text
     script_parts = ["set -euo pipefail"]
     for block in _fences(text):
         if "fragments/shs.yml" in block and "--resolve" not in block:
             script_parts.append('cp config/splunk_config.yml "$SNAPSHOT"')
-            script_parts.append(block)
+            script_parts.append(_expect_unresolved(block))
             script_parts.append('cmp -s config/splunk_config.yml "$SNAPSHOT"')
+        elif "spa apps add 1841 --dry-run" in block:
+            script_parts.append(_expect_unresolved(block))
         else:
             script_parts.append(block)
     script = "\n".join(script_parts)

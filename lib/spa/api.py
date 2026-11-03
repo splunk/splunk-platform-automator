@@ -78,6 +78,26 @@ class CommandResult:
         return payload
 
 
+def _mutation_result(action: str, data: Any) -> CommandResult:
+    payload = data if isinstance(data, dict) else {}
+    if payload.get("ready") is False:
+        parts = []
+        for item in payload.get("requirements") or []:
+            if not isinstance(item, dict):
+                continue
+            rule = str(item.get("rule_id") or "requirement")
+            summary = str(item.get("summary") or "").split("\n", 1)[0].strip()
+            parts.append("%s: %s" % (rule, summary) if summary else rule)
+        detail = "; ".join(parts) if parts else "unresolved dependencies"
+        return CommandResult(
+            ok=False,
+            data=payload,
+            error="%s did not write: %s" % (action, detail),
+            code=1,
+        )
+    return CommandResult(ok=True, data=data)
+
+
 @runtime_checkable
 class SpaSession(Protocol):
     """Backend port. The CLI and a future GUI both depend on this, not each other."""
@@ -191,6 +211,7 @@ class SpaSession(Protocol):
         stdin_text: Optional[str] = None,
         confirm: bool = False,
         agent: bool = False,
+        check_hand_edits: bool = False,
         header_fields: Optional[Dict[str, str]] = None,
     ) -> CommandResult: ...
 
@@ -616,6 +637,7 @@ class LocalSpaSession:
         stdin_text: Optional[str] = None,
         confirm: bool = False,
         agent: bool = False,
+        check_hand_edits: bool = False,
         header_fields: Optional[Dict[str, str]] = None,
     ) -> CommandResult:
         from spa.init import InitError
@@ -623,6 +645,7 @@ class LocalSpaSession:
         from spa.config_edit import (
             ConfigEditError,
             config_add,
+            config_audit,
             config_get,
             config_header_set,
             config_merge,
@@ -656,6 +679,11 @@ class LocalSpaSession:
                         full=full,
                     ),
                 )
+            if action == "audit":
+                return CommandResult(
+                    ok=True,
+                    data=config_audit(config_path, check_hand_edits=check_hand_edits),
+                )
             if action not in {"set", "add", "unset", "merge", "topology", "provider", "header-set"}:
                 return CommandResult(
                     ok=False,
@@ -679,7 +707,7 @@ class LocalSpaSession:
                     dry_run=dry_run,
                     expect_revision=expect_revision,
                 )
-                return CommandResult(ok=True, data=data)
+                return _mutation_result("config header set", data)
             if action == "topology":
                 if not operand:
                     raise ConfigEditError(MISSING_OPERAND[("spa config topology", "TOPOLOGY")])
@@ -778,7 +806,7 @@ class LocalSpaSession:
                     stdin_text=stdin_text,
                     **common,
                 )
-            return CommandResult(ok=True, data=data)
+            return _mutation_result("config %s" % action, data)
         except InitError as exc:
             return CommandResult(ok=False, error=str(exc), code=exc.code)
         except ConfigEditError as exc:
@@ -794,6 +822,7 @@ class LocalSpaSession:
                     "uses spa config merge --file",
                     "needs TOPOLOGY",
                     "needs PROVIDER",
+                    "needs --check-hand-edits",
                     "needs an identity selector",
                     "requires an identity list",
                     "requires a JSON object",
@@ -915,7 +944,7 @@ class LocalSpaSession:
                         resolve_file=resolve_file,
                         stdin_text=stdin_text,
                     )
-                    return CommandResult(ok=True, data=data)
+                    return _mutation_result("apps remove", data)
                 built = build_entry(
                     app_id,
                     version=version or "latest",
@@ -948,7 +977,7 @@ class LocalSpaSession:
                         "omitted_defaults": built.get("omitted_defaults") or [],
                     }
                 )
-                return CommandResult(ok=True, data=data)
+                return _mutation_result("apps add", data)
             if action == "download":
                 blocked = self._env_gate()
                 if blocked:

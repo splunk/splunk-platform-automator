@@ -139,10 +139,15 @@ HELP_CONTRACTS = [
             "merge",
             "topology",
             "provider",
+            "audit",
             "spa config search QUERY",
             "spa config explain PATH",
             "spa config schema --markdown",
         ],
+    ),
+    (
+        ["config", "audit", "--help"],
+        ["usage: spa config audit", "--check-hand-edits"],
     ),
     (
         ["config", "set", "--help"],
