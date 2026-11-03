@@ -103,6 +103,20 @@ Example:
 spa --agent config get splunk_defaults.splunk_version
 ```
 
+## `config audit`
+
+Compare the config SHA-256 to the last spa write stamp
+
+| Flag | Description |
+| --- | --- |
+| `--check-hand-edits` | Report ok, hand_edited, or unknown from the spa write stamp |
+
+Example:
+
+```bash
+spa --agent config audit --check-hand-edits
+```
+
 ## `config templates`
 
 List shipped reusable config fragments and their leading summaries
@@ -126,6 +140,7 @@ Transactionally replace one schema-backed value
 | `--expect-revision` | Require the current SHA-256 revision |
 | `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
 | `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `--show-diff` | Print the redacted unified diff after the status line (no-op in agent mode) |
 | `-y`, `--yes` | Skip the human confirmation prompt |
 
 | Argument | Required | Description |
@@ -151,6 +166,7 @@ Append one new non-app identity-list entry. Fails when that identity already exi
 | `--expect-revision` | Require the current SHA-256 revision |
 | `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
 | `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `--show-diff` | Print the redacted unified diff after the status line (no-op in agent mode) |
 | `-y`, `--yes` | Skip the human confirmation prompt |
 
 | Argument | Required | Description |
@@ -174,6 +190,7 @@ Transactionally remove one or more authored paths
 | `--expect-revision` | Require the current SHA-256 revision |
 | `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
 | `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `--show-diff` | Print the redacted unified diff after the status line (no-op in agent mode) |
 | `-y`, `--yes` | Skip the human confirmation prompt |
 
 | Argument | Required | Description |
@@ -198,6 +215,7 @@ Transactionally merge a partial splunk_config.yml
 | `--expect-revision` | Require the current SHA-256 revision |
 | `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
 | `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `--show-diff` | Print the redacted unified diff after the status line (no-op in agent mode) |
 | `-y`, `--yes` | Skip the human confirmation prompt |
 
 | Argument | Required | Description |
@@ -220,6 +238,7 @@ List catalog topology ids, or replace topology-owned sections from one
 | `--expect-revision` | Require the current SHA-256 revision |
 | `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
 | `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `--show-diff` | Print the redacted unified diff after the status line (no-op in agent mode) |
 | `-y`, `--yes` | Skip the human confirmation prompt |
 
 | Argument | Required | Description |
@@ -242,6 +261,7 @@ Replace provider-owned config sections from an example template
 | `--expect-revision` | Require the current SHA-256 revision |
 | `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
 | `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `--show-diff` | Print the redacted unified diff after the status line (no-op in agent mode) |
 | `-y`, `--yes` | Skip the human confirmation prompt |
 
 | Argument | Required | Description |
@@ -273,6 +293,7 @@ Requires confirmation: yes (`--yes`).
 | `--deploy` | Command that deploys this environment |
 | `--dry-run` | Preview without writing |
 | `--expect-revision` | Require the current SHA-256 revision |
+| `--show-diff` | Print the redacted unified diff after the status line (no-op in agent mode) |
 | `-y`, `--yes` | Confirm the header write (required in agent mode) |
 
 Example:
@@ -1021,6 +1042,7 @@ Idempotently add or update one apps[] entry; edits config and does not deploy
 | `--expect-revision` | Write only when the config still has this SHA-256 revision |
 | `--resolve` | Supply one unresolved dependency PATH VALUE; VALUE uses strict JSON; repeatable |
 | `--resolve-file` | Supply unresolved dependencies from sparse YAML/JSON; use - for stdin |
+| `--show-diff` | Print the redacted unified diff after the status line (no-op in agent mode) |
 | `-y`, `--yes` | Skip the human config-edit confirmation; agent mode never prompts |
 
 Example:
@@ -1040,6 +1062,7 @@ Remove an authored app entry; does not uninstall deployed files
 | `--expect-revision` | Require the current SHA-256 revision |
 | `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
 | `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `--show-diff` | Print the redacted unified diff after the status line (no-op in agent mode) |
 | `-y`, `--yes` | Skip the human confirmation prompt |
 
 | Argument | Required | Description |

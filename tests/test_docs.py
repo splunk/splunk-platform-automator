@@ -392,6 +392,38 @@ class TestSpaSkill:
         )
         assert tracked.strip() == ""
 
+    def test_verify_after_write_is_documented(self):
+        guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+        configure = guide[
+            guide.index("## Configure an environment") : guide.index("## Run the lifecycle")
+        ]
+        assert "changed" in configure and "ready" in configure
+        assert "--show-diff" in configure
+        assert "found" in configure
+        assert "spa validate" in configure or "spa --agent validate" in configure
+
+        skills = PROJECT_ROOT / "skills" / "spa"
+        create = (skills / "spa-create-config" / "SKILL.md").read_text(encoding="utf-8")
+        phase7 = create[create.index("## Phase 7 — Write config") : create.index("## Phase 8")]
+        modify = create[create.index("## Add / change a setting") : create.index("## Reference files")]
+        for block in (phase7, modify):
+            assert "changed" in block and "ready" in block
+            assert "found" in block
+        assert "--show-diff" in create
+
+        commands = (skills / "spa-create-config" / "references" / "config-commands.md").read_text(
+            encoding="utf-8"
+        )
+        assert "--show-diff" in commands
+        assert "found" in commands
+        assert "changed" in commands and "ready" in commands
+        assert "validate" in commands
+
+        apps = (skills / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
+        assert "changed" in apps and "ready" in apps
+        assert "found" in apps
+        assert "spa --agent validate" in apps
+
     def test_create_config_skill_uses_feature_discovery_loop(self):
         skill = PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md"
         text = skill.read_text(encoding="utf-8")

@@ -235,6 +235,82 @@ splunk_hosts:
         assert unset["source"] == "unset"
         assert unset["authored"] is None and unset["effective"] is None
 
+    def test_get_missing_app_selector_reports_found_false(self, tmp_path):
+        """CFG-PATH-005."""
+        path = _config(tmp_path)
+        got = config_get(
+            path, PROJECT_ROOT, "splunk_app_deployment.apps[app_id=1841].app_id"
+        )
+        assert got["found"] is False
+        assert got["reason"] == "matched no items"
+        assert got["source"] == "unset"
+        assert got["authored"] is None
+
+    def test_get_existing_app_selector_reports_found_true(self, tmp_path):
+        """CFG-PATH-005."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_app_deployment:
+  apps:
+    - app_id: 1841
+      name: Splunk_IT_Service_Intelligence
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        got = config_get(
+            path, PROJECT_ROOT, "splunk_app_deployment.apps[app_id=1841].app_id"
+        )
+        assert got["found"] is True
+        assert got["source"] == "explicit"
+        assert got["authored"] == 1841
+        assert "reason" not in got
+
+    def test_get_missing_host_effective_is_not_schema_default(self, tmp_path):
+        """CFG-PATH-005."""
+        path = _config(tmp_path)
+        missing = config_get(
+            path,
+            PROJECT_ROOT,
+            "splunk_hosts[name=missing].os.disable_selinux",
+            effective=True,
+        )
+        assert missing["found"] is False
+        assert missing["reason"] == "matched no items"
+        assert missing["source"] == "unset"
+        assert missing["effective"] is None
+        present = config_get(
+            path,
+            PROJECT_ROOT,
+            "splunk_hosts[name=sh].os.disable_selinux",
+            effective=True,
+        )
+        assert present["found"] is True
+        assert present["source"] == "schema_default"
+        assert present["effective"] is True
+
+    def test_get_secret_sets_found(self, tmp_path):
+        """CFG-PATH-005 CFG-PATH-007."""
+        path = _config(tmp_path)
+        present = config_get(path, PROJECT_ROOT, "splunk_defaults.splunk_admin_password")
+        assert present["authored"] == "set"
+        assert present["found"] is True
+        empty = _config(
+            tmp_path / "empty",
+            """\
+plugin: splunk-platform-automator
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        absent = config_get(empty, PROJECT_ROOT, "splunk_defaults.splunk_admin_password")
+        assert absent["authored"] == "not set"
+        assert absent["found"] is False
+
     def test_schema_default_is_omitted_unless_explicit(self, tmp_path):
         """CFG-PATH-006."""
         path = _config(tmp_path)
@@ -1207,11 +1283,237 @@ splunk_hosts:
             ],
             env=min_env_vars(env_dir),
         )
-        assert result.returncode == 0
+        assert result.returncode == 1
         assert "unresolved" in result.stdout.lower()
         assert "Choose the search-head cluster" in result.stdout
         assert "--resolve" in result.stdout
         assert path.read_bytes() == before
+
+    def test_human_set_without_show_diff_prints_no_hunk(self, tmp_path):
+        """CFG-TXN-003 CFG-CLI-002."""
+        env_dir = write_min_env(tmp_path / "env")
+        _config(env_dir)
+        result = run_spa(
+            [
+                "--no-agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "set",
+                "os.time_zone",
+                "UTC",
+                "--yes",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert result.returncode == 0
+        assert "changed" in result.stdout.lower()
+        assert "+++" not in result.stdout
+        assert "---" not in result.stdout
+
+    def test_human_set_show_diff_prints_redacted_hunk(self, tmp_path):
+        """CFG-TXN-003 CFG-CLI-002."""
+        env_dir = write_min_env(tmp_path / "env")
+        _config(env_dir)
+        result = run_spa(
+            [
+                "--no-agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "set",
+                "os.time_zone",
+                "UTC",
+                "--show-diff",
+                "--yes",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert result.returncode == 0
+        assert "+++" in result.stdout
+        assert "+  time_zone:" in result.stdout
+        assert "UTC" in result.stdout
+        assert "password" not in result.stdout.lower() or "<redacted>" in result.stdout
+        assert "SPLUNK_ADMIN_PASSWORD" not in result.stdout
+
+    def test_human_unresolved_show_diff_prints_hunk_and_no_write(self, tmp_path):
+        """CFG-TXN-003 CFG-DEP-003."""
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(
+            env_dir,
+            """\
+plugin: splunk-platform-automator
+splunk_hosts:
+  - name: dep
+    roles: [indexer]
+""",
+        )
+        before = path.read_bytes()
+        result = run_spa(
+            [
+                "--no-agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "set",
+                "splunk_hosts[name=dep].roles",
+                '["deployer"]',
+                "--show-diff",
+                "--yes",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert result.returncode == 1
+        assert "unresolved" in result.stdout.lower()
+        assert "+++" in result.stdout
+        assert "deployer" in result.stdout
+        assert path.read_bytes() == before
+
+    def test_agent_show_diff_is_noop_json_envelope(self, tmp_path):
+        """CFG-CLI-001 CFG-CLI-002 CFG-TXN-003."""
+        env_dir = write_min_env(tmp_path / "env")
+        _config(env_dir)
+        result = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "set",
+                "os.time_zone",
+                "UTC",
+                "--show-diff",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 0
+        assert result.stderr == ""
+        assert payload["ok"] is True
+        assert payload["data"]["changed"] is True
+        assert "diff" in payload["data"]
+        assert "+  time_zone:" in payload["data"]["diff"]
+        assert result.stdout.strip().startswith("{")
+        assert result.stdout.strip().endswith("}")
+
+    def test_audit_unknown_without_stamp(self, tmp_path):
+        env_dir = write_min_env(tmp_path / "env")
+        _config(env_dir)
+        result = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "audit",
+                "--check-hand-edits",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 0
+        assert payload["ok"] is True
+        assert payload["data"]["status"] == "unknown"
+        stamp = env_dir / "config" / ".splunk_config.yml.spa-stamp"
+        assert not stamp.exists()
+
+    def test_audit_ok_after_spa_write(self, tmp_path):
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(env_dir)
+        written = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "set",
+                "os.time_zone",
+                "UTC",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert json.loads(written.stdout)["ok"] is True
+        stamp = env_dir / "config" / ".splunk_config.yml.spa-stamp"
+        payload = json.loads(stamp.read_text(encoding="utf-8"))
+        assert payload["sha256"]
+        assert payload["command"]
+        assert "password" not in json.dumps(payload).lower()
+        assert path.read_text(encoding="utf-8") not in json.dumps(payload)
+        result = run_spa(
+            [
+                "--no-agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "audit",
+                "--check-hand-edits",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert result.returncode == 0
+        assert "ok" in result.stdout.lower()
+        agent = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "audit",
+                "--check-hand-edits",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        data = json.loads(agent.stdout)
+        assert data["ok"] is True
+        assert data["data"]["status"] == "ok"
+        assert data["data"]["revision"] == payload["sha256"]
+
+    def test_audit_reports_hand_edited_after_byte_mutation(self, tmp_path):
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(env_dir)
+        written = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "set",
+                "os.time_zone",
+                "UTC",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert json.loads(written.stdout)["data"]["changed"] is True
+        path.write_bytes(path.read_bytes() + b"\n")
+        result = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "audit",
+                "--check-hand-edits",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 0
+        assert payload["ok"] is True
+        assert payload["data"]["status"] == "hand_edited"
+
+    def test_audit_without_flag_is_usage_error(self, tmp_path):
+        env_dir = write_min_env(tmp_path / "env")
+        _config(env_dir)
+        result = run_spa(
+            ["--agent", "--start-dir", str(env_dir), "config", "audit"],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 2
+        assert payload["ok"] is False
+        assert "data" not in payload
+        assert "spa config audit" in payload["error"]
+        assert "--check-hand-edits" in payload["error"]
 
     def test_agent_set_writes_without_yes_and_returns_compact_envelope(self, tmp_path):
         """CFG-CLI-001 CFG-CLI-002 CFG-CLI-003."""
@@ -1263,6 +1565,7 @@ splunk_hosts:
                 "Then:              spa config explain PATH\n"
                 "Read current:      spa config get [PATH]\n"
                 "Write:             set, add, unset, merge, topology, or provider\n"
+                "Audit:             spa config audit --check-hand-edits\n"
                 "Coverage:          spa config keys\n"
                 "Docs dump:         spa config schema --markdown"
             ),
@@ -1565,7 +1868,9 @@ splunk_hosts:
             env=min_env_vars(env_dir),
         )
         payload = json.loads(result.stdout)
-        assert result.returncode == 0
+        assert result.returncode == 1
+        assert payload["ok"] is False
+        assert "did not write" in payload["error"]
         assert payload["data"]["ready"] is False
         assert payload["data"]["changed"] is False
         assert payload["data"]["requirements"][0]["rule_id"] == "host.deployer.shcluster"
@@ -1815,6 +2120,106 @@ splunk_app_deployment:
                 }
             )
 
+    def test_openjdk_21_jdk_on_search_head_satisfies_itsi_java(self):
+        """CFG-DEP-003."""
+        import sys
+
+        plugin = PROJECT_ROOT / "ansible" / "plugins" / "inventory"
+        sys.path.insert(0, str(plugin))
+        from schema import plan_config_dependencies
+
+        result = plan_config_dependencies(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_defaults": {
+                    "splunk_admin_password": "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}",
+                    "splunk_license_file": "Enterprise.lic",
+                },
+                "splunk_hosts": [
+                    {
+                        "name": "sh",
+                        "roles": ["search_head"],
+                        "os": {"packages": ["openjdk-21-jdk"]},
+                    },
+                    {"name": "idx", "roles": ["indexer"]},
+                    {"name": "lm", "roles": ["license_manager"]},
+                ],
+                "splunk_app_deployment": {
+                    "apps": [
+                        {
+                            "name": "Splunk IT Service Intelligence",
+                            "app_id": 1841,
+                            "premium_app": "itsi",
+                        }
+                    ]
+                },
+            }
+        )
+        assert "itsi.java" not in {item["rule_id"] for item in result["requirements"]}
+
+    def test_missing_itsi_java_error_names_packages_and_shows_yaml(self):
+        """CFG-DEP-003."""
+        import sys
+
+        plugin = PROJECT_ROOT / "ansible" / "plugins" / "inventory"
+        sys.path.insert(0, str(plugin))
+        from schema import ConfigValidationError, plan_config_dependencies, validate_config
+
+        candidate = {
+            "plugin": "splunk-platform-automator",
+            "splunk_defaults": {
+                "splunk_admin_password": "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}",
+                "splunk_license_file": "Enterprise.lic",
+            },
+            "splunk_hosts": [
+                {"name": "sh", "roles": ["search_head"]},
+                {"name": "idx", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    {
+                        "name": "Splunk IT Service Intelligence",
+                        "app_id": 1841,
+                        "premium_app": "itsi",
+                    }
+                ]
+            },
+        }
+        planned = plan_config_dependencies(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_defaults": {
+                    "splunk_admin_password": "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}",
+                    "splunk_license_file": "Enterprise.lic",
+                },
+                "splunk_hosts": [
+                    {"name": "sh", "roles": ["search_head"]},
+                    {"name": "idx", "roles": ["indexer"]},
+                    {"name": "lm", "roles": ["license_manager"]},
+                ],
+                "splunk_app_deployment": {
+                    "apps": [
+                        {
+                            "name": "Splunk IT Service Intelligence",
+                            "app_id": 1841,
+                            "premium_app": "itsi",
+                        }
+                    ]
+                },
+            }
+        )
+        java = next(item for item in planned["requirements"] if item["rule_id"] == "itsi.java")
+        combined = "%s\n%s" % (java["summary"], java["retry"])
+        assert "java-21-openjdk" in combined
+        assert "openjdk-21-jdk" in combined
+        assert "os.packages" in combined or "packages:" in combined
+        assert "password" not in combined.lower()
+        with pytest.raises(ConfigValidationError) as raised:
+            validate_config(candidate)
+        message = str(raised.value)
+        assert "java-21-openjdk" in message or "openjdk-21-jdk" in message
+        assert "packages:" in message
 
     def test_ambiguous_itsi_search_tier_preserves_bytes_until_one_filter(self, tmp_path):
         """CFG-APP-009 CFG-DEP-003."""

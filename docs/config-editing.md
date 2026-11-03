@@ -28,11 +28,14 @@ and never import `spa.api`.
 ### CFG-CLI-002 — result and status contract
 
 Usage errors exit 2. Runtime, validation, and transaction failures exit 1.
-Success exits 0. Agent mode emits one compact JSON object. Agent failures have
-`ok`, `schema_version`, and `error`, and no `data`. Successful mutations report
-`changed`, revisions, redacted operations, warnings, omitted defaults, and
-validation readiness; they never include the configuration body or rendered
-snippets.
+Success exits 0. Agent mode emits one compact JSON object. Usage and runtime
+failures have `ok`, `schema_version`, and `error`, and no `data`. Successful
+mutations report `changed`, revisions, redacted operations, warnings, omitted
+defaults, and validation readiness; they never include the configuration body
+or rendered snippets. An unresolved mutation is not success: `ok: false`,
+exit 1, `error` naming the unmet requirements, and `data` with `ready: false`,
+planned operations, and the redacted diff so the agent can retry with
+`--resolve`.
 
 ### CFG-CLI-003 — confirmation boundary
 
@@ -87,8 +90,13 @@ state returns to a schema default.
 
 `config get PATH` distinguishes `explicit`, `schema_default`, and `unset`, with
 separate authored and effective values. `--effective` reports an omit-safe
-schema default when the path is absent. Human output is YAML; agent output uses
-the normal envelope and includes the current content revision.
+schema default when the path is absent. Every path get also reports `found`:
+`true` when the identity (or scalar) exists, `false` when a selector matches
+no item (with `reason`, for example `matched no items`) or a scalar is unset.
+A missing identity never returns `schema_default` as if that host or app
+existed. Secret paths still report `authored: set|not set` and still set
+`found`. Human output is YAML; agent output uses the normal envelope and
+includes the current content revision.
 
 ### CFG-PATH-006 — omit-safe defaults
 
@@ -235,7 +243,8 @@ candidate. No stage writes a partial candidate.
 
 Dry-run and write use the same pipeline and produce the same structured
 operation plan and redacted unified diff. Dry-run stops before replacement.
-Human and agent output never exposes a secret value.
+Agent JSON always includes `data.diff`. Humans see that redacted hunk only
+with `--show-diff`. Human and agent output never exposes a secret value.
 
 ### CFG-TXN-004 — atomicity and rollback
 
@@ -268,11 +277,11 @@ resources. Cycles terminate as unresolved requirements.
 
 ### CFG-DEP-003 — unresolved result
 
-Unresolved input is a successful, non-writing result with `ready: false` and
-`changed: false`. Requirements carry rule ID, kind (`choice`, `value`,
-`external_resource`, or `cardinality`), affected paths, safe summary, available
-identities when applicable, and retry guidance. Deterministic repairs remain
-planned only until every requirement is resolved.
+Unresolved input is a failed, non-writing result with `ok: false`,
+`ready: false`, `changed: false`, and exit 1. Requirements carry rule ID, kind
+(`choice`, `value`, `external_resource`, or `cardinality`), affected paths,
+safe summary, available identities when applicable, and retry guidance.
+Deterministic repairs remain planned only until every requirement is resolved.
 
 ### CFG-DEP-004 — resolution retry
 

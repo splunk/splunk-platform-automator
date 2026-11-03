@@ -2832,7 +2832,14 @@ DEPENDENCY_RULES = (
     _dependency_rule("license_manager.license_file", "external_resource", "license_manager role", ["license file"], "none", "Provide an existing Splunk license file path."),
     _dependency_rule("license_file.license_manager", "choice", "configured license file", ["license_manager placement"], "none", "Choose a host for the license_manager role."),
     _dependency_rule("itsi.topology", "cardinality", "ITSI or content pack app", ["search head", "indexer", "license manager"], "none", "ITSI requires search, indexing, and license tiers."),
-    _dependency_rule("itsi.java", "value", "ITSI or content pack app", ["Java 21 package"], "none", "ITSI requires Java 21 on its search tier."),
+    _dependency_rule(
+        "itsi.java",
+        "value",
+        "ITSI or content pack app",
+        ["Java 21 package"],
+        "none",
+        "ITSI requires Java 21 on its search tier (java-21-openjdk or openjdk-21-jdk).",
+    ),
     _dependency_rule("itsi.search_tier", "choice", "installed ITSI app", ["one SHC or one standalone search head"], "none", "ITSI must target exactly one search tier."),
     _dependency_rule("app.filter.cluster", "choice", "cluster app filter", ["existing cluster identities"], "none", "Choose existing cluster identities for app filters."),
     _dependency_rule("app.filter.serverclass", "choice", "server-class app filter", ["deployment server"], "none", "Server-class filters require a deployment_server host."),
@@ -2840,6 +2847,31 @@ DEPENDENCY_RULES = (
 )
 
 _DEPENDENCY_RULE_BY_ID = {rule["id"]: rule for rule in DEPENDENCY_RULES}
+
+_JAVA_21_PACKAGE_NAMES = ("java-21-openjdk", "openjdk-21-jdk")
+_ITSI_JAVA_SUMMARY = (
+    "ITSI requires Java 21 on its search tier "
+    "(java-21-openjdk or openjdk-21-jdk). Example:\n"
+    "splunk_hosts:\n"
+    "  - name: SEARCH_HEAD\n"
+    "    os:\n"
+    "      packages: [java-21-openjdk]"
+)
+_ITSI_JAVA_RETRY = (
+    "Set splunk_hosts[name=NAME].os.packages to java-21-openjdk "
+    "(RHEL/Amazon Linux) or openjdk-21-jdk (Ubuntu/Debian), for example:\n"
+    "splunk_hosts:\n"
+    "  - name: NAME\n"
+    "    os:\n"
+    "      packages: [openjdk-21-jdk]"
+)
+
+
+def _packages_include_java_21(packages: Any) -> bool:
+    return any(
+        any(token in str(package) for token in _JAVA_21_PACKAGE_NAMES)
+        for package in packages or []
+    )
 
 
 def _raw_host_count(host: Dict[str, Any]) -> int:
@@ -3187,23 +3219,18 @@ def _plan_config_dependencies_pass(config: Dict[str, Any]) -> Dict[str, Any]:
                     ["splunk_hosts"],
                     "ITSI requires at least one %s host." % role,
                 )
-        global_packages = set((config.get("os") or {}).get("packages") or [])
-        java_present = any(
-            "java-21" in str(package)
-            for package in global_packages
-        ) or any(
+        global_packages = (config.get("os") or {}).get("packages") or []
+        java_present = _packages_include_java_21(global_packages) or any(
             "search_head" in set(host.get("roles") or [])
-            and any(
-                "java-21" in str(package)
-                for package in ((host.get("os") or {}).get("packages") or [])
-            )
+            and _packages_include_java_21((host.get("os") or {}).get("packages"))
             for host in hosts
         )
         if not java_present:
             require(
                 "itsi.java", "value",
                 ["os.packages", "splunk_hosts[].os.packages"],
-                "ITSI requires Java 21 on its search tier.",
+                _ITSI_JAVA_SUMMARY,
+                retry=_ITSI_JAVA_RETRY,
             )
 
     for index, app in enumerate(apps):

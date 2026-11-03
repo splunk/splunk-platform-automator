@@ -15,6 +15,15 @@ Always use these commands, never hand-edit:
 | Read current state | `spa --env NAME config get [PATH]` | Always check before assuming a value |
 | Search for a path | `spa --env NAME config search KEYWORD` | Finds related config paths |
 | Explain a path | `spa --env NAME config explain PATH` | Shows type, constraints, examples, related commands |
+| Preview a write | `spa --env NAME config set PATH VALUE --show-diff --yes` | Human-only redacted hunk; agent JSON already has `data.diff` |
+| Confirm an identity | `spa --env NAME config get 'splunk_hosts[name=HOSTNAME].roles'` | `found: true` on a hit; `found: false` plus `reason` on a miss |
+
+## After every write
+
+1. Inspect `changed` and `ready`. `ok: false` with `ready: false` wrote nothing.
+2. Humans: `--show-diff` for the redacted hunk. Agents already get `data.diff`.
+3. `spa config get` the identity and confirm `found: true`.
+4. `spa validate` before provision or deploy.
 
 ## Terminology
 
