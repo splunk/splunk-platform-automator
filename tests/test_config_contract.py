@@ -955,6 +955,25 @@ splunk_hosts:
         assert "# kept" in text
         assert "splunk_version: 9.4.0" in text
 
+    def test_roles_write_dumps_unquoted_keys_and_role_names(self, tmp_path):
+        """spa config dumps must not introduce double quotes on keys or role items."""
+        plugin = str(PROJECT_ROOT / "ansible" / "plugins" / "inventory")
+        if plugin not in sys.path:
+            sys.path.insert(0, plugin)
+        from schema import validate_config_file
+
+        path = _config(tmp_path)
+        config_set(path, PROJECT_ROOT, "splunk_hosts[name=sh].roles", '["search_head","indexer"]')
+        text = path.read_text(encoding="utf-8")
+        assert re.search(r'(?m)^\s*["\']name["\']\s*:', text) is None
+        assert re.search(r'(?m)^\s*["\']roles["\']\s*:', text) is None
+        assert re.search(r'(?m)^\s*["\']site["\']\s*:', text) is None
+        assert '"search_head"' not in text
+        assert '"indexer"' not in text
+        assert "'search_head'" not in text
+        assert "'indexer'" not in text
+        validate_config_file(str(path))
+
 
 class TestAddContract:
     def test_add_appends_a_new_identity_and_injects_the_selector(self, tmp_path):

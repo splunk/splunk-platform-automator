@@ -18,6 +18,7 @@ from schema import (
     SplunkHost,
     AllowedRole,
     validate_config as _schema_validate,
+    validate_config_file,
     ConfigValidationError,
     GeneralConfig,
     IdxClusterConfig,
@@ -1294,6 +1295,55 @@ class TestMultiRoleHosts:
         assert AllowedRole.indexer in result.splunk_hosts[0].roles
         assert AllowedRole.search_head in result.splunk_hosts[0].roles
 
+    def test_duplicate_role_on_one_host_is_rejected(self):
+        """The same AllowedRole may appear at most once on one host."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {
+                    "name": "cm",
+                    "roles": ["cluster_manager", "cluster_manager"],
+                    "idxcluster": "idxc1",
+                },
+                {"iter": {"numbers": "1..2"}, "roles": ["indexer"], "idxcluster": "idxc1"},
+            ],
+            "splunk_idxclusters": [{"idxc_name": "idxc1", "idxc_password": "secret"}],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        message = str(exc_info.value)
+        assert "splunk_hosts -> 0 -> roles" in message
+        assert "cluster_manager" in message
+
+    def test_duplicate_role_among_distinct_roles_is_rejected(self):
+        """CM+DS+MC stays valid; repeating cluster_manager does not.
+
+        A Python dict cannot carry YAML quote style, so mixed quoting
+        of the same role name is this same duplicate after load.
+        """
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {
+                    "name": "cm",
+                    "roles": [
+                        "cluster_manager",
+                        "deployment_server",
+                        "monitoring_console",
+                        "cluster_manager",
+                    ],
+                    "idxcluster": "idxc1",
+                },
+                {"iter": {"numbers": "1..2"}, "roles": ["indexer"], "idxcluster": "idxc1"},
+            ],
+            "splunk_idxclusters": [{"idxc_name": "idxc1", "idxc_password": "secret"}],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        message = str(exc_info.value)
+        assert "splunk_hosts -> 0 -> roles" in message
+        assert "cluster_manager" in message
+
     def test_deployment_server_and_deployer(self):
         """Test deployment_server and deployer on same host."""
         config = {
@@ -1397,6 +1447,117 @@ class TestMultiRoleHosts:
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(config)
         assert "license_manager" in str(exc_info.value)
+
+
+_MIN_YAML = (
+    "plugin: splunk-platform-automator\n"
+    "splunk_defaults:\n"
+    "  splunk_admin_password: \"{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}\"\n"
+)
+
+
+class TestQuotedYamlSource:
+    """Quote style is only visible on the YAML source, not a Python dict."""
+
+    def test_double_quoted_mapping_key_is_rejected(self, tmp_path):
+        cfg = tmp_path / "splunk_config.yml"
+        cfg.write_text(
+            _MIN_YAML
+            + "splunk_hosts:\n"
+            "  - name: sh1\n"
+            "    roles: [search_head]\n"
+            '    "site": site1\n'
+        )
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config_file(str(cfg))
+        message = str(exc_info.value)
+        assert "site" in message
+        assert "quote" in message.lower() or "quoted" in message.lower()
+
+    def test_double_quoted_block_role_name_is_rejected(self, tmp_path):
+        cfg = tmp_path / "splunk_config.yml"
+        cfg.write_text(
+            _MIN_YAML
+            + "splunk_hosts:\n"
+            "  - name: idx1\n"
+            "    roles:\n"
+            '      - "indexer"\n'
+        )
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config_file(str(cfg))
+        message = str(exc_info.value)
+        assert "indexer" in message
+        assert "roles" in message
+        assert "quote" in message.lower() or "quoted" in message.lower()
+
+    def test_double_quoted_flow_role_name_is_rejected(self, tmp_path):
+        cfg = tmp_path / "splunk_config.yml"
+        cfg.write_text(
+            _MIN_YAML
+            + "splunk_hosts:\n"
+            "  - name: idx1\n"
+            '    roles: ["indexer"]\n'
+        )
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config_file(str(cfg))
+        message = str(exc_info.value)
+        assert "indexer" in message
+        assert "roles" in message
+        assert "quote" in message.lower() or "quoted" in message.lower()
+
+    def test_double_quoted_scalar_values_are_allowed(self, tmp_path):
+        cfg = tmp_path / "splunk_config.yml"
+        cfg.write_text(
+            _MIN_YAML
+            + "splunk_hosts:\n"
+            '  - name: "idx1"\n'
+            "    roles: [indexer]\n"
+            '    cname: "idx1.example.invalid"\n'
+        )
+        result = validate_config_file(str(cfg))
+        assert result.splunk_hosts[0].name == "idx1"
+        assert result.splunk_hosts[0].cname == "idx1.example.invalid"
+
+    def test_unquoted_flow_and_block_roles_are_allowed(self, tmp_path):
+        cfg = tmp_path / "splunk_config.yml"
+        cfg.write_text(
+            _MIN_YAML
+            + "splunk_hosts:\n"
+            "  - name: idx1\n"
+            "    roles: [indexer]\n"
+            "  - name: sh1\n"
+            "    roles:\n"
+            "      - search_head\n"
+        )
+        result = validate_config_file(str(cfg))
+        assert [host.name for host in result.splunk_hosts] == ["idx1", "sh1"]
+
+    def test_double_quoted_key_required_by_yaml_is_allowed(self, tmp_path):
+        cfg = tmp_path / "splunk_config.yml"
+        cfg.write_text(
+            _MIN_YAML
+            + "splunk_hosts:\n"
+            "  - name: idx1\n"
+            "    roles: [indexer]\n"
+            "custom:\n"
+            '  "script://./bin/vmstat_metric.sh":\n'
+            "    disabled: 0\n"
+        )
+        result = validate_config_file(str(cfg))
+        assert result.splunk_hosts[0].name == "idx1"
+
+    def test_single_quoted_keys_and_roles_are_allowed(self, tmp_path):
+        cfg = tmp_path / "splunk_config.yml"
+        cfg.write_text(
+            _MIN_YAML
+            + "splunk_hosts:\n"
+            "  - 'name': idx1\n"
+            "    roles:\n"
+            "      - 'indexer'\n"
+        )
+        result = validate_config_file(str(cfg))
+        assert result.splunk_hosts[0].name == "idx1"
+        assert AllowedRole.indexer in result.splunk_hosts[0].roles
 
 
 class TestAppDeploymentConfig:

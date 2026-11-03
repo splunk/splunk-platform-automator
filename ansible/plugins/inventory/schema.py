@@ -1385,7 +1385,7 @@ class SplunkHost(BaseModel):
     # Required for a managed host. External hosts may omit it.
     roles: Optional[List[AllowedRole]] = Field(
         None,
-        description="Splunk roles for this host. Required unless the host is external. No default. Omit the key when an external host has no Splunk role.",
+        description="Splunk roles for this host. Each role at most once. Required unless the host is external. No default. Omit the key when an external host has no Splunk role.",
     )
     
     # Optional settings
@@ -1502,6 +1502,23 @@ class SplunkHost(BaseModel):
         if _drop_password_keys(data):
             data["__spa_reject_password"] = True
         return data
+
+    @field_validator("roles")
+    @classmethod
+    def reject_duplicate_roles(cls, roles: Optional[List[AllowedRole]]) -> Optional[List[AllowedRole]]:
+        """Each AllowedRole may appear at most once on one host."""
+        if not roles:
+            return roles
+        seen = set()
+        duplicates = []
+        for role in roles:
+            if role in seen and role not in duplicates:
+                duplicates.append(role)
+            seen.add(role)
+        if duplicates:
+            names = ", ".join(role.value for role in duplicates)
+            raise ValueError(f"duplicate role {names}")
+        return roles
 
     @model_validator(mode='after')
     def validate_external_connection(self) -> 'SplunkHost':
@@ -3333,6 +3350,114 @@ def validate_config(config_data: Dict[str, Any]) -> SplunkConfig:
     return model
 
 
+# Identifier keys can be plain YAML scalars. Keys with ':' or '/' (Splunk stanzas)
+# must stay quoted; those quotes are required, not unnecessary.
+_PLAIN_MAPPING_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]*$")
+
+
+def _double_quote_style_errors(file_path: str) -> List[Dict[str, Any]]:
+    """Return schema errors for double-quoted mapping keys and role names.
+
+    ``yaml.safe_load`` drops quote style, so this walks the YAML event stream.
+    Quoted scalar values are allowed. Single quotes are not this rule.
+    Double-quoted keys that YAML requires (for example ``script://...``) stay allowed.
+    """
+    import yaml
+    from yaml.events import (
+        MappingEndEvent,
+        MappingStartEvent,
+        ScalarEvent,
+        SequenceEndEvent,
+        SequenceStartEvent,
+    )
+
+    errors: List[Dict[str, Any]] = []
+    stack: List[Dict[str, Any]] = []
+    path: List[Any] = []
+
+    def begin_value(label: Any) -> None:
+        path.append(label)
+
+    def finish_value() -> None:
+        if not stack:
+            return
+        parent = stack[-1]
+        if parent["kind"] == "map":
+            parent["expecting_key"] = True
+            parent["key"] = None
+            if path:
+                path.pop()
+        elif parent["kind"] == "seq":
+            if path:
+                path.pop()
+            parent["index"] += 1
+
+    with open(file_path, "r") as handle:
+        events = yaml.parse(handle, Loader=yaml.SafeLoader)
+        for event in events:
+            if isinstance(event, MappingStartEvent):
+                if stack:
+                    parent = stack[-1]
+                    if parent["kind"] == "map":
+                        begin_value(parent["key"])
+                    else:
+                        begin_value(parent["index"])
+                stack.append(
+                    {"kind": "map", "expecting_key": True, "key": None}
+                )
+            elif isinstance(event, SequenceStartEvent):
+                is_roles = False
+                if stack:
+                    parent = stack[-1]
+                    if parent["kind"] == "map":
+                        is_roles = parent.get("key") == "roles"
+                        begin_value(parent["key"])
+                    else:
+                        begin_value(parent["index"])
+                stack.append(
+                    {"kind": "seq", "index": 0, "is_roles": is_roles}
+                )
+            elif isinstance(event, (MappingEndEvent, SequenceEndEvent)):
+                stack.pop()
+                finish_value()
+            elif isinstance(event, ScalarEvent):
+                if not stack:
+                    continue
+                parent = stack[-1]
+                if parent["kind"] == "map" and parent["expecting_key"]:
+                    if (
+                        event.style == '"'
+                        and event.value is not None
+                        and _PLAIN_MAPPING_KEY.fullmatch(str(event.value))
+                    ):
+                        errors.append(
+                            {
+                                "loc": path + [event.value],
+                                "msg": f"double-quoted mapping key {event.value}",
+                            }
+                        )
+                    parent["key"] = event.value
+                    parent["expecting_key"] = False
+                    continue
+                if (
+                    parent["kind"] == "seq"
+                    and parent.get("is_roles")
+                    and event.style == '"'
+                ):
+                    errors.append(
+                        {
+                            "loc": path + [parent["index"]],
+                            "msg": f"double-quoted role name {event.value}",
+                        }
+                    )
+                if parent["kind"] == "map":
+                    parent["expecting_key"] = True
+                    parent["key"] = None
+                elif parent["kind"] == "seq":
+                    parent["index"] += 1
+    return errors
+
+
 def validate_config_file(file_path: str) -> SplunkConfig:
     """
     Validate a configuration file.
@@ -3349,7 +3474,11 @@ def validate_config_file(file_path: str) -> SplunkConfig:
         yaml.YAMLError: If YAML parsing fails
     """
     import yaml
-    
+
+    quote_errors = _double_quote_style_errors(file_path)
+    if quote_errors:
+        raise ConfigValidationError(quote_errors)
+
     with open(file_path, 'r') as f:
         config_data = yaml.safe_load(f)
     

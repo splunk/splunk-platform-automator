@@ -67,6 +67,13 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 ## Config and validation
 
 - [x] Pydantic schema + `spa validate` (idxc / role pairing; supersedes a Vagrantfile-only idxc check)
+- [x] Schema rejects duplicate roles on one host and double-quoted mapping keys and role names; quoted values stay valid — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
+- [ ] Config write commands show a clear diff — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
+- [ ] `spa config get` for a list selector returns found vs not found — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
+- [ ] Validation errors include example YAML for the fix — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
+- [ ] Architecture-file apply is explicit and reports what was ingested — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
+- [ ] Docs include a verify-after-write practice — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
+- [ ] `spa config audit --check-hand-edits` — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
 - [ ] Version `splunk_config.yml` with `config_version` so schema checks follow that version. A missing key is version 1, and `spa validate` fails until `spa config set config_version 1`. A later incompatible change ships a migration. — [#117](https://github.com/splunk/splunk-platform-automator/issues/117)
 - [ ] `spa validate` checks Splunk installers in Software for the provider and architecture in use — [#74](https://github.com/splunk/splunk-platform-automator/issues/74)
 - [x] Host ranges (`iter.numbers: "1..N"`)
