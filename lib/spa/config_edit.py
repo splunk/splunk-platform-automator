@@ -1285,13 +1285,22 @@ def _validate_fragment_secrets(value: Any, path: str = "") -> None:
             _validate_fragment_secrets(child, path)
 
 
+def _plain_scalar(value: Any) -> Any:
+    """Drop ruamel quote-style wrappers so dumps do not quote identifier keys."""
+    if isinstance(value, str):
+        return str.__str__(value)
+    return copy.deepcopy(value)
+
+
 def _plain_fragment(value: Any) -> Any:
     """Drop ruamel comment metadata while retaining YAML 1.2 scalar values."""
     if isinstance(value, Mapping):
-        return {key: _plain_fragment(child) for key, child in value.items()}
+        return {
+            _plain_scalar(key): _plain_fragment(child) for key, child in value.items()
+        }
     if isinstance(value, list):
         return [_plain_fragment(child) for child in value]
-    return copy.deepcopy(value)
+    return _plain_scalar(value)
 
 
 def _fragment_schema_path(parts: Sequence[str]) -> str:

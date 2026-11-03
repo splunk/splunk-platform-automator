@@ -11,6 +11,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **Host roles and YAML quotes** ([#127](https://github.com/splunk/splunk-platform-automator/issues/127)): `spa validate` and post-write config checks reject the same role twice on one host, and reject double-quoted mapping keys and double-quoted role names. Quoted scalar values stay allowed. Distinct co-located roles are unchanged.
+
 - **Content Library schema is closed**: the Content Library entry is either Splunkbase `app_id: 5391` (any name) or `source: local` named `DA-ITSI-ContentLibrary`. It needs `itsi_content_pack: true` and exactly one of `content_pack_apps` (key present, non-empty) or `install_all_apps: true`. `install_all_apps` and `content_pack_install` must be booleans when set, so a quoted `"true"` or a null is rejected. The entry accepts `update_mode` and rejects other keys. `content_pack_install`, `force_run_playbook_after_restart`, and each `content_pack_api` value are type-checked. A local entry takes no `app_id`, and its `path`, when set, is a non-empty string. The folder name `DA-ITSI-ContentLibrary` is reserved for the library, so no other app can use it. Pack names are compared without surrounding whitespace, and a pack cannot repeat the library name or another pack name. `spa apps add 5391 --install-all-content-packs` writes top-level `install_all_apps: true`, the key the Ansible role reads, instead of `content_pack_api.install_all_apps`.
 
 - **Validate flag renamed**: `spa validate --splunk-config-aws` is now `spa validate --splunk-config aws`. The old flag is removed, so scripts that pass it must switch to the new form.
