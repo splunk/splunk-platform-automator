@@ -491,12 +491,12 @@ Each contract ID maps to executable behavioral evidence:
 - `CFG-CLI-004`: `tests/test_config_contract.py::TestCommandContract::test_agent_get_without_path_is_outline_not_document`
 - `CFG-CLI-005`: `tests/test_config_contract.py::TestExplainContract::test_explain_is_one_level_for_humans_and_agents`
 - `CFG-CLI-006`: `tests/test_config_contract.py::TestExplainContract::test_search_returns_paths_without_commands`
-- `CFG-PATH-001`: `tests/test_config_contract.py::TestPathContract::test_set_requires_strict_json_for_list` (also `test_set_unwraps_one_json_string_layer`, `test_resolve_json_list_writes_a_list`)
-- `CFG-PATH-002`: `tests/test_config_contract.py::TestPathContract::test_bare_or_missing_selector_is_rejected_without_write` (also `TestAppContract::test_compound_app_selector_matches_one_role`)
+- `CFG-PATH-001`: `tests/test_config_contract.py::TestPathContract::test_set_requires_strict_json_for_list`
+- `CFG-PATH-002`: `tests/test_config_contract.py::TestPathContract::test_bare_or_missing_selector_is_rejected_without_write`
 - `CFG-PATH-003`: `tests/test_config_contract.py::TestPathContract::test_set_preserves_comments_and_changes_only_the_path`
 - `CFG-PATH-004`: `tests/test_config_contract.py::TestPathContract::test_unset_selected_item_removes_only_that_item`
 - `CFG-PATH-005`: `tests/test_config_contract.py::TestPathContract::test_selector_get_set_and_unset_use_stable_identity`
-- `CFG-PATH-006`: `tests/test_config_contract.py::TestPathContract::test_schema_default_is_omitted_unless_explicit` (also `test_schema_default_replaces_polluted_current_value`)
+- `CFG-PATH-006`: `tests/test_config_contract.py::TestPathContract::test_schema_default_is_omitted_unless_explicit`
 - `CFG-PATH-007`: `tests/test_config_contract.py::TestPathContract::test_from_env_authors_lookup_and_get_redacts_secret`
 - `CFG-ADD-001`: `tests/test_config_contract.py::TestAddContract::test_add_appends_a_new_identity_and_injects_the_selector`
 - `CFG-ADD-002`: `tests/test_config_contract.py::TestAddContract::test_add_rejects_collisions_mismatches_and_bare_selectors`
@@ -527,7 +527,7 @@ Each contract ID maps to executable behavioral evidence:
 - `CFG-LAYOUT-006`: `tests/test_config_contract.py::TestLayoutContract::test_written_config_separates_sections_and_list_items`
 - `CFG-APP-001`: `tests/test_config_contract.py::TestAppContract::test_builder_omits_splunkbase_defaults_and_requires_ta_roles`
 - `CFG-APP-002`: `tests/test_config_contract.py::TestAppContract::test_app_add_upserts_credentials_and_is_idempotent`
-- `CFG-APP-003`: `tests/test_config_contract.py::TestAppContract::test_app_add_upserts_credentials_and_is_idempotent` (also `test_app_add_new_appends_a_second_row_with_different_roles`, `test_app_remove_without_roles_errors_when_defined_twice`)
+- `CFG-APP-003`: `tests/test_config_contract.py::TestAppContract::test_app_add_upserts_credentials_and_is_idempotent`
 - `CFG-APP-004`: `tests/test_config_contract.py::TestAppContract::test_snippet_and_add_share_typed_schema_backed_set_fields`
 - `CFG-APP-005`: `tests/test_config_contract.py::TestAppContract::test_builder_omits_splunkbase_defaults_and_requires_ta_roles`
 - `CFG-APP-006`: `tests/test_config_contract.py::TestAppContract::test_content_pack_adds_itsi_dependency_and_remove_pack_keeps_itsi`
