@@ -169,6 +169,7 @@ class SpaSession(Protocol):
         apps_dir: Optional[str] = None,
         provider: Optional[str] = None,
         registry_name: Optional[str] = None,
+        architecture: Optional[str] = None,
     ) -> CommandResult: ...
 
     def list_examples(self) -> CommandResult: ...
@@ -213,6 +214,11 @@ class SpaSession(Protocol):
         agent: bool = False,
         check_hand_edits: bool = False,
         header_fields: Optional[Dict[str, str]] = None,
+        move_role: Optional[str] = None,
+        move_from: Optional[str] = None,
+        move_to: Optional[str] = None,
+        move_prefix: Optional[str] = None,
+        move_postfix: Optional[str] = None,
     ) -> CommandResult: ...
 
     def apps(
@@ -329,6 +335,19 @@ class SpaSession(Protocol):
 
     def aws(self, argv: Optional[List[str]] = None) -> CommandResult: ...
 
+    def architecture_plan(self, path: str) -> CommandResult: ...
+
+    def architecture_apply(
+        self,
+        path: str,
+        confirm: bool = False,
+        agent: bool = False,
+        dry_run: bool = False,
+        expect_revision: Optional[str] = None,
+    ) -> CommandResult: ...
+
+    def architecture_check(self, path: str) -> CommandResult: ...
+
     def licenses(
         self,
         software_dir: Optional[str] = None,
@@ -386,6 +405,59 @@ class LocalSpaSession:
         if message:
             return CommandResult(ok=False, error=message, code=2)
         return None
+
+    def _apps_add_roles_choice(
+        self, app_id: Optional[str], roles: Optional[Sequence[str]]
+    ) -> Optional[CommandResult]:
+        from spa.apps import AppsError, classify_kind, get_app, parse_app_id
+        from spa.next_steps import roles_on_hosts, suggested_roles_for_app
+        from spa.preflight import load_config_mapping
+
+        if roles:
+            return None
+        try:
+            parsed = parse_app_id(app_id)
+            kind = classify_kind(parsed, get_app(parsed))
+        except (AppsError, Exception):
+            return None
+        if kind not in {"ta", "es_not_premium"}:
+            return None
+        try:
+            config = load_config_mapping(self.paths.config_file)
+        except Exception:
+            config = {}
+        allowed = roles_on_hosts(config)
+        suggested = [role for role in suggested_roles_for_app(parsed) if not allowed or role in allowed]
+        retry = "spa --agent apps add %s --roles ROLE --yes" % parsed
+        return CommandResult(
+            ok=False,
+            error="spa apps add needs --roles.",
+            code=1,
+            data={
+                "ready": False,
+                "app_id": parsed,
+                "kind": kind,
+                "requirements": [
+                    {
+                        "kind": "choice",
+                        "rule_id": "apps.target_roles",
+                        "summary": "Choose target_roles from roles on splunk_hosts.",
+                        "allowed": allowed,
+                        "suggested": suggested,
+                        "retry": retry,
+                    }
+                ],
+            },
+        )
+
+    def _lifecycle_next(self, action: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        if action != "provision":
+            return data
+        from spa.next_steps import provision_next
+
+        payload = dict(data)
+        payload["next"] = provision_next()
+        return payload
 
     def _env_lookup_gate(self) -> Optional[CommandResult]:
         """Reject missing lookup targets before confirmation, inventory, or providers."""
@@ -639,6 +711,11 @@ class LocalSpaSession:
         agent: bool = False,
         check_hand_edits: bool = False,
         header_fields: Optional[Dict[str, str]] = None,
+        move_role: Optional[str] = None,
+        move_from: Optional[str] = None,
+        move_to: Optional[str] = None,
+        move_prefix: Optional[str] = None,
+        move_postfix: Optional[str] = None,
     ) -> CommandResult:
         from spa.init import InitError
         from spa.usage import MISSING_OPERAND
@@ -650,6 +727,8 @@ class LocalSpaSession:
             config_header_set,
             config_merge,
             merge_operand,
+            config_move_host,
+            config_move_role,
             config_provider,
             config_set,
             config_templates,
@@ -684,7 +763,17 @@ class LocalSpaSession:
                     ok=True,
                     data=config_audit(config_path, check_hand_edits=check_hand_edits),
                 )
-            if action not in {"set", "add", "unset", "merge", "topology", "provider", "header-set"}:
+            if action not in {
+                "set",
+                "add",
+                "unset",
+                "merge",
+                "topology",
+                "provider",
+                "header-set",
+                "move-role",
+                "move-host",
+            }:
                 return CommandResult(
                     ok=False,
                     error="Unknown spa config action: %s" % action,
@@ -715,8 +804,13 @@ class LocalSpaSession:
 
                 resolve_topology_id(Path(self.paths.spa_home), operand)
             if not dry_run and not agent:
+                label = {
+                    "move-role": "move role",
+                    "move-host": "move host",
+                    "header-set": "header set",
+                }.get(action, action)
                 blocked = self._confirm_gate(
-                    "spa config %s" % action,
+                    "spa config %s" % label,
                     confirm=confirm,
                     agent=False,
                     details=["config: %s" % config_path],
@@ -782,6 +876,31 @@ class LocalSpaSession:
                     resolve_file=resolve_file,
                     **common,
                 )
+            elif action == "move-role":
+                data = config_move_role(
+                    config_path,
+                    self.paths.spa_home,
+                    move_role or "",
+                    from_host=move_from,
+                    to_host=move_to,
+                    resolve=resolve,
+                    resolve_file=resolve_file,
+                    stdin_text=stdin_text,
+                    **common,
+                )
+            elif action == "move-host":
+                data = config_move_host(
+                    config_path,
+                    self.paths.spa_home,
+                    old_name=move_from,
+                    new_name=move_to,
+                    prefix=move_prefix,
+                    postfix=move_postfix,
+                    resolve=resolve,
+                    resolve_file=resolve_file,
+                    stdin_text=stdin_text,
+                    **common,
+                )
             elif action == "topology":
                 if not operand:
                     raise ConfigEditError(MISSING_OPERAND[("spa config topology", "TOPOLOGY")])
@@ -806,7 +925,12 @@ class LocalSpaSession:
                     stdin_text=stdin_text,
                     **common,
                 )
-            return _mutation_result("config %s" % action, data)
+            label = {
+                "move-role": "move role",
+                "move-host": "move host",
+                "header-set": "header set",
+            }.get(action, action)
+            return _mutation_result("config %s" % label, data)
         except InitError as exc:
             return CommandResult(ok=False, error=str(exc), code=exc.code)
         except ConfigEditError as exc:
@@ -945,6 +1069,9 @@ class LocalSpaSession:
                         stdin_text=stdin_text,
                     )
                     return _mutation_result("apps remove", data)
+                missing_roles = self._apps_add_roles_choice(app_id, roles)
+                if missing_roles:
+                    return missing_roles
                 built = build_entry(
                     app_id,
                     version=version or "latest",
@@ -977,6 +1104,16 @@ class LocalSpaSession:
                         "omitted_defaults": built.get("omitted_defaults") or [],
                     }
                 )
+                from spa.next_steps import apps_add_next
+
+                follow = apps_add_next(
+                    kind=str(built.get("kind") or ""),
+                    app_id=built.get("app_id"),
+                    playbooks=built.get("playbooks") or [],
+                    customize=bool(customize),
+                )
+                if follow:
+                    data["next"] = follow
                 return _mutation_result("apps add", data)
             if action == "download":
                 blocked = self._env_gate()
@@ -1189,10 +1326,12 @@ class LocalSpaSession:
         apps_dir: Optional[str] = None,
         provider: Optional[str] = None,
         registry_name: Optional[str] = None,
+        architecture: Optional[str] = None,
     ) -> CommandResult:
         from spa.init import InitError, init_env
 
         messages: List[str] = []
+        report: Dict[str, Any] = {}
         try:
             rc = init_env(
                 Path(env_dir),
@@ -1215,14 +1354,23 @@ class LocalSpaSession:
                 apps_dir=apps_dir,
                 provider=provider,
                 registry_name=registry_name,
+                architecture=architecture,
+                report=report,
             )
         except InitError as exc:
             return CommandResult(ok=False, error=str(exc), code=exc.code, data={"messages": messages})
         dest = str(Path(env_dir).resolve())
+        data: Dict[str, Any] = {
+            "env_dir": dest,
+            "name": registry_name or Path(env_dir).name,
+            "messages": messages,
+        }
+        if report:
+            data["architecture"] = report
         return CommandResult(
             ok=rc == 0,
             code=rc,
-            data={"env_dir": dest, "name": registry_name or Path(env_dir).name, "messages": messages},
+            data=data,
             error=None if rc == 0 else "init failed",
         )
 
@@ -1543,7 +1691,7 @@ class LocalSpaSession:
                 data = {"provider": provider.name, "action": action}
                 data.update(outcome)
                 data.update(log.envelope_fields())
-                return CommandResult(ok=True, data=data)
+                return CommandResult(ok=True, data=self._lifecycle_next(action, data))
             rc = outcome
             if provider.name in {"aws", "virtualbox"} and external and action == "provision":
                 self._merge_external_lines(snapshot, external)
@@ -1565,6 +1713,8 @@ class LocalSpaSession:
         if action == "provision" and external:
             data["skipped_external"] = list(external)
         data.update(log.envelope_fields())
+        if rc == 0:
+            data = self._lifecycle_next(action, data)
         return CommandResult(
             ok=rc == 0,
             code=rc,
@@ -2068,12 +2218,10 @@ class LocalSpaSession:
         config: Optional[str] = None,
         env_recommend: bool = True,
     ) -> CommandResult:
-        blocked = self._env_gate()
-        if blocked:
-            return blocked
         from spa import licenses as licenses_mod
+        from spa.next_steps import licenses_list_next
 
-        project_root = licenses_mod.resolve_env_root()
+        project_root = Path(self.paths.spa_env_dir)
         config_path = None
         if config:
             config_path = Path(config).expanduser()
@@ -2081,21 +2229,24 @@ class LocalSpaSession:
                 config_path = (Path.cwd() / config_path).resolve()
                 if not config_path.is_file():
                     config_path = (licenses_mod.repo_root_from_script() / config).resolve()
+        elif self.paths.config_file and Path(self.paths.config_file).is_file():
+            config_path = Path(self.paths.config_file)
         try:
             data = licenses_mod.scan_licenses(
                 project_root,
-                software_dir=software_dir,
+                software_dir=software_dir or str(self.paths.software_dir),
                 config_path=config_path,
                 env_recommend=env_recommend,
             )
         except Exception as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
+        follow = licenses_list_next(data if isinstance(data, dict) else {})
+        if follow:
+            data["next"] = follow
         return CommandResult(ok=True, data=data)
 
-    def architecture_plan(
-        self, path: str, write_fragment: Optional[str] = None
-    ) -> CommandResult:
-        """Read an SVA architecture JSON file and plan the config. Read-only unless write_fragment."""
+    def architecture_plan(self, path: str) -> CommandResult:
+        """Read a splunk.architecture file and plan the overlay. Read-only."""
         import os
 
         from spa import architecture as arch
@@ -2111,15 +2262,101 @@ class LocalSpaSession:
                 error="architecture file is not valid: " + "; ".join(plan["errors"]),
                 code=1,
             )
-        if write_fragment:
-            try:
-                arch.write_fragment(Path(write_fragment), plan["fragment"])
-            except arch.ArchitectureError as exc:
-                return CommandResult(ok=False, error=str(exc), code=1)
-            except OSError as exc:
-                return CommandResult(ok=False, error="cannot write fragment: %s" % exc.strerror, code=1)
-            plan["fragment_file"] = str(Path(write_fragment))
         return CommandResult(ok=True, data=plan)
+
+    def architecture_apply(
+        self,
+        path: str,
+        confirm: bool = False,
+        agent: bool = False,
+        dry_run: bool = False,
+        expect_revision: Optional[str] = None,
+    ) -> CommandResult:
+        from spa import architecture as arch
+        from spa.config_edit import ConfigEditError
+
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
+        try:
+            doc = arch.load_architecture_file(Path(path))
+            parsed, errors, warnings = arch.parse_architecture(doc)
+        except arch.ArchitectureError as exc:
+            return CommandResult(ok=False, error=str(exc), code=1)
+        if errors:
+            return CommandResult(
+                ok=False,
+                error="architecture file is not valid: " + "; ".join(errors),
+                code=1,
+            )
+        if not parsed.get("confirmed"):
+            return CommandResult(ok=False, error="architecture file is not confirmed", code=1)
+        if not dry_run:
+            blocked = self._confirm_gate(
+                "spa architecture apply",
+                confirm=confirm,
+                agent=agent,
+                details=["config: %s" % self.paths.config_file],
+                risk="config_edit",
+            )
+            if blocked:
+                return blocked
+        try:
+            data = arch.apply_architecture_document(
+                Path(self.paths.config_file),
+                Path(self.paths.spa_home),
+                parsed,
+                dry_run=dry_run,
+                expect_revision=expect_revision,
+            )
+        except (arch.ArchitectureError, ConfigEditError) as exc:
+            return CommandResult(ok=False, error=str(exc), code=1)
+        data.setdefault("warnings", [])
+        data["warnings"] = list(data.get("warnings") or []) + warnings
+        from spa.next_steps import remaining_next
+
+        follow = remaining_next(data.get("remaining") or [])
+        if follow:
+            data["next"] = follow
+        return _mutation_result("architecture apply", data)
+
+    def architecture_check(self, path: str) -> CommandResult:
+        from spa import architecture as arch
+
+        blocked = self._env_gate()
+        if blocked:
+            return blocked
+        try:
+            doc = arch.load_architecture_file(Path(path))
+            parsed, errors, warnings = arch.parse_architecture(doc)
+        except arch.ArchitectureError as exc:
+            return CommandResult(ok=False, error=str(exc), code=1)
+        if errors:
+            return CommandResult(
+                ok=False,
+                error="architecture file is not valid: " + "; ".join(errors),
+                code=1,
+            )
+        try:
+            import yaml
+        except ImportError as exc:  # pragma: no cover
+            return CommandResult(ok=False, error="PyYAML is required: %s" % exc, code=1)
+        config_path = Path(self.paths.config_file)
+        if not config_path.is_file():
+            return CommandResult(ok=False, error="Config file not found: %s" % config_path, code=1)
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        if not isinstance(config, dict):
+            return CommandResult(ok=False, error="splunk_config.yml must contain a mapping", code=1)
+        result = arch.check_architecture(config, parsed, spa_home=self.paths.spa_home)
+        result["warnings"] = warnings
+        if not result.get("ok"):
+            return CommandResult(
+                ok=False,
+                error="architecture check found mismatches",
+                data=result,
+                code=1,
+            )
+        return CommandResult(ok=True, data=result)
 
     def hosts_list(
         self, status: bool = False, hosts: Optional[Sequence[str]] = None

@@ -480,6 +480,8 @@ def _child(name: str, canonical: str, detail: Dict[str, Any], features: List[Dic
         text = "%s%s" % (text, hint) if text else hint.lstrip()
     if text:
         item["description"] = text
+    if detail.get("default") is not None and not _is_secret(canonical):
+        item["default"] = detail["default"]
     return item
 
 

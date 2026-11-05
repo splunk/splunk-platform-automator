@@ -75,14 +75,31 @@ def controller_data_message(state: Any, playbook_dirs: Optional[List[Dict[str, A
 
 
 def license_summary(scan: Dict[str, Any]) -> Dict[str, Any]:
-    """What the license_role step asserts. Full per-file scan: `spa licenses --json`."""
+    """What the license_role step asserts. Full per-file scan: `spa licenses list`."""
     return {
         "configured_splunk_license_file": scan.get("configured_splunk_license_file"),
         "license_manager_in_config": scan.get("license_manager_in_config"),
         "itsi_in_config": scan.get("itsi_in_config"),
         "es_in_config": scan.get("es_in_config"),
         "files_found": len(scan.get("discovered_files") or []),
+        "proposed_splunk_license_file": list(scan.get("proposed_splunk_license_file") or []),
+        "unsatisfied_requirements": list(scan.get("unsatisfied_requirements") or []),
     }
+
+
+def premium_entitlement_error(scan: Dict[str, Any]) -> Optional[str]:
+    """ITSI/ES in config without a matching capability is a default validate failure."""
+    if not (scan.get("itsi_in_config") or scan.get("es_in_config")):
+        return None
+    errors = list((scan.get("license_validation") or {}).get("errors") or [])
+    if errors:
+        return "; ".join(str(item) for item in errors)
+    unsatisfied = [str(item) for item in (scan.get("unsatisfied_requirements") or []) if item]
+    if unsatisfied:
+        return "Configured license files do not provide required capability: %s" % ", ".join(
+            unsatisfied
+        )
+    return None
 
 
 def custom_playbook_dirs_error(playbook_dirs: List[Dict[str, Any]], env_dir: Any) -> str:
@@ -295,6 +312,10 @@ except ConfigValidationError as e:
         msg = "ITSI in config but no license_manager role on any host"
         steps.append({"id": "license_role", "ok": False, "message": msg})
         return CommandResult(ok=False, error=msg, data=data, code=1)
+    entitlement = premium_entitlement_error(license_scan)
+    if entitlement:
+        steps.append({"id": "license_role", "ok": False, "message": entitlement})
+        return CommandResult(ok=False, error=entitlement, data=data, code=1)
     steps.append({"id": "license_role", "ok": True, "message": "License role pairing OK"})
 
     _note(

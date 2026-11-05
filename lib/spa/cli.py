@@ -42,7 +42,7 @@ from spa.skills import supported_platform_list
 # Commands whose flags belong to the wrapped tool, not to spa (spa shell idx1,
 # spa aws --check-auth). argparse.REMAINDER drops a leading option, so these are
 # split off before the spa parser runs.
-NATIVE_FLAG_COMMANDS = ("shell", "sh", "aws", "licenses", "lic")
+NATIVE_FLAG_COMMANDS = ("shell", "sh", "aws")
 # Accepted at the command position, omitted from parent help and agent errors.
 # ``env`` stays a visible argparse alias of ``environment``.
 _HIDDEN_ALIASES = {
@@ -83,11 +83,12 @@ _HIDDEN_ALIASES = {
 _VISIBLE_ALIAS = {"environment": frozenset({"env"})}
 # These must keep working without a venv: they are how an operator inspects or
 # builds one. Every other command reads YAML or runs Ansible, so it is gated.
-VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills", "completion"})
+VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills", "completion", "licenses"})
 GLOBAL_OPTS_WITH_VALUE = ("--start-dir", "--env")
 # Header flags take a value. Their value must not be read as a command word,
 # so `config header --intent set` stays `config header` and not `config header set`.
 _COMMAND_WORD_VALUE_FLAGS = GLOBAL_OPTS_WITH_VALUE + (
+    "--architecture",
     "--intent",
     "--requirements",
     "--sva",
@@ -280,7 +281,7 @@ def _positional_tokens(head: Sequence[str]) -> List[str]:
 def _schema_help(head: Sequence[str]) -> Optional[int]:
     """Agent --help is one COMMAND_SCHEMA entry, or an index at spa --help.
 
-    Native aws, licenses, and shell help stay text. Playbook help stays on
+    Native aws and shell help stay text. Playbook help stays on
     the spa run --help path.
     """
     if not any(token in {"-h", "--help"} for token in head):
@@ -356,7 +357,7 @@ def _retired_catalog_flag(head: Sequence[str]) -> Optional[str]:
     tokens = list(head)
     while index < len(tokens):
         token = tokens[index]
-        if token in GLOBAL_OPTS_WITH_VALUE or token in {"--dir", "--hosts", "--apps-playbook", "--name", "--env-dir", "--example", "--provider", "--from"}:
+        if token in GLOBAL_OPTS_WITH_VALUE or token in {"--dir", "--hosts", "--apps-playbook", "--name", "--env-dir", "--example", "--architecture", "--provider", "--from"}:
             index += 2
             continue
         if token == "run":
@@ -649,7 +650,13 @@ Then run spa validate. Deploy only when intended: spa deploy --yes
 """
 ARCHITECTURE_NEEDS_ACTION = (
     "spa architecture needs an action.\n"
-    "Plan an SVA architecture file (read-only): spa architecture plan FILE [--write-fragment PATH]\n"
+    "Plan:  spa architecture plan FILE\n"
+    "Apply: spa architecture apply FILE --yes\n"
+    "Check: spa architecture check FILE\n"
+)
+LICENSES_NEEDS_ACTION = (
+    "spa licenses needs an action.\n"
+    "List: spa licenses list"
 )
 
 CONFIG_NEEDS_ACTION = (
@@ -657,10 +664,17 @@ CONFIG_NEEDS_ACTION = (
     "Look up a setting: spa config search QUERY\n"
     "Then:              spa config explain PATH\n"
     "Read current:      spa config get [PATH]\n"
-    "Write:             set, add, unset, merge, topology, or provider\n"
+    "Write:             set, add, unset, merge, move, topology, or provider\n"
     "Audit:             spa config audit --check-hand-edits\n"
     "Coverage:          spa config keys\n"
     "Docs dump:         spa config schema --markdown"
+)
+MOVE_NEEDS_ACTION = (
+    "spa config move needs an action.\n"
+    "Move a role: spa config move role ROLE --from HOST --to HOST --yes\n"
+    "Rename host: spa config move host OLD --to NEW --yes\n"
+    "Prefix all:  spa config move host --prefix PREFIX --yes\n"
+    "Postfix all: spa config move host --postfix POSTFIX --yes\n"
 )
 CONFIG_AUDIT_NEEDS_FLAG = (
     "spa config audit needs --check-hand-edits.\n"
@@ -868,7 +882,12 @@ def _add_init_arguments(parser) -> None:
     parser.add_argument(
         "--example",
         metavar="NAME",
-        help="Topology example id (see spa init list or spa environment init list)",
+        help="Topology example id (see spa init list or spa environment init list). Exclusive with --architecture.",
+    )
+    parser.add_argument(
+        "--architecture",
+        metavar="FILE",
+        help="Confirmed 0.4.0 architecture JSON (exclusive with --example). Example: examples/architectures/c3.json",
     )
     parser.add_argument(
         "--provider",
@@ -1016,6 +1035,22 @@ def _print_command_error(result: CommandResult, as_agent: bool = False) -> int:
     return result.code
 
 
+def _print_next(data: Optional[Dict[str, Any]]) -> None:
+    items = (data or {}).get("next") or []
+    if not items:
+        return
+    print("Next:", file=sys.stderr)
+    for row in items:
+        if not isinstance(row, dict):
+            continue
+        ask = str(row.get("ask") or row.get("id") or "").strip()
+        command = str(row.get("command") or "").strip()
+        if ask and command:
+            print("%s\n  %s" % (ask, command), file=sys.stderr)
+        elif ask:
+            print(ask, file=sys.stderr)
+
+
 def _print_redacted_diff(args, data: Dict[str, Any]) -> None:
     if not getattr(args, "show_diff", False):
         return
@@ -1025,10 +1060,23 @@ def _print_redacted_diff(args, data: Dict[str, Any]) -> None:
     sys.stdout.write(diff if diff.endswith("\n") else "%s\n" % diff)
 
 
+def _print_architecture_followup(data: Optional[Dict[str, Any]]) -> None:
+    if not isinstance(data, dict):
+        return
+    remaining = data.get("remaining") or []
+    if remaining:
+        print("Remaining: %s" % ", ".join(remaining))
+    for warning in data.get("warnings") or []:
+        print("Warning: %s" % warning, file=sys.stderr)
+
+
 def _print_init_messages(result: CommandResult) -> None:
-    messages = (result.data or {}).get("messages") if isinstance(result.data, dict) else None
+    data = result.data if isinstance(result.data, dict) else {}
+    messages = data.get("messages")
     if messages:
         print("\n".join(messages))
+    architecture = data.get("architecture") if isinstance(data.get("architecture"), dict) else None
+    _print_architecture_followup(architecture)
 
 
 def _doctor_env_dir(selector: Optional[str], start_dir: Optional[str]) -> Optional[str]:
@@ -1045,6 +1093,7 @@ def _init_listing(args) -> bool:
         return False
     create_flags = (
         "example",
+        "architecture",
         "provider",
         "from_dir",
         "migrate",
@@ -1093,10 +1142,13 @@ def _run_init(args, session, as_agent: bool) -> int:
     except RegistryError as exc:
         emit(False, error=str(exc), as_agent=as_agent)
         return exc.code
+    if getattr(args, "architecture", None) and args.example:
+        return _reject("Use --architecture FILE or --example TOPOLOGY, not both.", as_agent)
     result = session.init(
         str(dest),
         example=args.example,
         example_set=args.example is not None,
+        architecture=getattr(args, "architecture", None),
         from_dir=args.from_dir,
         migrate_set=args.migrate or args.from_dir is not None,
         keep_source=args.keep_source,
@@ -1544,6 +1596,63 @@ def _run(argv: Sequence[str]) -> int:
         metavar="FILE",
         help="Local YAML or JSON fragment, or - for stdin",
     )
+
+    p_config_move = _add_action(
+        config_sub,
+        "move",
+        help="Move a role between hosts, or rename host identities",
+        epilog=MOVE_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    move_sub = p_config_move.add_subparsers(dest="move_cmd", metavar="ACTION")
+    p_config_move_role = _add_action(
+        move_sub,
+        "role",
+        help="Move one role instance from a host onto another host (creates the destination if needed)",
+    )
+    _config_mutation_flags(p_config_move_role)
+    p_config_move_role.add_argument("role", metavar="ROLE", help="AllowedRole to relocate")
+    p_config_move_role.add_argument(
+        "--from",
+        dest="move_from",
+        metavar="HOST",
+        required=True,
+        help="Host that currently has ROLE",
+    )
+    p_config_move_role.add_argument(
+        "--to",
+        dest="move_to",
+        metavar="HOST",
+        required=True,
+        help="Destination host name (created if missing)",
+    )
+    p_config_move_role.set_defaults(canonical_action="move-role")
+    p_config_move_host = _add_action(
+        move_sub,
+        "host",
+        help="Rename one host, or prefix/postfix every host identity",
+    )
+    _config_mutation_flags(p_config_move_host)
+    p_config_move_host.add_argument("old_name", nargs="?", metavar="OLD", help="Current host name")
+    p_config_move_host.add_argument(
+        "--to",
+        dest="move_to",
+        metavar="NEW",
+        help="New host name (with OLD)",
+    )
+    p_config_move_host.add_argument(
+        "--prefix",
+        dest="move_prefix",
+        metavar="PREFIX",
+        help="Prepend to every host name, iter.prefix, and list entry",
+    )
+    p_config_move_host.add_argument(
+        "--postfix",
+        dest="move_postfix",
+        metavar="POSTFIX",
+        help="Append to every host name, iter.postfix, and list entry. A leading hyphen needs --postfix=-lab",
+    )
+    p_config_move_host.set_defaults(canonical_action="move-host")
 
     p_config_topology = _add_action(config_sub, "topology", aliases=["top"], help="Replace topology-owned sections")
     _config_mutation_flags(p_config_topology)
@@ -2324,15 +2433,46 @@ def _run(argv: Sequence[str]) -> int:
         add_help=False, accept_mode_flags=False,
     )
     _add_command(sub, "aws", help="AWS discovery (spa aws --help)", add_help=False, accept_mode_flags=False)
-    _add_command(
-        sub, "licenses", aliases=["lic"], help="License discovery (spa licenses --help)",
-        add_help=False, accept_mode_flags=False,
+    p_licenses = _add_command(
+        sub,
+        "licenses",
+        aliases=["lic"],
+        help="List Software licenses and propose splunk_license_file",
+        epilog=LICENSES_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_env_selector(p_licenses)
+    licenses_sub = p_licenses.add_subparsers(dest="licenses_cmd", metavar="ACTION")
+    p_licenses_list = _add_action(
+        licenses_sub,
+        "list",
+        help="Inspect license type, expiration, and ITSI/ES entitlements",
+    )
+    _add_mode_flags(p_licenses_list)
+    p_licenses_list.add_argument(
+        "--software-dir",
+        help="Software directory (default: ../Software from SPA_ENV_DIR, SPA splunk_software_dir)",
+    )
+    p_licenses_list.add_argument(
+        "--config",
+        help="splunk_config.yml path to detect ITSI/ES and validate current license settings",
+    )
+    p_licenses_list.add_argument(
+        "--no-env-recommend",
+        dest="no_env_recommend",
+        action="store_true",
+        help="Do not mention optional licenses when ITSI is not in config",
+    )
+    p_licenses_list.add_argument(
+        "--details",
+        action="store_true",
+        help="Include the full license inventory",
     )
 
     p_architecture = _add_command(
         sub,
         "architecture",
-        help="Plan an SVA architecture JSON file into config (read-only)",
+        help="Plan, apply, or check a splunk.architecture 0.4.0 file",
         epilog=ARCHITECTURE_NEEDS_ACTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -2340,20 +2480,53 @@ def _run(argv: Sequence[str]) -> int:
     p_architecture_plan = _add_action(
         architecture_sub,
         "plan",
-        help="Validate the architecture file and print the config plan (writes nothing)",
+        help="Validate the architecture file and print the overlay plan (writes nothing)",
         description=(
-            "Read an architecture JSON file (phase_1, phase_5, phase_6b). "
-            "Print hosts, constraint errors, and extensions. "
-            "--write-fragment writes the merge input for spa config merge --file."
+            "Read a confirmed splunk.architecture 0.4.0 JSON file. "
+            "Print topology, proposed hosts, skipped fields, and remaining questions. "
+            "Needs no environment. Example: spa architecture plan examples/architectures/c3.json"
         ),
     )
     _add_mode_flags(p_architecture_plan)
     p_architecture_plan.add_argument("file", metavar="FILE", help="Architecture JSON file")
-    p_architecture_plan.add_argument(
-        "--write-fragment",
-        metavar="PATH",
-        help="Write the config fragment as JSON for spa config merge --file (never splunk_config.yml)",
+    p_architecture_apply = _add_action(
+        architecture_sub,
+        "apply",
+        help="Overlay the architecture file onto the current environment config",
+        description=(
+            "Scale and overlay counts, RF/SF, org_prefix, and missing roles onto an existing env. "
+            "New environments should use spa init --architecture FILE instead."
+        ),
     )
+    _add_mode_flags(p_architecture_apply)
+    _add_env_selector(p_architecture_apply)
+    p_architecture_apply.add_argument("file", metavar="FILE", help="Architecture JSON file")
+    p_architecture_apply.add_argument(
+        "--dry-run", action="store_true", help="Validate and preview without writing"
+    )
+    p_architecture_apply.add_argument(
+        "--expect-revision", metavar="SHA256", help="Fail if the current content revision differs"
+    )
+    p_architecture_apply.add_argument(
+        "--show-diff",
+        action="store_true",
+        help="Print the redacted unified diff after the status line (no-op in agent mode)",
+    )
+    p_architecture_apply.add_argument(
+        "-y", "--yes", action="store_true", default=argparse.SUPPRESS, help="Confirm without prompting"
+    )
+    p_architecture_check = _add_action(
+        architecture_sub,
+        "check",
+        help="Subset-match the architecture file against the current environment config",
+        description=(
+            "Architecture values must still hold after later edits. Extra hosts are allowed. "
+            "Example: spa architecture check examples/architectures/c3.json"
+        ),
+    )
+    _add_mode_flags(p_architecture_check)
+    _add_env_selector(p_architecture_check)
+    p_architecture_check.add_argument("file", metavar="FILE", help="Architecture JSON file")
 
     p_completion = _add_command(
         sub,
@@ -2427,7 +2600,7 @@ def _run(argv: Sequence[str]) -> int:
     if args.command == "logs" and verbosity:
         parser.error("verbosity is only valid while executing a command")
     as_agent = agent_mode(force_agent=args.agent or args.json, force_human=args.no_agent)
-    # Shell stays human text. aws and licenses use the detected agent mode.
+    # Shell stays human text. aws uses the detected agent mode.
     if invoked in ("shell", "sh") and not args.agent:
         as_agent = agent_mode(force_agent=False, force_human=args.no_agent)
 
@@ -2473,11 +2646,17 @@ def _run(argv: Sequence[str]) -> int:
         and getattr(args, "config_cmd", None) in {"templates", "tpl", "explain", "exp", "search", "sea", "keys", "schema"}
     )
     apps_without_env = args.command == "apps" and apps_cmd in {"search", "snippet"}
+    architecture_without_env = args.command == "architecture" and _action(
+        args, "architecture_cmd"
+    ) in {None, "plan"}
+    licenses_without_env = args.command == "licenses"
     if (
         args.command not in {"init", "agent", "environment", "doctor", "venv", "skills", "completion"}
         and not native_help_only
         and not apps_without_env
         and not config_without_env
+        and not architecture_without_env
+        and not licenses_without_env
     ):
         missing = env_dir_required_error(paths)
         if missing:
@@ -2505,21 +2684,53 @@ def _run(argv: Sequence[str]) -> int:
         return _run_init(args, session, as_agent)
 
     if args.command == "architecture":
-        if not _action(args, "architecture_cmd"):
+        action = _action(args, "architecture_cmd")
+        if not action:
             return _reject(ARCHITECTURE_NEEDS_ACTION, as_agent)
         from spa import architecture as architecture_mod
 
-        result = session.architecture_plan(
-            args.file, write_fragment=getattr(args, "write_fragment", None)
-        )
+        if action == "plan":
+            result = session.architecture_plan(args.file)
+            if as_agent:
+                return _emit_result(result, True)
+            if isinstance(result.data, dict):
+                sys.stdout.write(architecture_mod.format_plan_text(result.data))
+            if not result.ok:
+                sys.stderr.write((result.error or "architecture plan failed") + "\n")
+                return result.code or 1
+            return 0
+        if action == "apply":
+            result = session.architecture_apply(
+                args.file,
+                confirm=bool(getattr(args, "yes", False)),
+                agent=as_agent,
+                dry_run=bool(getattr(args, "dry_run", False)),
+                expect_revision=getattr(args, "expect_revision", None),
+            )
+            if as_agent:
+                return _emit_result(result, True)
+            data = result.data or {}
+            if result.ok:
+                print("Architecture apply: %s" % ("changed" if data.get("changed") else "unchanged"))
+                _print_architecture_followup(data)
+                if getattr(args, "show_diff", False) and data.get("diff"):
+                    sys.stdout.write(data["diff"] if str(data["diff"]).endswith("\n") else data["diff"] + "\n")
+            else:
+                sys.stderr.write((result.error or "architecture apply failed") + "\n")
+            return result.code or (0 if result.ok else 1)
+        result = session.architecture_check(args.file)
         if as_agent:
             return _emit_result(result, True)
-        if isinstance(result.data, dict):
-            sys.stdout.write(architecture_mod.format_plan_text(result.data))
-        if not result.ok:
-            sys.stderr.write((result.error or "architecture plan failed") + "\n")
-            return result.code or 1
-        return 0
+        if result.ok:
+            print("Architecture check: matched")
+            return 0
+        sys.stderr.write((result.error or "architecture check failed") + "\n")
+        for item in (result.data or {}).get("mismatches") or []:
+            sys.stderr.write(
+                "  %s: expected %s, found %s\n"
+                % (item.get("path"), item.get("expected"), item.get("found"))
+            )
+        return result.code or 1
 
     if args.command == "config":
         action = _action(args, "config_cmd")
@@ -2527,6 +2738,11 @@ def _run(argv: Sequence[str]) -> int:
             return _reject(CONFIG_NEEDS_ACTION, as_agent)
         if action == "header":
             return _reject(HEADER_NEEDS_ACTION, as_agent)
+        if action == "move":
+            move_action = getattr(args, "move_cmd", None)
+            if not move_action:
+                return _reject(MOVE_NEEDS_ACTION, as_agent)
+            action = "move-role" if move_action == "role" else "move-host"
         if action == "keys" and getattr(args, "config_extra", None):
             return _reject(CONFIG_KEYS_NO_ARG, as_agent)
         if action == "schema" and getattr(args, "rejected_path", None):
@@ -2585,6 +2801,15 @@ def _run(argv: Sequence[str]) -> int:
                 for name in _HEADER_FIELDS
                 if getattr(args, "header_%s" % name, None) is not None
             },
+            move_role=getattr(args, "role", None) if action == "move-role" else None,
+            move_from=(
+                getattr(args, "move_from", None)
+                if action == "move-role"
+                else getattr(args, "old_name", None)
+            ),
+            move_to=getattr(args, "move_to", None),
+            move_prefix=getattr(args, "move_prefix", None),
+            move_postfix=getattr(args, "move_postfix", None),
         )
         if as_agent:
             return _emit_result(result, True)
@@ -2718,6 +2943,7 @@ def _run(argv: Sequence[str]) -> int:
                 )
                 print("Retry: %s" % requirement.get("retry"))
             _print_redacted_diff(args, data)
+            _print_next(data)
             return result.code
         if not result.ok:
             print(result.error or "apps failed", file=sys.stderr)
@@ -2748,6 +2974,7 @@ def _run(argv: Sequence[str]) -> int:
                 print(data["note"])
             _print_redacted_diff(args, data)
             print("Run spa validate after the final edit.")
+            _print_next(data)
             return 0
         sys.stdout.write(data.get("snippet") or "")
         return 0
@@ -3182,12 +3409,33 @@ def _run(argv: Sequence[str]) -> int:
             return exc.code if isinstance(exc.code, int) else 1
 
     if args.command == "licenses":
+        licenses_cmd = _action(args, "licenses_cmd")
+        if licenses_cmd != "list":
+            return _reject(LICENSES_NEEDS_ACTION, as_agent)
         from spa import licenses as licenses_mod
 
-        try:
-            return licenses_mod.main([*native, *extra], as_agent=as_agent)
-        except SystemExit as exc:
-            return exc.code if isinstance(exc.code, int) else 1
+        result = session.licenses(
+            software_dir=getattr(args, "software_dir", None),
+            config=getattr(args, "config", None),
+            env_recommend=not bool(getattr(args, "no_env_recommend", False)),
+        )
+        if as_agent:
+            if result.ok and isinstance(result.data, dict):
+                result = CommandResult(
+                    ok=True,
+                    data=licenses_mod._agent_license_payload(
+                        result.data,
+                        details=bool(getattr(args, "details", False)),
+                    ),
+                    code=result.code,
+                )
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+            return result.code
+        sys.stdout.write(licenses_mod.format_licenses_text(result.data or {}))
+        _print_next(result.data if isinstance(result.data, dict) else {})
+        return result.code
 
     parser.print_help()
     return 1

@@ -359,6 +359,7 @@ def test_agent_licenses_are_compact_until_details(monkeypatch, capsys):
             "basename": "Splunk_Enterprise.lic",
             "status": "valid",
             "expiration": "2099-01-01",
+            "capabilities": ["enterprise", "itsi"],
         }
     ]
     assert "path" not in _keys(payload)

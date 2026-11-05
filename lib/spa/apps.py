@@ -348,6 +348,11 @@ def project_hit(app: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         row["version"] = version
     if name:
         row["name"] = name
+    from spa.next_steps import suggested_roles_for_app
+
+    suggested = suggested_roles_for_app(app_id)
+    if suggested:
+        row["suggested_roles"] = list(suggested)
     return row
 
 
@@ -739,6 +744,11 @@ def snippet(
             for line in rendered.getvalue().splitlines()
         )
     built["snippet"] = yaml_text
+    from spa.next_steps import suggested_roles_for_app
+
+    suggested = suggested_roles_for_app(app_id if isinstance(app_id, int) else None)
+    if suggested:
+        built["suggested_roles"] = list(suggested)
     return built
 
 

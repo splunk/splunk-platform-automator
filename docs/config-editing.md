@@ -17,8 +17,9 @@ contract ID and mapped test in the same change, and passes the
 ### CFG-CLI-001 — command ownership
 
 `spa config` has one parser per action: `explain`, `search`, `get`,
-`templates`, `keys`, `schema`, `set`, `add`, `unset`, `merge`, `topology`,
-and `provider`. `explain` and `search` are the schema walk. `templates` is
+`templates`, `keys`, `schema`, `set`, `add`, `unset`, `merge`, `move`,
+`topology`, and `provider`. `spa config move` has required actions `role`
+and `host`. `explain` and `search` are the schema walk. `templates` is
 the read-only shipped fragment catalog. `keys` is the maintainer coverage
 check. `schema --markdown` is the human settings dump. `spa config add`
 appends one non-app identity-list entry. `spa apps` owns app and content-pack

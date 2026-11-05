@@ -1,6 +1,6 @@
 # Role placement on hosts
 
-After topology **counts** (Phase 5), map **roles onto hosts**. SVAs favor tier separation; labs often co-locate management roles.
+After topology **counts** (Phase 7), map **roles onto hosts**. SVAs favor tier separation; labs often co-locate management roles.
 
 See [role-placement.md](role-placement.md) opening strategy question in SKILL.md workflow.
 

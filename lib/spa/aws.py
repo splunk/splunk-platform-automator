@@ -119,6 +119,11 @@ def format_aws_text(data: Any) -> str:
         lines.append("Account: %s" % data["account"])
     if data.get("arn"):
         lines.append("ARN: %s" % data["arn"])
+    if data.get("aws_config_region"):
+        lines.append(
+            "AWS config region: %s (profile %s)"
+            % (data["aws_config_region"], data.get("aws_config_profile") or "default")
+        )
     if data.get("ami_id") and "items" not in data:
         lines.append(_aws_item_line(data))
     items = data.get("items")

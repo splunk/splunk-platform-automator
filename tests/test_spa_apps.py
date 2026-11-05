@@ -690,7 +690,16 @@ def test_search_compact_fields_no_description():
     assert 5403 not in ids
     for row in data["apps"]:
         assert "description" not in row
-        assert set(row) <= {"app_id", "name", "title", "type", "kind", "version", "summary"}
+        assert set(row) <= {
+            "app_id",
+            "name",
+            "title",
+            "type",
+            "kind",
+            "version",
+            "summary",
+            "suggested_roles",
+        }
         assert len(row["summary"]) <= 100
     nix = next(row for row in data["apps"] if row["app_id"] == 833)
     assert nix["name"] == "Splunk_TA_nix"

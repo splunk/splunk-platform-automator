@@ -32,7 +32,7 @@ spa validate --check-licenses --config config/splunk_config.yml
 Or directly:
 
 ```bash
-spa licenses --config config/splunk_config.yml --json
+spa --env NAME --agent licenses list
 ```
 
 ### Optional AWS validation
@@ -71,7 +71,8 @@ Do not hand off to user provision until:
 ## User deploy (skill does not run these)
 
 ```bash
-spa provision --yes && spa deploy --yes
+spa provision --yes
+spa deploy --yes
 ```
 
 Destroy:
@@ -86,7 +87,7 @@ spa destroy --yes
 |-------|-----|
 | `license_manager` without `splunk_license_file` | Add license file or remove LM role |
 | `splunk_license_file` without `license_manager` | Add `license_manager` to a host (e.g. on `cm`) or remove license file for trial labs |
-| License invalid, expired, or wrong entitlement | Use `spa licenses --config config/splunk_config.yml --json`; choose the proposed non-expired files that satisfy all required capabilities |
+| License invalid, expired, or wrong entitlement | Use `spa --env NAME --agent licenses list`; choose the proposed non-expired files that satisfy all required capabilities |
 | CM without `idxcluster:` | Add `idxcluster` on CM host |
 | Deployer without `shcluster:` | Add `shcluster` on deployer host |
 | Multisite without `site:` | Add `site` on CM and indexers |

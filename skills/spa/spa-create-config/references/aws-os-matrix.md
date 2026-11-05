@@ -53,7 +53,6 @@ os:
   packages:
     - acl
     - polkit
-  disable_selinux: true
 
 terraform:
   aws:
@@ -69,7 +68,6 @@ os:
   packages:
     - acl
     - polkit
-  disable_selinux: true
 
 terraform:
   aws:
@@ -82,7 +80,6 @@ terraform:
 ```yaml
 os:
   set_hostname: true
-  disable_apparmor: true
   packages:
     - acl
     - policykit-1
@@ -98,7 +95,6 @@ terraform:
 ```yaml
 os:
   set_hostname: true
-  disable_apparmor: true
   packages:
     - acl
     - policykit-1
@@ -133,4 +129,5 @@ Custom AMI search (optional): `spa aws amis list --region REGION --name-filter "
 
 - Prefer API discovery when credentials are available
 - Include **polkit** (or Ubuntu `policykit-1`) in global `os.packages` for all roles including forwarders
+- Author only non-default keys: `os.packages` and `os.set_hostname` if chosen. Do not set `disable_selinux`, `update_hosts_file`, `splunk_user_create`, `splunk_group_create`, or `enable_time_sync_cron` unless the operator asked to change the default. Never `config set os '{whole map}'`; set leaf paths.
 - Warn when example AMI IDs may be stale

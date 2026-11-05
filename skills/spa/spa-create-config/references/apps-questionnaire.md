@@ -31,7 +31,7 @@ See [docs/apps.md](../../../../docs/apps.md). Optional vault in config. Do not v
 
 ## 4. Target roles
 
-For **normal** apps, `target_roles`: `search_head`, `indexer`, `universal_forwarder`, `heavy_forwarder` (maps to deployer/CM/DS/direct per SPA). Before `apps add` for a normal app, ask with AskQuestion which roles it goes to, even with one host and one role. Pass `--roles` to `apps add`.
+For **normal** apps, `target_roles`: `search_head`, `indexer`, `universal_forwarder`, `heavy_forwarder` (maps to deployer/CM/DS/direct per SPA). SPA places TAs by role, not by host. Follow `data.next` after each add. If add returns `ready: false` with a roles choice, AskQuestion over `allowed` (pre-check `suggested`), then retry with `--roles`. Do not guess.
 
 Do **not** set `target_roles` on `premium_app: itsi` or `itsi_content_pack: true` entries. Do not ask for roles on those entries.
 
@@ -42,7 +42,7 @@ ITSI / ITE Work → Splunkbase **1841** only (`spa --agent apps add 1841`). Not 
 Discover Java and license paths with `spa --agent config explain PATH`, then set chosen values with `spa --agent config set PATH VALUE`.
 
 - Main app: `premium_app: itsi`, no `target_roles`
-- Licenses: run `spa licenses --config …` after adding ITSI — proposes `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` from Software; see [licenses.md](licenses.md)
+- Licenses: follow `data.next` after adding ITSI (`spa --env NAME --agent licenses list`) — proposes `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` from Software; see [licenses.md](licenses.md)
 - **Java 21 max** on the search/ITSI host `splunk_hosts[].os.packages` (not the global `os:` block) — see [aws-os-matrix.md](aws-os-matrix.md)
 - Full lab (not `spa init --example`): `examples/single_node_itsi.yml`
 

@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from spa.framework_paths import (
     CHECKOUT_ONLY_LEFTOVERS,
@@ -715,10 +715,43 @@ def _with_ami_comment(text: str, comment: str) -> str:
 
 
 def write_composed_config(
-    dest_config: Path, spa_home: Path, example: Optional[str], provider: Optional[str]
+    dest_config: Path,
+    spa_home: Path,
+    example: Optional[str],
+    provider: Optional[str],
+    architecture: Optional[Mapping[str, Any]] = None,
+    architecture_report: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, str]:
     topology_id, provider_id = resolve_example_pair(spa_home, example, provider)
     composed = compose_example_config(spa_home, topology_id, provider_id)
+    if architecture:
+        from spa.architecture import (
+            SKIPPED_FIELDS,
+            check_mismatch_warnings,
+            overlay_architecture,
+            remaining_questions,
+        )
+
+        warnings: List[str] = []
+        report = overlay_architecture(
+            composed, architecture, warnings, apply_schema=True
+        )
+        warnings.extend(check_mismatch_warnings(composed, architecture, spa_home))
+        if architecture_report is not None:
+            existing = list(architecture_report.get("warnings") or [])
+            architecture_report.update(report)
+            merged = existing[:]
+            for warning in warnings:
+                if warning not in merged:
+                    merged.append(warning)
+            architecture_report["warnings"] = merged
+            architecture_report["skipped"] = list(SKIPPED_FIELDS)
+            remaining = remaining_questions(composed, has_provider=True)
+            if any(item.get("deferred") for item in report.get("placement") or []):
+                remaining.append("license_manager")
+            architecture_report["remaining"] = remaining
+            architecture_report["topology"] = example
+            architecture_report["topology_id"] = topology_id
     text = dump_splunk_config(composed)
     provider_path = Path(spa_home) / "examples" / "providers" / ("%s.yml" % provider_id)
     if provider_path.is_file():
@@ -752,6 +785,8 @@ def init_env(
     apps_dir: Optional[str] = None,
     provider: Optional[str] = None,
     registry_name: Optional[str] = None,
+    architecture: Optional[str] = None,
+    report: Optional[Dict[str, Any]] = None,
 ) -> int:
     token = _LOG.set(log) if log is not None else None
     try:
@@ -774,6 +809,8 @@ def init_env(
             baseconfig_dir=baseconfig_dir,
             apps_dir=apps_dir,
             provider=provider,
+            architecture=architecture,
+            report=report,
         )
         if rc == 0:
             from spa.registry import RegistryError, register_environment
@@ -811,10 +848,40 @@ def _init_env(
     baseconfig_dir: Optional[str] = None,
     apps_dir: Optional[str] = None,
     provider: Optional[str] = None,
+    architecture: Optional[str] = None,
+    report: Optional[Dict[str, Any]] = None,
 ) -> int:
     pip_pkgs = list(pip_pkgs or [])
     dest = dest.resolve()
     spa_home = spa_home.resolve()
+    parsed_architecture = None
+    if architecture:
+        if example_set:
+            raise InitError("Use --architecture FILE or --example TOPOLOGY, not both.", code=2)
+        from spa.architecture import (
+            ArchitectureError,
+            load_architecture_file,
+            parse_architecture,
+            topology_feature_for_sva,
+        )
+
+        try:
+            doc = load_architecture_file(Path(architecture))
+            parsed_architecture, errors, warnings = parse_architecture(doc)
+        except ArchitectureError as exc:
+            raise InitError(str(exc), code=1) from exc
+        if errors:
+            raise InitError("; ".join(errors), code=1)
+        if not parsed_architecture.get("confirmed"):
+            raise InitError("architecture file is not confirmed", code=1)
+        try:
+            feature = topology_feature_for_sva(spa_home, parsed_architecture["sva_code"])
+        except ArchitectureError as exc:
+            raise InitError(str(exc), code=2) from exc
+        example = str(feature["id"])
+        example_set = True
+        if report is not None:
+            report["warnings"] = list(warnings)
     if _composes_config(dest, (from_dir or spa_home).resolve(), example_set, migrate_set, from_dir, force):
         provider = required_init_provider(provider)
     if example_set:
@@ -896,7 +963,12 @@ def _init_env(
     if example_set:
         ensure_env_dirs(dest)
         topology_id, provider_id = write_composed_config(
-            config_dest, spa_home, example, provider
+            config_dest,
+            spa_home,
+            example,
+            provider,
+            architecture=parsed_architecture,
+            architecture_report=report,
         )
         _write()
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
@@ -924,7 +996,12 @@ def _init_env(
         raise InitError("Env already exists (%s). Use --force to refresh .spa.yml." % dest)
     ensure_env_dirs(dest)
     topology_id, provider_id = write_composed_config(
-        config_dest, spa_home, example or "single_node", provider
+        config_dest,
+        spa_home,
+        example or "single_node",
+        provider,
+        architecture=parsed_architecture,
+        architecture_report=report,
     )
     _write()
     create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)

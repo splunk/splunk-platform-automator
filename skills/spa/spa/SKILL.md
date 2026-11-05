@@ -24,7 +24,7 @@ Classify the request first, then load the one skill that owns the next step. Loa
 
 | Request | Load | Keywords |
 | --- | --- | --- |
-| New environment or lab | `/spa-create-config` (Phases 0a–9, plan mode) | create, need, set up, new lab |
+| New environment or lab | `/spa-create-config` (path A questionnaire, or path B if a confirmed architecture file is given) | create, need, set up, new lab, architecture file |
 | Change an existing config | `/spa-create-config` ("Add / change a setting") | add, change, update, enable |
 | Lifecycle | `/spa` | provision, deploy, destroy, status, logs, validate, suspend, resume |
 | Apps | `/spa-apps` | Splunkbase, TA, app, content pack |
@@ -32,10 +32,10 @@ Classify the request first, then load the one skill that owns the next step. Loa
 
 ## Contract
 
-- **Config is command-only:** never edit `splunk_config.yml` by hand (no editor, no shell write, no YAML patch). Read and change it only with `spa config ...` (`search`, `explain`, `get`, `set`, `add`, `unset`, `merge`, `topology`, `provider`, `header set`). Config design and setting changes go to `/spa-create-config`. App entries go to `/spa-apps`. Both end with `spa --agent validate`; deploy stays here and waits for your yes.
+- **Config is command-only:** never edit `splunk_config.yml` by hand (no editor, no shell write, no YAML patch). Read and change it only with `spa config ...` (`search`, `explain`, `get`, `set`, `add`, `unset`, `merge`, `move`, `topology`, `provider`, `header set`). Config design and setting changes go to `/spa-create-config`. A confirmed architecture file still loads `/spa-create-config` (path B); this skill does not provision from that file. App entries go to `/spa-apps`. Both end with `spa --agent validate`; deploy stays here and waits for your yes.
 - **Routing:** a request for a Splunk lab, production, staging, or any other Splunk environment (create, deploy, change, check, or tear down), including a deploy to existing hosts (`spa hosts register`, then `spa deploy`), starts here. Do not use the AWS CLI, Terraform, Ansible, or Vagrant to create or change hosts for a Splunk environment. Use `spa`.
 - **`SPA_HOME`**: framework. **`SPA_ENV_DIR`**: one environment. Call **`bin/spa` only**. Do not import `spa.api`. Do not start a daemon.
-- Mutating commands need **`--yes`**. Never auto-run provision, deploy, suspend, resume, or destroy. Exception: `/spa-create-config` Phase 9 option A hands off here, and this skill then runs `provision`, then `deploy`, each only after its own explicit yes in chat. Never answer `Proceed?`.
+- Mutating commands need **`--yes`**. Never auto-run provision, deploy, suspend, resume, or destroy. Exception: `/spa-create-config` Phase 14 option A hands off here, and this skill then runs `provision`, then `deploy`, each only after its own explicit yes in chat. Never answer `Proceed?`.
 - Never print secrets. Report env vars as set / not set. YAML: `lookup('env', ...)`. Do not pass `spa -v` (unredacted Ansible stdout).
 - Full command names (`spa environment list`, `spa hosts ssh`, `spa validate`). Humans may type `spa env`.
 - No raw Ansible or Vagrant for operators. Ask in chat and wait before provision, deploy, destroy, suspend, resume, environment remove, or environment cleanup. See [lifecycle.md](references/lifecycle.md) and [prerequisites.md](references/prerequisites.md).
@@ -62,6 +62,7 @@ spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
 spa environment set --default my-lab                   # fallback when cwd does not select an env
 spa environment set --provider virtualbox              # saves the default for init in providers.yml (aws, virtualbox, or external)
 spa environment init --example cm_2idxc_sh --provider aws my-lab   # name-only under default parent; --provider required unless a default is saved
+spa environment init --architecture examples/architectures/c3.json --provider aws my-lab  # overlay a confirmed 0.4.0 file; exclusive with --example
 spa environment init --env-dir /custom --name my-lab   # one-off; does not change default parent
 spa init /custom/my-lab                                # same dest as the line above
 spa env init my-lab --force                            # adopt an existing env (cwd or default parent) into the list
@@ -83,7 +84,8 @@ spa venv upgrade --shared --yes                      # bump Ansible and other re
 spa venv rebuild --shared --yes                      # recreate the shared venv
 spa doctor
 spa validate
-spa provision --yes && spa deploy --yes
+spa provision --yes
+spa deploy --yes
 spa hosts list --status
 spa logs --last
 ```
@@ -92,9 +94,9 @@ spa logs --last
 
 `provision`, `deploy`, `destroy`, and `spa run` write one sentence to stderr when the phase or host changes. The 20-second heartbeat writes nothing. Stdout is the final JSON envelope. When the current directory is the environment, start `spa --agent provision --yes` there, and the same form for `deploy`, `destroy`, and `run NAME`. Do not pass `--env`, and do not run `spa environment list`. From any other directory, pass `--env NAME` on that same command. Do not pass `-v` or `--ansible-output`. Do not read `.spa.yml`, the terminal folder, `lib/spa`, or docs. Do not grep the repo. Do not list tools, and do not open a todo list.
 
-Start that command once. Provision, deploy, and destroy share one lock. While one of them is running, the others are refused. The error names the running command, for example `A deploy is already running.` Report that sentence and stop. Do not start one of the other two. The lock ends when that process ends, including when it is aborted. Wait in one call until `"ok":` or the process exits. Do not poll every second, and do not put the sentence list into the wait pattern. If a sentence is already visible on the command, repeat that exact line once. Do not read the terminal file, and do not call other tools. Do not run `spa validate` unless the user asked for it. The heartbeat writes nothing. When the process exits, report the envelope in one sentence. Do not wait on the word `phase` or a Terraform banner.
+Start that command once: `spa --agent provision --yes` from the env dir. No `2>&1`, no `| grep`, no `| head`/`tail`, no `-v`, no `--ansible-output`. Provision, deploy, and destroy share one lock. While one of them is running, the others are refused. The error names the running command, for example `A deploy is already running.` Report that sentence and stop. Do not start one of the other two. The lock ends when that process ends, including when it is aborted. Wait in one call until `"ok":` or the process exits. Do not poll every second, and do not put the sentence list into the wait pattern. If a sentence is already visible on the command, repeat that exact line once. Do not read the terminal file, and do not call other tools. Do not run `spa validate` unless the user asked for it. The heartbeat writes nothing. When the process exits, report the envelope in one sentence. Do not wait on the word `phase` or a Terraform banner.
 
-Cursor wait example: start the command as a background shell, keep its shell id, then call `AwaitShell` once with `pattern` `"ok":` and a long `block_until_ms` (for example 1200000). Do not use shell `sleep`, and do not read the terminal file. If the call returns and the process is still running with no `"ok":`, call it again with the same pattern. The sentences are for reporting only; they are not the wait pattern.
+Cursor: background the shell, `AwaitShell` once with `pattern` `"ok":` and a long `block_until_ms` (for example 1200000). Repeat that wait if still running. Forward each stderr sentence as it appears (`Planning the infrastructure.`, `Creating HOST.`, `HOST is up.`). Do not invent a grep pattern. Do not use shell `sleep`, and do not read the terminal file. The sentences are for reporting only; they are not the wait pattern. Same wait rules for destroy.
 
 Provision and destroy: `Planning the infrastructure.`, `Creating HOST.`, `HOST is up.`, `Destroying HOST.` Deploy: `Host is prepared.`, `Hosts are already prepared.`, `Downloading Splunk on HOST.`, `Splunk is already downloaded on HOST.`, `Extracting Splunk on HOST.`, `Splunk is already extracted on HOST.`, `Configuring the cluster manager.`, `The cluster manager is already configured.`, `Configuring Splunk.`, `Installing cluster manager apps.`, `Installing ITSI.`, `Installing apps on HOST.` A role's already-configured sentence is printed when that role's own tasks finish with nothing changed. Opening checks do not count, and baseconfig between those tasks does not finish the role. A role play with no matching hosts is silent. `spa run` uses those same sentences, plus `Upgrading indexer HOST.`, `Restarting Splunk on HOST.`, and `Running TITLE.` for any other playbook.
 
@@ -107,15 +109,15 @@ Provision and destroy: `Planning the infrastructure.`, `Creating HOST.`, `HOST i
 When a design ends with validation passed and the operator picks option A, run these steps here. Each step waits for its own yes in chat.
 
 1. **Infrastructure plan (read-only).** `spa --agent config get terraform.aws` and `spa --agent config get splunk_hosts`. List region, instance type, volume size, AMI, and host roles. SPA has no separate Terraform plan preview.
-2. **Provision gate.** AskQuestion (or chat): **Provision infrastructure?** Yes / No. On yes, run `spa --agent provision --yes` under Long runs. On `"ok": false`, report the error and stop.
-3. **Host check.** Run `spa hosts check`. A failed check stops here. Report it.
+2. **Provision gate.** AskQuestion (or chat): **Provision infrastructure?** Yes / No. The Phase 14 "yes" is not this gate. On yes, run `spa --agent provision --yes` under Long runs (background shell, `AwaitShell` on `"ok":`, no `2>&1 | grep`, no `head`). On `"ok": true`, follow `data.next`: required `spa --agent hosts check`, then the deploy ask. On `"ok": false`, report the error and stop.
+3. **Host check.** Run `spa --agent hosts check`. A failed check stops here. Report it.
 4. **Deploy gate.** Show the app names from `spa --agent config get splunk_app_deployment` and the license file from `splunk_defaults` (or trial-only). Report Splunkbase credentials as set / not set only. AskQuestion: **Deploy Splunk software?** Yes / No.
-5. On yes, run `spa --agent deploy --yes` under Long runs. Report the final status and the Splunk Web URL from the deploy result.
+5. On yes, run `spa --agent deploy --yes` under Long runs. Report the envelope in one sentence and the Splunk Web URL from the deploy result. Do not invent a URL. Do not open `data.log` unless asked.
 
-Stop at the first failure and report it. Never pass `-v`. From a directory other than the environment, pass `--env NAME`.
+Stop at the first failure and report it. Never pass `-v`. From a directory other than the environment, pass `--env NAME`. One yes per gate.
 
 ## Anti-patterns
 
-Import `spa.api`; answer `Proceed?`; invent playbook names; dump full Ansible logs into the model context (use `spa logs` / `data.log` only when the user asked to debug); put installers inside `SPA_HOME`.
+Import `spa.api`; answer `Proceed?`; invent playbook names; dump full Ansible logs into the model context (use `spa logs` / `data.log` only when the user asked to debug); put installers inside `SPA_HOME`; `2>&1 | grep`, `head`, or `tail` on provision/deploy/destroy/run.
 
 Human journey: [docs/user-guide.md](../../../docs/user-guide.md). Install: README curl `| sh`.

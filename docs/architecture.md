@@ -175,7 +175,7 @@ One command language for humans and agents. The CLI parses and renders. `SpaSess
 
 ### Command language
 
-- `list` is a catalog and the last word of the command (`spa hosts list`, `spa apps content-packs list`, `spa aws regions list`). `get` is the current value. `explain` is one definition. `search` is ranked discovery. Mutations stay explicit: `set`, `add`, `remove`, `merge`, `deploy`, `destroy`, and the other existing verbs. Do not use two verbs for the same operation.
+- `list` is a catalog and the last word of the command (`spa hosts list`, `spa licenses list`, `spa apps content-packs list`, `spa aws regions list`). `get` is the current value. `explain` is one definition. `search` is ranked discovery. Mutations stay explicit: `set`, `add`, `remove`, `merge`, `deploy`, `destroy`, and the other existing verbs. Do not use two verbs for the same operation.
 - A noun with several actions owns subcommands (`spa config`, `spa apps`). A single operation stays top-level (`spa validate`, `spa deploy`).
 - A bare parent that needs an action prints the legal forms and exits 2. It does not dump a catalog.
 - `spa --help` lists canonical names. Human `--help` for one command uses `usage: spa validate` and a separate `Aliases:` line for a short form such as `val`. Parent help, invalid-choice text, `COMMAND_SCHEMA`, generated docs, and agent output omit those short forms. `spa init` and `spa env` stay documented human aliases. Schema examples use `spa environment`. `spa shell` stays the SSH command; `sh` appears only on its `Aliases:` line. Retired `feat` is an error, not an alias.
@@ -207,7 +207,7 @@ Human rendering and agent JSON consume the same session data. Each command belon
 
 ### Intentional exceptions
 
-- `spa aws`, `spa licenses`, and `spa shell` own native output and are not wrapped in the envelope. Their `--help` stays text even when an agent is detected. `spa aws` and `spa licenses` print text by default. Human diagnostics, including the region sentence, go to stderr. `--json` and `--agent` print only that command's JSON, with no text sentence before or after it. A usage failure from those two commands is `{"ok":false,"error":"..."}` and does not add `schema_version`. `spa shell` stays text.
+- `spa aws` and `spa shell` own native output and are not wrapped in the envelope. Their `--help` stays text even when an agent is detected. `spa aws` prints text by default. Human diagnostics, including the region sentence, go to stderr. `--json` and `--agent` print only that command's JSON, with no text sentence before or after it. A usage failure from `spa aws` is `{"ok":false,"error":"..."}` and does not add `schema_version`. `spa shell` stays text.
 - `spa config schema --markdown` and `spa agent schema --markdown` are human docs dumps and keep `--no-agent`.
 - `spa config explain` keeps the shape from its accepted config-editing plan.
 - VirtualBox `suspend` and `resume` do not call `input()` today. This contract does not add that prompt.

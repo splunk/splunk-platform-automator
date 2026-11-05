@@ -1,11 +1,13 @@
-# Architecture plan template
+# Design summary template
 
-Use in **plan mode** after Phases 0a–6b. Present in chat; optionally write to `docs/plans/<short-name>-architecture-plan.md` when the user wants a file.
+Use in **plan mode** after Phases 1–10. Present in chat; optionally write to `docs/plans/<short-name>-design-summary.md` when the user wants a file.
+
+This is the skill's write-preview, not `spa architecture plan FILE`.
 
 Replace `<...>` with phase outcomes. Delete unused sections.
 
 ```markdown
-# Architecture plan — <short name>
+# Design summary — <short name>
 
 **Status:** draft | approved  
 **Target config:** `config/splunk_config.yml` (not written yet)
@@ -64,5 +66,5 @@ Replace `<...>` with phase outcomes. Delete unused sections.
 
 ## Next step
 
-- Revise plan in chat, or say **approve and write config** to run Phase 7–9.
+- Revise in chat, then confirm the reconfirmation table to run Phase 12–14.
 ```

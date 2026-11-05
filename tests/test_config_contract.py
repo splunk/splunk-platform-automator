@@ -1564,7 +1564,7 @@ splunk_hosts:
                 "Look up a setting: spa config search QUERY\n"
                 "Then:              spa config explain PATH\n"
                 "Read current:      spa config get [PATH]\n"
-                "Write:             set, add, unset, merge, topology, or provider\n"
+                "Write:             set, add, unset, merge, move, topology, or provider\n"
                 "Audit:             spa config audit --check-hand-edits\n"
                 "Coverage:          spa config keys\n"
                 "Docs dump:         spa config schema --markdown"

@@ -54,6 +54,7 @@ HELP_CONTRACTS = [
             "usage: spa init",
             "env_dir",
             "--example",
+            "--architecture",
             "--provider",
             "spa init list",
             "--from",
@@ -137,6 +138,7 @@ HELP_CONTRACTS = [
             "add",
             "unset",
             "merge",
+            "move",
             "topology",
             "provider",
             "audit",
@@ -177,6 +179,34 @@ HELP_CONTRACTS = [
     (
         ["config", "merge", "--help"],
         ["usage: spa config merge", "TEMPLATE", "--file", "--dry-run", "--resolve-file"],
+    ),
+    (
+        ["config", "move", "--help"],
+        ["usage: spa config move", "role", "host"],
+    ),
+    (
+        ["config", "move", "role", "--help"],
+        ["usage: spa config move role", "ROLE", "--from", "--to"],
+    ),
+    (
+        ["config", "move", "host", "--help"],
+        ["usage: spa config move host", "--to", "--prefix", "--postfix"],
+    ),
+    (
+        ["architecture", "--help"],
+        ["usage: spa architecture", "plan", "apply", "check"],
+    ),
+    (
+        ["architecture", "plan", "--help"],
+        ["usage: spa architecture plan", "FILE", "examples/architectures/c3.json"],
+    ),
+    (
+        ["architecture", "apply", "--help"],
+        ["usage: spa architecture apply", "FILE", "--yes"],
+    ),
+    (
+        ["architecture", "check", "--help"],
+        ["usage: spa architecture check", "FILE"],
     ),
     (
         ["apps", "--help"],
@@ -342,7 +372,17 @@ HELP_CONTRACTS = [
     ),
     (
         ["licenses", "--help"],
-        ["usage: spa licenses", "--json", "--software-dir", "--config", "--no-env-recommend"],
+        ["usage: spa licenses", "ACTION", "list", "Aliases: lic", "spa licenses needs an action"],
+    ),
+    (
+        ["licenses", "list", "--help"],
+        [
+            "usage: spa licenses list",
+            "--software-dir",
+            "--config",
+            "--details",
+            "--no-env-recommend",
+        ],
     ),
     (
         ["agent", "--help"],
@@ -381,7 +421,7 @@ def test_complete_help_contract(argv, required):
 
 # Help rows look like "    validate (val)      Validate splunk_config.yml".
 _COMMAND_ROW = re.compile(r"^    ([a-z][a-z0-9_-]*)(?: \(([a-z0-9]+)\))?\s{2,}\S", re.MULTILINE)
-_ACTION_PARENTS = ("environment", "hosts", "apps")
+_ACTION_PARENTS = ("environment", "hosts", "apps", "licenses")
 
 
 def _command_rows(help_text: str):
@@ -763,7 +803,6 @@ def test_agent_help_is_one_schema_entry_or_an_index():
 
     for argv in (
         ["--agent", "aws", "--help"],
-        ["--agent", "licenses", "--help"],
         ["--agent", "shell", "--help"],
     ):
         native = run_spa(argv)
@@ -793,10 +832,7 @@ def test_start_dir_routes_before_and_after_subcommand(argv):
         (["shell", "--help"], "usage: spa shell"),
         (["sh", "--help"], "usage: spa shell"),
         (["aws", "--json", "--help"], "usage: spa aws"),
-        (["licenses", "--json", "--help"], "usage: spa licenses"),
-        (["lic", "--json", "--help"], "usage: spa licenses"),
         (["--agent", "aws", "--json", "--help"], "usage: spa aws"),
-        (["--agent", "licenses", "--json", "--help"], "usage: spa licenses"),
     ],
 )
 def test_native_commands_keep_native_flags(argv, usage):
@@ -924,7 +960,7 @@ def _help_action_names():
     names = set()
     for name, _alias in _command_rows(root.stdout):
         names.add("agent schema" if name == "agent" else name)
-    for parent in ("environment", "hosts", "apps", "config", "skills", "venv", "completion", "architecture"):
+    for parent in ("environment", "hosts", "apps", "config", "skills", "venv", "completion", "architecture", "licenses"):
         child = run_spa(["--no-agent", parent, "--help"])
         assert child.returncode == 0, child.stderr
         for name, _alias in _command_rows(child.stdout):
@@ -941,6 +977,13 @@ def _help_action_names():
                 assert nested.returncode == 0, nested.stderr
                 for nested_name, _nested_alias in _command_rows(nested.stdout):
                     names.add("config header %s" % nested_name)
+                continue
+            if parent == "config" and name == "move":
+                names.add("config move")
+                nested = run_spa(["--no-agent", "config", "move", "--help"])
+                assert nested.returncode == 0, nested.stderr
+                for nested_name, _nested_alias in _command_rows(nested.stdout):
+                    names.add("config move %s" % nested_name)
                 continue
             names.add("%s %s" % (parent, name))
     catalogs = (
@@ -1034,6 +1077,7 @@ def test_agent_schema_is_complete_and_documented():
         ),
         "run": ("spa run list", "spa run NAME --help", "spa run NAME"),
         "logs": ("spa logs list", "spa logs RUN_ID", "spa logs --last"),
+        "licenses": ("spa licenses list",),
     }
     for parent, phrases in bare_parents.items():
         human = run_spa(["--no-agent", parent])
@@ -1082,3 +1126,66 @@ def test_agent_schema_is_complete_and_documented():
     assert aws_list.returncode == 2, aws_list.stderr
     for kind in ("regions", "amis", "instance-types", "key-pairs", "security-groups"):
         assert "spa aws %s list" % kind in aws_list.stderr
+
+
+def test_licenses_list_is_the_catalog():
+    """spa licenses is a catalog parent. list is the action; the bare parent exits 2."""
+    from spa.agent import COMMAND_SCHEMA
+
+    needs_action = "spa licenses needs an action.\nList: spa licenses list"
+    for parent in ("licenses", "lic"):
+        human = run_spa(["--no-agent", parent])
+        assert human.returncode == 2, parent
+        assert human.stdout.strip() == "", parent
+        assert human.stderr.strip() == needs_action, parent
+        agent = run_spa(["--json", parent])
+        assert agent.returncode == 2, parent
+        assert agent.stderr == "", parent
+        body = json.loads(agent.stdout)
+        assert body["ok"] is False
+        assert body["schema_version"] == 1
+        assert "data" not in body
+        assert body["error"] == needs_action
+
+    old_form = run_spa(["licenses", "--json"])
+    assert old_form.returncode == 2
+    assert old_form.stderr == ""
+    old_body = json.loads(old_form.stdout)
+    assert old_body["ok"] is False
+    assert old_body["schema_version"] == 1
+    assert "data" not in old_body
+    assert old_body["error"] == needs_action
+
+    help_text = run_spa(["--no-agent", "licenses", "--help"])
+    assert help_text.returncode == 0, help_text.stderr
+    assert "usage: spa licenses" in help_text.stdout
+    assert "Aliases: lic" in help_text.stdout
+    assert "list" in help_text.stdout
+    list_help = run_spa(["--no-agent", "licenses", "list", "--help"])
+    assert list_help.returncode == 0, list_help.stderr
+    assert "usage: spa licenses list" in list_help.stdout
+    for flag in ("--software-dir", "--config", "--details", "--no-env-recommend"):
+        assert flag in list_help.stdout
+        assert flag not in _defined_options(help_text.stdout)
+
+    by_name = {row["name"]: row for row in COMMAND_SCHEMA["commands"]}
+    assert "licenses list" in by_name
+    assert by_name["licenses"]["example"] == "spa --agent licenses list"
+    assert "flags" not in by_name["licenses"]
+    listed = by_name["licenses list"]
+    assert listed["example"] == "spa --agent licenses list"
+    flag_names = {flag["long"] for flag in listed.get("flags") or []}
+    assert flag_names == {"--software-dir", "--config", "--details", "--no-env-recommend"}
+
+    parent_help = run_spa(["--agent", "licenses", "--help"])
+    assert parent_help.returncode == 0, parent_help.stderr
+    parent_payload = json.loads(parent_help.stdout)
+    assert parent_payload["ok"] is True
+    assert parent_payload["schema_version"] == 1
+    assert parent_payload["data"]["name"] == "licenses"
+    list_schema = run_spa(["--agent", "licenses", "list", "--help"])
+    assert list_schema.returncode == 0, list_schema.stderr
+    list_payload = json.loads(list_schema.stdout)
+    assert list_payload["ok"] is True
+    assert list_payload["schema_version"] == 1
+    assert list_payload["data"]["name"] == "licenses list"

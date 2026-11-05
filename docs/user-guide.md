@@ -51,7 +51,7 @@ spa init --software-dir ~/Software --example cm_2idxc_sh --provider aws my-lab
    - [Splunk Universal Forwarder](https://www.splunk.com/en_us/download/universal-forwarder.html)
    - Filenames look like `splunk-<version>-<build>-linux-amd64.tgz` and `splunkforwarder-<version>-<build>-linux-amd64.tgz`. The version must match `splunk_version` in config.
 3. Copy Splunk **Professional Services Best Practices baseconfig apps** into the same tree and extract them. They are not a public Splunk.com download. Splunk / Cisco employees can download them from [http://go/baseconfigs](http://go/baseconfigs). Everyone else: contact Splunk Professional Services. Typical layout: `Configurations - Base` and `Configurations - Index Replication`.
-4. If you have a Splunk license, place or symlink it as **`Splunk_Enterprise.lic`** in that directory (`spa licenses` lists basenames for config). Trial-only labs can omit licenses.
+4. If you have a Splunk license, place or symlink it as **`Splunk_Enterprise.lic`** in that directory (`spa licenses list` lists basenames for config). Trial-only labs can omit licenses.
 
 ```text
 ~/Software/Configurations - Base/...
@@ -76,9 +76,39 @@ spa config explain splunk_idxclusters.idxc_name
 spa validate
 ```
 
+### Start from a confirmed architecture file
+
+A confirmed `splunk.architecture` 0.4.0 file (from the SVA skill or `examples/architectures/c3.json`) selects the catalog topology and overlays counts, RF/SF, `org_prefix`, and extra roles. Provider is required at init. Hardware sizing, OS, AWS, apps, and licenses stay ordinary `spa config` / `spa apps` questions after the host list exists.
+
+```mermaid
+flowchart TD
+  file["Confirmed 0.4.0 file"] --> planCmd["spa architecture plan FILE"]
+  planCmd --> provider["Ask provider: aws / virtualbox / external"]
+  provider --> gate["Env location + name"]
+  gate --> initCmd["spa init --architecture FILE --provider"]
+  initCmd --> place["spa config move role"]
+  place --> rename["spa config move host"]
+  rename --> sizing["Hardware sizing"]
+  sizing --> rest["OS, AWS, apps, licenses"]
+  rest --> checkCmd["spa architecture check FILE"]
+  checkCmd --> validate["spa validate"]
+```
+
+```bash
+spa architecture plan examples/architectures/c3.json
+spa environment init PARENT/NAME --architecture examples/architectures/c3.json --provider aws
+spa config move role license_manager --from cm --to lm --yes
+spa config move host --prefix acme- --yes
+spa config move host --postfix=-lab --yes
+spa architecture check examples/architectures/c3.json
+spa validate
+```
+
+`spa architecture apply FILE --yes` overlays the same deltas onto an environment that already exists. `--architecture` and `--example` are exclusive. Without an architecture file, keep `spa init --example TOPOLOGY --provider`. Init and apply warn when `license_manager` is not written yet (schema pairing with a license file) and when `spa architecture check` would still mismatch; they do not fail for those gaps.
+
 When a setting uses `{{ lookup('env', 'NAME') }}`, export the variable to a non-empty value before `spa validate`, `spa provision`, or `spa deploy`. `spa init` lists each referenced name as `set` or `not set` and does not stop. A missing value fails with the variable name, for example `SPLUNK_ADMIN_PASSWORD`, and does not print the value. `spa config set PATH --from-env NAME` can record the reference before the variable exists.
 
-The Pydantic schema enforced by `spa validate` owns types and allowed values. The feature catalog owns decision guidance and example snippets; editing commands never apply those snippets. Browse every key in [config.md](config.md) (`spa --no-agent config schema --markdown`). Discover a key with `spa --agent config explain PATH`. `spa --agent config explain PATH` prints the one mutation command for that feature and does not apply it. Author an existing scalar or map with `spa --agent config set PATH VALUE`. Append a new non-app identity, such as a host or cluster, with `spa --agent config add SELECTOR JSON_OBJECT`. Use one `spa --agent config merge --file FILE` transaction for a deliberate multi-setting fragment. Use `spa config topology` and `spa config provider` for layout replacement. App entries stay on `spa apps add`. After every `spa config` or `spa apps` write, inspect `changed` and `ready`: `ok: false` with `ready: false` wrote nothing. Pass `--show-diff` when you need the redacted hunk. Then `spa config get` the identity and confirm `found: true`. Finish with `spa --agent validate` before provision or deploy. Use `spa aws --json` for live regions, AMIs, instance types, and network values; use `spa licenses` and `spa validate --check-licenses` for license selection. See the [configuration editing contract](config-editing.md). For a full clustered ITSI example, follow [Build a clustered ITSI config](config-walkthrough.md).
+The Pydantic schema enforced by `spa validate` owns types and allowed values. The feature catalog owns decision guidance and example snippets; editing commands never apply those snippets. Browse every key in [config.md](config.md) (`spa --no-agent config schema --markdown`). Discover a key with `spa --agent config explain PATH`. `spa --agent config explain PATH` prints the one mutation command for that feature and does not apply it. Author an existing scalar or map with `spa --agent config set PATH VALUE`. Append a new non-app identity, such as a host or cluster, with `spa --agent config add SELECTOR JSON_OBJECT`. Use one `spa --agent config merge --file FILE` transaction for a deliberate multi-setting fragment. Use `spa config topology` and `spa config provider` for layout replacement. App entries stay on `spa apps add`. After every `spa config` or `spa apps` write, inspect `changed` and `ready`: `ok: false` with `ready: false` wrote nothing. Pass `--show-diff` when you need the redacted hunk. Then `spa config get` the identity and confirm `found: true`. Finish with `spa --agent validate` before provision or deploy. Use `spa aws --json` for live regions, AMIs, instance types, and network values; use `spa licenses list` and `spa validate --check-licenses` for license selection. See the [configuration editing contract](config-editing.md). For a full clustered ITSI example, follow [Build a clustered ITSI config](config-walkthrough.md).
 
 Universal-forwarder outputs always go to all indexers today. UF → heavy forwarder (or a single indexer) is not a config knob; see `spa config explain splunk_hosts.splunk_outputs` and [ROADMAP](../ROADMAP.md).
 

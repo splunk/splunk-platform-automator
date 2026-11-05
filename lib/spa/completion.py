@@ -471,6 +471,10 @@ def _catalog(kind: str, config: Optional[Mapping[str, Any]], paths: Any) -> List
 def _catalog_values(kind: str, config: Optional[Mapping[str, Any]], paths: Any) -> List[str]:
     if kind == "hosts":
         return _hosts(config, "")
+    if kind == "roles":
+        from spa.hosts import allowed_role_names
+
+        return allowed_role_names()
     if kind in {"init list", "providers"}:
         from spa.init import list_examples
 

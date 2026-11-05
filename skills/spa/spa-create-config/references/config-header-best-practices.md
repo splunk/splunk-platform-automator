@@ -1,10 +1,10 @@
 # Config header best practices
 
-The config header is documentation. It records the design decisions from Phases 0a–9, so a later reader can see why the environment was built this way. Set it with `spa config header set`, not by editing the file. The field list is in `spa config header set --help`, and the value mapping is in [config-header-template.md](../assets/config-header-template.md).
+The config header is documentation. It records the design decisions from Phases 1–14, so a later reader can see why the environment was built this way. Set it with `spa config header set`, not by editing the file. The field list is in `spa config header set --help`, and the value mapping is in [config-header-template.md](../assets/config-header-template.md).
 
 ## When to set the header
 
-Set it after the operator approves the plan (Phase 6c) and before provisioning:
+Set it after the operator confirms the design summary (Phase 11 reconfirmation) and before provisioning:
 
 ```
 spa --agent config header set \
