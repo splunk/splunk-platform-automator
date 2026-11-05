@@ -89,8 +89,31 @@ def test_walkthrough_replay_builds_the_clustered_config(tmp_path):
     )
     script = re.sub(r"(?m)^spa ", "%s " % _SPA, script)
     software = seed_software_dir(tmp_path / "data")
-    (software / "Splunk_Enterprise.lic").write_text("walkthrough-license-placeholder\n", encoding="utf-8")
-    (software / "Splunk_ITSI.lic").write_text("walkthrough-license-placeholder\n", encoding="utf-8")
+    (software / "Splunk_Enterprise.lic").write_text(
+        """<license>
+  <payload>
+    <type>enterprise</type>
+    <group_id>Enterprise</group_id>
+    <creation_time>1700000000</creation_time>
+    <expiration_time>4102444800</expiration_time>
+  </payload>
+</license>
+""",
+        encoding="utf-8",
+    )
+    (software / "Splunk_ITSI.lic").write_text(
+        """<license>
+  <payload>
+    <type>addon</type>
+    <group_id>ITSI</group_id>
+    <creation_time>1700000000</creation_time>
+    <expiration_time>4102444800</expiration_time>
+    <add_ons><add_on>itsi</add_on></add_ons>
+  </payload>
+</license>
+""",
+        encoding="utf-8",
+    )
     (software / "splunk-9.3.1-1-linux-amd64.tgz").write_bytes(b"")
     (software / "splunkforwarder-9.3.1-1-linux-amd64.tgz").write_bytes(b"")
     stub = PROJECT_ROOT / "tests" / "splunkbase_http_stub"

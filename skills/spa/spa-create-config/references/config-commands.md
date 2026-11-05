@@ -9,8 +9,8 @@ Always use these commands, never hand-edit:
 | Add a host | `spa --env NAME config add 'splunk_hosts[name=HOSTNAME]' '{"roles":[...], ...}' --yes` | SPA validates role constraints, cluster membership, site mapping |
 | Add an indexer cluster | `spa --env NAME config set splunk_idxclusters[idxc_name=idxc1].idxc_rf 3 --yes` | Constraints checked against peer count |
 | Add an app | `spa --agent apps search QUERY` then `spa --env NAME apps add APP_ID --roles ROLE1,ROLE2 --yes` | Validates app exists, role exists, app not duplicate |
-| Add ITSI content pack | `spa --agent apps content-packs list 1841` then `spa --env NAME apps add 1841 --content-pack CP_NAME --yes` | Pack name validated against ITSI manifest |
-| Change OS | `spa --env NAME config merge --file -` with YAML input | Ensures os.ssh_username, disable_apparmor are set together |
+| Add ITSI content pack | `spa --agent apps content-packs list 5391` then `spa --env NAME apps add 5391 --content-pack CP_NAME --yes` | Pack name validated against the Content Library manifest |
+| Change OS | `spa --env NAME config set os.packages '["acl","polkit"]' --yes` (leaf paths) | Author only non-default keys; never `config set os '{whole map}'` |
 | Merge multiple settings | `spa --env NAME config merge --file FILE.yml --yes` | Atomic, all-or-nothing; validation happens once |
 | Move a role to another host | `spa --env NAME config move role ROLE --from HOST --to HOST --yes` | Relocates one role; required on path B when an extra role must leave a co-located preset host |
 | Rename, prefix, or postfix hosts | `spa --env NAME config move host OLD --to NEW --yes` or `--prefix PREFIX` or `--postfix POSTFIX` | Rewrites host identities and host-name references |

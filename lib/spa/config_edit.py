@@ -804,6 +804,14 @@ def config_set(
     _validate_fragment_secrets(parsed, path)
     default = (detail or {}).get("default", _MISSING)
     omitted = default is not _MISSING and parsed == default and not explicit_default
+    nested_omitted: List[Dict[str, Any]] = []
+    if not omitted and isinstance(parsed, Mapping) and not explicit_default:
+        parsed = _omit_fragment_defaults(
+            parsed,
+            parts=tuple(part for part in path.split(".") if part),
+            omitted=nested_omitted,
+        )
+        omitted = parsed == {} and bool(nested_omitted)
 
     def mutate(document: MutableMapping[str, Any], warnings: List[str]) -> None:
         if omitted:
@@ -827,8 +835,10 @@ def config_set(
         stdin_text=stdin_text,
         command="config set",
     )
-    if omitted:
+    if omitted and not nested_omitted:
         result["omitted_defaults"] = [{"path": path, "value": _redacted_value(path, parsed)}]
+    elif nested_omitted:
+        result["omitted_defaults"] = nested_omitted
     return result
 
 

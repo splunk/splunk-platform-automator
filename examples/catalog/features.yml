@@ -349,7 +349,6 @@ features:
       os:
         set_hostname: true
         packages: [acl, polkit]
-        disable_selinux: true
 
   - id: setting.os.ubuntu
     selector: os.disable_apparmor
@@ -363,7 +362,6 @@ features:
     snippet: |
       os:
         set_hostname: true
-        disable_apparmor: true
         packages: [acl, policykit-1]
 
   - id: setting.ssh_username
@@ -474,7 +472,7 @@ features:
     when_to_use: >-
       Copy .lic files from Software onto a host with role license_manager, or point other
       hosts at an existing license manager with splunk_license_server (IP or FQDN). Pairing
-      is checked by spa validate and spa licenses. ITSI/ES need matching entitlement files.
+      is checked by spa validate and spa licenses list. ITSI/ES need matching entitlement files.
     keys: [splunk_defaults.splunk_license_file, splunk_defaults.splunk_license_server, "splunk_hosts[].splunk_license_file", "splunk_environments[].splunk_license_file"]
     related: ["#66"]
     snippet: |

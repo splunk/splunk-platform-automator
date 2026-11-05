@@ -6,9 +6,9 @@ Files must live in splunk_software_dir (default ../Software relative to SPA_ENV_
 SPA references licenses by basename only (e.g. Splunk_Enterprise.lic).
 
 Examples:
-  spa licenses --json
-  spa licenses --config config/splunk_config.yml --json
-  spa licenses --software-dir ../Software --propose --json
+  spa --agent licenses list
+  spa --env NAME --agent licenses list
+  spa --agent licenses list --software-dir ../Software
 """
 
 from __future__ import annotations
@@ -795,6 +795,7 @@ def _compact_license_row(record: Dict[str, Any]) -> Dict[str, Any]:
         "basename": record.get("basename"),
         "status": record.get("status"),
         "expiration": record.get("expires_at"),
+        "capabilities": list(record.get("capabilities") or []),
     }
 
 

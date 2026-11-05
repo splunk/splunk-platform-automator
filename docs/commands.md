@@ -998,11 +998,30 @@ spa --agent architecture check examples/architectures/c3.json
 
 ## `licenses`
 
+License discovery. List Software licenses. Bare spa licenses exits 2.
+
+Example:
+
+```bash
+spa --agent licenses list
+```
+
+## `licenses list`
+
 Inspect license type, expiration and ITSI/ES entitlements
 
 | Flag | Description |
 | --- | --- |
+| `--software-dir` | Software directory (default: ../Software from SPA_ENV_DIR, SPA splunk_software_dir) |
+| `--config` | splunk_config.yml path to detect ITSI/ES and validate current license settings |
 | `--details` | Include the full license inventory |
+| `--no-env-recommend` | Do not mention optional licenses when ITSI is not in config |
+
+Example:
+
+```bash
+spa --agent licenses list
+```
 
 ## `run`
 

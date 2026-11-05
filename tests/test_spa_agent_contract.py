@@ -102,7 +102,7 @@ def test_agent_confirmation_failure_is_versioned_json(monkeypatch, capsys):
 
 
 def test_native_help_remains_native_text_when_agent_is_auto_detected():
-    """aws/licenses/shell own their output contract and are not JSON-wrapped."""
+    """aws/shell own their output contract and are not JSON-wrapped."""
     result = run_spa(["aws", "--help"], extra_env={"SPA_AGENT": "1"})
     assert result.returncode == 0, result.stderr
     assert result.stdout.startswith("usage: spa aws")
@@ -133,6 +133,7 @@ def _assert_agent_json_only(result):
         ["--agent", "venv"],
         ["--agent", "logs", "list"],
         ["--agent", "hosts", "list"],
+        ["--agent", "licenses", "list"],
         ["--agent", "validate"],
     ],
 )
@@ -186,12 +187,10 @@ def test_agent_content_packs_list_prints_json_only(tmp_path, monkeypatch, capsys
     [
         ["--agent", "aws", "--bogus"],
         ["aws", "--json", "--bogus"],
-        ["--agent", "licenses", "--bogus"],
-        ["licenses", "--json", "--bogus"],
     ],
 )
 def test_native_usage_errors_are_json_only(argv):
-    """aws and licenses own their JSON. It is not the spa envelope."""
+    """aws owns its JSON. It is not the spa envelope."""
     result = run_spa(argv)
     assert result.returncode == 2
     assert result.stderr == "", result.stderr
@@ -200,6 +199,27 @@ def test_native_usage_errors_are_json_only(argv):
     assert "unrecognized arguments" in payload["error"]
     assert "schema_version" not in payload
     assert "data" not in payload
+    assert result.stdout == json.dumps(payload, separators=(",", ":")) + "\n"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--agent", "licenses", "--bogus"],
+        ["licenses", "--json", "--bogus"],
+        ["--agent", "licenses", "list", "--bogus"],
+        ["licenses", "list", "--json", "--bogus"],
+    ],
+)
+def test_licenses_usage_errors_include_schema_version(argv):
+    result = run_spa(argv)
+    assert result.returncode == 2
+    assert result.stderr == "", result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert payload["schema_version"] == 1
+    assert "data" not in payload
+    assert payload.get("error")
     assert result.stdout == json.dumps(payload, separators=(",", ":")) + "\n"
 
 

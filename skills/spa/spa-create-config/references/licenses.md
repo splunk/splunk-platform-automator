@@ -4,12 +4,15 @@ Splunk license files live on the **Ansible controller** in the shared Software d
 
 ## Discover available licenses
 
-From repo root:
+Mandatory scan (from any directory; no relative `--config`):
 
 ```bash
-spa licenses --json
-spa licenses --config config/splunk_config.yml --json
+spa --env NAME --agent licenses list
 ```
+
+After every `apps add` / `licenses list`, follow `data.next` in order (AskQuestion using each `ask`, then run `command`). Do not invent follow-ups the envelope omitted. Never `ls` Software, never guess `Splunk_Enterprise.lic`, never set `trial`. Treat "ITSI license is not assigned" as "add the ITSI file", not "remove ITSI".
+
+When a license file is chosen, ask MC+LM placement (dedicated `mc` vs co-locate on `cm`). Do not silently attach LM to `cm`. Pair the license list and LM host in one write using the exact basenames from `proposed_splunk_license_file`.
 
 Returns:
 
@@ -76,9 +79,10 @@ splunk_defaults:
 
 ## Skill workflow
 
-1. Run `spa licenses` after Phase 9 (apps) so ITSI detection is accurate.
-2. If `proposed_splunk_license_file` is non-empty, ask the user (AskQuestion if available): add to config for lab?
-3. **If adding `splunk_license_file`**, also add `license_manager` to a host in Phase 8 (co-locate on `cm` or `mc` per [role-placement.md](role-placement.md)). Do not write license file without LM role.
+1. Run `spa --env NAME --agent licenses list` after Phase 9 (apps) so ITSI detection is accurate.
+2. Show `proposed_splunk_license_file`, `unsatisfied_requirements`, and `licenses` (basename + capabilities). Follow `data.next`.
+3. **If adding `splunk_license_file`**, also add `license_manager` on a host (ask dedicated `mc` vs co-locate on `cm` per [role-placement.md](role-placement.md)). One transaction, for example:
+   `spa --env NAME config add 'splunk_hosts[name=mc]' '{"roles":["monitoring_console","license_manager"]}' --resolve splunk_defaults.splunk_license_file '["Splunk_Enterprise.lic","Splunk_ITSI.lic"]' --yes`
 4. If ITSI or ES and no `license_manager`, prompt to add LM role (or co-locate per [role-placement.md](role-placement.md)).
 5. **Trial-only labs** — omit both `splunk_license_file` and `license_manager`.
 6. Include chosen licenses in Phase 12 write under `splunk_defaults`.

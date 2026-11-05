@@ -13,7 +13,11 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 - **Architecture 0.4.0 handover**: `spa architecture plan FILE` reads confirmed `kind: splunk.architecture` files (schema `0.4.0` only). `spa init --architecture FILE` (exclusive with `--example`) selects the catalog topology from `sva.code` and overlays counts, RF/SF, `org_prefix`, and extra roles. `spa architecture apply FILE --yes` does the same overlay on an existing env and reports ingested/skipped/remaining. `spa architecture check FILE` subset-matches the file against the current config. Init and apply warn (and stay successful) when `license_manager` is deferred until a license file is set, and when architecture check would still mismatch. `spa config move role ROLE --from HOST --to HOST` relocates one role; `spa config move host OLD --to NEW`, `--prefix PREFIX`, and `--postfix POSTFIX` rename identities. Examples: `examples/architectures/c1.json`, `c3.json`, `m4.json`. Unreleased 0.3.0 phase JSON is not supported.
 
+- **Licenses catalog and next-step envelopes**: `spa licenses list` is the catalog. Bare `spa licenses` exits 2. The scan uses the environment config (no relative `--config` required) and compact rows include `capabilities`. Successful `apps add` and `provision` envelopes include `data.next`. A normal app without `--roles` returns `ok: false` with `ready: false` and a roles `choice` (`allowed` plus `suggested`).
+
 ### Changed
+
+- **Licenses is not native**: `spa aws` and `spa shell` remain the native exceptions. `spa licenses list` uses the `CommandResult` envelope with `schema_version`. Default `spa validate` fails closed when ITSI or ES is in config but no matching license capability is set. Nested `config set` omits schema-default booleans, so `config set os '{map}'` no longer writes `disable_selinux` and similar defaults. `/spa-create-config` scans with `spa --env NAME --agent licenses list`, follows `data.next`, authors only non-default OS keys, and prints provision and deploy as two commands.
 
 - **Create-config design summary**: Phase 11 is the plan-mode write-preview (`assets/design-summary-template.md`). It is not `spa architecture plan FILE`. One yes (the reconfirmation table) starts Phase 12.
 

@@ -864,10 +864,29 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "licenses",
+            "summary": "License discovery. List Software licenses. Bare spa licenses exits 2.",
+            "example": "spa --agent licenses list",
+        },
+        {
+            "name": "licenses list",
             "summary": "Inspect license type, expiration and ITSI/ES entitlements",
             "flags": [
+                {
+                    "long": "--software-dir",
+                    "help": "Software directory (default: ../Software from SPA_ENV_DIR, SPA splunk_software_dir)",
+                },
+                {
+                    "long": "--config",
+                    "help": "splunk_config.yml path to detect ITSI/ES and validate current license settings",
+                },
                 {"long": "--details", "help": "Include the full license inventory", "takes_value": False},
+                {
+                    "long": "--no-env-recommend",
+                    "help": "Do not mention optional licenses when ITSI is not in config",
+                    "takes_value": False,
+                },
             ],
+            "example": "spa --agent licenses list",
         },
         {
             "name": "run",

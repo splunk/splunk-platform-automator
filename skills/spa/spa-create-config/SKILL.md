@@ -73,8 +73,12 @@ Write mode: **1 → 2 → 3 → 4 → 5 → gate → init → 6–10 → reconfi
 - **No environment-scoped commands before init:** Do not run `spa init`, `spa --env NAME`, `spa config set`, `spa config add`, `spa config move`, `spa apps add`, or `spa validate` until the gate has been passed and init is confirmed. `spa architecture plan FILE` is read-only and needs no environment.
 - **Architecture file (optional):** Do not parse the file. Follow [architecture-input.md](references/architecture-input.md). Path B check is required before validate.
 - **Phase 9 (apps) is mandatory:** Always run Phase 9, even when the user did not mention apps. Always ask "Do you want to add apps?" with two clear options: "Yes, add apps" or "No, trial-only". Record the choice and proceed accordingly.
-- **Content packs follow questionnaire:** When ITSI (app 1841) is selected, always run `spa apps content-packs list 1841` and ask with AskQuestion which packs to add. Do not guess pack names or IDs; always search first.
-- **No writes until Phase 12 in plan mode:** record all decisions but run no `spa init`, `spa environment init`, `spa config set`, `add`, `unset`, `merge`, `move`, or `apps add` until the plan is approved and Phase 12 begins.
+- **Follow `data.next`:** After every `apps add` / `licenses list`, AskQuestion each `ask` then run `command` in order. Do not invent follow-ups the envelope omitted. For a normal app, if add returns `ready: false` with a roles choice, ask over `allowed` (pre-check `suggested`) and retry with `--roles`. Do not guess. SPA places TAs by role, not by host.
+- **Content packs follow the envelope:** After ITSI (1841), `data.next` names `spa --agent apps content-packs list 5391`. Ask with AskQuestion which packs to add (include None). Do not guess pack names or IDs.
+- **Do not combine Phases 4–10.** One phase, then the next.
+- **New host:** `spa --env NAME config add 'splunk_hosts[name=NAME]' '{"roles":[...]}' --yes`. Never `config add splunk_hosts`. Never a file edit.
+- **OS keys:** set leaf paths only. Never `config set os '{whole map}'`. Author only non-default keys (`os.packages`, `os.set_hostname` if chosen).
+- **No writes until Phase 12 in plan mode:** record all decisions but run no `spa init`, `spa environment init`, `spa config set`, `add`, `unset`, `merge`, `move`, or `apps add` until the reconfirmation yes and Phase 12 begins.
 
 **Guardrail enforcement for the agent:**
 1. If you complete Phase 1/2 but the user asks to proceed to init before path A has topology, provider, and OS, respond: "Path A still needs topology, provider, and OS before init. Let me ask..." Then ask them. Path B needs only the acknowledged architecture plan and the provider.
@@ -223,11 +227,11 @@ Ask scale-out vs scale-up; default **scale out** for Splunk.
 
 ## Phase 5 — Linux OS
 
-Pick OS via `spa --agent config search os`, then `spa --agent config explain os`, `os.disable_apparmor`, or `terraform.aws.ssh_username`. Author each chosen value with `spa --agent config set`; do not pass OS through `spa init`.
+Pick OS via `spa --agent config search os`, then `spa --agent config explain os`, `os.packages`, or `terraform.aws.ssh_username`. Author each chosen leaf with `spa --agent config set`; never `config set os '{whole map}'`. Omit schema-default booleans. Do not pass OS through `spa init`.
 
 **Recommended:** Amazon Linux 2023, RHEL 10, or Ubuntu 24.04 LTS (latest AMI in region).
 
-Set global `os:` block, expected `ssh_username`, and **polkit** (`polkit` on AL/RHEL; `policykit-1` on Ubuntu — required for forwarders and all hosts unless `splunk_use_policykit: false`).
+Set `os.packages` (acl plus **polkit** on AL/RHEL or `policykit-1` on Ubuntu), `os.set_hostname` if chosen, and `terraform.aws.ssh_username`.
 
 **Exit:** OS family chosen; `os:` template ready.
 
@@ -260,7 +264,7 @@ Run this before the first `spa init` or `spa environment init` for a new environ
 
 6. **Run init only after the yes, and only in write mode.** Plan mode skips this step; Phase 12 runs it. Write mode then continues with Phase 6 (AWS settings) and the later config steps, and the app step (Phase 9).
 
-**Write barrier.** Until step 6 has run, no writing command runs: no `spa init`, `spa environment init`, `spa architecture apply`, `spa config set|add|unset|merge|move|topology|provider|header set`, or `spa apps add|remove`. These stay allowed: `spa architecture plan`, `spa --agent config search|explain|get`, `spa aws ...`, `spa --agent environment list`, `spa licenses`, and `spa --agent apps search|snippet`.
+**Write barrier.** Until step 6 has run, no writing command runs: no `spa init`, `spa environment init`, `spa architecture apply`, `spa config set|add|unset|merge|move|topology|provider|header set`, or `spa apps add|remove`. These stay allowed: `spa architecture plan`, `spa --agent config search|explain|get`, `spa aws ...`, `spa --agent environment list`, `spa --agent licenses list`, and `spa --agent apps search|snippet`.
 
 **Target check (every write).** Pass `--env NAME` on each write, or run it from the target directory. Config and apps success envelopes include `resolved_env_name`, `env_dir`, and `config_file`. After each write, confirm they match the step 5 target. If they do not, stop, report the mismatch, and do not run another write. Never write to the registry default by accident.
 
@@ -323,7 +327,7 @@ Always ask, even when the user did not mention apps. Use AskQuestion if availabl
 **Loop (when the answer is yes):**
 
 1. Search and add one app with [spa-apps](../spa-apps/SKILL.md). For a normal app, ask with AskQuestion which roles it goes to before `spa --agent apps add`. ITSI and content packs have no roles question.
-1b. **ITSI (1841) first.** If the app just added is ITSI (1841), ask about content packs before the next question. Run `spa --agent apps content-packs list 5391`, ask with AskQuestion which packs to add (include "None"), and add each chosen pack with `spa --agent apps add 5391 --content-pack NAME`. Then go to step 2.
+1b. **ITSI (1841) first.** Follow `data.next` after the add: licenses list, then `spa --agent apps content-packs list 5391`. Ask with AskQuestion which packs to add (include "None"), and add each chosen pack with `spa --agent apps add 5391 --content-pack NAME`. Then go to step 2.
 2. After each add, ask with AskQuestion: **"Add another app?"** Options: Yes, add another; No, done with apps.
 3. On yes, repeat from step 1 until the operator answers no. Do not skip the question after any add.
 4. On no, show the current list with `spa --agent config get splunk_app_deployment` and confirm it is right. Then move on to Phase 10.
@@ -337,7 +341,7 @@ The loop ends only when the operator answers no. Apps added in this session go i
 [licenses.md](references/licenses.md). Run **after Phase 9** so ITSI detection is accurate. Always ask, even when no license file is found: a trial-only decision is reconfirmed before Phase 12.
 
 ```bash
-spa licenses --config config/splunk_config.yml --json
+spa --env NAME --agent licenses list
 ```
 
 1. Scan the Software directory for `*.lic` / `*.License` and inspect sanitized parsed
@@ -471,7 +475,8 @@ Validation passed. **Always** ask which way to continue with an AskQuestion call
 - **C) Wait:** stop here; you run them later.
 
 ```bash
-spa provision --yes && spa deploy --yes
+spa provision --yes
+spa deploy --yes
 ```
 
 Each run waits for its own explicit yes in chat. A request earlier in the chat is not that yes. Provision, deploy, `spa hosts check`, destroy, suspend, resume, and logs belong to `/spa`. Do not run them from this skill.

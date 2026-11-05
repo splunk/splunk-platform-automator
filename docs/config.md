@@ -87,7 +87,6 @@ Everything the Linux guest needs before Splunk installs, applied by the common r
 os:
   set_hostname: true
   packages: [acl, polkit]
-  disable_selinux: true
 ```
 
 #### Ubuntu / Debian OS block
@@ -99,7 +98,6 @@ Ubuntu LTS or Debian guests: the policykit package is policykit-1 (not polkit) a
 ```yaml
 os:
   set_hostname: true
-  disable_apparmor: true
   packages: [acl, policykit-1]
 ```
 
@@ -408,7 +406,7 @@ splunk_defaults:
 
 `splunk_defaults.splunk_license_server`
 
-Copy .lic files from Software onto a host with role license_manager, or point other hosts at an existing license manager with splunk_license_server (IP or FQDN). Pairing is checked by spa validate and spa licenses. ITSI/ES need matching entitlement files.
+Copy .lic files from Software onto a host with role license_manager, or point other hosts at an existing license manager with splunk_license_server (IP or FQDN). Pairing is checked by spa validate and spa licenses list. ITSI/ES need matching entitlement files.
 
 ```yaml
 splunk_defaults:

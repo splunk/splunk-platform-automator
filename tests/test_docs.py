@@ -536,7 +536,7 @@ class TestSpaSkill:
         assert "Confirmed: trial-only license. Continue?" in phase6b
         assert "If `proposed_splunk_license_file` is non-empty, ask" not in phase6b
         assert "No usable files in Software → warn" not in phase6b
-        assert "spa licenses --config config/splunk_config.yml --json" in phase6b
+        assert "spa --env NAME --agent licenses list" in phase6b
         step0 = text[text.index("## Step 0"):text.index("## Pre-Phase Checkpoint")]
         assert "spa licenses" not in step0, "licenses are scanned once, in Phase 10"
 
@@ -641,7 +641,9 @@ class TestSpaSkill:
             encoding="utf-8"
         )
         phase9 = text[text.index("## Phase 14 — Handoff"):]
-        assert "spa provision --yes && spa deploy --yes" in phase9
+        assert "spa provision --yes" in phase9
+        assert "spa deploy --yes" in phase9
+        assert "spa provision --yes && spa deploy --yes" not in phase9
         assert "Show me the command" in phase9 or "print" in phase9.lower()
         assert "explicit yes" in phase9
         assert "does **not** auto-provision" not in phase9

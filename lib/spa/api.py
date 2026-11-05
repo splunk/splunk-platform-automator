@@ -406,6 +406,59 @@ class LocalSpaSession:
             return CommandResult(ok=False, error=message, code=2)
         return None
 
+    def _apps_add_roles_choice(
+        self, app_id: Optional[str], roles: Optional[Sequence[str]]
+    ) -> Optional[CommandResult]:
+        from spa.apps import AppsError, classify_kind, get_app, parse_app_id
+        from spa.next_steps import roles_on_hosts, suggested_roles_for_app
+        from spa.preflight import load_config_mapping
+
+        if roles:
+            return None
+        try:
+            parsed = parse_app_id(app_id)
+            kind = classify_kind(parsed, get_app(parsed))
+        except (AppsError, Exception):
+            return None
+        if kind not in {"ta", "es_not_premium"}:
+            return None
+        try:
+            config = load_config_mapping(self.paths.config_file)
+        except Exception:
+            config = {}
+        allowed = roles_on_hosts(config)
+        suggested = [role for role in suggested_roles_for_app(parsed) if not allowed or role in allowed]
+        retry = "spa --agent apps add %s --roles ROLE --yes" % parsed
+        return CommandResult(
+            ok=False,
+            error="spa apps add needs --roles.",
+            code=1,
+            data={
+                "ready": False,
+                "app_id": parsed,
+                "kind": kind,
+                "requirements": [
+                    {
+                        "kind": "choice",
+                        "rule_id": "apps.target_roles",
+                        "summary": "Choose target_roles from roles on splunk_hosts.",
+                        "allowed": allowed,
+                        "suggested": suggested,
+                        "retry": retry,
+                    }
+                ],
+            },
+        )
+
+    def _lifecycle_next(self, action: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        if action != "provision":
+            return data
+        from spa.next_steps import provision_next
+
+        payload = dict(data)
+        payload["next"] = provision_next()
+        return payload
+
     def _env_lookup_gate(self) -> Optional[CommandResult]:
         """Reject missing lookup targets before confirmation, inventory, or providers."""
         from spa.preflight import env_lookup_readiness, load_config_mapping, unresolved_env_message
@@ -1016,6 +1069,9 @@ class LocalSpaSession:
                         stdin_text=stdin_text,
                     )
                     return _mutation_result("apps remove", data)
+                missing_roles = self._apps_add_roles_choice(app_id, roles)
+                if missing_roles:
+                    return missing_roles
                 built = build_entry(
                     app_id,
                     version=version or "latest",
@@ -1048,6 +1104,16 @@ class LocalSpaSession:
                         "omitted_defaults": built.get("omitted_defaults") or [],
                     }
                 )
+                from spa.next_steps import apps_add_next
+
+                follow = apps_add_next(
+                    kind=str(built.get("kind") or ""),
+                    app_id=built.get("app_id"),
+                    playbooks=built.get("playbooks") or [],
+                    customize=bool(customize),
+                )
+                if follow:
+                    data["next"] = follow
                 return _mutation_result("apps add", data)
             if action == "download":
                 blocked = self._env_gate()
@@ -1625,7 +1691,7 @@ class LocalSpaSession:
                 data = {"provider": provider.name, "action": action}
                 data.update(outcome)
                 data.update(log.envelope_fields())
-                return CommandResult(ok=True, data=data)
+                return CommandResult(ok=True, data=self._lifecycle_next(action, data))
             rc = outcome
             if provider.name in {"aws", "virtualbox"} and external and action == "provision":
                 self._merge_external_lines(snapshot, external)
@@ -1647,6 +1713,8 @@ class LocalSpaSession:
         if action == "provision" and external:
             data["skipped_external"] = list(external)
         data.update(log.envelope_fields())
+        if rc == 0:
+            data = self._lifecycle_next(action, data)
         return CommandResult(
             ok=rc == 0,
             code=rc,
@@ -2150,12 +2218,10 @@ class LocalSpaSession:
         config: Optional[str] = None,
         env_recommend: bool = True,
     ) -> CommandResult:
-        blocked = self._env_gate()
-        if blocked:
-            return blocked
         from spa import licenses as licenses_mod
+        from spa.next_steps import licenses_list_next
 
-        project_root = licenses_mod.resolve_env_root()
+        project_root = Path(self.paths.spa_env_dir)
         config_path = None
         if config:
             config_path = Path(config).expanduser()
@@ -2163,15 +2229,20 @@ class LocalSpaSession:
                 config_path = (Path.cwd() / config_path).resolve()
                 if not config_path.is_file():
                     config_path = (licenses_mod.repo_root_from_script() / config).resolve()
+        elif self.paths.config_file and Path(self.paths.config_file).is_file():
+            config_path = Path(self.paths.config_file)
         try:
             data = licenses_mod.scan_licenses(
                 project_root,
-                software_dir=software_dir,
+                software_dir=software_dir or str(self.paths.software_dir),
                 config_path=config_path,
                 env_recommend=env_recommend,
             )
         except Exception as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
+        follow = licenses_list_next(data if isinstance(data, dict) else {})
+        if follow:
+            data["next"] = follow
         return CommandResult(ok=True, data=data)
 
     def architecture_plan(self, path: str) -> CommandResult:
@@ -2242,6 +2313,11 @@ class LocalSpaSession:
             return CommandResult(ok=False, error=str(exc), code=1)
         data.setdefault("warnings", [])
         data["warnings"] = list(data.get("warnings") or []) + warnings
+        from spa.next_steps import remaining_next
+
+        follow = remaining_next(data.get("remaining") or [])
+        if follow:
+            data["next"] = follow
         return _mutation_result("architecture apply", data)
 
     def architecture_check(self, path: str) -> CommandResult:

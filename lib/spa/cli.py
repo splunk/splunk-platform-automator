@@ -42,7 +42,7 @@ from spa.skills import supported_platform_list
 # Commands whose flags belong to the wrapped tool, not to spa (spa shell idx1,
 # spa aws --check-auth). argparse.REMAINDER drops a leading option, so these are
 # split off before the spa parser runs.
-NATIVE_FLAG_COMMANDS = ("shell", "sh", "aws", "licenses", "lic")
+NATIVE_FLAG_COMMANDS = ("shell", "sh", "aws")
 # Accepted at the command position, omitted from parent help and agent errors.
 # ``env`` stays a visible argparse alias of ``environment``.
 _HIDDEN_ALIASES = {
@@ -83,7 +83,7 @@ _HIDDEN_ALIASES = {
 _VISIBLE_ALIAS = {"environment": frozenset({"env"})}
 # These must keep working without a venv: they are how an operator inspects or
 # builds one. Every other command reads YAML or runs Ansible, so it is gated.
-VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills", "completion"})
+VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills", "completion", "licenses"})
 GLOBAL_OPTS_WITH_VALUE = ("--start-dir", "--env")
 # Header flags take a value. Their value must not be read as a command word,
 # so `config header --intent set` stays `config header` and not `config header set`.
@@ -281,7 +281,7 @@ def _positional_tokens(head: Sequence[str]) -> List[str]:
 def _schema_help(head: Sequence[str]) -> Optional[int]:
     """Agent --help is one COMMAND_SCHEMA entry, or an index at spa --help.
 
-    Native aws, licenses, and shell help stay text. Playbook help stays on
+    Native aws and shell help stay text. Playbook help stays on
     the spa run --help path.
     """
     if not any(token in {"-h", "--help"} for token in head):
@@ -653,6 +653,10 @@ ARCHITECTURE_NEEDS_ACTION = (
     "Plan:  spa architecture plan FILE\n"
     "Apply: spa architecture apply FILE --yes\n"
     "Check: spa architecture check FILE\n"
+)
+LICENSES_NEEDS_ACTION = (
+    "spa licenses needs an action.\n"
+    "List: spa licenses list"
 )
 
 CONFIG_NEEDS_ACTION = (
@@ -1029,6 +1033,22 @@ def _print_command_error(result: CommandResult, as_agent: bool = False) -> int:
     if result.error:
         print(result.error, file=sys.stderr)
     return result.code
+
+
+def _print_next(data: Optional[Dict[str, Any]]) -> None:
+    items = (data or {}).get("next") or []
+    if not items:
+        return
+    print("Next:", file=sys.stderr)
+    for row in items:
+        if not isinstance(row, dict):
+            continue
+        ask = str(row.get("ask") or row.get("id") or "").strip()
+        command = str(row.get("command") or "").strip()
+        if ask and command:
+            print("%s\n  %s" % (ask, command), file=sys.stderr)
+        elif ask:
+            print(ask, file=sys.stderr)
 
 
 def _print_redacted_diff(args, data: Dict[str, Any]) -> None:
@@ -2413,9 +2433,40 @@ def _run(argv: Sequence[str]) -> int:
         add_help=False, accept_mode_flags=False,
     )
     _add_command(sub, "aws", help="AWS discovery (spa aws --help)", add_help=False, accept_mode_flags=False)
-    _add_command(
-        sub, "licenses", aliases=["lic"], help="License discovery (spa licenses --help)",
-        add_help=False, accept_mode_flags=False,
+    p_licenses = _add_command(
+        sub,
+        "licenses",
+        aliases=["lic"],
+        help="List Software licenses and propose splunk_license_file",
+        epilog=LICENSES_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_env_selector(p_licenses)
+    licenses_sub = p_licenses.add_subparsers(dest="licenses_cmd", metavar="ACTION")
+    p_licenses_list = _add_action(
+        licenses_sub,
+        "list",
+        help="Inspect license type, expiration, and ITSI/ES entitlements",
+    )
+    _add_mode_flags(p_licenses_list)
+    p_licenses_list.add_argument(
+        "--software-dir",
+        help="Software directory (default: ../Software from SPA_ENV_DIR, SPA splunk_software_dir)",
+    )
+    p_licenses_list.add_argument(
+        "--config",
+        help="splunk_config.yml path to detect ITSI/ES and validate current license settings",
+    )
+    p_licenses_list.add_argument(
+        "--no-env-recommend",
+        dest="no_env_recommend",
+        action="store_true",
+        help="Do not mention optional licenses when ITSI is not in config",
+    )
+    p_licenses_list.add_argument(
+        "--details",
+        action="store_true",
+        help="Include the full license inventory",
     )
 
     p_architecture = _add_command(
@@ -2549,7 +2600,7 @@ def _run(argv: Sequence[str]) -> int:
     if args.command == "logs" and verbosity:
         parser.error("verbosity is only valid while executing a command")
     as_agent = agent_mode(force_agent=args.agent or args.json, force_human=args.no_agent)
-    # Shell stays human text. aws and licenses use the detected agent mode.
+    # Shell stays human text. aws uses the detected agent mode.
     if invoked in ("shell", "sh") and not args.agent:
         as_agent = agent_mode(force_agent=False, force_human=args.no_agent)
 
@@ -2598,12 +2649,14 @@ def _run(argv: Sequence[str]) -> int:
     architecture_without_env = args.command == "architecture" and _action(
         args, "architecture_cmd"
     ) in {None, "plan"}
+    licenses_without_env = args.command == "licenses"
     if (
         args.command not in {"init", "agent", "environment", "doctor", "venv", "skills", "completion"}
         and not native_help_only
         and not apps_without_env
         and not config_without_env
         and not architecture_without_env
+        and not licenses_without_env
     ):
         missing = env_dir_required_error(paths)
         if missing:
@@ -2890,6 +2943,7 @@ def _run(argv: Sequence[str]) -> int:
                 )
                 print("Retry: %s" % requirement.get("retry"))
             _print_redacted_diff(args, data)
+            _print_next(data)
             return result.code
         if not result.ok:
             print(result.error or "apps failed", file=sys.stderr)
@@ -2920,6 +2974,7 @@ def _run(argv: Sequence[str]) -> int:
                 print(data["note"])
             _print_redacted_diff(args, data)
             print("Run spa validate after the final edit.")
+            _print_next(data)
             return 0
         sys.stdout.write(data.get("snippet") or "")
         return 0
@@ -3354,12 +3409,33 @@ def _run(argv: Sequence[str]) -> int:
             return exc.code if isinstance(exc.code, int) else 1
 
     if args.command == "licenses":
+        licenses_cmd = _action(args, "licenses_cmd")
+        if licenses_cmd != "list":
+            return _reject(LICENSES_NEEDS_ACTION, as_agent)
         from spa import licenses as licenses_mod
 
-        try:
-            return licenses_mod.main([*native, *extra], as_agent=as_agent)
-        except SystemExit as exc:
-            return exc.code if isinstance(exc.code, int) else 1
+        result = session.licenses(
+            software_dir=getattr(args, "software_dir", None),
+            config=getattr(args, "config", None),
+            env_recommend=not bool(getattr(args, "no_env_recommend", False)),
+        )
+        if as_agent:
+            if result.ok and isinstance(result.data, dict):
+                result = CommandResult(
+                    ok=True,
+                    data=licenses_mod._agent_license_payload(
+                        result.data,
+                        details=bool(getattr(args, "details", False)),
+                    ),
+                    code=result.code,
+                )
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+            return result.code
+        sys.stdout.write(licenses_mod.format_licenses_text(result.data or {}))
+        _print_next(result.data if isinstance(result.data, dict) else {})
+        return result.code
 
     parser.print_help()
     return 1

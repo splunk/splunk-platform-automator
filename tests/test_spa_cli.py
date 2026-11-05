@@ -140,7 +140,6 @@ def test_shell_list_flag_is_gone():
         ["sh", "idx1"],
         ["shell", "-c", "local.txt", "idx1:/tmp/"],
         ["aws", "--check-auth", "--json"],
-        ["licenses", "--json"],
     ],
 )
 def test_native_flags_are_not_parsed_by_spa(args):
@@ -149,11 +148,10 @@ def test_native_flags_are_not_parsed_by_spa(args):
     assert "unrecognized arguments" not in (result.stdout + result.stderr)
 
 
-def test_aws_and_licenses_help_use_own_parser():
-    for command, usage in (("aws", "usage: spa aws"), ("licenses", "usage: spa licenses")):
-        result = run_spa([command, "--help"])
-        assert result.returncode == 0, result.stderr
-        assert usage in result.stdout
+def test_aws_help_uses_own_parser():
+    result = run_spa(["aws", "--help"])
+    assert result.returncode == 0, result.stderr
+    assert "usage: spa aws" in result.stdout
 
 
 @pytest.mark.parametrize(
@@ -182,7 +180,7 @@ def test_split_passthrough_contract(argv, expected_head, expected_extra):
     ("argv", "expected_head", "expected_native"),
     [
         (["sh", "idx1"], ["sh"], ["idx1"]),
-        (["lic", "--json"], ["lic"], ["--json"]),
+        (["lic", "--json"], ["lic", "--json"], []),
         (["--json", "aws", "--list-regions"], ["--json", "aws"], ["--list-regions"]),
         (
             ["--env", "aws", "--start-dir", "licenses", "aws", "--json"],
@@ -375,7 +373,7 @@ def test_agent_validate_envelope_identifies_registered_env(tmp_path, monkeypatch
 
 
 def test_agent_validate_check_licenses_hides_filesystem_paths(tmp_path, monkeypatch, capsys):
-    """Six license files stay as basename, status, and expiration unless --details."""
+    """Six license files stay as basename, status, expiration, and capabilities unless --details."""
     import copy
 
     from spa.api import CommandResult, open_session
@@ -448,6 +446,7 @@ def test_agent_validate_check_licenses_hides_filesystem_paths(tmp_path, monkeypa
             "basename": "license-%d.lic" % index,
             "status": "valid",
             "expiration": "2099-01-%02d" % index,
+            "capabilities": ["enterprise"],
         }
         for index in range(1, 7)
     ]
@@ -458,17 +457,13 @@ def test_agent_validate_check_licenses_hides_filesystem_paths(tmp_path, monkeypa
     assert detailed["data"]["license_scan"]["discovered_files"][0]["path"] == "/tmp/Software/license-1.lic"
 
 
-def test_detected_agent_uses_json_for_licenses_and_aws(monkeypatch):
+def test_detected_agent_uses_json_for_aws(monkeypatch):
     """A detected agent gets the JSON payload. --no-agent stays text. Shell stays text."""
     from types import SimpleNamespace
 
     from spa import cli
 
     seen = {}
-
-    def fake_licenses(argv=None, as_agent=False):
-        seen["licenses"] = as_agent
-        return 0
 
     def fake_aws(argv=None, as_agent=False, environment_region=None):
         seen["aws"] = as_agent
@@ -500,21 +495,18 @@ def test_detected_agent_uses_json_for_licenses_and_aws(monkeypatch):
     monkeypatch.setattr(cli, "_envelope_identity", lambda paths: None)
     monkeypatch.setattr(cli, "env_dir_required_error", lambda paths: None)
     monkeypatch.setattr(cli, "venv_required_error", lambda paths: None)
-    monkeypatch.setattr("spa.licenses.main", fake_licenses)
     monkeypatch.setattr("spa.aws.main", fake_aws)
     monkeypatch.setattr("spa.shell.main", fake_shell)
 
-    assert cli.main(["licenses"]) == 0
-    assert seen["licenses"] is True
     assert cli.main(["aws", "--region", "eu-central-1", "--validate"]) == 0
     assert seen["aws"] is True
-    assert cli.main(["--no-agent", "licenses"]) == 0
-    assert seen["licenses"] is False
+    assert cli.main(["--no-agent", "aws", "--region", "eu-central-1", "--validate"]) == 0
+    assert seen["aws"] is False
 
     seen.clear()
     monkeypatch.delenv("SPA_AGENT", raising=False)
-    assert cli.main(["licenses"]) == 0
-    assert seen["licenses"] is False
+    assert cli.main(["aws", "--region", "eu-central-1", "--validate"]) == 0
+    assert seen["aws"] is False
 
 
 def test_agent_validate_unregistered_env_dir_identity_name_is_null(tmp_path, monkeypatch, capsys):
@@ -1527,6 +1519,9 @@ def _assert_usage_rejection(argv, message):
         (["environment", "init", "--list"], "Listing examples is: spa init list"),
         (["hosts"], "spa hosts needs an action."),
         (["hosts", "--status"], "spa hosts needs an action."),
+        (["licenses"], "spa licenses needs an action."),
+        (["lic"], "spa licenses needs an action."),
+        (["licenses", "--json"], "spa licenses needs an action."),
         (["logs"], "spa logs needs a run."),
         (["logs", "list", "--last"], "spa logs list does not take --last or --follow."),
         (["run", "list", "--yes"], "spa run list does not take run options."),
