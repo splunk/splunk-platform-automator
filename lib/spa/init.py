@@ -746,6 +746,9 @@ def write_composed_config(
                     merged.append(warning)
             architecture_report["warnings"] = merged
             architecture_report["skipped"] = list(SKIPPED_FIELDS)
+            architecture_report["skipped_app_folders"] = list(
+                architecture.get("apps_by_role_folders") or []
+            )
             remaining = remaining_questions(composed, has_provider=True)
             if any(item.get("deferred") for item in report.get("placement") or []):
                 remaining.append("license_manager")

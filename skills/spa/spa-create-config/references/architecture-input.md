@@ -18,7 +18,7 @@ Do not run the SVA questionnaire. Check is mandatory on this path, before valida
 4. Host ↔ role map; `spa config move role` / `config add` as answered.
 5. Optional `spa config move host --prefix` / `--postfix` / `move host OLD --to NEW`.
 6. Sizing, OS, AWS if `aws`.
-7. Apps (always ask). Ignore `apps.by_role`. ES search heads may already exist; app 263 still goes through `/spa-apps` if they want ES.
+7. Apps (always ask). Follow `data.next` after `spa architecture plan FILE` / init when `apps.by_role` listed folder names (ClusterBaseConfigs / BaseConfigs). AskQuestion whether to add those as local apps via `/spa-apps`. Do not auto-import. ES search heads may already exist; app 263 still goes through `/spa-apps` if they want ES.
 8. Licenses. If a file is chosen and `license_manager` is missing, say so and add it.
 9. **`spa architecture check FILE` (required).** Then `spa validate`. Phase 14 handoff.
 
@@ -36,7 +36,7 @@ spa validate
 
 `--architecture` and `--example` are exclusive. `confirmed: false` refuses init and apply. Plan warns and still prints the overlay.
 
-Do not parse the architecture file in this skill. `spa architecture plan FILE` is the reader. The checked-in shape is `examples/architectures/c3.json`. SPA ignores `apps.by_role` and `delivery`. If `secrets` is present, only environment variable **names** are collected; values are never shown. Phases 9 and 10 (apps and licenses) are still asked.
+Do not parse the architecture file in this skill. `spa architecture plan FILE` is the reader. The checked-in shape is `examples/architectures/c3.json`. SPA does not auto-import `apps.by_role` or `delivery`. After plan/init, `data.next` names skipped folders so the operator can add them as local apps via `/spa-apps`. If `secrets` is present, only environment variable **names** are collected; values are never shown. Phases 9 and 10 (apps and licenses) are still asked.
 
 ## Version gate
 
@@ -45,6 +45,6 @@ Supported version is `0.4.0`. Missing `kind` or `schema_version` is an error. Ne
 ## Rules
 
 - Every `deployment.roles` entry must map to an AllowedRole. An unknown extra role is a hard error.
-- `license_manager` is not written until a license file is set (schema pairing). Plan still shows the proposed host. Init and apply warn and list `license_manager` under Remaining; they do not fail. After licenses, add it if missing, then `spa architecture check`.
+- Architecture overlay still defers writing `license_manager` until a license file is set. The schema allows an LM host without files (trial). Plan still shows the proposed host. Init and apply warn and list `license_manager` under Remaining; they do not fail. After licenses, add it if missing, then `spa architecture check`.
 - Indexers and SHC members stay on their own hosts. Overlay scales `idxN` / `shN`.
 - Secret-shaped values are rejected and never echoed.

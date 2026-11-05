@@ -228,6 +228,40 @@ def test_follow_ctrl_c_exits_quietly(tmp_path, monkeypatch):
     assert "Traceback" not in output.getvalue()
 
 
+def test_wait_for_new_run_skips_older_jsonl(tmp_path):
+    from spa.runlog import wait_for_new_run
+
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+    folder = Path(extra["SPA_ENV_DIR"]) / "logs"
+    folder.mkdir()
+
+    def write_run(run_id: str, start: str) -> Path:
+        jsonl = folder / ("%s.jsonl" % run_id)
+        jsonl.write_text('{"msg":"%s"}\n' % run_id, encoding="utf-8")
+        (folder / ("%s.meta.json" % run_id)).write_text(
+            json.dumps(
+                {
+                    "run_id": run_id,
+                    "command": "deploy",
+                    "log": str(jsonl),
+                    "start": start,
+                }
+            ),
+            encoding="utf-8",
+        )
+        return jsonl
+
+    write_run("older", "2026-09-17T17:02:00.123+02:00")
+    since = datetime(2026, 9, 18, 12, 0, 0, tzinfo=timezone(timedelta(hours=2)))
+    assert wait_for_new_run(paths, since, idle_passes=1, sleep_s=0) is None
+    newer = write_run("newer", "2026-09-18T15:00:00.000+02:00")
+    found = wait_for_new_run(paths, since, idle_passes=1, sleep_s=0)
+    assert found is not None
+    assert found["run_id"] == "newer"
+    assert found["log"] == str(newer)
+
+
 def test_follow_completed_legacy_run_replays_with_infinite_follow(tmp_path, monkeypatch):
     from spa.runlog import follow_jsonl
 
@@ -589,6 +623,8 @@ def test_agent_phase_change_is_one_plain_line(tmp_path):
     lines = [line for line in stderr.getvalue().splitlines() if line.strip()]
     assert lines == [
         "Configuring the cluster manager.",
+        "Still configuring the cluster manager.",
+        "Still configuring the cluster manager.",
         "Configuring Splunk.",
     ]
     assert all(not line.startswith("{") for line in lines)
@@ -634,6 +670,7 @@ def test_runlog_agent_stderr_is_sparse(tmp_path):
     assert "password=secret" not in err
     plain = [line for line in err.splitlines() if line.strip() and not line.startswith("{")]
     assert plain[0] == "Downloading Splunk on idx1."
+    assert "Still downloading Splunk on idx1." in plain
     assert plain.count("Downloading Splunk on idx1.") == 1
     events = [json.loads(line) for line in err.splitlines() if line.startswith("{")]
     kinds = [row.get("status") for row in events]
@@ -2128,7 +2165,12 @@ def test_agent_render_writes_phase_sentences_to_stderr(tmp_path, capsys):
         }
     )
     log.finish(0)
-    assert stderr.getvalue() == "Creating shidx.\nshidx is up.\n"
+    assert stderr.getvalue() == (
+        "Creating shidx.\n"
+        "Still creating shidx.\n"
+        "Still creating shidx.\n"
+        "shidx is up.\n"
+    )
     assert capsys.readouterr().out == ""
 
 
@@ -2196,10 +2238,52 @@ def test_agent_render_deploy_sentences_skip_heartbeats(tmp_path):
     assert text == (
         "Hosts are already prepared.\n"
         "Downloading Splunk on shidx.\n"
+        "Still downloading Splunk on shidx.\n"
         "Configuring the cluster manager.\n"
         "The cluster manager is already configured.\n"
         "Configuring Splunk.\n"
+        "Still configuring Splunk.\n"
         "Installing cluster manager apps.\n"
+    )
+
+
+def test_agent_heartbeat_after_already_configured_repeats_that_sentence(tmp_path):
+    """A heartbeat after _close_role repeats the already-configured line, not the opening one."""
+    stderr = StringIO()
+    log = _phase_log(
+        tmp_path,
+        command="deploy",
+        playbook="ansible/deploy_site.yml",
+        agent=True,
+        stream=stderr,
+    )
+    log.emit(
+        {
+            "kind": "host_result",
+            "status": "ok",
+            "playbook": "ansible/deploy_site.yml",
+            "play_file": "ansible/splunk_setup_roles.yml",
+            "play": "Setup cluster manager role",
+            "task": "Configure CM",
+            "host": "cm",
+        }
+    )
+    log.emit(
+        {
+            "kind": "host_result",
+            "status": "ok",
+            "playbook": "ansible/deploy_site.yml",
+            "play_file": "ansible/create_linkpage.yml",
+            "task": "Write the host link page",
+            "host": "localhost",
+        }
+    )
+    log.emit({"status": "heartbeat", "kind": "heartbeat"})
+    log.finish(0)
+    assert stderr.getvalue() == (
+        "Configuring the cluster manager.\n"
+        "The cluster manager is already configured.\n"
+        "Still the cluster manager is already configured.\n"
     )
 
 
@@ -2224,7 +2308,10 @@ def test_agent_render_run_restart_sentence(tmp_path):
     )
     log.emit({"status": "heartbeat", "kind": "heartbeat", "phase": "play:Restart splunk", "host": "shidx"})
     log.finish(0)
-    assert stderr.getvalue() == "Restarting Splunk on shidx.\n"
+    assert stderr.getvalue() == (
+        "Restarting Splunk on shidx.\n"
+        "Still restarting Splunk on shidx.\n"
+    )
 
 
 def test_agent_creating_uses_plan_hosts_when_apply_is_localhost(tmp_path):
@@ -2343,10 +2430,10 @@ def test_agent_twenty_heartbeats_keep_one_sentence(tmp_path):
             }
         )
     log.finish(0)
-    assert stderr.getvalue() == "Creating shidx.\n"
+    assert stderr.getvalue() == "Creating shidx.\n" + ("Still creating shidx.\n" * 20)
 
 
-def test_agent_heartbeat_does_not_repeat_the_sentence(tmp_path):
+def test_agent_heartbeat_repeats_still_from_the_last_sentence(tmp_path):
     stderr = StringIO()
     log = _phase_log(tmp_path, agent=True, stream=stderr)
     log.emit(
@@ -2365,7 +2452,11 @@ def test_agent_heartbeat_does_not_repeat_the_sentence(tmp_path):
     log._clock = lambda: base + timedelta(seconds=80)
     log.emit({"status": "heartbeat", "kind": "heartbeat", "phase": "tf_apply"})
     log.finish(0)
-    assert stderr.getvalue() == "Creating shidx.\n"
+    assert stderr.getvalue() == (
+        "Creating shidx.\n"
+        "Still creating shidx.\n"
+        "Still creating shidx.\n"
+    )
 
 
 def test_download_sentence_is_once_per_host(tmp_path):

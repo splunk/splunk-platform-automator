@@ -80,7 +80,36 @@ def test_c3_example_plans_ok_and_scales_indexers():
     assert idxc["idxc_sf"] == 2
     assert plan["config"]["splunk_defaults"]["splunk_env_name"] == "acme"
     assert "apps.by_role" in plan["skipped"]
+    assert plan.get("skipped_app_folders") == []
     assert "provider" in plan["remaining"]
+
+
+def test_plan_lists_skipped_app_folder_names(tmp_path):
+    doc = _load(C3)
+    doc["apps"] = {
+        "by_role": {
+            "indexer": ["ClusterBaseConfigs"],
+            "search_head": ["BaseConfigs", "ClusterBaseConfigs"],
+        }
+    }
+    plan = plan_for(doc)
+    assert plan["ok"] is True, plan.get("errors")
+    assert plan["skipped_app_folders"] == ["ClusterBaseConfigs", "BaseConfigs"]
+
+
+def test_cli_plan_asks_to_add_skipped_local_apps(tmp_path):
+    source = tmp_path / "arch.json"
+    doc = _load(C3)
+    doc["apps"] = {"by_role": {"indexer": ["ClusterBaseConfigs"]}}
+    source.write_text(json.dumps(doc), encoding="utf-8")
+    result = run_spa(["--agent", "architecture", "plan", str(source)])
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    nxt = payload["data"]["next"]
+    assert nxt[0]["id"] == "apps.by_role.local"
+    assert nxt[0]["required"] is False
+    assert "ClusterBaseConfigs" in nxt[0]["ask"]
+    assert "/spa-apps" in nxt[0]["ask"]
 
 
 def host_roles_for(hosts, name):

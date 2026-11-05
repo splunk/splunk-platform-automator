@@ -17,12 +17,15 @@ def _next_ids(payload):
     return [item["id"] for item in (payload.get("next") or payload.get("data", {}).get("next") or [])]
 
 
-def _hosts_config():
+def _hosts_config(*, license_file: bool = True):
+    license_line = (
+        "  splunk_license_file: Splunk_Enterprise.lic\n" if license_file else ""
+    )
     return (
         "plugin: splunk-platform-automator\n"
         "splunk_defaults:\n"
         "  splunk_admin_password: \"{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}\"\n"
-        "  splunk_license_file: Splunk_Enterprise.lic\n"
+        "%s"
         "splunk_hosts:\n"
         "  - name: sh\n"
         "    roles: [search_head]\n"
@@ -36,7 +39,7 @@ def _hosts_config():
         "    roles: [heavy_forwarder]\n"
         "  - name: lm\n"
         "    roles: [license_manager]\n"
-    )
+    ) % license_line
 
 
 def test_apps_add_itsi_includes_license_and_content_pack_next(tmp_path, monkeypatch, capsys):
@@ -68,7 +71,14 @@ def test_apps_add_itsi_includes_license_and_content_pack_next(tmp_path, monkeypa
     licenses = payload["data"]["next"][0]
     packs = payload["data"]["next"][1]
     assert licenses["command"] == "spa --agent licenses list"
+    assert licenses["required"] is False
+    assert "essentials work" in licenses["ask"].lower() or "ite work" in licenses["ask"].lower()
     assert packs["command"] == "spa --agent apps content-packs list 5391"
+    assert packs["argv"] == ["spa", "--agent", "apps", "content-packs", "list", "5391"]
+    assert packs["choice"]["allowed"] == ["none", "list", "name"]
+    assert "none" in packs["ask"].lower()
+    assert "list" in packs["ask"].lower()
+    assert "name" in packs["ask"].lower()
     assert "license" in licenses["ask"].lower()
     assert "content pack" in packs["ask"].lower()
 
@@ -187,6 +197,28 @@ def test_licenses_list_reads_env_config_and_proposes_itsi(tmp_path, monkeypatch)
     write = next(item for item in result.data["next"] if item["id"] == "config.set.license_file")
     assert "Splunk_ITSI.lic" in write["command"]
     assert "Splunk_Enterprise.lic" in write["command"]
+    listed = json.dumps(proposed, separators=(",", ":"))
+    assert write["argv"] == [
+        "spa",
+        "--agent",
+        "config",
+        "set",
+        "splunk_defaults.splunk_license_file",
+        listed,
+        "--yes",
+    ]
+    placement = next(
+        item for item in result.data["next"] if item["id"] == "license_manager.placement"
+    )
+    assert placement["argv"] == [
+        "spa",
+        "--agent",
+        "config",
+        "add",
+        "splunk_hosts[name=mc]",
+        '{"roles":["monitoring_console","license_manager"]}',
+        "--yes",
+    ]
 
 
 def test_compact_license_rows_include_capabilities():
@@ -209,7 +241,7 @@ def test_compact_license_rows_include_capabilities():
     }
 
 
-def test_default_validate_fails_itsi_without_itsi_capability():
+def test_default_validate_warns_itsi_without_itsi_capability():
     from spa.validate import license_summary, premium_entitlement_error
 
     scan = {
@@ -231,7 +263,138 @@ def test_default_validate_fails_itsi_without_itsi_capability():
         "Splunk_ITSI.lic",
     ]
     assert summary["unsatisfied_requirements"] == ["itsi"]
+    assert premium_entitlement_error(scan) is None
+
+
+def test_default_validate_fails_es_without_es_capability():
+    from spa.validate import premium_entitlement_error
+
+    scan = {
+        "itsi_in_config": False,
+        "es_in_config": True,
+        "configured_splunk_license_file": ["Splunk_Enterprise.lic"],
+        "license_manager_in_config": True,
+        "unsatisfied_requirements": ["es"],
+        "license_validation": {
+            "errors": ["ES is in config but no ES-capable license is set"],
+            "warnings": [],
+        },
+    }
     assert premium_entitlement_error(scan)
+
+
+def test_evaluate_license_role_allows_lm_and_unlicensed_itsi():
+    from spa.validate import evaluate_license_role
+
+    lm_only = evaluate_license_role(
+        {
+            "license_manager_in_config": True,
+            "configured_splunk_license_file": None,
+            "itsi_in_config": False,
+            "es_in_config": False,
+            "unsatisfied_requirements": [],
+        }
+    )
+    assert lm_only["ok"] is True
+    assert {item["id"] for item in lm_only["warnings"]} == {"license_manager.license_file"}
+
+    unlicensed_itsi = evaluate_license_role(
+        {
+            "license_manager_in_config": True,
+            "configured_splunk_license_file": ["Splunk_Enterprise.lic"],
+            "itsi_in_config": True,
+            "es_in_config": False,
+            "unsatisfied_requirements": ["itsi"],
+            "license_validation": {"errors": [], "warnings": []},
+        }
+    )
+    assert unlicensed_itsi["ok"] is True
+    assert {item["id"] for item in unlicensed_itsi["warnings"]} == {"itsi.license_file"}
+
+    files_without_lm = evaluate_license_role(
+        {
+            "license_manager_in_config": False,
+            "configured_splunk_license_file": ["Splunk_Enterprise.lic"],
+            "itsi_in_config": False,
+            "es_in_config": False,
+        }
+    )
+    assert files_without_lm["ok"] is False
+
+
+def test_apps_add_1841_writes_without_license_files(tmp_path, monkeypatch, capsys):
+    env = write_min_env(tmp_path / "env")
+    config = env / "config" / "splunk_config.yml"
+    config.write_text(_hosts_config(license_file=False), encoding="utf-8")
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(env))
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(config))
+    monkeypatch.setenv("SPLUNK_ADMIN_PASSWORD", "test")
+    from spa.cli import _run
+
+    monkeypatch.setattr(
+        "spa.apps.get_app",
+        lambda app_id, client=None: {
+            "uid": 1841,
+            "appid": "itsi",
+            "title": "Splunk IT Service Intelligence",
+            "type": "app",
+        },
+    )
+    rc = _run(["--agent", "--start-dir", str(env), "apps", "add", "1841"])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0, payload
+    assert payload["ok"] is True
+    assert payload["data"]["ready"] is True
+    authored = YAML(typ="safe").load(config.read_text(encoding="utf-8"))
+    assert any(app.get("app_id") == 1841 for app in authored["splunk_app_deployment"]["apps"])
+    warning_ids = {
+        item["id"]
+        for item in payload["data"].get("warnings") or []
+        if isinstance(item, dict)
+    }
+    assert "itsi.license_file" in warning_ids or "license_manager.license_file" in warning_ids
+    licenses = next(item for item in payload["data"]["next"] if item["id"] == "licenses.list")
+    assert licenses["required"] is False
+    assert "essentials work" in licenses["ask"].lower() or "ite work" in licenses["ask"].lower()
+
+
+def test_config_add_license_manager_without_files_writes_and_returns_next(tmp_path):
+    from spa.config_edit import config_add
+
+    env = write_min_env(tmp_path / "env")
+    path = env / "config" / "splunk_config.yml"
+    path.write_text(
+        "plugin: splunk-platform-automator\n"
+        "splunk_defaults:\n"
+        "  splunk_admin_password: \"{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}\"\n"
+        "splunk_hosts:\n"
+        "  - name: sh\n"
+        "    roles: [search_head]\n",
+        encoding="utf-8",
+    )
+    result = config_add(
+        path,
+        PROJECT_ROOT,
+        "splunk_hosts[name=lm]",
+        '{"roles":["license_manager"]}',
+    )
+    assert result["ready"] is True
+    assert result["changed"] is True
+    authored = YAML(typ="safe").load(path.read_text(encoding="utf-8"))
+    assert any(
+        host.get("name") == "lm" and "license_manager" in (host.get("roles") or [])
+        for host in authored["splunk_hosts"]
+    )
+    warning_ids = {
+        item["id"]
+        for item in result.get("warnings") or []
+        if isinstance(item, dict)
+    }
+    assert "license_manager.license_file" in warning_ids
+    assert result["next"][0]["id"] == "config.set.license_file"
+    assert result["next"][0]["required"] is False
+    assert result["next"][0]["command"] == "spa --agent licenses list"
 
 
 def test_config_set_os_map_omits_schema_default_booleans(tmp_path):
@@ -295,10 +458,16 @@ def test_provision_success_envelope_includes_hosts_check_then_deploy(
     payload = json.loads(capsys.readouterr().out)
     assert rc == 0
     assert payload["ok"] is True
-    assert _next_ids(payload["data"]) == ["hosts.check", "deploy"]
-    check, deploy = payload["data"]["next"]
+    assert _next_ids(payload["data"]) == ["hosts.check", "logs.follow", "deploy"]
+    check, follow, deploy = payload["data"]["next"]
     assert check["required"] is True
     assert check["command"] == "spa --agent hosts check"
+    assert follow["required"] is False
+    assert follow["command"] == (
+        "spa --env %s logs --follow --wait --ansible-output --color" % env.name
+    )
+    assert follow["argv"][1] == "--env"
+    assert follow["argv"][2] == env.name
     assert deploy["required"] is False
     assert deploy["command"] == "spa --agent deploy --yes"
     assert "Deploy" in deploy["ask"]

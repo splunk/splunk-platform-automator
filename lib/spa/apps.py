@@ -25,6 +25,7 @@ ITE_WORK_ID = 5403
 ITSI_ID = 1841
 CONTENT_LIBRARY_ID = 5391
 ES_ID = 263
+NIX_ID = 833
 SINGLE_PACK_IDS = frozenset({7294})
 
 SUMMARY_CHARS = 100
@@ -51,7 +52,14 @@ PINNED_SEARCH = (
     ("itsi", ITSI_ID, "app", "premium_itsi"),
     ("itsi", CONTENT_LIBRARY_ID, "app", "itsi_content_library"),
     ("es", ES_ID, "app", "es_not_premium"),
+    ("unix", NIX_ID, "addon", "ta"),
+    ("nix", NIX_ID, "addon", "ta"),
 )
+FOLDER_PINS = {
+    "unix": NIX_ID,
+    "nix": NIX_ID,
+    "splunk_ta_nix": NIX_ID,
+}
 
 _UUID = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -186,7 +194,14 @@ def _wanted_pins(
             continue
         if wanted_kind not in (None, kind):
             continue
-        pins.append(app_id)
+        if app_id not in pins:
+            pins.append(app_id)
+    folder = folder_appid(query)
+    if folder:
+        mapped = FOLDER_PINS.get(folder.lower())
+        if mapped and mapped not in pins:
+            if wanted_type in (None, "addon") and wanted_kind in (None, "ta"):
+                pins.append(mapped)
     return pins
 
 
@@ -471,6 +486,13 @@ def search(
         if extra is not None and _matches_filters(extra, wanted_type, wanted_kind):
             hits.append(extra)
             seen.add(app_id)
+    folder = folder_appid(query)
+    if folder:
+        for row in hits:
+            if str(row.get("name") or "").lower() == folder.lower():
+                if row["app_id"] not in pins:
+                    pins = [row["app_id"], *pins]
+                break
     if pins:
         hits = _pin_ids(hits, pins)
     hits = hits[:limit]

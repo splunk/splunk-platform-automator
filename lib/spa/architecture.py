@@ -49,6 +49,19 @@ ROLES_NEEDING_IDXC = frozenset({"cluster_manager", "indexer"})
 ROLES_NEEDING_SHC = frozenset({"deployer", "search_head"})
 SKIPPED_FIELDS = ("apps.by_role", "delivery")
 
+
+def _folder_names_from_by_role(by_role: Any) -> List[str]:
+    names: List[str] = []
+    if not isinstance(by_role, Mapping):
+        return names
+    for value in by_role.values():
+        items = value if isinstance(value, list) else [value]
+        for item in items:
+            text = str(item or "").strip()
+            if text and text not in names:
+                names.append(text)
+    return names
+
 ENV_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 ORG_PREFIX_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 SVA_CODE_RE = re.compile(r"^[A-Z][A-Z0-9]*$")
@@ -260,6 +273,7 @@ def parse_architecture(doc: Mapping[str, Any]) -> Tuple[Dict[str, Any], List[str
     apps = doc.get("apps") if isinstance(doc.get("apps"), Mapping) else {}
     if "by_role" not in apps:
         errors.append("apps.by_role is required")
+    apps_by_role_folders = _folder_names_from_by_role(apps.get("by_role"))
     secrets = _secret_refs(doc.get("secrets"), errors)
     if errors:
         return {}, errors, warnings
@@ -277,6 +291,7 @@ def parse_architecture(doc: Mapping[str, Any]) -> Tuple[Dict[str, Any], List[str
         "clusters": doc.get("clusters") if isinstance(doc.get("clusters"), Mapping) else {},
         "secrets": secrets,
         "has_delivery": "delivery" in doc,
+        "apps_by_role_folders": apps_by_role_folders,
         "extensions": list(doc.get("extensions") or [])
         if isinstance(doc.get("extensions"), list)
         else [],
@@ -303,6 +318,7 @@ def plan_architecture(
     report = overlay_architecture(config, parsed, warnings)
     skipped = list(SKIPPED_FIELDS)
     remaining = remaining_questions(config, has_provider=False)
+    skipped_app_folders = list(parsed.get("apps_by_role_folders") or [])
     secrets = _secret_status(parsed["secrets"], env or {})
     return _result(
         ok=True,
@@ -316,6 +332,7 @@ def plan_architecture(
             "topology_id": feature["template"],
             "confirmed": parsed["confirmed"],
             "skipped": skipped,
+            "skipped_app_folders": skipped_app_folders,
             "remaining": remaining,
             "placement": report["placement"],
             "ingested": report["ingested"],
@@ -602,6 +619,7 @@ def apply_architecture_document(
     data["ingested"] = report.get("ingested") or {}
     data["placement"] = report.get("placement") or []
     data["skipped"] = list(SKIPPED_FIELDS)
+    data["skipped_app_folders"] = list(parsed.get("apps_by_role_folders") or [])
     data["remaining"] = remaining or remaining_questions(None, has_provider=True)
     if any(item.get("deferred") for item in data.get("placement") or []):
         if "license_manager" not in data["remaining"]:

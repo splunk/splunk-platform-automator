@@ -1235,18 +1235,18 @@ class TestClusterConfigurations:
         result = validate_config(config)
         assert result.splunk_app_deployment is not None
 
-    def test_license_manager_requires_license_file(self):
-        """Test that license_manager role requires splunk_license_file."""
+    def test_license_manager_without_license_file_is_valid(self):
+        """A license_manager host is valid without splunk_license_file (trial until files are added)."""
         config = {
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [
                 {"name": "lm", "roles": ["license_manager"]}
             ]
-            # No splunk_defaults with splunk_license_file
         }
-        with pytest.raises(ConfigValidationError) as exc_info:
-            validate_config(config)
-        assert "splunk_license_file" in str(exc_info.value)
+        result = validate_config(config)
+        assert any(
+            AllowedRole.license_manager in host.roles for host in result.splunk_hosts
+        )
 
     def test_license_file_requires_license_manager(self):
         """Test that splunk_license_file requires license_manager role."""

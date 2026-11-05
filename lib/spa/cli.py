@@ -626,6 +626,7 @@ Idempotently add or update one apps[] entry. This command edits splunk_config.ym
 App kinds:
   Normal app
     APP_ID_OR_NAME --roles ROLE[,ROLE]
+    A second copy of the same app_id uses --new --roles ROLE[,ROLE].
   ITSI 1841
     No --roles; SPA authors premium_app: itsi.
   Content Library 5391
@@ -637,6 +638,7 @@ App kinds:
 APPS_ADD_EPILOG = """\
 Examples:
   spa apps add 833 --roles search_head,indexer --yes
+  spa apps add 833 --new --roles universal_forwarder,heavy_forwarder --customize --yes
   spa apps add 1841 --yes
   spa apps add 5391 --content-pack DA-ITSI-CP-nix --yes
   spa apps add 5391 --install-all-content-packs --yes
@@ -1040,6 +1042,12 @@ def _print_command_error(result: CommandResult, as_agent: bool = False) -> int:
     return result.code
 
 
+def _warning_text(warning: Any) -> str:
+    if isinstance(warning, dict):
+        return str(warning.get("message") or warning.get("id") or warning)
+    return str(warning)
+
+
 def _print_next(data: Optional[Dict[str, Any]]) -> None:
     items = (data or {}).get("next") or []
     if not items:
@@ -1072,7 +1080,7 @@ def _print_architecture_followup(data: Optional[Dict[str, Any]]) -> None:
     if remaining:
         print("Remaining: %s" % ", ".join(remaining))
     for warning in data.get("warnings") or []:
-        print("Warning: %s" % warning, file=sys.stderr)
+        print("Warning: %s" % _warning_text(warning), file=sys.stderr)
 
 
 def _print_init_messages(result: CommandResult) -> None:
@@ -1886,6 +1894,12 @@ def _run(argv: Sequence[str]) -> int:
         help="Comma-separated target_roles; required only for normal apps and rejected for ITSI/content packs",
     )
     p_apps_add.add_argument(
+        "--new",
+        dest="force_new",
+        action="store_true",
+        help="Append another apps[] row for this app_id; without it, extra copies match by exact --roles",
+    )
+    p_apps_add.add_argument(
         "--source",
         choices=["splunkbase", "local"],
         default="splunkbase",
@@ -1972,6 +1986,10 @@ def _run(argv: Sequence[str]) -> int:
     )
     _add_mode_flags(p_apps_remove)
     p_apps_remove.add_argument("app_id", metavar="APP_ID_OR_NAME", help=APP_ID_HELP)
+    p_apps_remove.add_argument(
+        "--roles",
+        help="When the app is defined more than once, remove the copy whose target_roles match (one role or the exact set)",
+    )
     p_apps_remove.add_argument("--content-pack", metavar="NAME", help="Remove one named pack under Content Library 5391")
     p_apps_remove.add_argument("--dry-run", action="store_true")
     p_apps_remove.add_argument("--expect-revision", metavar="SHA256")
@@ -2329,6 +2347,11 @@ def _run(argv: Sequence[str]) -> int:
     p_logs.add_argument("run_id", nargs="?", help="Run id (filename stem)")
     p_logs.add_argument("--last", action="store_true", help="Show the most recent run")
     p_logs.add_argument("--follow", action="store_true", help="Follow the latest jsonl file")
+    p_logs.add_argument(
+        "--wait",
+        action="store_true",
+        help="With --follow, wait for a jsonl newer than this invocation",
+    )
     _add_ansible_output(p_logs, allow_verbose=False)
     _add_env_selector(p_logs)
 
@@ -2971,8 +2994,9 @@ def _run(argv: Sequence[str]) -> int:
         print("Config %s: %s" % (shown, state))
         _print_redacted_diff(args, data)
         for warning in data.get("warnings") or []:
-            print("Warning: %s" % warning, file=sys.stderr)
+            print("Warning: %s" % _warning_text(warning), file=sys.stderr)
         print("Run spa validate after the final edit.")
+        _print_next(data)
         return 0
 
     if args.command == "apps":
@@ -3009,6 +3033,7 @@ def _run(argv: Sequence[str]) -> int:
             install_all_content_packs=bool(getattr(args, "install_all_content_packs", False)),
             content_pack=getattr(args, "content_pack", None),
             archive=getattr(args, "archive", None),
+            force_new=bool(getattr(args, "force_new", False)),
             dry_run=bool(getattr(args, "dry_run", False)),
             expect_revision=getattr(args, "expect_revision", None),
             resolve=getattr(args, "resolve", None),
@@ -3065,6 +3090,8 @@ def _run(argv: Sequence[str]) -> int:
             if data.get("note"):
                 print(data["note"])
             _print_redacted_diff(args, data)
+            for warning in data.get("warnings") or []:
+                print("Warning: %s" % _warning_text(warning), file=sys.stderr)
             print("Run spa validate after the final edit.")
             _print_next(data)
             return 0
@@ -3171,6 +3198,13 @@ def _run(argv: Sequence[str]) -> int:
         run_id = getattr(args, "run_id", None)
         last = bool(getattr(args, "last", False))
         follow = bool(getattr(args, "follow", False))
+        wait = bool(getattr(args, "wait", False))
+        if wait and not follow:
+            return _reject(
+                "spa logs --wait needs --follow.\n"
+                "Example: spa logs --follow --wait --ansible-output --color",
+                as_agent,
+            )
         if run_id == "list":
             if last or follow:
                 return _reject(
@@ -3184,6 +3218,7 @@ def _run(argv: Sequence[str]) -> int:
             run_id=run_id,
             last=last,
             follow=follow and not as_agent,
+            wait=wait and follow and not as_agent,
             ansible_output=_want_ansible_output(args),
             timestamps=_transcript_timestamps(args),
             color=_transcript_color(args),

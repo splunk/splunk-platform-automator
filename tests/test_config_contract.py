@@ -105,6 +105,14 @@ splunk_hosts:
         with pytest.raises(ConfigEditError, match="JSON"):
             config_set(path, PROJECT_ROOT, "splunk_hosts[name=sh].roles", "search_head,indexer")
 
+    def test_set_unwraps_one_json_string_layer(self, tmp_path):
+        """CFG-PATH-001. A JSON-encoded string scalar unwraps one quote layer."""
+        path = _config(tmp_path)
+        result = config_set(path, PROJECT_ROOT, "os.time_zone", '"Europe/Berlin"')
+        assert result["changed"] is True
+        assert _load(path)["os"]["time_zone"] == "Europe/Berlin"
+        assert _load(path)["os"]["time_zone"] != '"Europe/Berlin"'
+
     def test_selector_get_set_and_unset_use_stable_identity(self, tmp_path):
         """CFG-PATH-002 CFG-PATH-004 CFG-PATH-005."""
         path = _config(tmp_path)
@@ -326,6 +334,58 @@ splunk_hosts:
         )
         assert written["changed"] is True
         assert _load(path)["os"]["disable_selinux"] is True
+
+    def test_schema_default_replaces_polluted_current_value(self, tmp_path):
+        """CFG-PATH-006. Omit the default only when current is absent or already default."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+terraform:
+  aws:
+    region: '"eu-central-1"'
+""",
+        )
+        assert _load(path)["terraform"]["aws"]["region"] == '"eu-central-1"'
+        result = config_set(
+            path,
+            PROJECT_ROOT,
+            "terraform.aws.region",
+            "eu-central-1",
+            validate=False,
+        )
+        assert result["changed"] is True
+        assert "omitted_defaults" not in result or result.get("omitted_defaults") in (None, [])
+        assert _load(path)["terraform"]["aws"]["region"] == "eu-central-1"
+
+    def test_resolve_json_list_writes_a_list(self, tmp_path):
+        """CFG-PATH-001. --resolve of a JSON list stays a list, not a quoted filename."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: lm
+    roles: [license_manager]
+""",
+        )
+        result = config_set(
+            path,
+            PROJECT_ROOT,
+            "os.time_zone",
+            "UTC",
+            resolve=[["splunk_defaults.splunk_license_file", '["a.lic","b.lic"]']],
+            validate=False,
+        )
+        assert result["changed"] is True
+        assert _load(path)["splunk_defaults"]["splunk_license_file"] == ["a.lic", "b.lic"]
 
 
 class TestMergeContract:
@@ -1921,8 +1981,8 @@ splunk_hosts:
         assert data["splunk_hosts"][0]["shcluster"] == "shc1"
         assert data["splunk_hosts"][1]["iter"]["numbers"] == "1..3"
 
-    def test_license_manager_requires_external_license_resource(self, tmp_path):
-        """CFG-DEP-003."""
+    def test_license_manager_without_file_warns_and_writes(self, tmp_path):
+        """CFG-DEP-003. License files are a warning, not a write barrier."""
         path = _config(tmp_path)
         result = config_set(
             path,
@@ -1930,8 +1990,15 @@ splunk_hosts:
             "splunk_hosts[name=sh].roles",
             '["license_manager"]',
         )
-        assert result["ready"] is False
-        assert result["requirements"][0]["kind"] == "external_resource"
+        assert result["ready"] is True
+        assert result["changed"] is True
+        warning_ids = {
+            item["id"]
+            for item in result.get("warnings") or []
+            if isinstance(item, dict)
+        }
+        assert "license_manager.license_file" in warning_ids
+        assert result["next"][0]["id"] == "config.set.license_file"
 
     @pytest.mark.parametrize(
         ("cluster_key", "cluster_name_key", "manager_role", "member_role", "link_key", "minimum"),
@@ -2413,6 +2480,89 @@ splunk_app_deployment:
         app = _load(path)["splunk_app_deployment"]["apps"][0]
         assert app["target_roles"] == ["indexer"]
         assert app["idxc_whitelist"] == ["idxc2"]
+
+    def test_app_add_new_appends_a_second_row_with_different_roles(self, tmp_path):
+        """CFG-APP-003. --new appends another apps[] row for the same app_id."""
+        path = _config(tmp_path)
+        first = {
+            "name": "Splunk_TA_nix",
+            "app_id": 833,
+            "target_roles": ["search_head"],
+        }
+        second = {
+            "name": "Splunk_TA_nix",
+            "app_id": 833,
+            "target_roles": ["universal_forwarder", "heavy_forwarder"],
+        }
+        config_app_add(path, PROJECT_ROOT, first, validate=False)
+        config_app_add(path, PROJECT_ROOT, second, force_new=True, validate=False)
+        apps = _load(path)["splunk_app_deployment"]["apps"]
+        assert [app["target_roles"] for app in apps] == [
+            ["search_head"],
+            ["universal_forwarder", "heavy_forwarder"],
+        ]
+
+    def test_app_remove_without_roles_errors_when_defined_twice(self, tmp_path):
+        """CFG-APP-003. Two copies need --roles to say which row to remove."""
+        path = _config(tmp_path)
+        config_app_add(
+            path,
+            PROJECT_ROOT,
+            {"name": "Splunk_TA_nix", "app_id": 833, "target_roles": ["search_head"]},
+            validate=False,
+        )
+        config_app_add(
+            path,
+            PROJECT_ROOT,
+            {
+                "name": "Splunk_TA_nix",
+                "app_id": 833,
+                "target_roles": ["universal_forwarder", "heavy_forwarder"],
+            },
+            force_new=True,
+            validate=False,
+        )
+        before = path.read_bytes()
+        with pytest.raises(ConfigEditError, match=r"defined twice.*--roles search_head"):
+            config_app_remove(path, PROJECT_ROOT, "833", validate=False)
+        assert path.read_bytes() == before
+        config_app_remove(
+            path, PROJECT_ROOT, "833", roles=["search_head"], validate=False
+        )
+        remaining = _load(path)["splunk_app_deployment"]["apps"]
+        assert remaining[0]["target_roles"] == ["universal_forwarder", "heavy_forwarder"]
+
+    def test_compound_app_selector_matches_one_role(self, tmp_path):
+        """CFG-PATH-002. apps[app_id=833,target_roles=search_head] selects one copy."""
+        path = _config(tmp_path)
+        config_app_add(
+            path,
+            PROJECT_ROOT,
+            {"name": "Splunk_TA_nix", "app_id": 833, "target_roles": ["search_head"]},
+            validate=False,
+        )
+        config_app_add(
+            path,
+            PROJECT_ROOT,
+            {
+                "name": "Splunk_TA_nix",
+                "app_id": 833,
+                "target_roles": ["universal_forwarder", "heavy_forwarder"],
+            },
+            force_new=True,
+            validate=False,
+        )
+        config_set(
+            path,
+            PROJECT_ROOT,
+            "splunk_app_deployment.apps[app_id=833,target_roles=search_head].customizations.run_playbook",
+            "playbooks/ta_nix.yml",
+            validate=False,
+        )
+        apps = _load(path)["splunk_app_deployment"]["apps"]
+        by_roles = {tuple(app["target_roles"]): app for app in apps}
+        assert by_roles[("search_head",)]["customizations"]["run_playbook"] == "playbooks/ta_nix.yml"
+        assert "customizations" not in by_roles[("universal_forwarder", "heavy_forwarder")]
 
     def test_app_add_and_remove_use_transaction_controls(self, tmp_path):
         """CFG-APP-008."""

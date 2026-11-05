@@ -85,7 +85,7 @@ spa destroy --yes
 
 | Error | Fix |
 |-------|-----|
-| `license_manager` without `splunk_license_file` | Add license file or remove LM role |
+| `license_manager` without `splunk_license_file` | Warning only (trial until files are added). Follow `data.next` / AskQuestion |
 | `splunk_license_file` without `license_manager` | Add `license_manager` to a host (e.g. on `cm`) or remove license file for trial labs |
 | License invalid, expired, or wrong entitlement | Use `spa --env NAME --agent licenses list`; choose the proposed non-expired files that satisfy all required capabilities |
 | CM without `idxcluster:` | Add `idxcluster` on CM host |

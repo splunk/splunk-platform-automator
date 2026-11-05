@@ -1150,6 +1150,7 @@ List or show per-environment run transcripts under $SPA_ENV_DIR/logs (newest fir
 | --- | --- |
 | `--last` | Show the most recent run |
 | `--follow` | Follow the latest jsonl file |
+| `--wait` | With --follow, wait for a jsonl newer than this invocation |
 | `--ansible-output` | Show captured Ansible output live or from stored logs (not in agent output) |
 | `--timestamps` | Prefix --ansible-output lines with their stored event time |
 | `--color` | Color --ansible-output. Live runs use Ansible color; stored logs are recolored |
@@ -1242,6 +1243,7 @@ Idempotently add or update one apps[] entry; edits config and does not deploy
 | --- | --- |
 | `--version` | Release or local archive version to author (default latest) |
 | `--roles` | Comma-separated target_roles; required only for normal apps and rejected for ITSI/content packs |
+| `--new` | Append another apps[] row for this app_id; without it, extra copies match by exact --roles |
 | `--source` | Use Splunkbase metadata, or a folder/archive already in apps_dir (default splunkbase). Mutually exclusive with --local |
 | `--local` | Shorthand for --source local. Mutually exclusive with --source |
 | `--customize` | Attach an exact matching curated SPA playbook to this top-level app entry |
@@ -1268,6 +1270,7 @@ Remove an authored app entry; does not uninstall deployed files
 
 | Flag | Description |
 | --- | --- |
+| `--roles` | When the app is defined more than once, remove the copy whose target_roles match (one role or the exact set) |
 | `--content-pack` | Remove one named pack under Content Library 5391 |
 | `--dry-run` | Preview without writing |
 | `--expect-revision` | Require the current SHA-256 revision |

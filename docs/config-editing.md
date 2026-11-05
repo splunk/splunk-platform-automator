@@ -60,19 +60,26 @@ a snippet or a value.
 
 ### CFG-PATH-001 — schema-aware values
 
-`config set` accepts `PATH VALUE`. Strings preserve their text. Boolean,
-integer, number, null, list, and map values use strict JSON of the schema type.
-`--value-file` accepts JSON or YAML 1.2. Missing mapping parents may be created,
-but catalog paths that are not schema-backed are rejected.
+`config set` accepts `PATH VALUE`. Strings preserve their text. A JSON-encoded
+string scalar (`"eu-central-1"`) unwraps one quote layer; pass string scalars
+unquoted. Boolean, integer, number, null, list, and map values use strict JSON
+of the schema type. A union that includes a list (for example
+`splunk_defaults.splunk_license_file`) parses a JSON list as a list, including
+on `--resolve`. `--value-file` accepts JSON or YAML 1.2. Missing mapping parents
+may be created, but catalog paths that are not schema-backed are rejected.
 
 ### CFG-PATH-002 — stable selectors
 
 Mutations select list items by stable identity, never by numeric index:
 indexer clusters by `idxc_name`, search-head clusters by `shc_name`, hosts by
 `name` or `iter.prefix`, environments by `splunk_env_name`, and apps by
-`app_id` or by `name` for local apps. Bare `[]`, zero matches, and multiple
-matches are errors for `config set` and `config unset`. `config add` is the
-command that creates a missing identity.
+`app_id` or by `name` for local apps. Two copies of the same app use a
+compound selector such as
+`splunk_app_deployment.apps[app_id=833,target_roles=search_head]`
+(membership on one role, or an exact comma-separated set; multiple hits still
+error). Bare `[]`, zero matches, and multiple matches are errors for
+`config set` and `config unset`. `config add` is the command that creates a
+missing identity.
 
 ### CFG-PATH-003 — exact assignment
 
@@ -102,8 +109,12 @@ includes the current content revision.
 ### CFG-PATH-006 — omit-safe defaults
 
 An explicit assignment equal to a published schema default is omitted with a
-warning and recorded in `omitted_defaults`. `--explicit-default` authors it.
-An already-authored default is not removed by an unrelated command.
+warning and recorded in `omitted_defaults` only when the current value is
+already absent or already that default. A polluted current value such as
+`"eu-central-1"` is replaced by the default `eu-central-1` without
+`--explicit-default`. `--explicit-default` authors the default when current is
+already absent or already default. An already-authored default is not removed
+by an unrelated command.
 
 ### CFG-PATH-007 — secret builders
 
@@ -366,9 +377,16 @@ overwriting or printing existing values.
 ### CFG-APP-003 — idempotent upsert and removal
 
 Add upserts by `app_id`, or by `name` for a local app without an ID. Unspecified
-fields on a matching app remain. An identical add is a no-op. Remove deletes
-only authored configuration and states that deployed software is not
-uninstalled.
+fields on a matching app remain. An identical add is a no-op. `--new` appends
+another `apps[]` row for the same identity (schema still rejects the same
+destination). Without `--new`, one copy stays today's upsert; two or more copies
+match by exact `target_roles`, error listing each copy's roles when `--roles` is
+missing, and name `--new` when no copy matches. Remove of one copy deletes that
+row. Remove of two or more copies without `--roles` is an error that names each
+copy's roles, for example `App 833 is defined twice; pass --roles search_head or
+--roles universal_forwarder,heavy_forwarder`. `--roles` then removes the matching
+copy (membership or exact set; multiple hits still error). Remove deletes only
+authored configuration and states that deployed software is not uninstalled.
 
 ### CFG-APP-004 — fields and filters
 
@@ -396,9 +414,10 @@ library and ITSI entries.
 ### CFG-APP-007 — deterministic ITSI dependency
 
 Adding a content pack may add missing ITSI app 1841 in the same candidate.
-Closure then reports unresolved search-head, indexer, license-manager,
-license-file, or Java requirements instead of inventing them. Existing ITSI
-configuration remains unchanged.
+Closure then reports unresolved search-head, indexer, license-manager
+role, or Java requirements instead of inventing them. License *files* are
+not a write barrier: unlicensed ITSI runs as IT Essentials Work until an
+ITSI license is added. Existing ITSI configuration remains unchanged.
 
 ### CFG-APP-009 — singular ITSI search tier
 
@@ -472,12 +491,12 @@ Each contract ID maps to executable behavioral evidence:
 - `CFG-CLI-004`: `tests/test_config_contract.py::TestCommandContract::test_agent_get_without_path_is_outline_not_document`
 - `CFG-CLI-005`: `tests/test_config_contract.py::TestExplainContract::test_explain_is_one_level_for_humans_and_agents`
 - `CFG-CLI-006`: `tests/test_config_contract.py::TestExplainContract::test_search_returns_paths_without_commands`
-- `CFG-PATH-001`: `tests/test_config_contract.py::TestPathContract::test_set_requires_strict_json_for_list`
-- `CFG-PATH-002`: `tests/test_config_contract.py::TestPathContract::test_bare_or_missing_selector_is_rejected_without_write`
+- `CFG-PATH-001`: `tests/test_config_contract.py::TestPathContract::test_set_requires_strict_json_for_list` (also `test_set_unwraps_one_json_string_layer`, `test_resolve_json_list_writes_a_list`)
+- `CFG-PATH-002`: `tests/test_config_contract.py::TestPathContract::test_bare_or_missing_selector_is_rejected_without_write` (also `TestAppContract::test_compound_app_selector_matches_one_role`)
 - `CFG-PATH-003`: `tests/test_config_contract.py::TestPathContract::test_set_preserves_comments_and_changes_only_the_path`
 - `CFG-PATH-004`: `tests/test_config_contract.py::TestPathContract::test_unset_selected_item_removes_only_that_item`
 - `CFG-PATH-005`: `tests/test_config_contract.py::TestPathContract::test_selector_get_set_and_unset_use_stable_identity`
-- `CFG-PATH-006`: `tests/test_config_contract.py::TestPathContract::test_schema_default_is_omitted_unless_explicit`
+- `CFG-PATH-006`: `tests/test_config_contract.py::TestPathContract::test_schema_default_is_omitted_unless_explicit` (also `test_schema_default_replaces_polluted_current_value`)
 - `CFG-PATH-007`: `tests/test_config_contract.py::TestPathContract::test_from_env_authors_lookup_and_get_redacts_secret`
 - `CFG-ADD-001`: `tests/test_config_contract.py::TestAddContract::test_add_appends_a_new_identity_and_injects_the_selector`
 - `CFG-ADD-002`: `tests/test_config_contract.py::TestAddContract::test_add_rejects_collisions_mismatches_and_bare_selectors`
@@ -508,7 +527,7 @@ Each contract ID maps to executable behavioral evidence:
 - `CFG-LAYOUT-006`: `tests/test_config_contract.py::TestLayoutContract::test_written_config_separates_sections_and_list_items`
 - `CFG-APP-001`: `tests/test_config_contract.py::TestAppContract::test_builder_omits_splunkbase_defaults_and_requires_ta_roles`
 - `CFG-APP-002`: `tests/test_config_contract.py::TestAppContract::test_app_add_upserts_credentials_and_is_idempotent`
-- `CFG-APP-003`: `tests/test_config_contract.py::TestAppContract::test_app_add_upserts_credentials_and_is_idempotent`
+- `CFG-APP-003`: `tests/test_config_contract.py::TestAppContract::test_app_add_upserts_credentials_and_is_idempotent` (also `test_app_add_new_appends_a_second_row_with_different_roles`, `test_app_remove_without_roles_errors_when_defined_twice`)
 - `CFG-APP-004`: `tests/test_config_contract.py::TestAppContract::test_snippet_and_add_share_typed_schema_backed_set_fields`
 - `CFG-APP-005`: `tests/test_config_contract.py::TestAppContract::test_builder_omits_splunkbase_defaults_and_requires_ta_roles`
 - `CFG-APP-006`: `tests/test_config_contract.py::TestAppContract::test_content_pack_adds_itsi_dependency_and_remove_pack_keeps_itsi`

@@ -87,14 +87,56 @@ def license_summary(scan: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def evaluate_license_role(scan: Dict[str, Any]) -> Dict[str, Any]:
+    """License-role step: files without LM still fail; missing files and unlicensed ITSI warn."""
+    from spa.next_steps import ITSI_LICENSE_FILE_WARNING, LICENSE_MANAGER_FILE_WARNING
+
+    configured = scan.get("configured_splunk_license_file")
+    has_lm = scan.get("license_manager_in_config")
+    warnings: List[Dict[str, str]] = []
+    if configured and not has_lm:
+        return {
+            "ok": False,
+            "message": "splunk_license_file is set but no license_manager role on any host",
+            "warnings": warnings,
+        }
+    if scan.get("itsi_in_config") and not has_lm:
+        return {
+            "ok": False,
+            "message": "ITSI in config but no license_manager role on any host",
+            "warnings": warnings,
+        }
+    entitlement = premium_entitlement_error(scan)
+    if entitlement:
+        return {"ok": False, "message": entitlement, "warnings": warnings}
+    if has_lm and not configured:
+        warnings.append(dict(LICENSE_MANAGER_FILE_WARNING))
+    if scan.get("itsi_in_config") and (
+        not configured or "itsi" in [str(item) for item in (scan.get("unsatisfied_requirements") or [])]
+    ):
+        warnings.append(dict(ITSI_LICENSE_FILE_WARNING))
+    return {"ok": True, "message": "License role pairing OK", "warnings": warnings}
+
+
 def premium_entitlement_error(scan: Dict[str, Any]) -> Optional[str]:
-    """ITSI/ES in config without a matching capability is a default validate failure."""
-    if not (scan.get("itsi_in_config") or scan.get("es_in_config")):
+    """ES in config without a matching capability is a default validate failure.
+
+    Unlicensed ITSI is IT Essentials Work and is a warning, not a failure.
+    """
+    if not scan.get("es_in_config"):
         return None
-    errors = list((scan.get("license_validation") or {}).get("errors") or [])
+    errors = [
+        str(item)
+        for item in ((scan.get("license_validation") or {}).get("errors") or [])
+        if "itsi" not in str(item).lower()
+    ]
     if errors:
-        return "; ".join(str(item) for item in errors)
-    unsatisfied = [str(item) for item in (scan.get("unsatisfied_requirements") or []) if item]
+        return "; ".join(errors)
+    unsatisfied = [
+        str(item)
+        for item in (scan.get("unsatisfied_requirements") or [])
+        if str(item) == "es"
+    ]
     if unsatisfied:
         return "Configured license files do not provide required capability: %s" % ", ".join(
             unsatisfied
@@ -313,25 +355,16 @@ except ConfigValidationError as e:
     data["licenses"] = license_summary(license_scan)
     if check_licenses:
         data["license_scan"] = license_scan
-    configured = license_scan.get("configured_splunk_license_file")
-    has_lm = license_scan.get("license_manager_in_config")
-    if configured and not has_lm:
-        msg = "splunk_license_file is set but no license_manager role on any host"
-        steps.append({"id": "license_role", "ok": False, "message": msg})
-        return CommandResult(ok=False, error=msg, data=data, code=1)
-    if has_lm and not configured:
-        msg = "license_manager role is set but splunk_license_file is missing"
-        steps.append({"id": "license_role", "ok": False, "message": msg})
-        return CommandResult(ok=False, error=msg, data=data, code=1)
-    if license_scan.get("itsi_in_config") and not has_lm:
-        msg = "ITSI in config but no license_manager role on any host"
-        steps.append({"id": "license_role", "ok": False, "message": msg})
-        return CommandResult(ok=False, error=msg, data=data, code=1)
-    entitlement = premium_entitlement_error(license_scan)
-    if entitlement:
-        steps.append({"id": "license_role", "ok": False, "message": entitlement})
-        return CommandResult(ok=False, error=entitlement, data=data, code=1)
-    steps.append({"id": "license_role", "ok": True, "message": "License role pairing OK"})
+    role = evaluate_license_role(license_scan)
+    if role["warnings"]:
+        data.setdefault("warnings", []).extend(role["warnings"])
+        from spa.next_steps import attach_license_file_next
+
+        attach_license_file_next(data)
+    if not role["ok"]:
+        steps.append({"id": "license_role", "ok": False, "message": role["message"]})
+        return CommandResult(ok=False, error=role["message"], data=data, code=1)
+    steps.append({"id": "license_role", "ok": True, "message": role["message"]})
 
     _note(
         on_progress,
@@ -425,6 +458,11 @@ def format_validate_text(result: CommandResult) -> str:
         message = step.get("message") or ""
         if message:
             lines.append(message)
+    for warning in data.get("warnings") or []:
+        if isinstance(warning, dict):
+            lines.append("Warning: %s" % (warning.get("message") or warning.get("id")))
+        else:
+            lines.append("Warning: %s" % warning)
     if result.ok:
         lines.append("=== Validation complete ===")
     return "\n".join(lines) + "\n"

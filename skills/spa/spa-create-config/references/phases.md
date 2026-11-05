@@ -20,7 +20,7 @@ Load one section at a time from this file. Hard rules stay in [SKILL.md](../SKIL
    - **Unavailable** → follow [aws-without-credentials.md](aws-without-credentials.md); do not block the workflow.
 6. Read existing config if merging or revising an existing plan from prior config.
 7. Licenses are not scanned here. Phase 10 scans the Software directory once, after the apps decision.
-8. **Architecture input (optional).** Two entry points: [architecture-input.md](architecture-input.md). **Path A (no file):** keep this questionnaire and `spa init --example TOPOLOGY --provider` (write mode at the gate; plan mode at Phase 12). **Path B (confirmed 0.4.0 file):** skip the SVA questionnaire; run `spa architecture plan FILE`, then the same init timing, place/size with `spa config move`, then **`spa architecture check FILE` before validate**. Phases 9 and 10 are always asked, even when `confirmed` is true. Ignore `apps.by_role` and `delivery`.
+8. **Architecture input (optional).** Two entry points: [architecture-input.md](architecture-input.md). **Path A (no file):** keep this questionnaire and `spa init --example TOPOLOGY --provider` (write mode at the gate; plan mode at Phase 12). **Path B (confirmed 0.4.0 file):** skip the SVA questionnaire; run `spa architecture plan FILE`, then the same init timing, place/size with `spa config move`, then **`spa architecture check FILE` before validate**. Phases 9 and 10 are always asked, even when `confirmed` is true. Follow `data.next` for skipped `apps.by_role` folder names; do not auto-import them.
 
 **Exit:** Intent noted (mode is confirmed at the gate); target path known; merge policy clear when applicable; **AWS API status recorded**; if a file was given, `spa architecture plan FILE` has been run (the skill does not parse the JSON).
 
@@ -183,7 +183,7 @@ Always ask, even when the user did not mention apps. Use AskQuestion if availabl
 **Loop (when the answer is yes):**
 
 1. Search and add one app with [spa-apps](../../spa-apps/SKILL.md). For a normal app, ask with AskQuestion which roles it goes to before `spa --agent apps add`. ITSI and content packs have no roles question.
-1b. **ITSI (1841) first.** Follow `data.next` after the add: licenses list, then `spa --agent apps content-packs list 5391`. Ask with AskQuestion which packs to add (include "None"), and add each chosen pack with `spa --agent apps add 5391 --content-pack NAME`. Then go to step 2.
+1b. **ITSI (1841) first.** Do not refuse the add for missing license files. Follow `data.next` after the add: licenses list is optional (skip = trial / IT Essentials Work), then AskQuestion `none` / `list` / `name` for content packs. On `list`, run `spa --agent apps content-packs list 5391` and present each pack `name` / `title` (and `spa_automation` when present). On `name`, wait for folder names. On `none`, skip. Add each chosen pack with `spa --agent apps add 5391 --content-pack NAME`. Then go to step 2.
 2. After each add, ask with AskQuestion: **"Add another app?"** Options: Yes, add another; No, done with apps.
 3. On yes, repeat from step 1 until the operator answers no. Do not skip the question after any add.
 4. On no, show the current list with `spa --agent config get splunk_app_deployment` and confirm it is right. Then move on to Phase 10.
@@ -208,9 +208,9 @@ spa --env NAME --agent licenses list
    - **No usable file:** stay trial-only, or add a license file to the Software directory before deploy.
    Trial-only is reconfirmed once: "Confirmed: trial-only license. Continue?"
 3. **If user accepts a license file** → add `license_manager` role on a host in Phase 8 (typical lab: co-locate on `cm` or dedicated `mc`).
-4. **ITSI in config** → require parsed `enterprise` + `itsi` capabilities; ensure `license_manager` role (Phase 8). Do not infer capability from filenames.
+4. **ITSI in config** → the `license_manager` **role** is required (Phase 8). License *files* are optional: AskQuestion; skip means ITSI runs as IT Essentials Work. Do not infer capability from filenames.
 5. **Enterprise Security in config** (app ID `263` or exact ES name) → require parsed `enterprise` + `es` capabilities. `premium_app: es` is not supported by the deployment schema; do not add it.
-6. **License manager role** → `splunk_license_file` is required (schema). **License file in config** → `license_manager` role is required (schema).
+6. **License manager role** → warning if no `splunk_license_file` (trial until files are added). **License file in config** → `license_manager` role is required (schema).
 7. Reject configured files that are missing, invalid, expired, or do not collectively satisfy the selected premium apps. Warn for expiration within 30 days or an unknown expiration.
 8. **Trial-only, after the reconfirmation in step 2** → omit both `splunk_license_file` and `license_manager`. Do not add a license file from the Software scan alone.
 

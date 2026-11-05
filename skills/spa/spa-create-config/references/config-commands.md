@@ -5,7 +5,7 @@ Reference for `spa-create-config`. Use these commands for every config change. N
 Always use these commands, never hand-edit:
 | Change | Correct Command | Why |
 |--------|-----------------|-----|
-| Set a scalar (region, instance type, OS) | `spa --env NAME config set PATH VALUE --yes` | Schema validation, audit trail |
+| Set a scalar (region, instance type, OS) | `spa --env NAME config set PATH VALUE --yes` | Unquoted scalars (`eu-central-1`); JSON only for lists/maps |
 | Add a host | `spa --env NAME config add 'splunk_hosts[name=HOSTNAME]' '{"roles":[...], ...}' --yes` | SPA validates role constraints, cluster membership, site mapping |
 | Add an indexer cluster | `spa --env NAME config set splunk_idxclusters[idxc_name=idxc1].idxc_rf 3 --yes` | Constraints checked against peer count |
 | Add an app | `spa --agent apps search QUERY` then `spa --env NAME apps add APP_ID --roles ROLE1,ROLE2 --yes` | Validates app exists, role exists, app not duplicate |
