@@ -197,6 +197,13 @@ App-scope scenarios live under `tests/configs/app_scope/<name>/`. Each has a dis
 
 ## Running Tests
 
+### When to run which runner
+
+- While coding: the new test, then existing tests for every touched module.
+- CLI surface (parser, help, routing, schema, session, or provider contracts): `./tests/run_cli_tests.sh`.
+- Optional before a PR: `./tests/run_local_tests.sh` (the same suite PR CI runs).
+- Merge gate: PR CI job `Local tests`. Push CI on `master` / `distribution` is background insurance.
+
 ### Run SPA CLI Release Tests
 
 ```bash

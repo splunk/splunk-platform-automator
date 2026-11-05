@@ -250,7 +250,12 @@ def test_development_docs_require_tdd_and_feature_review():
     assert "before the first file edit" in agents
     assert "see it fail before changing production code" in agents
     assert "only after its drift test has failed" in agents
-    assert "Leave the slice open until `./tests/run_local_tests.sh` passes." in agents
+    assert (
+        "Close the slice on the required local gates (the new test, tests "
+        "for every touched module, and `./tests/run_cli_tests.sh` when parser, "
+        "help, routing, schema, session, or provider contracts changed). "
+        "PR CI runs the full suite."
+    ) in agents
     assert "A plan, a todo list, or an implement-this request does not skip these steps." in agents
 
     # Stop at each gate. Completing todos is not ship authorization.
@@ -267,6 +272,16 @@ def test_development_docs_require_tdd_and_feature_review():
     assert "without requiring the user to enumerate those steps" not in agents
     assert "Completing todos is not authorization" in contributing
     assert "name one next step" in contributing
+
+
+def test_ci_cancels_stale_pull_request_runs():
+    ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert (
+        "group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
+        in ci
+    )
+    assert "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" in ci
 
 
 def test_config_editing_contract_is_linked_from_development_docs():

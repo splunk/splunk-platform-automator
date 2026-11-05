@@ -239,7 +239,8 @@ Do not present a convention as an enforced standard. Promote one to policy only 
 Use the narrowest gate that proves the changed contract:
 
 - `./tests/run_cli_tests.sh` runs parser, help, routing, schema, session, and provider contracts marked `cli`.
-- `./tests/run_local_tests.sh` runs the complete local suite without AWS or a live Splunk deployment.
+- `./tests/run_local_tests.sh` runs the complete local suite without AWS or a live Splunk deployment. It is optional locally on every slice; PR CI is the full-suite merge gate.
+- PR CI job `Local tests` (`.github/workflows/ci.yml`) is required to merge. Push CI on `master` / `distribution` is background insurance, not a promotion wait.
 - [`tests/test_spa_playbooks.py`](../tests/test_spa_playbooks.py) covers playbook metadata and resolution.
 - [`tests/test_spa_runlog.py`](../tests/test_spa_runlog.py) and [`tests/test_spa_jsonl_callback.py`](../tests/test_spa_jsonl_callback.py) cover progress and execution events.
 - Schema and example tests cover inventory changes; app-scope scenarios cover app routing changes.
@@ -264,7 +265,11 @@ Use one observable behavior per cycle:
 4. Run the focused test and existing tests for every touched module.
 5. Refactor only while those tests remain green; refactoring adds no behavior.
 
-Close a feature slice only after `./tests/run_local_tests.sh` passes. Report a
+Close a feature slice on the required local gates: the new test (observed red
+then green), existing tests for every touched module, and
+`./tests/run_cli_tests.sh` when parser, help, routing, schema, session, or
+provider contracts changed. PR CI runs the full suite.
+`./tests/run_local_tests.sh` is optional locally before opening a PR. Report a
 pre-existing failure by name instead of omitting it. Generated documentation is
 regenerated only after its drift test has gone red. Documentation and skill
 contracts start with a failing assertion when a test can express the
@@ -286,7 +291,7 @@ steps until it passes an independent whole-change review:
    untested branches, contradictory documentation, and exposed passwords,
    tokens, private keys, or certificates.
 4. Fix every confirmed finding with a new red-green-refactor cycle and rerun
-   the required local gates.
+   the required local gates (the narrowest gate, not a second full local suite).
 5. Report the review to the user before any commit. For each finding, say what
    was found, what was fixed, and what was left out. Discuss that report with
    the user. Do not commit until the user confirms the left-out items.
@@ -320,7 +325,7 @@ At each gate the agent **stops**, names **one** next step, and waits. Completing
 | Gate | Agent does | Next step it must say |
 | --- | --- | --- |
 | Plan ready | Do not edit production code | Accept the plan, then start a **new** Agent chat to implement. Do not implement here. |
-| Cursor injects "Implement the plan" in the same chat | Implement the slice only | After tests: write the [feature completion review](#feature-completion-review) report. Do not commit. |
+| Cursor injects "Implement the plan" in the same chat | Implement the slice only | After the required local gates: write the [feature completion review](#feature-completion-review) report. Do not commit. |
 | Tests green | Parent review report (what found / fixed / left out) | Confirm left-out items, then say whether to **commit**. |
 | Commit authorized | Commit only what was authorized | Open a PR against the recorded base? |
 | PR open | Report the URL | Merge when CI is green? Do not merge, close the issue, or delete branches unless asked. |
