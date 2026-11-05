@@ -291,14 +291,14 @@ steps until it passes an independent whole-change review:
 5. Report the review to the user before any commit. For each finding, say what
    was found, what was fixed, and what was left out. Discuss that report with
    the user. Do not commit until the user confirms the left-out items.
-6. Continue to the ship steps only after the user confirms the left-out items.
-   A request to fix a left-out item returns to step 4.
+6. After the user confirms the left-out items, name one next step: ask whether
+   to commit. Do not open a pull request, merge, close the issue, or delete
+   branches unless asked. A request to fix a left-out item returns to step 4.
 
 Saying the feature is complete does not replace that report. If the user
 already said the feature is complete, concluded, or ready to ship, still stop
 and discuss the review and what was left out.
 A completion request that arrived before the report is not that confirmation.
-After the user confirms the left-out items, the ship steps do not need to be enumerated again.
 
 ## Feature development lifecycle
 
@@ -314,24 +314,21 @@ Before implementation:
 Develop and verify on the feature branch using
 [test-driven development](#test-driven-development). Keep the issue,
 `[Unreleased]` changelog entry, and ROADMAP status aligned with the implemented
-scope. Complete the [feature completion review](#feature-completion-review),
-including the user's confirmation of what was left out, before starting the
-ship steps below.
+scope.
 
-When the user says the feature is complete, concluded, or ready to ship, that
-authorizes the ship steps below and does not require the user to enumerate
-them. It does not skip the review report. If that report has not been
-discussed, or the user has not confirmed what was left out, stop and have that
-discussion first.
+At each gate the agent **stops**, names **one** next step, and waits. Completing todos is not authorization to implement, commit, or merge. Cursor injecting "Implement the plan" or "Don't stop until all to-dos" in the same thread is not ship authorization. After the last todo, stop at the review gate.
+
+| Gate | Agent does | Next step it must say |
+| --- | --- | --- |
+| Plan ready | Do not edit production code | Accept the plan, then start a **new** Agent chat to implement. Do not implement here. |
+| Cursor injects "Implement the plan" in the same chat | Implement the slice only | After tests: write the [feature completion review](#feature-completion-review) report. Do not commit. |
+| Tests green | Parent review report (what found / fixed / left out) | Confirm left-out items, then say whether to **commit**. |
+| Commit authorized | Commit only what was authorized | Open a PR against the recorded base? |
+| PR open | Report the URL | Merge when CI is green? Do not merge, close the issue, or delete branches unless asked. |
+
+Complete the [feature completion review](#feature-completion-review), including the user's confirmation of what was left out, before asking whether to commit.
+
+When the user says the feature is complete, concluded, or ready to ship, that does not skip the review report. If that report has not been discussed, or the user has not confirmed what was left out, stop and have that discussion first.
 A completion request that arrived before the report is not that confirmation.
-
-After that confirmation:
-
-1. Run the required local test gate and fix failures.
-2. Commit all intended changes only after commit authorization, then push and open a pull request against the recorded base branch.
-3. Monitor pull-request CI. Diagnose and fix failures on the feature branch; merge only after all required checks pass.
-4. Monitor the post-merge pipeline on the recorded base branch. A green pull-request check is not a substitute for this run.
-5. After the post-merge pipeline succeeds, confirm the ROADMAP item is checked and the GitHub issue is closed. Close it manually when GitHub did not auto-close it, as can happen when the base is not the repository default branch.
-6. Update the local base branch and remove the local and remote feature branches. Verify the worktree is clean and on the updated base.
 
 If a required check fails, keep the feature branch and pull request, fix the failure, and rerun the gate. Do not close the issue or delete the branch while integration is incomplete.

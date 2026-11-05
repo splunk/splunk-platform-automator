@@ -286,6 +286,67 @@ def test_cli_install_comma_separated_platforms(tmp_path):
     assert (tmp_path / "home" / ".claude" / "skills" / "spa").is_symlink()
 
 
+def test_install_places_cursor_rule_adapters_without_always_apply(tmp_path):
+    source = _source(tmp_path)
+    home = tmp_path / "home"
+    _install(tmp_path, source=source, platform="cursor", home=home)
+    rules = home / ".cursor" / "rules"
+    neighbor = rules / "my-notes.mdc"
+    neighbor.write_text("keep\n", encoding="utf-8")
+    _install(tmp_path, source=source, platform="cursor", home=home)
+
+    budget = rules / "spa-token-budget.mdc"
+    contribute = rules / "spa-contribute.mdc"
+    assert budget.is_file()
+    assert contribute.is_file()
+    budget_text = budget.read_text(encoding="utf-8")
+    contribute_text = contribute.read_text(encoding="utf-8")
+    assert "alwaysApply: false" in budget_text
+    assert "alwaysApply: true" not in budget_text
+    assert "alwaysApply: false" in contribute_text
+    assert "token-budget.md" in budget_text
+    assert "contribute.md" in contribute_text
+    assert neighbor.read_text(encoding="utf-8") == "keep\n"
+    assert not (home / ".claude").exists()
+
+
+def test_install_places_claude_rule_adapter_when_that_platform_is_used(tmp_path):
+    source = _source(tmp_path)
+    home = tmp_path / "home"
+    _install(tmp_path, source=source, platform="claude-code", home=home)
+    adapter = home / ".claude" / "rules" / "spa.md"
+    assert adapter.is_file()
+    text = adapter.read_text(encoding="utf-8")
+    assert "token-budget.md" in text
+    assert "alwaysApply: true" not in text
+    assert not (home / ".cursor" / "rules").exists()
+
+
+def test_remove_deletes_only_spa_adapters(tmp_path):
+    source = _source(tmp_path)
+    home = tmp_path / "home"
+    _install(tmp_path, source=source, platform="cursor", home=home)
+    rules = home / ".cursor" / "rules"
+    neighbor = rules / "my-notes.mdc"
+    neighbor.write_text("keep\n", encoding="utf-8")
+    stale = rules / "spa-old.mdc"
+    stale.write_text("stale\n", encoding="utf-8")
+    assert (rules / "spa-token-budget.mdc").is_file()
+
+    remove_skills(
+        source=source,
+        home=home,
+        platform="cursor",
+        environ={"HOME": str(home)},
+        path_env="",
+        config_dir=tmp_path / "config" / "spa",
+    )
+    assert not (rules / "spa-token-budget.mdc").exists()
+    assert not (rules / "spa-contribute.mdc").exists()
+    assert not stale.exists()
+    assert neighbor.read_text(encoding="utf-8") == "keep\n"
+
+
 def test_cli_install_and_remove_round_trip(tmp_path):
     env = _cli_env(tmp_path, SPA_SKILLS_PLATFORMS="cursor")
     installed = run_spa(["--agent", "skills", "install"], env=env)
