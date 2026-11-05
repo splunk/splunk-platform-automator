@@ -24,7 +24,7 @@ Classify the request first, then load the one skill that owns the next step. Loa
 
 | Request | Load | Keywords |
 | --- | --- | --- |
-| New environment or lab | `/spa-create-config` (Phases 0a–9, plan mode) | create, need, set up, new lab |
+| New environment or lab | `/spa-create-config` (path A questionnaire, or path B if a confirmed architecture file is given) | create, need, set up, new lab, architecture file |
 | Change an existing config | `/spa-create-config` ("Add / change a setting") | add, change, update, enable |
 | Lifecycle | `/spa` | provision, deploy, destroy, status, logs, validate, suspend, resume |
 | Apps | `/spa-apps` | Splunkbase, TA, app, content pack |
@@ -32,10 +32,10 @@ Classify the request first, then load the one skill that owns the next step. Loa
 
 ## Contract
 
-- **Config is command-only:** never edit `splunk_config.yml` by hand (no editor, no shell write, no YAML patch). Read and change it only with `spa config ...` (`search`, `explain`, `get`, `set`, `add`, `unset`, `merge`, `topology`, `provider`, `header set`). Config design and setting changes go to `/spa-create-config`. App entries go to `/spa-apps`. Both end with `spa --agent validate`; deploy stays here and waits for your yes.
+- **Config is command-only:** never edit `splunk_config.yml` by hand (no editor, no shell write, no YAML patch). Read and change it only with `spa config ...` (`search`, `explain`, `get`, `set`, `add`, `unset`, `merge`, `move`, `topology`, `provider`, `header set`). Config design and setting changes go to `/spa-create-config`. A confirmed architecture file still loads `/spa-create-config` (path B); this skill does not provision from that file. App entries go to `/spa-apps`. Both end with `spa --agent validate`; deploy stays here and waits for your yes.
 - **Routing:** a request for a Splunk lab, production, staging, or any other Splunk environment (create, deploy, change, check, or tear down), including a deploy to existing hosts (`spa hosts register`, then `spa deploy`), starts here. Do not use the AWS CLI, Terraform, Ansible, or Vagrant to create or change hosts for a Splunk environment. Use `spa`.
 - **`SPA_HOME`**: framework. **`SPA_ENV_DIR`**: one environment. Call **`bin/spa` only**. Do not import `spa.api`. Do not start a daemon.
-- Mutating commands need **`--yes`**. Never auto-run provision, deploy, suspend, resume, or destroy. Exception: `/spa-create-config` Phase 9 option A hands off here, and this skill then runs `provision`, then `deploy`, each only after its own explicit yes in chat. Never answer `Proceed?`.
+- Mutating commands need **`--yes`**. Never auto-run provision, deploy, suspend, resume, or destroy. Exception: `/spa-create-config` Phase 14 option A hands off here, and this skill then runs `provision`, then `deploy`, each only after its own explicit yes in chat. Never answer `Proceed?`.
 - Never print secrets. Report env vars as set / not set. YAML: `lookup('env', ...)`. Do not pass `spa -v` (unredacted Ansible stdout).
 - Full command names (`spa environment list`, `spa hosts ssh`, `spa validate`). Humans may type `spa env`.
 - No raw Ansible or Vagrant for operators. Ask in chat and wait before provision, deploy, destroy, suspend, resume, environment remove, or environment cleanup. See [lifecycle.md](references/lifecycle.md) and [prerequisites.md](references/prerequisites.md).
@@ -62,6 +62,7 @@ spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
 spa environment set --default my-lab                   # fallback when cwd does not select an env
 spa environment set --provider virtualbox              # saves the default for init in providers.yml (aws, virtualbox, or external)
 spa environment init --example cm_2idxc_sh --provider aws my-lab   # name-only under default parent; --provider required unless a default is saved
+spa environment init --architecture examples/architectures/c3.json --provider aws my-lab  # overlay a confirmed 0.4.0 file; exclusive with --example
 spa environment init --env-dir /custom --name my-lab   # one-off; does not change default parent
 spa init /custom/my-lab                                # same dest as the line above
 spa env init my-lab --force                            # adopt an existing env (cwd or default parent) into the list

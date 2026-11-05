@@ -10,7 +10,19 @@ and `spa run NAME --help`.
 
 ## `init`
 
-Alias of spa environment init (spa init --example TOPOLOGY [--provider aws|virtualbox|external] NAME)
+Alias of spa environment init (spa init --example TOPOLOGY or --architecture FILE [--provider aws|virtualbox|external] NAME)
+
+| Flag | Description |
+| --- | --- |
+| `--example` | Topology example id (exclusive with --architecture) |
+| `--architecture` | Confirmed 0.4.0 architecture JSON (exclusive with --example) |
+| `--provider` | aws, virtualbox, or external. Required unless a default is saved (spa environment set --provider NAME) |
+
+Example:
+
+```bash
+spa init --architecture examples/architectures/c3.json --provider aws my-lab
+```
 
 ## `init list`
 
@@ -24,7 +36,7 @@ spa init list
 
 ## `config`
 
-Read, explain, or transactionally edit splunk_config.yml. Agents use config search QUERY, then config explain PATH. Bare spa config exits 2.
+Read, explain, or transactionally edit splunk_config.yml. Agents use config search QUERY, then config explain PATH. Bare spa config exits 2. Writes include set, add, unset, merge, move, topology, and provider.
 
 Example:
 
@@ -226,6 +238,71 @@ Example:
 
 ```bash
 spa --agent config merge --file fragment.yml
+```
+
+## `config move`
+
+Move a role between hosts, or rename host identities. Bare spa config move exits 2 and names role and host.
+
+Example:
+
+```bash
+spa --agent config move role license_manager --from cm --to lm --yes
+```
+
+## `config move role`
+
+Move one AllowedRole instance from a host onto another host in one transaction.
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `--from` | Host that currently has ROLE |
+| `--to` | Destination host name (created if missing) |
+| `--dry-run` | Preview without writing |
+| `--expect-revision` | Require the current SHA-256 revision |
+| `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
+| `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `--show-diff` | Print the redacted unified diff after the status line (no-op in agent mode) |
+| `-y`, `--yes` | Skip the human confirmation prompt |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `ROLE` | yes | AllowedRole to relocate |
+
+Example:
+
+```bash
+spa --agent config move role license_manager --from cm --to lm --yes
+```
+
+## `config move host`
+
+Rename one host, or prefix/postfix every host identity. Rewrites hosts_whitelist and hosts_blacklist.
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `--to` | New host name (with OLD) |
+| `--prefix` | Prepend to every host name, iter.prefix, and list entry |
+| `--postfix` | Append to every host name, iter.postfix, and list entry. A leading hyphen needs --postfix=-lab |
+| `--dry-run` | Preview without writing |
+| `--expect-revision` | Require the current SHA-256 revision |
+| `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
+| `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `--show-diff` | Print the redacted unified diff after the status line (no-op in agent mode) |
+| `-y`, `--yes` | Skip the human confirmation prompt |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `OLD` | no | Current host name |
+
+Example:
+
+```bash
+spa --agent config move host --prefix acme- --yes
 ```
 
 ## `config topology`
@@ -494,7 +571,8 @@ Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Plat
 
 | Flag | Description |
 | --- | --- |
-| `--example` | Topology example id |
+| `--example` | Topology example id (exclusive with --architecture) |
+| `--architecture` | Confirmed 0.4.0 architecture JSON (exclusive with --example) |
 | `--provider` | aws, virtualbox, or external. Required unless a default is saved (spa environment set --provider NAME) |
 | `--env-dir` | One-off parent (requires --name); does not change the default parent |
 | `--name` | Registry name (default: folder basename) |
@@ -504,7 +582,7 @@ Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Plat
 Example:
 
 ```bash
-spa environment init --example cm_2idxc_sh --provider aws my-lab
+spa environment init --architecture examples/architectures/c3.json --provider aws my-lab
 ```
 
 ## `environment init list`
@@ -859,21 +937,17 @@ spa aws security-groups list --region eu-central-1
 
 ## `architecture`
 
-Architecture file actions. Plan an SVA JSON file into config (read-only). Bare spa architecture exits 2.
+Architecture file actions. Bare spa architecture exits 2 and names plan, apply, and check.
 
 Example:
 
 ```bash
-spa --agent architecture plan ./m4-architecture.json
+spa --agent architecture plan examples/architectures/c3.json
 ```
 
 ## `architecture plan`
 
-Validate an SVA architecture JSON file and plan the config (read-only). Writes nothing unless --write-fragment.
-
-| Flag | Description |
-| --- | --- |
-| `--write-fragment` | Write the config fragment as JSON for spa config merge --file (never splunk_config.yml) |
+Validate a splunk.architecture 0.4.0 file and print the overlay plan (read-only). Needs no environment.
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -882,7 +956,44 @@ Validate an SVA architecture JSON file and plan the config (read-only). Writes n
 Example:
 
 ```bash
-spa --agent architecture plan ./m4-architecture.json --write-fragment /tmp/m4-fragment.json
+spa --agent architecture plan examples/architectures/c3.json
+```
+
+## `architecture apply`
+
+Overlay a confirmed architecture file onto the current environment config.
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `--dry-run` | Preview without writing |
+| `--expect-revision` | Require the current SHA-256 revision |
+| `--show-diff` | Print the redacted unified diff after the status line (no-op in agent mode) |
+| `-y`, `--yes` | Confirm without prompting |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `FILE` | yes | Architecture JSON file |
+
+Example:
+
+```bash
+spa --agent architecture apply examples/architectures/c3.json --yes
+```
+
+## `architecture check`
+
+Subset-match a splunk.architecture 0.4.0 file against the current environment config.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `FILE` | yes | Architecture JSON file |
+
+Example:
+
+```bash
+spa --agent architecture check examples/architectures/c3.json
 ```
 
 ## `licenses`

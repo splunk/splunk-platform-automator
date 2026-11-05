@@ -1,0 +1,50 @@
+{
+  "kind": "splunk.architecture",
+  "schema_version": "0.4.0",
+  "confirmed": true,
+  "generator": {
+    "name": "splunk-validated-architectures",
+    "version": "0.4.0"
+  },
+  "sva": {
+    "code": "C3",
+    "clustering": true,
+    "multisite": false,
+    "search_head_cluster": true,
+    "search_head_cluster_mode": "single_site",
+    "premium_apps": []
+  },
+  "environment": {
+    "name": "c3-lab",
+    "org_prefix": "acme"
+  },
+  "deployment": {
+    "sites": ["site1"],
+    "roles": [
+      {"role": "cluster_master", "count": 1},
+      {"role": "indexer_cluster_peer", "count": 3},
+      {"role": "shc_member", "count": 3},
+      {"role": "shc_deployer", "count": 1},
+      {"role": "license_master", "count": 1}
+    ]
+  },
+  "clusters": {
+    "indexer": {
+      "name": "idxc1",
+      "mode": "single_site",
+      "replication_port": 9887,
+      "replication_factor": 3,
+      "search_factor": 2
+    },
+    "search_head": {
+      "name": "shc1",
+      "mode": "single_site",
+      "replication_port": 9887,
+      "replication_factor": 3
+    }
+  },
+  "apps": {
+    "by_role": {}
+  },
+  "extensions": []
+}

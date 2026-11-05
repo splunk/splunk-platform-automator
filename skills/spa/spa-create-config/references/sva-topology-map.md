@@ -86,9 +86,9 @@ splunk_idxclusters:
 
 **SPA multisite layout:** cluster manager on `site0` (no indexer data); indexers on `site1`, `site2`, …
 
-### RF / SF checklist (before Phase 7 write)
+### RF / SF checklist (before Phase 12 write)
 
-Use during **Phase 5** after SVA code and indexer counts are chosen:
+Use during **Phase 7** after SVA code and indexer counts are chosen:
 
 1. **Pick factors from the table** (or copy verbatim from the example row) — do not invent strings unless you understand multisite factor rules.
 2. **Single-site:** indexer host count ≥ `idxc_rf` (Splunk cluster peer count must support replication factor).

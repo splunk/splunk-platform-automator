@@ -1,0 +1,53 @@
+{
+  "kind": "splunk.architecture",
+  "schema_version": "0.4.0",
+  "confirmed": true,
+  "generator": {
+    "name": "splunk-validated-architectures",
+    "version": "0.4.0"
+  },
+  "sva": {
+    "code": "M4",
+    "clustering": true,
+    "multisite": true,
+    "search_head_cluster": true,
+    "search_head_cluster_mode": "stretched",
+    "premium_apps": []
+  },
+  "environment": {
+    "name": "m4-lab",
+    "org_prefix": "acme"
+  },
+  "deployment": {
+    "sites": ["site1", "site2"],
+    "roles": [
+      {"role": "multisite_cluster_master", "count": 1},
+      {"role": "site_indexer_peer", "count": 4, "by_site": {"site1": 2, "site2": 2}},
+      {"role": "shc_member", "count": 3, "by_site": {"site1": 2, "site2": 1}},
+      {"role": "shc_deployer", "count": 1},
+      {"role": "license_master", "count": 1},
+      {"role": "deployment_server", "count": 1},
+      {"role": "monitoring_console", "count": 1},
+      {"role": "universal_forwarder", "count": 1}
+    ]
+  },
+  "clusters": {
+    "indexer": {
+      "name": "idxc1",
+      "mode": "multisite",
+      "replication_port": 9887,
+      "site_replication_factor": {"origin": 2, "total": 3},
+      "site_search_factor": {"origin": 1, "total": 2}
+    },
+    "search_head": {
+      "name": "shc1",
+      "mode": "stretched",
+      "replication_port": 9887,
+      "replication_factor": 3
+    }
+  },
+  "apps": {
+    "by_role": {}
+  },
+  "extensions": []
+}

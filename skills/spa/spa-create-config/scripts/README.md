@@ -7,7 +7,11 @@ Canonical scripts live in the **repository** `bin/` directory. Run from project 
 | `spa aws --region REGION` | AWS discovery: `--check-auth`, `--latest-ami`, `--survey`, `--validate` (`regions list` and `--check-auth` need no region) |
 | `spa licenses` | Scan Software for `.lic` files; propose `splunk_license_file` (ITSI-aware with `--config`) |
 | `spa validate` | Schema + inventory + playbook syntax-check; optional `--check-licenses` |
-| `spa architecture plan FILE [--write-fragment PATH]` | Read an SVA architecture JSON file: validate it, build the host plan, and write the merge fragment. Read-only for `splunk_config.yml`. See [references/architecture-input.md](../references/architecture-input.md). |
+| `spa architecture plan FILE` | Read a confirmed 0.4.0 architecture JSON file (read-only). See [references/architecture-input.md](../references/architecture-input.md). |
+| `spa init --architecture FILE --provider` | Scaffold from `sva.code` then overlay counts, RF/SF, and extra roles. Exclusive with `--example`. |
+| `spa architecture apply FILE --yes` | Overlay the same deltas onto an existing env. |
+| `spa architecture check FILE` | Subset-match the file against the current env (required on path B before validate). |
+| `spa config move role` / `move host` | Relocate one role, or rename/prefix/postfix hosts. |
 
 Do not duplicate logic in this skill folder. See [references/aws-baseline.md](../references/aws-baseline.md) and [references/validation.md](../references/validation.md).
 

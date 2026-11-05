@@ -1,0 +1,42 @@
+{
+  "kind": "splunk.architecture",
+  "schema_version": "0.4.0",
+  "confirmed": true,
+  "generator": {
+    "name": "splunk-validated-architectures",
+    "version": "0.4.0"
+  },
+  "sva": {
+    "code": "C1",
+    "clustering": true,
+    "multisite": false,
+    "search_head_cluster": false,
+    "search_head_cluster_mode": "none",
+    "premium_apps": []
+  },
+  "environment": {
+    "name": "c1-lab",
+    "org_prefix": "acme"
+  },
+  "deployment": {
+    "sites": ["site1"],
+    "roles": [
+      {"role": "cluster_master", "count": 1},
+      {"role": "indexer_cluster_peer", "count": 3},
+      {"role": "cluster_search_head", "count": 1}
+    ]
+  },
+  "clusters": {
+    "indexer": {
+      "name": "idxc1",
+      "mode": "single_site",
+      "replication_port": 9887,
+      "replication_factor": 3,
+      "search_factor": 2
+    }
+  },
+  "apps": {
+    "by_role": {}
+  },
+  "extensions": []
+}

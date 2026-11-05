@@ -225,6 +225,16 @@ def test_list_regions_reports_the_aws_config_region_beside_the_environment_regio
     assert payload["aws_config_profile"] == "default"
 
 
+def test_list_regions_human_text_names_the_aws_config_region(monkeypatch, capsys, tmp_path):
+    _aws_config(monkeypatch, tmp_path, "eu-west-1")
+    monkeypatch.setattr(aws, "_session", lambda region=None: _FakeRegionSession())
+
+    assert aws.main(["regions", "list"], environment_region="eu-central-1") == 0
+    captured = capsys.readouterr()
+    assert "AWS config region: eu-west-1 (profile default)" in captured.out
+    assert "eu-central-1  selected" in captured.out
+
+
 def test_list_regions_reports_a_missing_profile_as_json_not_a_traceback(monkeypatch, capsys, tmp_path):
     # Needs real botocore to raise ProfileNotFound; CI images without boto3 cannot exercise it.
     pytest.importorskip("boto3")

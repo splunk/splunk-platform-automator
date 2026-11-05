@@ -9,7 +9,17 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux packages and Homebrew are later, not part of 3.0.
 
+### Added
+
+- **Architecture 0.4.0 handover**: `spa architecture plan FILE` reads confirmed `kind: splunk.architecture` files (schema `0.4.0` only). `spa init --architecture FILE` (exclusive with `--example`) selects the catalog topology from `sva.code` and overlays counts, RF/SF, `org_prefix`, and extra roles. `spa architecture apply FILE --yes` does the same overlay on an existing env and reports ingested/skipped/remaining. `spa architecture check FILE` subset-matches the file against the current config. Init and apply warn (and stay successful) when `license_manager` is deferred until a license file is set, and when architecture check would still mismatch. `spa config move role ROLE --from HOST --to HOST` relocates one role; `spa config move host OLD --to NEW`, `--prefix PREFIX`, and `--postfix POSTFIX` rename identities. Examples: `examples/architectures/c1.json`, `c3.json`, `m4.json`. Unreleased 0.3.0 phase JSON is not supported.
+
 ### Changed
+
+- **Create-config design summary**: Phase 11 is the plan-mode write-preview (`assets/design-summary-template.md`). It is not `spa architecture plan FILE`. One yes (the reconfirmation table) starts Phase 12.
+
+- **Create-config phase numbers**: letter suffixes are gone (`0a`/`0b`/`5b`/`6b`/`6c`). The flow is Phases 1–14. Handoff is Phase 14. There was no Phase 8b section.
+
+- **Create-config plan mode**: `spa init` waits until Phase 12. The location/name gate still collects the path; it does not scaffold. The AWS region AskQuestion default is only `aws_config_region` from the active AWS profile, never `selected` / `region` / `us-east-1` from memory.
 
 - **Host roles and YAML quotes** ([#127](https://github.com/splunk/splunk-platform-automator/issues/127)): `spa validate` and post-write config checks reject the same role twice on one host, and reject double-quoted mapping keys and double-quoted role names. Quoted scalar values stay allowed. Distinct co-located roles are unchanged.
 
@@ -50,7 +60,6 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 - **Config audit** ([#127](https://github.com/splunk/splunk-platform-automator/issues/127)): a successful spa write stamps `.splunk_config.yml.spa-stamp` next to the config with sha256, timestamp, and command (no file contents). `spa config audit --check-hand-edits` reports `ok`, `hand_edited`, or `unknown`. A missing stamp does not fail `spa validate`.
 
-- **Architecture file plan**: `spa architecture plan FILE [--write-fragment PATH]` reads the architecture file that `splunk-validated-architectures` writes (schema 0.3.0: `phase_1`, `phase_5` with `indexer_cluster`, `shcluster`, `optional_roles`, `env_lookups`, and `_extensions`). It checks site counts, replication factors, and SHC minimums, builds one host per indexer, search head, and optional role, and lists the secrets as set or not set. It ignores `apps_by_role`, since SPA decides the apps. It writes nothing to `splunk_config.yml`; `--write-fragment` writes the merge input for `spa config merge --file`.
 
 - **Skills pack** ([#67](https://github.com/splunk/splunk-platform-automator/issues/67)): three operator skills (`spa`, `spa-create-config`, `spa-apps`). Agents ask in chat and wait before provision, deploy, destroy, suspend, resume, and environment remove. `spa validate --splunk-config aws` checks that provider from the environment config. App-scope scenario steps live in `tests/README.md`.
 

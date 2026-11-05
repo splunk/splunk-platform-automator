@@ -10,8 +10,8 @@ spa aws --check-auth --json
 
 | Result | Meaning | Skill path |
 |--------|---------|------------|
-| `ok: true` + `account` | Credentials work | Phase 4 **with creds** (`--survey`, `--latest-ami`, optional `spa validate --splunk-config aws`). Report account ID only — see [secrets-handling.md](secrets-handling.md) |
-| `ok: false`, error mentions credentials | No AWS creds / expired session | Phase 4 **without creds** (this doc) |
+| `ok: true` + `account` | Credentials work | Phase 6 **with creds** (`--survey`, `--latest-ami`, optional `spa validate --splunk-config aws`). Report account ID only — see [secrets-handling.md](secrets-handling.md) |
+| `ok: false`, error mentions credentials | No AWS creds / expired session | Phase 6 **without creds** (this doc) |
 | Exit 2, `boto3 is required` | boto3 not installed | `pip install boto3`; until then, **without creds** path |
 | `ok: false`, other API error | Profile/region/permission issue | Fix AWS setup or fall back **without creds** and note in header |
 
@@ -25,7 +25,7 @@ Record in config header comment when API was not used:
 
 | Step | Works without AWS? |
 |------|-------------------|
-| Phases 0a–3, 5–7 (topology, OS matrix, RF/SF, write YAML) | Yes |
+| Phases 1–5, 7–12 (topology, OS matrix, RF/SF, write YAML) | Yes |
 | `spa licenses` | Yes (local Software scan) |
 | `spa validate` (default) | Yes — schema, inventory, license pairing, playbook syntax |
 | `./tests/run_schema_tests.sh` | Yes |
@@ -41,9 +41,9 @@ Record in config header comment when API was not used:
 
 Provision and deploy (`spa provision --yes`, then `spa deploy --yes`, each after its own chat yes in `/spa`) **require** working AWS credentials at run time — building config offline is fine, but user must configure creds before provision.
 
-## Without-creds Phase 4 workflow
+## Without-creds Phase 6 workflow
 
-1. **Region** — run `spa aws --json regions list`. It works without credentials: `ok` is false and `items` is empty, but `aws_config_region` and `aws_config_profile` still come from `~/.aws/config`. Ask with AskQuestion: option 1 is `aws_config_region` (marked as the default), then "Other: type a region". If `aws_config_region` is null, show no default. Never choose a region from memory.
+1. **Region** — run `spa aws --json regions list`. It works without credentials: `ok` is false and `items` is empty, but `aws_config_region` and `aws_config_profile` still come from `~/.aws/config`. Ask with AskQuestion: option 1 is **only** `aws_config_region` (marked as the default), labelled ``<region> (from AWS config, profile <aws_config_profile>)``, then "Other: type a region". Do not use `selected` or `region`. If `aws_config_region` is null, show no default. Never mark `us-east-1` as default unless `aws_config_region` is exactly that. Never choose a region from memory.
 2. **OS + SSH** — [aws-os-matrix.md](aws-os-matrix.md) templates (`ec2-user` / `ubuntu` / `admin`).
 3. **AMI** — copy from `examples/providers/aws.yml` or catalog `provider.aws`; add comment `# verify AMI in console or re-run spa aws when creds available`.
 4. **Instance type** — lab default `t3.medium` ([aws-baseline.md](aws-baseline.md)).
@@ -52,7 +52,7 @@ Provision and deploy (`spa provision --yes`, then `spa deploy --yes`, each after
 
 Do **not** block config completion on missing AWS API. Warn that AMI IDs **expire** and key/SG names are **not verified**.
 
-## Phase 8 without AWS
+## Phase 13 without AWS
 
 Required:
 

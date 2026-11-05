@@ -54,6 +54,7 @@ HELP_CONTRACTS = [
             "usage: spa init",
             "env_dir",
             "--example",
+            "--architecture",
             "--provider",
             "spa init list",
             "--from",
@@ -137,6 +138,7 @@ HELP_CONTRACTS = [
             "add",
             "unset",
             "merge",
+            "move",
             "topology",
             "provider",
             "audit",
@@ -177,6 +179,34 @@ HELP_CONTRACTS = [
     (
         ["config", "merge", "--help"],
         ["usage: spa config merge", "TEMPLATE", "--file", "--dry-run", "--resolve-file"],
+    ),
+    (
+        ["config", "move", "--help"],
+        ["usage: spa config move", "role", "host"],
+    ),
+    (
+        ["config", "move", "role", "--help"],
+        ["usage: spa config move role", "ROLE", "--from", "--to"],
+    ),
+    (
+        ["config", "move", "host", "--help"],
+        ["usage: spa config move host", "--to", "--prefix", "--postfix"],
+    ),
+    (
+        ["architecture", "--help"],
+        ["usage: spa architecture", "plan", "apply", "check"],
+    ),
+    (
+        ["architecture", "plan", "--help"],
+        ["usage: spa architecture plan", "FILE", "examples/architectures/c3.json"],
+    ),
+    (
+        ["architecture", "apply", "--help"],
+        ["usage: spa architecture apply", "FILE", "--yes"],
+    ),
+    (
+        ["architecture", "check", "--help"],
+        ["usage: spa architecture check", "FILE"],
     ),
     (
         ["apps", "--help"],
@@ -941,6 +971,13 @@ def _help_action_names():
                 assert nested.returncode == 0, nested.stderr
                 for nested_name, _nested_alias in _command_rows(nested.stdout):
                     names.add("config header %s" % nested_name)
+                continue
+            if parent == "config" and name == "move":
+                names.add("config move")
+                nested = run_spa(["--no-agent", "config", "move", "--help"])
+                assert nested.returncode == 0, nested.stderr
+                for nested_name, _nested_alias in _command_rows(nested.stdout):
+                    names.add("config move %s" % nested_name)
                 continue
             names.add("%s %s" % (parent, name))
     catalogs = (

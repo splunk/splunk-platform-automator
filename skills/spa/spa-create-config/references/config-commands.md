@@ -12,6 +12,8 @@ Always use these commands, never hand-edit:
 | Add ITSI content pack | `spa --agent apps content-packs list 1841` then `spa --env NAME apps add 1841 --content-pack CP_NAME --yes` | Pack name validated against ITSI manifest |
 | Change OS | `spa --env NAME config merge --file -` with YAML input | Ensures os.ssh_username, disable_apparmor are set together |
 | Merge multiple settings | `spa --env NAME config merge --file FILE.yml --yes` | Atomic, all-or-nothing; validation happens once |
+| Move a role to another host | `spa --env NAME config move role ROLE --from HOST --to HOST --yes` | Relocates one role; required on path B when an extra role must leave a co-located preset host |
+| Rename, prefix, or postfix hosts | `spa --env NAME config move host OLD --to NEW --yes` or `--prefix PREFIX` or `--postfix POSTFIX` | Rewrites host identities and host-name references |
 | Read current state | `spa --env NAME config get [PATH]` | Always check before assuming a value |
 | Search for a path | `spa --env NAME config search KEYWORD` | Finds related config paths |
 | Explain a path | `spa --env NAME config explain PATH` | Shows type, constraints, examples, related commands |

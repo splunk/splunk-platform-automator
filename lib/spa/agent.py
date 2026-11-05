@@ -141,7 +141,25 @@ COMMAND_SCHEMA = {
     "name": "spa",
     "schema_version": SCHEMA_VERSION,
     "commands": [
-        {"name": "init", "summary": "Alias of spa environment init (spa init --example TOPOLOGY [--provider aws|virtualbox|external] NAME)"},
+        {
+            "name": "init",
+            "summary": "Alias of spa environment init (spa init --example TOPOLOGY or --architecture FILE [--provider aws|virtualbox|external] NAME)",
+            "flags": [
+                {"long": "--example", "help": "Topology example id (exclusive with --architecture)", "takes_value": True, "completes_from": "init list"},
+                {
+                    "long": "--architecture",
+                    "help": "Confirmed 0.4.0 architecture JSON (exclusive with --example)",
+                    "takes_value": True,
+                },
+                {
+                    "long": "--provider",
+                    "help": INIT_PROVIDER_HELP,
+                    "takes_value": True,
+                    "completes_from": "providers",
+                },
+            ],
+            "example": "spa init --architecture examples/architectures/c3.json --provider aws my-lab",
+        },
         {
             "name": "init list",
             "summary": "List topology examples. Bare spa init still scaffolds; it does not list.",
@@ -149,7 +167,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "config",
-            "summary": "Read, explain, or transactionally edit splunk_config.yml. Agents use config search QUERY, then config explain PATH. Bare spa config exits 2.",
+            "summary": "Read, explain, or transactionally edit splunk_config.yml. Agents use config search QUERY, then config explain PATH. Bare spa config exits 2. Writes include set, add, unset, merge, move, topology, and provider.",
             "example": "spa --agent config explain",
         },
         {
@@ -290,6 +308,52 @@ COMMAND_SCHEMA = {
                 {"long": "--yes", "short": "-y", "help": "Skip the human confirmation prompt"},
             ],
             "example": "spa --agent config merge --file fragment.yml",
+        },
+        {
+            "name": "config move",
+            "summary": "Move a role between hosts, or rename host identities. Bare spa config move exits 2 and names role and host.",
+            "example": "spa --agent config move role license_manager --from cm --to lm --yes",
+        },
+        {
+            "name": "config move role",
+            "summary": "Move one AllowedRole instance from a host onto another host in one transaction.",
+            "idempotent": False,
+            "requires_confirmation": True,
+            "positionals": [
+                {"name": "ROLE", "required": True, "help": "AllowedRole to relocate", "completes_from": "roles"},
+            ],
+            "flags": [
+                {"long": "--from", "help": "Host that currently has ROLE", "takes_value": True, "completes_from": "hosts"},
+                {"long": "--to", "help": "Destination host name (created if missing)", "takes_value": True},
+                {"long": "--dry-run", "help": "Preview without writing"},
+                {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},
+                {"long": "--resolve", "help": "Supply PATH VALUE for an unresolved dependency; repeatable"},
+                {"long": "--resolve-file", "help": "Supply a sparse YAML/JSON dependency fragment"},
+                {"long": "--show-diff", "help": "Print the redacted unified diff after the status line (no-op in agent mode)"},
+                {"long": "--yes", "short": "-y", "help": "Skip the human confirmation prompt"},
+            ],
+            "example": "spa --agent config move role license_manager --from cm --to lm --yes",
+        },
+        {
+            "name": "config move host",
+            "summary": "Rename one host, or prefix/postfix every host identity. Rewrites hosts_whitelist and hosts_blacklist.",
+            "idempotent": True,
+            "requires_confirmation": True,
+            "positionals": [
+                {"name": "OLD", "required": False, "help": "Current host name", "completes_from": "hosts"},
+            ],
+            "flags": [
+                {"long": "--to", "help": "New host name (with OLD)", "takes_value": True},
+                {"long": "--prefix", "help": "Prepend to every host name, iter.prefix, and list entry", "takes_value": True},
+                {"long": "--postfix", "help": "Append to every host name, iter.postfix, and list entry. A leading hyphen needs --postfix=-lab", "takes_value": True},
+                {"long": "--dry-run", "help": "Preview without writing"},
+                {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},
+                {"long": "--resolve", "help": "Supply PATH VALUE for an unresolved dependency; repeatable"},
+                {"long": "--resolve-file", "help": "Supply a sparse YAML/JSON dependency fragment"},
+                {"long": "--show-diff", "help": "Print the redacted unified diff after the status line (no-op in agent mode)"},
+                {"long": "--yes", "short": "-y", "help": "Skip the human confirmation prompt"},
+            ],
+            "example": "spa --agent config move host --prefix acme- --yes",
         },
         {
             "name": "config topology",
@@ -489,7 +553,12 @@ COMMAND_SCHEMA = {
             "name": "environment init",
             "summary": "Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Platform-Automator or paths.yml env_dir)",
             "flags": [
-                {"long": "--example", "help": "Topology example id", "takes_value": True, "completes_from": "init list"},
+                {"long": "--example", "help": "Topology example id (exclusive with --architecture)", "takes_value": True, "completes_from": "init list"},
+                {
+                    "long": "--architecture",
+                    "help": "Confirmed 0.4.0 architecture JSON (exclusive with --example)",
+                    "takes_value": True,
+                },
                 {
                     "long": "--provider",
                     "help": INIT_PROVIDER_HELP,
@@ -501,7 +570,7 @@ COMMAND_SCHEMA = {
                 {"long": "--force", "help": "Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example)"},
                 {"long": "--software-dir", "help": "Shared installers directory (saved in paths.yml)"},
             ],
-            "example": "spa environment init --example cm_2idxc_sh --provider aws my-lab",
+            "example": "spa environment init --architecture examples/architectures/c3.json --provider aws my-lab",
         },
         {
             "name": "environment init list",
@@ -759,22 +828,39 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "architecture",
-            "summary": "Architecture file actions. Plan an SVA JSON file into config (read-only). Bare spa architecture exits 2.",
-            "example": "spa --agent architecture plan ./m4-architecture.json",
+            "summary": "Architecture file actions. Bare spa architecture exits 2 and names plan, apply, and check.",
+            "example": "spa --agent architecture plan examples/architectures/c3.json",
         },
         {
             "name": "architecture plan",
-            "summary": "Validate an SVA architecture JSON file and plan the config (read-only). Writes nothing unless --write-fragment.",
+            "summary": "Validate a splunk.architecture 0.4.0 file and print the overlay plan (read-only). Needs no environment.",
+            "positionals": [
+                {"name": "FILE", "required": True, "help": "Architecture JSON file"},
+            ],
+            "example": "spa --agent architecture plan examples/architectures/c3.json",
+        },
+        {
+            "name": "architecture apply",
+            "summary": "Overlay a confirmed architecture file onto the current environment config.",
+            "requires_confirmation": True,
             "positionals": [
                 {"name": "FILE", "required": True, "help": "Architecture JSON file"},
             ],
             "flags": [
-                {
-                    "long": "--write-fragment",
-                    "help": "Write the config fragment as JSON for spa config merge --file (never splunk_config.yml)",
-                },
+                {"long": "--dry-run", "help": "Preview without writing"},
+                {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},
+                {"long": "--show-diff", "help": "Print the redacted unified diff after the status line (no-op in agent mode)"},
+                {"long": "--yes", "short": "-y", "help": "Confirm without prompting"},
             ],
-            "example": "spa --agent architecture plan ./m4-architecture.json --write-fragment /tmp/m4-fragment.json",
+            "example": "spa --agent architecture apply examples/architectures/c3.json --yes",
+        },
+        {
+            "name": "architecture check",
+            "summary": "Subset-match a splunk.architecture 0.4.0 file against the current environment config.",
+            "positionals": [
+                {"name": "FILE", "required": True, "help": "Architecture JSON file"},
+            ],
+            "example": "spa --agent architecture check examples/architectures/c3.json",
         },
         {
             "name": "licenses",

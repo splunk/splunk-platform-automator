@@ -121,7 +121,7 @@ RTO/RPO → multisite + factors is **qualitative** in the skill; confirm with SV
 
 ## Sizing beyond RF/SF (ingest, users, disk)
 
-Not RF formulas — use for **Phase 2** tier hints only.
+Not RF formulas — use for **Phase 4** tier hints only.
 
 ### Indexer count (performance table)
 
@@ -153,12 +153,12 @@ Use `splunk_defaults.splunk_volume_defaults` / per-host `terraform.aws.root_volu
 
 | Phase | Action |
 |-------|--------|
-| Phase 0b / 1 | Record ingest band, users, DR intent |
-| Phase 5 | Pick SVA code → use tables in [sva-topology-map.md](sva-topology-map.md) |
-| Phase 5 | If user states failure tolerance **N** → set RF = N+1 (single-site) or adjust `origin`/`total` (multisite) |
-| Phase 5 | Run **peer count checklist** (this doc + topology map) |
-| Phase 5 | If ingest/users band known → cite performance table; suggest indexer/SH **count** (not instance type) |
-| Phase 7 | Write `splunk_idxclusters`; for multisite lab with 2 peers/site add `idxc_rf: 2` when `total ≤ 3` |
+| Phase 2 / 3 | Record ingest band, users, DR intent |
+| Phase 7 | Pick SVA code → use tables in [sva-topology-map.md](sva-topology-map.md) |
+| Phase 7 | If user states failure tolerance **N** → set RF = N+1 (single-site) or adjust `origin`/`total` (multisite) |
+| Phase 7 | Run **peer count checklist** (this doc + topology map) |
+| Phase 7 | If ingest/users band known → cite performance table; suggest indexer/SH **count** (not instance type) |
+| Phase 12 | Write `splunk_idxclusters`; for multisite lab with 2 peers/site add `idxc_rf: 2` when `total ≤ 3` |
 
 ## Out of scope
 

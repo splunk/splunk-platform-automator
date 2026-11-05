@@ -76,12 +76,12 @@ splunk_defaults:
 
 ## Skill workflow
 
-1. Run `spa licenses` after Phase 6 (apps) so ITSI detection is accurate.
+1. Run `spa licenses` after Phase 9 (apps) so ITSI detection is accurate.
 2. If `proposed_splunk_license_file` is non-empty, ask the user (AskQuestion if available): add to config for lab?
-3. **If adding `splunk_license_file`**, also add `license_manager` to a host in Phase 5b (co-locate on `cm` or `mc` per [role-placement.md](role-placement.md)). Do not write license file without LM role.
+3. **If adding `splunk_license_file`**, also add `license_manager` to a host in Phase 8 (co-locate on `cm` or `mc` per [role-placement.md](role-placement.md)). Do not write license file without LM role.
 4. If ITSI or ES and no `license_manager`, prompt to add LM role (or co-locate per [role-placement.md](role-placement.md)).
 5. **Trial-only labs** — omit both `splunk_license_file` and `license_manager`.
-6. Include chosen licenses in Phase 7 write under `splunk_defaults`.
+6. Include chosen licenses in Phase 12 write under `splunk_defaults`.
 
 ## Out of scope
 
