@@ -4,6 +4,8 @@ Operators should start with the [user guide](user-guide.md). The generated CLI c
 
 Start framework changes with the [architecture and contributor standards](architecture.md), including module and Ansible boundaries, extension contracts, test layers, controller direction, and the feature development lifecycle. The sections below contain the detailed procedures linked from that guide.
 
+At each contributor gate, stop, name one next step, and wait. Completing todos is not authorization to implement, commit, or merge. After tests, write the [feature completion review](architecture.md#feature-completion-review) report and ask whether to commit; then ask before a pull request and again before merge. See the [feature development lifecycle](architecture.md#feature-development-lifecycle).
+
 ## Development setup
 
 Clone the repository and create the shared venv as in [Develop SPA](install.md#develop-spa-git-clone). Then activate it and run the local suite:
@@ -27,7 +29,7 @@ Canonical skills live only under `skills/spa/`:
 | Design `splunk_config.yml` | `spa-create-config` |
 | Find and configure Splunkbase apps | `spa-apps` |
 
-Cursor symlinks are not part of this repo. Install the packages into the user IDE directory with `spa skills install` (see [`skills/spa/README.md`](../skills/spa/README.md)). Do not duplicate skill content.
+Cursor User Rules stay personal (for example, commit or open a PR only when asked). SPA workflow belongs in repo `AGENTS.md` and in the thin `alwaysApply: false` adapters `spa skills install` writes for Cursor (`~/.cursor/rules/spa-*.mdc`) and Claude (`~/.claude/rules/spa.md` when that platform is used). Do not put SPA lifecycle in global User Rules. Cursor skill symlinks are not part of this repo. Install the packages into the user IDE directory with `spa skills install` (see [`skills/spa/README.md`](../skills/spa/README.md)). Do not duplicate skill content.
 
 Agents invoke `bin/spa`, never import `spa.api`, and follow [AGENTS.md](../AGENTS.md).
 

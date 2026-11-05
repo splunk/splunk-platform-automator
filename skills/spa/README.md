@@ -26,7 +26,7 @@ spa skills remove --yes
 
 Platforms: `claude-code` (`claude`), `cursor`, `codex`, `opencode`, `windsurf`, `gemini-code` (`gemini`), `pi` (`pi-dev`), `antigravity` (`agy`), or `all`. Pass several as one comma-separated argument (`cursor,claude`). An explicit platform ignores `SPA_SKILLS_PLATFORMS`. When several IDEs are present and the variable is unset, name the platform.
 
-Install prefers a symlink to `$SPA_HOME/skills/spa/<name>`. An existing directory or link with that package name is replaced. Other names in the IDE skill directory stay. If the OS cannot create a symlink, the package is copied and recorded in `~/.config/spa/skills.yml`. `spa skills remove` deletes only registered package names and requires `--yes`.
+Install prefers a symlink to `$SPA_HOME/skills/spa/<name>`. An existing directory or link with that package name is replaced. Other names in the IDE skill directory stay. If the OS cannot create a symlink, the package is copied and recorded in `~/.config/spa/skills.yml`. Cursor also gets thin `alwaysApply: false` adapters in `~/.cursor/rules/spa-*.mdc`; Claude Code gets `~/.claude/rules/spa.md` when that platform is used. Other IDEs use the skill directory plus repo `AGENTS.md`. `spa skills remove` deletes only registered package names and `spa-*` adapters, and requires `--yes`.
 
 ## Other agents
 

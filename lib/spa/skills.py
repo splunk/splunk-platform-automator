@@ -117,6 +117,7 @@ def install_skills(
     platforms, via = resolve_platforms(platform, home=home, environ=env, path_env=_path_value(env, path_env))
     copies = _load_copies(_skills_yml(config_dir, env))
     replaced = []
+    adapters = []
     for plat in platforms:
         root = _skills_root(home, plat)
         root.mkdir(parents=True, exist_ok=True)
@@ -124,6 +125,7 @@ def install_skills(
             dest = root / package
             if _place_package(source / package, dest, copies):
                 replaced.append(package)
+        adapters.extend(_place_adapters(home, plat))
     _save_copies(_skills_yml(config_dir, env), copies)
     return {
         "action": "install",
@@ -131,6 +133,7 @@ def install_skills(
         "detectedVia": via,
         "installed": list(packages),
         "replaced": replaced,
+        "adapters": adapters,
     }
 
 
@@ -151,18 +154,21 @@ def remove_skills(
     record = _skills_yml(config_dir, env)
     copies = _load_copies(record)
     removed = []
+    adapters = []
     for plat in platforms:
         root = _skills_root(home, plat)
         for package in packages:
             dest = root / package
             if _delete_package(dest, copies) and package not in removed:
                 removed.append(package)
+        adapters.extend(_delete_adapters(home, plat))
     _save_copies(record, copies)
     return {
         "action": "remove",
         "platforms": platforms,
         "detectedVia": via,
         "removed": removed,
+        "adapters": adapters,
     }
 
 
@@ -386,6 +392,85 @@ def _place_package(source: Path, dest: Path, copies: set) -> bool:
         return replaced
     copies.discard(str(dest))
     return replaced
+
+
+_CURSOR_ADAPTERS: Tuple[Tuple[str, str], ...] = (
+    (
+        "spa-token-budget.mdc",
+        "---\n"
+        "description: Splunk Platform Automator token budget (SPA checkout only)\n"
+        "alwaysApply: false\n"
+        "---\n"
+        "\n"
+        "When this workspace is Splunk Platform Automator, follow "
+        "skills/spa/spa/references/token-budget.md. Do not load contributor "
+        "lifecycle for operator lab or environment work.\n",
+    ),
+    (
+        "spa-contribute.mdc",
+        "---\n"
+        "description: Splunk Platform Automator contributor TDD and ship gates\n"
+        "alwaysApply: false\n"
+        "---\n"
+        "\n"
+        "When changing Splunk Platform Automator itself, follow "
+        "skills/spa/spa/references/contribute.md. Completing todos is not "
+        "authorization to implement, commit, or merge. Stop at each gate, "
+        "name one next step, and wait.\n",
+    ),
+)
+
+_CLAUDE_ADAPTER = (
+    "# Splunk Platform Automator\n"
+    "\n"
+    "When this workspace is Splunk Platform Automator, follow the spa skill "
+    "references/token-budget.md. When changing spa itself, also follow "
+    "references/contribute.md. Completing todos is not authorization to "
+    "implement, commit, or merge.\n"
+)
+
+
+def _place_adapters(home: Path, platform: str) -> List[str]:
+    """Write thin alwaysApply:false SPA rule adapters for Cursor and Claude."""
+    placed: List[str] = []
+    if platform == "cursor":
+        rules = _join(home, ".cursor/rules")
+        rules.mkdir(parents=True, exist_ok=True)
+        for name, body in _CURSOR_ADAPTERS:
+            dest = rules / name
+            dest.write_text(body, encoding="utf-8")
+            placed.append(str(dest))
+    elif platform == "claude-code":
+        rules = _join(home, ".claude/rules")
+        rules.mkdir(parents=True, exist_ok=True)
+        dest = rules / "spa.md"
+        dest.write_text(_CLAUDE_ADAPTER, encoding="utf-8")
+        placed.append(str(dest))
+    return placed
+
+
+def _delete_adapters(home: Path, platform: str) -> List[str]:
+    """Delete only spa-* (and Claude spa.md) adapters. Neighbor rules stay."""
+    removed: List[str] = []
+    if platform == "cursor":
+        rules = _join(home, ".cursor/rules")
+        if rules.is_dir():
+            for path in list(rules.iterdir()):
+                if path.name.startswith("spa-") and path.suffix == ".mdc" and path.is_file():
+                    path.unlink()
+                    removed.append(str(path))
+    elif platform == "claude-code":
+        rules = _join(home, ".claude/rules")
+        dest = rules / "spa.md"
+        if dest.is_file():
+            dest.unlink()
+            removed.append(str(dest))
+        if rules.is_dir():
+            for path in list(rules.iterdir()):
+                if path.name.startswith("spa-") and path.is_file():
+                    path.unlink()
+                    removed.append(str(path))
+    return removed
 
 
 def _delete_package(dest: Path, copies: set) -> bool:
