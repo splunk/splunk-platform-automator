@@ -1,6 +1,6 @@
 # Basic apps questionnaire
 
-Load [spa-apps](../../spa-apps/SKILL.md) for this phase. Search Splunkbase with `spa --agent apps search QUERY` (technology keywords), then use one `spa --agent apps add APP_ID` transaction. If curated `playbooks` are available, ask before adding `--customize`. Do not guess `app_id`, patch YAML, or open splunkbase.com first. Finish with `spa --agent validate`.
+Load [spa-apps](../../spa-apps/SKILL.md) for this phase. Search Splunkbase with `spa --agent apps search QUERY` (technology keywords), then use one `spa --agent apps add APP_ID` transaction. If curated `playbooks` are available, ask before adding `--customize` (`--customize` on 5391 is a no-op when `spa_automation` is already on the pack). Do not guess `app_id`, patch YAML, or open splunkbase.com first. Finish with `spa --agent validate`.
 
 Deep customization: [docs/apps.md](../../../../docs/apps.md#customize-an-app) and `spa --agent config explain splunk_app_deployment.apps.customizations.remove`.
 
@@ -55,7 +55,7 @@ Discover Java and license paths with `spa --agent config explain PATH`, then set
 
 ## 7. Other Splunkbase apps
 
-`spa --agent apps search QUERY` then `spa --agent apps add APP_ID --roles ROLE[,ROLE]`.
+`spa --agent apps search QUERY` then `spa --agent apps add APP_ID --roles ROLE[,ROLE]`. A second copy of the same `app_id` uses `--new` plus different `--roles`.
 
 ## 8. Local org apps
 
@@ -65,4 +65,4 @@ Discover Java and license paths with `spa --agent config explain PATH`, then set
 
 - ES full prerequisite matrix (`premium_app: es` is not valid)
 - Auto-deploy without approval
-- Host uninstall remains out of scope; `apps remove` removes only authored config.
+- Host uninstall remains out of scope; `apps remove` removes only authored config. Two copies need `--roles` to say which row to remove.

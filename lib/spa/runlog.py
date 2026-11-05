@@ -1748,6 +1748,7 @@ class RunLog:
         if sentence in self._sentences_said:
             return
         self._sentences_said.add(sentence)
+        self._last_phase_sentence = sentence
         self._write_stderr(sentence)
 
     def _maybe_phase_change(self, phase: Optional[str], stamp: datetime) -> None:
@@ -2151,6 +2152,11 @@ class RunLog:
         kind = str(event.get("kind") or status or "")
         if self.agent:
             if status == "heartbeat":
+                last = self._last_phase_sentence
+                if last:
+                    still = still_sentence(last)
+                    if still:
+                        self._write_stderr(still)
                 return
             self._write_phase_sentences(event)
             if status == "phase_end":
@@ -2298,6 +2304,53 @@ def load_run(paths: SpaPaths, run_id: str) -> Optional[Dict[str, Any]]:
 
 def read_jsonl(path: Path) -> str:
     return path.read_text(encoding="utf-8") if path.is_file() else ""
+
+
+def still_sentence(sentence: str) -> str:
+    """Repeat the last agent phase sentence as a heartbeat, e.g. Still downloading Splunk on cm."""
+    text = str(sentence or "").strip()
+    if not text:
+        return ""
+    if text.endswith("."):
+        body, suffix = text[:-1], "."
+    else:
+        body, suffix = text, ""
+    return "Still %s%s" % (body[:1].lower() + body[1:], suffix)
+
+
+def _run_started_at(row: Mapping[str, Any]) -> Optional[datetime]:
+    raw = row.get("start")
+    if not raw:
+        return None
+    try:
+        started = datetime.fromisoformat(str(raw))
+    except ValueError:
+        return None
+    if started.tzinfo is None:
+        return started.astimezone()
+    return started
+
+
+def wait_for_new_run(
+    paths: SpaPaths,
+    since: datetime,
+    *,
+    idle_passes: int = -1,
+    sleep_s: float = 0.2,
+) -> Optional[Dict[str, Any]]:
+    """Return the newest run whose meta start is after *since*, or None after idle_passes."""
+    if since.tzinfo is None:
+        since = since.astimezone()
+    idle = 0
+    while True:
+        for row in list_runs(paths):
+            started = _run_started_at(row)
+            if started is not None and started > since:
+                return row
+        idle += 1
+        if idle_passes >= 0 and idle >= idle_passes:
+            return None
+        time.sleep(sleep_s)
 
 
 def follow_jsonl(

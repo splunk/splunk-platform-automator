@@ -2103,24 +2103,6 @@ class SplunkConfig(BaseModel):
         return any(host.splunk_license_file is not None for host in self.splunk_hosts)
 
     @model_validator(mode='after')
-    def validate_license_manager_requires_license_file(self) -> 'SplunkConfig':
-        """Ensure license_manager role has splunk_license_file defined.
-        
-        If a license_manager role is defined, the splunk_defaults must include
-        a splunk_license_file setting.
-        """
-        if not self._has_license_manager_role():
-            return self
-
-        if not self._has_splunk_license_file_configured():
-            raise ValueError(
-                "When a license_manager role is defined, 'splunk_license_file' must be specified "
-                "in splunk_defaults (or splunk_environments / host override)."
-            )
-
-        return self
-
-    @model_validator(mode='after')
     def validate_license_file_requires_license_manager(self) -> 'SplunkConfig':
         """Ensure splunk_license_file is only set when a license_manager role exists.
 
@@ -3026,6 +3008,7 @@ def _plan_config_dependencies_pass(config: Dict[str, Any]) -> Dict[str, Any]:
     """
     requirements: List[Dict[str, Any]] = []
     repairs: List[Dict[str, Any]] = []
+    warnings: List[Dict[str, Any]] = []
     seen_requirements = set()
 
     def require(rule_id, kind, paths, summary, *, allowed=None, retry=None):
@@ -3149,10 +3132,14 @@ def _plan_config_dependencies_pass(config: Dict[str, Any]) -> Dict[str, Any]:
     )
     has_license_file = _raw_license_file_present(config)
     if has_license_manager and not has_license_file:
-        require(
-            "license_manager.license_file", "external_resource",
-            ["splunk_defaults.splunk_license_file"],
-            "Provide an existing Splunk license file path.",
+        warnings.append(
+            {
+                "id": "license_manager.license_file",
+                "message": (
+                    "license manager is set and no license file is configured; "
+                    "Splunk will run trial until files are added."
+                ),
+            }
         )
     if has_license_file and not has_license_manager:
         require(
@@ -3263,6 +3250,7 @@ def _plan_config_dependencies_pass(config: Dict[str, Any]) -> Dict[str, Any]:
         "ready": not requirements,
         "requirements": requirements,
         "repairs": repairs,
+        "warnings": warnings,
     }
 
 

@@ -138,7 +138,7 @@ flowchart TD
 | Remove managed infrastructure | `spa destroy --yes` |
 | Discover other playbooks | `spa run list` |
 | Inspect a playbook | `spa run NAME --help` |
-| Show a run transcript | `spa logs list` / `spa logs RUN_ID` / `spa logs --last` / `spa logs --follow` |
+| Show a run transcript | `spa logs list` / `spa logs RUN_ID` / `spa logs --last` / `spa logs --follow` / `spa logs --follow --wait` |
 | Replay the captured native Ansible transcript | `spa logs --last --ansible-output` |
 | Show event times on that transcript | `spa logs --last --ansible-output --timestamps` |
 | Color that transcript | `spa logs --last --ansible-output --color` |

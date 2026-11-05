@@ -25,7 +25,10 @@ class ConfigEditError(RuntimeError):
     """A safe, operator-facing config edit error."""
 
 
-_SEGMENT = re.compile(r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?:\[(?P<key>[^=\]]+)=(?P<value>[^\]]+)\])?$")
+_SEGMENT = re.compile(
+    r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?:\[(?P<selector>[^\]]+)\])?$"
+)
+_FILTER_SPLIT = re.compile(r"\s*,\s*(?=[A-Za-z_][A-Za-z0-9_]*=)")
 _ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _SECRET = re.compile(r"(?:password|secret|token|private_key)$", re.IGNORECASE)
 _IDENTITIES: Dict[Tuple[str, ...], Tuple[str, ...]] = {
@@ -124,7 +127,21 @@ def _locked(path: Path):
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-def _segments(path: str) -> List[Tuple[str, Optional[str], Optional[str]]]:
+def _parse_filters(selector: str) -> List[Tuple[str, str]]:
+    pairs = _FILTER_SPLIT.split(selector)
+    filters: List[Tuple[str, str]] = []
+    for pair in pairs:
+        if "=" not in pair:
+            raise ConfigEditError("Invalid config path selector %r" % selector)
+        key, value = pair.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise ConfigEditError("Invalid config path selector %r" % selector)
+        filters.append((key, value.strip()))
+    return filters
+
+
+def _segments(path: str) -> List[Tuple[str, Optional[str], Optional[str], Tuple[Tuple[str, str], ...]]]:
     if not path or path.startswith(".") or path.endswith("."):
         raise ConfigEditError("Invalid config path: %r" % path)
     parts: List[str] = []
@@ -148,12 +165,19 @@ def _segments(path: str) -> List[Tuple[str, Optional[str], Optional[str]]]:
             if "[]" in part:
                 raise ConfigEditError("A mutation path needs an identity selector, not []: %s" % path)
             raise ConfigEditError("Invalid config path segment %r" % part)
-        parsed.append((match.group("name"), match.group("key"), match.group("value")))
+        selector = match.group("selector")
+        if selector:
+            filters = _parse_filters(selector)
+            key, value = filters[0]
+            extras = tuple(filters[1:])
+            parsed.append((match.group("name"), key, value, extras))
+        else:
+            parsed.append((match.group("name"), None, None, ()))
     return parsed
 
 
 def _normalized_path(path: str) -> str:
-    return ".".join("%s[]" % name if key else name for name, key, _ in _segments(path))
+    return ".".join("%s[]" % name if key else name for name, key, _, _extras in _segments(path))
 
 
 def _nested_get(item: Mapping[str, Any], path: str) -> Any:
@@ -165,16 +189,42 @@ def _nested_get(item: Mapping[str, Any], path: str) -> Any:
     return value
 
 
-def _select(items: Any, key: str, value: str, path: str) -> MutableMapping[str, Any]:
+def _roles_match(actual: Any, wanted: str) -> bool:
+    actual_list = [str(role) for role in (actual or [])]
+    needed = [part.strip() for part in str(wanted).split(",") if part.strip()]
+    if len(needed) == 1:
+        return needed[0] in actual_list
+    return sorted(actual_list) == sorted(needed)
+
+
+def _item_matches_filters(
+    item: Mapping[str, Any], filters: Sequence[Tuple[str, str]]
+) -> bool:
+    for key, value in filters:
+        if key == "target_roles":
+            if not _roles_match(item.get("target_roles"), value):
+                return False
+            continue
+        if str(_nested_get(item, key)) != value:
+            return False
+    return True
+
+
+def _select(
+    items: Any,
+    key: str,
+    value: str,
+    path: str,
+    extras: Sequence[Tuple[str, str]] = (),
+) -> MutableMapping[str, Any]:
     if not isinstance(items, list):
         raise ConfigEditError("%s is not a list" % path)
-    matches = []
-    for item in items:
-        if not isinstance(item, MutableMapping):
-            continue
-        actual = _nested_get(item, key)
-        if str(actual) == value:
-            matches.append(item)
+    filters = [(key, value), *list(extras)]
+    matches = [
+        item
+        for item in items
+        if isinstance(item, MutableMapping) and _item_matches_filters(item, filters)
+    ]
     if not matches:
         raise ConfigEditError("%s matched no items" % path)
     if len(matches) > 1:
@@ -191,7 +241,7 @@ def _parent(
     parsed = _segments(path)
     current: Any = document
     walked: List[str] = []
-    for name, selector_key, selector_value in parsed[:-1]:
+    for name, selector_key, selector_value, extras in parsed[:-1]:
         walked.append(name)
         if not isinstance(current, MutableMapping):
             raise ConfigEditError("%s is not a mapping" % ".".join(walked[:-1]))
@@ -201,16 +251,37 @@ def _parent(
             current[name] = CommentedMap()
         current = current[name]
         if selector_key:
-            current = _select(current, selector_key, str(selector_value), ".".join(walked))
-    leaf, selector_key, selector_value = parsed[-1]
+            current = _select(
+                current,
+                selector_key,
+                str(selector_value),
+                ".".join(walked),
+                extras,
+            )
+    leaf, selector_key, selector_value, extras = parsed[-1]
     if selector_key:
         if not isinstance(current, MutableMapping) or leaf not in current:
             raise ConfigEditError("%s does not exist" % path)
-        selected = _select(current[leaf], selector_key, str(selector_value), path)
+        selected = _select(
+            current[leaf], selector_key, str(selector_value), path, extras
+        )
         return selected, ""
     if not isinstance(current, MutableMapping):
         raise ConfigEditError("Parent of %s is not a mapping" % path)
     return current, leaf
+
+
+def _lookup_leaf(document: Mapping[str, Any], path: str) -> Tuple[bool, Any]:
+    """Return (found, value) for PATH. found is False when the leaf is absent."""
+    try:
+        parent, leaf = _parent(document, path, create=False)  # type: ignore[arg-type]
+    except ConfigEditError:
+        return False, None
+    if not leaf:
+        return True, parent
+    if leaf not in parent:
+        return False, None
+    return True, parent[leaf]
 
 
 def _schema_detail(path: str) -> Optional[Dict[str, Any]]:
@@ -257,6 +328,30 @@ def _parse_value(path: str, raw: str) -> Any:
         if not isinstance(value, expected) or (type_name == "integer" and isinstance(value, bool)):
             raise ConfigEditError("%s expects %s" % (path, type_name))
         return value
+    parts = [part.strip() for part in type_name.split("|")]
+    if any(part.startswith(("list", "map", "object")) for part in parts):
+        try:
+            loaded = json.loads(raw)
+        except json.JSONDecodeError:
+            return _unwrap_json_string(raw)
+        if isinstance(loaded, list) and any(part.startswith("list") for part in parts):
+            return loaded
+        if isinstance(loaded, dict) and any(part.startswith(("map", "object")) for part in parts):
+            return loaded
+        if isinstance(loaded, str):
+            return loaded
+        return raw
+    return _unwrap_json_string(raw)
+
+
+def _unwrap_json_string(raw: str) -> str:
+    """Unwrap one JSON string layer. `"eu-central-1"` becomes eu-central-1."""
+    try:
+        loaded = json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+    if isinstance(loaded, str):
+        return loaded
     return raw
 
 
@@ -276,11 +371,13 @@ def _cleanup_empty(document: MutableMapping[str, Any], path: str) -> None:
     parsed = _segments(path)
     parents: List[Tuple[MutableMapping[str, Any], str]] = []
     current: Any = document
-    for name, selector_key, selector_value in parsed[:-1]:
+    for name, selector_key, selector_value, extras in parsed[:-1]:
         if not isinstance(current, MutableMapping) or name not in current:
             return
         if selector_key:
-            current = _select(current[name], selector_key, str(selector_value), path)
+            current = _select(
+                current[name], selector_key, str(selector_value), path, extras
+            )
         else:
             parents.append((current, name))
             current = current[name]
@@ -488,7 +585,7 @@ def _leaf_operations(before: Any, after: Any, prefix: str = "") -> List[Dict[str
                 operations.extend(_leaf_operations(before[key], after[key], path))
         return operations
     if isinstance(before, list) and isinstance(after, list) and prefix:
-        names = tuple(name for name, _, _ in _segments(prefix))
+        names = tuple(name for name, _, _, _ in _segments(prefix))
         identities = _IDENTITIES.get(names)
         if identities:
             operations = []
@@ -597,7 +694,7 @@ def _transact(
                 % (expect_revision, before_revision)
             )
         before = copy.deepcopy(document)
-        warnings: List[str] = []
+        warnings: List[Any] = []
         mutate(document, warnings)
         for pair in resolve or []:
             if len(pair) != 2:
@@ -609,13 +706,34 @@ def _transact(
         dependency = (
             _plan_dependencies(document, spa_home)
             if validate
-            else {"ready": True, "requirements": [], "repairs": []}
+            else {"ready": True, "requirements": [], "repairs": [], "warnings": []}
         )
+        warnings.extend(dependency.get("warnings") or [])
+        from spa.next_steps import ITSI_LICENSE_FILE_WARNING, attach_license_file_next
+
+        apps = ((document.get("splunk_app_deployment") or {}).get("apps") or [])
+        has_itsi = any(
+            isinstance(app, Mapping)
+            and str(app.get("state") or "installed") != "absent"
+            and (app.get("app_id") == 1841 or str(app.get("premium_app") or "") == "itsi")
+            for app in apps
+        )
+        has_file = bool((document.get("splunk_defaults") or {}).get("splunk_license_file"))
+        if has_itsi and not has_file and not any(
+            isinstance(item, Mapping) and item.get("id") == ITSI_LICENSE_FILE_WARNING["id"]
+            for item in warnings
+        ):
+            warnings.append(dict(ITSI_LICENSE_FILE_WARNING))
+
+        def finish(payload: Dict[str, Any]) -> Dict[str, Any]:
+            attach_license_file_next(payload)
+            return payload
+
         document = _ordered(document)
         operations = _leaf_operations(before, document)
         diff = _redacted_diff(before, document) if operations else ""
         if not dependency["ready"]:
-            return {
+            return finish({
                 "changed": False,
                 "ready": False,
                 "revision_before": before_revision,
@@ -626,9 +744,9 @@ def _transact(
                 "warnings": warnings,
                 "omitted_defaults": [],
                 "validation": "pending",
-            }
+            })
         if not operations:
-            return {
+            return finish({
                 "changed": False,
                 "ready": True,
                 "revision_before": before_revision,
@@ -638,7 +756,7 @@ def _transact(
                 "omitted_defaults": [],
                 "validation": "ok",
                 "requirements": [],
-            }
+            })
         fd, temp_name = tempfile.mkstemp(
             prefix=".%s." % config_path.name,
             suffix=".tmp",
@@ -667,7 +785,7 @@ def _transact(
                 os.replace(temp_path, config_path)
                 result["revision_after"] = _revision(candidate_raw)
                 _write_stamp(config_path, result["revision_after"], command)
-            return result
+            return finish(result)
         finally:
             if temp_path.exists():
                 temp_path.unlink()
@@ -803,20 +921,28 @@ def config_set(
         parsed = _parse_value(path, str(value))
     _validate_fragment_secrets(parsed, path)
     default = (detail or {}).get("default", _MISSING)
-    omitted = default is not _MISSING and parsed == default and not explicit_default
+    matches_default = default is not _MISSING and parsed == default and not explicit_default
     nested_omitted: List[Dict[str, Any]] = []
-    if not omitted and isinstance(parsed, Mapping) and not explicit_default:
+    if not matches_default and isinstance(parsed, Mapping) and not explicit_default:
         parsed = _omit_fragment_defaults(
             parsed,
             parts=tuple(part for part in path.split(".") if part),
             omitted=nested_omitted,
         )
-        omitted = parsed == {} and bool(nested_omitted)
+        matches_default = parsed == {} and bool(nested_omitted)
+    omitted_defaults: List[Dict[str, Any]] = []
 
     def mutate(document: MutableMapping[str, Any], warnings: List[str]) -> None:
-        if omitted:
+        if matches_default and nested_omitted:
             warnings.append("%s already has the schema default; use --explicit-default to author it" % path)
+            omitted_defaults.extend(nested_omitted)
             return
+        if matches_default:
+            found, current = _lookup_leaf(document, path)
+            if not found or current == default:
+                warnings.append("%s already has the schema default; use --explicit-default to author it" % path)
+                omitted_defaults.append({"path": path, "value": _redacted_value(path, parsed)})
+                return
         parent, leaf = _parent(document, path, create=True)
         if not leaf:
             raise ConfigEditError("Cannot replace a selected item without a field path")
@@ -835,8 +961,8 @@ def config_set(
         stdin_text=stdin_text,
         command="config set",
     )
-    if omitted and not nested_omitted:
-        result["omitted_defaults"] = [{"path": path, "value": _redacted_value(path, parsed)}]
+    if omitted_defaults:
+        result["omitted_defaults"] = omitted_defaults
     elif nested_omitted:
         result["omitted_defaults"] = nested_omitted
     return result
@@ -936,7 +1062,7 @@ def _identity_selector(path: str) -> Tuple[Tuple[str, ...], str, str]:
     parsed = _segments(path)
     if not parsed or not parsed[-1][1]:
         raise ConfigEditError("spa config add needs an identity selector: %s" % path)
-    names = tuple(name for name, _, _ in parsed)
+    names = tuple(name for name, _, _, _ in parsed)
     return names, str(parsed[-1][1]), str(parsed[-1][2])
 
 
@@ -951,14 +1077,20 @@ def _identity_list(document: MutableMapping[str, Any], path: str) -> Tuple[list,
         raise ConfigEditError("%s identity must be one of: %s" % (path, ", ".join(identities)))
     current: Any = document
     walked: List[str] = []
-    for name, selector_key, selector_value in _segments(path)[:-1]:
+    for name, selector_key, selector_value, extras in _segments(path)[:-1]:
         walked.append(name)
         if not isinstance(current, MutableMapping):
             raise ConfigEditError("%s is not a mapping" % ".".join(walked[:-1]))
         if selector_key:
             if name not in current:
                 raise ConfigEditError("%s does not exist" % ".".join(walked))
-            current = _select(current[name], selector_key, str(selector_value), ".".join(walked))
+            current = _select(
+                current[name],
+                selector_key,
+                str(selector_value),
+                ".".join(walked),
+                extras,
+            )
         else:
             if name not in current or current.get(name) is None:
                 current[name] = CommentedMap()
@@ -1113,19 +1245,23 @@ def config_unset(
             parsed = _segments(path)
             if parsed[-1][1]:
                 current: Any = document
-                for name, selector_key, selector_value in parsed[:-1]:
+                for name, selector_key, selector_value, extras in parsed[:-1]:
                     if not isinstance(current, MutableMapping) or name not in current:
                         raise ConfigEditError("%s does not exist" % path)
                     current = current[name]
                     if selector_key:
                         current = _select(
-                            current, selector_key, str(selector_value), path
+                            current, selector_key, str(selector_value), path, extras
                         )
-                name, selector_key, selector_value = parsed[-1]
+                name, selector_key, selector_value, extras = parsed[-1]
                 if not isinstance(current, MutableMapping) or name not in current:
                     raise ConfigEditError("%s does not exist" % path)
                 selected = _select(
-                    current[name], str(selector_key), str(selector_value), path
+                    current[name],
+                    str(selector_key),
+                    str(selector_value),
+                    path,
+                    extras,
                 )
                 current[name].remove(selected)
                 continue
@@ -1432,15 +1568,17 @@ def _safe_read_value(document: MutableMapping[str, Any], path: str) -> Any:
 def _identity_path(path: str) -> Optional[str]:
     parsed = _segments(path)
     last_selector = None
-    for index, (_name, key, _value) in enumerate(parsed):
+    for index, (_name, key, _value, _extras) in enumerate(parsed):
         if key:
             last_selector = index
     if last_selector is None:
         return None
     parts = []
-    for name, key, value in parsed[: last_selector + 1]:
+    for name, key, value, extras in parsed[: last_selector + 1]:
         if key:
-            parts.append("%s[%s=%s]" % (name, key, value))
+            filters = [(key, value), *list(extras)]
+            rendered = ",".join("%s=%s" % (item_key, item_value) for item_key, item_value in filters)
+            parts.append("%s[%s]" % (name, rendered))
         else:
             parts.append(name)
     return ".".join(parts)
@@ -1954,6 +2092,35 @@ def _app_identity(entry: Mapping[str, Any]) -> Tuple[str, Any]:
     raise ConfigEditError("App entry needs app_id or name")
 
 
+def _roles_key(roles: Any) -> Tuple[str, ...]:
+    return tuple(sorted(str(role) for role in (roles or [])))
+
+
+def _format_roles_flag(roles: Any) -> str:
+    return ",".join(str(role) for role in (roles or []))
+
+
+def _defined_twice_error(app_id_or_name: Any, copies: Sequence[Mapping[str, Any]]) -> ConfigEditError:
+    options = []
+    for app in copies:
+        options.append("--roles %s" % _format_roles_flag(app.get("target_roles")))
+    return ConfigEditError(
+        "App %s is defined twice; pass %s" % (app_id_or_name, " or ".join(options))
+    )
+
+
+def _app_copies(apps: Sequence[Any], app_id_or_name: str) -> List[MutableMapping[str, Any]]:
+    return [
+        app
+        for app in apps
+        if isinstance(app, MutableMapping)
+        and (
+            str(app.get("app_id")) == str(app_id_or_name)
+            or str(app.get("name")) == str(app_id_or_name)
+        )
+    ]
+
+
 def _replace_supplied_fields(current: MutableMapping[str, Any], supplied: Mapping[str, Any]) -> None:
     for key, value in supplied.items():
         if isinstance(value, Mapping) and isinstance(current.get(key), MutableMapping):
@@ -1967,6 +2134,7 @@ def config_app_add(
     spa_home: Path,
     entry: Mapping[str, Any],
     *,
+    force_new: bool = False,
     dry_run: bool = False,
     expect_revision: Optional[str] = None,
     validate: bool = True,
@@ -2005,15 +2173,35 @@ def config_app_add(
                 )
             )
             dependencies.append(1841)
-        match = next(
-            (
-                app
-                for app in apps
-                if isinstance(app, MutableMapping)
-                and str(app.get(identity_key)) == str(identity_value)
-            ),
-            None,
-        )
+        copies = [
+            app
+            for app in apps
+            if isinstance(app, MutableMapping)
+            and str(app.get(identity_key)) == str(identity_value)
+        ]
+        match: Optional[MutableMapping[str, Any]] = None
+        if force_new:
+            match = None
+        elif not copies:
+            match = None
+        elif len(copies) == 1:
+            match = copies[0]
+        else:
+            incoming_roles = entry.get("target_roles")
+            if not incoming_roles:
+                raise _defined_twice_error(identity_value, copies)
+            wanted = _roles_key(incoming_roles)
+            role_hits = [
+                app for app in copies if _roles_key(app.get("target_roles")) == wanted
+            ]
+            if not role_hits:
+                raise ConfigEditError(
+                    "App %s has no copy with those roles; pass --new to add another"
+                    % identity_value
+                )
+            if len(role_hits) > 1:
+                raise ConfigEditError("%s matched multiple items" % identity_value)
+            match = role_hits[0]
         if match is None:
             apps.append(copy.deepcopy(entry))
             return
@@ -2060,6 +2248,7 @@ def config_app_remove(
     app_id_or_name: str,
     *,
     content_pack: Optional[str] = None,
+    roles: Optional[Sequence[str]] = None,
     dry_run: bool = False,
     expect_revision: Optional[str] = None,
     validate: bool = True,
@@ -2072,20 +2261,27 @@ def config_app_remove(
         apps = deployment.get("apps") if isinstance(deployment, MutableMapping) else None
         if not isinstance(apps, list):
             raise ConfigEditError("App %s is not authored in splunk_config.yml" % app_id_or_name)
-        match = next(
-            (
-                app
-                for app in apps
-                if isinstance(app, MutableMapping)
-                and (
-                    str(app.get("app_id")) == str(app_id_or_name)
-                    or str(app.get("name")) == str(app_id_or_name)
-                )
-            ),
-            None,
-        )
-        if match is None:
+        copies = _app_copies(apps, app_id_or_name)
+        if not copies:
             raise ConfigEditError("App %s is not authored in splunk_config.yml" % app_id_or_name)
+        if roles:
+            wanted = ",".join(str(role) for role in roles)
+            role_hits = [
+                app for app in copies if _roles_match(app.get("target_roles"), wanted)
+            ]
+            if not role_hits:
+                raise ConfigEditError(
+                    "App %s --roles %s matched no items" % (app_id_or_name, wanted)
+                )
+            if len(role_hits) > 1:
+                raise ConfigEditError(
+                    "App %s --roles %s matched multiple items" % (app_id_or_name, wanted)
+                )
+            match = role_hits[0]
+        elif len(copies) > 1:
+            raise _defined_twice_error(app_id_or_name, copies)
+        else:
+            match = copies[0]
         if content_pack is not None:
             if str(match.get("app_id")) != "5391":
                 raise ConfigEditError("--content-pack removal is only valid for app 5391")

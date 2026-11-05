@@ -241,6 +241,7 @@ class SpaSession(Protocol):
         install_all_content_packs: bool = False,
         content_pack: Optional[str] = None,
         archive: Optional[str] = None,
+        force_new: bool = False,
         dry_run: bool = False,
         expect_revision: Optional[str] = None,
         resolve: Optional[Sequence[Sequence[str]]] = None,
@@ -328,6 +329,7 @@ class SpaSession(Protocol):
         run_id: Optional[str] = None,
         last: bool = False,
         follow: bool = False,
+        wait: bool = False,
         ansible_output: bool = False,
         timestamps: bool = False,
         color: bool = False,
@@ -456,7 +458,7 @@ class LocalSpaSession:
         from spa.next_steps import provision_next
 
         payload = dict(data)
-        payload["next"] = provision_next()
+        payload["next"] = provision_next(Path(self.paths.spa_env_dir).name)
         return payload
 
     def _env_lookup_gate(self) -> Optional[CommandResult]:
@@ -982,6 +984,7 @@ class LocalSpaSession:
         install_all_content_packs: bool = False,
         content_pack: Optional[str] = None,
         archive: Optional[str] = None,
+        force_new: bool = False,
         dry_run: bool = False,
         expect_revision: Optional[str] = None,
         resolve: Optional[Sequence[Sequence[str]]] = None,
@@ -1062,6 +1065,7 @@ class LocalSpaSession:
                         self.paths.spa_home,
                         str(app_id or ""),
                         content_pack=content_pack,
+                        roles=roles,
                         dry_run=dry_run,
                         expect_revision=expect_revision,
                         resolve=resolve,
@@ -1090,6 +1094,7 @@ class LocalSpaSession:
                     self.paths.config_file,
                     self.paths.spa_home,
                     built["entry"],
+                    force_new=force_new,
                     dry_run=dry_run,
                     expect_revision=expect_revision,
                     resolve=resolve,
@@ -1367,6 +1372,11 @@ class LocalSpaSession:
         }
         if report:
             data["architecture"] = report
+            from spa.next_steps import skipped_apps_next
+
+            follow = skipped_apps_next(report.get("skipped_app_folders") or [])
+            if follow:
+                data["next"] = follow
         return CommandResult(
             ok=rc == 0,
             code=rc,
@@ -2262,6 +2272,11 @@ class LocalSpaSession:
                 error="architecture file is not valid: " + "; ".join(plan["errors"]),
                 code=1,
             )
+        from spa.next_steps import skipped_apps_next
+
+        follow = skipped_apps_next(plan.get("skipped_app_folders") or [])
+        if follow:
+            plan["next"] = follow
         return CommandResult(ok=True, data=plan)
 
     def architecture_apply(
@@ -2313,9 +2328,10 @@ class LocalSpaSession:
             return CommandResult(ok=False, error=str(exc), code=1)
         data.setdefault("warnings", [])
         data["warnings"] = list(data.get("warnings") or []) + warnings
-        from spa.next_steps import remaining_next
+        from spa.next_steps import remaining_next, skipped_apps_next
 
-        follow = remaining_next(data.get("remaining") or [])
+        follow = skipped_apps_next(data.get("skipped_app_folders") or [])
+        follow.extend(remaining_next(data.get("remaining") or []))
         if follow:
             data["next"] = follow
         return _mutation_result("architecture apply", data)
@@ -2461,6 +2477,7 @@ class LocalSpaSession:
         run_id: Optional[str] = None,
         last: bool = False,
         follow: bool = False,
+        wait: bool = False,
         ansible_output: bool = False,
         timestamps: bool = False,
         color: bool = False,
@@ -2468,7 +2485,15 @@ class LocalSpaSession:
         blocked = self._env_gate()
         if blocked:
             return blocked
-        from spa.runlog import follow_jsonl, list_runs, load_run, read_jsonl, replay_jsonl
+        from spa.runlog import (
+            follow_jsonl,
+            list_runs,
+            load_run,
+            now_local,
+            read_jsonl,
+            replay_jsonl,
+            wait_for_new_run,
+        )
 
         rows = list_runs(self.paths)
         if not last and not follow and not run_id:
@@ -2478,6 +2503,11 @@ class LocalSpaSession:
             target = load_run(self.paths, run_id)
             if target is None:
                 return CommandResult(ok=False, error="Unknown run: %s" % run_id, code=1)
+        elif follow and wait:
+            try:
+                target = wait_for_new_run(self.paths, now_local())
+            except KeyboardInterrupt:
+                return CommandResult(ok=False, code=130)
         elif rows:
             target = rows[0]
         if target is None:

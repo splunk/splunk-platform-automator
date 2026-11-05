@@ -1001,6 +1001,11 @@ COMMAND_SCHEMA = {
             "flags": [
                 {"long": "--last", "help": "Show the most recent run"},
                 {"long": "--follow", "help": "Follow the latest jsonl file"},
+                {
+                    "long": "--wait",
+                    "help": "With --follow, wait for a jsonl newer than this invocation",
+                    "takes_value": False,
+                },
                 _FLAG_ANSIBLE_OUTPUT,
                 _FLAG_TIMESTAMPS,
                 _FLAG_COLOR,
@@ -1093,6 +1098,11 @@ COMMAND_SCHEMA = {
                     "help": "Comma-separated target_roles; required only for normal apps and rejected for ITSI/content packs",
                 },
                 {
+                    "long": "--new",
+                    "help": "Append another apps[] row for this app_id; without it, extra copies match by exact --roles",
+                    "takes_value": False,
+                },
+                {
                     "long": "--source",
                     "help": "Use Splunkbase metadata, or a folder/archive already in apps_dir (default splunkbase). Mutually exclusive with --local",
                     "takes_value": True,
@@ -1160,6 +1170,10 @@ COMMAND_SCHEMA = {
                 }
             ],
             "flags": [
+                {
+                    "long": "--roles",
+                    "help": "When the app is defined more than once, remove the copy whose target_roles match (one role or the exact set)",
+                },
                 {"long": "--content-pack", "help": "Remove one named pack under Content Library 5391"},
                 {"long": "--dry-run", "help": "Preview without writing"},
                 {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},

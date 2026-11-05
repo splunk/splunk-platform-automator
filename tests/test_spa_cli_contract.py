@@ -245,11 +245,11 @@ HELP_CONTRACTS = [
     ),
     (
         ["apps", "add", "--help"],
-        ["usage: spa apps add", "--roles", "--set", "--content-pack", "--install-all-content-packs", "--dry-run"],
+        ["usage: spa apps add", "--roles", "--new", "--set", "--content-pack", "--install-all-content-packs", "--dry-run"],
     ),
     (
         ["apps", "remove", "--help"],
-        ["usage: spa apps remove", "--content-pack", "--dry-run", "APP_ID_OR_NAME"],
+        ["usage: spa apps remove", "--roles", "--content-pack", "--dry-run", "APP_ID_OR_NAME"],
     ),
     (
         ["apps", "download", "--help"],
@@ -294,7 +294,7 @@ HELP_CONTRACTS = [
     ),
     (
         ["logs", "--help"],
-        ["usage: spa logs", "--last", "--follow", "run_id", "--ansible-output"],
+        ["usage: spa logs", "--last", "--follow", "--wait", "run_id", "--ansible-output"],
     ),
     (
         ["hosts", "--help"],

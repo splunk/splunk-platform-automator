@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
+import shlex
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from spa.apps import CONTENT_LIBRARY_ID, ES_ID, ITSI_ID
+
+LICENSE_MANAGER_FILE_WARNING = {
+    "id": "license_manager.license_file",
+    "message": (
+        "license manager is set and no license file is configured; "
+        "Splunk will run trial until files are added."
+    ),
+}
+ITSI_LICENSE_FILE_WARNING = {
+    "id": "itsi.license_file",
+    "message": (
+        "ITSI (1841) is configured without an ITSI license; "
+        "Splunk will run it as IT Essentials Work until an ITSI license is added."
+    ),
+}
 
 
 def item(
@@ -13,10 +29,15 @@ def item(
     command: Optional[str] = None,
     *,
     required: bool = False,
+    argv: Optional[Sequence[str]] = None,
+    choice: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     row: Dict[str, Any] = {"id": ident, "ask": ask, "required": bool(required)}
     if command:
         row["command"] = command
+        row["argv"] = list(argv) if argv is not None else shlex.split(command)
+    if choice:
+        row["choice"] = dict(choice)
     return row
 
 
@@ -51,14 +72,15 @@ def apps_add_next(
         return [
             item(
                 "licenses.list",
-                "Add Enterprise + ITSI license files?",
+                "Add license files? Without them Splunk is trial-only, and ITSI runs as IT Essentials Work.",
                 "spa --agent licenses list",
-                required=True,
+                required=False,
             ),
             item(
                 "apps.content-packs.list",
-                "Add ITSI content packs? Include None.",
+                "Add ITSI content packs? None, list the 5391 packs, or the operator names folders.",
                 "spa --agent apps content-packs list %s" % CONTENT_LIBRARY_ID,
+                choice={"allowed": ["none", "list", "name"]},
             ),
         ]
     if kind == "es_not_premium" or app_id == ES_ID:
@@ -84,6 +106,32 @@ def apps_add_next(
     return rows
 
 
+def license_file_prompt() -> Dict[str, Any]:
+    return item(
+        "config.set.license_file",
+        "Add license files? Without them Splunk is trial-only, and ITSI runs as IT Essentials Work.",
+        "spa --agent licenses list",
+        required=False,
+    )
+
+
+def attach_license_file_next(payload: Dict[str, Any]) -> None:
+    warning_ids = {
+        item.get("id")
+        for item in (payload.get("warnings") or [])
+        if isinstance(item, Mapping)
+    }
+    if not warning_ids & {
+        LICENSE_MANAGER_FILE_WARNING["id"],
+        ITSI_LICENSE_FILE_WARNING["id"],
+    }:
+        return
+    rows = list(payload.get("next") or [])
+    if any(row.get("id") == "config.set.license_file" for row in rows):
+        return
+    payload["next"] = [license_file_prompt()] + rows
+
+
 def licenses_list_next(scan: Dict[str, Any]) -> List[Dict[str, Any]]:
     proposed = [str(name) for name in (scan.get("proposed_splunk_license_file") or []) if name]
     if not proposed:
@@ -97,7 +145,7 @@ def licenses_list_next(scan: Dict[str, Any]) -> List[Dict[str, Any]]:
             "config.set.license_file",
             "Add proposed license files %s?" % ", ".join(proposed),
             "spa --agent config set splunk_defaults.splunk_license_file '%s' --yes" % listed,
-            required=unsatisfied,
+            required=False,
         ),
         item(
             "license_manager.placement",
@@ -109,7 +157,9 @@ def licenses_list_next(scan: Dict[str, Any]) -> List[Dict[str, Any]]:
     ]
 
 
-def provision_next() -> List[Dict[str, Any]]:
+def provision_next(env_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    env = env_name or "NAME"
+    follow = "spa --env %s logs --follow --wait --ansible-output --color" % env
     return [
         item(
             "hosts.check",
@@ -118,10 +168,32 @@ def provision_next() -> List[Dict[str, Any]]:
             required=True,
         ),
         item(
+            "logs.follow",
+            "In another terminal, follow native Ansible while deploy runs (optional).",
+            follow,
+            required=False,
+        ),
+        item(
             "deploy",
             "Deploy Splunk software?",
             "spa --agent deploy --yes",
         ),
+    ]
+
+
+def skipped_apps_next(folder_names: Iterable[str]) -> List[Dict[str, Any]]:
+    names = [str(name).strip() for name in folder_names if str(name).strip()]
+    if not names:
+        return []
+    listed = ", ".join(names)
+    return [
+        item(
+            "apps.by_role.local",
+            "Architecture skipped apps.by_role (%s). Add them as local apps via /spa-apps?"
+            % listed,
+            "spa --agent apps search QUERY",
+            required=False,
+        )
     ]
 
 

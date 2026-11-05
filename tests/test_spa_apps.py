@@ -763,6 +763,13 @@ def test_search_unix_does_not_pin_itsi():
     assert [row["app_id"] for row in data["apps"]] == [833, 1841]
 
 
+def test_search_nix_unix_and_folder_name_pin_833():
+    client = FakeClient(apps=[_itsi()], by_id={833: _ta()})
+    for query in ("nix", "unix", "Splunk_TA_nix"):
+        data = search(query, limit=10, client=client)
+        assert data["apps"][0]["app_id"] == 833, query
+
+
 def test_search_es_query_pins_263_first():
     data = search("es", limit=10, client=FakeClient(apps=[_ta(), _es()]))
     assert [row["app_id"] for row in data["apps"]][0] == 263
