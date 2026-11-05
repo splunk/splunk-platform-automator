@@ -55,6 +55,8 @@ cat VERSION
 
 ## CI
 
+Pull-request CI is the merge gate. The same workflow on `push` to `master` or `distribution` is background insurance (default-branch badge, admin-override, runner drift), not a promotion wait. A new push to a pull request cancels the previous PR run (`concurrency.cancel-in-progress`).
+
 On every pull request, and on every push to a branch listed under `on.push.branches` in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), that workflow runs:
 
 - `bash -n` on `bin/*.sh`, `tests/run_*.sh`, `scripts/*.sh`

@@ -8,14 +8,14 @@ At each contributor gate, stop, name one next step, and wait. Completing todos i
 
 ## Development setup
 
-Clone the repository and create the shared venv as in [Develop SPA](install.md#develop-spa-git-clone). Then activate it and run the local suite:
+Clone the repository and create the shared venv as in [Develop SPA](install.md#develop-spa-git-clone). Then activate it and run the local suite once to confirm the clone:
 
 ```bash
 source bin/spa_venv.sh
 ./tests/run_local_tests.sh
 ```
 
-Do not rely on Homebrew or system Ansible.
+Do not rely on Homebrew or system Ansible. After that clone check, `./tests/run_local_tests.sh` is optional on every slice once CI exists; PR CI is the full-suite merge gate. Each slice uses the required local gates in [test-driven development](architecture.md#test-driven-development).
 
 Use `tests/README.md` for suites and app-scope scenarios. Release steps are in [RELEASE.md](../RELEASE.md).
 
@@ -124,7 +124,7 @@ Commands that read or write `splunk_config.yml` also follow the
 3. Usage failures exit 2. Name the legal command in the error. Human mode writes that text to stderr and does not print a catalog. Agent mode (`--agent`, `--json`, or a detected agent) writes one compact JSON object on stdout and leaves stderr empty: `{"ok":false,"schema_version":1,"error":"..."}`. Do not add `data` on usage or runtime failure. An unresolved `spa config` or `spa apps` write is `ok: false` with `error` and `data` (`ready: false`). The same rule covers success: one JSON object, and no human sentence on stdout or stderr. Do not print a progress or cache notice in agent mode. Long-running progress, when emitted, is one JSON object per stderr line. Runtime and provider failures stay exit 1. Explicit `--help` stays exit 0.
 4. Register the action in `COMMAND_SCHEMA` in `lib/spa/agent.py` in the same change: required positional names, action-specific flags, and one legal example. `spa agent schema` is how agents discover commands.
 5. Regenerate [commands.md](commands.md) with `bin/spa --no-agent agent schema --markdown`. Do not hand-edit it or [config.md](config.md).
-6. Extend `tests/test_spa_cli_contract.py` so the help surface and `COMMAND_SCHEMA` stay equal, list flags are not advertised on the parent, and a parent that requires an action rejects a bare call with the agent envelope above. Run `./tests/run_cli_tests.sh`. A parser change does not need an AWS or live-Splunk run. `./tests/run_local_tests.sh` is the broader local gate.
+6. Extend `tests/test_spa_cli_contract.py` so the help surface and `COMMAND_SCHEMA` stay equal, list flags are not advertised on the parent, and a parent that requires an action rejects a bare call with the agent envelope above. Run `./tests/run_cli_tests.sh`. A parser change does not need an AWS or live-Splunk run. `./tests/run_local_tests.sh` is optional locally once CI exists; PR CI is the full-suite merge gate.
 7. Choose one command class from [CLI UX and output conventions](architecture.md#cli-ux-and-output-conventions): catalog or search, selected definition, current value, mutation, validation, or long-running. Return a `CommandResult`. Add one human test and one agent test for that class. Do not add a second renderer unless two commands in the class are changing to the same rule.
 8. Support agent mode. When an agent is detected, `spa COMMAND --help` is that one `COMMAND_SCHEMA` entry, not argparse text. Examples use the full command name and `--agent`. `--json` stays a synonym. A short alias, if one already exists, appears only on that command's `Aliases:` line.
 9. Stay completable. One schema entry per action, canonical names only. On a flag or positional, set `choices` for a closed set, `takes_value` when the flag consumes the next token, and `completes_from` when the values come from a local list command such as `run list` or `environment list`. A command is not done until `spa completion` can offer it. Do not add a command whose arguments can only be discovered by reading help, and do not restore a removed command.

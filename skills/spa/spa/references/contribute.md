@@ -12,7 +12,7 @@ A plan, a todo list, or an implement-this request does not skip these steps.
 
 ## TDD
 
-For each behavior, add one test, run it alone, and see it fail before changing production code. Regenerated catalogs (`spa --no-agent agent schema --markdown`, `spa --no-agent config schema --markdown`) only after the drift test has failed. Leave the slice open until `./tests/run_local_tests.sh` passes.
+For each behavior, add one test, run it alone, and see it fail before changing production code. Regenerated catalogs (`spa --no-agent agent schema --markdown`, `spa --no-agent config schema --markdown`) only after the drift test has failed. Close the slice on the required local gates (the new test, tests for every touched module, and `./tests/run_cli_tests.sh` when parser, help, routing, schema, session, or provider contracts changed). PR CI runs the full suite.
 
 Full procedure: [Test-driven development](../../../../docs/architecture.md#test-driven-development).
 

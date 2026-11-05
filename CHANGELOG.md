@@ -17,6 +17,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **CI is the full-suite merge gate**: close a feature slice on the required local gates (the new test, tests for every touched module, and `./tests/run_cli_tests.sh` when the CLI surface changed). PR CI job `Local tests` is required to merge. Push CI on `master` / `distribution` is background insurance. A new push to a pull request cancels the previous PR run.
+
 - **Contributor gates and token budget**: agents stop at each gate, name one next step, and wait. Completing todos is not authorization to implement, commit, or merge. `spa skills install` places thin `alwaysApply: false` Cursor (`~/.cursor/rules/spa-*.mdc`) and Claude (`~/.claude/rules/spa.md`) adapters. Canonical text is `skills/spa/spa/references/token-budget.md` and `contribute.md`. `/spa-create-config` phase bodies live in `references/phases.md`.
 
 - **Licenses is not native**: `spa licenses list` uses the `CommandResult` envelope with `schema_version`. Default `spa validate` fails closed when ITSI or ES is in config but no matching license capability is set. Nested `config set` omits schema-default booleans, so `config set os '{map}'` no longer writes `disable_selinux` and similar defaults. `/spa-create-config` scans with `spa --env NAME --agent licenses list`, follows `data.next`, authors only non-default OS keys, and prints provision and deploy as two commands.
