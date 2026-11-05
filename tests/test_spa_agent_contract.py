@@ -101,12 +101,14 @@ def test_agent_confirmation_failure_is_versioned_json(monkeypatch, capsys):
     }
 
 
-def test_native_help_remains_native_text_when_agent_is_auto_detected():
-    """aws/shell own their output contract and are not JSON-wrapped."""
-    result = run_spa(["aws", "--help"], extra_env={"SPA_AGENT": "1"})
+@pytest.mark.parametrize("command", ["aws", "shell"])
+def test_agent_aws_and_shell_help_is_the_schema_envelope(command):
+    """aws/shell --help in agent mode is COMMAND_SCHEMA, not native text."""
+    result = run_spa([command, "--help"], extra_env={"SPA_AGENT": "1"})
     assert result.returncode == 0, result.stderr
-    assert result.stdout.startswith("usage: spa aws")
-    assert not result.stdout.startswith("{")
+    payload = _payload(result)
+    assert payload["ok"] is True
+    assert payload["data"]["name"] == command
 
 
 def _assert_agent_json_only(result):
@@ -187,18 +189,19 @@ def test_agent_content_packs_list_prints_json_only(tmp_path, monkeypatch, capsys
     [
         ["--agent", "aws", "--bogus"],
         ["aws", "--json", "--bogus"],
+        ["--agent", "shell", "--bogus"],
+        ["shell", "--json", "--bogus"],
     ],
 )
-def test_native_usage_errors_are_json_only(argv):
-    """aws owns its JSON. It is not the spa envelope."""
+def test_aws_and_shell_usage_errors_include_schema_version(argv):
     result = run_spa(argv)
     assert result.returncode == 2
     assert result.stderr == "", result.stderr
     payload = json.loads(result.stdout)
     assert payload["ok"] is False
-    assert "unrecognized arguments" in payload["error"]
-    assert "schema_version" not in payload
+    assert payload["schema_version"] == 1
     assert "data" not in payload
+    assert payload.get("error")
     assert result.stdout == json.dumps(payload, separators=(",", ":")) + "\n"
 
 

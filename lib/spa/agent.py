@@ -764,13 +764,77 @@ COMMAND_SCHEMA = {
             ],
             "example": "spa hosts check",
         },
-        {"name": "shell", "summary": "Alias of spa hosts ssh", "positionals": [{"name": "NAME", "required": False, "help": "Inventory hostname or role", "completes_from": "hosts"}]},
+        {
+            "name": "shell",
+            "summary": "Alias of spa hosts ssh. Extra ssh arguments after --.",
+            "positionals": [
+                {"name": "NAME", "required": True, "help": "Inventory hostname or role", "completes_from": "hosts"},
+            ],
+            "example": "spa shell idx1 -- -L 8000:localhost:8000",
+        },
         {
             "name": "aws",
-            "summary": "AWS discovery for terraform.aws. Catalogs are spa aws regions list and the other resource list commands.",
+            "summary": "AWS discovery for terraform.aws. Bare spa aws exits 2.",
+            "example": "spa --agent aws check-auth",
+        },
+        {
+            "name": "aws check-auth",
+            "summary": "Verify AWS credentials via STS. No --region required.",
+            "example": "spa --agent aws check-auth",
+        },
+        {
+            "name": "aws latest-ami",
+            "summary": "Resolve the latest AMI for a recommended OS.",
             "flags": [
-                {"long": "--details", "help": "Include the full validation checks", "takes_value": False},
+                {
+                    "long": "--region",
+                    "help": "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config.",
+                },
+                {
+                    "long": "--os",
+                    "help": "Recommended OS: rhel, ubuntu, amazon_linux, debian (or all). Aliases: al2023, rhel10, ubuntu2404",
+                },
             ],
+            "example": "spa aws latest-ami --os rhel --region eu-central-1",
+        },
+        {
+            "name": "aws describe-ami",
+            "summary": "Describe one AMI.",
+            "flags": [
+                {
+                    "long": "--region",
+                    "help": "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config.",
+                },
+                {"long": "--ami-id", "help": "AMI ID"},
+            ],
+            "example": "spa aws describe-ami --ami-id ami-xxx",
+        },
+        {
+            "name": "aws validate",
+            "summary": "Validate AMI, key pair, security groups, and instance type in a region.",
+            "flags": [
+                {
+                    "long": "--region",
+                    "help": "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config.",
+                },
+                {"long": "--details", "help": "Include the full validation checks", "takes_value": False},
+                {"long": "--ami-id", "help": "AMI ID for validate"},
+                {"long": "--key-name", "help": "Key pair name for validate"},
+                {"long": "--security-groups", "help": "Comma-separated security group names for validate"},
+                {"long": "--instance-type", "help": "Instance type for validate"},
+            ],
+            "example": "spa aws validate --region eu-central-1 --security-groups Splunk_Basic",
+        },
+        {
+            "name": "aws survey",
+            "summary": "Combined discovery report for a region.",
+            "flags": [
+                {
+                    "long": "--region",
+                    "help": "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config.",
+                },
+            ],
+            "example": "spa aws survey --region eu-central-1",
         },
         {
             "name": "aws regions list",

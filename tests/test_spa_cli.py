@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -118,12 +119,14 @@ def test_validate_splunk_config_rejects_an_unknown_provider(tmp_path):
     assert "--splunk-config-aws" not in help_result.stdout
 
 
-def test_shell_help_is_the_shell_parser():
-    """spa shell -h must reach shell.py, not the spa dispatcher."""
-    result = run_spa(["shell", "--help"])
+def test_shell_help_matches_hosts_ssh():
+    """spa shell is an alias of spa hosts ssh. Copy is spa hosts copy."""
+    result = run_spa(["--no-agent", "shell", "--help"])
     assert result.returncode == 0, result.stderr
-    assert "usage: spa shell" in result.stdout
-    assert "-c, --copy" in result.stdout
+    assert result.stdout.startswith("usage: spa shell")
+    assert "Aliases: sh" in result.stdout
+    assert "-c" not in result.stdout
+    assert "--copy" not in result.stdout
     assert "-l" not in result.stdout
 
 
@@ -135,17 +138,19 @@ def test_shell_list_flag_is_gone():
 
 
 @pytest.mark.parametrize(
-    "args",
+    ("argv", "message"),
     [
-        ["sh", "idx1"],
-        ["shell", "-c", "local.txt", "idx1:/tmp/"],
-        ["aws", "--check-auth", "--json"],
+        (["aws", "--check-auth"], "Checking credentials is: spa aws check-auth"),
+        (["aws", "--latest-ami"], "Resolving the latest AMI is: spa aws latest-ami --os OS"),
+        (["aws", "--describe-ami"], "Describing an AMI is: spa aws describe-ami --ami-id AMI"),
+        (["aws", "--validate"], "Validating selections is: spa aws validate"),
+        (["aws", "--survey"], "Surveying a region is: spa aws survey"),
+        (["shell", "-c", "local.txt", "idx1:/tmp/"], "Copying files is: spa hosts copy SRC DST"),
+        (["shell", "--copy", "local.txt", "idx1:/tmp/"], "Copying files is: spa hosts copy SRC DST"),
     ],
 )
-def test_native_flags_are_not_parsed_by_spa(args):
-    """argparse.REMAINDER drops a leading option; these must never bubble up."""
-    result = run_spa(args)
-    assert "unrecognized arguments" not in (result.stdout + result.stderr)
+def test_retired_aws_and_shell_flags_name_the_legal_command(argv, message):
+    _assert_usage_rejection(argv, message)
 
 
 def test_aws_help_uses_own_parser():
@@ -176,24 +181,11 @@ def test_split_passthrough_contract(argv, expected_head, expected_extra):
     assert _split_passthrough(argv) == (expected_head, expected_extra)
 
 
-@pytest.mark.parametrize(
-    ("argv", "expected_head", "expected_native"),
-    [
-        (["sh", "idx1"], ["sh"], ["idx1"]),
-        (["lic", "--json"], ["lic", "--json"], []),
-        (["--json", "aws", "--list-regions"], ["--json", "aws"], ["--list-regions"]),
-        (
-            ["--env", "aws", "--start-dir", "licenses", "aws", "--json"],
-            ["--env", "aws", "--start-dir", "licenses", "aws"],
-            ["--json"],
-        ),
-        (["run", "--list"], ["run", "--list"], []),
-    ],
-)
-def test_split_native_contract(argv, expected_head, expected_native):
-    from spa.cli import _split_native
+def test_split_native_is_gone():
+    import spa.cli as cli
 
-    assert _split_native(argv) == (expected_head, expected_native)
+    assert not hasattr(cli, "_split_native")
+    assert not hasattr(cli, "NATIVE_FLAG_COMMANDS")
 
 
 @pytest.mark.parametrize(
@@ -457,21 +449,18 @@ def test_agent_validate_check_licenses_hides_filesystem_paths(tmp_path, monkeypa
     assert detailed["data"]["license_scan"]["discovered_files"][0]["path"] == "/tmp/Software/license-1.lic"
 
 
-def test_detected_agent_uses_json_for_aws(monkeypatch):
-    """A detected agent gets the JSON payload. --no-agent stays text. Shell stays text."""
+def test_detected_agent_uses_json_for_aws(monkeypatch, capsys):
+    """A detected agent gets the spa envelope. --no-agent stays text."""
     from types import SimpleNamespace
 
     from spa import cli
+    from spa.api import CommandResult
 
     seen = {}
 
-    def fake_aws(argv=None, as_agent=False, environment_region=None):
-        seen["aws"] = as_agent
-        return 0
-
-    def fake_shell(argv=None, as_agent=False):
-        seen["shell"] = as_agent
-        return 0
+    def fake_execute(args, environment_region=None):
+        seen["action"] = getattr(args, "aws_cmd", None)
+        return CommandResult(ok=True, data={"account": "1"})
 
     for name in (
         "SPA_AGENT",
@@ -495,18 +484,28 @@ def test_detected_agent_uses_json_for_aws(monkeypatch):
     monkeypatch.setattr(cli, "_envelope_identity", lambda paths: None)
     monkeypatch.setattr(cli, "env_dir_required_error", lambda paths: None)
     monkeypatch.setattr(cli, "venv_required_error", lambda paths: None)
-    monkeypatch.setattr("spa.aws.main", fake_aws)
-    monkeypatch.setattr("spa.shell.main", fake_shell)
+    monkeypatch.setattr("spa.aws.execute", fake_execute)
 
-    assert cli.main(["aws", "--region", "eu-central-1", "--validate"]) == 0
-    assert seen["aws"] is True
-    assert cli.main(["--no-agent", "aws", "--region", "eu-central-1", "--validate"]) == 0
-    assert seen["aws"] is False
+    assert cli.main(["aws", "check-auth"]) == 0
+    agent = capsys.readouterr()
+    assert seen["action"] == "check-auth"
+    payload = json.loads(agent.out)
+    assert payload["ok"] is True
+    assert payload["schema_version"] == 1
+    assert payload["data"]["account"] == "1"
+    assert agent.err == ""
+
+    assert cli.main(["--no-agent", "aws", "check-auth"]) == 0
+    human = capsys.readouterr()
+    assert "Account: 1" in human.out
+    assert not human.out.lstrip().startswith("{")
 
     seen.clear()
     monkeypatch.delenv("SPA_AGENT", raising=False)
-    assert cli.main(["aws", "--region", "eu-central-1", "--validate"]) == 0
-    assert seen["aws"] is False
+    assert cli.main(["aws", "check-auth"]) == 0
+    default = capsys.readouterr()
+    assert "Account: 1" in default.out
+    assert not default.out.lstrip().startswith("{")
 
 
 def test_agent_validate_unregistered_env_dir_identity_name_is_null(tmp_path, monkeypatch, capsys):
@@ -1522,6 +1521,9 @@ def _assert_usage_rejection(argv, message):
         (["licenses"], "spa licenses needs an action."),
         (["lic"], "spa licenses needs an action."),
         (["licenses", "--json"], "spa licenses needs an action."),
+        (["aws"], "spa aws check-auth"),
+        (["shell"], "spa shell needs NAME."),
+        (["sh"], "spa shell needs NAME."),
         (["logs"], "spa logs needs a run."),
         (["logs", "list", "--last"], "spa logs list does not take --last or --follow."),
         (["run", "list", "--yes"], "spa run list does not take run options."),
@@ -1572,20 +1574,33 @@ def test_aws_retired_list_flag_json_names_the_list_command():
     assert result.returncode == 2
     assert result.stderr == ""
     payload = json.loads(result.stdout)
-    assert payload == {"ok": False, "error": "Listing regions is: spa aws regions list"}
+    assert payload == {
+        "ok": False,
+        "schema_version": 1,
+        "error": "Listing regions is: spa aws regions list",
+    }
 
 
 def test_aws_list_help_keeps_flags_on_their_kind():
-    parent = run_spa(["aws", "--help"])
+    parent = run_spa(["--no-agent", "aws", "--help"])
     assert parent.returncode == 0, parent.stderr
+    options = set(re.findall(r"(?m)^\s+(?:-[A-Za-z],\s+)?(--[A-Za-z0-9-]+)", parent.stdout))
     for flag in (
         "--list-regions",
         "--list-amis",
         "--list-instance-types",
         "--list-key-pairs",
         "--list-security-groups",
+        "--check-auth",
+        "--latest-ami",
+        "--describe-ami",
+        "--validate",
+        "--survey",
+        "--region",
+        "--os",
+        "--details",
     ):
-        assert flag not in parent.stdout
+        assert flag not in options, flag
     amis = run_spa(["aws", "amis", "list", "--help"])
     types = run_spa(["aws", "instance-types", "list", "--help"])
     assert amis.returncode == 0, amis.stderr

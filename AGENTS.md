@@ -28,7 +28,7 @@ Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 | Guided design | [docs/user-guide.md](docs/user-guide.md#configure-an-environment) · `spa config search` then `spa config explain` |
 | 2.x → 3.0 | [docs/migrate.md](docs/migrate.md) |
 | New env | `spa environment init --example cm_2idxc_sh --provider aws NAME` then `spa --env NAME …`, `spa environment set --default NAME`, or `cd` into it |
-| Features / apps | `spa --agent config search QUERY`; `spa --agent apps search QUERY` then `snippet APP_ID`. For 5391: `spa --agent apps content-packs list 5391`. AWS live values: `spa aws --json` |
+| Features / apps | `spa --agent config search QUERY`; `spa --agent apps search QUERY` then `snippet APP_ID`. For 5391: `spa --agent apps content-packs list 5391`. AWS live values: `spa --agent aws check-auth`, `regions list`, `latest-ami`, `survey` |
 | Python | `spa venv create --shared --yes` (`spa init` creates it when missing) |
 | Repair Python venv | `spa venv reinstall --shared --yes` (or `spa venv rebuild --shared --yes`) |
 | Upgrade Python/Ansible in the venv | `spa venv upgrade --shared --yes` |

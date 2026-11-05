@@ -850,19 +850,100 @@ spa hosts check
 
 ## `shell`
 
-Alias of spa hosts ssh
+Alias of spa hosts ssh. Extra ssh arguments after --.
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `NAME` | no | Inventory hostname or role |
+| `NAME` | yes | Inventory hostname or role |
+
+Example:
+
+```bash
+spa shell idx1 -- -L 8000:localhost:8000
+```
 
 ## `aws`
 
-AWS discovery for terraform.aws. Catalogs are spa aws regions list and the other resource list commands.
+AWS discovery for terraform.aws. Bare spa aws exits 2.
+
+Example:
+
+```bash
+spa --agent aws check-auth
+```
+
+## `aws check-auth`
+
+Verify AWS credentials via STS. No --region required.
+
+Example:
+
+```bash
+spa --agent aws check-auth
+```
+
+## `aws latest-ami`
+
+Resolve the latest AMI for a recommended OS.
 
 | Flag | Description |
 | --- | --- |
+| `--region` | AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config. |
+| `--os` | Recommended OS: rhel, ubuntu, amazon_linux, debian (or all). Aliases: al2023, rhel10, ubuntu2404 |
+
+Example:
+
+```bash
+spa aws latest-ami --os rhel --region eu-central-1
+```
+
+## `aws describe-ami`
+
+Describe one AMI.
+
+| Flag | Description |
+| --- | --- |
+| `--region` | AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config. |
+| `--ami-id` | AMI ID |
+
+Example:
+
+```bash
+spa aws describe-ami --ami-id ami-xxx
+```
+
+## `aws validate`
+
+Validate AMI, key pair, security groups, and instance type in a region.
+
+| Flag | Description |
+| --- | --- |
+| `--region` | AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config. |
 | `--details` | Include the full validation checks |
+| `--ami-id` | AMI ID for validate |
+| `--key-name` | Key pair name for validate |
+| `--security-groups` | Comma-separated security group names for validate |
+| `--instance-type` | Instance type for validate |
+
+Example:
+
+```bash
+spa aws validate --region eu-central-1 --security-groups Splunk_Basic
+```
+
+## `aws survey`
+
+Combined discovery report for a region.
+
+| Flag | Description |
+| --- | --- |
+| `--region` | AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config. |
+
+Example:
+
+```bash
+spa aws survey --region eu-central-1
+```
 
 ## `aws regions list`
 

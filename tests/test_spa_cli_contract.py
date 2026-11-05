@@ -336,23 +336,43 @@ HELP_CONTRACTS = [
     ),
     (
         ["shell", "--help"],
-        ["usage: spa shell", "host", "-c", "--copy", "Additional arguments", "HOST:PATH"],
+        ["usage: spa shell", "Aliases: sh", "name", "ssh_args", "Inventory hostname", "passed to ssh"],
     ),
     (
         ["aws", "--help"],
         [
             "usage: spa aws",
-            "--json",
-            "--region",
-            "--check-auth",
+            "ACTION",
+            "check-auth",
+            "latest-ami",
+            "describe-ami",
+            "validate",
+            "survey",
             "regions",
             "amis",
+            "spa aws check-auth",
             "spa aws regions list",
-            "--latest-ami",
-            "--describe-ami",
-            "--validate",
-            "--survey",
         ],
+    ),
+    (
+        ["aws", "check-auth", "--help"],
+        ["usage: spa aws check-auth"],
+    ),
+    (
+        ["aws", "latest-ami", "--help"],
+        ["usage: spa aws latest-ami", "--region", "--os"],
+    ),
+    (
+        ["aws", "describe-ami", "--help"],
+        ["usage: spa aws describe-ami", "--ami-id"],
+    ),
+    (
+        ["aws", "validate", "--help"],
+        ["usage: spa aws validate", "--region", "--details", "--ami-id", "--key-name", "--security-groups", "--instance-type"],
+    ),
+    (
+        ["aws", "survey", "--help"],
+        ["usage: spa aws survey", "--region"],
     ),
     (
         ["aws", "regions", "--help"],
@@ -801,14 +821,16 @@ def test_agent_help_is_one_schema_entry_or_an_index():
     assert "usage: spa validate" in forced_human.stdout
     assert not forced_human.stdout.lstrip().startswith("{")
 
-    for argv in (
-        ["--agent", "aws", "--help"],
-        ["--agent", "shell", "--help"],
+    for argv, name in (
+        (["--agent", "aws", "--help"], "aws"),
+        (["--agent", "shell", "--help"], "shell"),
     ):
-        native = run_spa(argv)
-        assert native.returncode == 0, native.stderr
-        assert "usage: spa" in native.stdout
-        assert not native.stdout.lstrip().startswith("{")
+        schema_help = run_spa(argv)
+        assert schema_help.returncode == 0, schema_help.stderr
+        payload = json.loads(schema_help.stdout)
+        assert payload["ok"] is True
+        assert payload["schema_version"] == 1
+        assert payload["data"]["name"] == name
 
 
 @pytest.mark.parametrize(
@@ -831,15 +853,33 @@ def test_start_dir_routes_before_and_after_subcommand(argv):
     [
         (["shell", "--help"], "usage: spa shell"),
         (["sh", "--help"], "usage: spa shell"),
-        (["aws", "--json", "--help"], "usage: spa aws"),
-        (["--agent", "aws", "--json", "--help"], "usage: spa aws"),
+        (["aws", "--help"], "usage: spa aws"),
     ],
 )
-def test_native_commands_keep_native_flags(argv, usage):
+def test_human_aws_and_shell_help_stays_text(argv, usage):
+    result = run_spa(["--no-agent", *argv])
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith(usage)
+    assert not result.stdout.lstrip().startswith("{")
+
+
+@pytest.mark.parametrize(
+    ("argv", "name"),
+    [
+        (["aws", "--json", "--help"], "aws"),
+        (["--agent", "aws", "--json", "--help"], "aws"),
+        (["--agent", "aws", "--help"], "aws"),
+        (["--agent", "shell", "--help"], "shell"),
+    ],
+)
+def test_agent_aws_and_shell_help_is_schema_envelope(argv, name):
     result = run_spa(argv)
     assert result.returncode == 0, result.stderr
-    assert usage in result.stdout
-    assert not result.stdout.lstrip().startswith('{"ok":')
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["schema_version"] == 1
+    assert payload["data"]["name"] == name
+    assert result.stderr == ""
 
 
 def test_parent_help_shows_only_the_documented_env_alias():
@@ -960,7 +1000,7 @@ def _help_action_names():
     names = set()
     for name, _alias in _command_rows(root.stdout):
         names.add("agent schema" if name == "agent" else name)
-    for parent in ("environment", "hosts", "apps", "config", "skills", "venv", "completion", "architecture", "licenses"):
+    for parent in ("environment", "hosts", "apps", "config", "skills", "venv", "completion", "architecture", "licenses", "aws"):
         child = run_spa(["--no-agent", parent, "--help"])
         assert child.returncode == 0, child.stderr
         for name, _alias in _command_rows(child.stdout):
@@ -984,6 +1024,14 @@ def _help_action_names():
                 assert nested.returncode == 0, nested.stderr
                 for nested_name, _nested_alias in _command_rows(nested.stdout):
                     names.add("config move %s" % nested_name)
+                continue
+            if parent == "aws" and name in (
+                "regions",
+                "amis",
+                "instance-types",
+                "key-pairs",
+                "security-groups",
+            ):
                 continue
             names.add("%s %s" % (parent, name))
     catalogs = (
@@ -1050,7 +1098,22 @@ def test_agent_schema_is_complete_and_documented():
     for parent, banned in (
         ("config", ("--keys", "--command")),
         ("hosts", ("--status", "--hosts")),
-        ("aws", ("--list-regions", "--name-filter", "--family")),
+        (
+            "aws",
+            (
+                "--list-regions",
+                "--name-filter",
+                "--family",
+                "--check-auth",
+                "--latest-ami",
+                "--describe-ami",
+                "--validate",
+                "--survey",
+                "--region",
+                "--os",
+                "--details",
+            ),
+        ),
     ):
         options = _defined_options(run_spa(["--no-agent", parent, "--help"]).stdout)
         for flag in banned:
@@ -1078,6 +1141,14 @@ def test_agent_schema_is_complete_and_documented():
         "run": ("spa run list", "spa run NAME --help", "spa run NAME"),
         "logs": ("spa logs list", "spa logs RUN_ID", "spa logs --last"),
         "licenses": ("spa licenses list",),
+        "aws": (
+            "spa aws check-auth",
+            "spa aws latest-ami --os OS",
+            "spa aws describe-ami --ami-id AMI",
+            "spa aws validate",
+            "spa aws survey",
+            "spa aws regions list",
+        ),
     }
     for parent, phrases in bare_parents.items():
         human = run_spa(["--no-agent", parent])
@@ -1102,6 +1173,8 @@ def test_agent_schema_is_complete_and_documented():
         (["apps", "snippet"], "spa apps snippet needs APP_ID."),
         (["apps", "download"], "spa apps download needs APP_ID."),
         (["hosts", "ssh"], "spa hosts ssh needs NAME."),
+        (["shell"], "spa shell needs NAME."),
+        (["sh"], "spa shell needs NAME."),
         (["environment", "remove"], "spa environment remove needs NAME."),
         (["feat"], "spa features was removed."),
     )
@@ -1119,9 +1192,10 @@ def test_agent_schema_is_complete_and_documented():
 
     aws = run_spa(["--no-agent", "aws"])
     assert aws.returncode == 2, aws.stderr
-    assert "spa aws needs an operation." in aws.stderr
+    assert "spa aws needs an action." in aws.stderr
     assert "spa aws regions list" in aws.stderr
-    assert "spa aws --check-auth" in aws.stderr
+    assert "spa aws check-auth" in aws.stderr
+    assert "spa aws --check-auth" not in aws.stderr
     aws_list = run_spa(["--no-agent", "aws", "list"])
     assert aws_list.returncode == 2, aws_list.stderr
     for kind in ("regions", "amis", "instance-types", "key-pairs", "security-groups"):

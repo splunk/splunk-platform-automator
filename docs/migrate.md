@@ -12,7 +12,7 @@ Only `bin/spa` and `bin/spa_venv.sh` remain in a clone. Operators can install a 
 | --- | --- |
 | `bin/spash` | `spa hosts ssh NAME` (aliases: `spa sh`, `spa shell`) |
 | `bin/spash -l` | `spa hosts list` (optional `--status`) |
-| `bin/spash -c` | `spa hosts copy SRC DST` (`spa shell -c` still copies) |
+| `bin/spash -c` | `spa hosts copy SRC DST` |
 | `bin/init_spa_dir.sh` | `spa init` |
 | `bin/spa_env.sh` | Not needed by `spa`; `spa env --export` remains for external tools |
 | `bin/spa_doctor.sh` | `spa doctor` |

@@ -7,9 +7,9 @@ SPA provisions EC2 infrastructure with Terraform while keeping `config/splunk_co
 AWS credentials come from the normal AWS credential chain or vault/env references in config. Never commit or print access keys. Check authentication and inspect live regional values with:
 
 ```bash
-spa aws --check-auth --json
+spa aws check-auth --json
 spa aws regions list
-spa aws --survey --region REGION --json
+spa aws survey --region REGION --json
 spa config explain provider.aws
 ```
 

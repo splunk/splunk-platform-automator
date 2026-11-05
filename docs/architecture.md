@@ -207,7 +207,6 @@ Human rendering and agent JSON consume the same session data. Each command belon
 
 ### Intentional exceptions
 
-- `spa aws` and `spa shell` own native output and are not wrapped in the envelope. Their `--help` stays text even when an agent is detected. `spa aws` prints text by default. Human diagnostics, including the region sentence, go to stderr. `--json` and `--agent` print only that command's JSON, with no text sentence before or after it. A usage failure from `spa aws` is `{"ok":false,"error":"..."}` and does not add `schema_version`. `spa shell` stays text.
 - `spa config schema --markdown` and `spa agent schema --markdown` are human docs dumps and keep `--no-agent`.
 - `spa config explain` keeps the shape from its accepted config-editing plan.
 - VirtualBox `suspend` and `resume` do not call `input()` today. This contract does not add that prompt.

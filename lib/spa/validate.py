@@ -113,6 +113,21 @@ def custom_playbook_dirs_error(playbook_dirs: List[Dict[str, Any]], env_dir: Any
     return "\n".join(lines)
 
 
+def aws_validate_argv(aws: Dict[str, Any]) -> List[str]:
+    """Named `spa aws validate` argv from terraform.aws. Not parent flags."""
+    argv = ["validate", "--region", aws["region"]]
+    if aws.get("ami_id"):
+        argv.extend(["--ami-id", aws["ami_id"]])
+    if aws.get("key_name"):
+        argv.extend(["--key-name", aws["key_name"]])
+    if aws.get("instance_type"):
+        argv.extend(["--instance-type", aws["instance_type"]])
+    sgs = aws.get("security_group_names") or []
+    if sgs:
+        argv.extend(["--security-groups", ",".join(sgs)])
+    return argv
+
+
 def resolve_config_path(config: str, paths: Optional[SpaPaths] = None) -> Path:
     """Resolve a --config argument like validate_env will consume it."""
     cfg = Path(config).expanduser()
@@ -372,17 +387,7 @@ except ConfigValidationError as e:
         else:
             from spa import aws as aws_mod
 
-            argv_aws = ["--region", region, "--validate"]
-            if aws.get("ami_id"):
-                argv_aws.extend(["--ami-id", aws["ami_id"]])
-            if aws.get("key_name"):
-                argv_aws.extend(["--key-name", aws["key_name"]])
-            if aws.get("instance_type"):
-                argv_aws.extend(["--instance-type", aws["instance_type"]])
-            sgs = aws.get("security_group_names") or []
-            if sgs:
-                argv_aws.extend(["--security-groups", ",".join(sgs)])
-            aws_result = aws_mod.execute_argv(argv_aws)
+            aws_result = aws_mod.execute_argv(aws_validate_argv(aws))
             data["aws"] = aws_result.data
             if not aws_result.ok:
                 steps.append(

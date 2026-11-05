@@ -9,6 +9,21 @@ class ShellError(RuntimeError):
     """Inventory or host lookup failed (library path; CLI still may sys.exit)."""
 
 
+class ShellArgumentParser(argparse.ArgumentParser):
+    """Agent mode prints the spa envelope for usage errors."""
+
+    json_errors = False
+
+    def error(self, message: str) -> None:
+        if type(self).json_errors:
+            from spa.agent import emit
+
+            emit(False, error=message, as_agent=True)
+            self.exit(2)
+        self.print_usage(sys.stderr)
+        self.exit(2, "%s: error: %s\n" % (self.prog, message))
+
+
 def apply_spa_env():
     """Export SPA_HOME / SPA_ENV_DIR / ANSIBLE_* so inventory uses the env, not the clone."""
     from spa.executil import apply_paths_env
@@ -533,21 +548,25 @@ def run_scp(cmd_args, inventory=None):
     os.execvp('scp', scp_cmd)
 
 
-def main(argv=None):
+def main(argv=None, as_agent=False):
     apply_spa_env()
 
-    parser = argparse.ArgumentParser(
-        prog="spa shell",
-        description="Aliases: sh\n\nSSH or SCP using inventory (alias of spa hosts ssh / spa hosts copy).",
-        epilog="Copy: spa shell -c SRC DST, where a remote side is HOST:PATH\n"
-        "  spa shell -c app.tgz idx1:/tmp/\n"
-        "  spa shell -c idx1:/opt/splunk/etc/system/local/server.conf .\n",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument("host", nargs='?', help="Inventory hostname to SSH to, or first scp path with -c")
-    parser.add_argument("-c", "--copy", action="store_true", help="Use scp to copy files (SRC DST)")
-    parser.add_argument("args", nargs=argparse.REMAINDER, help="Additional arguments to pass to ssh/scp")
-    args = parser.parse_args(argv)
+    raw = list(sys.argv[1:] if argv is None else argv)
+    as_agent = bool(as_agent or "--json" in raw or "--agent" in raw)
+    if "--no-agent" in raw:
+        as_agent = False
+    cleaned = [token for token in raw if token not in {"--json", "--agent", "--no-agent"}]
+    ShellArgumentParser.json_errors = as_agent
+    try:
+        parser = ShellArgumentParser(
+            prog="spa shell",
+            description="Aliases: sh\n\nSSH using inventory (alias of spa hosts ssh).",
+        )
+        parser.add_argument("host", nargs='?', help="Inventory hostname to SSH to")
+        parser.add_argument("args", nargs=argparse.REMAINDER, help="Additional arguments passed to ssh")
+        args = parser.parse_args(cleaned)
+    finally:
+        ShellArgumentParser.json_errors = False
 
     if not args.host:
         parser.print_help()
@@ -558,64 +577,47 @@ def main(argv=None):
     except ShellError as exc:
         print(str(exc), file=sys.stderr)
         sys.exit(1)
-    
-    # Check if host is known
+
     all_hosts = []
     if '_meta' in inventory and 'hostvars' in inventory['_meta']:
         all_hosts = list(inventory['_meta']['hostvars'].keys())
 
-    if args.copy:
-        cmd_args = [args.host, *(args.args or [])]
-        if len(cmd_args) < 2:
-            print(
-                "spa shell -c needs a source and a destination, "
-                "for example: spa shell -c app.tgz idx1:/tmp/",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        run_scp(cmd_args, inventory)
+    target_host = args.host
+    extra_args = args.args
 
-    else:
-        # SSH Mode
-        target_host = args.host
-        extra_args = args.args
-    
-        if target_host not in all_hosts:
-            print(f"Error: Host '{target_host}' not found in inventory.", file=sys.stderr)
-            matches = [h for h in all_hosts if target_host in h]
-            if matches:
-                print(f"Did you mean: {', '.join(matches)}?", file=sys.stderr)
-            sys.exit(1)
+    if target_host not in all_hosts:
+        print(f"Error: Host '{target_host}' not found in inventory.", file=sys.stderr)
+        matches = [h for h in all_hosts if target_host in h]
+        if matches:
+            print(f"Did you mean: {', '.join(matches)}?", file=sys.stderr)
+        sys.exit(1)
 
-        details = resolve_connection_details(target_host, inventory)
-        
-        # Construct SSH command
-        ssh_cmd = ['ssh']
-        
-        if details['key_file']:
-            if os.path.exists(details['key_file']):
-                ssh_cmd.extend(['-i', details['key_file']])
-            else:
-                 print(f"Warning: Private key file '{details['key_file']}' not found.", file=sys.stderr)
+    details = resolve_connection_details(target_host, inventory)
 
-        if details['user']:
-            ssh_cmd.extend(['-l', details['user']])
+    ssh_cmd = ['ssh']
 
-        if details['ssh_common_args']:
-             ssh_cmd.extend(details['ssh_common_args'].split())
+    if details['key_file']:
+        if os.path.exists(details['key_file']):
+            ssh_cmd.extend(['-i', details['key_file']])
+        else:
+            print(f"Warning: Private key file '{details['key_file']}' not found.", file=sys.stderr)
 
-        # Add strict host key checking=no for convenience
-        ssh_cmd.extend(['-o', 'StrictHostKeyChecking=no'])
-        ssh_cmd.extend(['-o', 'UserKnownHostsFile=/dev/null'])
+    if details['user']:
+        ssh_cmd.extend(['-l', details['user']])
 
-        ssh_cmd.append(details['real_host'])
+    if details['ssh_common_args']:
+        ssh_cmd.extend(details['ssh_common_args'].split())
 
-        if extra_args:
-            ssh_cmd.extend(extra_args)
+    ssh_cmd.extend(['-o', 'StrictHostKeyChecking=no'])
+    ssh_cmd.extend(['-o', 'UserKnownHostsFile=/dev/null'])
 
-        as_user = f" as {details['user']}" if details["user"] else ""
-        print(f"Connecting to {target_host} ({details['real_host']}){as_user}...")
-        
-        # Replace current process with ssh
-        os.execvp('ssh', ssh_cmd)
+    ssh_cmd.append(details['real_host'])
+
+    if extra_args:
+        ssh_cmd.extend(extra_args)
+
+    as_user = f" as {details['user']}" if details["user"] else ""
+    print(f"Connecting to {target_host} ({details['real_host']}){as_user}...")
+
+    os.execvp('ssh', ssh_cmd)
 

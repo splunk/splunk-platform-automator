@@ -151,6 +151,6 @@ def test_ami_explain_shows_how_to_find_a_redhat_image():
     from spa.config_tree import explain_config
 
     description = explain_config("terraform.aws.ami_id")["description"]
-    assert "spa aws --region eu-central-1 --latest-ami --os rhel" in description
+    assert "spa aws latest-ami --region eu-central-1 --os rhel" in description
     assert "spa aws amis list --region eu-central-1 --os rhel" in description
     assert "comment" in description.lower()

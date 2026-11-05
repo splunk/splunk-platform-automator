@@ -47,6 +47,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [x] Portable skills under [skills/spa/](skills/spa/) + Cursor `/spa-create-config` ([docs/contributing.md](docs/contributing.md#agent-skills))
 - [x] Agent-mode `spa`: auto-detect agent env, JSON envelope with `schema_version`, `spa agent schema`, `--agent` / `--no-agent`, `-y` for destructive ops, parse-error JSON
 - [x] Explicit `spa` actions: a catalog is `spa COMMAND list`; a missing action or a retired `--list` / `--list-*` flag exits 2 and names the legal command — [#99](https://github.com/splunk/splunk-platform-automator/issues/99)
+- [x] Promote `spa aws` and `spa shell` onto the versioned agent envelope; named aws actions replace parent flags; live SSH/SCP stay native text — [#133](https://github.com/splunk/splunk-platform-automator/issues/133)
 - [x] `spa.api` backend session (`open_session` / `LocalSpaSession`) for the CLI and a future GUI; optional remote daemon later; skills stay on `spa`. See the [controller architecture](docs/contributing.md#controller-architecture).
 - [x] Fold SSH/SCP into `spa hosts` (`list` / `ssh` / `copy`); `spa shell` / `spa sh` remain SSH aliases (no `spa shell -l`)
 - [x] Shell completion for every `spa` command (`spa completion bash|zsh` prints the script; `spa shell` stays SSH) — [#107](https://github.com/splunk/splunk-platform-automator/issues/107)

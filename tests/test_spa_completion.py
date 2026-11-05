@@ -145,6 +145,19 @@ def test_typed_alias_still_completes_the_canonical_subcommand():
     assert "exp" not in complete(["spa", "config", ""], 2)
 
 
+def test_aws_named_actions_are_offered():
+    actions = complete(["spa", "aws", ""], 2)
+    for name in ("check-auth", "latest-ami", "describe-ami", "validate", "survey", "regions"):
+        assert name in actions
+    flags = complete(["spa", "aws", "latest-ami", "--"], 3)
+    assert "--os" in flags
+    assert "--region" in flags
+    assert "--details" not in flags
+    validate = complete(["spa", "aws", "validate", "--"], 3)
+    assert "--details" in validate
+    assert "--os" not in validate
+
+
 def test_flags_belong_to_the_command_being_typed():
     deploy = complete(["spa", "deploy", "--"], 2)
     assert "--hosts" in deploy
