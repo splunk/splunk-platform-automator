@@ -39,10 +39,6 @@ from spa.usage import (
 from spa.skills import supported_platform_list
 
 
-# Commands whose flags belong to the wrapped tool, not to spa (spa shell idx1,
-# spa aws --check-auth). argparse.REMAINDER drops a leading option, so these are
-# split off before the spa parser runs.
-NATIVE_FLAG_COMMANDS = ("shell", "sh", "aws")
 # Accepted at the command position, omitted from parent help and agent errors.
 # ``env`` stays a visible argparse alias of ``environment``.
 _HIDDEN_ALIASES = {
@@ -116,23 +112,6 @@ def _split_passthrough(argv: Sequence[str]) -> Tuple[List[str], List[str]]:
     if "--" in argv:
         idx = list(argv).index("--")
         return list(argv[:idx]), list(argv[idx + 1 :])
-    return list(argv), []
-
-
-def _split_native(argv: Sequence[str]) -> Tuple[List[str], List[str]]:
-    """Split at a native-flag command: (spa args incl. command, tool args)."""
-    index = 0
-    while index < len(argv):
-        token = argv[index]
-        if token in GLOBAL_OPTS_WITH_VALUE:
-            index += 2
-            continue
-        if token.startswith("-"):
-            index += 1
-            continue
-        if token in NATIVE_FLAG_COMMANDS:
-            return list(argv[: index + 1]), list(argv[index + 1 :])
-        break
     return list(argv), []
 
 
@@ -281,8 +260,7 @@ def _positional_tokens(head: Sequence[str]) -> List[str]:
 def _schema_help(head: Sequence[str]) -> Optional[int]:
     """Agent --help is one COMMAND_SCHEMA entry, or an index at spa --help.
 
-    Native aws and shell help stay text. Playbook help stays on
-    the spa run --help path.
+    Playbook help stays on the spa run --help path.
     """
     if not any(token in {"-h", "--help"} for token in head):
         return None
@@ -293,8 +271,6 @@ def _schema_help(head: Sequence[str]) -> Optional[int]:
     if not as_agent:
         return None
     tokens = _positional_tokens(head)
-    if tokens and tokens[0] in NATIVE_FLAG_COMMANDS:
-        return None
     if tokens and tokens[0] == "run" and tokens[1:2] != ["list"]:
         return None
     from spa.agent import COMMAND_SCHEMA
@@ -373,6 +349,26 @@ def _retired_catalog_flag(head: Sequence[str]) -> Optional[str]:
         return "Listing playbooks is: spa run list"
     if saw_init:
         return "Listing examples is: spa init list"
+    return None
+
+
+def _retired_aws_shell_flag(head: Sequence[str]) -> Optional[str]:
+    """Rejection for a removed aws parent flag or spa shell -c."""
+    tokens = _positional_tokens(head)
+    if tokens and tokens[0] == "aws":
+        from spa import aws as aws_mod
+
+        listed = aws_mod._retired_list_message(list(tokens[1:]))
+        if listed:
+            return listed
+        for flag, kind in aws_mod._RETIRED_AWS_LISTS.items():
+            if flag in head:
+                return "Listing %s is: spa aws %s list" % (kind, kind)
+        for flag, message in _RETIRED_AWS_PARENT.items():
+            if flag in head:
+                return message
+    if tokens and tokens[0] in {"shell", "sh"} and ("-c" in head or "--copy" in head):
+        return "Copying files is: spa hosts copy SRC DST"
     return None
 
 
@@ -658,6 +654,14 @@ LICENSES_NEEDS_ACTION = (
     "spa licenses needs an action.\n"
     "List: spa licenses list"
 )
+SHELL_NEEDS_NAME = "spa shell needs NAME.\nExample: spa shell NAME"
+_RETIRED_AWS_PARENT = {
+    "--check-auth": "Checking credentials is: spa aws check-auth",
+    "--latest-ami": "Resolving the latest AMI is: spa aws latest-ami --os OS",
+    "--describe-ami": "Describing an AMI is: spa aws describe-ami --ami-id AMI",
+    "--validate": "Validating selections is: spa aws validate",
+    "--survey": "Surveying a region is: spa aws survey",
+}
 
 CONFIG_NEEDS_ACTION = (
     "spa config needs an action.\n"
@@ -752,6 +756,7 @@ _MISSING_OPERAND = {
         "spa apps download needs APP_ID.\nExample: spa apps download APP_ID --yes"
     ),
     ("spa hosts ssh", "name"): "spa hosts ssh needs NAME.\nExample: spa hosts ssh NAME",
+    ("spa shell", "name"): SHELL_NEEDS_NAME,
     ("spa environment remove", "name"): (
         "spa environment remove needs NAME.\nExample: spa environment remove NAME --yes"
     ),
@@ -1292,9 +1297,6 @@ def _run_skills(args, session, as_agent: bool) -> int:
 def _error_agent_mode(argv: List[str]) -> bool:
     """Agent mode for a failure raised outside normal command dispatch."""
     head, _ = _split_passthrough(argv)
-    head, _ = _split_native(head)
-    if head and head[-1] in NATIVE_FLAG_COMMANDS:
-        return False
     return agent_mode(
         force_agent="--agent" in head or "--json" in head,
         force_human="--no-agent" in head,
@@ -1328,7 +1330,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 def _run(argv: Sequence[str]) -> int:
     argv = _expand_hidden_aliases(argv)
     head, extra = _split_passthrough(argv)
-    retired = _retired_catalog_flag(head)
+    retired = _retired_catalog_flag(head) or _retired_aws_shell_flag(head)
     if retired:
         return _reject(
             retired,
@@ -1374,7 +1376,6 @@ def _run(argv: Sequence[str]) -> int:
     schema_help = _schema_help(head)
     if schema_help is not None:
         return schema_help
-    head, native = _split_native(head)
 
     parse_as_agent = agent_mode(
         force_agent="--agent" in head or "--json" in head,
@@ -1414,6 +1415,16 @@ def _run(argv: Sequence[str]) -> int:
                 from spa.completion import COMPLETION_AGENT, COMPLETION_NEEDS_SHELL
 
                 message = COMPLETION_AGENT if parse_as_agent else COMPLETION_NEEDS_SHELL
+            elif command_words[:1] == ["aws"]:
+                from spa import aws as aws_mod
+
+                resource = command_words[1] if len(command_words) > 1 else ""
+                if resource in aws_mod._AWS_LIST_KINDS and (
+                    "required" in message or "invalid choice" in message
+                ):
+                    message = "Listing %s is: %s" % (resource, aws_mod._listing_command(resource))
+                elif "invalid choice" in message and "'list'" in message:
+                    message = aws_mod._listing_menu()
             elif message.startswith("the following arguments are required:"):
                 missing = message.split(":", 1)[1].strip()
                 named = _MISSING_OPERAND.get((self.prog, missing))
@@ -2427,12 +2438,99 @@ def _run(argv: Sequence[str]) -> int:
     _add_mode_flags(p_hosts_check)
     _add_hosts_option(p_hosts_check)
 
-    # Flags for these are parsed by the wrapped tool (see _split_native).
-    _add_command(
-        sub, "shell", aliases=["sh"], help="SSH via inventory (alias of spa hosts ssh)",
-        add_help=False, accept_mode_flags=False,
+    p_shell = _add_command(
+        sub,
+        "shell",
+        aliases=["sh"],
+        help="SSH via inventory (alias of spa hosts ssh)",
     )
-    _add_command(sub, "aws", help="AWS discovery (spa aws --help)", add_help=False, accept_mode_flags=False)
+    _add_env_selector(p_shell)
+    p_shell.add_argument("name", help="Inventory hostname")
+    shell_ssh_args = p_shell.add_argument(
+        "ssh_args",
+        nargs=argparse.REMAINDER,
+        help="Additional arguments passed to ssh",
+    )
+    shell_ssh_args.required = False
+
+    from spa.aws import AWS_NEEDS_ACTION
+
+    p_aws = _add_command(
+        sub,
+        "aws",
+        help="AWS discovery for terraform.aws",
+        epilog=AWS_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_env_selector(p_aws)
+    aws_sub = p_aws.add_subparsers(
+        dest="aws_cmd",
+        metavar="ACTION",
+        parser_class=AgentAwareArgumentParser,
+    )
+    region_help = (
+        "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config."
+    )
+    os_help = (
+        "Recommended OS: rhel, ubuntu, amazon_linux, debian (or all). "
+        "Aliases: al2023, rhel10, ubuntu2404"
+    )
+    p_aws_check = _add_action(aws_sub, "check-auth", help="Verify AWS credentials via STS")
+    _add_mode_flags(p_aws_check)
+    p_aws_latest = _add_action(aws_sub, "latest-ami", help="Resolve latest AMI for a recommended OS")
+    _add_mode_flags(p_aws_latest)
+    p_aws_latest.add_argument("--region", help=region_help)
+    p_aws_latest.add_argument("--os", help=os_help)
+    p_aws_describe = _add_action(aws_sub, "describe-ami", help="Describe one AMI")
+    _add_mode_flags(p_aws_describe)
+    p_aws_describe.add_argument("--region", help=region_help)
+    p_aws_describe.add_argument("--ami-id", help="AMI ID")
+    p_aws_validate = _add_action(aws_sub, "validate", help="Validate selections")
+    _add_mode_flags(p_aws_validate)
+    p_aws_validate.add_argument("--region", help=region_help)
+    p_aws_validate.add_argument(
+        "--details",
+        action="store_true",
+        help="Include the full validation checks",
+    )
+    p_aws_validate.add_argument("--ami-id", help="AMI ID for validate")
+    p_aws_validate.add_argument("--key-name", help="Key pair name for validate")
+    p_aws_validate.add_argument(
+        "--security-groups",
+        help="Comma-separated security group names for validate",
+    )
+    p_aws_validate.add_argument("--instance-type", help="Instance type for validate")
+    p_aws_survey = _add_action(aws_sub, "survey", help="Combined discovery report for a region")
+    _add_mode_flags(p_aws_survey)
+    p_aws_survey.add_argument("--region", help=region_help)
+
+    def _add_aws_catalog(name: str, summary: str):
+        resource = _add_action(aws_sub, name, help=summary)
+        actions = resource.add_subparsers(
+            dest="aws_action",
+            required=True,
+            metavar="ACTION",
+            parser_class=AgentAwareArgumentParser,
+        )
+        listing = _add_action(actions, "list", help=summary)
+        _add_mode_flags(listing)
+        listing.set_defaults(aws_list_kind=name)
+        listing.add_argument("--region", help=region_help)
+        return listing
+
+    _add_aws_catalog("regions", "List enabled regions")
+    aws_amis = _add_aws_catalog("amis", "List AMIs in a region")
+    aws_amis.add_argument("--name-filter", help="AMI name wildcard (not used with --os)")
+    aws_amis.add_argument(
+        "--owners",
+        help="Comma-separated AMI owners (default: amazon,aws-marketplace,self)",
+    )
+    aws_amis.add_argument("--max-results", type=int, default=15, help="Max AMIs to return")
+    aws_amis.add_argument("--os", help=os_help)
+    aws_types = _add_aws_catalog("instance-types", "List instance types offered in a region")
+    aws_types.add_argument("--family", help="Instance type family prefix (e.g. t3)")
+    _add_aws_catalog("key-pairs", "List EC2 key pairs")
+    _add_aws_catalog("security-groups", "List security groups")
     p_licenses = _add_command(
         sub,
         "licenses",
@@ -2594,15 +2692,11 @@ def _run(argv: Sequence[str]) -> int:
     )
     if verbosity and backend_verbosity:
         parser.error("set Ansible verbosity before or after --, not both")
-    invoked = args.command
     if getattr(args, "canonical", None):
         args.command = args.canonical
     if args.command == "logs" and verbosity:
         parser.error("verbosity is only valid while executing a command")
     as_agent = agent_mode(force_agent=args.agent or args.json, force_human=args.no_agent)
-    # Shell stays human text. aws uses the detected agent mode.
-    if invoked in ("shell", "sh") and not args.agent:
-        as_agent = agent_mode(force_agent=False, force_human=args.no_agent)
 
     conflict = _env_selector_conflict(args)
     if conflict:
@@ -2639,7 +2733,6 @@ def _run(argv: Sequence[str]) -> int:
         sys.stdout.write(script if script.endswith("\n") else script + "\n")
         return 0
 
-    native_help_only = invoked in NATIVE_FLAG_COMMANDS and set(native) <= {"-h", "--help"}
     apps_cmd = getattr(args, "apps_cmd", None)
     config_without_env = (
         args.command == "config"
@@ -2652,7 +2745,6 @@ def _run(argv: Sequence[str]) -> int:
     licenses_without_env = args.command == "licenses"
     if (
         args.command not in {"init", "agent", "environment", "doctor", "venv", "skills", "completion"}
-        and not native_help_only
         and not apps_without_env
         and not config_without_env
         and not architecture_without_env
@@ -2663,7 +2755,7 @@ def _run(argv: Sequence[str]) -> int:
             emit(False, error=missing, as_agent=as_agent)
             return 2
 
-    if args.command not in VENV_OPTIONAL_COMMANDS and not native_help_only:
+    if args.command not in VENV_OPTIONAL_COMMANDS:
         not_ready = venv_required_error(paths)
         if not_ready:
             emit(False, error=not_ready, as_agent=as_agent)
@@ -3388,12 +3480,15 @@ def _run(argv: Sequence[str]) -> int:
     if args.command == "shell":
         from spa import shell as shell_mod
 
-        # SSH/SCP is interactive: no JSON envelope even in agent mode.
+        # Live SSH/SCP stays native text once connected. Usage and provision
+        # failures follow the caller mode.
         blocked = session._require_provisioned()
         if blocked:
-            return _print_command_error(blocked)
+            return _print_command_error(blocked, as_agent)
         try:
-            shell_mod.main([*native, *extra])
+            shell_mod.main(
+                [args.name, *list(getattr(args, "ssh_args", []) or []), *extra]
+            )
         except SystemExit as exc:
             return exc.code if isinstance(exc.code, int) else 1
         return 0
@@ -3401,12 +3496,43 @@ def _run(argv: Sequence[str]) -> int:
     if args.command == "aws":
         from spa import aws as aws_mod
 
+        aws_cmd = _action(args, "aws_cmd")
+        if not aws_cmd:
+            return _reject(aws_mod.AWS_NEEDS_ACTION, as_agent)
         paths = getattr(session, "paths", None)
         env_region = aws_mod.environment_config_region(paths.config_file) if paths else None
-        try:
-            return aws_mod.main([*native, *extra], as_agent=as_agent, environment_region=env_region)
-        except SystemExit as exc:
-            return exc.code if isinstance(exc.code, int) else 1
+        result = aws_mod.execute(args, environment_region=env_region)
+        if as_agent:
+            shown = result.data
+            if (
+                aws_cmd == "validate"
+                and not getattr(args, "details", False)
+                and isinstance(shown, dict)
+            ):
+                shown = aws_mod._compact_validate_payload(shown)
+                result = CommandResult(
+                    ok=result.ok,
+                    data=shown,
+                    error=result.error,
+                    code=result.code,
+                )
+            return _emit_result(result, True)
+        data = result.data if isinstance(result.data, dict) else {}
+        if data.get("region"):
+            notice = aws_mod.region_notice(
+                aws_mod._ResolvedRegion(
+                    data.get("region"),
+                    data.get("region_source"),
+                    data.get("profile"),
+                )
+            )
+            if notice:
+                print(notice, file=sys.stderr)
+        if result.error:
+            print(result.error, file=sys.stderr)
+        if result.data is not None:
+            sys.stdout.write(aws_mod.format_aws_text(result.data))
+        return result.code
 
     if args.command == "licenses":
         licenses_cmd = _action(args, "licenses_cmd")

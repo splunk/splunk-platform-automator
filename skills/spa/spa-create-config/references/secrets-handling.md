@@ -26,19 +26,19 @@ Used by `spa aws`, Terraform provision, and optional `spa validate --splunk-conf
 | `AWS_SESSION_TOKEN` | **Never** (temporary creds) | Report **set** or **not set** only |
 | `AWS_PROFILE` | **OK** — profile name is not a secret | e.g. `AWS_PROFILE: my-dev-profile` |
 | `AWS_REGION` / `AWS_DEFAULT_REGION` | **OK** | e.g. `eu-central-1` |
-| Account ID from `--check-auth` | **OK** | 12-digit account ID |
-| ARN from `--check-auth` | **OK** | Contains account ID, not the secret key |
+| Account ID from `spa --agent aws check-auth` (`data.account`) | **OK** | 12-digit account ID |
+| ARN from `spa --agent aws check-auth` | **OK** | Contains account ID, not the secret key |
 | `ssh_private_key_file` path in config | **OK** | Path only — **never** key file contents |
 
 **Preferred AWS check** (no env echo):
 
 ```bash
-spa aws --check-auth --json
+spa --agent aws check-auth
 ```
 
-Report: *AWS API: ok (account 123456789012)* or *AWS API: failed — credentials not available* — not raw env vars.
+Report: *AWS API: ok (account 123456789012)* or *AWS API: failed — credentials not available* — not raw env vars. Read `data.account` from the envelope.
 
-If `--check-auth` is inconclusive, use set/not-set loops below — not `echo` / `printenv`.
+If `spa --agent aws check-auth` is inconclusive, use set/not-set loops below — not `echo` / `printenv`.
 
 ## Other secrets — same rule
 
@@ -81,9 +81,9 @@ for v in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do
 done
 ```
 
-If `AWS_PROFILE` is set, report the profile name; still prefer `--check-auth` for “will API calls work?”
+If `AWS_PROFILE` is set, report the profile name; still prefer `spa --agent aws check-auth` for “will API calls work?”
 
-Report summaries without values — e.g. *AWS: profile `lab`; static key env vars not set; `--check-auth` ok*.
+Report summaries without values — e.g. *AWS: profile `lab`; static key env vars not set; `spa aws check-auth` ok*.
 
 ## YAML snippets in chat
 

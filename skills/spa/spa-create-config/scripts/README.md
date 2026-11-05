@@ -4,7 +4,7 @@ Canonical scripts live in the **repository** `bin/` directory. Run from project 
 
 | Script | Purpose |
 |--------|---------|
-| `spa aws --region REGION` | AWS discovery: `--check-auth`, `--latest-ami`, `--survey`, `--validate` (`regions list` and `--check-auth` need no region) |
+| `spa aws` | AWS discovery: `check-auth`, `latest-ami`, `survey`, `validate`, `KIND list` (`regions list` and `check-auth` need no region; pass `--region` on the others) |
 | `spa licenses list` | Scan Software for `.lic` files; propose `splunk_license_file` (ITSI-aware from the env config) |
 | `spa validate` | Schema + inventory + playbook syntax-check; optional `--check-licenses` |
 | `spa architecture plan FILE` | Read a confirmed 0.4.0 architecture JSON file (read-only). See [references/architecture-input.md](../references/architecture-input.md). |

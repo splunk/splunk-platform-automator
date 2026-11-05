@@ -18,12 +18,12 @@ Use the **latest** AMI in your region (AMIs expire). Discover with `spa aws` or 
 Discover latest AMI (no hardcoded versions):
 
 ```bash
-spa aws --region eu-central-1 --latest-ami --os rhel --json
-spa aws --region eu-central-1 --latest-ami --os ubuntu --json
-spa aws --region eu-central-1 --latest-ami --os amazon_linux --json
-spa aws --region eu-central-1 --latest-ami --os debian --json
-spa aws --region eu-central-1 --latest-ami --os all --json
-spa aws --survey --region eu-central-1 --json
+spa --agent aws latest-ami --region eu-central-1 --os rhel
+spa --agent aws latest-ami --region eu-central-1 --os ubuntu
+spa --agent aws latest-ami --region eu-central-1 --os amazon_linux
+spa --agent aws latest-ami --region eu-central-1 --os debian
+spa --agent aws latest-ami --region eu-central-1 --os all
+spa --agent aws survey --region eu-central-1
 ```
 
 | OS | Resolution method |
@@ -116,7 +116,7 @@ terraform:
 
 ## AMI → ssh_username heuristic
 
-`spa aws --region REGION --describe-ami --ami-id AMI_ID` suggests username from AMI name:
+`spa --agent aws describe-ami --region REGION --ami-id AMI_ID` suggests username from AMI name:
 
 - Contains `ubuntu` → `ubuntu`
 - Contains `debian` → `admin`

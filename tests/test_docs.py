@@ -462,7 +462,8 @@ class TestSpaSkill:
         assert "unsupported" in text
         assert "do not read `examples/catalog/features.yml`" in text
         assert "spa --agent config set PATH VALUE" in text
-        assert "spa aws --json regions list" in text
+        assert "spa --agent aws regions list" in text
+        assert "spa aws --json regions list" not in text
         assert "spa aws list regions" not in text
         entry = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
         assert "spa --agent config explain PATH" in entry
@@ -687,7 +688,8 @@ class TestSpaSkill:
     def test_create_config_region_question_puts_aws_config_region_first(self):
         text = _create_config_workflow()
         phase4 = text[text.index("## Phase 6 — AWS settings"):text.index("## Phase 7 — Topology counts")]
-        assert "spa aws --json regions list" in phase4
+        assert "spa --agent aws regions list" in phase4
+        assert "spa aws --json" not in phase4
         assert "aws_config_region" in phase4
         assert "aws_config_profile" in phase4
         assert "first" in phase4.lower()
@@ -910,11 +912,15 @@ class TestSpaSkill:
     def test_skill_aws_discovery_commands_pass_region(self):
         """AMI and survey lookups must search the region the config uses, so every skill line names --region."""
         skills = PROJECT_ROOT / "skills" / "spa"
-        triggers = ("--latest-ami", "--survey", "--describe-ami", "amis list")
+        triggers = ("latest-ami", "survey", "describe-ami", "amis list")
         offenders = []
         for path in sorted(skills.rglob("*.md")):
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-                if "spa aws" in line and any(t in line for t in triggers) and "--region" not in line:
+                if (
+                    ("spa aws" in line or "--agent aws" in line)
+                    and any(t in line for t in triggers)
+                    and "--region" not in line
+                ):
                     offenders.append("%s:%d" % (path.relative_to(PROJECT_ROOT), number))
         assert offenders == [], offenders
 
@@ -1048,3 +1054,22 @@ class TestReviewFindings67:
         unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
         assert "--splunk-config-aws" in unreleased
         assert "--splunk-config aws" in unreleased
+
+    def test_changelog_and_skills_use_named_aws_actions(self):
+        banned = (
+            "spa aws --check-auth",
+            "spa aws --validate",
+            "spa aws --json",
+            "spa aws --survey",
+            "spa aws --latest-ami",
+            "spa aws --describe-ami",
+            "spa aws --region ",
+        )
+        changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        for spelling in banned:
+            assert spelling not in changelog, spelling
+        skills = PROJECT_ROOT / "skills" / "spa"
+        for path in sorted(skills.rglob("*.md")):
+            text = path.read_text(encoding="utf-8")
+            for spelling in banned:
+                assert spelling not in text, "%s: %s" % (path.relative_to(PROJECT_ROOT), spelling)

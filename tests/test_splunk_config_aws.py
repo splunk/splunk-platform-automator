@@ -13,6 +13,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 from spa import aws  # noqa: E402
 
 
+def test_aws_module_has_no_operator_main():
+    assert not hasattr(aws, "main")
+
+
 @pytest.mark.parametrize(
     "ami,description,expected",
     [
@@ -83,7 +87,7 @@ def test_retired_list_flags_exit_before_any_aws_call(monkeypatch, capsys):
         ("--list-security-groups", "security-groups"),
     ):
         with pytest.raises(SystemExit) as excinfo:
-            aws.main([flag])
+            aws.build_parser().parse_args([flag])
         assert excinfo.value.code == 2
         captured = capsys.readouterr()
         assert captured.out == ""
@@ -105,14 +109,14 @@ def test_list_kind_parsers_scope_flags_and_skip_aws_without_region(monkeypatch, 
     assert amis.name_filter == "custom*"
     assert amis.json is True
     inherited = aws.build_parser().parse_args(
-        ["--region", "eu-central-1", "instance-types", "list", "--family", "t3"]
+        ["instance-types", "list", "--region", "eu-central-1", "--family", "t3"]
     )
     assert inherited.region == "eu-central-1"
     assert inherited.family == "t3"
     _aws_config(monkeypatch, tmp_path)
-    code = aws.main(["amis", "list"])
-    assert code == 2
-    assert "--region is required for spa aws amis list" in capsys.readouterr().err
+    result = aws.execute_argv(["amis", "list"])
+    assert result.code == 2
+    assert "--region is required for spa aws amis list" in (result.error or "")
     with pytest.raises(SystemExit) as family:
         aws.build_parser().parse_args(["amis", "list", "--region", "eu-central-1", "--family", "t3"])
     assert family.value.code == 2
@@ -146,34 +150,27 @@ def test_list_regions_marks_the_region_from_the_aws_config(monkeypatch, capsys, 
     _aws_config(monkeypatch, tmp_path, "eu-central-1")
     monkeypatch.setattr(aws, "_session", lambda region=None: _FakeRegionSession())
 
-    assert aws.main(["regions", "list"]) == 0
-    captured = capsys.readouterr()
-    assert captured.out.startswith("{") is False
-    assert "Using region eu-central-1 from ~/.aws/config (profile default)." in captured.err
-    assert "Using region" not in captured.out
-    assert "eu-central-1  selected" in captured.out
-    assert "us-east-1" in captured.out
-
-    assert aws.main(["regions", "list", "--json"]) == 0
-    captured = capsys.readouterr()
-    assert "Using region" not in captured.err
-    assert captured.err == ""
-    payload = json.loads(captured.out)
-    assert payload["region"] == "eu-central-1"
-    assert payload["region_source"] == "aws-config"
-    assert payload["profile"] == "default"
-    assert [item for item in payload["items"] if item.get("selected")] == [
+    result = aws.execute_argv(["regions", "list"])
+    assert result.ok and result.code == 0
+    data = result.data
+    notice = aws.region_notice(
+        aws._ResolvedRegion(data.get("region"), data.get("region_source"), data.get("profile"))
+    )
+    text = aws.format_aws_text(data)
+    assert "Using region eu-central-1 from ~/.aws/config (profile default)." in notice
+    assert "Using region" not in text
+    assert "eu-central-1  selected" in text
+    assert "us-east-1" in text
+    assert data["region"] == "eu-central-1"
+    assert data["region_source"] == "aws-config"
+    assert data["profile"] == "default"
+    assert [item for item in data["items"] if item.get("selected")] == [
         {
             "name": "eu-central-1",
             "endpoint": "ec2.eu-central-1.amazonaws.com",
             "selected": True,
         }
     ]
-
-    assert aws.main(["regions", "list"], as_agent=True) == 0
-    captured = capsys.readouterr()
-    assert captured.err == ""
-    assert json.loads(captured.out)["region_source"] == "aws-config"
 
 
 def test_config_region_does_not_require_boto3(monkeypatch, tmp_path):
@@ -199,26 +196,26 @@ def test_list_regions_uses_aws_default_region(monkeypatch, capsys, tmp_path):
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-west-2")
     monkeypatch.setattr(aws, "_session", lambda region=None: _FakeRegionSession())
 
-    assert aws.main(["regions", "list"]) == 0
-    captured = capsys.readouterr()
-    assert "Using region us-west-2 from AWS_DEFAULT_REGION." in captured.err
-    assert "Using region" not in captured.out
-
-    assert aws.main(["regions", "list", "--json"]) == 0
-    captured = capsys.readouterr()
-    assert captured.err == ""
-    payload = json.loads(captured.out)
-    assert payload["region"] == "us-west-2"
-    assert payload["region_source"] == "AWS_DEFAULT_REGION"
-    assert "Using region" not in captured.out
+    result = aws.execute_argv(["regions", "list"])
+    assert result.ok
+    data = result.data
+    notice = aws.region_notice(
+        aws._ResolvedRegion(data.get("region"), data.get("region_source"), data.get("profile"))
+    )
+    text = aws.format_aws_text(data)
+    assert "Using region us-west-2 from AWS_DEFAULT_REGION." in notice
+    assert "Using region" not in text
+    assert data["region"] == "us-west-2"
+    assert data["region_source"] == "AWS_DEFAULT_REGION"
 
 
 def test_list_regions_reports_the_aws_config_region_beside_the_environment_region(monkeypatch, capsys, tmp_path):
     _aws_config(monkeypatch, tmp_path, "us-east-1")
     monkeypatch.setattr(aws, "_session", lambda region=None: _FakeRegionSession())
 
-    assert aws.main(["regions", "list", "--json"], environment_region="eu-central-1") == 0
-    payload = json.loads(capsys.readouterr().out)
+    result = aws.execute_argv(["regions", "list"], environment_region="eu-central-1")
+    assert result.ok
+    payload = result.data
     assert payload["region"] == "eu-central-1"
     assert payload["region_source"] == "terraform.aws.region"
     assert payload["aws_config_region"] == "us-east-1"
@@ -229,10 +226,11 @@ def test_list_regions_human_text_names_the_aws_config_region(monkeypatch, capsys
     _aws_config(monkeypatch, tmp_path, "eu-west-1")
     monkeypatch.setattr(aws, "_session", lambda region=None: _FakeRegionSession())
 
-    assert aws.main(["regions", "list"], environment_region="eu-central-1") == 0
-    captured = capsys.readouterr()
-    assert "AWS config region: eu-west-1 (profile default)" in captured.out
-    assert "eu-central-1  selected" in captured.out
+    result = aws.execute_argv(["regions", "list"], environment_region="eu-central-1")
+    assert result.ok
+    text = aws.format_aws_text(result.data)
+    assert "AWS config region: eu-west-1 (profile default)" in text
+    assert "eu-central-1  selected" in text
 
 
 def test_list_regions_reports_a_missing_profile_as_json_not_a_traceback(monkeypatch, capsys, tmp_path):
@@ -241,15 +239,13 @@ def test_list_regions_reports_a_missing_profile_as_json_not_a_traceback(monkeypa
     _aws_config(monkeypatch, tmp_path, "eu-central-1")
     monkeypatch.setenv("AWS_PROFILE", "no-such-profile")
 
-    code = aws.main(["regions", "list", "--json"], environment_region="eu-central-1")
-    captured = capsys.readouterr()
-    assert code == 1
-    payload = json.loads(captured.out)
+    result = aws.execute_argv(["regions", "list"], environment_region="eu-central-1")
+    assert result.code == 1
+    payload = result.data
     assert payload["ok"] is False
     assert "no-such-profile" in payload["error"]
     assert payload["region"] == "eu-central-1"
     assert payload["items"] == []
-    assert "Traceback" not in captured.err
 
 
 def test_regional_aws_command_uses_the_config_region_and_names_the_source(monkeypatch, capsys, tmp_path):
@@ -263,48 +259,52 @@ def test_regional_aws_command_uses_the_config_region_and_names_the_source(monkey
     monkeypatch.setattr(aws, "list_amis", fake_list)
     monkeypatch.setattr(aws, "_session", lambda region=None: object())
 
-    assert aws.main(["amis", "list"]) == 0
-    captured = capsys.readouterr()
+    result = aws.execute_argv(["amis", "list"])
+    assert result.ok
+    data = result.data
+    notice = aws.region_notice(
+        aws._ResolvedRegion(data.get("region"), data.get("region_source"), data.get("profile"))
+    )
+    text = aws.format_aws_text(data)
     assert seen["region"] == "eu-central-1"
-    assert "Using region eu-central-1 from ~/.aws/config (profile default)." in captured.err
-    assert "Using region" not in captured.out
-    assert captured.out.startswith("{") is False
+    assert "Using region eu-central-1 from ~/.aws/config (profile default)." in notice
+    assert "Using region" not in text
 
-    assert aws.main(["amis", "list", "--json"]) == 0
-    captured = capsys.readouterr()
-    assert captured.err == ""
-    payload = json.loads(captured.out)
+    result = aws.execute_argv(["amis", "list"])
+    assert result.ok
+    payload = result.data
     assert payload["region_source"] == "aws-config"
     assert payload["profile"] == "default"
-    assert "Using region" not in captured.out
 
-    assert aws.main(["amis", "list", "--region", "us-west-2"]) == 0
-    captured = capsys.readouterr()
+    result = aws.execute_argv(["amis", "list", "--region", "us-west-2"])
+    assert result.ok
+    data = result.data
+    notice = aws.region_notice(
+        aws._ResolvedRegion(data.get("region"), data.get("region_source"), data.get("profile"))
+    )
     assert seen["region"] == "us-west-2"
-    assert "Using region us-west-2 from --region." in captured.err
-    assert "Using region" not in captured.out
-    assert captured.out.startswith("{") is False
+    assert "Using region us-west-2 from --region." in notice
 
     monkeypatch.setenv("AWS_REGION", "us-east-1")
-    assert aws.main(["amis", "list", "--json"]) == 0
-    captured = capsys.readouterr()
+    result = aws.execute_argv(["amis", "list"])
+    assert result.ok
+    payload = result.data
     assert seen["region"] == "us-east-1"
-    assert captured.err == ""
-    payload = json.loads(captured.out)
     assert payload["region_source"] == "AWS_REGION"
-    assert "Using region" not in captured.out
 
 
-def test_aws_json_error_redacts_secrets(monkeypatch, capsys):
+def test_aws_json_error_redacts_secrets(monkeypatch):
     secret = "AKIA0000000000000000"
     monkeypatch.setattr(aws, "_session", lambda region=None: object())
     monkeypatch.setattr(aws, "check_auth", lambda _session: {"ok": False, "error": "denied " + secret})
 
-    assert aws.main(["--check-auth", "--json"]) == 1
-    captured = capsys.readouterr()
-    assert captured.err == ""
-    assert secret not in captured.out
-    assert "***" in captured.out
+    result = aws.execute_argv(["check-auth"])
+    assert result.code == 1
+    from spa.runlog import redact
+
+    printed = json.dumps(redact(result.data))
+    assert secret not in printed
+    assert "***" in printed
 
 
 def test_parse_security_groups():
@@ -373,39 +373,37 @@ class _WorldOpenSession(_FakeValidateSession):
         return _WorldOpenEc2()
 
 
-def test_aws_validate_warns_when_a_group_is_open_to_the_world(monkeypatch, capsys):
+def test_aws_validate_warns_when_a_group_is_open_to_the_world(monkeypatch):
     monkeypatch.setattr(aws, "_session", lambda region=None: _WorldOpenSession())
 
-    assert aws.main(
-        ["--region", "eu-central-1", "--validate", "--security-groups", "lab"],
-        as_agent=True,
-    ) == 0
-    payload = json.loads(capsys.readouterr().out)
+    result = aws.execute_argv(
+        ["validate", "--region", "eu-central-1", "--security-groups", "lab"]
+    )
+    assert result.ok
+    payload = aws._compact_validate_payload(result.data)
     assert payload["checks"]["security_groups"] == {"ok": True}
     assert payload["warnings"] == [
         "security group lab allows 0.0.0.0/0 to ports 22, 8000, 8088, 8089"
     ]
     assert "IpPermissions" not in json.dumps(payload)
 
-    assert aws.main(["--region", "eu-central-1", "--validate", "--security-groups", "lab"]) == 0
-    human = capsys.readouterr()
-    assert "Warning: security group lab allows 0.0.0.0/0 to ports 22, 8000, 8088, 8089" in human.out
-    assert human.out.startswith("{") is False
+    human = aws.format_aws_text(result.data)
+    assert "Warning: security group lab allows 0.0.0.0/0 to ports 22, 8000, 8088, 8089" in human
+    assert human.startswith("{") is False
 
 
-def test_agent_aws_validate_is_one_ok_per_check(monkeypatch, capsys):
+def test_agent_aws_validate_is_one_ok_per_check(monkeypatch):
     monkeypatch.setattr(aws, "_session", lambda region=None: _FakeValidateSession())
 
-    assert aws.main(["--region", "eu-central-1", "--validate", "--security-groups", "lab"]) == 0
-    human = capsys.readouterr()
-    assert human.out.startswith("{") is False
-    assert "security_groups: ok" in human.out
+    result = aws.execute_argv(
+        ["validate", "--region", "eu-central-1", "--security-groups", "lab"]
+    )
+    assert result.ok
+    human = aws.format_aws_text(result.data)
+    assert human.startswith("{") is False
+    assert "security_groups: ok" in human
 
-    assert aws.main(
-        ["--region", "eu-central-1", "--validate", "--security-groups", "lab"],
-        as_agent=True,
-    ) == 0
-    present = json.loads(capsys.readouterr().out)
+    present = aws._compact_validate_payload(result.data)
     assert present["checks"]["auth"] == {"ok": True}
     assert present["checks"]["security_groups"] == {"ok": True}
     assert "ami" not in present["checks"]
@@ -415,11 +413,11 @@ def test_agent_aws_validate_is_one_ok_per_check(monkeypatch, capsys):
     assert '"items"' not in present_text
     assert '"group_id"' not in present_text
 
-    assert aws.main(
-        ["--region", "eu-central-1", "--validate", "--security-groups", "lab,missing"],
-        as_agent=True,
-    ) == 1
-    missing = json.loads(capsys.readouterr().out)
+    missing_result = aws.execute_argv(
+        ["validate", "--region", "eu-central-1", "--security-groups", "lab,missing"]
+    )
+    assert missing_result.code == 1
+    missing = aws._compact_validate_payload(missing_result.data)
     assert missing["ok"] is False
     assert missing["checks"]["security_groups"] == {"ok": False}
     missing_text = json.dumps(missing)
@@ -427,16 +425,16 @@ def test_agent_aws_validate_is_one_ok_per_check(monkeypatch, capsys):
     assert '"items"' not in missing_text
     assert '"group_id"' not in missing_text
 
-    assert aws.main(
-        ["--region", "eu-central-1", "--validate", "--security-groups", "lab", "--details"],
-        as_agent=True,
-    ) == 0
-    detailed = json.loads(capsys.readouterr().out)
+    detailed_result = aws.execute_argv(
+        ["validate", "--region", "eu-central-1", "--security-groups", "lab", "--details"]
+    )
+    assert detailed_result.ok
+    detailed = detailed_result.data
     assert detailed["checks"]["security_groups"]["items"][0]["group_id"] == "sg-lab"
     assert "IpPermissions" not in json.dumps(detailed)
 
 
-def test_environment_config_region_beats_aws_environment_variables(monkeypatch, capsys, tmp_path):
+def test_environment_config_region_beats_aws_environment_variables(monkeypatch, tmp_path):
     _aws_config(monkeypatch, tmp_path, "eu-central-1")
     monkeypatch.setenv("AWS_REGION", "us-east-1")
     seen = {}
@@ -448,16 +446,20 @@ def test_environment_config_region_beats_aws_environment_variables(monkeypatch, 
     monkeypatch.setattr(aws, "list_amis", fake_list)
     monkeypatch.setattr(aws, "_session", lambda region=None: object())
 
-    assert aws.main(["amis", "list"], environment_region="eu-west-1") == 0
-    captured = capsys.readouterr()
+    result = aws.execute_argv(["amis", "list"], environment_region="eu-west-1")
+    assert result.ok
+    data = result.data
+    notice = aws.region_notice(
+        aws._ResolvedRegion(data.get("region"), data.get("region_source"), data.get("profile"))
+    )
     assert seen["region"] == "eu-west-1"
-    assert "Using region eu-west-1 from terraform.aws.region in the environment config." in captured.err
+    assert "Using region eu-west-1 from terraform.aws.region in the environment config." in notice
+    assert data["region_source"] == "terraform.aws.region"
 
-    assert aws.main(["amis", "list", "--json"], environment_region="eu-west-1") == 0
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["region_source"] == "terraform.aws.region"
-
-    assert aws.main(["amis", "list", "--region", "us-west-2"], environment_region="eu-west-1") == 0
+    result = aws.execute_argv(
+        ["amis", "list", "--region", "us-west-2"], environment_region="eu-west-1"
+    )
+    assert result.ok
     assert seen["region"] == "us-west-2"
 
 

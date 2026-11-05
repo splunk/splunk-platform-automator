@@ -53,19 +53,19 @@ terraform:
 From repo root (requires `boto3` and AWS credentials):
 
 ```bash
-spa aws --check-auth --json
-spa aws --json regions list
-spa aws --region eu-central-1 --latest-ami --os all --json
-spa aws --json instance-types list --region eu-central-1 --family t3
-spa aws --json key-pairs list --region eu-central-1
-spa aws --json security-groups list --region eu-central-1
-spa aws --region eu-central-1 --describe-ami --ami-id ami-xxx --json
-spa aws --region eu-central-1 --validate \
-  --ami-id ami-xxx --key-name aws_key --security-groups Splunk_Basic --instance-type t3.medium --json
-spa aws --survey --region eu-central-1 --json
+spa --agent aws check-auth
+spa --agent aws regions list
+spa --agent aws latest-ami --region eu-central-1 --os all
+spa --agent aws instance-types list --region eu-central-1 --family t3
+spa --agent aws key-pairs list --region eu-central-1
+spa --agent aws security-groups list --region eu-central-1
+spa --agent aws describe-ami --region eu-central-1 --ami-id ami-xxx
+spa --agent aws validate --region eu-central-1 \
+  --ami-id ami-xxx --key-name aws_key --security-groups Splunk_Basic --instance-type t3.medium
+spa --agent aws survey --region eu-central-1
 ```
 
-`--region` wins. When it is omitted, `spa aws` uses `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `region` in `~/.aws/config` for the active profile. Text output names that source, and `spa aws regions list` marks the region with `selected`. `--json` and `--agent` print only JSON, including `region_source`. `regions list --json` also returns `aws_config_region` and `aws_config_profile` from `~/.aws/config`, even when an environment config sets the region first. Provision and the other lifecycle commands still read `terraform.aws.region` from the environment config.
+`--region` wins. When it is omitted, `spa aws` uses `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `region` in `~/.aws/config` for the active profile. Text output names that source, and `spa aws regions list` marks the region with `selected`. `--json` and `--agent` print the envelope (`schema_version`); live fields (`region_source`, `aws_config_region`, `aws_config_profile`, `account`, `recommended_amis`, `items`) are under `data`. `regions list --json` still returns `data.aws_config_region` and `data.aws_config_profile` from `~/.aws/config`, even when an environment config sets the region first. Provision and the other lifecycle commands still read `terraform.aws.region` from the environment config.
 
 ## Prerequisites checklist
 
@@ -77,4 +77,4 @@ spa aws --survey --region eu-central-1 --json
 
 ## Static fallback (no AWS API)
 
-If `--check-auth` fails or boto3 is missing, follow [aws-without-credentials.md](aws-without-credentials.md). Inspect `spa --agent config explain provider.aws`, then select it with `spa --agent config provider aws`; use [aws-os-matrix.md](aws-os-matrix.md) for `ssh_username` and `os.packages`. **Verify AMI IDs in the AWS console** before provision, or re-run discovery when credentials are available.
+If `spa --agent aws check-auth` fails or boto3 is missing, follow [aws-without-credentials.md](aws-without-credentials.md). Inspect `spa --agent config explain provider.aws`, then select it with `spa --agent config provider aws`; use [aws-os-matrix.md](aws-os-matrix.md) for `ssh_username` and `os.packages`. **Verify AMI IDs in the AWS console** before provision, or re-run discovery when credentials are available.

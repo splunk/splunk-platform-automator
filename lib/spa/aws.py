@@ -5,22 +5,21 @@ AWS discovery and validation for splunk_config.yml terraform.aws settings.
 Requires boto3 and AWS credentials (env, profile, or instance role).
 
 Examples:
-  spa aws --check-auth --json
+  spa aws check-auth --json
   spa aws regions list --json
-  spa aws --region eu-central-1 --latest-ami --os amazon_linux --json
-  spa aws --region eu-central-1 --latest-ami --os all --json
+  spa aws latest-ami --region eu-central-1 --os amazon_linux --json
+  spa aws latest-ami --region eu-central-1 --os all --json
   spa aws amis list --region eu-central-1 --name-filter "custom*" --json
-  spa aws --region eu-central-1 --validate \\
+  spa aws validate --region eu-central-1 \\
     --ami-id ami-xxx --key-name aws_key --security-groups Splunk_Basic \\
     --instance-type t3.medium --json
-  spa aws --survey --region eu-central-1 --json
+  spa aws survey --region eu-central-1 --json
 """
 
 from __future__ import annotations
 
 import argparse
 import configparser
-import json
 import os
 import re
 import sys
@@ -172,32 +171,9 @@ def format_aws_text(data: Any) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _output(data: Any, as_json: bool) -> None:
-    from spa.runlog import redact
-
-    if as_json:
-        print(json.dumps(redact(data), indent=2, default=str))
-        return
-    if isinstance(data, dict):
-        notice = region_notice(
-            _ResolvedRegion(data.get("region"), data.get("region_source"), data.get("profile"))
-        )
-        if notice:
-            _err(notice)
-        if data.get("ok") is False and data.get("error"):
-            _err(str(redact(data["error"])))
-    sys.stdout.write(format_aws_text(data))
-
-
 def _require_boto3() -> None:
     if boto3 is None:
-        message = "boto3 is required. Install with: pip install boto3"
-        if AwsArgumentParser.json_errors:
-            from spa.runlog import redact
-
-            print(json.dumps({"ok": False, "error": redact(message)}, separators=(",", ":")))
-        else:
-            _err(message)
+        _err("boto3 is required. Install with: pip install boto3")
         sys.exit(2)
 
 
@@ -1047,24 +1023,37 @@ def _listing_menu() -> str:
     )
 
 
+AWS_NEEDS_ACTION = (
+    "spa aws needs an action.\n"
+    "Auth:       spa aws check-auth\n"
+    "Latest AMI: spa aws latest-ami --os OS\n"
+    "Describe:   spa aws describe-ami --ami-id AMI\n"
+    "Validate:   spa aws validate\n"
+    "Survey:     spa aws survey\n"
+    "List:       spa aws regions list\n"
+    "            spa aws amis list --region REGION\n"
+    "            spa aws instance-types list --region REGION\n"
+    "            spa aws key-pairs list --region REGION\n"
+    "            spa aws security-groups list --region REGION"
+)
+
 AWS_LIST_EXAMPLES = """
 examples:
+  spa aws check-auth
+  spa aws latest-ami --os OS [--region REGION]
+  spa aws describe-ami --ami-id AMI [--region REGION]
+  spa aws validate [--region REGION]
+  spa aws survey [--region REGION]
   spa aws regions list
   spa aws amis list --region REGION [--os OS] [--name-filter PATTERN]
   spa aws instance-types list --region REGION [--family FAMILY]
   spa aws key-pairs list --region REGION
   spa aws security-groups list --region REGION
-  spa aws --check-auth
-  spa aws --region REGION --latest-ami --os OS
-  spa aws --region REGION --survey
-  spa aws --region REGION --validate
 """
 
 
 class AwsArgumentParser(argparse.ArgumentParser):
     """Name the legal list command when a removed --list-* flag is used."""
-
-    json_errors = False
 
     def error(self, message: str) -> None:
         for flag, kind in _RETIRED_AWS_LISTS.items():
@@ -1079,13 +1068,6 @@ class AwsArgumentParser(argparse.ArgumentParser):
                 message = "Listing %s is: %s" % (resource, _listing_command(resource))
             elif "KIND" in message and "required" in message:
                 message = _listing_menu()
-        if type(self).json_errors:
-            from spa.runlog import redact
-
-            sys.stdout.write(
-                json.dumps({"ok": False, "error": redact(message)}, separators=(",", ":")) + "\n"
-            )
-            self.exit(2)
         self.print_usage(sys.stderr)
         self.exit(2, "%s: error: %s\n" % (self.prog, message))
 
@@ -1104,37 +1086,45 @@ def build_parser() -> argparse.ArgumentParser:
     p = AwsArgumentParser(
         prog="spa aws",
         description="AWS discovery and validation for splunk_config.yml",
-        epilog=AWS_LIST_EXAMPLES,
+        epilog=AWS_NEEDS_ACTION + AWS_LIST_EXAMPLES,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--json", action="store_true", help="Print JSON. The default is text.")
-    p.add_argument(
-        "--region",
-        help="AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config.",
-    )
-    p.add_argument("--check-auth", action="store_true", help="Verify AWS credentials via STS (no --region required)")
-    p.add_argument("--latest-ami", action="store_true", help="Resolve latest AMI for recommended OS (--os)")
-    p.add_argument(
-        "--os",
-        help="Recommended OS for --latest-ami: rhel, ubuntu, amazon_linux, debian (or all). Aliases: al2023, rhel10, ubuntu2404",
-    )
-    p.add_argument("--describe-ami", action="store_true", help="Describe one AMI")
-    p.add_argument("--ami-id", help="AMI ID for describe or validate")
-    p.add_argument("--validate", action="store_true", help="Validate selections")
-    p.add_argument(
-        "--details",
-        action="store_true",
-        help="Include the full validation checks",
-    )
-    p.add_argument("--key-name", help="Key pair name for validate")
-    p.add_argument("--security-groups", help="Comma-separated security group names for validate")
-    p.add_argument("--instance-type", help="Instance type for validate")
-    p.add_argument("--survey", action="store_true", help="Combined discovery report for a region")
 
-    commands = p.add_subparsers(dest="aws_command", parser_class=AwsArgumentParser)
+    commands = p.add_subparsers(dest="aws_cmd", parser_class=AwsArgumentParser)
     region_help = (
         "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config."
     )
+    os_help = (
+        "Recommended OS: rhel, ubuntu, amazon_linux, debian (or all). "
+        "Aliases: al2023, rhel10, ubuntu2404"
+    )
+
+    check_auth = commands.add_parser("check-auth", help="Verify AWS credentials via STS (no --region required)")
+    _add_json_after_kind(check_auth)
+
+    latest = commands.add_parser("latest-ami", help="Resolve latest AMI for a recommended OS")
+    _add_json_after_kind(latest)
+    latest.add_argument("--region", help=region_help)
+    latest.add_argument("--os", help=os_help)
+
+    describe = commands.add_parser("describe-ami", help="Describe one AMI")
+    _add_json_after_kind(describe)
+    describe.add_argument("--region", help=region_help)
+    describe.add_argument("--ami-id", help="AMI ID")
+
+    validate = commands.add_parser("validate", help="Validate selections")
+    _add_json_after_kind(validate)
+    validate.add_argument("--region", help=region_help)
+    validate.add_argument("--details", action="store_true", help="Include the full validation checks")
+    validate.add_argument("--ami-id", help="AMI ID for validate")
+    validate.add_argument("--key-name", help="Key pair name for validate")
+    validate.add_argument("--security-groups", help="Comma-separated security group names for validate")
+    validate.add_argument("--instance-type", help="Instance type for validate")
+
+    survey = commands.add_parser("survey", help="Combined discovery report for a region")
+    _add_json_after_kind(survey)
+    survey.add_argument("--region", help=region_help)
 
     def _add_catalog(name: str, summary: str) -> argparse.ArgumentParser:
         resource = commands.add_parser(name, help=summary)
@@ -1150,7 +1140,8 @@ def build_parser() -> argparse.ArgumentParser:
         listing.set_defaults(aws_list_kind=name)
         return listing
 
-    _add_catalog("regions", "List enabled regions")
+    regions = _add_catalog("regions", "List enabled regions")
+    regions.add_argument("--region", default=argparse.SUPPRESS, help=region_help)
 
     amis = _add_catalog("amis", "List AMIs in a region")
     amis.add_argument("--region", default=argparse.SUPPRESS, help=region_help)
@@ -1232,37 +1223,21 @@ def _list_amis_result(session: Any, args: Any):
 def execute(args: Any, environment_region: Optional[str] = None):
     from spa.api import CommandResult
 
+    action = getattr(args, "aws_cmd", None) or getattr(args, "canonical_action", None)
     kind = getattr(args, "aws_list_kind", None)
     if kind and kind != "amis" and getattr(args, "os", None):
         return CommandResult(ok=False, error="--os requires: spa aws amis list", code=2)
 
-    if not kind and not any(
-        (
-            args.check_auth,
-            args.survey,
-            args.latest_ami,
-            args.describe_ami,
-            args.validate,
-        )
-    ):
-        return CommandResult(
-            ok=False,
-            error=(
-                "spa aws needs an operation.\n"
-                "List:       spa aws regions list\n"
-                "            spa aws amis list --region REGION\n"
-                "            spa aws instance-types list --region REGION\n"
-                "            spa aws key-pairs list --region REGION\n"
-                "            spa aws security-groups list --region REGION\n"
-                "Auth:       spa aws --check-auth\n"
-                "Latest AMI: spa aws --region REGION --latest-ami --os OS\n"
-                "Survey:     spa aws --region REGION --survey\n"
-                "Validate:   spa aws --region REGION --validate"
-            ),
-            code=2,
-        )
+    if not kind and action not in {
+        "check-auth",
+        "latest-ami",
+        "describe-ami",
+        "validate",
+        "survey",
+    }:
+        return CommandResult(ok=False, error=AWS_NEEDS_ACTION, code=2)
 
-    if args.check_auth:
+    if action == "check-auth":
         return _aws_result(check_auth(_session()))
 
     if kind == "regions":
@@ -1316,7 +1291,7 @@ def execute(args: Any, environment_region: Optional[str] = None):
         return CommandResult(
             ok=False,
             error=(
-                "--region is required for this operation (except spa aws regions list and --check-auth). "
+                "--region is required for this operation (except spa aws regions list and spa aws check-auth). "
                 "Or set AWS_REGION, AWS_DEFAULT_REGION, or region in ~/.aws/config."
             ),
             code=1,
@@ -1325,25 +1300,26 @@ def execute(args: Any, environment_region: Optional[str] = None):
     args.region = resolved.region
     session = _session(resolved.region)
 
-    if args.survey:
+    if action == "survey":
         return _finish(_aws_result(survey(session, args.region)), resolved)
 
-    if args.latest_ami:
-        if not args.os:
+    if action == "latest-ami":
+        os_name = getattr(args, "os", None)
+        if not os_name:
             return CommandResult(
                 ok=False,
-                error="--os is required for --latest-ami (rhel, ubuntu, amazon_linux, debian, or all)",
+                error="--os is required for spa aws latest-ami (rhel, ubuntu, amazon_linux, debian, or all)",
                 code=1,
             )
-        if args.os == "all":
+        if os_name == "all":
             return _finish(_aws_result(recommended_os_amis(session, args.region)), resolved)
-        normalized = normalize_os_key(args.os)
+        normalized = normalize_os_key(os_name)
         if normalized not in RECOMMENDED_OS:
             return CommandResult(
                 ok=False,
                 error=(
                     "Unknown --os %s. Valid: %s, all (aliases: %s)"
-                    % (args.os, ", ".join(valid_os_keys()), ", ".join(OS_ALIASES))
+                    % (os_name, ", ".join(valid_os_keys()), ", ".join(OS_ALIASES))
                 ),
                 code=1,
             )
@@ -1352,39 +1328,29 @@ def execute(args: Any, environment_region: Optional[str] = None):
             resolved,
         )
 
-    if args.describe_ami:
-        if not args.ami_id:
-            return CommandResult(ok=False, error="--ami-id is required for --describe-ami", code=1)
-        return _finish(_aws_result(describe_ami(session, args.region, args.ami_id)), resolved)
+    if action == "describe-ami":
+        ami_id = getattr(args, "ami_id", None)
+        if not ami_id:
+            return CommandResult(ok=False, error="--ami-id is required for spa aws describe-ami", code=1)
+        return _finish(_aws_result(describe_ami(session, args.region, ami_id)), resolved)
 
-    if args.validate:
-        sg = parse_security_groups(args.security_groups)
+    if action == "validate":
+        sg = parse_security_groups(getattr(args, "security_groups", None))
         return _finish(
             _aws_result(
                 validate_selections(
                     session,
                     args.region,
-                    ami_id=args.ami_id,
-                    key_name=args.key_name,
+                    ami_id=getattr(args, "ami_id", None),
+                    key_name=getattr(args, "key_name", None),
                     security_groups=sg,
-                    instance_type=args.instance_type,
+                    instance_type=getattr(args, "instance_type", None),
                 )
             ),
             resolved,
         )
 
-    return CommandResult(
-        ok=False,
-        error=(
-            "spa aws needs an operation.\n"
-            "List:       spa aws regions list\n"
-            "Auth:       spa aws --check-auth\n"
-            "Latest AMI: spa aws --region REGION --latest-ami --os OS\n"
-            "Survey:     spa aws --region REGION --survey\n"
-            "Validate:   spa aws --region REGION --validate"
-        ),
-        code=2,
-    )
+    return CommandResult(ok=False, error=AWS_NEEDS_ACTION, code=2)
 
 
 def _retired_list_message(argv: Sequence[str]) -> Optional[str]:
@@ -1419,45 +1385,3 @@ def execute_argv(argv: Optional[List[str]] = None, environment_region: Optional[
 
         return CommandResult(ok=False, error=retired, code=2)
     return execute(build_parser().parse_args(raw), environment_region=environment_region)
-
-
-def main(argv: Optional[List[str]] = None, as_agent: bool = False, environment_region: Optional[str] = None) -> int:
-    raw = list(sys.argv[1:] if argv is None else argv)
-    AwsArgumentParser.json_errors = bool(as_agent or "--json" in raw)
-    try:
-        retired = _retired_list_message(raw)
-        if retired:
-            if as_agent or "--json" in raw:
-                from spa.runlog import redact
-
-                print(json.dumps({"ok": False, "error": redact(retired)}, separators=(",", ":")))
-            else:
-                _err(retired)
-            return 2
-        args = build_parser().parse_args(raw)
-        result = execute(args, environment_region=environment_region)
-        as_json = bool(args.json or as_agent)
-        shown = result.data
-        if (
-            as_json
-            and getattr(args, "validate", False)
-            and not getattr(args, "details", False)
-            and isinstance(shown, dict)
-        ):
-            shown = _compact_validate_payload(shown)
-        if shown is not None:
-            _output(shown, as_json)
-        elif result.error:
-            if as_json:
-                from spa.runlog import redact
-
-                print(json.dumps({"ok": False, "error": redact(result.error)}, separators=(",", ":")))
-            else:
-                _err(result.error)
-        return result.code
-    finally:
-        AwsArgumentParser.json_errors = False
-
-
-if __name__ == "__main__":
-    sys.exit(main())
