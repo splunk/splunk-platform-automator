@@ -20,7 +20,7 @@ Full procedure: [Test-driven development](../../../../docs/architecture.md#test-
 
 The parent agent writes the report. Do not spawn a second agent to re-run tests.
 
-For each finding: what was found, what was fixed, and what was left out. Wait for the user to confirm the left-out items, then ask whether to commit. Then ask before a pull request, and again before merge.
+For each finding: what was found, what was fixed, and what was left out. Wait for the user to confirm the left-out items, then ask whether to commit. Then ask before a pull request, and again before merge. After merge succeeds, close the linked issue with a short note naming the PR and commit (GitHub will not auto-close on `distribution`).
 
 Completing todos is not authorization to implement, commit, or merge.
 

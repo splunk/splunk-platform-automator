@@ -261,11 +261,15 @@ def test_development_docs_require_tdd_and_feature_review():
     assert "say whether to **commit**" in architecture
     assert "Open a PR against the recorded base?" in architecture
     assert "Merge when CI is green?" in architecture
+    assert "Merge succeeded" in architecture
+    assert "GitHub will not auto-close" in architecture
+    assert "not the default branch" in architecture
     assert "does not require the user to enumerate" not in architecture
     assert "authorizes the ship steps" not in architecture
     assert "without requiring the user to enumerate those steps" not in agents
     assert "Completing todos is not authorization" in contributing
     assert "name one next step" in contributing
+    assert "After merge succeeds, close the linked GitHub issue" in contributing
 
 
 def test_ci_cancels_stale_pull_request_runs():
@@ -841,8 +845,11 @@ class TestSpaSkill:
         assert "windowed reads" in budget
         assert "Do not load a graphify SKILL.md" in budget
         assert "parent" in budget.lower()
+        assert "6. Merge succeeded" in budget
+        assert "GitHub will not auto-close" in budget
         assert "see it fail before changing production code" in contribute
         assert "what was left out" in contribute
+        assert "After merge succeeds, close the linked issue" in contribute
         assert "Haiku" not in budget and "Composer" not in budget
 
     def test_config_skills_never_hand_edit_splunk_config(self):

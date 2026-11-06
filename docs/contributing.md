@@ -4,7 +4,7 @@ Operators should start with the [user guide](user-guide.md). The generated CLI c
 
 Start framework changes with the [architecture and contributor standards](architecture.md), including module and Ansible boundaries, extension contracts, test layers, controller direction, and the feature development lifecycle. The sections below contain the detailed procedures linked from that guide.
 
-At each contributor gate, stop, name one next step, and wait. Completing todos is not authorization to implement, commit, or merge. After tests, write the [feature completion review](architecture.md#feature-completion-review) report and ask whether to commit; then ask before a pull request and again before merge. See the [feature development lifecycle](architecture.md#feature-development-lifecycle).
+At each contributor gate, stop, name one next step, and wait. Completing todos is not authorization to implement, commit, or merge. After tests, write the [feature completion review](architecture.md#feature-completion-review) report and ask whether to commit; then ask before a pull request and again before merge. After merge succeeds, close the linked GitHub issue with a short note naming the PR and commit (GitHub will not auto-close on `distribution`). See the [feature development lifecycle](architecture.md#feature-development-lifecycle).
 
 ## Development setup
 
