@@ -1372,11 +1372,6 @@ class LocalSpaSession:
         }
         if report:
             data["architecture"] = report
-            from spa.next_steps import skipped_apps_next
-
-            follow = skipped_apps_next(report.get("skipped_app_folders") or [])
-            if follow:
-                data["next"] = follow
         return CommandResult(
             ok=rc == 0,
             code=rc,
@@ -2272,11 +2267,6 @@ class LocalSpaSession:
                 error="architecture file is not valid: " + "; ".join(plan["errors"]),
                 code=1,
             )
-        from spa.next_steps import skipped_apps_next
-
-        follow = skipped_apps_next(plan.get("skipped_app_folders") or [])
-        if follow:
-            plan["next"] = follow
         return CommandResult(ok=True, data=plan)
 
     def architecture_apply(
@@ -2328,10 +2318,9 @@ class LocalSpaSession:
             return CommandResult(ok=False, error=str(exc), code=1)
         data.setdefault("warnings", [])
         data["warnings"] = list(data.get("warnings") or []) + warnings
-        from spa.next_steps import remaining_next, skipped_apps_next
+        from spa.next_steps import remaining_next
 
-        follow = skipped_apps_next(data.get("skipped_app_folders") or [])
-        follow.extend(remaining_next(data.get("remaining") or []))
+        follow = remaining_next(data.get("remaining") or [])
         if follow:
             data["next"] = follow
         return _mutation_result("architecture apply", data)

@@ -97,7 +97,11 @@ def test_plan_lists_skipped_app_folder_names(tmp_path):
     assert plan["skipped_app_folders"] == ["ClusterBaseConfigs", "BaseConfigs"]
 
 
-def test_cli_plan_asks_to_add_skipped_local_apps(tmp_path):
+def _next_ids(payload):
+    return [item.get("id") for item in (payload.get("data") or {}).get("next") or []]
+
+
+def test_cli_plan_does_not_ask_to_import_apps_by_role(tmp_path):
     source = tmp_path / "arch.json"
     doc = _load(C3)
     doc["apps"] = {"by_role": {"indexer": ["ClusterBaseConfigs"]}}
@@ -105,24 +109,9 @@ def test_cli_plan_asks_to_add_skipped_local_apps(tmp_path):
     result = run_spa(["--agent", "architecture", "plan", str(source)])
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    nxt = payload["data"]["next"]
-    assert nxt[0]["id"] == "apps.by_role.local"
-    assert nxt[0]["required"] is False
-    assert "ClusterBaseConfigs" in nxt[0]["ask"]
-    assert "/spa-apps" in nxt[0]["ask"]
-    assert "Next:" not in result.stderr
-
-
-def test_human_plan_prints_skipped_apps_next(tmp_path):
-    source = tmp_path / "arch.json"
-    doc = _load(C3)
-    doc["apps"] = {"by_role": {"indexer": ["ClusterBaseConfigs"]}}
-    source.write_text(json.dumps(doc), encoding="utf-8")
-    result = run_spa(["--no-agent", "architecture", "plan", str(source)])
-    assert result.returncode == 0, result.stderr
-    assert "Next:" in result.stderr
-    assert "ClusterBaseConfigs" in result.stderr
-    assert "spa --agent apps search QUERY" in result.stderr
+    assert "apps.by_role" in payload["data"]["skipped"]
+    assert "apps.by_role.local" not in _next_ids(payload)
+    assert "next" not in payload["data"]
 
 
 def host_roles_for(hosts, name):
@@ -305,21 +294,6 @@ def test_init_architecture_warns_when_license_manager_is_deferred(tmp_path):
     assert "license_manager" in text
 
 
-def test_human_init_prints_skipped_apps_next(tmp_path):
-    dest = tmp_path / "c3-lab"
-    source = tmp_path / "arch.json"
-    doc = _load(C3)
-    doc["apps"] = {"by_role": {"indexer": ["ClusterBaseConfigs"]}}
-    source.write_text(json.dumps(doc), encoding="utf-8")
-    result = run_spa_init(
-        ["--architecture", str(source), "--provider", "aws", str(dest)]
-    )
-    assert result.returncode == 0, result.stderr
-    assert "Next:" in result.stderr
-    assert "ClusterBaseConfigs" in result.stderr
-    assert "spa --agent apps search QUERY" in result.stderr
-
-
 def test_agent_init_architecture_includes_deferred_warnings(tmp_path):
     dest = tmp_path / "c3-lab"
     result = run_spa(
@@ -340,6 +314,30 @@ def test_agent_init_architecture_includes_deferred_warnings(tmp_path):
     assert any("license_manager is required" in item for item in warnings)
     assert any("deployment.roles.license_master.count" in item for item in warnings)
     assert "license_manager" in payload["data"]["architecture"]["remaining"]
+
+
+def test_agent_init_does_not_ask_to_import_apps_by_role(tmp_path):
+    dest = tmp_path / "c3-lab"
+    source = tmp_path / "arch.json"
+    doc = _load(C3)
+    doc["apps"] = {"by_role": {"indexer": ["ClusterBaseConfigs"]}}
+    source.write_text(json.dumps(doc), encoding="utf-8")
+    result = run_spa(
+        [
+            "--agent",
+            "init",
+            "--architecture",
+            str(source),
+            "--provider",
+            "aws",
+            "--skip-doctor",
+            str(dest),
+        ]
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert "apps.by_role.local" not in _next_ids(payload)
+    assert "next" not in payload["data"]
 
 
 def test_init_architecture_and_example_are_exclusive(tmp_path):
@@ -417,6 +415,23 @@ def test_apply_warns_when_license_manager_is_deferred(tmp_path):
     assert "Remaining:" in text
     assert "Next:" in text
     assert "spa --agent licenses list" in result.stderr
+
+
+def test_apply_does_not_ask_to_import_apps_by_role(tmp_path):
+    dest = tmp_path / "lab"
+    init = run_spa_init(["--example", "topology.c3", "--provider", "aws", str(dest)])
+    assert init.returncode == 0, init.stderr
+    source = tmp_path / "arch.json"
+    doc = _load(C3)
+    doc["apps"] = {"by_role": {"indexer": ["ClusterBaseConfigs"]}}
+    source.write_text(json.dumps(doc), encoding="utf-8")
+    result = run_spa(
+        ["--agent", "--start-dir", str(dest), "architecture", "apply", str(source), "--yes"],
+        extra_env={"SPA_ENV_DIR": str(dest)},
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert "apps.by_role.local" not in _next_ids(payload)
 
 
 def test_apply_refuses_unconfirmed(tmp_path):
