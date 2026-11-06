@@ -1,12 +1,12 @@
 ---
 name: spa-create-config
 description: >-
-  Use when a Splunk lab, pro lab, or Splunk environment is requested on AWS or
-  VirtualBox, and when creating or updating splunk_config.yml: single-node,
-  multisite IDXC, SHC layout, architecture plan, Redhat or other OS, CPU and instance
-  size, or the AWS Terraform block for SPA. Guides interactive design on AWS Linux:
-  deployment intent, SVA topology, role placement, OS/SSH, spa aws discovery, licenses,
-  apps, validation. Use spa, not the AWS CLI. In Cursor invoke with /spa-create-config.
+  Use when creating or updating splunk_config.yml in an existing SPA
+  environment: topology, SVA layout, role placement, OS/SSH, terraform.aws,
+  licenses, and app blocks. Dispatch from /spa after init, or invoke with
+  /spa-create-config. Do not load for a request that has no YAML work, or
+  for contributor work on spa itself. Use spa config, not hand-edited YAML
+  and not the AWS CLI.
 license: Proprietary
 compatibility: Requires SPA_HOME (install prefix `${XDG_DATA_HOME:-~/.local/share}/spa`, or a git clone with ansible.cfg and bin/). Env dirs from spa init are valid working directories. Boto3 is required for AWS discovery and suspend/resume.
 metadata:

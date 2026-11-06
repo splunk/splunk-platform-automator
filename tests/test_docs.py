@@ -241,22 +241,18 @@ def test_development_docs_require_tdd_and_feature_review():
     assert "until the user confirms the left-out items" in architecture
     assert "Saying the feature is complete does not replace that report." in architecture
     assert "A completion request that arrived before the report is not that confirmation." in architecture
-    assert "even when the user already said the feature is complete" in agents
-    assert "A completion request that arrived before the report is not that confirmation." in agents
     assert "architecture.md#test-driven-development" in contributing
     assert "architecture.md#feature-completion-review" in contributing
     assert "docs/architecture.md#test-driven-development" in agents
     assert "docs/architecture.md#feature-completion-review" in agents
-    assert "before the first file edit" in agents
-    assert "see it fail before changing production code" in agents
-    assert "only after its drift test has failed" in agents
-    assert (
-        "Close the slice on the required local gates (the new test, tests "
-        "for every touched module, and `./tests/run_cli_tests.sh` when parser, "
-        "help, routing, schema, session, or provider contracts changed). "
-        "PR CI runs the full suite."
-    ) in agents
-    assert "A plan, a todo list, or an implement-this request does not skip these steps." in agents
+    assert "skills/spa/spa/references/token-budget.md" in agents
+    assert "skills/spa/spa/references/contribute.md" in agents
+    assert "One plan todo per implement chat" in agents
+    assert "After compaction, start a new chat" in agents
+    assert "including Plan mode" in agents
+    assert "Do not load `/spa` or Read a `SKILL.md` when changing spa itself." in agents
+    assert "Do not Read `lib/spa/cli.py`" in agents
+    assert len(agents.splitlines()) <= 55
 
     # Stop at each gate. Completing todos is not ship authorization.
     assert "names **one** next step" in architecture
@@ -267,8 +263,6 @@ def test_development_docs_require_tdd_and_feature_review():
     assert "Merge when CI is green?" in architecture
     assert "does not require the user to enumerate" not in architecture
     assert "authorizes the ship steps" not in architecture
-    assert "Completing todos is not authorization" in agents
-    assert "name one next step" in agents
     assert "without requiring the user to enumerate those steps" not in agents
     assert "Completing todos is not authorization" in contributing
     assert "name one next step" in contributing
@@ -519,13 +513,27 @@ class TestSpaSkill:
         assert "${!v}" not in prerequisites
 
     def test_entry_skill_waits_on_phase_sentences(self):
-        text = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
-        assert "Creating HOST." in text
-        assert "Downloading Splunk on HOST." in text
-        assert "Configuring Splunk." in text
-        assert "Installing apps on HOST." in text
-        assert "terraform apply" not in text
-        assert "Apply complete" not in text
+        skill_root = PROJECT_ROOT / "skills" / "spa" / "spa"
+        skill = (skill_root / "SKILL.md").read_text(encoding="utf-8")
+        runs = skill_root / "references" / "long-runs.md"
+        assert runs.is_file(), runs
+        body = runs.read_text(encoding="utf-8")
+        assert "## Long runs" in body
+        assert "## Handoff from spa-create-config" in body
+        assert "Creating HOST." in body
+        assert "Downloading Splunk on HOST." in body
+        assert "Configuring Splunk." in body
+        assert "Installing apps on HOST." in body
+        assert "AwaitShell" in body
+        assert "references/long-runs.md" in skill
+        assert "Creating HOST." not in skill
+        assert "## Handoff from spa-create-config" in skill
+        assert "long-runs.md" in (
+            skill_root / "references" / "lifecycle.md"
+        ).read_text(encoding="utf-8")
+        for text in (skill, body):
+            assert "terraform apply" not in text
+            assert "Apply complete" not in text
 
     def test_create_config_asks_location_name_and_summary_before_init(self):
         text = _create_config_workflow()
@@ -825,7 +833,12 @@ class TestSpaSkill:
         assert "Token budget: [token-budget.md](references/token-budget.md)" in skill
         assert "Completing todos is not authorization" in budget
         assert "Spawn at most one explore" in budget
-        assert "lib/spa/cli.py" in budget
+        assert "One plan todo per implement chat" in budget
+        assert "After compaction, start a new chat" in budget
+        assert "including Plan mode" in budget
+        assert "Do not load `/spa` or Read a `SKILL.md` when changing spa itself." in budget
+        assert "Do not Read `lib/spa/cli.py`" in budget
+        assert "windowed reads" in budget
         assert "Do not load a graphify SKILL.md" in budget
         assert "parent" in budget.lower()
         assert "see it fail before changing production code" in contribute
@@ -978,8 +991,9 @@ class TestSpaSkill:
         config = description(
             PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md"
         )
-        for phrase in ("Splunk lab", "Splunk environment", "AWS", "single-node", "Redhat"):
-            assert phrase in config, phrase
+        assert "splunk_config.yml" in config
+        for phrase in ("Splunk lab", "pro lab", "Splunk environment", "single-node", "Redhat"):
+            assert phrase not in config, phrase
 
         agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
         assert "Splunk lab" in agents
