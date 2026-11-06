@@ -4,9 +4,10 @@ import json
 
 import pytest
 
-from spa.config_edit import _ONE_OF
-from spa.config_tree import explain_candidates, explain_config, search_config
-from spa_testutil import run_spa
+from spa.catalog import feature_command, load_features
+from spa.config_edit import _ONE_OF, config_templates
+from spa.config_tree import explain_candidates, explain_config, format_explain, search_config
+from spa_testutil import PROJECT_ROOT, run_spa
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -110,6 +111,84 @@ def test_search_returns_paths_and_one_line_without_commands():
         assert "spa config" not in item["description"]
     assert data["total_matches"] >= len(data["matches"])
     assert len(data["matches"]) <= 10
+
+
+def test_search_matches_shipped_templates_by_name_and_summary():
+    for query in ("remote-provider", "tls"):
+        data = search_config(query)
+        by_path = {item["path"]: item["description"] for item in data["matches"]}
+        assert "template.remote-provider" in by_path, query
+        assert "TLS" in by_path["template.remote-provider"]
+        for item in data["matches"]:
+            assert set(item) == {"path", "description"}
+            assert "spa config" not in item["description"]
+
+
+def test_explain_template_returns_the_merge_command():
+    data = explain_config("template.remote-provider")
+    assert data["path"] == "template.remote-provider"
+    assert "TLS" in data["description"]
+    command = "spa config merge remote-provider --yes"
+    assert data["command"] == command
+    assert data["example"] == command
+    with pytest.raises(KeyError):
+        explain_config("template.missing")
+
+
+def _explain_inventory_paths():
+    paths = {""}
+    queue = list(explain_candidates(""))
+    while queue:
+        path = queue.pop()
+        if path in paths:
+            continue
+        paths.add(path)
+        try:
+            queue.extend(explain_candidates(path))
+        except TypeError:
+            continue
+    for item in load_features(PROJECT_ROOT):
+        if item.get("id"):
+            paths.add(str(item["id"]))
+    for row in config_templates(PROJECT_ROOT).get("templates") or []:
+        name = row.get("name")
+        if name:
+            paths.add("template.%s" % name)
+    return paths
+
+
+def test_explain_commands_are_human_spelling_on_every_page():
+    """CFG-CLI-005. Explain command/example never includes --agent, including templates."""
+    seen_commands = []
+    for path in sorted(_explain_inventory_paths()):
+        try:
+            data = explain_config(path)
+        except (KeyError, TypeError):
+            continue
+        blob = json.dumps(data)
+        assert "--agent" not in blob, path or "<root>"
+        assert "--agent" not in format_explain(data), path or "<root>"
+        command = data.get("command")
+        if command:
+            seen_commands.append((path or "<root>", command))
+            assert str(command).startswith("spa "), (path, command)
+    for item in load_features(PROJECT_ROOT):
+        command = feature_command(item)
+        if not command or not command.get("command"):
+            continue
+        text = command["command"]
+        seen_commands.append((item.get("id") or item.get("selector"), text))
+        assert "--agent" not in text, text
+        assert text.startswith("spa "), text
+    assert any(
+        path == "template.remote-provider" and "config merge" in command
+        for path, command in seen_commands
+    )
+    assert any(command.startswith("spa config set ") for _path, command in seen_commands)
+    assert any(command.startswith("spa config topology ") for _path, command in seen_commands)
+    assert any(command.startswith("spa config provider ") for _path, command in seen_commands)
+    assert any(command.startswith("spa config add ") for _path, command in seen_commands)
+    assert any(command.startswith("spa apps add ") for _path, command in seen_commands)
 
 
 def test_candidates_are_user_paths_for_a_later_shell():

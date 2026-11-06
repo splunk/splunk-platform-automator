@@ -226,8 +226,14 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "config templates",
+            "summary": "Shipped fragment catalog. Bare spa config templates exits 2.",
+            "example": "spa --agent config templates list",
+        },
+        {
+            "name": "config templates list",
             "summary": "List shipped reusable config fragments and their leading summaries",
-            "example": "spa --agent config templates",
+            "read_only": True,
+            "example": "spa --agent config templates list",
         },
         {
             "name": "config set",
@@ -294,7 +300,7 @@ COMMAND_SCHEMA = {
                     "name": "TEMPLATE",
                     "required": False,
                     "help": "Shipped fragment name from examples/templates",
-                    "completes_from": "config templates",
+                    "completes_from": "config templates list",
                 }
             ],
             "flags": [
@@ -307,7 +313,7 @@ COMMAND_SCHEMA = {
                 {"long": "--show-diff", "help": "Print the redacted unified diff after the status line (no-op in agent mode)"},
                 {"long": "--yes", "short": "-y", "help": "Skip the human confirmation prompt"},
             ],
-            "example": "spa --agent config merge --file fragment.yml",
+            "example": "spa --agent config merge remote-provider --yes",
         },
         {
             "name": "config move",

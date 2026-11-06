@@ -131,12 +131,22 @@ spa --agent config audit --check-hand-edits
 
 ## `config templates`
 
+Shipped fragment catalog. Bare spa config templates exits 2.
+
+Example:
+
+```bash
+spa --agent config templates list
+```
+
+## `config templates list`
+
 List shipped reusable config fragments and their leading summaries
 
 Example:
 
 ```bash
-spa --agent config templates
+spa --agent config templates list
 ```
 
 ## `config set`
@@ -237,7 +247,7 @@ Transactionally merge a partial splunk_config.yml
 Example:
 
 ```bash
-spa --agent config merge --file fragment.yml
+spa --agent config merge remote-provider --yes
 ```
 
 ## `config move`

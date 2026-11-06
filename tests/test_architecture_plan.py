@@ -413,6 +413,8 @@ def test_apply_warns_when_license_manager_is_deferred(tmp_path):
     assert "license_manager is required" in text
     assert "architecture check: deployment.roles.license_master.count" in text
     assert "Remaining:" in text
+    assert "Next:" in text
+    assert "spa --agent licenses list" in result.stderr
 
 
 def test_apply_does_not_ask_to_import_apps_by_role(tmp_path):

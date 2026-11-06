@@ -136,6 +136,7 @@ def _assert_agent_json_only(result):
         ["--agent", "logs", "list"],
         ["--agent", "hosts", "list"],
         ["--agent", "licenses", "list"],
+        ["--agent", "config", "templates", "list"],
         ["--agent", "validate"],
     ],
 )

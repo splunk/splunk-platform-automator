@@ -23,6 +23,10 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **Shipped config templates are a catalog** ([#143](https://github.com/splunk/splunk-platform-automator/issues/143)): `spa config templates list` is the catalog. Bare `spa config templates` exits 2. Each row includes the merge command. `spa config search` hits `template.NAME`; `spa config explain template.NAME` returns `spa config merge NAME --yes`. Agent list rows keep `spa --agent config merge NAME --yes`. Writes keep `splunk_app_deployment` scalars above `apps`.
+
+- **Human `data.next`**: every command that attaches `data.next` also prints it for humans (`Next:` on stderr, then each ask and command). Agent mode stays JSON-only. Init, architecture plan/apply, validate, and provision were the gaps.
+
 - **Architecture ignores `apps.by_role`** ([#144](https://github.com/splunk/splunk-platform-automator/issues/144)): `spa architecture plan` / init / apply no longer attach `data.next` asking to import ClusterBaseConfigs / BaseConfigs as local apps. SPA installs PS baseconfigs from `splunk_baseconfig_dir`. Phase 9 still asks for extra Splunkbase / ITSI / ES apps.
 
 - **Close the GitHub issue after merge**: GitHub will not auto-close issues when a PR lands on `distribution` (not the default branch). After merge succeeds, confirm the linked issue's scope landed, then close it with a short note naming the PR and commit. `Closes #N` in the PR body still links the issue. Canonical text is the feature-development lifecycle in `docs/architecture.md`, plus `token-budget.md` and `contribute.md`.

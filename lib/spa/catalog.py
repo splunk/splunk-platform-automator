@@ -1122,8 +1122,25 @@ def order_config_roots(document):
     if hasattr(document, "move_to_end"):
         for key in keys:
             document.move_to_end(key)
+        _order_app_deployment(document)
         return document
-    return type(document)((key, document[key]) for key in keys)
+    ordered = type(document)((key, document[key]) for key in keys)
+    _order_app_deployment(ordered)
+    return ordered
+
+
+def _order_app_deployment(document):
+    """Keep splunk_app_deployment scalars above apps."""
+    if not isinstance(document, dict):
+        return
+    deployment = document.get("splunk_app_deployment")
+    if not isinstance(deployment, dict) or "apps" not in deployment:
+        return
+    if hasattr(deployment, "move_to_end"):
+        deployment.move_to_end("apps")
+        return
+    apps = deployment.pop("apps")
+    deployment["apps"] = apps
 
 
 _LAYOUT_KEY = re.compile(r"""^(?P<dash>-\s+)?(?P<key>"[^"]*"|'[^']*'|[^\s#'"\[{][^:#]*?):(?P<rest>\s.*)?$""")

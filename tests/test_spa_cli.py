@@ -934,6 +934,27 @@ def test_provision_yes_after_subcommand_auto_approves(monkeypatch):
     assert captured["extra"][:2] == ["-e", "auto_approve=true"]
 
 
+def test_human_provision_prints_data_next(monkeypatch, capsys):
+    satisfy_env_lookups(monkeypatch)
+
+    class FakeProvider:
+        name = "test"
+
+        def provision(self, extra, **_kwargs):
+            return 0
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    from spa.cli import main
+
+    rc = main(["--no-agent", "provision", "--yes"])
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "Next:" in err
+    assert "Check provisioned hosts before deploy?" in err
+    assert "spa --agent hosts check" in err
+    assert "Deploy Splunk software?" in err
+
+
 @pytest.mark.parametrize("argv", [["-y", "provision"], ["provision", "-y"]])
 def test_provision_yes_works_before_or_after_subcommand(monkeypatch, argv):
     satisfy_env_lookups(monkeypatch)
@@ -1521,6 +1542,8 @@ def _assert_usage_rejection(argv, message):
         (["licenses"], "spa licenses needs an action."),
         (["lic"], "spa licenses needs an action."),
         (["licenses", "--json"], "spa licenses needs an action."),
+        (["config", "templates"], "spa config templates needs an action."),
+        (["config", "tpl"], "spa config templates needs an action."),
         (["aws"], "spa aws check-auth"),
         (["shell"], "spa shell needs NAME."),
         (["sh"], "spa shell needs NAME."),

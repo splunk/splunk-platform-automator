@@ -675,6 +675,10 @@ CONFIG_NEEDS_ACTION = (
     "Coverage:          spa config keys\n"
     "Docs dump:         spa config schema --markdown"
 )
+TEMPLATES_NEEDS_ACTION = (
+    "spa config templates needs an action.\n"
+    "List: spa config templates list"
+)
 MOVE_NEEDS_ACTION = (
     "spa config move needs an action.\n"
     "Move a role: spa config move role ROLE --from HOST --to HOST --yes\n"
@@ -1190,6 +1194,7 @@ def _run_init(args, session, as_agent: bool) -> int:
     _print_init_messages(result)
     if result.error:
         print(result.error, file=sys.stderr)
+    _print_next(result.data if isinstance(result.data, dict) else {})
     return result.code
 
 
@@ -1535,8 +1540,17 @@ def _run(argv: Sequence[str]) -> int:
         "templates",
         aliases=["tpl"],
         help="List shipped reusable config fragments",
+        epilog=TEMPLATES_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    _add_mode_flags(p_config_templates)
+    templates_sub = p_config_templates.add_subparsers(dest="templates_cmd", metavar="ACTION")
+    p_config_templates_list = _add_action(
+        templates_sub,
+        "list",
+        help="List shipped reusable config fragments and their leading summaries",
+    )
+    p_config_templates_list.set_defaults(canonical_action="templates")
+    _add_mode_flags(p_config_templates_list)
 
     p_config_explain = _add_action(
         config_sub,
@@ -2813,6 +2827,7 @@ def _run(argv: Sequence[str]) -> int:
             if not result.ok:
                 sys.stderr.write((result.error or "architecture plan failed") + "\n")
                 return result.code or 1
+            _print_next(result.data if isinstance(result.data, dict) else {})
             return 0
         if action == "apply":
             result = session.architecture_apply(
@@ -2832,6 +2847,7 @@ def _run(argv: Sequence[str]) -> int:
                     sys.stdout.write(data["diff"] if str(data["diff"]).endswith("\n") else data["diff"] + "\n")
             else:
                 sys.stderr.write((result.error or "architecture apply failed") + "\n")
+            _print_next(data)
             return result.code or (0 if result.ok else 1)
         result = session.architecture_check(args.file)
         if as_agent:
@@ -2853,6 +2869,8 @@ def _run(argv: Sequence[str]) -> int:
             return _reject(CONFIG_NEEDS_ACTION, as_agent)
         if action == "header":
             return _reject(HEADER_NEEDS_ACTION, as_agent)
+        if action == "templates" and getattr(args, "templates_cmd", None) != "list":
+            return _reject(TEMPLATES_NEEDS_ACTION, as_agent)
         if action == "move":
             move_action = getattr(args, "move_cmd", None)
             if not move_action:
@@ -3134,6 +3152,7 @@ def _run(argv: Sequence[str]) -> int:
         validation = ((result.data or {}).get("license_validation") or {})
         for warning in validation.get("warnings") or []:
             print("License warning: %s" % warning, file=sys.stderr)
+        _print_next(result.data if isinstance(result.data, dict) else {})
         return result.code
 
     if args.command == "skills":
@@ -3277,6 +3296,7 @@ def _run(argv: Sequence[str]) -> int:
             print(result.error, file=sys.stderr)
         elif (result.data or {}).get("note"):
             print(result.data["note"])
+        _print_next(result.data if isinstance(result.data, dict) else {})
         return result.code
 
     if args.command == "deploy":
