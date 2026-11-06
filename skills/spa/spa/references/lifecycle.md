@@ -6,6 +6,6 @@ The question names the env and the effect. Provision creates the hosts. Deploy i
 
 Mutating commands pass `--env` or run with that env as cwd. If provision or deploy for that env is still running, stop that pid before destroy.
 
-Phase lines, the provision/deploy/destroy lock, and the stderr sentence catalog are in the entry skill `## Long runs` section. Forward a phase line from stderr. On `ok: true` or `ok: false`, post the result only. Agent stdout is not a run log. Do not open `data.log` unless the user asked to debug a failure.
+Phase lines, the provision/deploy/destroy lock, and the stderr sentence catalog are in [long-runs.md](long-runs.md). Load that file when running provision, deploy, destroy, or `spa run`. Forward a phase line from stderr. On `ok: true` or `ok: false`, post the result only. Agent stdout is not a run log. Do not open `data.log` unless the user asked to debug a failure.
 
 `spa hosts check` and `spa hosts check --hosts NAME_OR_ROLE` are the post-provision ping and `splunk_architecture` compare after the hosts exist. They take no AMI, key, or security-group arguments. Run that check before `spa run` when the playbook needs root. It is not the AWS selection check.

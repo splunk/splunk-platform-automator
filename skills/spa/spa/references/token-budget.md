@@ -16,11 +16,13 @@ Cursor injecting "Don't stop until all to-dos" is not ship authorization. After 
 
 ## Cost
 
-- Spawn at most one explore subagent. Do not fan out parallel explorers.
-- Do not read `lib/spa/cli.py` whole. Discover flags with `spa --agent schema` or `spa --no-agent agent schema`.
+- One plan todo per implement chat. After the parent review, stop. Next slice is a new chat.
+- After compaction, start a new chat. Do not continue a compacted implement thread.
+- Spawn at most one explore subagent, including Plan mode. Cursor Plan mode may suggest parallel explorers; still spawn at most one. Do not fan out parallel explorers.
+- Do not load `/spa` or Read a `SKILL.md` when changing spa itself.
+- Do not Read `lib/spa/cli.py`. Discover flags with `spa --agent schema` or `spa --no-agent agent schema` instead of windowed reads.
 - Do not paste a full local-gate dump. Name the failing test and the assertion.
 - Do not load a graphify SKILL.md. Graphify is local architecture lookup only, and not before ordinary Read/Grep.
-- After compaction, start a new chat. Do not continue a compacted implement thread.
 - The parent agent writes the completion review. Do not launch a second agent to re-run tests.
 
 If changing spa itself, follow [contribute.md](contribute.md).
