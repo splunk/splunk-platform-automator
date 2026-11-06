@@ -3,7 +3,6 @@
 # SVA: C3
 # Lab: CM + 2 IDXC peers (RF/SF 2/2) + 3-member SHC + DS/deployer.
 # Do not add virtualbox:, terraform:, os:, or apps here.
-plugin: splunk-platform-automator
 
 
 # Splunk default settings

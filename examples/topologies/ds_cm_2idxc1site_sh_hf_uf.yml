@@ -2,7 +2,6 @@
 # Topology only — compose with: spa init --example ds_cm_2idxc1site_sh_hf_uf --provider aws|virtualbox ENV
 # Lab: DS + CM + IDXC + SH + HF + UF.
 # Do not add virtualbox:, terraform:, os:, or apps here.
-plugin: splunk-platform-automator
 
 
 # Splunk default settings

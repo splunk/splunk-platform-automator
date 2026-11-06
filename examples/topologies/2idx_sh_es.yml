@@ -3,7 +3,6 @@
 # SVA: D11
 # Lab: D1 plus one dedicated ES search head. No indexer cluster. No ES app.
 # Do not add virtualbox:, terraform:, os:, or apps here.
-plugin: splunk-platform-automator
 
 
 # Splunk default settings

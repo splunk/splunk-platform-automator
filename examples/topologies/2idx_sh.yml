@@ -3,7 +3,6 @@
 # SVA: D1
 # Lab: Two standalone indexers + one search head. No indexer cluster.
 # Do not add virtualbox:, terraform:, os:, or apps here.
-plugin: splunk-platform-automator
 
 
 # Splunk default settings

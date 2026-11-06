@@ -2,7 +2,6 @@
 # Topology only — compose with: spa init --example cm1_2idxc1site_cm2_2idxc1site_ds_3shc_smc_uf --provider aws|virtualbox ENV
 # Lab: Two indexer clusters, shared SHC, separate CMs, SMC.
 # Do not add virtualbox:, terraform:, os:, or apps here.
-plugin: splunk-platform-automator
 
 
 # Splunk default settings

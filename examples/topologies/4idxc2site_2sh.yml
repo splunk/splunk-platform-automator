@@ -3,7 +3,6 @@
 # SVA: M2
 # Lab: Multisite IDXC (2 sites x 2 idx) + one search head per site.
 # Do not add virtualbox:, terraform:, os:, or apps here.
-plugin: splunk-platform-automator
 
 
 # Splunk default settings
