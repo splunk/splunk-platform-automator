@@ -3,7 +3,6 @@
 # SVA: M12
 # Lab: M2 plus one dedicated ES search head on each site. No ES app.
 # Do not add virtualbox:, terraform:, os:, or apps here.
-plugin: splunk-platform-automator
 
 
 # Splunk default settings

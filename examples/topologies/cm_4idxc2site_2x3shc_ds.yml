@@ -3,7 +3,6 @@
 # SVA: M3
 # Lab: Multisite IDXC + one 3-member SHC per site + a deployer per cluster.
 # Do not add virtualbox:, terraform:, os:, or apps here.
-plugin: splunk-platform-automator
 
 
 # Splunk default settings

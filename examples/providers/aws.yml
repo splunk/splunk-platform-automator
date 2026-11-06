@@ -1,7 +1,6 @@
 ---
 # Provider only — compose with: spa init --example TOPOLOGY --provider aws ENV
 # terraform.aws knobs only. OS packages, polkit, and ssh_username live in the feature catalog.
-plugin: splunk-platform-automator
 terraform:
   aws:
     region: "eu-central-1"

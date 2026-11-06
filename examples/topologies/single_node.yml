@@ -3,7 +3,6 @@
 # SVA: S1
 # Lab: Single host: indexer + search_head. Lab may omit LM.
 # Do not add virtualbox:, terraform:, os:, or apps here.
-plugin: splunk-platform-automator
 
 
 # Splunk default settings
