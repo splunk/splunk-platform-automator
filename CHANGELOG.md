@@ -23,6 +23,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **Close the GitHub issue after merge**: GitHub will not auto-close issues when a PR lands on `distribution` (not the default branch). After merge succeeds, confirm the linked issue's scope landed, then close it with a short note naming the PR and commit. `Closes #N` in the PR body still links the issue. Canonical text is the feature-development lifecycle in `docs/architecture.md`, plus `token-budget.md` and `contribute.md`.
+
 - **Always-on token-cost rules**: AGENTS.md names one-slice implement chats, a new chat after compaction, a Plan-mode explorer cap, no `SKILL.md` on contributor work, and schema instead of `lib/spa/cli.py` reads. Canonical text stays in `skills/spa/spa/references/token-budget.md`. `/spa-create-config` no longer auto-loads on a lab request. `/spa` Long runs and create-config handoff live in `skills/spa/spa/references/long-runs.md`; the entry skill points at that file and does not inline the phase catalog.
 
 - **Config values unwrap one JSON string layer** ([#138](https://github.com/splunk/splunk-platform-automator/issues/138)): `spa config set` of `"eu-central-1"` stores `eu-central-1`. Omit-safe defaults skip the write only when the current value is already absent or already the default, so a polluted quoted region can be replaced. `--resolve` of a JSON list on a string-or-list path such as `splunk_license_file` writes a list. `data.next` items include `argv` so agents do not re-quote JSON lists or objects.

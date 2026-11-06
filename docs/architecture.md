@@ -329,6 +329,9 @@ At each gate the agent **stops**, names **one** next step, and waits. Completing
 | Tests green | Parent review report (what found / fixed / left out) | Confirm left-out items, then say whether to **commit**. |
 | Commit authorized | Commit only what was authorized | Open a PR against the recorded base? |
 | PR open | Report the URL | Merge when CI is green? Do not merge, close the issue, or delete branches unless asked. |
+| Merge succeeded | Confirm the linked issue's scope is in the merge commit, then close it with a short note naming the PR and commit. | Delete the feature branch? Do not delete branches unless asked. |
+
+GitHub will not auto-close issues when the PR lands on `distribution` (not the default branch). `Closes #N` in the PR body still links the issue. After merge succeeds, close it with a short note naming the PR and merge commit.
 
 Complete the [feature completion review](#feature-completion-review), including the user's confirmation of what was left out, before asking whether to commit.
 

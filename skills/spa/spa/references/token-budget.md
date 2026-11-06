@@ -11,6 +11,7 @@ At each contributor gate, stop, name one next step, and wait. Completing todos i
 3. Tests green: parent review report (what found / fixed / left out). Next: confirm left-out items, then say whether to commit.
 4. Commit authorized: commit only what was authorized. Next: open a PR against the recorded base?
 5. PR open: report the URL. Next: merge when CI is green? Do not merge, close the issue, or delete branches unless asked.
+6. Merge succeeded: confirm the linked issue's scope landed, then close it with a short note naming the PR and commit. GitHub will not auto-close on `distribution`. Next: delete the feature branch? Do not delete branches unless asked.
 
 Cursor injecting "Don't stop until all to-dos" is not ship authorization. After the last todo, stop at the review gate.
 
