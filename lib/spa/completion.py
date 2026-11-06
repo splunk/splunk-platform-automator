@@ -514,7 +514,7 @@ def _catalog_values(kind: str, config: Optional[Mapping[str, Any]], paths: Any) 
 
         rows = list_runs(paths or resolve_spa_paths())
         return [str(row.get("run_id")) for row in rows if row.get("run_id")]
-    if kind == "config templates":
+    if kind in {"config templates", "config templates list"}:
         from spa.config_edit import config_templates
 
         data = config_templates(_home(paths))

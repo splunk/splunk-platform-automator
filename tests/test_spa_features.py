@@ -710,6 +710,7 @@ def test_explain_command_is_read_only_and_one_per_feature():
         assert set(command) == {"action", "path", "command"}
         assert command["action"] in supported
         assert command["command"].startswith("spa ")
+        assert "--agent" not in command["command"]
         assert "\n" not in command["command"]
         commands.append(command)
     by_path = {item.get("selector") or item.get("id"): feature_command(item) for item in features}

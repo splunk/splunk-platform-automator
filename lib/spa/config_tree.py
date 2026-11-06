@@ -18,7 +18,7 @@ from spa.catalog import (
     schema_key_details,
     snippet_is_safe,
 )
-from spa.config_edit import _ONE_OF, _is_secret
+from spa.config_edit import _ONE_OF, _is_secret, config_templates
 
 _ROOT_DESCRIPTION = "Configurable sections of splunk_config.yml."
 _SEARCH_LIMIT = 10
@@ -39,6 +39,9 @@ def explain_config(path: str = "") -> Dict[str, Any]:
     target = (path or "").strip()
     if target in _layout_index(features):
         return _layout_node(target, features[ _layout_index(features)[target] ])
+    template = _template_node(target)
+    if template is not None:
+        return template
     canonical = _canonical(target, schema)
     if target and canonical is None:
         raise KeyError(target)
@@ -89,6 +92,12 @@ def search_config(query: str) -> Dict[str, Any]:
     for ident, item in _layout_index(features).items():
         feature = features[item]
         description = _one_line(_decision_line(feature) or str(feature.get("title") or ""))
+        blob = "%s %s" % (ident.lower(), description.lower())
+        if needles and not all(needle in blob for needle in needles):
+            continue
+        rows.append((3, ident, {"path": ident, "description": description}))
+    for ident, row in _template_index().items():
+        description = _one_line(str(row.get("summary") or ""))
         blob = "%s %s" % (ident.lower(), description.lower())
         if needles and not all(needle in blob for needle in needles):
             continue
@@ -523,6 +532,32 @@ def _layout_index(features: List[Dict[str, Any]]) -> Dict[str, int]:
         if item.get("kind") in {"topology", "provider"} and item.get("id"):
             found[str(item["id"])] = index
     return found
+
+
+def _template_index() -> Dict[str, Dict[str, Any]]:
+    found: Dict[str, Dict[str, Any]] = {}
+    for row in config_templates(_spa_home()).get("templates") or []:
+        name = str(row.get("name") or "")
+        if name:
+            found["template.%s" % name] = row
+    return found
+
+
+def _template_node(target: str) -> Optional[Dict[str, Any]]:
+    if not target.startswith("template."):
+        return None
+    rows = _template_index()
+    if target not in rows:
+        raise KeyError(target)
+    row = rows[target]
+    name = str(row.get("name") or target.split(".", 1)[-1])
+    command = "spa config merge %s --yes" % name
+    return {
+        "path": target,
+        "description": str(row.get("summary") or ""),
+        "command": command,
+        "example": command,
+    }
 
 
 def _layout_node(ident: str, item: Dict[str, Any]) -> Dict[str, Any]:

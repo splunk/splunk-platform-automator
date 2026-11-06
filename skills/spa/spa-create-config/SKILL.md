@@ -60,8 +60,8 @@ The design phases exist so the first `--example` template is not accepted blindl
     
 Never edit `config/splunk_config.yml` yourself: no editor, no shell write, no YAML patch, no pasted block, and no edit tool on any `splunk_config.yml` path (including `$SPA_ENV_DIR` and any environment outside this repo, such as `~/labs/NAME`). Shell writes include `sed -i`, `perl -i`, `yq -i`, `tee`, `>`/`>>` redirects, `cp`/`mv` onto the file, `python`/`node` file writes, and **any tool that writes a file directly** (including cursor tools like `Write`, editing the file in an IDE, etc.). This holds even when a change looks pending, unfinished, or missing from the config. spa has no pending-operation state that the agent may finish by hand. If a spa write fails, report the error and stop. If a hand edit already happened, stop, tell the operator which keys changed, and fix them only with `spa config` or `spa apps`. Every change goes through `spa config`:
 
-- Read: `spa --agent config search QUERY`, `spa --agent config explain PATH`, `spa --agent config get [PATH]`
-- Write: `spa --agent config set PATH VALUE`, `add`, `unset`, `merge --file FILE`, `move role`, `move host`, `topology`, `provider`, and `header set`
+- Read: `spa --agent config search QUERY`, `spa --agent config explain PATH`, `spa --agent config templates list`, `spa --agent config get [PATH]`
+- Write: `spa --agent config set PATH VALUE`, `add`, `unset`, `spa --agent config merge NAME`, `merge --file FILE`, `move role`, `move host`, `topology`, `provider`, and `header set`
 
 App entries go to [spa-apps](../spa-apps/SKILL.md) (`spa --agent apps add`). Validation, provision, deploy, and destroy stay in [/spa](../spa/SKILL.md), which waits for your yes.
 
@@ -110,7 +110,7 @@ Follow [secrets-handling.md](references/secrets-handling.md) for the full list.
 
 1. `spa --agent config search QUERY` (words from the request: `itsi`, `smartstore`, `apps`, `ssl`, `volumes`).
 2. `spa --agent config explain PATH` for the matching path. It returns one level, the decision, and one mutation command. It does not apply the command. A deeper level is a longer path. When `scope` is present, `applies_to` plus `per_host_path` or `global_path` is the other place that setting can go. `behavior` `merge` adds a per-host list to the global list. `replace` uses the host value instead of the global one. Omit `scope` means that path has no counterpart.
-3. Update one existing schema path with `spa --agent config set PATH VALUE`. Append a new host, indexer cluster, or search-head cluster with `spa --agent config add SELECTOR JSON_OBJECT`. Use `spa --agent config merge --file FILE` only for a deliberate multi-setting fragment.
+3. Update one existing schema path with `spa --agent config set PATH VALUE`. Append a new host, indexer cluster, or search-head cluster with `spa --agent config add SELECTOR JSON_OBJECT`. For a shipped bundle, `spa --agent config templates list` then `spa --agent config merge NAME --yes`. Use `spa --agent config merge --file FILE` only for an operator-authored fragment.
 4. Do not invent YAML from leftover mixed example files or apply a catalog snippet. For Splunkbase TAs and packs, follow [spa-apps](../spa-apps/SKILL.md): search, choose the ID and roles, then use one `spa --agent apps add` transaction.
 5. After every write, inspect `changed` and `ready` (`ok: false` means nothing was written). Humans pass `--show-diff` for the hunk. `spa --agent config get` the identity (`found`), then `spa --agent validate` (Phase 13). Do not auto-run provision/deploy.
 
@@ -142,7 +142,7 @@ Repo keys: for every requested capability, use this loop. Call `bin/spa` JSON. D
 1. Search the operator’s concept: `spa --agent config search QUERY`.
 2. Compare the one-line description. Do not choose from the title alone.
 3. Inspect the selected schema path: `spa --agent config explain PATH`.
-4. Author the selected value with `spa --agent config set PATH VALUE`, or append a new non-app identity with `spa --agent config add SELECTOR JSON_OBJECT`. For several already-known paths, pass one sparse fragment to `spa --agent config merge --file -`.
+4. Author the selected value with `spa --agent config set PATH VALUE`, or append a new non-app identity with `spa --agent config add SELECTOR JSON_OBJECT`. For a shipped bundle, `spa --agent config templates list` then `spa --agent config merge NAME --yes`. For an operator-authored fragment, pass it to `spa --agent config merge --file FILE` or `--file -`.
 5. After every write, inspect `changed` and `ready`, `spa --agent config get` the identity (`found`), then `spa --agent validate`. If search has no suitable result, report that the setting is unsupported. Do not invent a key.
 
 `docs/config.md` stays the human browse fallback. Reselect layouts with `spa --agent config topology TOPOLOGY` and `spa --agent config provider PROVIDER`; those actions replace only their owned sections.

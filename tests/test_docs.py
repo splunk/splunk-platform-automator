@@ -132,6 +132,9 @@ def test_architecture_defines_cli_ux_and_output_conventions():
     assert "spa shell" in architecture
     assert "VirtualBox" in architecture
     assert "architecture.md#cli-ux-and-output-conventions" in contributing
+    assert "When `CommandResult.data` includes `next`" in architecture
+    assert "`Next:` line on stderr" in architecture
+    assert "If the session attaches `data.next`, the human renderer prints it." in contributing
 
 
 def test_shell_completion_is_part_of_shipping_a_command():
@@ -316,6 +319,22 @@ def test_operator_guidance_uses_transactional_config_commands():
     assert "- [x] `spa config`" in roadmap
 
 
+def test_config_editing_names_templates_list_search_and_merge():
+    contract = (_docs_dir() / "config-editing.md").read_text(encoding="utf-8")
+
+    def section(heading: str) -> str:
+        start = contract.index(heading)
+        nxt = contract.find("\n### ", start + 1)
+        return contract[start:nxt if nxt != -1 else None]
+
+    cli001 = section("### CFG-CLI-001")
+    assert "templates list" in cli001
+    cli006 = section("### CFG-CLI-006")
+    assert "template.NAME" in cli006
+    merge001 = section("### CFG-MERGE-001")
+    assert "templates list" in merge001
+
+
 def test_every_config_editing_contract_id_has_behavioral_test_traceability():
     contract = (_docs_dir() / "config-editing.md").read_text(encoding="utf-8")
     definitions = CONFIG_CONTRACT_HEADING.findall(contract)
@@ -480,6 +499,22 @@ class TestSpaSkill:
         assert "spa aws list regions" not in text
         entry = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
         assert "spa --agent config explain PATH" in entry
+
+    def test_create_config_uses_templates_list_then_merge_name(self):
+        skills = _create_config_dir()
+        text = "\n".join(
+            [
+                (skills / "SKILL.md").read_text(encoding="utf-8"),
+                (skills / "references" / "config-commands.md").read_text(encoding="utf-8"),
+                (skills / "references" / "phases.md").read_text(encoding="utf-8"),
+                (skills / "references" / "architecture-input.md").read_text(encoding="utf-8"),
+            ]
+        )
+        assert "spa --agent config templates list" in text
+        assert "spa --agent config merge NAME" in text
+        assert "merge --file" in text
+        assert "spa --agent config templates`" not in text
+        assert "spa --agent config templates\n" not in text
 
     def test_spa_skill_confirms_before_destroy(self):
         skill_root = PROJECT_ROOT / "skills" / "spa" / "spa"

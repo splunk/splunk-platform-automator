@@ -507,6 +507,39 @@ splunk_shclusters:
         )
         assert accepted.returncode == 0, accepted.stdout + accepted.stderr
 
+    def test_merge_remote_provider_writes_hostname_download_and_tls(self, tmp_path):
+        """CFG-MERGE-001. Shipped remote-provider fragment writes inventory hostname, host-side download, Splunkbase target download, and TLS."""
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(env_dir)
+        result = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "merge",
+                "remote-provider",
+                "--yes",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 0, result.stdout
+        assert payload["ok"] is True
+        loaded = _load(path)
+        assert loaded["os"]["set_hostname"] is True
+        defaults = loaded["splunk_defaults"]
+        assert defaults["splunk_download"] == {"splunk": True, "splunkforwarder": True}
+        assert defaults["splunk_set_servername"] is True
+        assert defaults["splunk_set_default_hostname"] is True
+        assert defaults["splunk_loginpage_print_userpw"] is False
+        assert defaults["splunk_ssl"]["web"]["enable"] is True
+        assert defaults["splunk_ssl"]["inputs"]["enable"] is True
+        assert defaults["splunk_ssl"]["outputs"]["enable"] is True
+        apps = loaded["splunk_app_deployment"]
+        assert apps["target_download"] is True
+        assert apps["cache_downloads"] is False
+
     def test_fragment_limits_and_duplicate_keys_fail_without_write(self, tmp_path):
         """CFG-MERGE-001 CFG-MERGE-002 CFG-TXN-004."""
         path = _config(tmp_path)
@@ -886,6 +919,55 @@ class TestLayoutContract:
 
         roots = [root for _, _, area_roots in CONFIG_AREAS for root in area_roots]
         assert roots.index("splunk_shclusters") < roots.index("splunk_defaults")
+
+    def test_app_deployment_scalars_sit_above_apps(self, tmp_path):
+        """CFG-LAYOUT-001. Top-level splunk_app_deployment keys are written above apps."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+splunk_app_deployment:
+  apps:
+    - name: Splunk_TA_nix
+      app_id: 833
+      target_roles: [search_head]
+""",
+        )
+        config_set(
+            path,
+            PROJECT_ROOT,
+            "splunk_app_deployment.target_download",
+            "true",
+            validate=False,
+        )
+        keys = list(_load(path)["splunk_app_deployment"])
+        assert keys[-1] == "apps"
+        assert keys.index("target_download") < keys.index("apps")
+
+        config_merge(path, PROJECT_ROOT, "remote-provider", validate=False)
+        keys = list(_load(path)["splunk_app_deployment"])
+        assert keys[-1] == "apps"
+        assert keys.index("target_download") < keys.index("apps")
+        assert keys.index("cache_downloads") < keys.index("apps")
+
+        config_app_add(
+            path,
+            PROJECT_ROOT,
+            {
+                "name": "Splunk_TA_nix",
+                "app_id": 833,
+                "target_roles": ["indexer"],
+            },
+            force_new=True,
+            validate=False,
+        )
+        keys = list(_load(path)["splunk_app_deployment"])
+        assert keys[-1] == "apps"
+        assert keys.index("splunkbase_username") < keys.index("apps")
+        assert keys.index("splunkbase_password") < keys.index("apps")
 
     def test_provider_switch_replaces_only_provider_sections(self, tmp_path):
         """CFG-LAYOUT-002 CFG-LAYOUT-004."""
@@ -1633,15 +1715,63 @@ splunk_hosts:
 
     def test_templates_lists_shipped_fragments_without_environment(self):
         """CFG-CLI-001 CFG-MERGE-001."""
-        result = run_spa(["--agent", "config", "templates"])
+        human = run_spa(["--no-agent", "config", "templates", "list"])
+        assert human.returncode == 0, human.stderr
+        assert human.stdout.splitlines() == [
+            "os-tools - Add common operating-system utility packages.",
+            (
+                "remote-provider - Remote-provider defaults: inventory hostname, "
+                "host-side Splunk and Splunkbase download, and TLS."
+            ),
+        ]
+        result = run_spa(["--agent", "config", "templates", "list"])
         payload = json.loads(result.stdout)
         assert result.returncode == 0
         assert payload["data"]["templates"] == [
             {
                 "name": "os-tools",
                 "summary": "Add common operating-system utility packages.",
-            }
+                "command": "spa --agent config merge os-tools --yes",
+                "argv": ["spa", "--agent", "config", "merge", "os-tools", "--yes"],
+            },
+            {
+                "name": "remote-provider",
+                "summary": (
+                    "Remote-provider defaults: inventory hostname, "
+                    "host-side Splunk and Splunkbase download, and TLS."
+                ),
+                "command": "spa --agent config merge remote-provider --yes",
+                "argv": [
+                    "spa",
+                    "--agent",
+                    "config",
+                    "merge",
+                    "remote-provider",
+                    "--yes",
+                ],
+            },
         ]
+
+    def test_bare_templates_is_usage_error(self):
+        """CFG-CLI-001. spa config templates is a catalog parent; list is the action."""
+        needs_action = (
+            "spa config templates needs an action.\n"
+            "List: spa config templates list"
+        )
+        for argv in (["config", "templates"], ["config", "tpl"]):
+            human = run_spa(["--no-agent", *argv])
+            assert human.returncode == 2, argv
+            assert human.stdout.strip() == "", argv
+            assert human.stderr.strip() == needs_action, argv
+            agent = run_spa(["--json", *argv])
+            assert agent.returncode == 2, argv
+            assert agent.stderr == "", argv
+            body = json.loads(agent.stdout)
+            assert body == {
+                "ok": False,
+                "schema_version": 1,
+                "error": needs_action,
+            }
 
     def test_feature_catalog_has_templates_and_no_apply_contract(self):
         """CFG-CLI-004 CFG-LAYOUT-002."""
@@ -1716,6 +1846,33 @@ class TestExplainContract:
         by_path = {item["path"]: item["description"] for item in payload["data"]["matches"]}
         assert "All hosts" in by_path["os.packages"]
         assert "Per-host" in by_path["splunk_hosts.os.packages"]
+        templates = json.loads(
+            run_spa(["--agent", "config", "search", "remote-provider"]).stdout
+        )
+        hits = {item["path"]: item for item in templates["data"]["matches"]}
+        assert "template.remote-provider" in hits
+        assert set(hits["template.remote-provider"]) == {"path", "description"}
+        assert "spa config" not in hits["template.remote-provider"]["description"]
+
+    def test_explain_template_returns_merge_command(self):
+        """CFG-CLI-005 CFG-CLI-006 CFG-MERGE-001."""
+        result = run_spa(["--agent", "config", "explain", "template.remote-provider"])
+        payload = json.loads(result.stdout)
+        assert result.returncode == 0, result.stderr
+        data = payload["data"]
+        assert data["path"] == "template.remote-provider"
+        command = "spa config merge remote-provider --yes"
+        assert data["command"] == command
+        assert data["example"] == command
+        human = run_spa(["config", "explain", "template.remote-provider"])
+        assert human.returncode == 0, human.stderr
+        assert command in human.stdout
+        assert "spa --agent" not in human.stdout
+        missing = run_spa(["--agent", "config", "explain", "template.missing"])
+        error = json.loads(missing.stdout)
+        assert missing.returncode == 1
+        assert error["ok"] is False
+        assert "Unknown config path: template.missing" in error["error"]
 
 
 class TestDependencyContract:
@@ -2405,6 +2562,7 @@ class TestAppContract:
         assert deployment["splunkbase_username"] == "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
         assert deployment["splunkbase_password"] == "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
         assert deployment["apps"] == [entry]
+        assert list(deployment)[-1] == "apps"
 
     def test_snippet_and_add_share_typed_schema_backed_set_fields(self):
         """CFG-APP-003 CFG-APP-004."""

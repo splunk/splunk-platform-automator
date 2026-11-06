@@ -142,10 +142,25 @@ HELP_CONTRACTS = [
             "topology",
             "provider",
             "audit",
+            "templates",
             "spa config search QUERY",
             "spa config explain PATH",
             "spa config schema --markdown",
         ],
+    ),
+    (
+        ["config", "templates", "--help"],
+        [
+            "usage: spa config templates",
+            "ACTION",
+            "list",
+            "Aliases: tpl",
+            "spa config templates needs an action",
+        ],
+    ),
+    (
+        ["config", "templates", "list", "--help"],
+        ["usage: spa config templates list"],
     ),
     (
         ["config", "audit", "--help"],
@@ -1025,6 +1040,13 @@ def _help_action_names():
                 for nested_name, _nested_alias in _command_rows(nested.stdout):
                     names.add("config move %s" % nested_name)
                 continue
+            if parent == "config" and name == "templates":
+                names.add("config templates")
+                nested = run_spa(["--no-agent", "config", "templates", "--help"])
+                assert nested.returncode == 0, nested.stderr
+                for nested_name, _nested_alias in _command_rows(nested.stdout):
+                    names.add("config templates %s" % nested_name)
+                continue
             if parent == "aws" and name in (
                 "regions",
                 "amis",
@@ -1263,3 +1285,59 @@ def test_licenses_list_is_the_catalog():
     assert list_payload["ok"] is True
     assert list_payload["schema_version"] == 1
     assert list_payload["data"]["name"] == "licenses list"
+
+
+def test_templates_list_is_the_catalog():
+    """spa config templates is a catalog parent. list is the action; the bare parent exits 2."""
+    from spa.agent import COMMAND_SCHEMA
+
+    needs_action = (
+        "spa config templates needs an action.\n"
+        "List: spa config templates list"
+    )
+    for argv in (["config", "templates"], ["config", "tpl"]):
+        human = run_spa(["--no-agent", *argv])
+        assert human.returncode == 2, argv
+        assert human.stdout.strip() == "", argv
+        assert human.stderr.strip() == needs_action, argv
+        agent = run_spa(["--json", *argv])
+        assert agent.returncode == 2, argv
+        assert agent.stderr == "", argv
+        body = json.loads(agent.stdout)
+        assert body["ok"] is False
+        assert body["schema_version"] == 1
+        assert "data" not in body
+        assert body["error"] == needs_action
+
+    help_text = run_spa(["--no-agent", "config", "templates", "--help"])
+    assert help_text.returncode == 0, help_text.stderr
+    assert "usage: spa config templates" in help_text.stdout
+    assert "Aliases: tpl" in help_text.stdout
+    assert "list" in help_text.stdout
+    list_help = run_spa(["--no-agent", "config", "templates", "list", "--help"])
+    assert list_help.returncode == 0, list_help.stderr
+    assert "usage: spa config templates list" in list_help.stdout
+
+    by_name = {row["name"]: row for row in COMMAND_SCHEMA["commands"]}
+    assert "config templates list" in by_name
+    assert by_name["config templates"]["example"] == "spa --agent config templates list"
+    assert "flags" not in by_name["config templates"]
+    listed = by_name["config templates list"]
+    assert listed["example"] == "spa --agent config templates list"
+    merge = by_name["config merge"]
+    assert merge["example"] == "spa --agent config merge remote-provider --yes"
+    template = next(item for item in merge["positionals"] if item["name"] == "TEMPLATE")
+    assert template["completes_from"] == "config templates list"
+
+    parent_help = run_spa(["--agent", "config", "templates", "--help"])
+    assert parent_help.returncode == 0, parent_help.stderr
+    parent_payload = json.loads(parent_help.stdout)
+    assert parent_payload["ok"] is True
+    assert parent_payload["schema_version"] == 1
+    assert parent_payload["data"]["name"] == "config templates"
+    list_schema = run_spa(["--agent", "config", "templates", "list", "--help"])
+    assert list_schema.returncode == 0, list_schema.stderr
+    list_payload = json.loads(list_schema.stdout)
+    assert list_payload["ok"] is True
+    assert list_payload["schema_version"] == 1
+    assert list_payload["data"]["name"] == "config templates list"

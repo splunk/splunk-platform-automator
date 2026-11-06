@@ -19,8 +19,9 @@ contract ID and mapped test in the same change, and passes the
 `spa config` has one parser per action: `explain`, `search`, `get`,
 `templates`, `keys`, `schema`, `set`, `add`, `unset`, `merge`, `move`,
 `topology`, and `provider`. `spa config move` has required actions `role`
-and `host`. `explain` and `search` are the schema walk. `templates` is
-the read-only shipped fragment catalog. `keys` is the maintainer coverage
+and `host`. `spa config templates` has required action `list`. `explain` and
+`search` are the schema walk. `templates list` is the read-only shipped
+fragment catalog. `keys` is the maintainer coverage
 check. `schema --markdown` is the human settings dump. `spa config add`
 appends one non-app identity-list entry. `spa apps` owns app and content-pack
 entries; there is no `spa config app`. Operators and agents call `bin/spa`
@@ -177,27 +178,31 @@ host, the selected node includes `SCOPE` with the other path. `os`,
 to the global list. Other paired values replace the global value for that
 host. A setting with no counterpart omits `SCOPE`. An immediate field line
 names the other path in one clause. The selected node may include one command
-and one example. Secrets use `--from-env` and have no literal example. Agent
+and one example. That command is the human spelling (`spa config …` or
+`spa apps …`) and does not include `--agent`. Secrets use `--from-env` and
+have no literal example. Agent
 JSON is that structure with empty values omitted. `schema --markdown` is
 rejected in agent mode.
 
 ### CFG-CLI-006 — path search
 
 `spa config search QUERY` returns paths and a one-line description. It does
-not return a command. When a counterpart exists, that line says `All hosts`
-or `Per-host` and names the other path. Agent results contain at most 10
-matches plus `total_matches` and `truncated`.
+not return a command. Search also matches shipped fragments as `template.NAME`.
+When a counterpart exists, that line says `All hosts` or `Per-host` and names
+the other path. Agent results contain at most 10 matches plus `total_matches`
+and `truncated`. `spa config explain template.NAME` returns the merge command.
 
 ## Fragment merge
 
 ### CFG-MERGE-001 — fragment sources
 
 `config merge TEMPLATE` reads a shipped `examples/templates/TEMPLATE.yml`.
-A local fragment is only `config merge --file FILE`, and stdin is
-`config merge --file -`. A path in the template position is an error that
-names `--file`. Passing a template and `--file` together is an error. Stdin
-is limited to 1 MiB and files to 8 MiB. YAML uses YAML 1.2 round-trip parsing,
-preserves strings such as `yes`, and rejects duplicate keys.
+TEMPLATE is a name from `spa config templates list`. A local fragment is only
+`config merge --file FILE`, and stdin is `config merge --file -`. A path in
+the template position is an error that names `--file`. Passing a template and
+`--file` together is an error. Stdin is limited to 1 MiB and files to 8 MiB.
+YAML uses YAML 1.2 round-trip parsing, preserves strings such as `yes`, and
+rejects duplicate keys.
 
 ### CFG-MERGE-002 — mappings, scalars, and null
 
@@ -316,7 +321,9 @@ external-topology exceptions remain valid.
 Writes order roots as: plugin; general and custom; OS; providers; indexer and
 search-head clustering; defaults, directories, systemd, and environments;
 hosts; apps. Unknown roots follow in their existing relative order. Nested
-mapping and list order is not canonicalized.
+mapping and list order is not canonicalized, except `splunk_app_deployment.apps`
+is always the last key in that mapping. Other keys in that mapping keep their
+relative order and sit above `apps`.
 
 ### CFG-LAYOUT-002 — template resolution
 

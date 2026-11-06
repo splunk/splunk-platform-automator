@@ -17,7 +17,7 @@ Do not run the SVA questionnaire. Check is mandatory on this path, before valida
 3. Write mode, after the gate yes: `spa environment init PARENT/NAME --architecture FILE --provider PROVIDER`. Plan mode: record location/name; do **not** init until Phase 12.
 4. Host ↔ role map; `spa config move role` / `config add` as answered.
 5. Optional `spa config move host --prefix` / `--postfix` / `move host OLD --to NEW`.
-6. Sizing, OS, AWS if `aws`.
+6. Sizing, OS, AWS if `aws`. For a shipped bundle such as remote-provider defaults, `spa --agent config templates list` then `spa --agent config merge NAME --yes`. Keep `merge --file` for an operator-authored fragment.
 7. Apps (always ask). Follow `data.next` after `spa architecture plan FILE` / init when `apps.by_role` listed folder names (ClusterBaseConfigs / BaseConfigs). AskQuestion whether to add those as local apps via `/spa-apps`. Do not auto-import. ES search heads may already exist; app 263 still goes through `/spa-apps` if they want ES.
 8. Licenses. If a file is chosen and `license_manager` is missing, say so and add it.
 9. **`spa architecture check FILE` (required).** Then `spa validate`. Phase 14 handoff.

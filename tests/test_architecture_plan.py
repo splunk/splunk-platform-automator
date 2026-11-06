@@ -110,6 +110,19 @@ def test_cli_plan_asks_to_add_skipped_local_apps(tmp_path):
     assert nxt[0]["required"] is False
     assert "ClusterBaseConfigs" in nxt[0]["ask"]
     assert "/spa-apps" in nxt[0]["ask"]
+    assert "Next:" not in result.stderr
+
+
+def test_human_plan_prints_skipped_apps_next(tmp_path):
+    source = tmp_path / "arch.json"
+    doc = _load(C3)
+    doc["apps"] = {"by_role": {"indexer": ["ClusterBaseConfigs"]}}
+    source.write_text(json.dumps(doc), encoding="utf-8")
+    result = run_spa(["--no-agent", "architecture", "plan", str(source)])
+    assert result.returncode == 0, result.stderr
+    assert "Next:" in result.stderr
+    assert "ClusterBaseConfigs" in result.stderr
+    assert "spa --agent apps search QUERY" in result.stderr
 
 
 def host_roles_for(hosts, name):
@@ -292,6 +305,21 @@ def test_init_architecture_warns_when_license_manager_is_deferred(tmp_path):
     assert "license_manager" in text
 
 
+def test_human_init_prints_skipped_apps_next(tmp_path):
+    dest = tmp_path / "c3-lab"
+    source = tmp_path / "arch.json"
+    doc = _load(C3)
+    doc["apps"] = {"by_role": {"indexer": ["ClusterBaseConfigs"]}}
+    source.write_text(json.dumps(doc), encoding="utf-8")
+    result = run_spa_init(
+        ["--architecture", str(source), "--provider", "aws", str(dest)]
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Next:" in result.stderr
+    assert "ClusterBaseConfigs" in result.stderr
+    assert "spa --agent apps search QUERY" in result.stderr
+
+
 def test_agent_init_architecture_includes_deferred_warnings(tmp_path):
     dest = tmp_path / "c3-lab"
     result = run_spa(
@@ -387,6 +415,8 @@ def test_apply_warns_when_license_manager_is_deferred(tmp_path):
     assert "license_manager is required" in text
     assert "architecture check: deployment.roles.license_master.count" in text
     assert "Remaining:" in text
+    assert "Next:" in text
+    assert "spa --agent licenses list" in result.stderr
 
 
 def test_apply_refuses_unconfirmed(tmp_path):

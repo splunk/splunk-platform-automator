@@ -10,6 +10,7 @@ import io
 import json
 import os
 import re
+import shlex
 import stat
 import tempfile
 from contextlib import contextmanager
@@ -1780,6 +1781,10 @@ def _fragment_path(spa_home: Path, operand: str) -> Path:
     return spa_home / "examples" / "templates" / ("%s.yml" % operand)
 
 
+def template_merge_command(name: str) -> str:
+    return "spa --agent config merge %s --yes" % name
+
+
 def config_templates(spa_home: Path) -> Dict[str, Any]:
     rows = []
     directory = Path(spa_home) / "examples" / "templates"
@@ -1792,7 +1797,15 @@ def config_templates(spa_home: Path) -> Dict[str, Any]:
                     break
             elif line.strip():
                 break
-        rows.append({"name": path.stem, "summary": summary})
+        command = template_merge_command(path.stem)
+        rows.append(
+            {
+                "name": path.stem,
+                "summary": summary,
+                "command": command,
+                "argv": shlex.split(command),
+            }
+        )
     return {"templates": rows}
 
 

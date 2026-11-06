@@ -11,7 +11,8 @@ Always use these commands, never hand-edit:
 | Add an app | `spa --agent apps search QUERY` then `spa --env NAME apps add APP_ID --roles ROLE1,ROLE2 --yes` | Validates app exists, role exists, app not duplicate |
 | Add ITSI content pack | `spa --agent apps content-packs list 5391` then `spa --env NAME apps add 5391 --content-pack CP_NAME --yes` | Pack name validated against the Content Library manifest |
 | Change OS | `spa --env NAME config set os.packages '["acl","polkit"]' --yes` (leaf paths) | Author only non-default keys; never `config set os '{whole map}'` |
-| Merge multiple settings | `spa --env NAME config merge --file FILE.yml --yes` | Atomic, all-or-nothing; validation happens once |
+| Merge a shipped template | `spa --agent config templates list` then `spa --env NAME config merge NAME --yes` | Catalog name from `templates list`; not a local path |
+| Merge an operator-authored fragment | `spa --env NAME config merge --file FILE.yml --yes` | Atomic, all-or-nothing; validation happens once |
 | Move a role to another host | `spa --env NAME config move role ROLE --from HOST --to HOST --yes` | Relocates one role; required on path B when an extra role must leave a co-located preset host |
 | Rename, prefix, or postfix hosts | `spa --env NAME config move host OLD --to NEW --yes` or `--prefix PREFIX` or `--postfix POSTFIX` | Rewrites host identities and host-name references |
 | Read current state | `spa --env NAME config get [PATH]` | Always check before assuming a value |
