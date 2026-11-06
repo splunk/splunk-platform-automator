@@ -711,6 +711,13 @@ class TestSpaSkill:
         assert "still asked" in contract.lower()
         assert "secret" in contract.lower()
         assert "docs/user-guide.md#configure-an-environment" in contract
+        assert "ignores `apps.by_role`" in contract
+        assert "baseconfig" in contract.lower()
+        assert "add those as local apps via `/spa-apps`" not in contract
+        assert "add them as local apps via `/spa-apps`" not in contract
+        phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
+        assert "ignores `apps.by_role`" in phases
+        assert "Follow `data.next` for skipped `apps.by_role`" not in phases
 
     def test_create_config_region_question_puts_aws_config_region_first(self):
         text = _create_config_workflow()

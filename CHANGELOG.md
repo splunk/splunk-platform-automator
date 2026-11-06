@@ -13,7 +13,7 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 - **Architecture 0.4.0 handover**: `spa architecture plan FILE` reads confirmed `kind: splunk.architecture` files (schema `0.4.0` only). `spa init --architecture FILE` (exclusive with `--example`) selects the catalog topology from `sva.code` and overlays counts, RF/SF, `org_prefix`, and extra roles. `spa architecture apply FILE --yes` does the same overlay on an existing env and reports ingested/skipped/remaining. `spa architecture check FILE` subset-matches the file against the current config. Init and apply warn (and stay successful) when `license_manager` is deferred until a license file is set, and when architecture check would still mismatch. `spa config move role ROLE --from HOST --to HOST` relocates one role; `spa config move host OLD --to NEW`, `--prefix PREFIX`, and `--postfix POSTFIX` rename identities. Examples: `examples/architectures/c1.json`, `c3.json`, `m4.json`. Unreleased 0.3.0 phase JSON is not supported.
 
-- **Search pin 833 and architecture apps.by_role next-step** ([#138](https://github.com/splunk/splunk-platform-automator/issues/138)): `spa apps search` of `unix`, `nix`, or `Splunk_TA_nix` pins app 833. `spa architecture plan` / init / apply attach `data.next` naming skipped `apps.by_role` folders so agents AskQuestion about adding them as local apps; they are not auto-imported.
+- **Search pin 833** ([#138](https://github.com/splunk/splunk-platform-automator/issues/138)): `spa apps search` of `unix`, `nix`, or `Splunk_TA_nix` pins app 833.
 
 - **Deploy follow-logs** ([#138](https://github.com/splunk/splunk-platform-automator/issues/138)): `spa logs --follow --wait` waits for a jsonl newer than invocation so it does not tail the previous provision run. `/spa` prints `spa --env NAME logs --follow --wait --ansible-output --color` before deploy. Agent heartbeats repeat `Still …` from the last phase sentence.
 
@@ -22,6 +22,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 - **Licenses catalog and next-step envelopes**: `spa licenses list` is the catalog. Bare `spa licenses` exits 2. The scan uses the environment config (no relative `--config` required) and compact rows include `capabilities`. Successful `apps add` and `provision` envelopes include `data.next`. A normal app without `--roles` returns `ok: false` with `ready: false` and a roles `choice` (`allowed` plus `suggested`).
 
 ### Changed
+
+- **Architecture ignores `apps.by_role`** ([#144](https://github.com/splunk/splunk-platform-automator/issues/144)): `spa architecture plan` / init / apply no longer attach `data.next` asking to import ClusterBaseConfigs / BaseConfigs as local apps. SPA installs PS baseconfigs from `splunk_baseconfig_dir`. Phase 9 still asks for extra Splunkbase / ITSI / ES apps.
 
 - **Close the GitHub issue after merge**: GitHub will not auto-close issues when a PR lands on `distribution` (not the default branch). After merge succeeds, confirm the linked issue's scope landed, then close it with a short note naming the PR and commit. `Closes #N` in the PR body still links the issue. Canonical text is the feature-development lifecycle in `docs/architecture.md`, plus `token-budget.md` and `contribute.md`.
 

@@ -181,22 +181,6 @@ def provision_next(env_name: Optional[str] = None) -> List[Dict[str, Any]]:
     ]
 
 
-def skipped_apps_next(folder_names: Iterable[str]) -> List[Dict[str, Any]]:
-    names = [str(name).strip() for name in folder_names if str(name).strip()]
-    if not names:
-        return []
-    listed = ", ".join(names)
-    return [
-        item(
-            "apps.by_role.local",
-            "Architecture skipped apps.by_role (%s). Add them as local apps via /spa-apps?"
-            % listed,
-            "spa --agent apps search QUERY",
-            required=False,
-        )
-    ]
-
-
 def remaining_next(remaining: Iterable[str]) -> List[Dict[str, Any]]:
     mapping = {
         "apps": item("apps.search", "Add apps?", "spa --agent apps search QUERY"),
