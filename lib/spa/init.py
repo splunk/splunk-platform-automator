@@ -648,13 +648,13 @@ def compose_example_config(spa_home: Path, topology_id: str, provider_id: str) -
             "Provider %s must not contain %s" % (prov_path.name, ", ".join(bad_prov))
         )
     plugin = topology.get("plugin") or provider.get("plugin") or "splunk-platform-automator"
-    composed: Dict[str, Any] = {"plugin": plugin}
+    composed: Dict[str, Any] = {"plugin": plugin, "schema_version": 1}
     for key, value in provider.items():
-        if key == "plugin":
+        if key in ("plugin", "schema_version", "config_version"):
             continue
         composed[key] = value
     for key, value in topology.items():
-        if key == "plugin":
+        if key in ("plugin", "schema_version", "config_version"):
             continue
         composed[key] = value
     return composed

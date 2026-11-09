@@ -1152,3 +1152,22 @@ class TestReviewFindings67:
             text = path.read_text(encoding="utf-8")
             for spelling in banned:
                 assert spelling not in text, "%s: %s" % (path.relative_to(PROJECT_ROOT), spelling)
+
+
+def test_roadmap_schema_version_stamp_is_done():
+    text = (PROJECT_ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+    lines = [line for line in text.splitlines() if "issues/117" in line]
+    assert lines, "ROADMAP needs a #117 line"
+    line = lines[0]
+    assert line.startswith("- [x]"), line
+    assert "`schema_version`" in line
+    assert "spa config set config_version" not in line
+    assert "spa config migrate" in line
+
+
+def test_changelog_unreleased_names_schema_version_and_config_version():
+    text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
+    assert "`schema_version`" in unreleased
+    assert "`config_version`" in unreleased
+    assert "issues/117" in unreleased
