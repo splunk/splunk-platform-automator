@@ -18,6 +18,9 @@ CATALOG_REL = Path("examples") / "catalog" / "features.yml"
 
 # Keys that playbooks honor but that are not Pydantic fields. Empty when schema covers them.
 USED_IN_CODE_KEYS: frozenset[str] = frozenset()
+# Schema keys documented only by Field description. They are stamps or operator
+# labels, not catalog choices, so spa config keys does not require a features.yml row.
+CATALOG_OPTIONAL_KEYS: frozenset[str] = frozenset({"schema_version", "config_version"})
 
 _SECRET_LEAF = re.compile(r"password|secret|token|private_key", re.IGNORECASE)
 _INTERNAL_ID = re.compile(r"\b(?:setting|topology|provider)\.[A-Za-z0-9_.]+\b")
@@ -498,7 +501,11 @@ def key_inventory(spa_home: Path) -> Dict[str, Any]:
                 "has_key_detail": has_detail,
             }
         )
-    missing = [row["key"] for row in rows if row["in_schema"] and not row["in_catalog"]]
+    missing = [
+        row["key"]
+        for row in rows
+        if row["in_schema"] and not row["in_catalog"] and row["key"] not in CATALOG_OPTIONAL_KEYS
+    ]
     missing_detail = [
         row["key"]
         for row in rows
@@ -1103,7 +1110,7 @@ def features_for_paths(paths: SpaPaths) -> List[Dict[str, Any]]:
 # Top-level splunk_config.yml areas for the human settings dump.
 # Unknown roots land in "other" so a new schema field cannot disappear.
 CONFIG_AREAS: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = (
-    ("identity", "Identity", ("plugin",)),
+    ("identity", "Identity", ("plugin", "schema_version", "config_version")),
     ("general", "General", ("general", "custom")),
     ("os", "OS", ("os",)),
     ("provider", "Provider", ("terraform", "virtualbox", "external")),

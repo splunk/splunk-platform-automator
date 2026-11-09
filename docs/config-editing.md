@@ -318,9 +318,10 @@ external-topology exceptions remain valid.
 
 ### CFG-LAYOUT-001 — canonical root order
 
-Writes order roots as: plugin; general and custom; OS; providers; indexer and
-search-head clustering; defaults, directories, systemd, and environments;
-hosts; apps. Unknown roots follow in their existing relative order. Nested
+Writes order roots as: plugin, schema_version, and config_version; general and
+custom; OS; providers; indexer and search-head clustering; defaults,
+directories, systemd, and environments; hosts; apps. Unknown roots follow in
+their existing relative order. Nested
 mapping and list order is not canonicalized, except `splunk_app_deployment.apps`
 is always the last key in that mapping. Other keys in that mapping keep their
 relative order and sit above `apps`.
@@ -363,6 +364,15 @@ Schema validation, `spa validate`, inventory, provision, and deploy do not
 read or require this spacing. A file with the blank lines removed, with extra
 blank lines, or with added comments stays valid and is left unchanged until a
 write command edits it.
+
+### CFG-LAYOUT-007 — identity key order
+
+Among root keys, `plugin` is first and `schema_version` is second whenever it
+is present. `config_version` and every other key follow those two. `---`,
+blank lines, and comments (including `spa config header set`) may appear
+before those keys. They must not appear between them as other keys. Header
+comments stay leading; they do not move below `plugin` / `schema_version`.
+`spa config set schema_version` writes the stamp as the second root key.
 
 ## Applications
 
@@ -532,6 +542,7 @@ Each contract ID maps to executable behavioral evidence:
 - `CFG-LAYOUT-004`: `tests/test_config_contract.py::TestLayoutContract::test_provider_switch_replaces_only_provider_sections`
 - `CFG-LAYOUT-005`: `tests/test_config_contract.py::TestLayoutContract::test_all_clustered_topology_examples_use_iter_for_member_ranges`
 - `CFG-LAYOUT-006`: `tests/test_config_contract.py::TestLayoutContract::test_written_config_separates_sections_and_list_items`
+- `CFG-LAYOUT-007`: `tests/test_config_contract.py::TestLayoutContract::test_set_schema_version_is_second_root_and_header_stays_leading`
 - `CFG-APP-001`: `tests/test_config_contract.py::TestAppContract::test_builder_omits_splunkbase_defaults_and_requires_ta_roles`
 - `CFG-APP-002`: `tests/test_config_contract.py::TestAppContract::test_app_add_upserts_credentials_and_is_idempotent`
 - `CFG-APP-003`: `tests/test_config_contract.py::TestAppContract::test_app_add_upserts_credentials_and_is_idempotent`

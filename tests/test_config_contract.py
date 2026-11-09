@@ -918,7 +918,29 @@ class TestLayoutContract:
         from spa.catalog import CONFIG_AREAS
 
         roots = [root for _, _, area_roots in CONFIG_AREAS for root in area_roots]
+        assert roots[:3] == ["plugin", "schema_version", "config_version"]
         assert roots.index("splunk_shclusters") < roots.index("splunk_defaults")
+
+    def test_set_schema_version_is_second_root_and_header_stays_leading(self, tmp_path):
+        """CFG-LAYOUT-007. plugin first, schema_version second; header comments stay above them."""
+        from spa.catalog import CONFIG_AREAS
+
+        identity = next(roots for area_id, _, roots in CONFIG_AREAS if area_id == "identity")
+        assert identity == ("plugin", "schema_version", "config_version")
+        path = _config(tmp_path)
+        config_set(path, PROJECT_ROOT, "schema_version", "1")
+        keys = list(_load(path))
+        assert keys[0] == "plugin"
+        assert keys[1] == "schema_version"
+        assert _load(path)["schema_version"] == 1
+        config_set(path, PROJECT_ROOT, "config_version", "1.4.0")
+        keys = list(_load(path))
+        assert keys[:3] == ["plugin", "schema_version", "config_version"]
+        config_header_set(path, {"intent": "config-test", "sva": "S1"})
+        text = path.read_text(encoding="utf-8")
+        assert text.index("# intent: config-test") < text.index("plugin:")
+        assert text.index("plugin:") < text.index("schema_version:")
+        assert list(_load(path))[:3] == ["plugin", "schema_version", "config_version"]
 
     def test_app_deployment_scalars_sit_above_apps(self, tmp_path):
         """CFG-LAYOUT-001. Top-level splunk_app_deployment keys are written above apps."""
