@@ -428,7 +428,9 @@ def test_deploy_refuses_unstamped_config_before_playbook(tmp_path, monkeypatch):
     before = paths.config_file.read_bytes()
     result = session.deploy(confirm=True)
     assert result.ok is False
-    assert result.error == "spa config migrate --yes"
+    assert "no schema_version" in result.error
+    assert "version 1" in result.error
+    assert "spa config migrate --yes" in result.error
     assert result.data is None
     assert not called
     assert paths.config_file.read_bytes() == before
@@ -445,7 +447,9 @@ def test_provision_refuses_unstamped_config_before_playbook(tmp_path, monkeypatc
     before = paths.config_file.read_bytes()
     result = session.provision(confirm=True)
     assert result.ok is False
-    assert result.error == "spa config migrate --yes"
+    assert "no schema_version" in result.error
+    assert "version 1" in result.error
+    assert "spa config migrate --yes" in result.error
     assert result.data is None
     assert not called
     assert paths.config_file.read_bytes() == before

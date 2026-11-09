@@ -943,6 +943,8 @@ def test_human_validate_reports_missing_schema_version_and_does_not_write(tmp_pa
         extra_env=extra,
     )
     assert result.returncode == 1
+    assert "no schema_version" in result.stderr
+    assert "version 1" in result.stderr
     assert _MIGRATE_YES in result.stderr
     assert "Schema OK" in result.stdout
     assert path.read_bytes() == before
@@ -958,7 +960,12 @@ def test_agent_validate_missing_schema_version_omits_data(tmp_path):
     )
     payload = json.loads(result.stdout)
     assert result.returncode == 1
-    assert payload == {"ok": False, "schema_version": 1, "error": _MIGRATE_YES}
+    assert payload["ok"] is False
+    assert payload["schema_version"] == 1
+    assert "data" not in payload
+    assert "no schema_version" in payload["error"]
+    assert "version 1" in payload["error"]
+    assert _MIGRATE_YES in payload["error"]
     assert path.read_bytes() == before
 
 
@@ -993,7 +1000,8 @@ def test_validate_config_version_without_schema_version_is_missing_stamp(tmp_pat
     )
     payload = json.loads(result.stdout)
     assert result.returncode == 1
-    assert payload["error"] == _MIGRATE_YES
+    assert "no schema_version" in payload["error"]
+    assert _MIGRATE_YES in payload["error"]
     assert "data" not in payload
     assert path.read_bytes() == before
 

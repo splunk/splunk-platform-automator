@@ -25,7 +25,11 @@ VALIDATE_STEPS = (
     ("syntax", "Playbook syntax-check"),
 )
 
-SCHEMA_STAMP_ERROR = "spa config migrate --yes"
+SCHEMA_STAMP_ERROR = (
+    "splunk_config.yml has no schema_version. "
+    "An omitted key still reads as version 1. "
+    "Stamp it with spa config migrate --yes."
+)
 
 
 def require_authored_schema_version(config_path: Path) -> Optional[CommandResult]:
