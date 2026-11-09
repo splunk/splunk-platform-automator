@@ -53,9 +53,11 @@ unspecified-risk playbooks still require `--yes` in agent mode.
 
 `spa config migrate` is the accepted write for `schema_version`. Day one
 (current is 1, `MIGRATIONS` empty): an unstamped file inserts
-`schema_version: 1` as the second root key after `plugin` and reports
-`changed`. A file already at the current version is a no-op (`changed:
-false`). Operator `config_version` is never invented or bumped. `--dry-run`
+`schema_version: 1` immediately under `plugin` (no blank line or comment
+between them) and reports `changed`. A file that already has the current
+stamp is a no-op (`changed: false`), including when a later hand edit put a
+blank line or comment between `plugin` and the stamp. Operator
+`config_version` is never invented or bumped. `--dry-run`
 is faithful and does not write. `--show-diff` prints the redacted unified
 hunk after the status line. Human status is `Config migrate: would change` /
 `changed` / `unchanged`. `spa validate`, `spa deploy`, and `spa provision`
@@ -368,10 +370,11 @@ forwarders, and universal forwarders use `name`.
 
 Blank lines are write formatting. `spa config` and `spa apps` insert one blank
 line between top-level sections, and one blank line between entries of a
-top-level list such as hosts, clusters, environments, and apps. `spa init`
-uses the same formatting when it writes a new file. Comments directly above an
-entry stay with it. Scalar lists such as `roles` and lists nested inside an
-entry stay compact.
+top-level list such as hosts, clusters, environments, and apps. Identity keys
+(`plugin`, `schema_version`, `config_version`) are one section: a first-time
+write puts them on consecutive lines. `spa init` uses the same formatting when
+it writes a new file. Comments directly above an entry stay with it. Scalar
+lists such as `roles` and lists nested inside an entry stay compact.
 
 Schema validation, `spa validate`, inventory, provision, and deploy do not
 read or require this spacing. A file with the blank lines removed, with extra
@@ -383,9 +386,13 @@ write command edits it.
 Among root keys, `plugin` is first and `schema_version` is second whenever it
 is present. `config_version` and every other key follow those two. `---`,
 blank lines, and comments (including `spa config header set`) may appear
-before those keys. They must not appear between them as other keys. Header
-comments stay leading; they do not move below `plugin` / `schema_version`.
-`spa config set schema_version` writes the stamp as the second root key.
+before those keys. A first-time write (`spa init`, including `--example` and `--architecture`,
+`spa config migrate` of an unstamped file, `spa config set schema_version`)
+puts `schema_version` on the next line after `plugin`, with no blank line or
+comment between them. Comments that used to follow `plugin` stay with the next
+non-identity section. Header comments stay leading. A later hand edit that
+inserts a blank line or comment between those keys still validates; a later
+`spa config migrate` does not rewrite it.
 
 ## Applications
 

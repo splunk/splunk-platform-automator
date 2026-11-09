@@ -176,6 +176,23 @@ class TestIdentityKeyOrder:
         text = str(exc_info.value)
         assert "schema_version" in text
 
+    def test_blank_line_and_comment_between_plugin_and_schema_version_still_validate(self, tmp_path):
+        cfg = tmp_path / "splunk_config.yml"
+        cfg.write_text(
+            "plugin: splunk-platform-automator\n"
+            "\n"
+            "# hand comment\n"
+            "schema_version: 1\n"
+            "splunk_defaults:\n"
+            "  splunk_admin_password: \"{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}\"\n"
+            "splunk_hosts:\n"
+            "  - name: shidx\n"
+            "    roles: [indexer]\n",
+            encoding="utf-8",
+        )
+        result = validate_config_file(str(cfg))
+        assert result.schema_version == 1
+
     def test_yaml_load_preserves_plugin_then_schema_version(self):
         loaded = yaml.safe_load(
             "plugin: splunk-platform-automator\n"

@@ -1826,6 +1826,59 @@ splunk_hosts:
 
 
 class TestMigrateContract:
+    def test_migrate_places_schema_version_immediately_after_plugin(self, tmp_path):
+        """CFG-LAYOUT-007. Comments that followed plugin stay with the next section."""
+        path = _config(
+            tmp_path,
+            """\
+# splunk_config.yml
+plugin: splunk-platform-automator
+
+#
+# ap ansible/provision_terraform_aws.yml -e auto_approve=true; ap ansible/deploy_site.yml
+
+# General settings
+general:
+  url_locale: en-US
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        config_migrate(path, PROJECT_ROOT)
+        lines = path.read_text(encoding="utf-8").splitlines()
+        plugin_at = next(i for i, line in enumerate(lines) if line.startswith("plugin:"))
+        assert lines[plugin_at + 1].startswith("schema_version:")
+        text = "\n".join(lines)
+        assert text.index("schema_version:") < text.index("# General settings")
+        assert text.index("# General settings") < text.index("\ngeneral:")
+
+    def test_already_stamped_migrate_leaves_hand_layout_unchanged(self, tmp_path):
+        """CFG-MIGRATE-001 CFG-LAYOUT-007. Later migrate does not rewrite a hand-placed stamp."""
+        body = """\
+plugin: splunk-platform-automator
+
+#
+# ap ansible/provision_terraform_aws.yml -e auto_approve=true; ap ansible/deploy_site.yml
+
+# General settings
+schema_version: 1
+general:
+  url_locale: en-US
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+"""
+        path = _config(tmp_path, body)
+        before = path.read_bytes()
+        result = config_migrate(path, PROJECT_ROOT)
+        assert result["changed"] is False
+        assert path.read_bytes() == before
+
     def test_unstamped_migrate_inserts_schema_version_1_only(self, tmp_path):
         """CFG-MIGRATE-001 CFG-CLI-002 CFG-TXN-003 CFG-LAYOUT-007."""
         path = _config(tmp_path)

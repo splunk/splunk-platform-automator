@@ -1121,6 +1121,9 @@ CONFIG_AREAS: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = (
 )
 
 
+_IDENTITY_ROOTS = ("plugin", "schema_version", "config_version")
+
+
 def order_config_roots(document):
     """Order known config roots while preserving unknown and nested ordering."""
     order = [root for _, _, roots in CONFIG_AREAS for root in roots]
@@ -1130,10 +1133,59 @@ def order_config_roots(document):
         for key in keys:
             document.move_to_end(key)
         _order_app_deployment(document)
+        _shift_identity_post_comments(document)
         return document
     ordered = type(document)((key, document[key]) for key in keys)
     _order_app_deployment(ordered)
     return ordered
+
+
+def _comment_text(token: Any) -> str:
+    if token is None:
+        return ""
+    if isinstance(token, list):
+        return "".join(_comment_text(part) for part in token)
+    return str(getattr(token, "value", "") or "")
+
+
+def _shift_identity_post_comments(document):
+    """Keep hash comments that followed plugin after the identity keys, not between them."""
+    items = getattr(getattr(document, "ca", None), "items", None)
+    if not isinstance(items, dict):
+        return
+    present = [key for key in _IDENTITY_ROOTS if key in document]
+    if len(present) < 2:
+        return
+    last = present[-1]
+    carried = None
+    for key in present[:-1]:
+        entry = items.get(key)
+        if not isinstance(entry, list) or len(entry) < 3 or entry[2] is None:
+            continue
+        if "#" not in _comment_text(entry[2]):
+            continue
+        token = entry[2]
+        entry[2] = None
+        carried = token
+    if carried is None:
+        return
+    slot = items.get(last)
+    if not isinstance(slot, list):
+        items[last] = [None, None, carried, None]
+        return
+    while len(slot) < 4:
+        slot.append(None)
+    existing = slot[2]
+    if existing is None or "#" not in _comment_text(existing):
+        slot[2] = carried
+        return
+    text = _comment_text(carried) + _comment_text(existing)
+    target = carried if hasattr(carried, "value") else existing
+    if hasattr(target, "value"):
+        target.value = text
+        slot[2] = target
+        return
+    slot[2] = carried
 
 
 def _order_app_deployment(document):
@@ -1217,7 +1269,8 @@ def format_config_text(text: str) -> str:
                 stack.pop()
             if column == 0 and match is not None:
                 top_level_keys += 1
-                gap = top_level_keys > 1
+                key_name = match.group("key").strip().strip("\"'")
+                gap = top_level_keys > 1 and key_name not in _IDENTITY_ROOTS[1:]
             if match is not None and not (match.group("rest") or "").split("#", 1)[0].strip():
                 stack.append({"col": column, "item": False, "items": 0})
         if gap:

@@ -147,9 +147,14 @@ def test_scaffold_creates_env_without_ansible(tmp_path):
     elif clone_apps.is_dir():
         assert Path(spa_yml["apps_dir"]).resolve() == clone_apps
 
-    cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
+    text = (dest / "config" / "splunk_config.yml").read_text()
+    cfg = yaml.safe_load(text)
     assert cfg["plugin"] == "splunk-platform-automator"
+    assert cfg["schema_version"] == 1
     assert cfg["splunk_hosts"]
+    lines = text.splitlines()
+    plugin_at = next(i for i, line in enumerate(lines) if line.startswith("plugin:"))
+    assert lines[plugin_at + 1].startswith("schema_version:")
 
 
 @pytest.mark.parametrize(
@@ -186,11 +191,15 @@ def test_composed_example_stamps_schema_version_after_plugin(tmp_path, provider)
         ["--example", "single_node.yml", "--provider", provider, str(dest)]
     )
     assert result.returncode == 0, result.stderr + result.stdout
-    loaded = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
+    text = (dest / "config" / "splunk_config.yml").read_text()
+    loaded = yaml.safe_load(text)
     keys = list(loaded)
     assert keys[:2] == ["plugin", "schema_version"]
     assert loaded["schema_version"] == 1
     assert "config_version" not in loaded
+    lines = text.splitlines()
+    plugin_at = next(i for i, line in enumerate(lines) if line.startswith("plugin:"))
+    assert lines[plugin_at + 1].startswith("schema_version:")
 
 
 def test_example_flag(tmp_path):
