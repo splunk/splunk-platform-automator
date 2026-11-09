@@ -969,6 +969,54 @@ def config_set(
     return result
 
 
+def config_migrate(
+    config_path: Path,
+    spa_home: Path,
+    *,
+    dry_run: bool = False,
+    expect_revision: Optional[str] = None,
+    validate: bool = True,
+    resolve: Optional[Sequence[Sequence[str]]] = None,
+    resolve_file: Optional[str] = None,
+    stdin_text: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Stamp schema_version to current and apply MIGRATIONS in order. Does not touch config_version."""
+    import sys
+
+    plugin = Path(spa_home) / "ansible" / "plugins" / "inventory"
+    if str(plugin) not in sys.path:
+        sys.path.insert(0, str(plugin))
+    from schema import CURRENT_SCHEMA_VERSION, MIGRATIONS  # type: ignore
+
+    def mutate(document: MutableMapping[str, Any], warnings: List[str]) -> None:
+        authored = document.get("schema_version")
+        if authored is None:
+            document["schema_version"] = CURRENT_SCHEMA_VERSION
+            return
+        if isinstance(authored, bool) or not isinstance(authored, int):
+            return
+        if authored > CURRENT_SCHEMA_VERSION:
+            return
+        for src in range(authored, CURRENT_SCHEMA_VERSION):
+            step = MIGRATIONS.get((src, src + 1))
+            if isinstance(step, Mapping) and step:
+                _merge(document, step, (), warnings)
+        document["schema_version"] = CURRENT_SCHEMA_VERSION
+
+    return _transact(
+        config_path,
+        spa_home,
+        mutate,
+        dry_run=dry_run,
+        expect_revision=expect_revision,
+        validate=validate,
+        resolve=resolve,
+        resolve_file=resolve_file,
+        stdin_text=stdin_text,
+        command="config migrate",
+    )
+
+
 _AMI_ID = re.compile(r"^ami-[0-9a-fA-F]+$")
 
 

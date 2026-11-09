@@ -19,6 +19,8 @@ from spa_testutil import PROJECT_ROOT, min_env_vars, run_spa, seed_software_dir
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
 AWS_TWO_HOSTS = """
+plugin: splunk-platform-automator
+schema_version: 1
 terraform:
   aws:
     region: eu-central-1
@@ -28,6 +30,8 @@ splunk_hosts:
 """
 
 AWS_ITER = """
+plugin: splunk-platform-automator
+schema_version: 1
 terraform:
   aws:
     region: eu-central-1
@@ -215,6 +219,8 @@ def test_deploy_hosts_role_checks_unprovisioned_members(tmp_path, monkeypatch):
         },
     )
     config = """
+plugin: splunk-platform-automator
+schema_version: 1
 terraform:
   aws:
     region: eu-central-1
@@ -397,6 +403,52 @@ def test_lifecycle_lock_is_refused_before_confirmation(tmp_path, monkeypatch):
                 "error": "A deploy is already running.",
             }
     held.close()
+
+
+UNSTAMPED_AWS = """
+plugin: splunk-platform-automator
+terraform:
+  aws:
+    region: eu-central-1
+splunk_hosts:
+  - name: idx1
+  - name: idx2
+"""
+
+
+def test_deploy_refuses_unstamped_config_before_playbook(tmp_path, monkeypatch):
+    called = []
+    monkeypatch.setattr(
+        "spa.playbooks.run_playbook", lambda *a, **k: called.append("deploy") or 0
+    )
+    monkeypatch.setattr("spa.confirm.ensure_confirmed", lambda *a, **k: None)
+    paths, session = _session_env(tmp_path, UNSTAMPED_AWS)
+    _write_state(paths)
+    _write_inventory(paths, "idx1", "idx2")
+    before = paths.config_file.read_bytes()
+    result = session.deploy(confirm=True)
+    assert result.ok is False
+    assert result.error == "spa config migrate --yes"
+    assert result.data is None
+    assert not called
+    assert paths.config_file.read_bytes() == before
+
+
+def test_provision_refuses_unstamped_config_before_playbook(tmp_path, monkeypatch):
+    called = []
+    monkeypatch.setattr(
+        "spa.playbooks.run_playbook", lambda *a, **k: called.append("provision") or 0
+    )
+    monkeypatch.setattr("spa.providers.get_provider", lambda *a, **k: called.append("provider"))
+    monkeypatch.setattr("spa.confirm.ensure_confirmed", lambda *a, **k: None)
+    paths, session = _session_env(tmp_path, UNSTAMPED_AWS)
+    before = paths.config_file.read_bytes()
+    result = session.provision(confirm=True)
+    assert result.ok is False
+    assert result.error == "spa config migrate --yes"
+    assert result.data is None
+    assert not called
+    assert paths.config_file.read_bytes() == before
 
 
 def test_help_and_schema_omit_allow_unprovisioned():

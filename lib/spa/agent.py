@@ -167,7 +167,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "config",
-            "summary": "Read, explain, or transactionally edit splunk_config.yml. Agents use config search QUERY, then config explain PATH. Bare spa config exits 2. Writes include set, add, unset, merge, move, topology, and provider.",
+            "summary": "Read, explain, or transactionally edit splunk_config.yml. Agents use config search QUERY, then config explain PATH. Bare spa config exits 2. Writes include set, add, unset, merge, move, topology, provider, and migrate.",
             "example": "spa --agent config explain",
         },
         {
@@ -404,6 +404,20 @@ COMMAND_SCHEMA = {
                 {"long": "--yes", "short": "-y", "help": "Skip the human confirmation prompt"},
             ],
             "example": "spa --agent config provider aws",
+        },
+        {
+            "name": "config migrate",
+            "summary": "Stamp schema_version to the current schema and apply pending migrations. Does not change operator config_version.",
+            "idempotent": True,
+            "flags": [
+                {"long": "--dry-run", "help": "Preview without writing"},
+                {"long": "--expect-revision", "help": "Require the current SHA-256 revision"},
+                {"long": "--resolve", "help": "Supply PATH VALUE for an unresolved dependency; repeatable"},
+                {"long": "--resolve-file", "help": "Supply a sparse YAML/JSON dependency fragment"},
+                {"long": "--show-diff", "help": "Print the redacted unified diff after the status line (no-op in agent mode)"},
+                {"long": "--yes", "short": "-y", "help": "Skip the human confirmation prompt"},
+            ],
+            "example": "spa --agent config migrate --yes",
         },
         {
             "name": "config header set",

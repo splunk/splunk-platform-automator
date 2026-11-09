@@ -146,6 +146,8 @@ def test_walkthrough_replay_builds_the_clustered_config(tmp_path):
     assert "license" in combined.lower()
     config_path = tmp_path / "itsi-lab" / "config" / "splunk_config.yml"
     loaded = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert list(loaded)[:2] == ["plugin", "schema_version"]
+    assert loaded["schema_version"] == 1
     assert "Splunk Add-on for Unix and Linux" in combined
     assert loaded["splunk_defaults"]["splunk_license_file"] == [
         "Splunk_Enterprise.lic",

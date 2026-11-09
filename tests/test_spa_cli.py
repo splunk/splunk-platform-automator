@@ -907,6 +907,97 @@ def test_agent_validate_unowned_config_omits_identity(tmp_path, monkeypatch, cap
     assert "config_file" not in payload
 
 
+_STAMP_BODY = """\
+plugin: splunk-platform-automator
+%s
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: shidx
+    roles: [indexer, search_head]
+"""
+_UNSTAMPED_CONFIG = _STAMP_BODY % ""
+_STAMPED_CONFIG = _STAMP_BODY % "schema_version: 1\n"
+_CONFIG_VERSION_ONLY = _STAMP_BODY % "config_version: 1.4.0\n"
+_NEWER_SCHEMA_CONFIG = _STAMP_BODY % "schema_version: 2\n"
+_MIGRATE_YES = "spa config migrate --yes"
+
+
+def _validate_stamp_env(tmp_path, body):
+    env_dir = write_min_env(tmp_path / "env")
+    path = env_dir / "config" / "splunk_config.yml"
+    path.write_text(body, encoding="utf-8")
+    extra = {
+        "SPA_HOME": str(PROJECT_ROOT),
+        "SPA_ENV_DIR": str(env_dir),
+        "SPLUNK_ADMIN_PASSWORD": "spa-test-value",
+    }
+    return env_dir, path, extra
+
+
+def test_human_validate_reports_missing_schema_version_and_does_not_write(tmp_path):
+    env_dir, path, extra = _validate_stamp_env(tmp_path, _UNSTAMPED_CONFIG)
+    before = path.read_bytes()
+    result = run_spa(
+        ["--no-agent", "--start-dir", str(env_dir), "validate"],
+        extra_env=extra,
+    )
+    assert result.returncode == 1
+    assert _MIGRATE_YES in result.stderr
+    assert "Schema OK" in result.stdout
+    assert path.read_bytes() == before
+    assert "schema_version:" not in path.read_text(encoding="utf-8")
+
+
+def test_agent_validate_missing_schema_version_omits_data(tmp_path):
+    env_dir, path, extra = _validate_stamp_env(tmp_path, _UNSTAMPED_CONFIG)
+    before = path.read_bytes()
+    result = run_spa(
+        ["--agent", "--start-dir", str(env_dir), "validate"],
+        extra_env=extra,
+    )
+    payload = json.loads(result.stdout)
+    assert result.returncode == 1
+    assert payload == {"ok": False, "schema_version": 1, "error": _MIGRATE_YES}
+    assert path.read_bytes() == before
+
+
+def test_validate_leaves_stamped_current_file_unchanged(tmp_path):
+    env_dir, path, extra = _validate_stamp_env(tmp_path, _STAMPED_CONFIG)
+    before = path.read_bytes()
+    run_spa(["--no-agent", "--start-dir", str(env_dir), "validate"], extra_env=extra)
+    assert path.read_bytes() == before
+
+
+def test_validate_newer_schema_keeps_schema_error_not_missing_stamp(tmp_path):
+    env_dir, path, extra = _validate_stamp_env(tmp_path, _NEWER_SCHEMA_CONFIG)
+    before = path.read_bytes()
+    result = run_spa(
+        ["--no-agent", "--start-dir", str(env_dir), "validate"],
+        extra_env=extra,
+    )
+    assert result.returncode == 1
+    combined = result.stdout + result.stderr
+    assert "schema_version" in combined
+    assert combined.strip() != _MIGRATE_YES
+    assert _MIGRATE_YES not in result.stderr.splitlines()
+    assert path.read_bytes() == before
+
+
+def test_validate_config_version_without_schema_version_is_missing_stamp(tmp_path):
+    env_dir, path, extra = _validate_stamp_env(tmp_path, _CONFIG_VERSION_ONLY)
+    before = path.read_bytes()
+    result = run_spa(
+        ["--agent", "--start-dir", str(env_dir), "validate"],
+        extra_env=extra,
+    )
+    payload = json.loads(result.stdout)
+    assert result.returncode == 1
+    assert payload["error"] == _MIGRATE_YES
+    assert "data" not in payload
+    assert path.read_bytes() == before
+
+
 def test_provision_help_includes_yes():
     result = run_spa(["provision", "--help"])
     assert result.returncode == 0, result.stderr
@@ -914,9 +1005,20 @@ def test_provision_help_includes_yes():
     assert "-y" in result.stdout
 
 
-def test_provision_yes_after_subcommand_auto_approves(monkeypatch):
+def _stamped_lifecycle_env(tmp_path, monkeypatch):
+    env_dir = write_min_env(tmp_path / "env")
+    config_path = env_dir / "config" / "splunk_config.yml"
+    config_path.write_text(_STAMPED_CONFIG, encoding="utf-8")
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(env_dir))
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(config_path))
+    satisfy_env_lookups(monkeypatch, start_dir=env_dir)
+    return env_dir
+
+
+def test_provision_yes_after_subcommand_auto_approves(tmp_path, monkeypatch):
     """spa provision --yes must be a subcommand flag, not only spa --yes provision."""
-    satisfy_env_lookups(monkeypatch)
+    _stamped_lifecycle_env(tmp_path, monkeypatch)
     captured = {}
 
     class FakeProvider:
@@ -934,8 +1036,8 @@ def test_provision_yes_after_subcommand_auto_approves(monkeypatch):
     assert captured["extra"][:2] == ["-e", "auto_approve=true"]
 
 
-def test_human_provision_prints_data_next(monkeypatch, capsys):
-    satisfy_env_lookups(monkeypatch)
+def test_human_provision_prints_data_next(tmp_path, monkeypatch, capsys):
+    _stamped_lifecycle_env(tmp_path, monkeypatch)
 
     class FakeProvider:
         name = "test"
@@ -956,8 +1058,8 @@ def test_human_provision_prints_data_next(monkeypatch, capsys):
 
 
 @pytest.mark.parametrize("argv", [["-y", "provision"], ["provision", "-y"]])
-def test_provision_yes_works_before_or_after_subcommand(monkeypatch, argv):
-    satisfy_env_lookups(monkeypatch)
+def test_provision_yes_works_before_or_after_subcommand(tmp_path, monkeypatch, argv):
+    _stamped_lifecycle_env(tmp_path, monkeypatch)
     captured = []
 
     class FakeProvider:
@@ -1414,8 +1516,8 @@ def test_human_run_prompt_names_playbook_and_risk(monkeypatch):
     ("command", "risk"),
     [("provision", "mutating"), ("destroy", "destructive"), ("deploy", "mutating")],
 )
-def test_human_lifecycle_prompt_names_command_and_risk(monkeypatch, command, risk):
-    satisfy_env_lookups(monkeypatch)
+def test_human_lifecycle_prompt_names_command_and_risk(tmp_path, monkeypatch, command, risk):
+    _stamped_lifecycle_env(tmp_path, monkeypatch)
     from spa.confirm import prompt_text
 
     seen = []

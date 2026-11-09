@@ -482,6 +482,12 @@ class LocalSpaSession:
             data={"env_lookups": env_lookup_readiness(loaded)},
         )
 
+    def _schema_stamp_gate(self) -> Optional[CommandResult]:
+        """Refuse provision/deploy until schema_version is authored. Does not write."""
+        from spa.validate import require_authored_schema_version
+
+        return require_authored_schema_version(Path(self.paths.config_file))
+
     def _venv_gate(self) -> Optional[CommandResult]:
         """Ansible/provider work needs the venv; say so instead of ImportError."""
         from spa.executil import venv_required_error
@@ -728,6 +734,7 @@ class LocalSpaSession:
             config_get,
             config_header_set,
             config_merge,
+            config_migrate,
             merge_operand,
             config_move_host,
             config_move_role,
@@ -772,6 +779,7 @@ class LocalSpaSession:
                 "merge",
                 "topology",
                 "provider",
+                "migrate",
                 "header-set",
                 "move-role",
                 "move-host",
@@ -910,6 +918,15 @@ class LocalSpaSession:
                     config_path,
                     self.paths.spa_home,
                     operand,
+                    resolve=resolve,
+                    resolve_file=resolve_file,
+                    stdin_text=stdin_text,
+                    **common,
+                )
+            elif action == "migrate":
+                data = config_migrate(
+                    config_path,
+                    self.paths.spa_home,
                     resolve=resolve,
                     resolve_file=resolve_file,
                     stdin_text=stdin_text,
@@ -1529,6 +1546,9 @@ class LocalSpaSession:
         blocked = self._env_lookup_gate()
         if blocked:
             return blocked
+        blocked = self._schema_stamp_gate()
+        if blocked:
+            return blocked
         return self._lifecycle_playbook(
             "provision",
             extra,
@@ -1862,6 +1882,9 @@ class LocalSpaSession:
         if blocked:
             return blocked
         blocked = self._env_lookup_gate()
+        if blocked:
+            return blocked
+        blocked = self._schema_stamp_gate()
         if blocked:
             return blocked
         blocked, lifecycle_lock = self._begin_lifecycle("deploy")

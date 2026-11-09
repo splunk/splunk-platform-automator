@@ -18,14 +18,15 @@ contract ID and mapped test in the same change, and passes the
 
 `spa config` has one parser per action: `explain`, `search`, `get`,
 `templates`, `keys`, `schema`, `set`, `add`, `unset`, `merge`, `move`,
-`topology`, and `provider`. `spa config move` has required actions `role`
-and `host`. `spa config templates` has required action `list`. `explain` and
-`search` are the schema walk. `templates list` is the read-only shipped
-fragment catalog. `keys` is the maintainer coverage
+`topology`, `provider`, and `migrate`. `spa config move` has required actions
+`role` and `host`. `spa config templates` has required action `list`.
+`explain` and `search` are the schema walk. `templates list` is the read-only
+shipped fragment catalog. `keys` is the maintainer coverage
 check. `schema --markdown` is the human settings dump. `spa config add`
-appends one non-app identity-list entry. `spa apps` owns app and content-pack
-entries; there is no `spa config app`. Operators and agents call `bin/spa`
-and never import `spa.api`.
+appends one non-app identity-list entry. `spa config migrate` stamps
+`schema_version` and applies pending schema migrations. `spa apps` owns app
+and content-pack entries; there is no `spa config app`. Operators and agents
+call `bin/spa` and never import `spa.api`.
 
 ### CFG-CLI-002 — result and status contract
 
@@ -47,6 +48,18 @@ idempotent and may write without `--yes`; `--yes` remains accepted. Provision,
 deploy, destroy, suspend, resume, environment removal, venv rebuild or
 reinstall, skill removal, app download, and mutating, destructive, or
 unspecified-risk playbooks still require `--yes` in agent mode.
+
+### CFG-MIGRATE-001 — schema stamp
+
+`spa config migrate` is the accepted write for `schema_version`. Day one
+(current is 1, `MIGRATIONS` empty): an unstamped file inserts
+`schema_version: 1` as the second root key after `plugin` and reports
+`changed`. A file already at the current version is a no-op (`changed:
+false`). Operator `config_version` is never invented or bumped. `--dry-run`
+is faithful and does not write. `--show-diff` prints the redacted unified
+hunk after the status line. Human status is `Config migrate: would change` /
+`changed` / `unchanged`. `spa validate`, `spa deploy`, and `spa provision`
+require the authored key and do not write it.
 
 ### CFG-CLI-004 — bounded discovery
 
@@ -506,6 +519,7 @@ Each contract ID maps to executable behavioral evidence:
 - `CFG-CLI-002`: `tests/test_config_contract.py::TestCommandContract::test_agent_set_writes_without_yes_and_returns_compact_envelope`
 - `CFG-CLI-003`: `tests/test_config_contract.py::TestCommandContract::test_agent_set_writes_without_yes_and_returns_compact_envelope`
 - `CFG-CLI-004`: `tests/test_config_contract.py::TestCommandContract::test_agent_get_without_path_is_outline_not_document`
+- `CFG-MIGRATE-001`: `tests/test_config_contract.py::TestMigrateContract::test_unstamped_migrate_inserts_schema_version_1_only`
 - `CFG-CLI-005`: `tests/test_config_contract.py::TestExplainContract::test_explain_is_one_level_for_humans_and_agents`
 - `CFG-CLI-006`: `tests/test_config_contract.py::TestExplainContract::test_search_returns_paths_without_commands`
 - `CFG-PATH-001`: `tests/test_config_contract.py::TestPathContract::test_set_requires_strict_json_for_list`

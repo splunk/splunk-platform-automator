@@ -329,6 +329,7 @@ def test_config_editing_names_templates_list_search_and_merge():
 
     cli001 = section("### CFG-CLI-001")
     assert "templates list" in cli001
+    assert "migrate" in cli001
     cli006 = section("### CFG-CLI-006")
     assert "template.NAME" in cli006
     merge001 = section("### CFG-MERGE-001")

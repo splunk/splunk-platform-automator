@@ -36,7 +36,7 @@ spa init list
 
 ## `config`
 
-Read, explain, or transactionally edit splunk_config.yml. Agents use config search QUERY, then config explain PATH. Bare spa config exits 2. Writes include set, add, unset, merge, move, topology, and provider.
+Read, explain, or transactionally edit splunk_config.yml. Agents use config search QUERY, then config explain PATH. Bare spa config exits 2. Writes include set, add, unset, merge, move, topology, provider, and migrate.
 
 Example:
 
@@ -359,6 +359,25 @@ Example:
 
 ```bash
 spa --agent config provider aws
+```
+
+## `config migrate`
+
+Stamp schema_version to the current schema and apply pending migrations. Does not change operator config_version.
+
+| Flag | Description |
+| --- | --- |
+| `--dry-run` | Preview without writing |
+| `--expect-revision` | Require the current SHA-256 revision |
+| `--resolve` | Supply PATH VALUE for an unresolved dependency; repeatable |
+| `--resolve-file` | Supply a sparse YAML/JSON dependency fragment |
+| `--show-diff` | Print the redacted unified diff after the status line (no-op in agent mode) |
+| `-y`, `--yes` | Skip the human confirmation prompt |
+
+Example:
+
+```bash
+spa --agent config migrate --yes
 ```
 
 ## `config header set`
