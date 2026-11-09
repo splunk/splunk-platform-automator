@@ -293,10 +293,13 @@ One transaction adds `shs`, gives it Java, and sets `shc_whitelist` to
 ## 14. Review and validate
 
 ```bash
+spa config migrate --yes
 spa config get --full
 spa validate
 ```
 
+`spa validate` requires authored `schema_version`. `spa config migrate --yes`
+stamps the current schema and does not change operator `config_version`.
 Export every referenced variable before `spa validate`. The command fails
 until `SPLUNK_ADMIN_PASSWORD`, `SPLUNK_IDXC_PASSWORD`, `SPLUNK_SHC_PASSWORD`,
 `SPLUNKBASE_USERNAME`, and `SPLUNKBASE_PASSWORD` are non-empty. Put

@@ -18,14 +18,15 @@ contract ID and mapped test in the same change, and passes the
 
 `spa config` has one parser per action: `explain`, `search`, `get`,
 `templates`, `keys`, `schema`, `set`, `add`, `unset`, `merge`, `move`,
-`topology`, and `provider`. `spa config move` has required actions `role`
-and `host`. `spa config templates` has required action `list`. `explain` and
-`search` are the schema walk. `templates list` is the read-only shipped
-fragment catalog. `keys` is the maintainer coverage
+`topology`, `provider`, and `migrate`. `spa config move` has required actions
+`role` and `host`. `spa config templates` has required action `list`.
+`explain` and `search` are the schema walk. `templates list` is the read-only
+shipped fragment catalog. `keys` is the maintainer coverage
 check. `schema --markdown` is the human settings dump. `spa config add`
-appends one non-app identity-list entry. `spa apps` owns app and content-pack
-entries; there is no `spa config app`. Operators and agents call `bin/spa`
-and never import `spa.api`.
+appends one non-app identity-list entry. `spa config migrate` stamps
+`schema_version` and applies pending schema migrations. `spa apps` owns app
+and content-pack entries; there is no `spa config app`. Operators and agents
+call `bin/spa` and never import `spa.api`.
 
 ### CFG-CLI-002 — result and status contract
 
@@ -47,6 +48,20 @@ idempotent and may write without `--yes`; `--yes` remains accepted. Provision,
 deploy, destroy, suspend, resume, environment removal, venv rebuild or
 reinstall, skill removal, app download, and mutating, destructive, or
 unspecified-risk playbooks still require `--yes` in agent mode.
+
+### CFG-MIGRATE-001 — schema stamp
+
+`spa config migrate` is the accepted write for `schema_version`. Day one
+(current is 1, `MIGRATIONS` empty): an unstamped file inserts
+`schema_version: 1` immediately under `plugin` (no blank line or comment
+between them) and reports `changed`. A file that already has the current
+stamp is a no-op (`changed: false`), including when a later hand edit put a
+blank line or comment between `plugin` and the stamp. Operator
+`config_version` is never invented or bumped. `--dry-run`
+is faithful and does not write. `--show-diff` prints the redacted unified
+hunk after the status line. Human status is `Config migrate: would change` /
+`changed` / `unchanged`. `spa validate`, `spa deploy`, and `spa provision`
+require the authored key and do not write it.
 
 ### CFG-CLI-004 — bounded discovery
 
@@ -318,9 +333,10 @@ external-topology exceptions remain valid.
 
 ### CFG-LAYOUT-001 — canonical root order
 
-Writes order roots as: plugin; general and custom; OS; providers; indexer and
-search-head clustering; defaults, directories, systemd, and environments;
-hosts; apps. Unknown roots follow in their existing relative order. Nested
+Writes order roots as: plugin, schema_version, and config_version; general and
+custom; OS; providers; indexer and search-head clustering; defaults,
+directories, systemd, and environments; hosts; apps. Unknown roots follow in
+their existing relative order. Nested
 mapping and list order is not canonicalized, except `splunk_app_deployment.apps`
 is always the last key in that mapping. Other keys in that mapping keep their
 relative order and sit above `apps`.
@@ -354,15 +370,29 @@ forwarders, and universal forwarders use `name`.
 
 Blank lines are write formatting. `spa config` and `spa apps` insert one blank
 line between top-level sections, and one blank line between entries of a
-top-level list such as hosts, clusters, environments, and apps. `spa init`
-uses the same formatting when it writes a new file. Comments directly above an
-entry stay with it. Scalar lists such as `roles` and lists nested inside an
-entry stay compact.
+top-level list such as hosts, clusters, environments, and apps. Identity keys
+(`plugin`, `schema_version`, `config_version`) are one section: a first-time
+write puts them on consecutive lines. `spa init` uses the same formatting when
+it writes a new file. Comments directly above an entry stay with it. Scalar
+lists such as `roles` and lists nested inside an entry stay compact.
 
 Schema validation, `spa validate`, inventory, provision, and deploy do not
 read or require this spacing. A file with the blank lines removed, with extra
 blank lines, or with added comments stays valid and is left unchanged until a
 write command edits it.
+
+### CFG-LAYOUT-007 — identity key order
+
+Among root keys, `plugin` is first and `schema_version` is second whenever it
+is present. `config_version` and every other key follow those two. `---`,
+blank lines, and comments (including `spa config header set`) may appear
+before those keys. A first-time write (`spa init`, including `--example` and `--architecture`,
+`spa config migrate` of an unstamped file, `spa config set schema_version`)
+puts `schema_version` on the next line after `plugin`, with no blank line or
+comment between them. Comments that used to follow `plugin` stay with the next
+non-identity section. Header comments stay leading. A later hand edit that
+inserts a blank line or comment between those keys still validates; a later
+`spa config migrate` does not rewrite it.
 
 ## Applications
 
@@ -496,6 +526,7 @@ Each contract ID maps to executable behavioral evidence:
 - `CFG-CLI-002`: `tests/test_config_contract.py::TestCommandContract::test_agent_set_writes_without_yes_and_returns_compact_envelope`
 - `CFG-CLI-003`: `tests/test_config_contract.py::TestCommandContract::test_agent_set_writes_without_yes_and_returns_compact_envelope`
 - `CFG-CLI-004`: `tests/test_config_contract.py::TestCommandContract::test_agent_get_without_path_is_outline_not_document`
+- `CFG-MIGRATE-001`: `tests/test_config_contract.py::TestMigrateContract::test_unstamped_migrate_inserts_schema_version_1_only`
 - `CFG-CLI-005`: `tests/test_config_contract.py::TestExplainContract::test_explain_is_one_level_for_humans_and_agents`
 - `CFG-CLI-006`: `tests/test_config_contract.py::TestExplainContract::test_search_returns_paths_without_commands`
 - `CFG-PATH-001`: `tests/test_config_contract.py::TestPathContract::test_set_requires_strict_json_for_list`
@@ -532,6 +563,7 @@ Each contract ID maps to executable behavioral evidence:
 - `CFG-LAYOUT-004`: `tests/test_config_contract.py::TestLayoutContract::test_provider_switch_replaces_only_provider_sections`
 - `CFG-LAYOUT-005`: `tests/test_config_contract.py::TestLayoutContract::test_all_clustered_topology_examples_use_iter_for_member_ranges`
 - `CFG-LAYOUT-006`: `tests/test_config_contract.py::TestLayoutContract::test_written_config_separates_sections_and_list_items`
+- `CFG-LAYOUT-007`: `tests/test_config_contract.py::TestLayoutContract::test_set_schema_version_is_second_root_and_header_stays_leading`
 - `CFG-APP-001`: `tests/test_config_contract.py::TestAppContract::test_builder_omits_splunkbase_defaults_and_requires_ta_roles`
 - `CFG-APP-002`: `tests/test_config_contract.py::TestAppContract::test_app_add_upserts_credentials_and_is_idempotent`
 - `CFG-APP-003`: `tests/test_config_contract.py::TestAppContract::test_app_add_upserts_credentials_and_is_idempotent`

@@ -147,9 +147,14 @@ def test_scaffold_creates_env_without_ansible(tmp_path):
     elif clone_apps.is_dir():
         assert Path(spa_yml["apps_dir"]).resolve() == clone_apps
 
-    cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
+    text = (dest / "config" / "splunk_config.yml").read_text()
+    cfg = yaml.safe_load(text)
     assert cfg["plugin"] == "splunk-platform-automator"
+    assert cfg["schema_version"] == 1
     assert cfg["splunk_hosts"]
+    lines = text.splitlines()
+    plugin_at = next(i for i, line in enumerate(lines) if line.startswith("plugin:"))
+    assert lines[plugin_at + 1].startswith("schema_version:")
 
 
 @pytest.mark.parametrize(
@@ -158,6 +163,7 @@ def test_scaffold_creates_env_without_ansible(tmp_path):
         [
             *PROJECT_ROOT.joinpath("examples", "providers").glob("*.yml"),
             *PROJECT_ROOT.joinpath("examples", "topologies").glob("*.yml"),
+            *PROJECT_ROOT.joinpath("examples", "templates").glob("*.yml"),
         ]
     ),
     ids=lambda path: "%s-%s" % (path.parent.name, path.stem),
@@ -165,6 +171,35 @@ def test_scaffold_creates_env_without_ansible(tmp_path):
 def test_init_fragments_omit_plugin(fragment):
     cfg = yaml.safe_load(fragment.read_text())
     assert "plugin" not in cfg
+    assert "schema_version" not in cfg
+    assert "config_version" not in cfg
+
+
+def test_shipped_full_example_stamps_schema_version():
+    loaded = yaml.safe_load(
+        (PROJECT_ROOT / "examples" / "single_node_itsi.yml").read_text()
+    )
+    assert list(loaded)[:2] == ["plugin", "schema_version"]
+    assert loaded["schema_version"] == 1
+    assert "config_version" not in loaded
+
+
+@pytest.mark.parametrize("provider", ["aws", "virtualbox"])
+def test_composed_example_stamps_schema_version_after_plugin(tmp_path, provider):
+    dest = tmp_path / provider
+    result = run_spa_init(
+        ["--example", "single_node.yml", "--provider", provider, str(dest)]
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    text = (dest / "config" / "splunk_config.yml").read_text()
+    loaded = yaml.safe_load(text)
+    keys = list(loaded)
+    assert keys[:2] == ["plugin", "schema_version"]
+    assert loaded["schema_version"] == 1
+    assert "config_version" not in loaded
+    lines = text.splitlines()
+    plugin_at = next(i for i, line in enumerate(lines) if line.startswith("plugin:"))
+    assert lines[plugin_at + 1].startswith("schema_version:")
 
 
 def test_example_flag(tmp_path):
@@ -324,6 +359,19 @@ def test_auto_migrate_when_spa_home_has_config(tmp_path):
     assert not (source / "config" / "splunk_config.yml").exists()
     spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
     assert spa_yml["spa_home"] == str(source)
+
+
+def test_init_from_unstamped_source_leaves_config_without_schema_version(tmp_path):
+    source = tmp_path / "old-clone"
+    dest = tmp_path / "env"
+    _write_old_env(source)
+    src_text = (source / "config" / "splunk_config.yml").read_text()
+    assert "schema_version" not in src_text
+    result = run_spa_init(["--from", str(source), str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    dest_text = (dest / "config" / "splunk_config.yml").read_text()
+    assert dest_text == src_text
+    assert "schema_version" not in dest_text
 
 
 def test_migrate_from_existing_env(tmp_path):

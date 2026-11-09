@@ -670,7 +670,7 @@ CONFIG_NEEDS_ACTION = (
     "Look up a setting: spa config search QUERY\n"
     "Then:              spa config explain PATH\n"
     "Read current:      spa config get [PATH]\n"
-    "Write:             set, add, unset, merge, move, topology, or provider\n"
+    "Write:             set, add, unset, merge, move, topology, provider, or migrate\n"
     "Audit:             spa config audit --check-hand-edits\n"
     "Coverage:          spa config keys\n"
     "Docs dump:         spa config schema --markdown"
@@ -1694,6 +1694,13 @@ def _run(argv: Sequence[str]) -> int:
     p_config_provider = _add_action(config_sub, "provider", aliases=["pro"], help="Replace provider-owned sections")
     _config_mutation_flags(p_config_provider)
     p_config_provider.add_argument("operand", metavar="PROVIDER", help=PROVIDER_HELP)
+
+    p_config_migrate = _add_action(
+        config_sub,
+        "migrate",
+        help="Stamp schema_version to the current schema and apply pending migrations",
+    )
+    _config_mutation_flags(p_config_migrate)
 
     p_config_header = _add_action(
         config_sub,

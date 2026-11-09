@@ -141,6 +141,7 @@ HELP_CONTRACTS = [
             "move",
             "topology",
             "provider",
+            "migrate",
             "audit",
             "templates",
             "spa config search QUERY",
@@ -169,6 +170,10 @@ HELP_CONTRACTS = [
     (
         ["config", "set", "--help"],
         ["usage: spa config set", "PATH", "VALUE", "--value-file", "--from-env", "--dry-run", "--expect-revision", "--resolve"],
+    ),
+    (
+        ["config", "migrate", "--help"],
+        ["usage: spa config migrate", "--dry-run", "--expect-revision", "--show-diff", "--yes"],
     ),
     (
         ["config", "header", "set", "--help"],

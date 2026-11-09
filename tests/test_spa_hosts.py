@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from spa_testutil import LIB, PROJECT_ROOT, run_spa, satisfy_env_lookups
+from spa_testutil import LIB, PROJECT_ROOT, run_spa, satisfy_env_lookups, write_min_env
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -112,8 +112,22 @@ def test_cli_agent_schema_includes_hosts_commands():
     assert "--limit" not in flags
 
 
-def test_session_deploy_injects_limit(monkeypatch):
-    satisfy_env_lookups(monkeypatch, start_dir=PROJECT_ROOT)
+def test_session_deploy_injects_limit(tmp_path, monkeypatch):
+    env_dir = write_min_env(tmp_path / "lab")
+    config_path = env_dir / "config" / "splunk_config.yml"
+    config_path.write_text(
+        "plugin: splunk-platform-automator\n"
+        "schema_version: 1\n"
+        "splunk_hosts:\n"
+        "  - name: idx1\n"
+        "    roles: [indexer]\n"
+        "  - name: idx2\n"
+        "    roles: [indexer]\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SPA_ENV_DIR", str(env_dir))
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(config_path))
+    satisfy_env_lookups(monkeypatch, start_dir=env_dir)
     from spa.api import open_session
 
     captured = {}
@@ -141,7 +155,7 @@ def test_session_deploy_injects_limit(monkeypatch):
         "spa.preflight.check_controller_data",
         lambda paths: ControllerDataState(ok=True),
     )
-    session = open_session(start_dir=str(PROJECT_ROOT))
+    session = open_session(start_dir=str(env_dir))
     result = session.deploy(hosts=["indexer"], confirm=True)
     assert result.ok
     assert result.data["hosts"] == ["idx1", "idx2"]

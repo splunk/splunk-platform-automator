@@ -21,6 +21,7 @@ from spa.config_edit import (
     config_get,
     config_header_set,
     config_merge,
+    config_migrate,
     config_provider,
     config_set,
     config_topology,
@@ -918,7 +919,29 @@ class TestLayoutContract:
         from spa.catalog import CONFIG_AREAS
 
         roots = [root for _, _, area_roots in CONFIG_AREAS for root in area_roots]
+        assert roots[:3] == ["plugin", "schema_version", "config_version"]
         assert roots.index("splunk_shclusters") < roots.index("splunk_defaults")
+
+    def test_set_schema_version_is_second_root_and_header_stays_leading(self, tmp_path):
+        """CFG-LAYOUT-007. plugin first, schema_version second; header comments stay above them."""
+        from spa.catalog import CONFIG_AREAS
+
+        identity = next(roots for area_id, _, roots in CONFIG_AREAS if area_id == "identity")
+        assert identity == ("plugin", "schema_version", "config_version")
+        path = _config(tmp_path)
+        config_set(path, PROJECT_ROOT, "schema_version", "1")
+        keys = list(_load(path))
+        assert keys[0] == "plugin"
+        assert keys[1] == "schema_version"
+        assert _load(path)["schema_version"] == 1
+        config_set(path, PROJECT_ROOT, "config_version", "1.4.0")
+        keys = list(_load(path))
+        assert keys[:3] == ["plugin", "schema_version", "config_version"]
+        config_header_set(path, {"intent": "config-test", "sva": "S1"})
+        text = path.read_text(encoding="utf-8")
+        assert text.index("# intent: config-test") < text.index("plugin:")
+        assert text.index("plugin:") < text.index("schema_version:")
+        assert list(_load(path))[:3] == ["plugin", "schema_version", "config_version"]
 
     def test_app_deployment_scalars_sit_above_apps(self, tmp_path):
         """CFG-LAYOUT-001. Top-level splunk_app_deployment keys are written above apps."""
@@ -1706,7 +1729,7 @@ splunk_hosts:
                 "Look up a setting: spa config search QUERY\n"
                 "Then:              spa config explain PATH\n"
                 "Read current:      spa config get [PATH]\n"
-                "Write:             set, add, unset, merge, move, topology, or provider\n"
+                "Write:             set, add, unset, merge, move, topology, provider, or migrate\n"
                 "Audit:             spa config audit --check-hand-edits\n"
                 "Coverage:          spa config keys\n"
                 "Docs dump:         spa config schema --markdown"
@@ -1800,6 +1823,151 @@ splunk_hosts:
         normalized_help = " ".join(help_result.stdout.split())
         assert "ignored for ITSI" not in normalized_help
         assert "rejected for ITSI" in normalized_help
+
+
+class TestMigrateContract:
+    def test_migrate_places_schema_version_immediately_after_plugin(self, tmp_path):
+        """CFG-LAYOUT-007. Comments that followed plugin stay with the next section."""
+        path = _config(
+            tmp_path,
+            """\
+# splunk_config.yml
+plugin: splunk-platform-automator
+
+#
+# ap ansible/provision_terraform_aws.yml -e auto_approve=true; ap ansible/deploy_site.yml
+
+# General settings
+general:
+  url_locale: en-US
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        config_migrate(path, PROJECT_ROOT)
+        lines = path.read_text(encoding="utf-8").splitlines()
+        plugin_at = next(i for i, line in enumerate(lines) if line.startswith("plugin:"))
+        assert lines[plugin_at + 1].startswith("schema_version:")
+        text = "\n".join(lines)
+        assert text.index("schema_version:") < text.index("# General settings")
+        assert text.index("# General settings") < text.index("\ngeneral:")
+
+    def test_already_stamped_migrate_leaves_hand_layout_unchanged(self, tmp_path):
+        """CFG-MIGRATE-001 CFG-LAYOUT-007. Later migrate does not rewrite a hand-placed stamp."""
+        body = """\
+plugin: splunk-platform-automator
+
+#
+# ap ansible/provision_terraform_aws.yml -e auto_approve=true; ap ansible/deploy_site.yml
+
+# General settings
+schema_version: 1
+general:
+  url_locale: en-US
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+"""
+        path = _config(tmp_path, body)
+        before = path.read_bytes()
+        result = config_migrate(path, PROJECT_ROOT)
+        assert result["changed"] is False
+        assert path.read_bytes() == before
+
+    def test_unstamped_migrate_inserts_schema_version_1_only(self, tmp_path):
+        """CFG-MIGRATE-001 CFG-CLI-002 CFG-TXN-003 CFG-LAYOUT-007."""
+        path = _config(tmp_path)
+        assert "schema_version" not in _load(path)
+        result = config_migrate(path, PROJECT_ROOT)
+        assert result["changed"] is True
+        assert result["operations"] == [
+            {"op": "set", "path": "schema_version", "value": 1}
+        ]
+        loaded = _load(path)
+        assert list(loaded)[:2] == ["plugin", "schema_version"]
+        assert loaded["schema_version"] == 1
+        assert "config_version" not in loaded
+
+    def test_already_current_migrate_is_unchanged(self, tmp_path):
+        """CFG-MIGRATE-001."""
+        path = _config(tmp_path)
+        config_set(path, PROJECT_ROOT, "schema_version", "1")
+        before = path.read_bytes()
+        result = config_migrate(path, PROJECT_ROOT)
+        assert result["changed"] is False
+        assert result["operations"] == []
+        assert path.read_bytes() == before
+
+    def test_migrate_leaves_operator_config_version_untouched(self, tmp_path):
+        """CFG-MIGRATE-001."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+config_version: 1.4.0
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        result = config_migrate(path, PROJECT_ROOT)
+        assert result["changed"] is True
+        loaded = _load(path)
+        assert list(loaded)[:3] == ["plugin", "schema_version", "config_version"]
+        assert loaded["schema_version"] == 1
+        assert loaded["config_version"] == "1.4.0"
+
+    def test_migrate_dry_run_matches_write_and_does_not_write(self, tmp_path):
+        """CFG-MIGRATE-001 CFG-TXN-003."""
+        dry_path = _config(tmp_path / "dry")
+        write_path = _config(tmp_path / "write")
+        before = dry_path.read_bytes()
+        dry = config_migrate(dry_path, PROJECT_ROOT, dry_run=True)
+        written = config_migrate(write_path, PROJECT_ROOT)
+        assert dry_path.read_bytes() == before
+        assert dry["operations"] == written["operations"]
+        assert dry["diff"] == written["diff"]
+        assert dry["changed"] is True
+        assert "revision_after" not in dry
+        assert "+schema_version: 1" in dry["diff"] or "+schema_version:" in dry["diff"]
+
+    def test_human_and_agent_migrate_use_mutation_contract(self, tmp_path):
+        """CFG-CLI-001 CFG-CLI-002 CFG-CLI-003 CFG-MIGRATE-001."""
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(env_dir)
+        human = run_spa(
+            [
+                "--no-agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "migrate",
+                "--dry-run",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert human.returncode == 0, human.stderr
+        assert human.stdout.splitlines()[0] == "Config migrate: would change"
+        assert "schema_version" not in path.read_text(encoding="utf-8")
+        agent = run_spa(
+            ["--agent", "--start-dir", str(env_dir), "config", "migrate", "--yes"],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(agent.stdout)
+        assert agent.returncode == 0
+        assert payload["ok"] is True
+        assert payload["data"]["changed"] is True
+        assert payload["data"]["operations"] == [
+            {"op": "set", "path": "schema_version", "value": 1}
+        ]
+        assert _load(path)["schema_version"] == 1
 
 
 class TestExplainContract:

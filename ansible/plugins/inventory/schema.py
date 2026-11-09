@@ -1640,6 +1640,22 @@ class SplunkConfig(BaseModel):
         pattern=r'^splunk-platform-automator$',
         description="Name of the Ansible inventory plugin. Required.",
     )
+    schema_version: Optional[int] = Field(
+        None,
+        description=(
+            "Which schema this YAML file follows, not a revision of the file. "
+            "No default. Omit the key to read the file as version 1. "
+            "Stamp a missing key with spa config migrate --yes."
+        ),
+    )
+    config_version: Optional[Union[str, int]] = Field(
+        None,
+        description=(
+            "Operator label for a local tracking system. "
+            "No default. Omit the key if you do not track a local revision of this file. "
+            "SPA does not read this value."
+        ),
+    )
     splunk_hosts: List[SplunkHost] = Field(
         ...,
         min_length=1,
@@ -1760,6 +1776,13 @@ class SplunkConfig(BaseModel):
         if v != 'splunk-platform-automator':
             raise ValueError(f"Invalid plugin: '{v}'. Must be 'splunk-platform-automator'")
         return v
+
+    @field_validator("config_version", mode="before")
+    @classmethod
+    def reject_bool_config_version(cls, value: Any) -> Any:
+        if isinstance(value, bool):
+            raise ValueError("config_version must be a string or integer, not a boolean")
+        return value
 
     @model_validator(mode='before')
     @classmethod
@@ -3300,6 +3323,15 @@ def plan_config_dependencies(config: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # =============================================================================
+# Schema version dispatch
+# =============================================================================
+
+CURRENT_SCHEMA_VERSION = 1
+SCHEMAS = {1: SplunkConfig}
+MIGRATIONS: dict = {}
+
+
+# =============================================================================
 # Validation helper function
 # =============================================================================
 
@@ -3320,6 +3352,64 @@ class ConfigValidationError(Exception):
         return "\n".join(lines)
 
 
+def _identity_key_order_errors(config_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """plugin must be first; schema_version, when present, must be second."""
+    if not isinstance(config_data, dict) or not config_data:
+        return []
+    keys = list(config_data)
+    errors: List[Dict[str, Any]] = []
+    if keys[0] != "plugin":
+        errors.append(
+            {
+                "loc": [keys[0]],
+                "msg": "first root key must be plugin",
+            }
+        )
+    if "schema_version" in config_data and (len(keys) < 2 or keys[1] != "schema_version"):
+        errors.append(
+            {
+                "loc": ["schema_version"],
+                "msg": "schema_version must be the second root key",
+            }
+        )
+    return errors
+
+
+def effective_schema_version(config_data: Dict[str, Any]) -> int:
+    """Resolve schema_version from the raw mapping. Absent or null is version 1."""
+    if not isinstance(config_data, dict):
+        return 1
+    raw = config_data.get("schema_version")
+    if raw is None:
+        return 1
+    loc = ["schema_version"]
+    if isinstance(raw, bool):
+        raise ConfigValidationError(
+            [{"loc": loc, "msg": "schema_version must be an integer, not a boolean"}]
+        )
+    if not isinstance(raw, int):
+        raise ConfigValidationError(
+            [{"loc": loc, "msg": "schema_version must be an integer"}]
+        )
+    if raw < 1:
+        raise ConfigValidationError(
+            [{"loc": loc, "msg": "schema_version must be at least 1"}]
+        )
+    if raw > CURRENT_SCHEMA_VERSION:
+        raise ConfigValidationError(
+            [
+                {
+                    "loc": loc,
+                    "msg": (
+                        "schema_version %s is newer than this SPA (current %s)"
+                        % (raw, CURRENT_SCHEMA_VERSION)
+                    ),
+                }
+            ]
+        )
+    return raw
+
+
 def validate_config(config_data: Dict[str, Any]) -> SplunkConfig:
     """
     Validate a configuration dictionary against the schema.
@@ -3336,8 +3426,22 @@ def validate_config(config_data: Dict[str, Any]) -> SplunkConfig:
     """
     from pydantic import ValidationError
 
+    order_errors = _identity_key_order_errors(config_data)
+    if order_errors:
+        raise ConfigValidationError(order_errors)
+    version = effective_schema_version(config_data)
+    schema = SCHEMAS.get(version)
+    if schema is None:
+        raise ConfigValidationError(
+            [
+                {
+                    "loc": ["schema_version"],
+                    "msg": "schema_version %s has no schema in this SPA" % version,
+                }
+            ]
+        )
     try:
-        model = SplunkConfig.model_validate(config_data)
+        model = schema.model_validate(config_data)
     except ValidationError as initial_error:
         raise ConfigValidationError(initial_error.errors())
     candidate = model.model_dump(mode="json", exclude_none=True)
@@ -3360,6 +3464,19 @@ def validate_config(config_data: Dict[str, Any]) -> SplunkConfig:
                     "msg": "Configuration requires dependency repair before validation.",
                 }
                 for repair in dependency["repairs"]
+            ]
+        )
+    if version < CURRENT_SCHEMA_VERSION:
+        raise ConfigValidationError(
+            [
+                {
+                    "loc": ["schema_version"],
+                    "msg": (
+                        "schema_version %s is older than the current schema (%s); "
+                        "run spa config migrate"
+                        % (version, CURRENT_SCHEMA_VERSION)
+                    ),
+                }
             ]
         )
     return model

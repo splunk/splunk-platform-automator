@@ -13,6 +13,8 @@ CLI flags stay in [commands.md](commands.md).
 | Path | Type | Qualifiers | Description |
 | --- | --- | --- | --- |
 | `plugin` | string | required; pattern=^splunk-platform-automator$ | Name of the Ansible inventory plugin. Required. |
+| `schema_version` | integer | optional | Which schema this YAML file follows, not a revision of the file. No default. Omit the key to read the file as version 1. Stamp a missing key with spa config migrate --yes. |
+| `config_version` | string \| integer | optional | Operator label for a local tracking system. No default. Omit the key if you do not track a local revision of this file. SPA does not read this value. |
 
 ### Snippets
 

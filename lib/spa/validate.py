@@ -25,6 +25,24 @@ VALIDATE_STEPS = (
     ("syntax", "Playbook syntax-check"),
 )
 
+SCHEMA_STAMP_ERROR = (
+    "splunk_config.yml has no schema_version. "
+    "An omitted key still reads as version 1. "
+    "Stamp it with spa config migrate --yes."
+)
+
+
+def require_authored_schema_version(config_path: Path) -> Optional[CommandResult]:
+    """Fail when splunk_config.yml has no authored schema_version. Does not write."""
+    from spa.preflight import load_config_mapping
+
+    if not config_path.is_file():
+        return None
+    mapping = load_config_mapping(config_path)
+    if mapping.get("schema_version") is None:
+        return CommandResult(ok=False, error=SCHEMA_STAMP_ERROR, code=1)
+    return None
+
 
 def _note(
     on_progress: Optional[ProgressCallback],
@@ -266,6 +284,11 @@ except ConfigValidationError as e:
     if rc.returncode != 0:
         err = (rc.stderr or rc.stdout or "Schema validation failed").strip()
         return CommandResult(ok=False, error=err, data=data, code=rc.returncode)
+    stamp = require_authored_schema_version(config_path)
+    if stamp is not None:
+        if agent:
+            return stamp
+        return CommandResult(ok=False, error=SCHEMA_STAMP_ERROR, data=data, code=1)
 
     _note(
         on_progress,

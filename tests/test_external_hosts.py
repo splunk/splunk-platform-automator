@@ -189,6 +189,8 @@ def _paths(tmp_path, config):
 
     config_path = tmp_path / "config" / "splunk_config.yml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
+    if "schema_version:" not in config:
+        config = "schema_version: 1\n" + config
     config_path.write_text(config)
     base = resolve_spa_paths(start_dir=PROJECT_ROOT)
     return replace(
@@ -883,6 +885,7 @@ def test_deploy_ping_failure_does_not_start_the_playbook(tmp_path, monkeypatch):
     config = tmp_path / "config" / "splunk_config.yml"
     config.parent.mkdir()
     config.write_text(
+        "schema_version: 1\n"
         "external: {}\n"
         "splunk_hosts:\n"
         "  - name: byo1\n"
@@ -935,6 +938,7 @@ def test_deploy_logs_the_host_check(tmp_path, monkeypatch, capsys):
     config = tmp_path / "config" / "splunk_config.yml"
     config.parent.mkdir()
     config.write_text(
+        "schema_version: 1\n"
         "external: {}\n"
         "splunk_hosts:\n"
         "  - name: byo1\n"
@@ -987,6 +991,7 @@ def test_deploy_architecture_mismatch_does_not_blame_ssh(tmp_path, monkeypatch, 
     config = tmp_path / "config" / "splunk_config.yml"
     config.parent.mkdir()
     config.write_text(
+        "schema_version: 1\n"
         "external: {}\n"
         "splunk_defaults:\n"
         "  splunk_architecture: arm64\n"
@@ -1043,6 +1048,7 @@ def test_deploy_prints_the_architecture_mismatch_once(tmp_path, monkeypatch, cap
     config = tmp_path / "config" / "splunk_config.yml"
     config.parent.mkdir()
     config.write_text(
+        "schema_version: 1\n"
         "external: {}\n"
         "splunk_defaults:\n"
         "  splunk_architecture: arm64\n"
