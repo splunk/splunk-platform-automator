@@ -152,6 +152,21 @@ def test_scaffold_creates_env_without_ansible(tmp_path):
     assert cfg["splunk_hosts"]
 
 
+@pytest.mark.parametrize(
+    "fragment",
+    sorted(
+        [
+            *PROJECT_ROOT.joinpath("examples", "providers").glob("*.yml"),
+            *PROJECT_ROOT.joinpath("examples", "topologies").glob("*.yml"),
+        ]
+    ),
+    ids=lambda path: "%s-%s" % (path.parent.name, path.stem),
+)
+def test_init_fragments_omit_plugin(fragment):
+    cfg = yaml.safe_load(fragment.read_text())
+    assert "plugin" not in cfg
+
+
 def test_example_flag(tmp_path):
     dest = tmp_path / "c1"
     result = run_spa_init(["--example", "cm_2idxc_sh", str(dest)])

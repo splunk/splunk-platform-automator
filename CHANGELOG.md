@@ -23,6 +23,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **Init fragments omit `plugin:`**: provider and topology examples no longer repeat `plugin: splunk-platform-automator`. `spa init` still writes it on the composed env config.
+
 - **Shipped config templates are a catalog** ([#143](https://github.com/splunk/splunk-platform-automator/issues/143)): `spa config templates list` is the catalog. Bare `spa config templates` exits 2. Each row includes the merge command. `spa config search` hits `template.NAME`; `spa config explain template.NAME` returns `spa config merge NAME --yes`. Agent list rows keep `spa --agent config merge NAME --yes`. Writes keep `splunk_app_deployment` scalars above `apps`.
 
 - **Human `data.next`**: every command that attaches `data.next` also prints it for humans (`Next:` on stderr, then each ask and command). Agent mode stays JSON-only. Init, architecture plan/apply, validate, and provision were the gaps.

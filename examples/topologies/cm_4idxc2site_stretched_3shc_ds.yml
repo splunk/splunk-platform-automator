@@ -2,7 +2,6 @@
 # SVA: M4
 # Lab: Multisite IDXC + one stretched SHC (shc1) with members on site1 and site2. No ES tier.
 # Do not add virtualbox:, terraform:, os:, or apps here.
-plugin: splunk-platform-automator
 
 
 # Splunk default settings

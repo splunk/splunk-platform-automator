@@ -3,7 +3,6 @@
 # SVA: C11
 # Lab: C1 plus one dedicated ES search head. Lab RF/SF 2/2. No ES app.
 # Do not add virtualbox:, terraform:, os:, or apps here.
-plugin: splunk-platform-automator
 
 
 # Splunk default settings

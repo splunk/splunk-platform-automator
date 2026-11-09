@@ -2,7 +2,6 @@
 # Topology only — compose with: spa init --example two_envs_each_cm_2idxc1site_ds_sh_uf --provider aws|virtualbox ENV
 # Lab: Two splunk_environments, each with CM+IDXC+SH+UF.
 # Do not add virtualbox:, terraform:, os:, or apps here.
-plugin: splunk-platform-automator
 
 
 # Splunk default settings

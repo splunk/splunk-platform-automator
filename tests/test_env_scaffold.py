@@ -202,7 +202,15 @@ def test_clone_equal_inventory_still_parses(tmp_path):
     os.makedirs(env["ANSIBLE_LOCAL_TEMP"], exist_ok=True)
 
     cfg = tmp_path / "splunk_config.yml"
-    cfg.write_text((PROJECT_ROOT / "examples" / "topologies" / "single_node.yml").read_text())
+    text = (PROJECT_ROOT / "examples" / "topologies" / "single_node.yml").read_text()
+    lines = text.splitlines(True)
+    plugin = "plugin: splunk-platform-automator\n"
+    if "plugin:" not in text:
+        if lines and lines[0].strip() == "---":
+            text = lines[0] + plugin + "".join(lines[1:])
+        else:
+            text = plugin + text
+    cfg.write_text(text)
     parsed = subprocess.run(
         ["ansible-inventory", "--list", "-i", str(cfg)],
         cwd=PROJECT_ROOT,
