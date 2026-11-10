@@ -11,7 +11,9 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Added
 
-- **CCM provision, destroy, suspend, and resume** ([#146](https://github.com/splunk/splunk-platform-automator/issues/146)): `spa provision --yes` / `spa destroy --yes` for a `ccm:` env create and tear down a CCM EC2 deployment over HTTPS (`CCM_TOKEN` is reported as set / not set). `spa suspend --yes` / `spa resume --yes` PATCH instance `desired_state` (`stopped` / `running`); resume refreshes inventory IPs and warns when `ccm.operation_hours` is `business_hours`. `spa hosts list --status` uses CCM instance `state` / `ip_address`. State is `$SPA_ENV_DIR/ccm/state.json` (deployment id and TTL, never the PAT). CCM terminates the lab when TTL expires; suspend/resume then fail with that hint. `spa destroy --yes` treats a missing deployment as success and still clears local state.
+- **CCM provision, destroy, suspend, and resume** ([#146](https://github.com/splunk/splunk-platform-automator/issues/146)): `spa provision --yes` / `spa destroy --yes` for a `ccm:` env create and tear down a CCM EC2 deployment over HTTPS (`CCM_TOKEN` is reported as set / not set). `spa suspend --yes` / `spa resume --yes` PATCH instance `desired_state` (`stopped` / `running`); resume refreshes inventory IPs and warns when `ccm.operation_hours` is `business_hours`. `spa hosts list --status` uses CCM instance `state` / `ip_address` and the live deployment TTL in controller-local time. State is `$SPA_ENV_DIR/ccm/state.json` (deployment id and TTL, never the PAT). CCM terminates the lab when TTL expires; suspend/resume then fail with that hint. `spa destroy --yes` treats a missing deployment as success and still clears local state.
+
+- **`spa provider ccm` discovery** ([#146](https://github.com/splunk/splunk-platform-automator/issues/146)): `spa provider ccm check-auth` / `survey` / catalog `list` commands, `ttl extend --days N --yes`, and `operation-hours set`. Human `spa --help` and completion omit `provider` unless `CCM_TOKEN` is set or the env has a root `ccm:` block; `pro` is a hidden alias. `spa validate` fails a `ccm:` env when host count exceeds 50, the local private key file is missing, or (when the token is set) the account instance cap or `key_name` does not match CCM. Parent `spa --help` no longer shows `environment (env)`.
 
 - **Config schema stamp** ([#117](https://github.com/splunk/splunk-platform-automator/issues/117)): `splunk_config.yml` has SPA-owned `schema_version` (integer; current is 1) and optional operator `config_version` (string or integer; SPA stores it and never uses it for schema dispatch). New `spa init --example` files and the shipped full example stamp `schema_version: 1`. Copies (`--from` / `--migrate`, clone convert, `--force` keep-config) stay as-is. `spa validate` reports a missing stamp (an omitted key still reads as version 1, so schema validation can succeed) and does not write; `spa deploy` and `spa provision` refuse until `spa config migrate --yes`.
 
@@ -26,6 +28,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 - **Licenses catalog and next-step envelopes**: `spa licenses list` is the catalog. Bare `spa licenses` exits 2. The scan uses the environment config (no relative `--config` required) and compact rows include `capabilities`. Successful `apps add` and `provision` envelopes include `data.next`. A normal app without `--roles` returns `ok: false` with `ready: false` and a roles `choice` (`allowed` plus `suggested`).
 
 ### Changed
+
+- **Integer enum `spa config set`**: unquoted `50` on `ccm.disk_storage` / `ccm.ebs_storage.ebs_size` stores an integer, not the string `"50"`. String enums are unchanged.
 
 - **Init fragments omit `plugin:`**: provider and topology examples no longer repeat `plugin: splunk-platform-automator`. `spa init` still writes it on the composed env config.
 

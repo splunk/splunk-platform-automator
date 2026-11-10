@@ -211,7 +211,7 @@ class CcmConfig(BaseModel):
     )
     ssh_username: Optional[str] = Field(
         None,
-        description="SSH login user for the CCM image. Default ec2-user. Omit the key to keep that. Use ubuntu when the image requires it.",
+        description="SSH login user for the CCM image. Default splunker. Omit the key to keep that. Every CCM OS flavor uses splunker, not the AWS AMI user.",
     )
     timezone: Optional[str] = Field(
         None,

@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 
 
 class ShellError(RuntimeError):
@@ -377,6 +378,8 @@ def host_report(
                 if record:
                     row["provider"] = provider.get("name")
                     row["provider_status"] = record.get("state")
+                    if record.get("ttl"):
+                        row["ttl"] = record["ttl"]
         rows.append(row)
     return {
         "provider": provider.get("name"),
@@ -406,6 +409,25 @@ def filter_report(report, names):
     return filtered
 
 
+def format_ttl_local(stamp):
+    """Render a CCM UTC ttl stamp in the controller local timezone."""
+    raw = str(stamp or "")
+    if not raw:
+        return raw
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return raw
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    local = parsed.astimezone()
+    zone = local.strftime("%Z") or local.strftime("%z")
+    text = local.strftime("%A, %d %b %Y at %H:%M")
+    if zone:
+        return "%s %s" % (text, zone)
+    return text
+
+
 def format_host_status(row):
     """Human suffix for spa hosts list --status."""
     if row.get("ansible") == "unprovisioned" or row.get("provider_status") == "unprovisioned":
@@ -417,7 +439,10 @@ def format_host_status(row):
             row["provider_status"],
         )
     if row.get("ansible") or row.get("provider_status"):
-        return " - Ansible: %s%s" % (row.get("ansible", "N/A"), provider_status)
+        suffix = " - Ansible: %s%s" % (row.get("ansible", "N/A"), provider_status)
+        if row.get("ttl"):
+            suffix += ", expires %s" % format_ttl_local(row["ttl"])
+        return suffix
     return ""
 
 

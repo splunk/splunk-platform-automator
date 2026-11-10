@@ -15,7 +15,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Mapping, NoReturn, Optional, Tuple
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Mapping, NoReturn, Optional, Sequence, Tuple
 
 from spa.paths import SpaPaths
 from spa.providers import (
@@ -30,7 +31,10 @@ TOKEN_ENV = "CCM_TOKEN"
 API_ROOT = "https://api.ccm.splunkits.io"
 DEFAULT_TIMEOUT = 30
 DEPLOYMENTS_PATH = "/api/v1/deployments"
+META_PATH = "/api/v1/meta"
+SSH_KEYS_PATH = "/ssh_keys/"
 MAX_INSTANCES = 50
+ACCOUNT_INSTANCE_CAP = 100
 NAME_MIN = 5
 NAME_MAX = 100
 NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][\w-]*[a-zA-Z0-9]$")
@@ -39,11 +43,31 @@ DEFAULT_DISK_STORAGE = 50
 DEFAULT_TIMEZONE = "UTC"
 DEFAULT_OPERATION_HOURS = "manual"
 DEFAULT_BUSINESS_PURPOSE = "DeveloperInstance"
-DEFAULT_SSH_USERNAME = "ec2-user"
+DEFAULT_SSH_USERNAME = "splunker"
 DEFAULT_SSH_KEY_FILE = "~/.ssh/CCM-Key.pem"
 POLL_INTERVAL = 5
 POLL_ATTEMPTS = 180
 TTL_MAX_DAYS = 30
+BUSINESS_PURPOSES = ("DeveloperInstance", "SalesOpportunity", "SupportCase")
+OPERATION_HOURS = ("manual", "business_hours")
+META_ATTRIBUTES = ("operating_systems", "instance_types", "disk_storage")
+PROVIDER_NEEDS_ACTION = (
+    "spa provider needs an action.\n"
+    "CCM: spa provider ccm check-auth"
+)
+PROVIDER_CCM_NEEDS_ACTION = (
+    "spa provider ccm needs an action.\n"
+    "spa provider ccm check-auth.\n"
+    "spa provider ccm survey\n"
+    "spa provider ccm operating-systems list\n"
+    "spa provider ccm instance-types list\n"
+    "spa provider ccm disk-storage list\n"
+    "spa provider ccm business-purposes list\n"
+    "spa provider ccm operation-hours list\n"
+    "spa provider ccm ssh-keys list\n"
+    "spa provider ccm ttl extend --days N --yes\n"
+    "spa provider ccm operation-hours set manual|business_hours --yes"
+)
 
 
 class CcmError(RuntimeError):
@@ -75,6 +99,37 @@ def token_present(environ: Optional[Mapping[str, str]] = None) -> bool:
 
 def token_state(environ: Optional[Mapping[str, str]] = None) -> str:
     return "set" if token_present(environ) else "not set"
+
+
+def _top_level_has_ccm(text: str) -> bool:
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0]
+        if not line.strip() or line[:1].isspace():
+            continue
+        if line.split(":", 1)[0].strip() == "ccm":
+            return True
+    return False
+
+
+def audience_visible(
+    environ: Optional[Mapping[str, str]] = None,
+    config: Optional[Mapping[str, Any]] = None,
+    paths: Optional[SpaPaths] = None,
+) -> bool:
+    """True when human help/completion should name spa provider (CCM)."""
+    if token_present(environ):
+        return True
+    if isinstance(config, dict) and isinstance(config.get("ccm"), dict):
+        return True
+    if paths is None:
+        return False
+    cfg = Path(paths.config_file)
+    if not cfg.is_file():
+        return False
+    try:
+        return _top_level_has_ccm(cfg.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return False
 
 
 class UrllibCcmClient:
@@ -528,11 +583,19 @@ class Provider:
         deployment_id: str,
         selected: Mapping[str, Mapping[str, Any]],
         desired_state: str,
+        deployment: Optional[Mapping[str, Any]] = None,
     ) -> None:
+        current: Dict[str, str] = {}
+        for row in (deployment or {}).get("instances_data") or []:
+            if isinstance(row, dict) and row.get("instance_id"):
+                current[str(row["instance_id"])] = str(row.get("state") or "").lower()
+        wanted = desired_state.lower()
         for name, row in selected.items():
             instance_id = str((row or {}).get("instance_id") or "")
             if not instance_id:
                 raise ProviderError("CCM state has no instance_id for %s" % name)
+            if current.get(instance_id) == wanted:
+                continue
             status, _payload = self._request(
                 "PATCH",
                 self._instance_path(deployment_id, instance_id),
@@ -568,6 +631,9 @@ class Provider:
                 "reachable": str(state or "").lower() == "running",
                 "instance_id": instance.get("instance_id") or instance_id,
             }
+            ttl = deployment.get("ttl")
+            if ttl:
+                record["ttl"] = ttl
             for identifier in (name, record["instance_id"], instance.get("ip_address")):
                 if identifier:
                     status[str(identifier)] = record
@@ -578,8 +644,8 @@ class Provider:
         recorded = self._require_state()
         deployment_id = str(recorded["deployment_id"])
         selected = self._selected_hosts(recorded, hosts)
-        self._get_deployment(deployment_id)
-        self._patch_instances(deployment_id, selected, "stopped")
+        deployment = self._get_deployment(deployment_id)
+        self._patch_instances(deployment_id, selected, "stopped", deployment)
         return {
             "provider": self.name,
             "action": "suspend",
@@ -625,8 +691,8 @@ class Provider:
         recorded = self._require_state()
         deployment_id = str(recorded["deployment_id"])
         selected = self._selected_hosts(recorded, hosts)
-        self._get_deployment(deployment_id)
-        self._patch_instances(deployment_id, selected, "running")
+        deployment = self._get_deployment(deployment_id)
+        self._patch_instances(deployment_id, selected, "running", deployment)
         deployment = self._get_deployment(deployment_id)
         mapped = self._map_instances(selected, deployment)
         inventory = self._write_inventory(mapped, merge=bool(hosts))
@@ -648,3 +714,418 @@ class Provider:
         if warnings:
             result["warnings"] = warnings
         return result
+
+    def _deployment_path(self, deployment_id: str) -> str:
+        return "%s/%s" % (
+            DEPLOYMENTS_PATH,
+            urllib.parse.quote(deployment_id, safe=""),
+        )
+
+    def patch_deployment(self, body: Mapping[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        recorded = self._require_state()
+        deployment_id = str(recorded["deployment_id"])
+        status, payload = self._request(
+            "PATCH",
+            self._deployment_path(deployment_id),
+            body=dict(body),
+        )
+        if status == 404:
+            self._expired_error(deployment_id)
+        if status >= 400:
+            raise ProviderError("CCM API returned HTTP %s" % status)
+        data = _unwrap(payload) or {}
+        if not isinstance(data, dict):
+            data = {}
+        return recorded, data
+
+    def extend_ttl(self, days: int, when: Optional[datetime] = None) -> Dict[str, Any]:
+        stamp = _ttl_stamp(when or self._now(), days)
+        timezone = str(self.config.get("timezone") or DEFAULT_TIMEZONE)
+        recorded, data = self.patch_deployment({"ttl": stamp, "timezone": timezone})
+        known = str(data.get("ttl") or stamp)
+        hosts = recorded.get("hosts") if isinstance(recorded.get("hosts"), dict) else {}
+        self._write_state(str(recorded["deployment_id"]), known, hosts)
+        return {
+            "deployment_id": str(recorded["deployment_id"]),
+            "ttl": known,
+        }
+
+    def set_operation_hours(self, hours: str) -> Dict[str, Any]:
+        timezone = str(self.config.get("timezone") or DEFAULT_TIMEZONE)
+        self.patch_deployment({"operation_hours": hours, "timezone": timezone})
+        return {"operation_hours": hours, "timezone": timezone}
+
+
+_META_ACTIONS = {
+    "operating-systems": "operating_systems",
+    "instance-types": "instance_types",
+    "disk-storage": "disk_storage",
+}
+EBS_SIZES = (50, 100, 300)
+
+
+def _named_catalog(names: Sequence[Any]) -> Dict[str, Any]:
+    return {"items": [{"name": name} for name in names]}
+
+
+def _meta_rows(payload: Any, attribute: str) -> List[Any]:
+    data = _unwrap(payload)
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        nested = data.get(attribute)
+        if isinstance(nested, list):
+            return nested
+    return []
+
+
+def _meta_items(payload: Any, attribute: str) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    for row in _meta_rows(payload, attribute):
+        if isinstance(row, dict):
+            name = row.get("name", row.get("value"))
+            items.append({"name": name})
+        else:
+            items.append({"name": row})
+    return items
+
+
+def _ccm_item_line(item: Any) -> str:
+    if not isinstance(item, dict):
+        return str(item)
+    if item.get("fingerprint") or item.get("local_private_key"):
+        parts = [item.get("name"), item.get("fingerprint"), item.get("local_private_key")]
+        return "  ".join(str(part) for part in parts if part is not None and part != "")
+    if "name" in item:
+        return str(item["name"])
+    return "  ".join(
+        "%s=%s" % (key, value)
+        for key, value in item.items()
+        if value is not None and key != "public_key"
+    )
+
+
+def format_ccm_text(data: Any) -> str:
+    """Human stdout for spa provider ccm. JSON mode does not call this."""
+    if not isinstance(data, dict):
+        return str(data) + "\n"
+    lines: List[str] = []
+    if data.get("ccm_token"):
+        lines.append("CCM_TOKEN: %s" % data["ccm_token"])
+    items = data.get("items")
+    if isinstance(items, list):
+        if not items:
+            lines.append("No results.")
+        for item in items:
+            lines.append(_ccm_item_line(item))
+    for label, key in (
+        ("Operating systems", "operating_systems"),
+        ("Instance types", "instance_types"),
+        ("Disk storage", "disk_storage"),
+        ("Business purposes", "business_purposes"),
+        ("Operation hours", "operation_hours"),
+    ):
+        nested = data.get(key)
+        if not isinstance(nested, dict):
+            continue
+        lines.append("%s:" % label)
+        nested_items = nested.get("items") or []
+        if not nested_items:
+            lines.append("  No results.")
+        for entry in nested_items:
+            lines.append("  %s" % _ccm_item_line(entry))
+    if data.get("ttl"):
+        lines.append("ttl: %s" % data["ttl"])
+    hours = data.get("operation_hours")
+    if hours and not isinstance(hours, dict):
+        lines.append("operation_hours: %s" % hours)
+    for warning in data.get("warnings") or []:
+        lines.append("Warning: %s" % warning)
+    if not lines:
+        lines.append("ok" if data.get("ok", True) else "failed")
+    return "\n".join(lines) + "\n"
+
+
+def _private_key_path(config: Mapping[str, Any]) -> Path:
+    raw = str(config.get("ssh_private_key_file") or DEFAULT_SSH_KEY_FILE)
+    return Path(raw).expanduser()
+
+
+def _instance_count(payload: Any) -> int:
+    data = _unwrap(payload)
+    if isinstance(data, list):
+        rows = data
+    elif isinstance(data, dict):
+        nested = data.get("deployments") or data.get("items") or []
+        rows = nested if isinstance(nested, list) else []
+    else:
+        rows = []
+    total = 0
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        instances = row.get("instances_data")
+        if isinstance(instances, list):
+            total += len(instances)
+    return total
+
+
+def _ssh_key_names(payload: Any) -> List[str]:
+    data = _unwrap(payload)
+    rows = data if isinstance(data, list) else []
+    names: List[str] = []
+    for row in rows:
+        if isinstance(row, dict) and row.get("pub_key_name"):
+            names.append(str(row["pub_key_name"]))
+        elif isinstance(row, dict) and row.get("name"):
+            names.append(str(row["name"]))
+    return names
+
+
+def _ssh_key_items(payload: Any, config: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    data = _unwrap(payload)
+    rows = data if isinstance(data, list) else []
+    local = "yes" if _private_key_path(config).is_file() else "no"
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        items.append(
+            {
+                "name": row.get("pub_key_name") or row.get("name"),
+                "fingerprint": row.get("fingerprint"),
+                "local_private_key": local,
+            }
+        )
+    return items
+
+
+def _fail(error: str, code: int = 1) -> Any:
+    from spa.api import CommandResult
+
+    return CommandResult(ok=False, error=error, code=code)
+
+
+def _confirm(label: str, confirm: bool, agent: bool) -> Optional[Any]:
+    from spa.confirm import ConfirmationError, ConfirmationUsageError, ensure_confirmed
+
+    try:
+        ensure_confirmed(label, confirm=confirm, agent=agent, risk="mutating")
+    except ConfirmationUsageError as exc:
+        return _fail(str(exc), 2)
+    except ConfirmationError as exc:
+        return _fail(str(exc), 1)
+    return None
+
+
+def _require_client(client: Optional[UrllibCcmClient]) -> UrllibCcmClient:
+    return client or UrllibCcmClient.from_env()
+
+
+def _meta_catalog(http: UrllibCcmClient, attribute: str) -> Dict[str, Any]:
+    status, payload = http.request("GET", META_PATH, query={"attribute": attribute})
+    if status >= 400:
+        raise CcmError("CCM API returned HTTP %s" % status)
+    return {"items": _meta_items(payload, attribute)}
+
+
+def _provider(
+    paths: Optional[SpaPaths],
+    config: Optional[Mapping[str, Any]],
+    client: Optional[UrllibCcmClient],
+    now: Optional[Any] = None,
+) -> Provider:
+    if paths is None:
+        from spa.paths import resolve_spa_paths
+
+        paths = resolve_spa_paths()
+    kwargs: Dict[str, Any] = {}
+    if now is not None:
+        kwargs["now"] = now if callable(now) else (lambda: now)
+    return Provider(paths, dict(config or {}), client=client, **kwargs)
+
+
+def validate_ccm(
+    paths: SpaPaths,
+    config: Mapping[str, Any],
+    client: Optional[UrllibCcmClient] = None,
+) -> Any:
+    """Local CCM checks, plus live account/key checks when a token or client is present."""
+    from spa.api import CommandResult
+
+    hosts = expected_hostnames(load_deployment_config(paths))
+    if len(hosts) > MAX_INSTANCES:
+        return _fail(
+            "This env has %s hosts; CCM accepts at most %s instances in one create."
+            % (len(hosts), MAX_INSTANCES),
+            2,
+        )
+    ttl_days = config.get("ttl_days")
+    if ttl_days is not None:
+        try:
+            ttl_value = int(ttl_days)
+        except (TypeError, ValueError):
+            ttl_value = -1
+        if ttl_value < 1 or ttl_value > TTL_MAX_DAYS:
+            return _fail(
+                "ccm.ttl_days must be 1–%s, got %s." % (TTL_MAX_DAYS, ttl_days),
+                2,
+            )
+    ebs = config.get("ebs_storage")
+    if isinstance(ebs, dict):
+        count = ebs.get("ebs_count")
+        size = ebs.get("ebs_size")
+        if count is not None:
+            try:
+                count_value = int(count)
+            except (TypeError, ValueError):
+                count_value = -1
+            if count_value < 1 or count_value > 3:
+                return _fail("ccm.ebs_storage.ebs_count must be 1–3, got %s." % count, 2)
+        if size is not None:
+            try:
+                size_value = int(size)
+            except (TypeError, ValueError):
+                size_value = -1
+            if size_value not in EBS_SIZES:
+                return _fail(
+                    "ccm.ebs_storage.ebs_size must be one of %s, got %s."
+                    % (", ".join(str(item) for item in EBS_SIZES), size),
+                    2,
+                )
+    key_file = _private_key_path(config)
+    if not key_file.is_file():
+        return _fail("ccm.ssh_private_key_file is missing: %s" % key_file, 1)
+
+    if client is None and not token_present():
+        return CommandResult(ok=True, data={"ok": True})
+
+    problems: List[str] = []
+    try:
+        http = _require_client(client)
+        status, deployments = http.request("GET", DEPLOYMENTS_PATH)
+        if status >= 400:
+            raise CcmError("CCM API returned HTTP %s" % status)
+        current = _instance_count(deployments)
+        if current + len(hosts) > ACCOUNT_INSTANCE_CAP:
+            problems.append(
+                "This env has %s hosts; the account already has %s instances; "
+                "CCM allows at most %s total."
+                % (len(hosts), current, ACCOUNT_INSTANCE_CAP)
+            )
+        status, keys = http.request("GET", SSH_KEYS_PATH)
+        if status >= 400:
+            raise CcmError("CCM API returned HTTP %s" % status)
+        key_name = str(config.get("key_name") or "").strip()
+        names = _ssh_key_names(keys)
+        if key_name and key_name not in names:
+            problems.append("ccm.key_name %r is not in the CCM SSH key list." % key_name)
+    except CcmError as exc:
+        return _fail(str(exc), 1)
+    if problems:
+        return _fail(" ".join(problems), 1)
+    return CommandResult(ok=True, data={"ok": True})
+
+
+def execute(
+    *,
+    action: str,
+    resource: Optional[str] = None,
+    subaction: Optional[str] = None,
+    hours: Optional[str] = None,
+    days: Optional[int] = None,
+    confirm: bool = False,
+    agent: bool = False,
+    paths: Optional[SpaPaths] = None,
+    config: Optional[Mapping[str, Any]] = None,
+    client: Optional[UrllibCcmClient] = None,
+    now: Optional[Any] = None,
+) -> Any:
+    """Run one spa provider ccm action. Discovery does not need a provisioned env."""
+    from spa.api import CommandResult
+    from spa.providers import ProviderError
+
+    del resource
+    if not action:
+        return CommandResult(ok=False, error=PROVIDER_CCM_NEEDS_ACTION, code=2)
+    cfg = dict(config or {})
+
+    try:
+        if action == "check-auth":
+            if client is None and not token_present():
+                return _fail("%s is not set" % TOKEN_ENV, 1)
+            ping(client=_require_client(client))
+            return CommandResult(ok=True, data={"ccm_token": "set"})
+
+        if action == "business-purposes" and subaction in (None, "list"):
+            return CommandResult(ok=True, data=_named_catalog(BUSINESS_PURPOSES))
+
+        if action == "operation-hours" and subaction in (None, "list"):
+            return CommandResult(ok=True, data=_named_catalog(OPERATION_HOURS))
+
+        if action == "survey":
+            http = _require_client(client)
+            data: Dict[str, Any] = {}
+            for attribute in META_ATTRIBUTES:
+                data[attribute] = _meta_catalog(http, attribute)
+            data["business_purposes"] = _named_catalog(BUSINESS_PURPOSES)
+            data["operation_hours"] = _named_catalog(OPERATION_HOURS)
+            return CommandResult(ok=True, data=data)
+
+        if action in _META_ACTIONS and subaction in (None, "list"):
+            http = _require_client(client)
+            return CommandResult(
+                ok=True,
+                data=_meta_catalog(http, _META_ACTIONS[action]),
+            )
+
+        if action == "ssh-keys" and subaction in (None, "list"):
+            http = _require_client(client)
+            status, payload = http.request("GET", SSH_KEYS_PATH)
+            if status >= 400:
+                raise CcmError("CCM API returned HTTP %s" % status)
+            return CommandResult(ok=True, data={"items": _ssh_key_items(payload, cfg)})
+
+        if action == "ttl" and subaction == "extend":
+            blocked = _confirm("spa provider ccm ttl extend", confirm, agent)
+            if blocked is not None:
+                return blocked
+            if days is None:
+                return _fail(
+                    "--days must be 1–%s for spa provider ccm ttl extend." % TTL_MAX_DAYS,
+                    2,
+                )
+            try:
+                day_count = int(days)
+            except (TypeError, ValueError):
+                day_count = -1
+            if day_count < 1 or day_count > TTL_MAX_DAYS:
+                return _fail(
+                    "--days must be 1–%s for spa provider ccm ttl extend." % TTL_MAX_DAYS,
+                    2,
+                )
+            when = now() if callable(now) else now
+            data = _provider(paths, cfg, client, now=when).extend_ttl(day_count, when)
+            return CommandResult(ok=True, data=data)
+
+        if action == "operation-hours" and subaction == "set":
+            blocked = _confirm("spa provider ccm operation-hours set", confirm, agent)
+            if blocked is not None:
+                return blocked
+            if hours not in OPERATION_HOURS:
+                return _fail(
+                    "Hours must be %s for spa provider ccm operation-hours set."
+                    % " or ".join(OPERATION_HOURS),
+                    2,
+                )
+            data = _provider(paths, cfg, client).set_operation_hours(str(hours))
+            return CommandResult(ok=True, data=data)
+    except CcmError as exc:
+        message = str(exc)
+        if message == "%s: not set" % TOKEN_ENV:
+            message = "%s is not set" % TOKEN_ENV
+        return _fail(message, 1)
+    except ProviderError as exc:
+        return _fail(str(exc), exc.code or 1)
+
+    return CommandResult(ok=False, error=PROVIDER_CCM_NEEDS_ACTION, code=2)

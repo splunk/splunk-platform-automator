@@ -112,7 +112,7 @@ def test_ccm_provider_example_validates(tmp_path):
     assert ccm["operating_system"] == "rhel_9"
     assert ccm["key_name"] == "CCM-Key"
     assert ccm["ssh_private_key_file"] == "~/.ssh/CCM-Key.pem"
-    assert ccm["ssh_username"] == "ec2-user"
+    assert ccm["ssh_username"] == "splunker"
     text = open(provider, encoding="utf-8").read()
     assert "CCM_TOKEN" not in fragment
     assert "CCM_TOKEN" not in (fragment.get("ccm") or {})

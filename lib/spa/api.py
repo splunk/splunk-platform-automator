@@ -336,6 +336,18 @@ class SpaSession(Protocol):
 
     def aws(self, argv: Optional[List[str]] = None) -> CommandResult: ...
 
+    def provider(
+        self,
+        child: str = "ccm",
+        action: Optional[str] = None,
+        resource: Optional[str] = None,
+        subaction: Optional[str] = None,
+        hours: Optional[str] = None,
+        days: Optional[int] = None,
+        confirm: bool = False,
+        agent: bool = False,
+    ) -> CommandResult: ...
+
     def architecture_plan(self, path: str) -> CommandResult: ...
 
     def architecture_apply(
@@ -2249,6 +2261,37 @@ class LocalSpaSession:
         return aws_mod.execute_argv(
             list(argv or []),
             environment_region=aws_mod.environment_config_region(self.paths.config_file),
+        )
+
+    def provider(
+        self,
+        child: str = "ccm",
+        action: Optional[str] = None,
+        resource: Optional[str] = None,
+        subaction: Optional[str] = None,
+        hours: Optional[str] = None,
+        days: Optional[int] = None,
+        confirm: bool = False,
+        agent: bool = False,
+    ) -> CommandResult:
+        from spa.providers import ccm as ccm_mod
+
+        if child != "ccm":
+            return CommandResult(ok=False, error=ccm_mod.PROVIDER_NEEDS_ACTION, code=2)
+        config: Dict[str, Any] = {}
+        loaded = self._app_deployment_config()
+        if isinstance(loaded, dict) and isinstance(loaded.get("ccm"), dict):
+            config = loaded["ccm"]
+        return ccm_mod.execute(
+            action=action or "",
+            resource=resource,
+            subaction=subaction,
+            hours=hours,
+            days=days,
+            confirm=confirm,
+            agent=agent,
+            paths=self.paths,
+            config=config,
         )
 
     def licenses(

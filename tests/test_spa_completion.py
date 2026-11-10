@@ -136,8 +136,22 @@ def test_completion_offers_canonical_names_only():
     assert "shell" in names
     assert "hosts" in names
     assert "completion" in names
-    for alias in ("env", "sh", "cfg", "h", "feat", "features"):
+    for alias in ("env", "sh", "cfg", "h", "feat", "features", "pro"):
         assert alias not in names
+    assert "provider" not in names
+
+
+def test_completion_offers_provider_when_ccm_token_is_set(monkeypatch):
+    monkeypatch.setenv("CCM_TOKEN", "test-ccm-pat-value")
+    names = complete(["spa", ""], 1)
+    assert "provider" in names
+    assert "pro" not in names
+    actions = complete(["spa", "provider", "ccm", ""], 3)
+    assert "check-auth" in actions
+    assert "survey" in actions
+    hours = complete(["spa", "provider", "ccm", "operation-hours", "set", ""], 5)
+    assert "manual" in hours
+    assert "business_hours" in hours
 
 
 def test_typed_alias_still_completes_the_canonical_subcommand():

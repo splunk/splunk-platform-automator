@@ -17,6 +17,7 @@ from schema import (
     SplunkConfig,
     SplunkHost,
     AllowedRole,
+    CcmConfig,
     validate_config as _schema_validate,
     validate_config_file,
     ConfigValidationError,
@@ -840,6 +841,11 @@ class TestCcmConfig:
         assert result.ccm.disk_storage == 50
         assert result.ccm.ttl_days == 7
         assert "ccm" not in SplunkHost.model_fields
+
+    def test_ssh_username_is_splunker_for_every_os_flavor(self):
+        text = CcmConfig.model_fields["ssh_username"].description
+        assert "Every CCM OS flavor uses splunker" in text
+        assert "not the AWS AMI user" in text
 
 
 class TestClusterConfigurations:

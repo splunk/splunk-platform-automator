@@ -681,7 +681,7 @@ Requires confirmation: yes (`--yes`).
 
 ## `environment`
 
-Environment family (alias: env). spa resolves cwd or --env itself; --export is for external tools
+Environment family. spa resolves cwd or --env itself; --export is for external tools
 
 | Flag | Description |
 | --- | --- |
@@ -1048,6 +1048,143 @@ Example:
 
 ```bash
 spa aws security-groups list --region eu-central-1
+```
+
+## `provider`
+
+Provider discovery. Bare spa provider exits 2 and names implemented children. Today that is ccm.
+
+Example:
+
+```bash
+spa --agent provider ccm check-auth
+```
+
+## `provider ccm`
+
+CCM discovery. Bare spa provider ccm exits 2.
+
+Example:
+
+```bash
+spa --agent provider ccm check-auth
+```
+
+## `provider ccm check-auth`
+
+Verify CCM_TOKEN is set and CCM accepts Bearer via GET /api/v1/deployments. Reports the env var as set / not set.
+
+Example:
+
+```bash
+spa --agent provider ccm check-auth
+```
+
+## `provider ccm survey`
+
+Combined CCM meta dump plus GUI closed sets (operating systems, instance types, disk storage, business purposes, operation hours).
+
+Example:
+
+```bash
+spa --agent provider ccm survey
+```
+
+## `provider ccm operating-systems list`
+
+List CCM operating systems from GET /api/v1/meta.
+
+Example:
+
+```bash
+spa --agent provider ccm operating-systems list
+```
+
+## `provider ccm instance-types list`
+
+List CCM instance types from GET /api/v1/meta.
+
+Example:
+
+```bash
+spa --agent provider ccm instance-types list
+```
+
+## `provider ccm disk-storage list`
+
+List CCM disk storage sizes from GET /api/v1/meta.
+
+Example:
+
+```bash
+spa --agent provider ccm disk-storage list
+```
+
+## `provider ccm business-purposes list`
+
+List GUI business purposes. Not a CCM meta attribute.
+
+Example:
+
+```bash
+spa --agent provider ccm business-purposes list
+```
+
+## `provider ccm operation-hours list`
+
+List GUI/API operation hours. Not a CCM meta attribute.
+
+Example:
+
+```bash
+spa --agent provider ccm operation-hours list
+```
+
+## `provider ccm operation-hours set`
+
+PATCH the CCM deployment operation_hours. Mutating. Does not change hours on spa resume.
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `-y`, `--yes` | Confirm without prompting |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `HOURS` | yes | manual or business_hours |
+
+Example:
+
+```bash
+spa --agent provider ccm operation-hours set manual --yes
+```
+
+## `provider ccm ssh-keys list`
+
+List CCM SSH key names and fingerprints, and whether ccm.ssh_private_key_file exists locally. Never prints public_key bodies.
+
+Example:
+
+```bash
+spa --agent provider ccm ssh-keys list
+```
+
+## `provider ccm ttl extend`
+
+PATCH the CCM deployment ttl to now plus --days (1-30). Mutating. Fail if not provisioned or already terminated.
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `--days` | New TTL in days from now (1-30) |
+| `-y`, `--yes` | Confirm without prompting |
+
+Example:
+
+```bash
+spa --agent provider ccm ttl extend --days 7 --yes
 ```
 
 ## `architecture`

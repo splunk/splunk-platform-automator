@@ -543,6 +543,48 @@ def test_ccm_resume_patches_running_and_refreshes_inventory_ips(tmp_path):
     assert result.get("inventory") == str(hosts_file)
 
 
+def test_ccm_resume_skips_patch_when_already_running_and_rewrites_ssh_user(tmp_path):
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN
+        + "splunk_hosts:\n"
+        + "  - name: idx1\n"
+        + "    roles: [indexer]\n",
+    )
+    _write_ccm_state(env, hosts={"idx1": {"instance_id": "i-aaa"}})
+    hosts_file = env / "inventory" / "hosts"
+    hosts_file.write_text(
+        'idx1 ansible_host="1.1.1.1" ansible_user="ec2-user" '
+        'ansible_ssh_private_key_file="/tmp/ccm-test-key"\n',
+        encoding="utf-8",
+    )
+    deployment = {
+        "deployment_id": "dep-9",
+        "req_state": "ready",
+        "instances_data": [
+            {"instance_id": "i-aaa", "ip_address": "9.9.9.9", "state": "running"},
+        ],
+    }
+    opener = CcmApiOpener(deployment)
+    provider = CcmProvider(
+        paths,
+        {**_CCM_CONFIG, "ssh_username": "splunker"},
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        sleep=lambda _seconds: None,
+    )
+    result = provider.resume(yes=True)
+    assert opener.patches == []
+    inventory = hosts_file.read_text(encoding="utf-8")
+    assert 'ansible_user="splunker"' in inventory
+    assert 'ansible_user="ec2-user"' not in inventory
+    assert "9.9.9.9" in inventory
+    assert result.get("inventory") == str(hosts_file)
+
+
 def test_ccm_resume_hosts_filter_merges_inventory(tmp_path):
     from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
 
@@ -694,6 +736,7 @@ def test_ccm_host_status_indexes_name_instance_and_ip(tmp_path):
         {
             "deployment_id": "dep-9",
             "req_state": "ready",
+            "ttl": "2026-11-24T13:26:51.000Z",
             "instances_data": [
                 {"instance_id": "i-aaa", "ip_address": "1.1.1.1", "state": "stopped"},
                 {"instance_id": "i-bbb", "ip_address": "2.2.2.2", "state": "running"},
@@ -709,10 +752,12 @@ def test_ccm_host_status_indexes_name_instance_and_ip(tmp_path):
     assert status["idx1"]["state"] == "stopped"
     assert status["idx1"]["reachable"] is False
     assert status["idx1"]["instance_id"] == "i-aaa"
+    assert status["idx1"]["ttl"] == "2026-11-24T13:26:51.000Z"
     assert status["i-aaa"] == status["idx1"]
     assert status["1.1.1.1"] == status["idx1"]
     assert status["sh1"]["state"] == "running"
     assert status["sh1"]["reachable"] is True
+    assert status["sh1"]["ttl"] == "2026-11-24T13:26:51.000Z"
     assert status["2.2.2.2"] == status["sh1"]
     methods = [req.get_method() for req in opener.requests]
     assert methods == ["GET"]
@@ -794,3 +839,416 @@ def test_ccm_destroy_treats_404_as_success_and_clears_local_state(tmp_path):
     assert not (env / "ccm" / "state.json").exists()
     assert not hosts_file.exists() or not hosts_file.read_text(encoding="utf-8").strip()
     assert result["deployment_id"] == "dep-9"
+
+
+def test_ccm_check_auth_reports_token_not_set(monkeypatch):
+    monkeypatch.delenv("CCM_TOKEN", raising=False)
+    from spa.providers.ccm import execute
+
+    result = execute(action="check-auth")
+    assert result.ok is False
+    assert result.code == 1
+    assert "CCM_TOKEN is not set" in (result.error or "")
+    assert "test-ccm" not in (result.error or "").lower()
+
+
+def test_ccm_check_auth_accepts_bearer_without_printing_token():
+    from spa.providers.ccm import UrllibCcmClient, execute
+
+    opener = FakeOpener(status=200, body=b"[]")
+    result = execute(
+        action="check-auth",
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    assert result.ok is True
+    assert result.data["ccm_token"] == "set"
+    assert opener.requests[0].full_url.endswith("/api/v1/deployments")
+    encoded = json.dumps(result.data)
+    assert "test-ccm-token" not in encoded
+
+
+def test_ccm_business_purposes_and_operation_hours_are_closed_sets():
+    from spa.providers.ccm import execute
+
+    purposes = execute(action="business-purposes", subaction="list")
+    assert purposes.ok is True
+    names = [row["name"] for row in purposes.data["items"]]
+    assert names == ["DeveloperInstance", "SalesOpportunity", "SupportCase"]
+    hours = execute(action="operation-hours", subaction="list")
+    assert hours.ok is True
+    assert [row["name"] for row in hours.data["items"]] == ["manual", "business_hours"]
+
+
+def test_ccm_operating_systems_list_uses_meta_attribute():
+    from spa.providers.ccm import API_ROOT, UrllibCcmClient, execute
+
+    opener = FakeOpener(
+        status=200,
+        body=json.dumps(["ubuntu_22.04", "rhel_9"]).encode("utf-8"),
+    )
+    result = execute(
+        action="operating-systems",
+        subaction="list",
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    assert result.ok is True
+    assert [row["name"] for row in result.data["items"]] == ["ubuntu_22.04", "rhel_9"]
+    req = opener.requests[0]
+    assert req.full_url.startswith(API_ROOT + "/api/v1/meta")
+    assert "attribute=operating_systems" in req.full_url
+    assert req.get_method() == "GET"
+
+
+def test_ccm_instance_types_list_reads_meta_object_envelope():
+    from spa.providers.ccm import UrllibCcmClient, execute, format_ccm_text
+
+    opener = FakeOpener(
+        status=200,
+        body=json.dumps(
+            {
+                "operating_systems": None,
+                "disk_storage": None,
+                "instance_types": ["c5a.4xlarge", "t3a.medium"],
+                "svas": None,
+                "ebs_disk_storage": None,
+            }
+        ).encode("utf-8"),
+    )
+    result = execute(
+        action="instance-types",
+        subaction="list",
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    assert result.ok is True
+    assert [row["name"] for row in result.data["items"]] == ["c5a.4xlarge", "t3a.medium"]
+    assert format_ccm_text(result.data) == "c5a.4xlarge\nt3a.medium\n"
+
+
+def test_ccm_survey_includes_meta_and_gui_sets():
+    import urllib.parse
+
+    from spa.providers.ccm import UrllibCcmClient, execute
+
+    class MetaOpener:
+        def __init__(self) -> None:
+            self.requests: List[object] = []
+
+        def open(self, req: object, timeout: object = None) -> _FakeResponse:
+            self.requests.append(req)
+            attr = urllib.parse.parse_qs(urllib.parse.urlparse(req.full_url).query).get(
+                "attribute", [""]
+            )[0]
+            payload = {
+                "operating_systems": ["rhel_9"],
+                "instance_types": ["t3a.medium"],
+                "disk_storage": [50, 100],
+            }.get(attr, [])
+            return _FakeResponse(200, json.dumps(payload).encode("utf-8"))
+
+    opener = MetaOpener()
+    result = execute(
+        action="survey",
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    assert result.ok is True
+    data = result.data
+    assert [row["name"] for row in data["operating_systems"]["items"]] == ["rhel_9"]
+    assert [row["name"] for row in data["instance_types"]["items"]] == ["t3a.medium"]
+    assert [row["name"] for row in data["disk_storage"]["items"]] == [50, 100]
+    assert [row["name"] for row in data["business_purposes"]["items"]] == [
+        "DeveloperInstance",
+        "SalesOpportunity",
+        "SupportCase",
+    ]
+    assert [row["name"] for row in data["operation_hours"]["items"]] == [
+        "manual",
+        "business_hours",
+    ]
+    queried = [
+        urllib.parse.parse_qs(urllib.parse.urlparse(req.full_url).query)["attribute"][0]
+        for req in opener.requests
+    ]
+    assert queried == ["operating_systems", "instance_types", "disk_storage"]
+
+
+def test_ccm_ssh_keys_list_marks_local_file_and_omits_public_key(tmp_path):
+    from spa.providers.ccm import UrllibCcmClient, execute
+
+    key = tmp_path / "CCM-Key.pem"
+    key.write_text("not-a-real-key\n", encoding="utf-8")
+    opener = FakeOpener(
+        status=200,
+        body=json.dumps(
+            [
+                {
+                    "pub_key_name": "CCM-Key",
+                    "fingerprint": "SHA256:abcd",
+                    "public_key": "ssh-rsa AAAA-long-material",
+                }
+            ]
+        ).encode("utf-8"),
+    )
+    result = execute(
+        action="ssh-keys",
+        subaction="list",
+        config={"ssh_private_key_file": str(key), "key_name": "CCM-Key"},
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    assert result.ok is True
+    row = result.data["items"][0]
+    assert row["name"] == "CCM-Key"
+    assert row["fingerprint"] == "SHA256:abcd"
+    assert row["local_private_key"] == "yes"
+    encoded = json.dumps(result.data)
+    assert "AAAA-long-material" not in encoded
+    assert "public_key" not in encoded
+    assert opener.requests[0].full_url.endswith("/ssh_keys/")
+
+
+def test_ccm_ttl_extend_patches_and_persists_expiry(tmp_path):
+    from datetime import datetime, timezone
+
+    from spa.providers.ccm import API_ROOT, UrllibCcmClient, execute
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    _write_ccm_state(env)
+    opener = FakeOpener(status=200, body=b'{"data":{"ttl":"2026-12-10T12:00:00.000Z"}}')
+    now = datetime(2026, 11, 10, 12, 0, tzinfo=timezone.utc)
+    result = execute(
+        action="ttl",
+        subaction="extend",
+        days=30,
+        confirm=True,
+        paths=paths,
+        config=_CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        now=now,
+    )
+    assert result.ok is True
+    req = opener.requests[0]
+    assert req.get_method() == "PATCH"
+    assert req.full_url == API_ROOT + "/api/v1/deployments/dep-9"
+    body = json.loads(req.data.decode("utf-8"))
+    assert body == {"ttl": "2026-12-10T12:00:00.000Z", "timezone": "UTC"}
+    state = json.loads((env / "ccm" / "state.json").read_text(encoding="utf-8"))
+    assert state["ttl"] == "2026-12-10T12:00:00.000Z"
+    assert result.data["ttl"] == "2026-12-10T12:00:00.000Z"
+
+
+def test_ccm_ttl_extend_without_yes_on_non_tty_names_yes():
+    from spa.providers.ccm import execute
+
+    result = execute(action="ttl", subaction="extend", days=7, confirm=False, agent=False)
+    assert result.ok is False
+    assert result.code == 2
+    assert "-y/--yes" in (result.error or "")
+
+
+def test_ccm_operation_hours_set_patches_manual(tmp_path):
+    from spa.providers.ccm import API_ROOT, UrllibCcmClient, execute
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    _write_ccm_state(env)
+    opener = FakeOpener(status=200, body=b"{}")
+    result = execute(
+        action="operation-hours",
+        subaction="set",
+        hours="manual",
+        confirm=True,
+        paths=paths,
+        config={**_CCM_CONFIG, "timezone": "UTC"},
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    assert result.ok is True
+    req = opener.requests[0]
+    assert req.get_method() == "PATCH"
+    assert req.full_url == API_ROOT + "/api/v1/deployments/dep-9"
+    body = json.loads(req.data.decode("utf-8"))
+    assert body["operation_hours"] == "manual"
+    assert body["timezone"] == "UTC"
+
+
+def test_ccm_validate_fails_when_host_count_exceeds_50(tmp_path):
+    from spa.providers.ccm import validate_ccm
+
+    paths = _ccm_paths(
+        tmp_path,
+        _CCM_MIN
+        + "splunk_hosts:\n"
+        + "  - iter:\n"
+        + "      prefix: h\n"
+        + '      numbers: "01..51"\n'
+        + "    roles: [indexer]\n",
+    )
+    result = validate_ccm(paths, _CCM_CONFIG)
+    assert result.ok is False
+    assert "51" in (result.error or "")
+    assert "50" in (result.error or "")
+
+
+def test_ccm_validate_fails_when_private_key_file_is_missing(tmp_path):
+    from spa.providers.ccm import validate_ccm
+
+    missing = tmp_path / "no-such-key.pem"
+    paths = _ccm_paths(
+        tmp_path,
+        _CCM_MIN + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    result = validate_ccm(
+        paths,
+        {**_CCM_CONFIG, "ssh_private_key_file": str(missing)},
+    )
+    assert result.ok is False
+    assert "ssh_private_key_file" in (result.error or "")
+
+
+def test_ccm_validate_account_cap_and_key_name_when_token_set(tmp_path):
+    from spa.providers.ccm import UrllibCcmClient, validate_ccm
+
+    key = tmp_path / "CCM-Key.pem"
+    key.write_text("not-a-real-key\n", encoding="utf-8")
+    paths = _ccm_paths(
+        tmp_path,
+        _CCM_MIN + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    deployments = [
+        {
+            "deployment_id": "other",
+            "instances_data": [{"instance_id": "i-%s" % i} for i in range(100)],
+        }
+    ]
+    keys = [{"pub_key_name": "other-key", "fingerprint": "SHA256:ffff"}]
+    opener = ScriptedOpener(
+        [
+            (200, deployments),
+            (200, keys),
+        ]
+    )
+    result = validate_ccm(
+        paths,
+        {
+            **_CCM_CONFIG,
+            "ssh_private_key_file": str(key),
+            "key_name": "CCM-Key",
+        },
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    assert result.ok is False
+    text = result.error or ""
+    assert "100" in text or "101" in text
+    assert "CCM-Key" in text or "key_name" in text
+
+
+def test_ccm_operating_systems_human_text_is_one_row_per_item():
+    from spa.providers.ccm import UrllibCcmClient, execute, format_ccm_text
+
+    opener = FakeOpener(
+        status=200,
+        body=json.dumps(["ubuntu_22.04", "rhel_9"]).encode("utf-8"),
+    )
+    result = execute(
+        action="operating-systems",
+        subaction="list",
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    assert result.ok is True
+    text = format_ccm_text(result.data)
+    assert text == "ubuntu_22.04\nrhel_9\n"
+    payload = result.to_dict()
+    assert payload["ok"] is True
+    assert payload["schema_version"] == 1
+    assert [row["name"] for row in payload["data"]["items"]] == ["ubuntu_22.04", "rhel_9"]
+
+
+def test_ccm_check_auth_failure_agent_envelope_omits_data(monkeypatch):
+    monkeypatch.delenv("CCM_TOKEN", raising=False)
+    from spa.providers.ccm import execute
+
+    result = execute(action="check-auth")
+    payload = result.to_dict()
+    assert payload["ok"] is False
+    assert payload["schema_version"] == 1
+    assert "data" not in payload
+    assert "CCM_TOKEN is not set" in payload["error"]
+
+
+def test_ccm_ssh_keys_human_text_omits_public_key_material():
+    from spa.providers.ccm import format_ccm_text
+
+    text = format_ccm_text(
+        {
+            "items": [
+                {
+                    "name": "CCM-Key",
+                    "fingerprint": "SHA256:abcd",
+                    "local_private_key": "yes",
+                }
+            ]
+        }
+    )
+    assert "CCM-Key" in text
+    assert "SHA256:abcd" in text
+    assert "yes" in text
+    assert "public_key" not in text
+    assert "ssh-rsa" not in text
+
+
+def test_ccm_ttl_extend_rejects_days_outside_1_to_30():
+    from spa.providers.ccm import execute
+
+    result = execute(action="ttl", subaction="extend", days=31, confirm=True)
+    assert result.ok is False
+    assert result.code == 2
+    assert "30" in (result.error or "")
+
+
+def test_ccm_ttl_extend_fails_when_not_provisioned(tmp_path):
+    from spa.providers.ccm import UrllibCcmClient, execute
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    opener = FakeOpener(status=200, body=b"{}")
+    result = execute(
+        action="ttl",
+        subaction="extend",
+        days=7,
+        confirm=True,
+        paths=paths,
+        config=_CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    assert result.ok is False
+    assert opener.requests == []
+    assert "state" in (result.error or "").lower() or "provision" in (result.error or "").lower()
+
+
+def test_validate_env_fails_when_ccm_host_count_exceeds_50(tmp_path):
+    from spa.validate import validate_env
+
+    paths = _ccm_paths(
+        tmp_path,
+        _CCM_MIN
+        + "splunk_hosts:\n"
+        + "  - iter:\n"
+        + "      prefix: h\n"
+        + '      numbers: "01..51"\n'
+        + "    roles: [indexer]\n",
+    )
+    result = validate_env(paths)
+    assert result.ok is False
+    assert "51" in (result.error or "")
+    assert "50" in (result.error or "")

@@ -142,7 +142,7 @@ os:
 | `ccm.operating_system` | string | optional | CCM operating system id. A live CCM catalog value, not an AMI id. No default. Omit the key to set none. |
 | `ccm.operation_hours` | enum | optional; default='manual'; allowed=business_hours\|manual | When CCM may stop instances. manual leaves them running; business_hours follows the deployment timezone. |
 | `ccm.ssh_private_key_file` | string | optional | Path on the Ansible controller to the private key for key_name. Default ~/.ssh/CCM-Key.pem. Omit the key to keep that. |
-| `ccm.ssh_username` | string | optional; default='ec2-user' | SSH login user for the CCM image. Use ubuntu when the image requires it. |
+| `ccm.ssh_username` | string | optional; default='splunker' | SSH login user for the CCM image. Every CCM OS flavor uses splunker, not the AWS AMI user. |
 | `ccm.timezone` | string | optional; default='UTC' | IANA time zone on the CCM deployment. |
 | `ccm.ttl_days` | integer | optional; default=7; ge=1; le=30 | Days until CCM terminates the whole deployment. Minimum 1, maximum 30. |
 | `external` | ExternalConfig | optional | Bring-your-own SSH provider. Holds no value itself. No default. Set this when no terraform.aws or virtualbox block is present. |

@@ -175,6 +175,16 @@ SESSION_API_PARAMETERS = {
     ),
     "logs": ("run_id", "last", "follow", "wait", "ansible_output", "timestamps", "color"),
     "aws": ("argv",),
+    "provider": (
+        "child",
+        "action",
+        "resource",
+        "subaction",
+        "hours",
+        "days",
+        "confirm",
+        "agent",
+    ),
     "licenses": ("software_dir", "config", "env_recommend"),
     "hosts_list": ("status", "hosts"),
     "hosts_register": (
@@ -493,6 +503,7 @@ def test_session_ccm_hosts_list_status_uses_instance_state(tmp_path, monkeypatch
                 {
                     "data": {
                         "deployment_id": "dep-9",
+                        "ttl": "2026-11-24T13:26:51.000Z",
                         "instances_data": [
                             {
                                 "instance_id": "i-aaa",
@@ -532,5 +543,10 @@ def test_session_ccm_hosts_list_status_uses_instance_state(tmp_path, monkeypatch
     assert rows["idx1"]["provider"] == "ccm"
     assert rows["idx1"]["provider_status"] == "stopped"
     assert rows["idx1"]["ansible"] == "N/A"
-    assert "CCM" in format_host_status(rows["idx1"])
-    assert "stopped" in format_host_status(rows["idx1"])
+    assert rows["idx1"]["ttl"] == "2026-11-24T13:26:51.000Z"
+    assert rows["idx1"]["ttl"] != "2026-11-01T00:00:00.000Z"
+    rendered = format_host_status(rows["idx1"])
+    assert "CCM" in rendered
+    assert "stopped" in rendered
+    assert "expires " in rendered
+    assert "2026-11-24T13:26:51.000Z" not in rendered

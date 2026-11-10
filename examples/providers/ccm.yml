@@ -9,7 +9,7 @@ ccm:
   operating_system: rhel_9     # Red Hat 9; live CCM catalog id, not an AMI id
   key_name: CCM-Key            # CCM ssh_key_name; same YAML name as terraform.aws.key_name
   ssh_private_key_file: ~/.ssh/CCM-Key.pem
-  ssh_username: ec2-user       # RHEL login user
+  ssh_username: splunker       # always splunker for every CCM OS; not ubuntu/ec2-user from the AMI
   timezone: UTC
   ttl_days: 7                  # 1-30; spa validate rejects > 30
   operation_hours: manual      # business_hours | manual

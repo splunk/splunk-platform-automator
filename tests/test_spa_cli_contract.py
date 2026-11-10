@@ -25,7 +25,7 @@ HELP_CONTRACTS = [
             "validate",
             "doctor",
             "venv",
-            "environment (env)",
+            "environment",
             "provision",
             "deploy",
             "destroy",
@@ -103,6 +103,7 @@ HELP_CONTRACTS = [
         ["env", "--help"],
         [
             "usage: spa environment",
+            "Aliases: env",
             "--export",
             "list",
             "init",
@@ -526,7 +527,15 @@ def test_short_aliases_stay_on_the_command_help_page():
     assert parent.returncode == 0, parent.stderr
     assert "validate (val)" not in parent.stdout
     assert re.search(r"\bval\b", parent.stdout) is None
-    assert "environment (env)" in parent.stdout
+    assert "environment (env)" not in parent.stdout
+    assert "env" not in {name for name, _alias in _command_rows(parent.stdout)}
+    assert "env" not in {alias for _name, alias in _command_rows(parent.stdout) if alias}
+
+    environment = run_spa(["--no-agent", "environment", "--help"])
+    assert "usage: spa environment" in environment.stdout
+    assert "Aliases: env" in environment.stdout
+    via_env = run_spa(["--no-agent", "env", "--help"])
+    assert via_env.stdout == environment.stdout
 
     human = run_spa(["--no-agent", "validate", "--help"])
     assert "usage: spa validate" in human.stdout
@@ -901,17 +910,17 @@ def test_agent_aws_and_shell_help_is_schema_envelope(argv, name):
     assert result.stderr == ""
 
 
-def test_parent_help_shows_only_the_documented_env_alias():
-    """Hidden shortcuts stay out of the parent list. env remains visible."""
+def test_parent_help_omits_hidden_aliases():
+    """Hidden shortcuts stay out of the parent list, including env."""
     commands = _discovered_commands()
     names = {" ".join((*parents, name)) for parents, name, _alias in commands}
     assert "environment remove" in names
     assert "hosts list" in names
     assert "apps search" in names
     visible = [(parents, name, alias) for parents, name, alias in commands if alias]
-    assert visible == [((), "environment", "env")]
+    assert visible == []
     hidden = {
-        (): {"val": "validate", "sh": "shell", "cfg": "config"},
+        (): {"val": "validate", "sh": "shell", "cfg": "config", "env": "environment"},
         ("config",): {"top": "topology"},
         ("apps",): {"sea": "search"},
         ("environment",): {"rm": "remove"},
@@ -1019,7 +1028,7 @@ def _help_action_names():
     names = set()
     for name, _alias in _command_rows(root.stdout):
         names.add("agent schema" if name == "agent" else name)
-    for parent in ("environment", "hosts", "apps", "config", "skills", "venv", "completion", "architecture", "licenses", "aws"):
+    for parent in ("environment", "hosts", "apps", "config", "skills", "venv", "completion", "architecture", "licenses", "aws", "provider"):
         child = run_spa(["--no-agent", parent, "--help"])
         assert child.returncode == 0, child.stderr
         for name, _alias in _command_rows(child.stdout):
@@ -1059,6 +1068,24 @@ def _help_action_names():
                 "security-groups",
             ):
                 continue
+            if parent == "provider" and name == "ccm":
+                names.add("provider ccm")
+                nested = run_spa(["--no-agent", "provider", "ccm", "--help"])
+                assert nested.returncode == 0, nested.stderr
+                ccm_folders = {
+                    "operating-systems",
+                    "instance-types",
+                    "disk-storage",
+                    "business-purposes",
+                    "operation-hours",
+                    "ssh-keys",
+                    "ttl",
+                }
+                for nested_name, _nested_alias in _command_rows(nested.stdout):
+                    if nested_name in ccm_folders:
+                        continue
+                    names.add("provider ccm %s" % nested_name)
+                continue
             names.add("%s %s" % (parent, name))
     catalogs = (
         (["run", "--help"], "spa run list", "run list"),
@@ -1077,6 +1104,20 @@ def _help_action_names():
         assert listed.returncode == 0, listed.stderr
         for name, _alias in _command_rows(listed.stdout):
             names.add("aws %s %s" % (resource, name))
+    names.add("provider")
+    for resource in (
+        "operating-systems",
+        "instance-types",
+        "disk-storage",
+        "business-purposes",
+        "operation-hours",
+        "ssh-keys",
+        "ttl",
+    ):
+        listed = run_spa(["--no-agent", "provider", "ccm", resource, "--help"])
+        assert listed.returncode == 0, listed.stderr
+        for name, _alias in _command_rows(listed.stdout):
+            names.add("provider ccm %s %s" % (resource, name))
     return names
 
 
@@ -1345,3 +1386,114 @@ def test_templates_list_is_the_catalog():
     assert list_payload["ok"] is True
     assert list_payload["schema_version"] == 1
     assert list_payload["data"]["name"] == "config templates list"
+
+
+PROVIDER_NEEDS_ACTION = (
+    "spa provider needs an action.\n"
+    "CCM: spa provider ccm check-auth"
+)
+PROVIDER_CCM_NEEDS_ACTION = (
+    "spa provider ccm needs an action.\n"
+    "spa provider ccm check-auth\n"
+    "spa provider ccm survey\n"
+    "spa provider ccm operating-systems list\n"
+    "spa provider ccm instance-types list\n"
+    "spa provider ccm disk-storage list\n"
+    "spa provider ccm business-purposes list\n"
+    "spa provider ccm operation-hours list\n"
+    "spa provider ccm ssh-keys list\n"
+    "spa provider ccm ttl extend --days N --yes\n"
+    "spa provider ccm operation-hours set manual|business_hours --yes"
+)
+
+
+def test_human_parent_help_omits_provider_without_ccm_audience():
+    parent = run_spa(["--no-agent", "--help"])
+    assert parent.returncode == 0, parent.stderr
+    names = {name for name, _alias in _command_rows(parent.stdout)}
+    assert "provider" not in names
+    assert "pro" not in names
+    assert "provider (pro)" not in parent.stdout
+
+
+def test_human_parent_help_lists_canonical_provider_when_ccm_token_is_set():
+    parent = run_spa(
+        ["--no-agent", "--help"],
+        extra_env={"CCM_TOKEN": "test-ccm-pat-value"},
+    )
+    assert parent.returncode == 0, parent.stderr
+    names = {name for name, _alias in _command_rows(parent.stdout)}
+    assert "provider" in names
+    assert "pro" not in names
+    assert "provider (pro)" not in parent.stdout
+    assert "test-ccm-pat-value" not in parent.stdout
+    assert "test-ccm-pat-value" not in parent.stderr
+
+
+def test_human_parent_help_lists_canonical_provider_for_a_ccm_env(tmp_path):
+    dest = write_min_env(tmp_path)
+    (dest / "config" / "splunk_config.yml").write_text(
+        "ccm:\n  instance_type: t3a.medium\n",
+        encoding="utf-8",
+    )
+    parent = run_spa(
+        ["--no-agent", "--help"],
+        extra_env={"SPA_ENV_DIR": str(dest), "SPA_HOME": str(PROJECT_ROOT)},
+    )
+    assert parent.returncode == 0, parent.stderr
+    names = {name for name, _alias in _command_rows(parent.stdout)}
+    assert "provider" in names
+    assert "pro" not in names
+
+
+def test_provider_help_shows_hidden_pro_alias():
+    help_text = run_spa(["--no-agent", "provider", "--help"])
+    assert help_text.returncode == 0, help_text.stderr
+    assert "usage: spa provider" in help_text.stdout
+    assert "Aliases: pro" in help_text.stdout
+    assert "ccm" in help_text.stdout
+    via_alias = run_spa(["--no-agent", "pro", "--help"])
+    assert via_alias.returncode == 0, via_alias.stderr
+    assert via_alias.stdout == help_text.stdout
+
+
+def test_agent_schema_includes_provider_ccm_and_never_pro():
+    schema = json.loads(run_spa(["--agent", "agent", "schema"]).stdout)
+    assert schema["ok"] is True
+    encoded = json.dumps(schema)
+    names = {row["name"] for row in schema["data"]["commands"]}
+    assert "provider ccm check-auth" in names
+    assert "provider ccm survey" in names
+    assert "provider ccm ttl extend" in names
+    assert "provider ccm operation-hours set" in names
+    assert all(row.get("audience") == "ccm" for row in schema["data"]["commands"] if row["name"].startswith("provider"))
+    assert "spa pro " not in encoded
+    assert not any(
+        (row.get("example") or "").startswith("spa pro ")
+        or row["name"] == "pro"
+        or row["name"].startswith("pro ")
+        for row in schema["data"]["commands"]
+    )
+
+
+def test_provider_and_provider_ccm_bare_parents_exit_2():
+    for argv, message in (
+        (["provider"], PROVIDER_NEEDS_ACTION),
+        (["pro"], PROVIDER_NEEDS_ACTION),
+        (["provider", "ccm"], PROVIDER_CCM_NEEDS_ACTION),
+        (["pro", "ccm"], PROVIDER_CCM_NEEDS_ACTION),
+    ):
+        human = run_spa(["--no-agent", *argv])
+        assert human.returncode == 2, argv
+        assert human.stdout.strip() == "", argv
+        for line in message.splitlines():
+            assert line.rstrip(".") in human.stderr, (argv, line)
+        agent = run_spa(["--json", *argv])
+        assert agent.returncode == 2, argv
+        assert agent.stderr == "", argv
+        body = json.loads(agent.stdout)
+        assert body["ok"] is False
+        assert body["schema_version"] == 1
+        assert "data" not in body
+        for line in message.splitlines():
+            assert line.rstrip(".") in body["error"], (argv, line)

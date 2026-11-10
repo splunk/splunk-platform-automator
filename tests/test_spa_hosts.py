@@ -323,6 +323,44 @@ def test_hosts_list_status_skips_runtime_when_unprovisioned(tmp_path, monkeypatc
     assert format_host_status(rows["idx1"]) == " - unprovisioned"
 
 
+def test_format_host_status_renders_ccm_ttl_in_local_time():
+    import os
+    import time
+
+    from spa.shell import format_host_status
+
+    previous = os.environ.get("TZ")
+    os.environ["TZ"] = "America/New_York"
+    time.tzset()
+    try:
+        rendered = format_host_status(
+            {
+                "ansible": "N/A",
+                "provider": "ccm",
+                "provider_status": "stopped",
+                "ttl": "2026-11-24T13:26:51.000Z",
+            }
+        )
+        assert "expires Tuesday, 24 Nov 2026 at 08:26 EST" in rendered
+        assert "2026-11-24T13:26:51.000Z" not in rendered
+        microseconds = format_host_status(
+            {
+                "ansible": "Success",
+                "provider": "ccm",
+                "provider_status": "running",
+                "ttl": "2026-11-17T14:45:05.000000Z",
+            }
+        )
+        assert "expires Tuesday, 17 Nov 2026 at 09:45 EST" in microseconds
+        assert "2026-11-17T14:45:05.000000Z" not in microseconds
+    finally:
+        if previous is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = previous
+        time.tzset()
+
+
 def test_ansible_ping_uses_the_venv_binary(tmp_path, monkeypatch):
     from spa import shell as shell_mod
 

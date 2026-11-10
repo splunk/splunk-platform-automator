@@ -140,7 +140,7 @@ def test_init_provider_ccm_writes_root_ccm_block(tmp_path):
     assert cfg["ccm"]["operating_system"] == "rhel_9"
     assert cfg["ccm"]["key_name"] == "CCM-Key"
     assert cfg["ccm"]["ssh_private_key_file"] == "~/.ssh/CCM-Key.pem"
-    assert cfg["ccm"]["ssh_username"] == "ec2-user"
+    assert cfg["ccm"]["ssh_username"] == "splunker"
     assert "terraform" not in cfg
     assert "virtualbox" not in cfg
     assert "CCM_TOKEN" not in cfg

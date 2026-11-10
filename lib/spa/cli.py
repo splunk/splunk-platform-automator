@@ -42,7 +42,6 @@ from spa.skills import supported_platform_list
 
 
 # Accepted at the command position, omitted from parent help and agent errors.
-# ``env`` stays a visible argparse alias of ``environment``.
 _HIDDEN_ALIASES = {
     (): {
         "cfg": "config",
@@ -58,6 +57,8 @@ _HIDDEN_ALIASES = {
         "sh": "shell",
         "lic": "licenses",
         "agt": "agent",
+        "env": "environment",
+        "pro": "provider",
     },
     ("config",): {
         "tpl": "templates",
@@ -78,7 +79,7 @@ _HIDDEN_ALIASES = {
     ("environment",): {"rm": "remove"},
     ("env",): {"rm": "remove"},
 }
-_VISIBLE_ALIAS = {"environment": frozenset({"env"})}
+_VISIBLE_ALIAS: Dict[str, frozenset] = {}
 # These must keep working without a venv: they are how an operator inspects or
 # builds one. Every other command reads YAML or runs Ansible, so it is gated.
 VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills", "completion", "licenses"})
@@ -669,6 +670,21 @@ LICENSES_NEEDS_ACTION = (
     "spa licenses needs an action.\n"
     "List: spa licenses list"
 )
+
+
+def _ccm_audience_visible(head: Sequence[str]) -> bool:
+    from spa.providers.ccm import audience_visible
+
+    values = _env_values_from_head(head)
+    if len(set(values)) > 1:
+        return audience_visible(paths=None)
+    try:
+        paths = _paths(_start_dir_from_head(head), _env_selector_from_head(head))
+    except Exception:
+        paths = None
+    return audience_visible(paths=paths)
+
+
 SHELL_NEEDS_NAME = "spa shell needs NAME.\nExample: spa shell NAME"
 _RETIRED_AWS_PARENT = {
     "--check-auth": "Checking credentials is: spa aws check-auth",
@@ -1460,6 +1476,45 @@ def _run(argv: Sequence[str]) -> int:
                     message = "Listing %s is: %s" % (resource, aws_mod._listing_command(resource))
                 elif "invalid choice" in message and "'list'" in message:
                     message = aws_mod._listing_menu()
+            elif command_words[:1] == ["provider"]:
+                from spa.providers import ccm as ccm_mod
+
+                if len(command_words) == 1 and (
+                    "required" in message or "invalid choice" in message
+                ):
+                    message = ccm_mod.PROVIDER_NEEDS_ACTION
+                elif len(command_words) >= 2 and command_words[1] == "ccm":
+                    resource = command_words[2] if len(command_words) > 2 else ""
+                    if not resource and (
+                        "required" in message or "invalid choice" in message
+                    ):
+                        message = ccm_mod.PROVIDER_CCM_NEEDS_ACTION
+                    elif resource in {
+                        "operating-systems",
+                        "instance-types",
+                        "disk-storage",
+                        "business-purposes",
+                        "ssh-keys",
+                    } and ("required" in message or "invalid choice" in message):
+                        message = (
+                            "Listing %s is: spa provider ccm %s list"
+                            % (resource, resource)
+                        )
+                    elif resource == "operation-hours" and (
+                        "required" in message or "invalid choice" in message
+                    ):
+                        message = (
+                            "spa provider ccm operation-hours needs an action.\n"
+                            "List: spa provider ccm operation-hours list\n"
+                            "Set:  spa provider ccm operation-hours set manual|business_hours --yes"
+                        )
+                    elif resource == "ttl" and (
+                        "required" in message or "invalid choice" in message
+                    ):
+                        message = (
+                            "spa provider ccm ttl needs an action.\n"
+                            "Extend: spa provider ccm ttl extend --days N --yes"
+                        )
             elif message.startswith("the following arguments are required:"):
                 missing = message.split(":", 1)[1].strip()
                 named = _MISSING_OPERAND.get((self.prog, missing))
@@ -2211,7 +2266,7 @@ def _run(argv: Sequence[str]) -> int:
         sub,
         "environment",
         aliases=["env"],
-        help="List, init, set, or remove registered environments (alias: env)",
+        help="List, init, set, or remove registered environments",
         epilog=ENVIRONMENT_NEEDS_ACTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -2601,6 +2656,125 @@ def _run(argv: Sequence[str]) -> int:
     aws_types.add_argument("--family", help="Instance type family prefix (e.g. t3)")
     _add_aws_catalog("key-pairs", "List EC2 key pairs")
     _add_aws_catalog("security-groups", "List security groups")
+
+    from spa.providers import ccm as ccm_mod
+
+    provider_kwargs = {
+        "epilog": ccm_mod.PROVIDER_NEEDS_ACTION,
+        "formatter_class": argparse.RawDescriptionHelpFormatter,
+    }
+    if _ccm_audience_visible(head):
+        provider_kwargs["help"] = "Provider discovery. CCM is the first child."
+    p_provider = _add_command(
+        sub,
+        "provider",
+        aliases=["pro"],
+        **provider_kwargs,
+    )
+    _add_env_selector(p_provider)
+    provider_sub = p_provider.add_subparsers(
+        dest="provider_cmd",
+        metavar="ACTION",
+        required=False,
+        parser_class=AgentAwareArgumentParser,
+    )
+    p_provider_ccm = _add_action(
+        provider_sub,
+        "ccm",
+        help="CCM discovery for a ccm: environment",
+        epilog=ccm_mod.PROVIDER_CCM_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_mode_flags(p_provider_ccm)
+    ccm_sub = p_provider_ccm.add_subparsers(
+        dest="ccm_cmd",
+        metavar="ACTION",
+        required=False,
+        parser_class=AgentAwareArgumentParser,
+    )
+    p_ccm_check = _add_action(ccm_sub, "check-auth", help="Verify CCM_TOKEN via GET /api/v1/deployments")
+    _add_mode_flags(p_ccm_check)
+    p_ccm_survey = _add_action(
+        ccm_sub,
+        "survey",
+        help="Combined CCM meta dump plus GUI closed sets",
+    )
+    _add_mode_flags(p_ccm_survey)
+
+    def _add_ccm_catalog(name: str, summary: str):
+        resource = _add_action(ccm_sub, name, help=summary)
+        actions = resource.add_subparsers(
+            dest="ccm_action",
+            required=True,
+            metavar="ACTION",
+            parser_class=AgentAwareArgumentParser,
+        )
+        listing = _add_action(actions, "list", help=summary)
+        _add_mode_flags(listing)
+        listing.set_defaults(ccm_list_kind=name)
+        return listing
+
+    _add_ccm_catalog("operating-systems", "List CCM operating systems from meta")
+    _add_ccm_catalog("instance-types", "List CCM instance types from meta")
+    _add_ccm_catalog("disk-storage", "List CCM disk storage sizes from meta")
+    _add_ccm_catalog("business-purposes", "List GUI business purposes")
+    _add_ccm_catalog("ssh-keys", "List CCM SSH key names and local private-key presence")
+    oh = _add_action(
+        ccm_sub,
+        "operation-hours",
+        help="List or set CCM operation hours",
+    )
+    oh_sub = oh.add_subparsers(
+        dest="ccm_action",
+        required=True,
+        metavar="ACTION",
+        parser_class=AgentAwareArgumentParser,
+    )
+    p_oh_list = _add_action(oh_sub, "list", help="List GUI/API operation hours")
+    _add_mode_flags(p_oh_list)
+    p_oh_list.set_defaults(ccm_list_kind="operation-hours")
+    p_oh_set = _add_action(
+        oh_sub,
+        "set",
+        help="PATCH deployment operation_hours (mutating)",
+    )
+    _add_mode_flags(p_oh_set)
+    p_oh_set.add_argument(
+        "hours",
+        choices=list(ccm_mod.OPERATION_HOURS),
+        help="manual or business_hours",
+    )
+    p_oh_set.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Confirm without prompting",
+    )
+    ttl = _add_action(ccm_sub, "ttl", help="Extend CCM deployment TTL")
+    ttl_sub = ttl.add_subparsers(
+        dest="ccm_action",
+        required=True,
+        metavar="ACTION",
+        parser_class=AgentAwareArgumentParser,
+    )
+    p_ttl_extend = _add_action(
+        ttl_sub,
+        "extend",
+        help="PATCH deployment ttl to now plus --days (mutating)",
+    )
+    _add_mode_flags(p_ttl_extend)
+    p_ttl_extend.add_argument(
+        "--days",
+        type=int,
+        required=True,
+        help="New TTL in days from now (1-30)",
+    )
+    p_ttl_extend.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Confirm without prompting",
+    )
     p_licenses = _add_command(
         sub,
         "licenses",
@@ -2813,12 +2987,16 @@ def _run(argv: Sequence[str]) -> int:
         args, "architecture_cmd"
     ) in {None, "plan"}
     licenses_without_env = args.command == "licenses"
+    provider_without_env = args.command == "provider" and getattr(
+        args, "ccm_action", None
+    ) not in {"set", "extend"}
     if (
         args.command not in {"init", "agent", "environment", "doctor", "venv", "skills", "completion"}
         and not apps_without_env
         and not config_without_env
         and not architecture_without_env
         and not licenses_without_env
+        and not provider_without_env
     ):
         missing = env_dir_required_error(paths)
         if missing:
@@ -3628,6 +3806,33 @@ def _run(argv: Sequence[str]) -> int:
             print(result.error, file=sys.stderr)
         if result.data is not None:
             sys.stdout.write(aws_mod.format_aws_text(result.data))
+        return result.code
+
+    if args.command == "provider":
+        from spa.providers import ccm as ccm_mod
+
+        child = getattr(args, "provider_cmd", None)
+        if child != "ccm":
+            return _reject(ccm_mod.PROVIDER_NEEDS_ACTION, as_agent)
+        ccm_cmd = getattr(args, "ccm_cmd", None)
+        if not ccm_cmd:
+            return _reject(ccm_mod.PROVIDER_CCM_NEEDS_ACTION, as_agent)
+        result = session.provider(
+            child="ccm",
+            action=ccm_cmd,
+            resource=getattr(args, "ccm_list_kind", None),
+            subaction=getattr(args, "ccm_action", None),
+            hours=getattr(args, "hours", None),
+            days=getattr(args, "days", None),
+            confirm=bool(getattr(args, "yes", False)),
+            agent=as_agent,
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+        if result.data is not None:
+            sys.stdout.write(ccm_mod.format_ccm_text(result.data))
         return result.code
 
     if args.command == "licenses":

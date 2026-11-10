@@ -190,6 +190,7 @@ features:
       Corporate Cloud Manager instead of Terraform. spa init --provider ccm copies
       these knobs. operating_system and instance_type are live CCM catalog values,
       not AMI ids. disk_storage is the CCM root-disk catalog, not terraform.aws.root_volume_size.
+      ssh_username is always splunker for every CCM OS flavor.
     when_not_to_use: >-
       Public aws, virtualbox, or external labs. Do not use a CCM Splunk install
       (type=splunk); SPA keeps topology and the Splunk install.
@@ -218,7 +219,7 @@ features:
         operating_system: rhel_9
         key_name: CCM-Key
         ssh_private_key_file: ~/.ssh/CCM-Key.pem
-        ssh_username: ec2-user
+        ssh_username: splunker
         timezone: UTC
         ttl_days: 7
         operation_hours: manual

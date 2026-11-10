@@ -79,9 +79,12 @@ a snippet or a value.
 `config set` accepts `PATH VALUE`. Strings preserve their text. A JSON-encoded
 string scalar (`"eu-central-1"`) unwraps one quote layer; pass string scalars
 unquoted. Boolean, integer, number, null, list, and map values use strict JSON
-of the schema type. A union that includes a list (for example
-`splunk_defaults.splunk_license_file`) parses a JSON list as a list, including
-on `--resolve`. `--value-file` accepts JSON or YAML 1.2. Missing mapping parents
+of the schema type. An enum whose allowed values are integers (for example
+`ccm.disk_storage` or `ccm.ebs_storage.ebs_size`) is an integer: unquoted `50`
+stores 50, not `"50"`. String enums stay unquoted text. A union that includes a
+list (for example `splunk_defaults.splunk_license_file`) parses a JSON list as a
+list, including on `--resolve`. `--value-file` accepts JSON or YAML 1.2. Missing
+mapping parents
 may be created, but catalog paths that are not schema-backed are rejected.
 
 ### CFG-PATH-002 — stable selectors

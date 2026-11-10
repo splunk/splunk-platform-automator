@@ -661,7 +661,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "environment",
-            "summary": "Environment family (alias: env). spa resolves cwd or --env itself; --export is for external tools",
+            "summary": "Environment family. spa resolves cwd or --env itself; --export is for external tools",
             "flags": [{"long": "--export", "help": "Print shell exports for external tools"}],
             "example": "spa environment --export",
         },
@@ -922,6 +922,99 @@ COMMAND_SCHEMA = {
                 }
             ],
             "example": "spa aws security-groups list --region eu-central-1",
+        },
+        {
+            "name": "provider",
+            "summary": "Provider discovery. Bare spa provider exits 2 and names implemented children. Today that is ccm.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm check-auth",
+        },
+        {
+            "name": "provider ccm",
+            "summary": "CCM discovery. Bare spa provider ccm exits 2.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm check-auth",
+        },
+        {
+            "name": "provider ccm check-auth",
+            "summary": "Verify CCM_TOKEN is set and CCM accepts Bearer via GET /api/v1/deployments. Reports the env var as set / not set.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm check-auth",
+        },
+        {
+            "name": "provider ccm survey",
+            "summary": "Combined CCM meta dump plus GUI closed sets (operating systems, instance types, disk storage, business purposes, operation hours).",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm survey",
+        },
+        {
+            "name": "provider ccm operating-systems list",
+            "summary": "List CCM operating systems from GET /api/v1/meta.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm operating-systems list",
+        },
+        {
+            "name": "provider ccm instance-types list",
+            "summary": "List CCM instance types from GET /api/v1/meta.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm instance-types list",
+        },
+        {
+            "name": "provider ccm disk-storage list",
+            "summary": "List CCM disk storage sizes from GET /api/v1/meta.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm disk-storage list",
+        },
+        {
+            "name": "provider ccm business-purposes list",
+            "summary": "List GUI business purposes. Not a CCM meta attribute.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm business-purposes list",
+        },
+        {
+            "name": "provider ccm operation-hours list",
+            "summary": "List GUI/API operation hours. Not a CCM meta attribute.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm operation-hours list",
+        },
+        {
+            "name": "provider ccm operation-hours set",
+            "summary": "PATCH the CCM deployment operation_hours. Mutating. Does not change hours on spa resume.",
+            "audience": "ccm",
+            "requires_confirmation": True,
+            "positionals": [
+                {
+                    "name": "HOURS",
+                    "required": True,
+                    "help": "manual or business_hours",
+                    "choices": ["manual", "business_hours"],
+                }
+            ],
+            "flags": [
+                {"long": "--yes", "short": "-y", "help": "Confirm without prompting"},
+            ],
+            "example": "spa --agent provider ccm operation-hours set manual --yes",
+        },
+        {
+            "name": "provider ccm ssh-keys list",
+            "summary": "List CCM SSH key names and fingerprints, and whether ccm.ssh_private_key_file exists locally. Never prints public_key bodies.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm ssh-keys list",
+        },
+        {
+            "name": "provider ccm ttl extend",
+            "summary": "PATCH the CCM deployment ttl to now plus --days (1-30). Mutating. Fail if not provisioned or already terminated.",
+            "audience": "ccm",
+            "requires_confirmation": True,
+            "flags": [
+                {
+                    "long": "--days",
+                    "help": "New TTL in days from now (1-30)",
+                    "takes_value": True,
+                },
+                {"long": "--yes", "short": "-y", "help": "Confirm without prompting"},
+            ],
+            "example": "spa --agent provider ccm ttl extend --days 7 --yes",
         },
         {
             "name": "architecture",

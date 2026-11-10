@@ -171,8 +171,8 @@ def complete(
     if index > len(words):
         index = len(words)
     current = words[index] if index < len(words) else ""
-    command, rest = _split(words, index)
-    entry = _entry(command)
+    command, rest = _split(words, index, config=config, paths=paths)
+    entry = _entry(command, config=config, paths=paths)
     flag = _open_flag(entry, rest)
     if flag is not None:
         return _flag_values(flag, current, config, paths)
@@ -184,7 +184,7 @@ def complete(
         return []
     found: List[str] = []
     if not _positionals(entry, rest):
-        found.extend(_next_words(command))
+        found.extend(_next_words(command, config=config, paths=paths))
     slot = _open_positional(entry, rest)
     if slot is not None:
         if slot.get("choices"):
@@ -196,18 +196,47 @@ def complete(
     return _filter(found, current)
 
 
-def _schema() -> List[Dict[str, Any]]:
+def _audience_visible(audience: str, config: Optional[Mapping[str, Any]], paths: Any) -> bool:
+    if audience != "ccm":
+        return True
+    from spa.providers.ccm import audience_visible
+
+    return audience_visible(config=config, paths=paths)
+
+
+def _schema(
+    config: Optional[Mapping[str, Any]] = None,
+    paths: Any = None,
+    *,
+    include_hidden: bool = False,
+) -> List[Dict[str, Any]]:
     from spa.agent import COMMAND_SCHEMA
 
-    return list(COMMAND_SCHEMA.get("commands") or [])
+    rows = list(COMMAND_SCHEMA.get("commands") or [])
+    if include_hidden:
+        return rows
+    visible = []
+    for row in rows:
+        audience = str(row.get("audience") or "")
+        if audience and not _audience_visible(audience, config, paths):
+            continue
+        visible.append(row)
+    return visible
 
 
-def _by_name() -> Dict[str, Dict[str, Any]]:
-    return {str(row.get("name") or ""): row for row in _schema()}
+def _by_name(
+    config: Optional[Mapping[str, Any]] = None,
+    paths: Any = None,
+) -> Dict[str, Dict[str, Any]]:
+    return {str(row.get("name") or ""): row for row in _schema(config, paths)}
 
 
-def _entry(name: str) -> Dict[str, Any]:
-    rows = _by_name()
+def _entry(
+    name: str,
+    config: Optional[Mapping[str, Any]] = None,
+    paths: Any = None,
+) -> Dict[str, Any]:
+    rows = _by_name(config, paths)
     if name == "init":
         return _merged(rows.get("init") or {"name": "init"}, rows.get("environment init") or {})
     if name == "shell":
@@ -246,9 +275,14 @@ def _canonical(parts: Sequence[str], token: str) -> str:
     return mapped
 
 
-def _extends(parts: Sequence[str], token: str) -> bool:
+def _extends(
+    parts: Sequence[str],
+    token: str,
+    config: Optional[Mapping[str, Any]] = None,
+    paths: Any = None,
+) -> bool:
     prefix = " ".join([*parts, token])
-    for name in _by_name():
+    for name in _by_name(config, paths):
         if name == prefix or name.startswith(prefix + " "):
             return True
     return False
@@ -263,7 +297,12 @@ def _global_kind(token: str) -> str:
     return ""
 
 
-def _split(words: Sequence[str], index: int) -> Tuple[str, List[str]]:
+def _split(
+    words: Sequence[str],
+    index: int,
+    config: Optional[Mapping[str, Any]] = None,
+    paths: Any = None,
+) -> Tuple[str, List[str]]:
     start = 1 if words and _is_spa(words[0]) and index > 0 else 0
     parts: List[str] = []
     i = start
@@ -281,15 +320,16 @@ def _split(words: Sequence[str], index: int) -> Tuple[str, List[str]]:
         if token.startswith("-"):
             break
         canon = _canonical(parts, token)
-        if _extends(parts, canon):
+        if _extends(parts, canon, config=config, paths=paths):
             parts.append(canon)
             i += 1
             continue
         break
     name = ""
+    known = _by_name(config, paths)
     for length in range(len(parts), 0, -1):
         candidate = " ".join(parts[:length])
-        if candidate in _by_name():
+        if candidate in known:
             name = candidate
             break
     return name, list(words[i:index])
@@ -406,10 +446,14 @@ def _flag_values(
     return []
 
 
-def _next_words(command: str) -> List[str]:
+def _next_words(
+    command: str,
+    config: Optional[Mapping[str, Any]] = None,
+    paths: Any = None,
+) -> List[str]:
     prefix = command + " " if command else ""
     found = []
-    for name in _by_name():
+    for name in _by_name(config, paths):
         if prefix and not name.startswith(prefix):
             continue
         rest = name[len(prefix):]
