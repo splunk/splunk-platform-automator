@@ -11,6 +11,7 @@ from typing import Any, Dict, Mapping, Optional
 from spa.hosts import allowed_role_names
 from spa.usage import (
     APP_ID_HELP,
+    DOCTOR_PROVIDER_HELP,
     INIT_PROVIDER_HELP,
     PROVIDER_HELP,
     SELECTOR_HELP,
@@ -455,7 +456,19 @@ COMMAND_SCHEMA = {
             ],
             "example": "spa validate --splunk-config aws",
         },
-        {"name": "doctor", "summary": "Host prerequisite checks"},
+        {
+            "name": "doctor",
+            "summary": "Host prerequisite checks",
+            "flags": [
+                {
+                    "long": "--provider",
+                    "help": DOCTOR_PROVIDER_HELP,
+                    "takes_value": True,
+                    "completes_from": "providers",
+                },
+                {"long": "--strict", "help": "Treat optional-tool warnings as failures", "takes_value": False},
+            ],
+        },
         {
             "name": "skills",
             "summary": "Install or remove SPA agent skills from $SPA_HOME/skills/spa/ into user IDE directories",

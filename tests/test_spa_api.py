@@ -30,7 +30,7 @@ SESSION_API_PARAMETERS = {
     "catalog": ("extra_dir",),
     "describe_playbook": ("name", "extra_dir"),
     "validate": ("config", "check_licenses", "splunk_config", "agent"),
-    "doctor": ("spa_home", "env_dir", "aws", "virtualbox", "strict"),
+    "doctor": ("spa_home", "env_dir", "provider", "strict"),
     "skills": ("action", "platform", "name", "all_packages", "confirm", "agent"),
     "venv": ("action", "environment", "python", "no_install", "confirm", "agent"),
     "init": (

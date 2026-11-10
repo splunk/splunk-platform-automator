@@ -1,5 +1,6 @@
 """Tests for spa doctor host prerequisite checks."""
 
+import json
 import os
 import shutil
 import sys
@@ -42,7 +43,7 @@ def test_doctor_ok_when_spa_comes_from_spa_home():
 def test_doctor_aws_strict_fails_without_terraform():
     env = spa_env()
     env["PATH"] = "/usr/bin:/bin"
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT), "--aws"], env=env)
+    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT), "--provider", "aws"], env=env)
     assert result.returncode != 0
     assert "terraform" in (result.stdout + result.stderr).lower()
 
@@ -369,3 +370,98 @@ def test_doctor_missing_vagrant_and_virtualbox_both_instruct(tmp_path, monkeypat
     assert "hashicorp-vagrant" in by_id["vagrant"]["fix"]
     assert by_id["virtualbox"]["level"] == "error"
     assert "cask virtualbox" in by_id["virtualbox"]["fix"]
+
+
+def test_doctor_ccm_flag_fails_when_token_not_set(monkeypatch):
+    monkeypatch.delenv("CCM_TOKEN", raising=False)
+    from spa import doctor as doctor_mod
+
+    result = doctor_mod.collect_checks(spa_home=str(PROJECT_ROOT), provider=["ccm"])
+    by_id = {row["id"]: row for row in result.data["checks"]}
+    assert by_id["ccm_token"]["level"] == "error"
+    assert by_id["ccm_token"]["message"] == "CCM_TOKEN: not set"
+    assert result.ok is False
+    assert "ccm_api" not in by_id
+
+
+def test_doctor_ccm_reports_token_set_and_api_reachable(monkeypatch):
+    monkeypatch.setenv("CCM_TOKEN", "test-ccm-pat-value")
+    from spa import doctor as doctor_mod
+    from spa.providers import ccm as ccm_mod
+
+    monkeypatch.setattr(ccm_mod, "ping", lambda client=None: None)
+    result = doctor_mod.collect_checks(spa_home=str(PROJECT_ROOT), provider=["ccm"])
+    by_id = {row["id"]: row for row in result.data["checks"]}
+    assert by_id["ccm_token"]["level"] == "ok"
+    assert by_id["ccm_token"]["message"] == "CCM_TOKEN: set"
+    assert by_id["ccm_api"]["level"] == "ok"
+    assert "reachable" in by_id["ccm_api"]["message"].lower()
+    blob = json.dumps(result.data)
+    assert "test-ccm-pat-value" not in blob
+
+
+def test_doctor_ccm_api_failure_does_not_print_token(monkeypatch):
+    from spa.providers.ccm import CcmError
+
+    monkeypatch.setenv("CCM_TOKEN", "test-ccm-pat-value")
+    from spa import doctor as doctor_mod
+    from spa.providers import ccm as ccm_mod
+
+    def _boom(client=None):
+        raise CcmError("CCM API returned HTTP 401")
+
+    monkeypatch.setattr(ccm_mod, "ping", _boom)
+    result = doctor_mod.collect_checks(spa_home=str(PROJECT_ROOT), provider=["ccm"])
+    by_id = {row["id"]: row for row in result.data["checks"]}
+    assert by_id["ccm_token"]["message"] == "CCM_TOKEN: set"
+    assert by_id["ccm_api"]["level"] == "error"
+    assert "HTTP 401" in by_id["ccm_api"]["message"]
+    blob = json.dumps(result.data)
+    assert "test-ccm-pat-value" not in blob
+    assert result.ok is False
+
+
+def test_doctor_ccm_env_checks_token_without_flag(tmp_path, monkeypatch):
+    monkeypatch.delenv("CCM_TOKEN", raising=False)
+    dest = tmp_path / "env"
+    run_spa_init(["--example", "single_node", "--provider", "ccm", "--skip-doctor", str(dest)])
+    from spa import doctor as doctor_mod
+
+    result = doctor_mod.collect_checks(spa_home=str(PROJECT_ROOT), env_dir=str(dest))
+    by_id = {row["id"]: row for row in result.data["checks"]}
+    assert "provider tools checked for: ccm" in by_id["provider"]["message"]
+    assert by_id["ccm_token"]["message"] == "CCM_TOKEN: not set"
+    assert by_id["ccm_token"]["level"] == "error"
+
+
+def test_doctor_ccm_cli_flag_reports_token_not_set():
+    env = spa_env()
+    env.pop("CCM_TOKEN", None)
+    result = run_spa(
+        ["doctor", "--spa-home", str(PROJECT_ROOT), "--provider", "ccm"], env=env
+    )
+    out = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "CCM_TOKEN: not set" in out
+    assert "CCM_TOKEN: set" not in out
+
+
+def test_doctor_provider_flag_is_repeatable(monkeypatch):
+    monkeypatch.delenv("CCM_TOKEN", raising=False)
+    from spa import doctor as doctor_mod
+
+    result = doctor_mod.collect_checks(
+        spa_home=str(PROJECT_ROOT), provider=["aws", "ccm"]
+    )
+    by_id = {row["id"]: row for row in result.data["checks"]}
+    assert "terraform.aws" in by_id["provider"]["message"]
+    assert "ccm" in by_id["provider"]["message"]
+    assert by_id["ccm_token"]["message"] == "CCM_TOKEN: not set"
+
+
+def test_doctor_unknown_provider_names_legal_values():
+    result = run_spa(["--no-agent", "doctor", "--provider", "gcp"])
+    assert result.returncode == 2, result.stderr
+    assert "Unknown provider: gcp" in result.stderr
+    assert "spa doctor --provider ccm" in result.stderr
+    assert result.stdout.strip() == ""

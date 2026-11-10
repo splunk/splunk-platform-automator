@@ -428,6 +428,11 @@ spa validate --splunk-config aws
 
 Host prerequisite checks
 
+| Flag | Description |
+| --- | --- |
+| `--provider` | aws, virtualbox, external, or ccm. Repeatable. Example: spa doctor --provider ccm |
+| `--strict` | Treat optional-tool warnings as failures |
+
 ## `skills`
 
 Install or remove SPA agent skills from $SPA_HOME/skills/spa/ into user IDE directories

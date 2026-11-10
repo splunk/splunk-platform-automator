@@ -28,6 +28,7 @@ from spa.executil import (
 from spa.paths import env_dir_required_error, resolve_spa_paths
 from spa.usage import (
     APP_ID_HELP,
+    DOCTOR_PROVIDER_HELP,
     MISSING_OPERAND,
     INIT_PROVIDER_HELP,
     PROVIDER_HELP,
@@ -35,6 +36,7 @@ from spa.usage import (
     SET_PATH_HELP,
     TOPOLOGY_HELP,
     UNSET_PATH_HELP,
+    unknown_doctor_provider,
 )
 from spa.skills import supported_platform_list
 
@@ -372,6 +374,17 @@ def _retired_aws_shell_flag(head: Sequence[str]) -> Optional[str]:
     return None
 
 
+def _retired_doctor_provider_flag(head: Sequence[str]) -> Optional[str]:
+    """Rejection for removed spa doctor --aws / --virtualbox / --ccm."""
+    tokens = _positional_tokens(head)
+    if not tokens or tokens[0] not in {"doctor", "doc"}:
+        return None
+    for flag, message in _RETIRED_DOCTOR_PROVIDER.items():
+        if flag in head:
+            return message
+    return None
+
+
 def _print_run_usage() -> None:
     print("usage: spa run [-h] [--dir DIR] [--hosts NAME] [--apps-playbook STEM] [--ansible-output] [-v] [-y] [NAME]")
     print()
@@ -663,6 +676,11 @@ _RETIRED_AWS_PARENT = {
     "--describe-ami": "Describing an AMI is: spa aws describe-ami --ami-id AMI",
     "--validate": "Validating selections is: spa aws validate",
     "--survey": "Surveying a region is: spa aws survey",
+}
+_RETIRED_DOCTOR_PROVIDER = {
+    "--aws": "Checking AWS prerequisites is: spa doctor --provider aws",
+    "--virtualbox": "Checking VirtualBox prerequisites is: spa doctor --provider virtualbox",
+    "--ccm": "Checking CCM prerequisites is: spa doctor --provider ccm",
 }
 
 CONFIG_NEEDS_ACTION = (
@@ -1343,7 +1361,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 def _run(argv: Sequence[str]) -> int:
     argv = _expand_hidden_aliases(argv)
     head, extra = _split_passthrough(argv)
-    retired = _retired_catalog_flag(head) or _retired_aws_shell_flag(head)
+    retired = (
+        _retired_catalog_flag(head)
+        or _retired_aws_shell_flag(head)
+        or _retired_doctor_provider_flag(head)
+    )
     if retired:
         return _reject(
             retired,
@@ -2135,8 +2157,12 @@ def _run(argv: Sequence[str]) -> int:
 
     p_doc = _add_command(sub, "doctor", aliases=["doc"], help="Host prerequisite checks")
     p_doc.add_argument("--spa-home", metavar="DIR", help="Framework directory to inspect")
-    p_doc.add_argument("--aws", action="store_true", help="Check AWS prerequisites")
-    p_doc.add_argument("--virtualbox", action="store_true", help="Check VirtualBox prerequisites")
+    p_doc.add_argument(
+        "--provider",
+        action="append",
+        metavar="NAME",
+        help=DOCTOR_PROVIDER_HELP,
+    )
     p_doc.add_argument("--strict", action="store_true", help="Treat optional-tool warnings as failures")
     _add_env_selector(p_doc)
 
@@ -3168,11 +3194,19 @@ def _run(argv: Sequence[str]) -> int:
     if args.command == "doctor":
         from spa.doctor import format_doctor_text
 
+        requested = list(getattr(args, "provider", None) or [])
+        from spa.registry import PROVIDER_ALIASES
+
+        names = []
+        for raw in requested:
+            key = (raw or "").strip().lower()
+            if key not in PROVIDER_ALIASES:
+                return _reject(unknown_doctor_provider(raw), as_agent)
+            names.append(PROVIDER_ALIASES[key])
         result = session.doctor(
             spa_home=args.spa_home,
             env_dir=_doctor_env_dir(env_selector, args.start_dir),
-            aws=args.aws,
-            virtualbox=args.virtualbox,
+            provider=names,
             strict=args.strict,
         )
         want_json = as_agent or bool(getattr(args, "json", False))

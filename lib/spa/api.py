@@ -124,8 +124,7 @@ class SpaSession(Protocol):
         self,
         spa_home: Optional[str] = None,
         env_dir: Optional[str] = None,
-        aws: bool = False,
-        virtualbox: bool = False,
+        provider: Optional[Sequence[str]] = None,
         strict: bool = False,
     ) -> CommandResult: ...
 
@@ -1206,17 +1205,25 @@ class LocalSpaSession:
         self,
         spa_home: Optional[str] = None,
         env_dir: Optional[str] = None,
-        aws: bool = False,
-        virtualbox: bool = False,
+        provider: Optional[Sequence[str]] = None,
         strict: bool = False,
     ) -> CommandResult:
         from spa.doctor import collect_checks
+        from spa.registry import PROVIDER_ALIASES
+        from spa.usage import unknown_doctor_provider
 
+        requested: List[str] = []
+        for raw in provider or ():
+            key = (raw or "").strip().lower()
+            if key not in PROVIDER_ALIASES:
+                return CommandResult(
+                    ok=False, error=unknown_doctor_provider(raw), code=2
+                )
+            requested.append(PROVIDER_ALIASES[key])
         return collect_checks(
             spa_home=spa_home,
             env_dir=env_dir,
-            aws=aws,
-            virtualbox=virtualbox,
+            provider=requested,
             strict=strict,
         )
 

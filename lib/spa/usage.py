@@ -20,6 +20,10 @@ INIT_PROVIDER_HELP = (
     "aws, virtualbox, external, or ccm. Required unless a default is saved "
     "(spa environment set --provider NAME)"
 )
+DOCTOR_PROVIDER_HELP = (
+    "aws, virtualbox, external, or ccm. Repeatable. "
+    "Example: spa doctor --provider ccm"
+)
 SET_PATH_HELP = (
     "A config path. Find one: spa config search QUERY. "
     "Then read it: spa config explain PATH. "
@@ -62,3 +66,7 @@ def unknown_topology(name: str) -> str:
 
 def unknown_provider(name: str) -> str:
     return "Unknown provider: %s\n%s" % (name, PROVIDER_HELP)
+
+
+def unknown_doctor_provider(name: str) -> str:
+    return "Unknown provider: %s\n%s" % (name, DOCTOR_PROVIDER_HELP)

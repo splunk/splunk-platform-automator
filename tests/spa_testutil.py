@@ -125,6 +125,8 @@ def spa_env(extra: Optional[Mapping[str, str]] = None) -> dict:
     env = os.environ.copy()
     for name in (*AGENT_ENV_VARS, *INHERITED_PATH_VARS):
         env.pop(name, None)
+    # Tests mock CCM HTTP. Do not inherit an operator PAT into subprocess spa.
+    env.pop("CCM_TOKEN", None)
     env["PYTHONPATH"] = str(LIB) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     # Never let spa write the operator's ~/.config/spa (paths.yml, environments.yml).
     env.setdefault("XDG_CONFIG_HOME", _throwaway_xdg_config_home())

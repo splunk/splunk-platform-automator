@@ -147,6 +147,13 @@ def test_shell_list_flag_is_gone():
         (["aws", "--survey"], "Surveying a region is: spa aws survey"),
         (["shell", "-c", "local.txt", "idx1:/tmp/"], "Copying files is: spa hosts copy SRC DST"),
         (["shell", "--copy", "local.txt", "idx1:/tmp/"], "Copying files is: spa hosts copy SRC DST"),
+        (["doctor", "--aws"], "Checking AWS prerequisites is: spa doctor --provider aws"),
+        (
+            ["doctor", "--virtualbox"],
+            "Checking VirtualBox prerequisites is: spa doctor --provider virtualbox",
+        ),
+        (["doctor", "--ccm"], "Checking CCM prerequisites is: spa doctor --provider ccm"),
+        (["doc", "--ccm"], "Checking CCM prerequisites is: spa doctor --provider ccm"),
     ],
 )
 def test_retired_aws_and_shell_flags_name_the_legal_command(argv, message):

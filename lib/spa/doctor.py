@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 
 from spa.api import CommandResult
 from spa.executil import SPA_VENV_MODULES, resolve_venv_dir, venv_has_requirements
@@ -215,14 +215,16 @@ def collect_checks(
     *,
     spa_home: Optional[str] = None,
     env_dir: Optional[str] = None,
-    aws: bool = False,
-    virtualbox: bool = False,
+    provider: Optional[Sequence[str]] = None,
     strict: bool = False,
 ) -> CommandResult:
     spa_home_path = Path(spa_home).resolve() if spa_home else resolve_spa_paths().spa_home
     env_path = Path(env_dir).resolve() if env_dir else None
-    require_aws = aws
-    require_vbox = virtualbox
+    requested = {name for name in (provider or ()) if name}
+    require_aws = "aws" in requested
+    require_vbox = "virtualbox" in requested
+    require_ccm = "ccm" in requested
+    require_external = "external" in requested
 
     # Without --env, check the env the caller is standing in (SPA_ENV_DIR,
     # .spa.yml, cwd) so provider tools are checked for that config. Doctor
@@ -254,9 +256,8 @@ def collect_checks(
         providers = _config_providers(cfg.read_text(encoding="utf-8", errors="replace"))
         require_aws = require_aws or "aws" in providers
         require_vbox = require_vbox or "virtualbox" in providers
-        require_external = "external" in providers
-    else:
-        require_external = False
+        require_ccm = require_ccm or "ccm" in providers
+        require_external = require_external or "external" in providers
 
     ok: List[Dict[str, str]] = []
     warns: List[Dict[str, str]] = []
@@ -393,10 +394,14 @@ def collect_checks(
 
     selected = [
         name
-        for name, wanted in (("terraform.aws", require_aws), ("virtualbox", require_vbox))
+        for name, wanted in (
+            ("terraform.aws", require_aws),
+            ("virtualbox", require_vbox),
+            ("ccm", require_ccm),
+        )
         if wanted
     ]
-    if require_external and not require_aws and not require_vbox:
+    if require_external and not require_aws and not require_vbox and not require_ccm:
         rec(
             "ok",
             "provider",
@@ -407,7 +412,7 @@ def collect_checks(
             "ok",
             "provider",
             "provider tools checked for: %s (%s)"
-            % (", ".join(selected), cfg if cfg else "--aws/--virtualbox"),
+            % (", ".join(selected), cfg if cfg else "--provider"),
         )
     elif cfg:
         rec(
@@ -425,6 +430,30 @@ def collect_checks(
                 "terraform",
                 "terraform required for terraform.aws (not on PATH)",
                 _terraform_install_hint(),
+            )
+
+    if require_ccm:
+        from spa.providers import ccm as ccm_mod
+
+        state = ccm_mod.token_state()
+        if state == "set":
+            rec("ok", "ccm_token", "%s: set" % ccm_mod.TOKEN_ENV)
+            try:
+                ccm_mod.ping()
+                rec("ok", "ccm_api", "CCM API reachable")
+            except ccm_mod.CcmError as exc:
+                rec(
+                    "error",
+                    "ccm_api",
+                    str(exc),
+                    "Check CCM_TOKEN and https://api.ccm.splunkits.io",
+                )
+        else:
+            rec(
+                "error",
+                "ccm_token",
+                "%s: not set" % ccm_mod.TOKEN_ENV,
+                "Set CCM_TOKEN to a CCM personal access token (mint in the CCM UI)",
             )
 
     if require_external:
@@ -581,16 +610,14 @@ def run(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Check host prerequisites for SPA")
     parser.add_argument("--spa-home")
     parser.add_argument("--env", "--lab", dest="env_dir", help="Env dir")
-    parser.add_argument("--aws", action="store_true")
-    parser.add_argument("--virtualbox", action="store_true")
+    parser.add_argument("--provider", action="append", metavar="NAME")
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     result = collect_checks(
         spa_home=args.spa_home,
         env_dir=args.env_dir,
-        aws=args.aws,
-        virtualbox=args.virtualbox,
+        provider=args.provider,
         strict=args.strict,
     )
     if args.json:
