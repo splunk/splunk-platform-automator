@@ -19,9 +19,9 @@ paths:
   - "examples/catalog/features.yml"
 ---
 
-# spa-create-config — splunk_config.yml (AWS Linux)
+# spa-create-config — splunk_config.yml
 
-Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
+Interactive workflow for `config/splunk_config.yml` on AWS, VirtualBox, external hosts, or CCM only when CCM is in play. Linux only.
 
 ## Hard rule: no hand edits
 
@@ -29,10 +29,10 @@ Interactive workflow for `config/splunk_config.yml` on AWS. Linux only.
 
 ## When to Use
 
-- Creating or updating `config/splunk_config.yml` for AWS Terraform provisioning
+- Creating or updating `config/splunk_config.yml` for AWS Terraform provisioning, or for CCM only when CCM is in play
 - **Planning a new architecture** before writing YAML (plan mode — discuss until approved)
 - Designing lab topology (IDXC, multisite, SHC, forwarders)
-- Choosing OS, AMI, `ssh_username`, and `terraform.aws` settings
+- Choosing OS, AMI, `ssh_username`, and `terraform.aws` settings (CCM: live survey, `ssh_username` is `splunker`)
 - Basic app deployment blocks before first deploy
 
 ## When NOT to Use
@@ -54,7 +54,7 @@ Use this skill for a new environment or a change to an existing config. Load [/s
 
 The design phases exist so the first `--example` template is not accepted blindly: intent (1), requirements (2), topology (3), sizing (4), OS (5), AWS (6), counts and placement (7, 8), apps and licenses (9, 10), plan (11), write (12), validate (13), handoff (14).
 
-**Provider:** `spa init` requires `--provider aws|virtualbox|external` unless the operator has saved a default with `spa environment set --provider NAME`. Ask the operator which provider to use before any init, then record it with `--aws` in the header when it is AWS. See [config-header-best-practices.md](references/config-header-best-practices.md).
+**Provider:** `spa init` requires `--provider aws|virtualbox|external` unless the operator has saved a default with `spa environment set --provider NAME`. Ask the operator which provider to use before any init (AskQuestion options: aws, virtualbox, and external), then record it with `--aws` in the header when it is AWS. Employee-only CCM is hidden unless it is available. Report `CCM_TOKEN` as set / not set (never the value). Do not AskQuestion CCM unless `CCM_TOKEN` is set, the env has a root `ccm:` block, or the operator already named CCM. Do not probe the network to decide. When CCM is in play: compose with `--provider ccm`. `spa config provider ccm` writes the YAML block; `spa provider ccm` is discovery (`survey` and the list commands). See [config-header-best-practices.md](references/config-header-best-practices.md).
 
 ## Never edit by hand (mandatory)
     

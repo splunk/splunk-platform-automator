@@ -21,6 +21,7 @@ CANONICAL_DOCS = {
     "apps.md",
     "architecture.md",
     "aws.md",
+    "ccm.md",
     "commands.md",
     "config-editing.md",
     "config-walkthrough.md",
@@ -1171,3 +1172,127 @@ def test_changelog_unreleased_names_schema_version_and_config_version():
     assert "`schema_version`" in unreleased
     assert "`config_version`" in unreleased
     assert "issues/117" in unreleased
+
+
+def test_roadmap_ccm_provider_is_done():
+    text = (PROJECT_ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+    lines = [line for line in text.splitlines() if "issues/146" in line]
+    assert lines, "ROADMAP needs a #146 line"
+    line = lines[0]
+    assert line.startswith("- [x]"), line
+    assert "CCM" in line
+
+
+def test_user_guide_names_employee_only_ccm():
+    """Public one-liners stay aws|virtualbox|external; CCM is an employee-only note."""
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    intro = guide.split("## Start here", 1)[0]
+    assert "Corporate Cloud Manager" not in intro
+    assert "employee-only" in guide.lower() or "employee only" in guide.lower()
+    assert "spa provider ccm survey" in guide
+    assert "spa config provider ccm" in guide
+    assert "spa provider ccm" in guide
+    assert "CCM_TOKEN" in guide
+    assert "set / not set" in guide or "set/not set" in guide
+    assert "ccm:" in guide
+    assert "(ccm.md)" in guide
+    blob = guide.lower()
+    assert "ubuntu_22.04" not in blob
+    assert "rhel_9" not in blob
+
+
+def test_ccm_operator_page_matches_aws_pattern():
+    page = (_docs_dir() / "ccm.md").read_text(encoding="utf-8")
+    assert "employee-only" in page.lower()
+    assert "spa config provider ccm" in page
+    assert "spa provider ccm survey" in page
+    assert "spa provider ccm" in page
+    assert "CCM_TOKEN" in page
+    assert "lookup('env', 'CCM_TOKEN')" in page
+    assert "set / not set" in page or "set/not set" in page
+    assert "splunker" in page
+    assert "remote-provider" in page
+    assert "-----BEGIN" not in page
+    assert "ubuntu_22.04" not in page.lower()
+    assert "rhel_9" not in page.lower()
+
+
+def test_create_config_proposes_ccm_remote_provider_and_live_survey():
+    """CCM sizing is live discovery, not a hardcoded catalog; YAML write is config provider."""
+    skill_dir = _create_config_dir()
+    create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
+    architecture = (skill_dir / "references" / "architecture-input.md").read_text(
+        encoding="utf-8"
+    )
+    text = "\n".join((create, phases, architecture))
+    assert "employee-only" in text.lower() or "employee only" in text.lower()
+    assert "spa provider ccm survey" in text
+    assert "spa config provider ccm" in text
+    assert "spa provider ccm" in text
+    assert "remote-provider" in architecture
+    assert "ccm" in architecture.lower()
+    assert "spa provider ccm" in phases
+    assert "CCM_TOKEN" in text
+    assert "set / not set" in text or "set/not set" in text
+    assert "-----BEGIN" not in text
+    for catalog_id in ("ubuntu_22.04", "rhel_9"):
+        assert catalog_id not in text, catalog_id
+
+
+CCM_ASK_GATE = (
+    "Do not AskQuestion CCM unless `CCM_TOKEN` is set, the env has a root `ccm:` "
+    "block, or the operator already named CCM."
+)
+
+
+def test_skills_do_not_ask_ccm_unless_available():
+    """Public provider AskQuestion stays aws/virtualbox/external. CCM is gated."""
+    skill_dir = _create_config_dir()
+    create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
+    secrets = (skill_dir / "references" / "secrets-handling.md").read_text(
+        encoding="utf-8"
+    )
+    design = (skill_dir / "assets" / "design-summary-template.md").read_text(
+        encoding="utf-8"
+    )
+    spa = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert CCM_ASK_GATE in create
+    assert CCM_ASK_GATE in spa
+    assert "aws, virtualbox, and external" in create
+    assert "splunker" in phases
+    assert "operating_system" in phases
+    assert "splunker" in design
+    assert "CCM_TOKEN" in design
+    assert "CCM_TOKEN" in secrets
+    assert "echo $CCM_TOKEN" in secrets
+    assert "only when ccm is in play" in (create + "\n" + phases).lower()
+
+
+def test_readme_secrets_and_contributing_name_ccm():
+    """Remaining slice-6 surfaces: README note, secrets CCM_TOKEN, catalog layout id."""
+    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    intro = readme.split("\n## ", 1)[0]
+    assert "Corporate Cloud Manager" not in intro
+    start = readme.split("## Start here", 1)[1].split("\n## ", 1)[0]
+    assert "employee-only" in start.lower() or "employee only" in start.lower()
+    assert "--provider ccm" in start
+    assert "docs/ccm.md" in readme
+    contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
+    assert "provider.ccm" in contributing
+    secrets = (_docs_dir() / "secrets.md").read_text(encoding="utf-8")
+    assert "CCM_TOKEN" in secrets
+    assert "lookup('env', 'CCM_TOKEN')" in secrets
+    assert "set / not set" in secrets or "set/not set" in secrets or "**set** or **not set**" in secrets
+
+
+def test_changelog_unreleased_finishes_ccm_docs():
+    text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
+    assert "issues/146" in unreleased
+    assert "user guide" in unreleased.lower() or "user-guide" in unreleased.lower()
+    assert "spa config provider ccm" in unreleased
+    assert "spa provider ccm" in unreleased

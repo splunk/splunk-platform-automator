@@ -11,6 +11,8 @@ splunk_passwords:
 
 Use CI or operating-system secret storage to set the variable. `spa validate` resolves the value without writing it back to config.
 
+`CCM_TOKEN` is a process environment variable for employee-only Corporate Cloud Manager, not a `splunk_config.yml` key. SPA reports it as **set** or **not set**. Schema and comments may say `lookup('env', 'CCM_TOKEN')`; do not add a `CCM_TOKEN:` YAML key. Never echo the value. Operator page: [CCM](ccm.md).
+
 ## Ansible Vault
 
 Generate an encrypted string with `ansible-vault encrypt_string`, then quote the entire multiline value in YAML. The quote is required because SPA's inventory loader first parses standard YAML; a raw `!vault` tag is not a registered YAML constructor at that stage.

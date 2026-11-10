@@ -109,7 +109,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [x] VirtualBox spa provider (`spa provision` / `destroy` / suspend-resume via Vagrant) — [#56](https://github.com/splunk/splunk-platform-automator/issues/56)
 - [ ] Shared network access groups (provider-agnostic CLI; AWS first; SPA_HOME state; env destroy does not delete) — [#58](https://github.com/splunk/splunk-platform-automator/issues/58)
 - [x] External / BYO SSH hosts (register only; mixed with managed; never terminate the real machine) — [#57](https://github.com/splunk/splunk-platform-automator/issues/57).
-- [ ] CCM provider (Corporate Cloud Manager EC2 via REST, not Terraform) — [#146](https://github.com/splunk/splunk-platform-automator/issues/146)
+- [x] CCM provider (Corporate Cloud Manager EC2 via REST, not Terraform) — [#146](https://github.com/splunk/splunk-platform-automator/issues/146). Operator page: [docs/ccm.md](docs/ccm.md)
 - [ ] Splunk Operator for Kubernetes: `splunk_config.yml` → Operator CRs (IndexerCluster, SearchHeadCluster, ClusterManager, LicenseManager, MonitoringConsole, Standalone) plus namespace, storage, and image settings
 - [ ] Windows Universal Forwarder on AWS (AMI + WinRM); VirtualBox UF role exists but needs a supported SPA workflow (background in [docs/contributing.md](docs/contributing.md#windows-box-maintenance))
 

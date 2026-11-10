@@ -85,6 +85,23 @@ If `AWS_PROFILE` is set, report the profile name; still prefer `spa --agent aws 
 
 Report summaries without values — e.g. *AWS: profile `lab`; static key env vars not set; `spa aws check-auth` ok*.
 
+## CCM token (only when CCM is in play)
+
+| Variable | Show in chat? | Notes |
+|----------|---------------|-------|
+| `CCM_TOKEN` | **Never** the value | Report **set** or **not set** only. Not a config key. |
+
+**Forbidden**
+
+- `echo $CCM_TOKEN`
+- `printenv CCM_TOKEN` / `env | grep CCM`
+
+**Safe presence check**
+
+```bash
+if [ -n "${CCM_TOKEN:-}" ]; then echo "CCM_TOKEN: set"; else echo "CCM_TOKEN: not set"; fi
+```
+
 ## YAML snippets in chat
 
 Use lookup templates from examples — never substitute live env values into snippets or architecture plans.

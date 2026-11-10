@@ -18,6 +18,8 @@ spa provision --yes && spa deploy --yes
 
 Use `--provider virtualbox` with a topology such as `single_node` for local VMs. Before production, review the deployment-intent work tracked in [ROADMAP #80](../ROADMAP.md); default examples are intentionally permissive.
 
+Splunk staff with CCM access (employee-only) can compose with `--provider ccm`. Public one-liners stay `aws`, `virtualbox`, or `external`; `spa init list` and `spa config explain provider.ccm` name the rest. See [CCM (employee-only)](#ccm-employee-only).
+
 ## Understand the paths
 
 ```mermaid
@@ -110,6 +112,18 @@ When a setting uses `{{ lookup('env', 'NAME') }}`, export the variable to a non-
 
 The Pydantic schema enforced by `spa validate` owns types and allowed values. The feature catalog owns decision guidance and example snippets; editing commands never apply those snippets. Browse every key in [config.md](config.md) (`spa --no-agent config schema --markdown`). Discover a key with `spa --agent config explain PATH`. `spa --agent config explain PATH` prints the one mutation command for that feature and does not apply it. Author an existing scalar or map with `spa --agent config set PATH VALUE`. Append a new non-app identity, such as a host or cluster, with `spa --agent config add SELECTOR JSON_OBJECT`. Use one `spa --agent config merge --file FILE` transaction for a deliberate multi-setting fragment. Use `spa config topology` and `spa config provider` for layout replacement. App entries stay on `spa apps add`. After every `spa config` or `spa apps` write, inspect `changed` and `ready`: `ok: false` with `ready: false` wrote nothing. Pass `--show-diff` when you need the redacted hunk. Then `spa config get` the identity and confirm `found: true`. Finish with `spa --agent validate` before provision or deploy. Use `spa --agent aws regions list`, `latest-ami`, `instance-types list`, and `survey` for live regions, AMIs, instance types, and network values; use `spa licenses list` and `spa validate --check-licenses` for license selection. See the [configuration editing contract](config-editing.md). For a full clustered ITSI example, follow [Build a clustered ITSI config](config-walkthrough.md).
 
+### CCM (employee-only)
+
+Corporate Cloud Manager is a REST portal over AWS for Splunk staff with CCM access. It is not Terraform. Public labs stay `--provider aws`, `virtualbox`, or `external`.
+
+```bash
+spa init --example TOPOLOGY --provider ccm ENV
+```
+
+`spa config provider ccm` writes the `ccm:` YAML block. `spa provider ccm` is discovery, not that write: size OS, instance type, and disk from `spa provider ccm survey` (or `operating-systems list` / `instance-types list` / `disk-storage list`). Do not hardcode those catalogs.
+
+Auth is `CCM_TOKEN` in the process environment (`lookup('env', 'CCM_TOKEN')`). `spa doctor` reports it as **set / not set** and never prints the token. CCM is remote; after an explicit yes, `spa config merge remote-provider --yes`. Full operator page: [CCM](ccm.md).
+
 Universal-forwarder outputs always go to all indexers today. UF → heavy forwarder (or a single indexer) is not a config knob; see `spa config explain splunk_hosts.splunk_outputs` and [ROADMAP](../ROADMAP.md).
 
 ## Run the lifecycle
@@ -145,7 +159,7 @@ flowchart TD
 | Show native Ansible output during a run | `spa deploy --yes --ansible-output` |
 | Increase Ansible verbosity and show native output | `spa deploy --yes -v` through `-vvvv` |
 
-Provider selection comes from `terraform.aws` or `virtualbox:` in config. Provision, deploy, destroy, suspend, resume, and environment remove wait for a yes in chat. `spa destroy --hosts` does not exist. Do not delete a live host from config and run `spa provision`; the current Terraform flow can terminate it. See [AWS](aws.md) for cloud decisions and [Upgrade](upgrade.md) for the ordered distributed-upgrade workflow.
+Provider selection comes from `terraform.aws`, `virtualbox:`, or `ccm:` in config. Provision, deploy, destroy, suspend, resume, and environment remove wait for a yes in chat. `spa destroy --hosts` does not exist. Do not delete a live host from config and run `spa provision`; the current Terraform flow can terminate it. See [AWS](aws.md) for cloud decisions, [CCM](ccm.md) for Corporate Cloud Manager, and [Upgrade](upgrade.md) for the ordered distributed-upgrade workflow.
 
 Mutating Ansible/Terraform work writes a timestamped JSONL transcript under `$SPA_ENV_DIR/logs/`. On a TTY, humans see **one live line per named group that actually runs** (for example `Deploy  App deployment · Search Head Cluster apps`), with the active host and task while work is running and compact counters when it settles. Rolling upgrade groups settle once per host and include installed and target Splunk versions when reported by the playbook. There is no `[3/10]` index; unused topology simply never appears. `spa run` of every first-party playbook uses the same compact grouping, with play-name fallback for work outside known roles and functions. Failures print immediately. `NO_COLOR` / piped stderr stay uncolored. Agents keep a small JSON envelope on stdout plus `data.log`; they must not ingest the transcript unless you asked to debug a failure. Terraform instance changes (`instance_type`, disk) fold into the provision plan/apply line. On VirtualBox, provisioning shows one line per VM (`Provision  VM idx1`) built from Vagrant's output, and a Vagrant error is printed before the group closes as `failed`.
 
@@ -201,5 +215,6 @@ Use `lookup('env', 'NAME')` or quoted Ansible Vault values; never commit plainte
 - [Install](install.md): install, uninstall, VirtualBox, WSL2
 - [Apps](apps.md): routing and app lifecycle
 - [AWS](aws.md): AWS and Terraform through `spa`
+- [CCM](ccm.md): employee-only Corporate Cloud Manager EC2 through `spa`
 - [Upgrade](upgrade.md) and [Migrate](migrate.md)
 - [Contributing](contributing.md) and [AGENTS.md](../AGENTS.md)
