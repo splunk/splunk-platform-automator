@@ -1694,6 +1694,10 @@ class LocalSpaSession:
                 playbook = "external_%s" % action
             elif provider.name == "aws":
                 playbook = "aws_provision" if action == "provision" else "aws_destroy"
+            elif provider.name == "ccm":
+                playbook = "ccm_provision" if action == "provision" else "ccm_destroy"
+            elif provider.name == "virtualbox":
+                playbook = "vagrant_up" if action == "provision" else "vagrant_destroy"
             else:
                 playbook = "vagrant_up" if action == "provision" else "vagrant_destroy"
             log = self._run_log(

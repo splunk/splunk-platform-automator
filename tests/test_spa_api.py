@@ -352,3 +352,54 @@ def test_session_init_messages(tmp_path, capsys, monkeypatch):
     json.dumps(result.data)
     assert capsys.readouterr().out == ""
     assert (dest / "config" / "splunk_config.yml").is_file()
+
+
+def test_session_ccm_lifecycle_does_not_use_vagrant(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from spa.paths import resolve_spa_paths
+
+    env = tmp_path / "mylab"
+    config_path = env / "config" / "splunk_config.yml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        "ccm: {}\nsplunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+        encoding="utf-8",
+    )
+    (env / "inventory").mkdir()
+    base = resolve_spa_paths(start_dir=PROJECT_ROOT)
+    paths = replace(
+        base,
+        spa_env_dir=env,
+        config_file=config_path,
+        inventory_dir=env / "inventory",
+        roots_differ=True,
+    )
+    session = LocalSpaSession(paths=paths)
+    seen = []
+
+    class FakeCcm:
+        name = "ccm"
+
+        def provision(self, extra, **kwargs):
+            del extra
+            seen.append(kwargs["run_log"].playbook)
+            return {"deployment_id": "dep-9"}
+
+        def destroy(self, extra, **kwargs):
+            del extra
+            seen.append(kwargs["run_log"].playbook)
+            return {"deployment_id": "dep-9"}
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda _paths: FakeCcm())
+    monkeypatch.setattr(session, "_venv_gate", lambda: None)
+    monkeypatch.setattr(session, "_env_gate", lambda: None)
+    monkeypatch.setattr(session, "_env_lookup_gate", lambda: None)
+    monkeypatch.setattr(session, "_schema_stamp_gate", lambda: None)
+
+    provisioned = session.provision(confirm=True)
+    assert provisioned.ok, provisioned.error
+    destroyed = session.destroy(confirm=True)
+    assert destroyed.ok, destroyed.error
+    assert seen == ["ccm_provision", "ccm_destroy"]
+    assert all("vagrant" not in name for name in seen)
