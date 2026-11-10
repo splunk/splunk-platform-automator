@@ -42,7 +42,7 @@ KEEP_HINT = (
     ".vault_pass*",
 )
 
-TOPOLOGY_FORBIDDEN = ("virtualbox", "terraform", "os", "splunk_app_deployment", "aws")
+TOPOLOGY_FORBIDDEN = ("virtualbox", "terraform", "os", "splunk_app_deployment", "aws", "ccm")
 PROVIDER_FORBIDDEN = (
     "splunk_hosts",
     "splunk_idxclusters",
@@ -533,7 +533,7 @@ def format_example_list(data: Dict[str, Any]) -> str:
     lines.append("Providers:")
     for item in data.get("providers") or []:
         lines.append("  %s" % item["id"])
-    lines.append("Compose: spa init --example TOPOLOGY [--provider aws|virtualbox|external] NAME")
+    lines.append("Compose: spa init --example TOPOLOGY [--provider aws|virtualbox|external|ccm] NAME")
     return "\n".join(lines)
 
 
@@ -547,7 +547,7 @@ def _normalize_example_name(name: str) -> str:
 
 
 INIT_PROVIDER_REQUIRED = (
-    "spa init needs --provider: choose aws, virtualbox, or external.\n"
+    "spa init needs --provider: choose aws, virtualbox, external, or ccm.\n"
     "Or save a default once: spa environment set --provider NAME"
 )
 
@@ -910,6 +910,11 @@ def _init_env(
         raise InitError("Source and dest are the same path (%s)." % dest)
     if example_set and migrate_set:
         raise InitError("Use --example or --migrate/--from, not both.")
+    if (provider or "").strip() and migrate_set:
+        raise InitError(
+            "Use --provider with --example, not with --migrate/--from.",
+            code=2,
+        )
     converting = is_old_clone_tree(dest) and not example_set and from_dir is None
     if force:
         prune_incomplete_venv(dest)

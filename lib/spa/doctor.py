@@ -186,7 +186,7 @@ def _vagrant_virtualbox_drivers() -> List[str]:
 
 
 def _config_providers(text: str) -> set:
-    """Providers configured in splunk_config.yml: 'virtualbox' and/or 'aws'.
+    """Providers configured in splunk_config.yml: virtualbox, ccm, external, and/or aws.
 
     Scans top-level keys so a mention in a comment or a nested key does not
     pull in tool checks. Doctor runs before the venv exists, so no PyYAML.
@@ -203,6 +203,8 @@ def _config_providers(text: str) -> set:
                 providers.add("virtualbox")
             elif top == "external":
                 providers.add("external")
+            elif top == "ccm":
+                providers.add("ccm")
             continue
         if top == "terraform" and line.strip().split(":", 1)[0].strip() == "aws":
             providers.add("aws")

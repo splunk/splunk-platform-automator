@@ -921,6 +921,8 @@ class TestLayoutContract:
         roots = [root for _, _, area_roots in CONFIG_AREAS for root in area_roots]
         assert roots[:3] == ["plugin", "schema_version", "config_version"]
         assert roots.index("splunk_shclusters") < roots.index("splunk_defaults")
+        provider_roots = next(area_roots for area_id, _, area_roots in CONFIG_AREAS if area_id == "provider")
+        assert "ccm" in provider_roots
 
     def test_set_schema_version_is_second_root_and_header_stays_leading(self, tmp_path):
         """CFG-LAYOUT-007. plugin first, schema_version second; header comments stay above them."""
@@ -1034,6 +1036,7 @@ splunk_app_deployment:
         """CFG-LAYOUT-002."""
         path = _config(tmp_path)
         assert config_provider(path, PROJECT_ROOT, "provider.aws")["provider"] == "aws"
+        assert config_provider(path, PROJECT_ROOT, "provider.ccm")["provider"] == "ccm"
         assert config_topology(path, PROJECT_ROOT, "topology.c1", validate=False)["topology"] == "cm_2idxc_sh"
 
     def test_all_clustered_topology_examples_use_iter_for_member_ranges(self):

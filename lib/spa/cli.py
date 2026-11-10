@@ -2241,7 +2241,7 @@ def _run(argv: Sequence[str]) -> int:
         "--provider",
         dest="set_provider",
         metavar="NAME",
-        help="Save the default provider for init (aws, virtualbox, or external) in providers.yml, so init does not need --provider",
+        help="Save the default provider for init (aws, virtualbox, external, or ccm) in providers.yml, so init does not need --provider",
     )
     p_env_cleanup = _add_action(
         env_sub,

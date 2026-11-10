@@ -163,6 +163,8 @@ def check_provisioned(paths: SpaPaths) -> ProvisionState:
             return get_provider(paths).provision_state()
     if "virtualbox" in config:
         return get_provider(paths).provision_state()
+    if "ccm" in config:
+        return get_provider(paths).provision_state()
     if "external" in config:
         return get_provider(paths).provision_state()
     return ProvisionState(provider="none", provisioned=True)
@@ -172,6 +174,7 @@ def check_provisioned(paths: SpaPaths) -> ProvisionState:
 PROVIDER_MODULES = {
     "aws": "spa.providers.aws",
     "virtualbox": "spa.providers.virtualbox",
+    "ccm": "spa.providers.ccm",
     "external": "spa.providers.external",
 }
 
@@ -205,6 +208,11 @@ def detect_provider(paths: SpaPaths) -> ProviderSelection:
             % ", ".join(sorted(configured))
         )
     if configured:
+        if "ccm" in config:
+            raise ProviderError(
+                "Multiple providers are configured (ccm, terraform.%s); select exactly one."
+                % configured[0]
+            )
         name = configured[0]
         if name not in PROVIDER_MODULES:
             raise ProviderError(
@@ -213,6 +221,15 @@ def detect_provider(paths: SpaPaths) -> ProviderSelection:
             )
         return ProviderSelection(name=name, config=terraform[name])
 
+    if "ccm" in config and "virtualbox" in config:
+        raise ProviderError(
+            "Multiple providers are configured (ccm, virtualbox); select exactly one."
+        )
+    if "ccm" in config:
+        ccm = config.get("ccm")
+        if ccm is not None and not isinstance(ccm, dict):
+            raise ProviderError("ccm must be a mapping in %s" % paths.config_file)
+        return ProviderSelection(name="ccm", config=ccm or {})
     if "virtualbox" in config:
         vbox = config.get("virtualbox")
         if vbox is not None and not isinstance(vbox, dict):
@@ -225,7 +242,8 @@ def detect_provider(paths: SpaPaths) -> ProviderSelection:
         return ProviderSelection(name="external", config=external or {})
     raise ProviderError(
         "No managed deployment provider found in %s "
-        "(expected terraform.<provider> or virtualbox; implemented: terraform.aws, virtualbox)."
+        "(expected terraform.<provider>, virtualbox, or ccm; "
+        "implemented: terraform.aws, virtualbox, ccm)."
         % paths.config_file
     )
 

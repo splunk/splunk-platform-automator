@@ -129,6 +129,22 @@ os:
 | `virtualbox.synced_folder` | list[object] | optional | Folders mounted from the Ansible controller into the guest. Holds no value itself. |
 | `virtualbox.synced_folder[].source` | string | required | Path on the Ansible controller to mount into the guest. Required. |
 | `virtualbox.synced_folder[].target` | string | required | Path inside the guest where the controller folder is mounted. Required. |
+| `ccm` | object | optional | Splunk Corporate Cloud Manager EC2 settings. Holds no value itself. Auth is lookup('env', 'CCM_TOKEN'), not a config key. |
+| `ccm.business_description` | string | optional | Free-text description next to business_purpose. No default. Omit the key to set no description. |
+| `ccm.business_purpose` | enum | optional; default='DeveloperInstance'; allowed=DeveloperInstance\|SalesOpportunity\|SupportCase | Reason shown in the CCM GUI. |
+| `ccm.disk_storage` | enum | optional; default=50; allowed=50\|100\|200\|250\|500\|1024\|2048 | CCM instance root disk size in GB. One of 50, 100, 200, 250, 500, 1024, or 2048. |
+| `ccm.ebs_storage` | object | optional | Extra attached volumes. Holds no value itself. Omit the key for no extra volumes. |
+| `ccm.ebs_storage.ebs_count` | integer | optional; ge=1; le=3 | Number of extra attached volumes. Minimum 1, maximum 3. No default. Omit ebs_storage for no extra volumes. |
+| `ccm.ebs_storage.ebs_size` | enum | optional; allowed=50\|100\|300 | Size in GB of each extra volume. One of 50, 100, or 300. No default. Omit ebs_storage for no extra volumes. |
+| `ccm.instance_type` | string | optional | CCM instance type. A live CCM catalog value, not an AWS AMI id. No default. Omit the key to set none. |
+| `ccm.key_name` | string | optional | CCM SSH key name (ssh_key_name on create). No default. Omit the key to set none. |
+| `ccm.name` | string | optional; min_length=5; max_length=100; pattern=^[a-zA-Z0-9][\w-]*[a-zA-Z0-9]$ | CCM deployment name. Default is the env directory basename when it matches CCM's 5-100 character pattern. Omit the key to keep that. |
+| `ccm.operating_system` | string | optional | CCM operating system id. A live CCM catalog value, not an AMI id. No default. Omit the key to set none. |
+| `ccm.operation_hours` | enum | optional; default='manual'; allowed=business_hours\|manual | When CCM may stop instances. manual leaves them running; business_hours follows the deployment timezone. |
+| `ccm.ssh_private_key_file` | string | optional | Path on the Ansible controller to the private key for key_name. Default ~/.ssh/CCM-Key.pem. Omit the key to keep that. |
+| `ccm.ssh_username` | string | optional; default='ec2-user' | SSH login user for the CCM image. Use ubuntu when the image requires it. |
+| `ccm.timezone` | string | optional; default='UTC' | IANA time zone on the CCM deployment. |
+| `ccm.ttl_days` | integer | optional; default=7; ge=1; le=30 | Days until CCM terminates the whole deployment. Minimum 1, maximum 30. |
 | `external` | ExternalConfig | optional | Bring-your-own SSH provider. Holds no value itself. No default. Set this when no terraform.aws or virtualbox block is present. |
 
 ### Snippets

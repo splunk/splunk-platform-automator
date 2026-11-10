@@ -11,6 +11,12 @@ from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
 
+def test_topology_forbidden_includes_ccm():
+    from spa.init import TOPOLOGY_FORBIDDEN
+
+    assert "ccm" in TOPOLOGY_FORBIDDEN
+
+
 def test_explicit_aws_provider_is_not_described_as_virtualbox():
     from spa.init import resolve_example_pair
 
@@ -103,7 +109,8 @@ def test_init_help():
 def test_init_provider_help_names_external():
     result = run_spa(["init", "--help"])
     assert result.returncode == 0
-    assert "aws, virtualbox, or external" in result.stdout
+    assert "ccm" in result.stdout
+    assert "aws, virtualbox, external, or ccm" in result.stdout
     assert "aws or virtualbox" not in result.stdout
 
 
@@ -117,8 +124,27 @@ def test_init_list_examples():
     assert "topology.d11  2idx_sh_es" in out
     assert "virtualbox" in out
     assert "aws" in out
+    assert "ccm" in out
     assert "cm_2idxc_sh_aws.yml" not in out
     assert "--provider" in out
+
+
+def test_init_provider_ccm_writes_root_ccm_block(tmp_path):
+    dest = tmp_path / "lab"
+    result = run_spa_init(["--example", "single_node", "--provider", "ccm", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
+    assert "ccm" in cfg
+    assert cfg["ccm"]["instance_type"] == "t3a.medium"
+    assert cfg["ccm"]["disk_storage"] == 50
+    assert cfg["ccm"]["operating_system"] == "rhel_9"
+    assert cfg["ccm"]["key_name"] == "CCM-Key"
+    assert cfg["ccm"]["ssh_private_key_file"] == "~/.ssh/CCM-Key.pem"
+    assert cfg["ccm"]["ssh_username"] == "ec2-user"
+    assert "terraform" not in cfg
+    assert "virtualbox" not in cfg
+    assert "CCM_TOKEN" not in cfg
+    assert "CCM_TOKEN" not in (cfg.get("ccm") or {})
 
 
 def test_scaffold_creates_env_without_ansible(tmp_path):
@@ -372,6 +398,28 @@ def test_init_from_unstamped_source_leaves_config_without_schema_version(tmp_pat
     dest_text = (dest / "config" / "splunk_config.yml").read_text()
     assert dest_text == src_text
     assert "schema_version" not in dest_text
+
+
+def test_init_from_rejects_provider(tmp_path):
+    source = tmp_path / "old-clone"
+    dest = tmp_path / "env"
+    _write_old_env(source)
+    (source / "config" / "splunk_config.yml").write_text(
+        "plugin: splunk-platform-automator\n"
+        "terraform:\n"
+        "  aws:\n"
+        "    region: eu-central-1\n"
+        "splunk_hosts:\n"
+        "  - name: idx1\n"
+        "    roles: [indexer]\n"
+    )
+    result = run_spa_init(["--from", str(source), "--provider", "ccm", str(dest)])
+    assert result.returncode == 2
+    out = (result.stderr + result.stdout).lower()
+    assert "--provider" in out
+    assert "--from" in out or "--migrate" in out
+    assert (source / "config" / "splunk_config.yml").is_file()
+    assert not (dest / "config" / "splunk_config.yml").exists()
 
 
 def test_migrate_from_existing_env(tmp_path):
@@ -1047,7 +1095,7 @@ def test_init_requires_provider_when_no_default_is_saved(tmp_path):
     result = _init_no_provider(dest, XDG_CONFIG_HOME=str(tmp_path / "xdg"))
     assert result.returncode == 2, result.stdout + result.stderr
     assert "--provider" in result.stderr
-    for name in ("aws", "virtualbox", "external"):
+    for name in ("aws", "virtualbox", "external", "ccm"):
         assert name in result.stderr, name
     assert "spa environment set --provider NAME" in result.stderr
     assert not dest.exists()

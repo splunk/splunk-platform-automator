@@ -53,7 +53,7 @@ _APP_IDENTITY_LISTS = {
     ("splunk_app_deployment", "apps"),
     ("splunk_app_deployment", "apps", "content_pack_apps"),
 }
-_PROVIDER_ROOTS = ("terraform", "virtualbox", "aws", "external")
+_PROVIDER_ROOTS = ("terraform", "virtualbox", "aws", "external", "ccm")
 _TOPOLOGY_ROOTS = ("splunk_hosts", "splunk_idxclusters", "splunk_shclusters", "splunk_environments")
 _HEADER_FIELDS = (
     "intent",

@@ -12,12 +12,12 @@ TOPOLOGY_HELP = (
     "Example: spa config topology topology.c1"
 )
 PROVIDER_HELP = (
-    "aws, virtualbox, or external, or a provider feature id. "
+    "aws, virtualbox, external, or ccm, or a provider feature id. "
     "List them: spa init list. "
     "Example: spa config provider aws"
 )
 INIT_PROVIDER_HELP = (
-    "aws, virtualbox, or external. Required unless a default is saved "
+    "aws, virtualbox, external, or ccm. Required unless a default is saved "
     "(spa environment set --provider NAME)"
 )
 SET_PATH_HELP = (

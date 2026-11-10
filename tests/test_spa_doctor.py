@@ -151,6 +151,8 @@ def test_config_providers_ignores_comments_and_nested_keys():
     assert _config_providers("aws:\n  region: eu-central-1\n") == set()
     # comments and host-level keys must not pull in tool checks
     assert _config_providers("# virtualbox: nope\nsplunk_hosts:\n  - virtualbox: {}\n") == set()
+    assert _config_providers("ccm:\n  instance_type: t3a.medium\n") == {"ccm"}
+    assert _config_providers("# ccm: nope\nsplunk_hosts:\n  - ccm: {}\n") == set()
 
 
 def test_doctor_env_provider_terraform_aws(tmp_path):

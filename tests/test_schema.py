@@ -795,6 +795,53 @@ class TestInvalidConfigurations:
         assert "memory" in str(exc_info.value).lower()
 
 
+def _ccm_config(**ccm):
+    return {
+        "plugin": "splunk-platform-automator",
+        "ccm": ccm,
+        "splunk_hosts": [{"name": "idx1", "roles": ["indexer"]}],
+    }
+
+
+class TestCcmConfig:
+    """Corporate Cloud Manager root block. Not a per-host override in v1."""
+
+    def test_disk_storage_rejects_values_outside_the_closed_set(self):
+        with pytest.raises(ConfigValidationError, match="disk_storage"):
+            validate_config(_ccm_config(disk_storage=75))
+
+    def test_ttl_days_rejects_over_30(self):
+        with pytest.raises(ConfigValidationError, match="ttl_days"):
+            validate_config(_ccm_config(ttl_days=31))
+
+    def test_ebs_size_rejects_values_outside_50_100_300(self):
+        with pytest.raises(ConfigValidationError, match="ebs_size"):
+            validate_config(_ccm_config(ebs_storage={"ebs_count": 1, "ebs_size": 200}))
+
+    def test_ebs_count_rejects_over_3(self):
+        with pytest.raises(ConfigValidationError, match="ebs_count"):
+            validate_config(_ccm_config(ebs_storage={"ebs_count": 4, "ebs_size": 50}))
+
+    def test_example_shaped_block_validates(self):
+        result = validate_config(
+            _ccm_config(
+                instance_type="t3a.medium",
+                disk_storage=50,
+                operating_system="rhel_9",
+                key_name="CCM-Key",
+                ssh_private_key_file="~/.ssh/CCM-Key.pem",
+                ssh_username="ec2-user",
+                timezone="UTC",
+                ttl_days=7,
+                operation_hours="manual",
+                business_purpose="DeveloperInstance",
+            )
+        )
+        assert result.ccm.disk_storage == 50
+        assert result.ccm.ttl_days == 7
+        assert "ccm" not in SplunkHost.model_fields
+
+
 class TestClusterConfigurations:
     """Test indexer and search head cluster configurations."""
 

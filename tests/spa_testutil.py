@@ -154,6 +154,8 @@ def run_spa_init(args: Sequence[str], env=None, cwd=None, extra_env=None):
     argv = list(args)
     if "--skip-doctor" not in argv:
         argv.insert(0, "--skip-doctor")
-    if "--provider" not in argv:
+    migrating = "--from" in argv or "--migrate" in argv
+    composing = "--example" in argv or "--architecture" in argv
+    if "--provider" not in argv and (composing or not migrating):
         argv[0:0] = ["--provider", "aws"]
     return run_spa(["init", *argv], env=env, cwd=cwd, extra_env=extra_env)

@@ -10,13 +10,13 @@ and `spa run NAME --help`.
 
 ## `init`
 
-Alias of spa environment init (spa init --example TOPOLOGY or --architecture FILE [--provider aws|virtualbox|external] NAME)
+Alias of spa environment init (spa init --example TOPOLOGY or --architecture FILE [--provider aws|virtualbox|external|ccm] NAME)
 
 | Flag | Description |
 | --- | --- |
 | `--example` | Topology example id (exclusive with --architecture) |
 | `--architecture` | Confirmed 0.4.0 architecture JSON (exclusive with --example) |
-| `--provider` | aws, virtualbox, or external. Required unless a default is saved (spa environment set --provider NAME) |
+| `--provider` | aws, virtualbox, external, or ccm. Required unless a default is saved (spa environment set --provider NAME) |
 
 Example:
 
@@ -353,7 +353,7 @@ Replace provider-owned config sections from an example template
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `PROVIDER` | yes | aws, virtualbox, or external, or a provider feature id. List them: spa init list. Example: spa config provider aws |
+| `PROVIDER` | yes | aws, virtualbox, external, or ccm, or a provider feature id. List them: spa init list. Example: spa config provider aws |
 
 Example:
 
@@ -602,7 +602,7 @@ Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Plat
 | --- | --- |
 | `--example` | Topology example id (exclusive with --architecture) |
 | `--architecture` | Confirmed 0.4.0 architecture JSON (exclusive with --example) |
-| `--provider` | aws, virtualbox, or external. Required unless a default is saved (spa environment set --provider NAME) |
+| `--provider` | aws, virtualbox, external, or ccm. Required unless a default is saved (spa environment set --provider NAME) |
 | `--env-dir` | One-off parent (requires --name); does not change the default parent |
 | `--name` | Registry name (default: folder basename) |
 | `--force` | Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example) |
@@ -635,7 +635,7 @@ User-level defaults in paths.yml (env parent, Software, baseconfig, apps) and th
 | `--baseconfig-dir` | PS baseconfig apps directory |
 | `--apps-dir` | Local apps directory |
 | `--default` | Registered environment used when cwd does not select one |
-| `--provider` | Save the default provider for init: aws, virtualbox, or external. Saved even for aws, so init then accepts no --provider |
+| `--provider` | Save the default provider for init: aws, virtualbox, external, or ccm. Saved even for aws, so init then accepts no --provider |
 
 Example:
 

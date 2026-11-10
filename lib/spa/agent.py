@@ -143,7 +143,7 @@ COMMAND_SCHEMA = {
     "commands": [
         {
             "name": "init",
-            "summary": "Alias of spa environment init (spa init --example TOPOLOGY or --architecture FILE [--provider aws|virtualbox|external] NAME)",
+            "summary": "Alias of spa environment init (spa init --example TOPOLOGY or --architecture FILE [--provider aws|virtualbox|external|ccm] NAME)",
             "flags": [
                 {"long": "--example", "help": "Topology example id (exclusive with --architecture)", "takes_value": True, "completes_from": "init list"},
                 {
@@ -613,7 +613,7 @@ COMMAND_SCHEMA = {
                 },
                 {
                     "long": "--provider",
-                    "help": "Save the default provider for init: aws, virtualbox, or external. Saved even for aws, so init then accepts no --provider",
+                    "help": "Save the default provider for init: aws, virtualbox, external, or ccm. Saved even for aws, so init then accepts no --provider",
                     "takes_value": True,
                     "completes_from": "providers",
                 },

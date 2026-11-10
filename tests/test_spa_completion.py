@@ -177,6 +177,7 @@ def test_init_provider_tab_lists_shipped_providers():
     assert "aws" in names
     assert "virtualbox" in names
     assert "external" in names
+    assert "ccm" in names
     assert "external" in complete(["spa", "environment", "init", "--provider", ""], 4)
     assert "external" in complete(["spa", "environment", "set", "--provider", ""], 4)
     kinds = complete(["spa", "apps", "search", "--kind", ""], 4)
