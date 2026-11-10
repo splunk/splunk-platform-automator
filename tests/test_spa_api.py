@@ -403,3 +403,134 @@ def test_session_ccm_lifecycle_does_not_use_vagrant(tmp_path, monkeypatch):
     assert destroyed.ok, destroyed.error
     assert seen == ["ccm_provision", "ccm_destroy"]
     assert all("vagrant" not in name for name in seen)
+
+    class FakeCcmPower(FakeCcm):
+        def suspend(self, **kwargs):
+            seen.append(kwargs["run_log"].playbook)
+            return {"action": "suspend"}
+
+        def resume(self, **kwargs):
+            seen.append(kwargs["run_log"].playbook)
+            return {"action": "resume"}
+
+        def provision_state(self):
+            from spa.providers import ProvisionState
+
+            return ProvisionState(provider="ccm", provisioned=True)
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda _paths: FakeCcmPower())
+    monkeypatch.setattr(session, "_require_provisioned", lambda extra_line=None: None)
+    suspended = session.suspend(confirm=True)
+    assert suspended.ok, suspended.error
+    resumed = session.resume(confirm=True)
+    assert resumed.ok, resumed.error
+    assert seen[-2:] == ["suspend", "resume"]
+    assert all("vagrant" not in name for name in seen)
+
+
+def test_session_ccm_hosts_list_status_uses_instance_state(tmp_path, monkeypatch):
+    import json
+    from dataclasses import replace
+
+    from spa.paths import resolve_spa_paths
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+    from spa.shell import format_host_status
+
+    env = tmp_path / "mylab"
+    config_path = env / "config" / "splunk_config.yml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        "ccm:\n  instance_type: t3a.medium\n"
+        "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+        encoding="utf-8",
+    )
+    inventory_dir = env / "inventory"
+    inventory_dir.mkdir()
+    (inventory_dir / "hosts").write_text(
+        'idx1 ansible_host="1.1.1.1" ansible_user="ec2-user" '
+        'ansible_ssh_private_key_file="/tmp/ccm-test-key"\n',
+        encoding="utf-8",
+    )
+    state_dir = env / "ccm"
+    state_dir.mkdir()
+    (state_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "deployment_id": "dep-9",
+                "ttl": "2026-11-01T00:00:00.000Z",
+                "hosts": {"idx1": {"instance_id": "i-aaa"}},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    base = resolve_spa_paths(start_dir=PROJECT_ROOT)
+    paths = replace(
+        base,
+        spa_env_dir=env,
+        config_file=config_path,
+        inventory_dir=inventory_dir,
+        roots_differ=True,
+    )
+
+    class FakeResponse:
+        def __init__(self, status, body):
+            self.status = status
+            self._body = body
+
+        def read(self):
+            return self._body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+    class Opener:
+        def open(self, req, timeout=None):
+            body = json.dumps(
+                {
+                    "data": {
+                        "deployment_id": "dep-9",
+                        "instances_data": [
+                            {
+                                "instance_id": "i-aaa",
+                                "ip_address": "1.1.1.1",
+                                "state": "stopped",
+                            }
+                        ],
+                    }
+                }
+            ).encode("utf-8")
+            return FakeResponse(200, body)
+
+    provider = CcmProvider(
+        paths,
+        {"instance_type": "t3a.medium", "ssh_username": "ec2-user"},
+        client=UrllibCcmClient(token="test-ccm-token", opener=Opener()),
+    )
+    session = LocalSpaSession(paths=paths)
+    monkeypatch.setattr("spa.providers.get_provider", lambda _paths: provider)
+    monkeypatch.setattr(session, "_env_gate", lambda: None)
+    monkeypatch.setattr(
+        "spa.shell.get_inventory_data",
+        lambda: {
+            "_meta": {"hostvars": {"idx1": {"ansible_host": "1.1.1.1"}}},
+            "role_indexer": {"hosts": ["idx1"]},
+        },
+    )
+    monkeypatch.setattr(
+        "spa.shell.check_ansible_status",
+        lambda hosts, paths=None: (_ for _ in ()).throw(
+            AssertionError("stopped CCM hosts must not be pinged")
+        ),
+    )
+    result = session.hosts_list(status=True)
+    assert result.ok, result.error
+    rows = {row["name"]: row for row in result.data["hosts"]}
+    assert rows["idx1"]["provider"] == "ccm"
+    assert rows["idx1"]["provider_status"] == "stopped"
+    assert rows["idx1"]["ansible"] == "N/A"
+    assert "CCM" in format_host_status(rows["idx1"])
+    assert "stopped" in format_host_status(rows["idx1"])

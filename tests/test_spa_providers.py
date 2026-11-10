@@ -92,14 +92,14 @@ def test_check_provisioned_ccm_missing_state_is_not_provisioned(tmp_path):
     assert not (tmp_path / "ccm" / "state.json").exists()
 
 
-def test_ccm_suspend_resume_stubs_raise_until_later_slices(tmp_path):
+def test_ccm_suspend_resume_require_local_state(tmp_path):
     from spa.providers.ccm import Provider as CcmProvider
 
     paths = _paths(tmp_path, "ccm: {}\n")
     provider = CcmProvider(paths, {})
-    with pytest.raises(ProviderError, match="not implemented"):
+    with pytest.raises(ProviderError, match="No CCM state"):
         provider.suspend(yes=True)
-    with pytest.raises(ProviderError, match="not implemented"):
+    with pytest.raises(ProviderError, match="No CCM state"):
         provider.resume(yes=True)
 
 

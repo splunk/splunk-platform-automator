@@ -15,7 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, NoReturn, Optional, Tuple
 
 from spa.paths import SpaPaths
 from spa.providers import (
@@ -252,6 +252,10 @@ class Provider:
             hint="spa destroy --yes then spa provision --yes",
         )
 
+    def _expired_error(self, deployment_id: str) -> NoReturn:
+        state = self._expired_state(deployment_id)
+        raise ProviderError("%s. Run: %s" % (state.reason, state.hint))
+
     def provision_state(self) -> ProvisionState:
         recorded = self._read_state()
         deployment_id = str((recorded or {}).get("deployment_id") or "")
@@ -281,9 +285,6 @@ class Provider:
         except (CcmError, ProviderError):
             return ProvisionState(provider=self.name, provisioned=True)
         return ProvisionState(provider=self.name, provisioned=True)
-
-    def _not_implemented(self, action: str) -> None:
-        raise ProviderError("CCM %s is not implemented yet." % action)
 
     def _http(self) -> UrllibCcmClient:
         try:
@@ -366,10 +367,7 @@ class Provider:
         for _ in range(self._poll_attempts):
             status, payload = self._request("GET", path)
             if status == 404:
-                raise ProviderError(
-                    "CCM terminated this deployment (TTL expiry or CCM terminate): %s. "
-                    "Run: spa destroy --yes then spa provision --yes" % deployment_id
-                )
+                self._expired_error(deployment_id)
             if status >= 400:
                 raise ProviderError("CCM API returned HTTP %s" % status)
             data = _unwrap(payload) or {}
@@ -395,12 +393,14 @@ class Provider:
         temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         temporary.replace(path)
 
-    def _write_inventory(self, hosts: Mapping[str, Mapping[str, Any]]) -> Any:
+    def _write_inventory(
+        self, hosts: Mapping[str, Mapping[str, Any]], merge: bool = False
+    ) -> Any:
         user = self.config.get("ssh_username") or DEFAULT_SSH_USERNAME
         key = self.config.get("ssh_private_key_file") or DEFAULT_SSH_KEY_FILE
         destination = self.paths.inventory_dir / "hosts"
         destination.parent.mkdir(parents=True, exist_ok=True)
-        if destination.is_file():
+        if destination.is_file() and not merge:
             destination.write_text("", encoding="utf-8")
         for name, row in hosts.items():
             address = str(row.get("ip_address") or "")
@@ -486,10 +486,165 @@ class Provider:
         self._clear_local()
         return {"deployment_id": deployment_id or None, "cleared": True}
 
+    def _instance_path(self, deployment_id: str, instance_id: str) -> str:
+        return "%s/%s/instances/%s" % (
+            DEPLOYMENTS_PATH,
+            urllib.parse.quote(deployment_id, safe=""),
+            urllib.parse.quote(instance_id, safe=""),
+        )
+
+    def _require_state(self) -> Dict[str, Any]:
+        recorded = self._read_state() or {}
+        deployment_id = str(recorded.get("deployment_id") or "")
+        if not deployment_id:
+            raise ProviderError(
+                "No CCM state for this env: %s" % self.state_dir,
+                code=1,
+            )
+        return recorded
+
+    def _selected_hosts(
+        self, recorded: Mapping[str, Any], hosts: Optional[List[str]] = None
+    ) -> Dict[str, Mapping[str, Any]]:
+        mapping = recorded.get("hosts") or {}
+        if not isinstance(mapping, dict):
+            mapping = {}
+        if not hosts:
+            return {
+                name: row
+                for name, row in mapping.items()
+                if isinstance(row, dict)
+            }
+        missing = [name for name in hosts if name not in mapping]
+        if missing:
+            raise ProviderError(
+                "No CCM instance for: %s. Known: %s"
+                % (", ".join(missing), ", ".join(sorted(mapping)))
+            )
+        return {name: mapping[name] for name in hosts if isinstance(mapping[name], dict)}
+
+    def _patch_instances(
+        self,
+        deployment_id: str,
+        selected: Mapping[str, Mapping[str, Any]],
+        desired_state: str,
+    ) -> None:
+        for name, row in selected.items():
+            instance_id = str((row or {}).get("instance_id") or "")
+            if not instance_id:
+                raise ProviderError("CCM state has no instance_id for %s" % name)
+            status, _payload = self._request(
+                "PATCH",
+                self._instance_path(deployment_id, instance_id),
+                body={"desired_state": desired_state},
+            )
+            if status == 404:
+                self._expired_error(deployment_id)
+            if status >= 400:
+                raise ProviderError("CCM API returned HTTP %s" % status)
+
+    def host_status(self) -> Dict[str, Dict[str, Any]]:
+        recorded = self._read_state() or {}
+        deployment_id = str(recorded.get("deployment_id") or "")
+        if not deployment_id:
+            return {}
+        mapping = recorded.get("hosts") or {}
+        if not isinstance(mapping, dict):
+            mapping = {}
+        deployment = self._get_deployment(deployment_id)
+        instances: Dict[str, Dict[str, Any]] = {}
+        for row in deployment.get("instances_data") or []:
+            if isinstance(row, dict) and row.get("instance_id"):
+                instances[str(row["instance_id"])] = row
+        status: Dict[str, Dict[str, Any]] = {}
+        for name, row in mapping.items():
+            if not isinstance(row, dict):
+                continue
+            instance_id = str(row.get("instance_id") or "")
+            instance = instances.get(instance_id) or {}
+            state = instance.get("state")
+            record = {
+                "state": state,
+                "reachable": str(state or "").lower() == "running",
+                "instance_id": instance.get("instance_id") or instance_id,
+            }
+            for identifier in (name, record["instance_id"], instance.get("ip_address")):
+                if identifier:
+                    status[str(identifier)] = record
+        return status
+
     def suspend(self, **kwargs: Any) -> Dict[str, Any]:
-        del kwargs
-        self._not_implemented("suspend")
+        hosts = kwargs.get("hosts")
+        recorded = self._require_state()
+        deployment_id = str(recorded["deployment_id"])
+        selected = self._selected_hosts(recorded, hosts)
+        self._get_deployment(deployment_id)
+        self._patch_instances(deployment_id, selected, "stopped")
+        return {
+            "provider": self.name,
+            "action": "suspend",
+            "deployment_id": deployment_id,
+        }
+
+    def _get_deployment(self, deployment_id: str) -> Dict[str, Any]:
+        path = "%s/%s" % (
+            DEPLOYMENTS_PATH,
+            urllib.parse.quote(deployment_id, safe=""),
+        )
+        status, payload = self._request("GET", path)
+        if status == 404:
+            self._expired_error(deployment_id)
+        if status >= 400:
+            raise ProviderError("CCM API returned HTTP %s" % status)
+        data = _unwrap(payload) or {}
+        if not isinstance(data, dict) or not data:
+            self._expired_error(deployment_id)
+        return data
+
+    def _map_instances(
+        self,
+        selected: Mapping[str, Mapping[str, Any]],
+        deployment: Mapping[str, Any],
+    ) -> Dict[str, Dict[str, Any]]:
+        instances: Dict[str, Dict[str, Any]] = {}
+        for row in deployment.get("instances_data") or []:
+            if isinstance(row, dict) and row.get("instance_id"):
+                instances[str(row["instance_id"])] = row
+        mapped: Dict[str, Dict[str, Any]] = {}
+        for name, row in selected.items():
+            instance_id = str((row or {}).get("instance_id") or "")
+            instance = instances.get(instance_id) or {}
+            mapped[name] = {
+                "instance_id": instance_id,
+                "ip_address": instance.get("ip_address"),
+            }
+        return mapped
 
     def resume(self, **kwargs: Any) -> Dict[str, Any]:
-        del kwargs
-        self._not_implemented("resume")
+        hosts = kwargs.get("hosts")
+        recorded = self._require_state()
+        deployment_id = str(recorded["deployment_id"])
+        selected = self._selected_hosts(recorded, hosts)
+        self._get_deployment(deployment_id)
+        self._patch_instances(deployment_id, selected, "running")
+        deployment = self._get_deployment(deployment_id)
+        mapped = self._map_instances(selected, deployment)
+        inventory = self._write_inventory(mapped, merge=bool(hosts))
+        warnings: List[str] = []
+        if str(self.config.get("operation_hours") or "") == "business_hours":
+            warning = (
+                "ccm.operation_hours is business_hours; CCM may stop instances "
+                "again outside the window."
+            )
+            warnings.append(warning)
+            if not kwargs.get("agent"):
+                print(warning, file=sys.stderr)
+        result = {
+            "provider": self.name,
+            "action": "resume",
+            "deployment_id": deployment_id,
+            "inventory": str(inventory),
+        }
+        if warnings:
+            result["warnings"] = warnings
+        return result

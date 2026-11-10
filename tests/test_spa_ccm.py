@@ -383,7 +383,7 @@ def test_ccm_provision_polls_until_req_state_ready(tmp_path):
     assert slept == [5]
 
 
-def _write_ccm_state(env, deployment_id="dep-9"):
+def _write_ccm_state(env, deployment_id="dep-9", hosts=None):
     state_dir = env / "ccm"
     state_dir.mkdir(parents=True, exist_ok=True)
     (state_dir / "state.json").write_text(
@@ -391,12 +391,332 @@ def _write_ccm_state(env, deployment_id="dep-9"):
             {
                 "deployment_id": deployment_id,
                 "ttl": "2026-11-01T00:00:00.000Z",
-                "hosts": {"idx1": {"instance_id": "i-aaa"}},
+                "hosts": hosts or {"idx1": {"instance_id": "i-aaa"}},
             }
         )
         + "\n",
         encoding="utf-8",
     )
+
+
+class CcmApiOpener:
+    """Route GET/PATCH by path so suspend/resume tests are not request-order scripts."""
+
+    def __init__(self, deployment, missing=False) -> None:
+        self.deployment = deployment
+        self.missing = missing
+        self.requests: List[object] = []
+        self.patches: List[dict] = []
+
+    def open(self, req: object, timeout: object = None) -> _FakeResponse:
+        import urllib.parse
+
+        self.requests.append(req)
+        method = req.get_method()
+        path = urllib.parse.urlparse(req.full_url).path
+        if self.missing:
+            return _FakeResponse(404, b'{"detail":"not found"}')
+        if method == "PATCH" and "/instances/" in path:
+            body = json.loads(req.data.decode("utf-8")) if req.data else {}
+            instance_id = path.rsplit("/", 1)[-1]
+            self.patches.append(
+                {"instance_id": instance_id, "body": body, "url": req.full_url}
+            )
+            desired = str(body.get("desired_state") or "")
+            for row in self.deployment.get("instances_data") or []:
+                if row.get("instance_id") == instance_id and desired:
+                    row["state"] = desired
+                    row["desired_state"] = desired
+            return _FakeResponse(200, b'{"code":200}')
+        if method == "GET" and path.endswith("/deployments/" + str(self.deployment.get("deployment_id") or "dep-9")):
+            return _FakeResponse(200, json.dumps({"data": self.deployment}).encode("utf-8"))
+        raise AssertionError("unexpected %s %s" % (method, req.full_url))
+
+
+def test_ccm_suspend_patches_instances_stopped(tmp_path):
+    from spa.providers.ccm import API_ROOT, Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN
+        + "splunk_hosts:\n"
+        + "  - name: idx1\n"
+        + "    roles: [indexer]\n"
+        + "  - name: sh1\n"
+        + "    roles: [search_head]\n",
+    )
+    _write_ccm_state(
+        env,
+        hosts={
+            "idx1": {"instance_id": "i-aaa"},
+            "sh1": {"instance_id": "i-bbb"},
+        },
+    )
+    deployment = {
+        "deployment_id": "dep-9",
+        "req_state": "ready",
+        "instances_data": [
+            {"instance_id": "i-aaa", "ip_address": "1.1.1.1", "state": "running"},
+            {"instance_id": "i-bbb", "ip_address": "2.2.2.2", "state": "running"},
+        ],
+    }
+    opener = CcmApiOpener(deployment)
+    provider = CcmProvider(
+        paths,
+        _CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        sleep=lambda _seconds: None,
+    )
+    result = provider.suspend(yes=True)
+    assert "not implemented" not in str(result).lower()
+    patched = {row["instance_id"]: row["body"] for row in opener.patches}
+    assert patched == {
+        "i-aaa": {"desired_state": "stopped"},
+        "i-bbb": {"desired_state": "stopped"},
+    }
+    for row in opener.patches:
+        assert row["url"].startswith(API_ROOT)
+        assert row["url"].startswith("https://")
+        assert "/api/v1/deployments/dep-9/instances/" in row["url"]
+    auth = [req.get_header("Authorization") for req in opener.requests]
+    assert all(value == "Bearer test-ccm-token" for value in auth)
+    assert (env / "ccm" / "state.json").is_file()
+
+
+def test_ccm_resume_patches_running_and_refreshes_inventory_ips(tmp_path):
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN
+        + "splunk_hosts:\n"
+        + "  - name: idx1\n"
+        + "    roles: [indexer]\n"
+        + "  - name: sh1\n"
+        + "    roles: [search_head]\n",
+    )
+    _write_ccm_state(
+        env,
+        hosts={
+            "idx1": {"instance_id": "i-aaa"},
+            "sh1": {"instance_id": "i-bbb"},
+        },
+    )
+    hosts_file = env / "inventory" / "hosts"
+    hosts_file.write_text(
+        'idx1 ansible_host="1.1.1.1" ansible_user="ec2-user" '
+        'ansible_ssh_private_key_file="/tmp/ccm-test-key"\n'
+        'sh1 ansible_host="2.2.2.2" ansible_user="ec2-user" '
+        'ansible_ssh_private_key_file="/tmp/ccm-test-key"\n',
+        encoding="utf-8",
+    )
+    deployment = {
+        "deployment_id": "dep-9",
+        "req_state": "ready",
+        "instances_data": [
+            {"instance_id": "i-aaa", "ip_address": "9.9.9.9", "state": "stopped"},
+            {"instance_id": "i-bbb", "ip_address": "8.8.8.8", "state": "stopped"},
+        ],
+    }
+    opener = CcmApiOpener(deployment)
+    provider = CcmProvider(
+        paths,
+        _CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        sleep=lambda _seconds: None,
+    )
+    result = provider.resume(yes=True)
+    patched = {row["instance_id"]: row["body"] for row in opener.patches}
+    assert patched == {
+        "i-aaa": {"desired_state": "running"},
+        "i-bbb": {"desired_state": "running"},
+    }
+    inventory = hosts_file.read_text(encoding="utf-8")
+    assert "9.9.9.9" in inventory
+    assert "8.8.8.8" in inventory
+    assert "1.1.1.1" not in inventory
+    assert "2.2.2.2" not in inventory
+    assert result.get("inventory") == str(hosts_file)
+
+
+def test_ccm_resume_hosts_filter_merges_inventory(tmp_path):
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN
+        + "splunk_hosts:\n"
+        + "  - name: idx1\n"
+        + "    roles: [indexer]\n"
+        + "  - name: sh1\n"
+        + "    roles: [search_head]\n",
+    )
+    _write_ccm_state(
+        env,
+        hosts={
+            "idx1": {"instance_id": "i-aaa"},
+            "sh1": {"instance_id": "i-bbb"},
+        },
+    )
+    hosts_file = env / "inventory" / "hosts"
+    hosts_file.write_text(
+        'idx1 ansible_host="1.1.1.1" ansible_user="ec2-user" '
+        'ansible_ssh_private_key_file="/tmp/ccm-test-key"\n'
+        'sh1 ansible_host="2.2.2.2" ansible_user="ec2-user" '
+        'ansible_ssh_private_key_file="/tmp/ccm-test-key"\n',
+        encoding="utf-8",
+    )
+    opener = CcmApiOpener(
+        {
+            "deployment_id": "dep-9",
+            "req_state": "ready",
+            "instances_data": [
+                {"instance_id": "i-aaa", "ip_address": "9.9.9.9", "state": "stopped"},
+                {"instance_id": "i-bbb", "ip_address": "2.2.2.2", "state": "stopped"},
+            ],
+        }
+    )
+    provider = CcmProvider(
+        paths,
+        _CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        sleep=lambda _seconds: None,
+    )
+    provider.resume(yes=True, hosts=["idx1"])
+    assert {row["instance_id"] for row in opener.patches} == {"i-aaa"}
+    inventory = hosts_file.read_text(encoding="utf-8")
+    assert "9.9.9.9" in inventory
+    assert "sh1" in inventory
+    assert "2.2.2.2" in inventory
+
+
+def test_ccm_resume_warns_when_operation_hours_are_business_hours(tmp_path, capsys):
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN
+        + "  operation_hours: business_hours\n"
+        + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    _write_ccm_state(env)
+    config = dict(_CCM_CONFIG)
+    config["operation_hours"] = "business_hours"
+    opener = CcmApiOpener(
+        {
+            "deployment_id": "dep-9",
+            "req_state": "ready",
+            "instances_data": [
+                {"instance_id": "i-aaa", "ip_address": "9.9.9.9", "state": "stopped"},
+            ],
+        }
+    )
+    provider = CcmProvider(
+        paths,
+        config,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        sleep=lambda _seconds: None,
+    )
+    result = provider.resume(yes=True)
+    err = capsys.readouterr().err
+    assert "business_hours" in err
+    assert "stop" in err.lower()
+    warnings = result.get("warnings") or []
+    assert any("business_hours" in item and "stop" in item.lower() for item in warnings)
+    assert all("operation_hours" not in row["body"] for row in opener.patches)
+
+
+@pytest.mark.parametrize("action", ["suspend", "resume"])
+def test_ccm_power_fails_when_deployment_expired(tmp_path, action):
+    from spa.providers import ProviderError
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    _write_ccm_state(env)
+    opener = CcmApiOpener(
+        {
+            "deployment_id": "dep-9",
+            "instances_data": [
+                {"instance_id": "i-aaa", "ip_address": "1.1.1.1", "state": "stopped"},
+            ],
+        },
+        missing=True,
+    )
+    provider = CcmProvider(
+        paths,
+        _CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    with pytest.raises(ProviderError) as caught:
+        getattr(provider, action)(yes=True)
+    message = str(caught.value)
+    assert "TTL" in message or "terminate" in message.lower()
+    assert "spa destroy --yes" in message
+    assert "spa provision --yes" in message
+    assert opener.patches == []
+
+
+def test_ccm_host_status_indexes_name_instance_and_ip(tmp_path):
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN
+        + "splunk_hosts:\n"
+        + "  - name: idx1\n"
+        + "    roles: [indexer]\n"
+        + "  - name: sh1\n"
+        + "    roles: [search_head]\n",
+    )
+    _write_ccm_state(
+        env,
+        hosts={
+            "idx1": {"instance_id": "i-aaa"},
+            "sh1": {"instance_id": "i-bbb"},
+        },
+    )
+    opener = CcmApiOpener(
+        {
+            "deployment_id": "dep-9",
+            "req_state": "ready",
+            "instances_data": [
+                {"instance_id": "i-aaa", "ip_address": "1.1.1.1", "state": "stopped"},
+                {"instance_id": "i-bbb", "ip_address": "2.2.2.2", "state": "running"},
+            ],
+        }
+    )
+    provider = CcmProvider(
+        paths,
+        _CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    status = provider.host_status()
+    assert status["idx1"]["state"] == "stopped"
+    assert status["idx1"]["reachable"] is False
+    assert status["idx1"]["instance_id"] == "i-aaa"
+    assert status["i-aaa"] == status["idx1"]
+    assert status["1.1.1.1"] == status["idx1"]
+    assert status["sh1"]["state"] == "running"
+    assert status["sh1"]["reachable"] is True
+    assert status["2.2.2.2"] == status["sh1"]
+    methods = [req.get_method() for req in opener.requests]
+    assert methods == ["GET"]
+    assert opener.patches == []
 
 
 def test_ccm_provision_state_404_is_not_provisioned(tmp_path):
