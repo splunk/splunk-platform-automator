@@ -46,7 +46,7 @@ tests/
 ├── test_schema.py             # Schema validation unit tests
 ├── test_schema_files.py       # validate_config_file + examples/app_scope sweep
 ├── test_splunk_config_licenses.py # spa licenses helpers
-├── test_splunk_config_aws.py      # spa aws pure functions
+├── test_splunk_config_aws.py      # spa provider aws pure functions
 ├── test_validate_splunk_config.py # spa validate missing-config smoke
 ├── test_spa_paths.py              # SPA_HOME / SPA_ENV_DIR resolver
 ├── test_spa_init.py               # spa init scaffold and migrate

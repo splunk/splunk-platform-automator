@@ -1007,7 +1007,7 @@ def _listing_command(kind: str) -> str:
 
 def _listing_menu() -> str:
     return (
-        "spa aws list has moved.\n"
+        "spa provider aws list has moved.\n"
         "Regions:         %s\n"
         "AMIs:            %s --region REGION\n"
         "Instance types:  %s --region REGION\n"
@@ -1354,7 +1354,7 @@ def execute(args: Any, environment_region: Optional[str] = None):
 
 
 def _retired_list_message(argv: Sequence[str]) -> Optional[str]:
-    """The old spa aws list KIND form names the resource command and exits."""
+    """The old spa provider aws list KIND form names the resource command and exits."""
     tokens = [token for token in argv if token and not str(token).startswith("-")]
     if not tokens or tokens[0] != "list":
         return None

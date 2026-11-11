@@ -356,21 +356,8 @@ def _retired_catalog_flag(head: Sequence[str]) -> Optional[str]:
 
 
 def _retired_aws_shell_flag(head: Sequence[str]) -> Optional[str]:
-    """Rejection for top-level spa aws, a removed aws parent flag, or spa shell -c."""
+    """Rejection for a removed spa shell -c / --copy flag. Top-level spa aws is not a command."""
     tokens = _positional_tokens(head)
-    if tokens and tokens[0] == "aws":
-        from spa import aws as aws_mod
-
-        for flag, kind in aws_mod._RETIRED_AWS_LISTS.items():
-            if flag in head:
-                return "Listing %s is: spa provider aws %s list" % (kind, kind)
-        for flag, message in _RETIRED_AWS_PARENT.items():
-            if flag in head:
-                return message
-        listed = aws_mod._retired_list_message(list(tokens[1:]))
-        if listed:
-            return listed
-        return aws_mod.AWS_NEEDS_ACTION
     if tokens and tokens[0] in {"shell", "sh"} and ("-c" in head or "--copy" in head):
         return "Copying files is: spa hosts copy SRC DST"
     return None
@@ -696,13 +683,6 @@ def _omit_parser_choice(message: str, name: str) -> str:
 
 
 SHELL_NEEDS_NAME = "spa shell needs NAME.\nExample: spa shell NAME"
-_RETIRED_AWS_PARENT = {
-    "--check-auth": "Checking credentials is: spa provider aws check-auth",
-    "--latest-ami": "Resolving the latest AMI is: spa provider aws latest-ami --os OS",
-    "--describe-ami": "Describing an AMI is: spa provider aws describe-ami --ami-id AMI",
-    "--validate": "Validating selections is: spa provider aws validate",
-    "--survey": "Surveying a region is: spa provider aws survey",
-}
 _RETIRED_DOCTOR_PROVIDER = {
     "--aws": "Checking AWS prerequisites is: spa doctor --provider aws",
     "--virtualbox": "Checking VirtualBox prerequisites is: spa doctor --provider virtualbox",

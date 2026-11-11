@@ -140,11 +140,6 @@ def test_shell_list_flag_is_gone():
 @pytest.mark.parametrize(
     ("argv", "message"),
     [
-        (["aws", "--check-auth"], "Checking credentials is: spa provider aws check-auth"),
-        (["aws", "--latest-ami"], "Resolving the latest AMI is: spa provider aws latest-ami --os OS"),
-        (["aws", "--describe-ami"], "Describing an AMI is: spa provider aws describe-ami --ami-id AMI"),
-        (["aws", "--validate"], "Validating selections is: spa provider aws validate"),
-        (["aws", "--survey"], "Surveying a region is: spa provider aws survey"),
         (["shell", "-c", "local.txt", "idx1:/tmp/"], "Copying files is: spa hosts copy SRC DST"),
         (["shell", "--copy", "local.txt", "idx1:/tmp/"], "Copying files is: spa hosts copy SRC DST"),
         (["doctor", "--aws"], "Checking AWS prerequisites is: spa doctor --provider aws"),
@@ -174,18 +169,24 @@ def test_provider_aws_help_uses_own_parser():
         ["aws", "check-auth"],
         ["aws", "--check-auth"],
         ["aws", "--list-regions"],
+        ["ccm"],
     ],
 )
-def test_retired_spa_aws_names_provider_aws(argv):
+def test_top_level_aws_and_ccm_are_invalid_choices(argv):
+    """spa aws is not an alias of spa provider aws. Same invalid-choice path as spa ccm."""
+    command = argv[0]
     human = run_spa(["--no-agent", *argv])
     assert human.returncode == 2, human.stderr
-    assert "spa provider aws" in human.stderr
+    assert "invalid choice: '%s'" % command in human.stderr
+    assert "spa provider aws needs an action." not in human.stderr
+    assert "spa provider aws check-auth" not in human.stderr
     assert human.stdout.strip() == ""
     agent = run_spa(["--json", *argv])
     assert agent.returncode == 2, agent.stdout
     payload = json.loads(agent.stdout)
     assert payload["ok"] is False
-    assert "spa provider aws" in payload["error"]
+    assert "invalid choice: '%s'" % command in payload["error"]
+    assert "spa provider aws needs an action." not in payload["error"]
 
 
 @pytest.mark.parametrize(
@@ -1779,7 +1780,6 @@ def _assert_usage_rejection(argv, message):
         (["licenses", "--json"], "spa licenses needs an action."),
         (["config", "templates"], "spa config templates needs an action."),
         (["config", "tpl"], "spa config templates needs an action."),
-        (["aws"], "spa provider aws check-auth"),
         (["provider"], "spa provider aws check-auth"),
         (["provider", "aws"], "spa provider aws check-auth"),
         (["shell"], "spa shell needs NAME."),
@@ -1791,24 +1791,6 @@ def _assert_usage_rejection(argv, message):
 )
 def test_catalog_usage_names_the_legal_command(argv, message):
     _assert_usage_rejection(argv, message)
-
-
-@pytest.mark.parametrize(
-    ("argv", "message"),
-    [
-        (["aws", "--list-regions"], "Listing regions is: spa provider aws regions list"),
-        (["aws", "--list-amis"], "Listing amis is: spa provider aws amis list"),
-        (["aws", "--list-instance-types"], "Listing instance-types is: spa provider aws instance-types list"),
-        (["aws", "--list-key-pairs"], "Listing key-pairs is: spa provider aws key-pairs list"),
-        (["aws", "--list-security-groups"], "Listing security-groups is: spa provider aws security-groups list"),
-    ],
-)
-def test_aws_retired_list_flags_name_the_list_command(argv, message):
-    result = run_spa(["--no-agent", *argv])
-    assert result.returncode == 2, result.stderr
-    assert message in result.stderr
-    assert "Regions" not in result.stdout
-    assert not result.stdout.lstrip().startswith("{")
 
 
 def test_hidden_alias_expands_after_a_flag():
@@ -1827,18 +1809,6 @@ def test_hidden_alias_expands_after_a_flag():
         "topology",
         "cm_2idxc_sh",
     ]
-
-
-def test_aws_retired_list_flag_json_names_the_list_command():
-    result = run_spa(["--json", "aws", "--list-regions"])
-    assert result.returncode == 2
-    assert result.stderr == ""
-    payload = json.loads(result.stdout)
-    assert payload == {
-        "ok": False,
-        "schema_version": 1,
-        "error": "Listing regions is: spa provider aws regions list",
-    }
 
 
 def test_aws_list_help_keeps_flags_on_their_kind():

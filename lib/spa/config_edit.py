@@ -1087,7 +1087,7 @@ def _attach_ami_comment(
     if region:
         warnings.append(
             "AMI %s was set in %s without an image comment. "
-            "spa aws describe-ami --region %s --ami-id %s can identify it."
+            "spa provider aws describe-ami --region %s --ami-id %s can identify it."
             % (value, region, region, value)
         )
     else:

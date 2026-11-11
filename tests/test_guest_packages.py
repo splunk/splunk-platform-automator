@@ -118,6 +118,8 @@ def test_config_set_drops_a_stale_ami_comment_without_aws(tmp_path, monkeypatch)
     assert "ami-0abc123" in text
     assert "Does not include acl" not in text
     assert any("without an image comment" in warning for warning in result["warnings"])
+    assert any("spa provider aws describe-ami" in warning for warning in result["warnings"])
+    assert all("spa aws describe-ami" not in warning for warning in result["warnings"])
 
 
 def test_ami_comment_for_config_uses_the_described_image(monkeypatch):

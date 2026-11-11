@@ -1274,8 +1274,8 @@ def test_agent_schema_is_complete_and_documented():
     assert "spa aws --check-auth" not in aws.stderr
     aws_list = run_spa(["--no-agent", "aws", "list"])
     assert aws_list.returncode == 2, aws_list.stderr
-    for kind in ("regions", "amis", "instance-types", "key-pairs", "security-groups"):
-        assert "spa provider aws %s list" % kind in aws_list.stderr
+    assert "invalid choice: 'aws'" in aws_list.stderr
+    assert "spa provider aws needs an action." not in aws_list.stderr
 
 
 def test_licenses_list_is_the_catalog():

@@ -1181,6 +1181,40 @@ class TestReviewFindings67:
         migrate = (_docs_dir() / "migrate.md").read_text(encoding="utf-8")
         assert "spa provider aws" in migrate
 
+    def test_contributor_text_uses_provider_aws_not_live_spa_aws(self):
+        """Runtime strings, changelog examples, and contributor indexes name spa provider aws."""
+        live = (
+            "spa aws check-auth",
+            "spa aws regions list",
+            "spa aws latest-ami",
+            "spa aws describe-ami",
+            "spa aws validate",
+            "spa aws survey",
+            "spa aws amis list",
+            "spa aws list KIND",
+            "spa aws list has moved",
+            "spa --agent aws",
+        )
+        paths = (
+            PROJECT_ROOT / "CHANGELOG.md",
+            PROJECT_ROOT / "ROADMAP.md",
+            PROJECT_ROOT / "tests" / "README.md",
+            PROJECT_ROOT / "lib" / "spa" / "validate.py",
+            PROJECT_ROOT / "lib" / "spa" / "aws.py",
+            PROJECT_ROOT / "lib" / "spa" / "config_edit.py",
+        )
+        offenders = []
+        for path in paths:
+            text = path.read_text(encoding="utf-8")
+            for spelling in live:
+                if spelling in text:
+                    offenders.append("%s: %s" % (path.relative_to(PROJECT_ROOT), spelling))
+        assert offenders == [], offenders
+        readme = (PROJECT_ROOT / "tests" / "README.md").read_text(encoding="utf-8")
+        assert "spa provider aws" in readme
+        roadmap = (PROJECT_ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+        assert "spa provider aws" in roadmap
+
     def test_changelog_and_skills_use_named_aws_actions(self):
         banned = (
             "spa aws --check-auth",
