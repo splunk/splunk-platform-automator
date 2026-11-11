@@ -383,6 +383,169 @@ def test_ccm_provision_polls_until_req_state_ready(tmp_path):
     assert slept == [5]
 
 
+def test_ccm_provision_refuses_when_state_has_live_deployment(tmp_path):
+    from spa.providers import ProviderError
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN
+        + "splunk_hosts:\n"
+        + "  - name: idx1\n"
+        + "    roles: [indexer]\n"
+        + "  - name: sh1\n"
+        + "    roles: [search_head]\n",
+    )
+    _write_ccm_state(env)
+    opener = ScriptedOpener(
+        [
+            (200, {"data": {"deployment_id": "dep-9", "req_state": "ready"}}),
+            (200, _ready_deployment()),
+        ]
+    )
+    provider = CcmProvider(
+        paths,
+        _CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        sleep=lambda _seconds: None,
+    )
+    with pytest.raises(ProviderError, match=r"already provisioned: dep-9") as caught:
+        provider.provision([])
+    assert caught.value.code == 2
+    assert "spa destroy --yes" in str(caught.value)
+    assert [req.get_method() for req in opener.requests] == ["GET"]
+
+
+def test_ccm_provision_refuses_when_state_has_expired_deployment(tmp_path):
+    from spa.providers import ProviderError
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN
+        + "splunk_hosts:\n"
+        + "  - name: idx1\n"
+        + "    roles: [indexer]\n"
+        + "  - name: sh1\n"
+        + "    roles: [search_head]\n",
+    )
+    _write_ccm_state(env)
+    opener = ScriptedOpener(
+        [
+            (404, {"detail": "not found"}),
+            (200, {"data": {"deployment_id": "dep-new"}}),
+            (200, _ready_deployment("dep-new")),
+        ]
+    )
+    provider = CcmProvider(
+        paths,
+        _CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        sleep=lambda _seconds: None,
+    )
+    with pytest.raises(ProviderError, match=r"spa destroy --yes then spa provision --yes") as caught:
+        provider.provision([])
+    text = str(caught.value)
+    assert "TTL" in text or "terminate" in text.lower()
+    assert "dep-9" in text
+    assert [req.get_method() for req in opener.requests] == ["GET"]
+
+
+def test_ccm_provision_records_deployment_id_when_poll_fails(tmp_path):
+    from spa.providers import ProviderError
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN
+        + "splunk_hosts:\n"
+        + "  - name: idx1\n"
+        + "    roles: [indexer]\n"
+        + "  - name: sh1\n"
+        + "    roles: [search_head]\n",
+    )
+    pending = _ready_deployment()
+    pending["data"]["req_state"] = "pending"
+    opener = ScriptedOpener(
+        [
+            (200, {"data": {"deployment_id": "dep-9"}}),
+            (200, pending),
+            (200, b""),
+        ]
+    )
+    provider = CcmProvider(
+        paths,
+        _CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        sleep=lambda _seconds: None,
+        poll_attempts=1,
+    )
+    with pytest.raises(ProviderError, match=r"did not become ready"):
+        provider.provision([])
+    state = json.loads((env / "ccm" / "state.json").read_text(encoding="utf-8"))
+    assert state["deployment_id"] == "dep-9"
+    assert state["hosts"] == {}
+    assert state.get("req_state") == "pending"
+    result = provider.destroy([])
+    assert result["deployment_id"] == "dep-9"
+    assert [req.get_method() for req in opener.requests] == ["POST", "GET", "DELETE"]
+    assert opener.requests[2].full_url.endswith("/api/v1/deployments/dep-9")
+
+
+def test_ccm_provision_refuses_when_state_is_pending(tmp_path):
+    from spa.providers import ProviderError
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN
+        + "splunk_hosts:\n"
+        + "  - name: idx1\n"
+        + "    roles: [indexer]\n"
+        + "  - name: sh1\n"
+        + "    roles: [search_head]\n",
+    )
+    state_dir = env / "ccm"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / "state.json").write_text(
+        json.dumps(
+            {
+                "deployment_id": "dep-9",
+                "ttl": "2026-11-17T12:00:00.000Z",
+                "hosts": {},
+                "req_state": "pending",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    opener = ScriptedOpener(
+        [
+            (200, {"data": {"deployment_id": "dep-9", "req_state": "pending"}}),
+            (200, {"data": {"deployment_id": "dep-new"}}),
+            (200, _ready_deployment("dep-new")),
+        ]
+    )
+    provider = CcmProvider(
+        paths,
+        _CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        sleep=lambda _seconds: None,
+    )
+    with pytest.raises(ProviderError, match=r"already provisioned: dep-9") as caught:
+        provider.provision([])
+    assert caught.value.code == 2
+    assert [req.get_method() for req in opener.requests] == ["GET"]
+
+
 def _write_ccm_state(env, deployment_id="dep-9", hosts=None):
     state_dir = env / "ccm"
     state_dir.mkdir(parents=True, exist_ok=True)

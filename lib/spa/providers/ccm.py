@@ -433,8 +433,14 @@ class Provider:
             self._sleep(self._poll_interval)
         raise ProviderError("CCM deployment %s did not become ready" % deployment_id)
 
-    def _write_state(self, deployment_id: str, ttl: str, hosts: Mapping[str, Mapping[str, Any]]) -> None:
-        payload = {
+    def _write_state(
+        self,
+        deployment_id: str,
+        ttl: str,
+        hosts: Mapping[str, Mapping[str, Any]],
+        req_state: Optional[str] = None,
+    ) -> None:
+        payload: Dict[str, Any] = {
             "deployment_id": deployment_id,
             "ttl": ttl,
             "hosts": {
@@ -442,6 +448,8 @@ class Provider:
                 for name, row in hosts.items()
             },
         }
+        if req_state is not None:
+            payload["req_state"] = req_state
         self.state_dir.mkdir(parents=True, exist_ok=True)
         path = self.state_dir / "state.json"
         temporary = path.with_suffix(".tmp")
@@ -479,6 +487,17 @@ class Provider:
             )
         name = self._deployment_name()
         body, ttl = self._create_body(name, hosts)
+        recorded = self._read_state()
+        existing_id = str((recorded or {}).get("deployment_id") or "")
+        if existing_id:
+            state = self.provision_state()
+            if state.provisioned:
+                raise ProviderError(
+                    "already provisioned: %s. Run: spa destroy --yes to replace the lab."
+                    % existing_id,
+                    code=2,
+                )
+            self._expired_error(existing_id)
         status, payload = self._request(
             "POST",
             DEPLOYMENTS_PATH,
@@ -491,6 +510,7 @@ class Provider:
         deployment_id = created.get("deployment_id") if isinstance(created, dict) else None
         if not deployment_id:
             raise ProviderError("CCM create did not return a deployment_id")
+        self._write_state(str(deployment_id), ttl, {}, req_state="pending")
         ready = self._poll_until_ready(str(deployment_id))
         instances = ready.get("instances_data") or []
         if len(instances) != len(hosts):
@@ -506,7 +526,7 @@ class Provider:
                 "ip_address": instance.get("ip_address"),
             }
         known_ttl = str(ready.get("ttl") or ttl)
-        self._write_state(str(deployment_id), known_ttl, mapped)
+        self._write_state(str(deployment_id), known_ttl, mapped, req_state="ready")
         inventory = self._write_inventory(mapped)
         warning = "CCM will terminate the whole deployment when %s passes." % known_ttl
         if not kwargs.get("agent"):
