@@ -252,3 +252,18 @@ def get_provider(paths: SpaPaths):
     selection = detect_provider(paths)
     module = importlib.import_module(PROVIDER_MODULES[selection.name])
     return module.Provider(paths, selection.config)
+
+
+def run_lifecycle_preflight(provider: Any, action: str) -> None:
+    """Raise ProviderError if this action cannot start. Default: allow."""
+    method = getattr(provider, "lifecycle_preflight", None)
+    if callable(method):
+        method(action)
+
+
+def lifecycle_warnings(provider: Any, action: str) -> List[str]:
+    """Human lines after a successful lifecycle action (and in the envelope)."""
+    method = getattr(provider, "lifecycle_warnings", None)
+    if not callable(method):
+        return []
+    return [str(row) for row in (method(action) or []) if str(row).strip()]

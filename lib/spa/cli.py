@@ -1095,6 +1095,10 @@ def _warning_text(warning: Any) -> str:
     return str(warning)
 
 
+def _human_next_command(command: str) -> str:
+    return " ".join(part for part in command.split() if part != "--agent")
+
+
 def _print_next(data: Optional[Dict[str, Any]]) -> None:
     items = (data or {}).get("next") or []
     if not items:
@@ -1104,7 +1108,7 @@ def _print_next(data: Optional[Dict[str, Any]]) -> None:
         if not isinstance(row, dict):
             continue
         ask = str(row.get("ask") or row.get("id") or "").strip()
-        command = str(row.get("command") or "").strip()
+        command = _human_next_command(str(row.get("command") or "").strip())
         if ask and command:
             print("%s\n  %s" % (ask, command), file=sys.stderr)
         elif ask:
@@ -3530,7 +3534,10 @@ def _run(argv: Sequence[str]) -> int:
             print(result.error, file=sys.stderr)
         elif (result.data or {}).get("note"):
             print(result.data["note"])
-        _print_next(result.data if isinstance(result.data, dict) else {})
+        data = result.data if isinstance(result.data, dict) else {}
+        for warning in data.get("warnings") or []:
+            print(_warning_text(warning), file=sys.stderr)
+        _print_next(data)
         return result.code
 
     if args.command == "deploy":

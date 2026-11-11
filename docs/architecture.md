@@ -184,7 +184,7 @@ One command language for humans and agents. The CLI parses and renders. `SpaSess
 
 Successful data goes to stdout. Diagnostics, warnings, progress, and errors go to stderr. Usage errors exit 2. Runtime failures exit 1. Help exits 0. Name the legal command and a next action.
 
-When `CommandResult.data` includes `next`, print it for humans the same way agents receive it in the envelope: a `Next:` line on stderr, then each item's `ask` and `command`. Do not attach `next` that the human renderer omits. Agent mode still prints only the JSON envelope.
+When `CommandResult.data` includes `next`, print it for humans the same way agents receive it in the envelope: a `Next:` line on stderr, then each item's `ask` and `command`. Human `command` lines omit `--agent`. Do not attach `next` that the human renderer omits. Agent mode still prints only the JSON envelope.
 
 A usage error must name the legal values when the set is small (`aws` or `virtualbox`), or say what the operand is, name the command that lists the values, and give one example. `spa config topology` with no operand lists each `topology.*` id and the template it loads. An unknown topology points at `spa init list` (the same catalog as `spa environment init list`) and shows an example such as `spa config topology topology.c1`. An unknown topology or provider points at that list and does not stop at a filesystem path. Do not paste an open-ended catalog into the error. Human stderr and the agent `error` string carry the same sentences.
 

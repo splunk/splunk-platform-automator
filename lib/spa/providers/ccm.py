@@ -573,8 +573,10 @@ class Provider:
             )
         return destination
 
-    def provision(self, extra: List[str], **kwargs: Any) -> Dict[str, Any]:
-        del extra
+    def lifecycle_preflight(self, action: str) -> None:
+        """Refuse a second create before confirmation. Other actions proceed."""
+        if action != "provision":
+            return
         mixed = _mixed_external_error(load_deployment_config(self.paths))
         if mixed:
             raise ProviderError(mixed, code=2)
@@ -585,19 +587,51 @@ class Provider:
                 % (len(hosts), MAX_INSTANCES),
                 code=2,
             )
-        name = self._deployment_name()
-        body, ttl = self._create_body(name, hosts)
+        self._deployment_name()
+        ttl_days = int(self.config.get("ttl_days") or DEFAULT_TTL_DAYS)
+        if ttl_days < 1 or ttl_days > TTL_MAX_DAYS:
+            raise ProviderError(
+                "ccm.ttl_days must be 1–%s, got %s." % (TTL_MAX_DAYS, ttl_days),
+                code=2,
+            )
         recorded = self._read_state()
         existing_id = str((recorded or {}).get("deployment_id") or "")
-        if existing_id:
-            state = self.provision_state()
-            if state.provisioned:
-                raise ProviderError(
-                    "already provisioned: %s. Run: spa destroy --yes to replace the lab."
-                    % existing_id,
-                    code=2,
-                )
-            self._expired_error(existing_id)
+        if not existing_id:
+            return
+        state = self.provision_state()
+        if state.provisioned:
+            raise ProviderError(
+                "already provisioned: %s. Run: spa destroy --yes to replace the lab."
+                % existing_id,
+                code=2,
+            )
+        self._expired_error(existing_id)
+
+    def lifecycle_warnings(self, action: str) -> List[str]:
+        if action != "provision":
+            return []
+        recorded = self._read_state()
+        stamp = str((recorded or {}).get("ttl") or "")
+        if not stamp:
+            ttl_days = int(self.config.get("ttl_days") or DEFAULT_TTL_DAYS)
+            if ttl_days < 1 or ttl_days > TTL_MAX_DAYS:
+                return []
+            stamp = _ttl_stamp(self._now(), ttl_days)
+        from spa.shell import format_ttl_local
+
+        shown = format_ttl_local(stamp)
+        if not shown:
+            return []
+        return [
+            "CCM will terminate the whole deployment when %s passes." % shown
+        ]
+
+    def provision(self, extra: List[str], **kwargs: Any) -> Dict[str, Any]:
+        del extra
+        self.lifecycle_preflight("provision")
+        hosts = self._hostnames()
+        name = self._deployment_name()
+        body, ttl = self._create_body(name, hosts)
         status, payload = self._request(
             "POST",
             DEPLOYMENTS_PATH,
@@ -637,14 +671,11 @@ class Provider:
             operation_hours=hours,
         )
         inventory = self._write_inventory(mapped)
-        warning = "CCM will terminate the whole deployment when %s passes." % known_ttl
-        if not kwargs.get("agent"):
-            print(warning, file=sys.stderr)
         return {
             "deployment_id": str(deployment_id),
             "ttl": known_ttl,
             "inventory": str(inventory),
-            "warnings": [warning],
+            "warnings": self.lifecycle_warnings("provision"),
         }
 
     def _clear_local(self) -> None:

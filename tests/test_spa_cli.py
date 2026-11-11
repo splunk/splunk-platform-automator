@@ -1068,8 +1068,104 @@ def test_human_provision_prints_data_next(tmp_path, monkeypatch, capsys):
     err = capsys.readouterr().err
     assert "Next:" in err
     assert "Check provisioned hosts before deploy?" in err
-    assert "spa --agent hosts check" in err
+    assert "spa hosts check" in err
+    assert "spa deploy --yes" in err
+    assert "--agent" not in err
     assert "Deploy Splunk software?" in err
+
+
+def test_provision_preflight_error_skips_prompt_and_still_prints_with_yes(
+    tmp_path, monkeypatch, capsys
+):
+    """Provider preflight runs before Proceed?, and the same error prints with --yes."""
+    _stamped_lifecycle_env(tmp_path, monkeypatch)
+    prompted = []
+
+    class FakeProvider:
+        name = "ccm"
+
+        def lifecycle_preflight(self, action):
+            from spa.providers import ProviderError
+
+            del action
+            raise ProviderError(
+                "already provisioned: dep-9. Run: spa destroy --yes to replace the lab.",
+                code=2,
+            )
+
+        def provision(self, extra, **_kwargs):
+            raise AssertionError("provision must not run after preflight")
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda prompt="": prompted.append(prompt) or "y",
+    )
+    from spa.cli import main
+
+    rc = main(["--no-agent", "provision"])
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert prompted == []
+    assert "already provisioned: dep-9" in err
+    assert "Proceed?" not in err
+
+    rc = main(["--no-agent", "provision", "--yes"])
+    yes_err = capsys.readouterr().err
+    assert rc == 2
+    assert prompted == []
+    assert "already provisioned: dep-9" in yes_err
+    assert "Proceed?" not in yes_err
+
+
+def test_provision_warnings_print_after_success_and_with_yes(tmp_path, monkeypatch, capsys):
+    _stamped_lifecycle_env(tmp_path, monkeypatch)
+    warning = (
+        "CCM will terminate the whole deployment when "
+        "Tuesday, 17 Nov 2026 at 07:00 EST passes."
+    )
+
+    class FakeProvider:
+        name = "ccm"
+
+        def lifecycle_warnings(self, action):
+            del action
+            return [warning]
+
+        def provision(self, extra, **_kwargs):
+            return {"warnings": [warning]}
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    events = []
+    orig_write = sys.stderr.write
+
+    def write(text):
+        events.append(("stderr", text))
+        return orig_write(text)
+
+    monkeypatch.setattr(sys.stderr, "write", write)
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda prompt="": events.append(("prompt", prompt)) or "y",
+    )
+    from spa.cli import main
+
+    rc = main(["--no-agent", "provision"])
+    assert rc == 0
+    warn_at = next(i for i, event in enumerate(events) if event[0] == "stderr" and warning in event[1])
+    prompt_at = next(i for i, event in enumerate(events) if event[0] == "prompt")
+    assert prompt_at < warn_at
+    assert "Proceed?" in events[prompt_at][1]
+    next_at = next(i for i, event in enumerate(events) if event[0] == "stderr" and "Next:" in event[1])
+    assert warn_at < next_at
+
+    events.clear()
+    rc = main(["--no-agent", "provision", "--yes"])
+    assert rc == 0
+    assert any(event[0] == "stderr" and warning in event[1] for event in events)
+    assert all(event[0] != "prompt" for event in events)
 
 
 @pytest.mark.parametrize("argv", [["-y", "provision"], ["provision", "-y"]])

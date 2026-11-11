@@ -135,6 +135,7 @@ def test_architecture_defines_cli_ux_and_output_conventions():
     assert "architecture.md#cli-ux-and-output-conventions" in contributing
     assert "When `CommandResult.data` includes `next`" in architecture
     assert "`Next:` line on stderr" in architecture
+    assert "Human `command` lines omit `--agent`" in architecture
     assert "If the session attaches `data.next`, the human renderer prints it." in contributing
 
 

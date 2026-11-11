@@ -39,7 +39,9 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 - **Shipped config templates are a catalog** ([#143](https://github.com/splunk/splunk-platform-automator/issues/143)): `spa config templates list` is the catalog. Bare `spa config templates` exits 2. Each row includes the merge command. `spa config search` hits `template.NAME`; `spa config explain template.NAME` returns `spa config merge NAME --yes`. Agent list rows keep `spa --agent config merge NAME --yes`. Writes keep `splunk_app_deployment` scalars above `apps`.
 
-- **Human `data.next`**: every command that attaches `data.next` also prints it for humans (`Next:` on stderr, then each ask and command). Agent mode stays JSON-only. Init, architecture plan/apply, validate, and provision were the gaps.
+- **Human `data.next`**: every command that attaches `data.next` also prints it for humans (`Next:` on stderr, then each ask and command). Human `command` lines omit `--agent`; agent JSON `command` keeps it. Agent mode stays JSON-only. Init, architecture plan/apply, validate, and provision were the gaps.
+
+- **Lifecycle preflight before confirmation**: `spa provision` runs provider `lifecycle_preflight` before `Proceed?`, so a CCM lab that is already live prints `already provisioned: ID` without asking, and `spa provision --yes` prints the same error. After a successful provision, CCM TTL warnings print in controller-local time (same spelling as `spa hosts list --status`), including with `--yes`. Human confirm `details` print with `--yes` as well.
 
 - **Architecture ignores `apps.by_role`** ([#144](https://github.com/splunk/splunk-platform-automator/issues/144)): `spa architecture plan` / init / apply no longer attach `data.next` asking to import ClusterBaseConfigs / BaseConfigs as local apps. SPA installs PS baseconfigs from `splunk_baseconfig_dir`. Phase 9 still asks for extra Splunkbase / ITSI / ES apps.
 

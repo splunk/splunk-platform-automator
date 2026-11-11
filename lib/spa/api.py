@@ -1684,6 +1684,14 @@ class LocalSpaSession:
                 "SPA does not provision external hosts: %s" % ", ".join(external),
                 file=sys.stderr,
             )
+        from spa.providers import run_lifecycle_preflight
+
+        try:
+            run_lifecycle_preflight(provider, action)
+        except ProviderError as exc:
+            return CommandResult(
+                ok=False, error=str(exc), code=getattr(exc, "code", 1) or 1
+            )
         blocked = self._confirm_gate(
             action,
             confirm=confirm,

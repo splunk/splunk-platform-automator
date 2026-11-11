@@ -63,6 +63,9 @@ def ensure_confirmed(
     risk: Optional[str] = None,
 ) -> None:
     """No-op if confirm; fail in agent mode; otherwise prompt on a terminal."""
+    if not agent:
+        for line in details or ():
+            print(line, file=sys.stderr)
     if confirm:
         return
     if agent:
@@ -71,8 +74,6 @@ def ensure_confirmed(
         raise ConfirmationUsageError(
             "%s requires -y/--yes when stdin is not a terminal." % label
         )
-    for line in details or ():
-        print(line, file=sys.stderr)
     answer = input(prompt_text(label, risk=risk))
     if answer.strip().lower() not in {"y", "yes"}:
         raise ConfirmationError("%s cancelled." % label)

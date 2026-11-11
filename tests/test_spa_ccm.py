@@ -366,10 +366,52 @@ def test_ccm_provision_writes_state_inventory_and_warns_ttl(tmp_path, capsys):
     assert "/tmp/ccm-test-key" in inventory
 
     err = capsys.readouterr().err
-    assert "terminate" in err.lower()
-    assert "2026-11-17" in err
+    assert "terminate" not in err.lower()
     warnings = result.get("warnings") or []
-    assert any("terminate" in item.lower() for item in warnings)
+    assert warnings
+    for item in warnings:
+        assert "terminate" in item.lower()
+        assert "2026-11-17T12:00:00.000Z" not in item
+
+
+def test_ccm_lifecycle_warnings_use_controller_local_time(tmp_path):
+    import os
+    import time
+    from datetime import datetime, timezone
+
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN
+        + "splunk_hosts:\n"
+        + "  - name: idx1\n"
+        + "    roles: [indexer]\n",
+    )
+    previous = os.environ.get("TZ")
+    os.environ["TZ"] = "America/New_York"
+    time.tzset()
+    try:
+        provider = CcmProvider(
+            paths,
+            _CCM_CONFIG,
+            client=UrllibCcmClient(token="test-ccm-token", opener=ScriptedOpener([])),
+            now=lambda: datetime(2026, 11, 10, 12, 0, tzinfo=timezone.utc),
+        )
+        warnings = provider.lifecycle_warnings("provision")
+        assert warnings == [
+            "CCM will terminate the whole deployment when "
+            "Tuesday, 17 Nov 2026 at 07:00 EST passes."
+        ]
+        assert provider.lifecycle_warnings("destroy") == []
+    finally:
+        if previous is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = previous
+        time.tzset()
 
 
 def test_ccm_provision_posts_ebs_storage_when_configured(tmp_path):
