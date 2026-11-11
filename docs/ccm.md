@@ -2,7 +2,7 @@
 
 Corporate Cloud Manager is a REST portal over AWS for Splunk staff with CCM access. SPA provisions CCM **EC2** deployments and then installs Splunk with the usual Ansible path. This is **not** Terraform (`terraform.aws`) and **not** a CCM Splunk install (`?type=splunk`). Public labs stay `--provider aws`, `virtualbox`, or `external`.
 
-Human `spa --help` and skills omit CCM unless `CCM_TOKEN` is set, the env already has a root `ccm:` block, or the operator already named CCM. Typing `spa provider ccm …` still works; a missing token fails at runtime as **set / not set**.
+Human `spa --help`, invalid-choice text, and skills omit CCM unless `CCM_TOKEN` is set, the env already has a root `ccm:` block, or the operator already named CCM. Typing `spa provider ccm …` still works; a missing token fails at runtime as **set / not set**.
 
 ## Discover and configure
 

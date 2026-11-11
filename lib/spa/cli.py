@@ -685,6 +685,15 @@ def _ccm_audience_visible(head: Sequence[str]) -> bool:
     return audience_visible(paths=paths)
 
 
+def _omit_parser_choice(message: str, name: str) -> str:
+    """Drop one quoted argparse choice from an invalid-choice error."""
+    quoted = "'%s'" % name
+    for token in (", %s" % quoted, "%s, " % quoted):
+        if token in message:
+            return message.replace(token, "", 1)
+    return message
+
+
 SHELL_NEEDS_NAME = "spa shell needs NAME.\nExample: spa shell NAME"
 _RETIRED_AWS_PARENT = {
     "--check-auth": "Checking credentials is: spa aws check-auth",
@@ -1523,6 +1532,12 @@ def _run(argv: Sequence[str]) -> int:
             if parse_as_agent:
                 emit(False, error=message, as_agent=True)
                 raise SystemExit(2)
+            if (
+                "invalid choice" in message
+                and "argument COMMAND:" in message
+                and not _ccm_audience_visible(head)
+            ):
+                message = _omit_parser_choice(message, "provider")
             self.print_usage(sys.stderr)
             print("%s: error: %s" % (self.prog, message), file=sys.stderr)
             raise SystemExit(2)

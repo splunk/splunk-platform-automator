@@ -1446,6 +1446,39 @@ def test_human_parent_help_lists_canonical_provider_for_a_ccm_env(tmp_path):
     assert "pro" not in names
 
 
+def test_human_invalid_choice_omits_provider_without_ccm_audience():
+    result = run_spa(["--no-agent", "nosuch"])
+    assert result.returncode == 2
+    assert "invalid choice" in result.stderr
+    assert "'aws'" in result.stderr
+    assert "'provider'" not in result.stderr
+    assert "'pro'" not in result.stderr
+
+
+def test_human_invalid_choice_lists_provider_when_ccm_token_is_set():
+    result = run_spa(
+        ["--no-agent", "nosuch"],
+        extra_env={"CCM_TOKEN": "test-ccm-pat-value"},
+    )
+    assert result.returncode == 2
+    assert "invalid choice" in result.stderr
+    assert "'provider'" in result.stderr
+    assert "'pro'" not in result.stderr
+    assert "test-ccm-pat-value" not in result.stderr
+
+
+def test_agent_invalid_choice_lists_provider_without_ccm_audience():
+    result = run_spa(["--agent", "nosuch"])
+    assert result.returncode == 2
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert payload["schema_version"] == 1
+    assert "data" not in payload
+    assert "invalid choice" in payload["error"]
+    assert "'provider'" in payload["error"]
+    assert result.stderr == ""
+
+
 def test_provider_help_shows_hidden_pro_alias():
     help_text = run_spa(["--no-agent", "provider", "--help"])
     assert help_text.returncode == 0, help_text.stderr
