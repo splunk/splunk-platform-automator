@@ -19,7 +19,7 @@ This file is a legacy runbook. The skills own the flow now. Agents use `/spa-cre
 | Step | Owner |
 |------|-------|
 | Design, AWS settings, and config writes | `/spa-create-config` |
-| Credential probe | `spa --agent aws check-auth` (report set / not set only; read `data.account`) |
+| Credential probe | `spa --agent provider aws check-auth` (report set / not set only; read `data.account`) |
 | Preview, provision, host check, deploy, suspend, resume, destroy | `/spa` |
 | Host status and SSH | `spa hosts list --status`, `spa hosts ssh <host>` |
 | Logs | `spa logs --last` |

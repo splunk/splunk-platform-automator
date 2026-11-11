@@ -11,6 +11,7 @@ from typing import Any, Dict, Mapping, Optional
 from spa.hosts import allowed_role_names
 from spa.usage import (
     APP_ID_HELP,
+    DOCTOR_PROVIDER_HELP,
     INIT_PROVIDER_HELP,
     PROVIDER_HELP,
     SELECTOR_HELP,
@@ -143,7 +144,7 @@ COMMAND_SCHEMA = {
     "commands": [
         {
             "name": "init",
-            "summary": "Alias of spa environment init (spa init --example TOPOLOGY or --architecture FILE [--provider aws|virtualbox|external] NAME)",
+            "summary": "Alias of spa environment init (spa init --example TOPOLOGY or --architecture FILE [--provider aws|virtualbox|external|ccm] NAME)",
             "flags": [
                 {"long": "--example", "help": "Topology example id (exclusive with --architecture)", "takes_value": True, "completes_from": "init list"},
                 {
@@ -455,7 +456,19 @@ COMMAND_SCHEMA = {
             ],
             "example": "spa validate --splunk-config aws",
         },
-        {"name": "doctor", "summary": "Host prerequisite checks"},
+        {
+            "name": "doctor",
+            "summary": "Host prerequisite checks",
+            "flags": [
+                {
+                    "long": "--provider",
+                    "help": DOCTOR_PROVIDER_HELP,
+                    "takes_value": True,
+                    "completes_from": "providers",
+                },
+                {"long": "--strict", "help": "Treat optional-tool warnings as failures", "takes_value": False},
+            ],
+        },
         {
             "name": "skills",
             "summary": "Install or remove SPA agent skills from $SPA_HOME/skills/spa/ into user IDE directories",
@@ -613,7 +626,7 @@ COMMAND_SCHEMA = {
                 },
                 {
                     "long": "--provider",
-                    "help": "Save the default provider for init: aws, virtualbox, or external. Saved even for aws, so init then accepts no --provider",
+                    "help": "Save the default provider for init: aws, virtualbox, external, or ccm. Saved even for aws, so init then accepts no --provider",
                     "takes_value": True,
                     "completes_from": "providers",
                 },
@@ -648,7 +661,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "environment",
-            "summary": "Environment family (alias: env). spa resolves cwd or --env itself; --export is for external tools",
+            "summary": "Environment family. spa resolves cwd or --env itself; --export is for external tools",
             "flags": [{"long": "--export", "help": "Print shell exports for external tools"}],
             "example": "spa environment --export",
         },
@@ -793,17 +806,22 @@ COMMAND_SCHEMA = {
             "example": "spa shell idx1 -- -L 8000:localhost:8000",
         },
         {
-            "name": "aws",
-            "summary": "AWS discovery for terraform.aws. Bare spa aws exits 2.",
-            "example": "spa --agent aws check-auth",
+            "name": "provider",
+            "summary": "Provider discovery. Bare spa provider exits 2 and names AWS, then CCM when CCM is in play.",
+            "example": "spa --agent provider aws check-auth",
         },
         {
-            "name": "aws check-auth",
+            "name": "provider aws",
+            "summary": "AWS discovery for terraform.aws. Bare spa provider aws exits 2.",
+            "example": "spa --agent provider aws check-auth",
+        },
+        {
+            "name": "provider aws check-auth",
             "summary": "Verify AWS credentials via STS. No --region required.",
-            "example": "spa --agent aws check-auth",
+            "example": "spa --agent provider aws check-auth",
         },
         {
-            "name": "aws latest-ami",
+            "name": "provider aws latest-ami",
             "summary": "Resolve the latest AMI for a recommended OS.",
             "flags": [
                 {
@@ -815,10 +833,10 @@ COMMAND_SCHEMA = {
                     "help": "Recommended OS: rhel, ubuntu, amazon_linux, debian (or all). Aliases: al2023, rhel10, ubuntu2404",
                 },
             ],
-            "example": "spa aws latest-ami --os rhel --region eu-central-1",
+            "example": "spa provider aws latest-ami --os rhel --region eu-central-1",
         },
         {
-            "name": "aws describe-ami",
+            "name": "provider aws describe-ami",
             "summary": "Describe one AMI.",
             "flags": [
                 {
@@ -827,10 +845,10 @@ COMMAND_SCHEMA = {
                 },
                 {"long": "--ami-id", "help": "AMI ID"},
             ],
-            "example": "spa aws describe-ami --ami-id ami-xxx",
+            "example": "spa provider aws describe-ami --ami-id ami-xxx",
         },
         {
-            "name": "aws validate",
+            "name": "provider aws validate",
             "summary": "Validate AMI, key pair, security groups, and instance type in a region.",
             "flags": [
                 {
@@ -843,10 +861,10 @@ COMMAND_SCHEMA = {
                 {"long": "--security-groups", "help": "Comma-separated security group names for validate"},
                 {"long": "--instance-type", "help": "Instance type for validate"},
             ],
-            "example": "spa aws validate --region eu-central-1 --security-groups Splunk_Basic",
+            "example": "spa provider aws validate --region eu-central-1 --security-groups Splunk_Basic",
         },
         {
-            "name": "aws survey",
+            "name": "provider aws survey",
             "summary": "Combined discovery report for a region.",
             "flags": [
                 {
@@ -854,15 +872,15 @@ COMMAND_SCHEMA = {
                     "help": "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config.",
                 },
             ],
-            "example": "spa aws survey --region eu-central-1",
+            "example": "spa provider aws survey --region eu-central-1",
         },
         {
-            "name": "aws regions list",
+            "name": "provider aws regions list",
             "summary": "List enabled regions. Marks the region from --region, AWS_REGION, AWS_DEFAULT_REGION, or ~/.aws/config.",
-            "example": "spa aws regions list --json",
+            "example": "spa provider aws regions list --json",
         },
         {
-            "name": "aws amis list",
+            "name": "provider aws amis list",
             "summary": "List AMIs in a region",
             "flags": [
                 {
@@ -874,10 +892,10 @@ COMMAND_SCHEMA = {
                 {"long": "--max-results", "help": "Max AMIs to return"},
                 {"long": "--os", "help": "Recommended OS, or all"},
             ],
-            "example": "spa aws amis list --region eu-central-1 --json",
+            "example": "spa provider aws amis list --region eu-central-1 --json",
         },
         {
-            "name": "aws instance-types list",
+            "name": "provider aws instance-types list",
             "summary": "List instance types offered in a region",
             "flags": [
                 {
@@ -886,10 +904,10 @@ COMMAND_SCHEMA = {
                 },
                 {"long": "--family", "help": "Instance type family prefix (e.g. t3)"},
             ],
-            "example": "spa aws instance-types list --region eu-central-1 --family t3",
+            "example": "spa provider aws instance-types list --region eu-central-1 --family t3",
         },
         {
-            "name": "aws key-pairs list",
+            "name": "provider aws key-pairs list",
             "summary": "List EC2 key pairs",
             "flags": [
                 {
@@ -897,10 +915,10 @@ COMMAND_SCHEMA = {
                     "help": "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config.",
                 }
             ],
-            "example": "spa aws key-pairs list --region eu-central-1",
+            "example": "spa provider aws key-pairs list --region eu-central-1",
         },
         {
-            "name": "aws security-groups list",
+            "name": "provider aws security-groups list",
             "summary": "List security groups",
             "flags": [
                 {
@@ -908,7 +926,94 @@ COMMAND_SCHEMA = {
                     "help": "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config.",
                 }
             ],
-            "example": "spa aws security-groups list --region eu-central-1",
+            "example": "spa provider aws security-groups list --region eu-central-1",
+        },
+        {
+            "name": "provider ccm",
+            "summary": "CCM discovery. Bare spa provider ccm exits 2.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm check-auth",
+        },
+        {
+            "name": "provider ccm check-auth",
+            "summary": "Verify CCM_TOKEN is set and CCM accepts Bearer via GET /api/v1/deployments. Reports the env var as set / not set.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm check-auth",
+        },
+        {
+            "name": "provider ccm survey",
+            "summary": "Combined CCM meta dump plus GUI closed sets (operating systems, instance types, disk storage, business purposes, operation hours).",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm survey",
+        },
+        {
+            "name": "provider ccm operating-systems list",
+            "summary": "List CCM operating systems from GET /api/v1/meta.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm operating-systems list",
+        },
+        {
+            "name": "provider ccm instance-types list",
+            "summary": "List CCM instance types from GET /api/v1/meta.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm instance-types list",
+        },
+        {
+            "name": "provider ccm disk-storage list",
+            "summary": "List CCM disk storage sizes from GET /api/v1/meta.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm disk-storage list",
+        },
+        {
+            "name": "provider ccm business-purposes list",
+            "summary": "List GUI business purposes. Not a CCM meta attribute.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm business-purposes list",
+        },
+        {
+            "name": "provider ccm operation-hours list",
+            "summary": "List GUI/API operation hours. Not a CCM meta attribute.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm operation-hours list",
+        },
+        {
+            "name": "provider ccm operation-hours set",
+            "summary": "PATCH the CCM deployment operation_hours. Mutating. Does not change hours on spa resume.",
+            "audience": "ccm",
+            "requires_confirmation": True,
+            "positionals": [
+                {
+                    "name": "HOURS",
+                    "required": True,
+                    "help": "manual or business_hours",
+                    "choices": ["manual", "business_hours"],
+                }
+            ],
+            "flags": [
+                {"long": "--yes", "short": "-y", "help": "Confirm without prompting"},
+            ],
+            "example": "spa --agent provider ccm operation-hours set manual --yes",
+        },
+        {
+            "name": "provider ccm ssh-keys list",
+            "summary": "List CCM SSH key names and fingerprints, and whether ccm.ssh_private_key_file exists locally. Never prints public_key bodies.",
+            "audience": "ccm",
+            "example": "spa --agent provider ccm ssh-keys list",
+        },
+        {
+            "name": "provider ccm ttl extend",
+            "summary": "PATCH the CCM deployment ttl to now plus --days (1-30). Mutating. Fail if not provisioned or already terminated.",
+            "audience": "ccm",
+            "requires_confirmation": True,
+            "flags": [
+                {
+                    "long": "--days",
+                    "help": "New TTL in days from now (1-30)",
+                    "takes_value": True,
+                },
+                {"long": "--yes", "short": "-y", "help": "Confirm without prompting"},
+            ],
+            "example": "spa --agent provider ccm ttl extend --days 7 --yes",
         },
         {
             "name": "architecture",

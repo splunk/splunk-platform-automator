@@ -10,13 +10,13 @@ and `spa run NAME --help`.
 
 ## `init`
 
-Alias of spa environment init (spa init --example TOPOLOGY or --architecture FILE [--provider aws|virtualbox|external] NAME)
+Alias of spa environment init (spa init --example TOPOLOGY or --architecture FILE [--provider aws|virtualbox|external|ccm] NAME)
 
 | Flag | Description |
 | --- | --- |
 | `--example` | Topology example id (exclusive with --architecture) |
 | `--architecture` | Confirmed 0.4.0 architecture JSON (exclusive with --example) |
-| `--provider` | aws, virtualbox, or external. Required unless a default is saved (spa environment set --provider NAME) |
+| `--provider` | aws, virtualbox, external, or ccm. Required unless a default is saved (spa environment set --provider NAME) |
 
 Example:
 
@@ -353,7 +353,7 @@ Replace provider-owned config sections from an example template
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `PROVIDER` | yes | aws, virtualbox, or external, or a provider feature id. List them: spa init list. Example: spa config provider aws |
+| `PROVIDER` | yes | aws, virtualbox, external, or ccm, or a provider feature id. List them: spa init list. Example: spa config provider aws |
 
 Example:
 
@@ -427,6 +427,11 @@ spa validate --splunk-config aws
 ## `doctor`
 
 Host prerequisite checks
+
+| Flag | Description |
+| --- | --- |
+| `--provider` | aws, virtualbox, external, or ccm. Repeatable. Example: spa doctor --provider ccm |
+| `--strict` | Treat optional-tool warnings as failures |
 
 ## `skills`
 
@@ -602,7 +607,7 @@ Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Plat
 | --- | --- |
 | `--example` | Topology example id (exclusive with --architecture) |
 | `--architecture` | Confirmed 0.4.0 architecture JSON (exclusive with --example) |
-| `--provider` | aws, virtualbox, or external. Required unless a default is saved (spa environment set --provider NAME) |
+| `--provider` | aws, virtualbox, external, or ccm. Required unless a default is saved (spa environment set --provider NAME) |
 | `--env-dir` | One-off parent (requires --name); does not change the default parent |
 | `--name` | Registry name (default: folder basename) |
 | `--force` | Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example) |
@@ -635,7 +640,7 @@ User-level defaults in paths.yml (env parent, Software, baseconfig, apps) and th
 | `--baseconfig-dir` | PS baseconfig apps directory |
 | `--apps-dir` | Local apps directory |
 | `--default` | Registered environment used when cwd does not select one |
-| `--provider` | Save the default provider for init: aws, virtualbox, or external. Saved even for aws, so init then accepts no --provider |
+| `--provider` | Save the default provider for init: aws, virtualbox, external, or ccm. Saved even for aws, so init then accepts no --provider |
 
 Example:
 
@@ -676,7 +681,7 @@ Requires confirmation: yes (`--yes`).
 
 ## `environment`
 
-Environment family (alias: env). spa resolves cwd or --env itself; --export is for external tools
+Environment family. spa resolves cwd or --env itself; --export is for external tools
 
 | Flag | Description |
 | --- | --- |
@@ -891,27 +896,37 @@ Example:
 spa shell idx1 -- -L 8000:localhost:8000
 ```
 
-## `aws`
+## `provider`
 
-AWS discovery for terraform.aws. Bare spa aws exits 2.
+Provider discovery. Bare spa provider exits 2 and names AWS, then CCM when CCM is in play.
 
 Example:
 
 ```bash
-spa --agent aws check-auth
+spa --agent provider aws check-auth
 ```
 
-## `aws check-auth`
+## `provider aws`
+
+AWS discovery for terraform.aws. Bare spa provider aws exits 2.
+
+Example:
+
+```bash
+spa --agent provider aws check-auth
+```
+
+## `provider aws check-auth`
 
 Verify AWS credentials via STS. No --region required.
 
 Example:
 
 ```bash
-spa --agent aws check-auth
+spa --agent provider aws check-auth
 ```
 
-## `aws latest-ami`
+## `provider aws latest-ami`
 
 Resolve the latest AMI for a recommended OS.
 
@@ -923,10 +938,10 @@ Resolve the latest AMI for a recommended OS.
 Example:
 
 ```bash
-spa aws latest-ami --os rhel --region eu-central-1
+spa provider aws latest-ami --os rhel --region eu-central-1
 ```
 
-## `aws describe-ami`
+## `provider aws describe-ami`
 
 Describe one AMI.
 
@@ -938,10 +953,10 @@ Describe one AMI.
 Example:
 
 ```bash
-spa aws describe-ami --ami-id ami-xxx
+spa provider aws describe-ami --ami-id ami-xxx
 ```
 
-## `aws validate`
+## `provider aws validate`
 
 Validate AMI, key pair, security groups, and instance type in a region.
 
@@ -957,10 +972,10 @@ Validate AMI, key pair, security groups, and instance type in a region.
 Example:
 
 ```bash
-spa aws validate --region eu-central-1 --security-groups Splunk_Basic
+spa provider aws validate --region eu-central-1 --security-groups Splunk_Basic
 ```
 
-## `aws survey`
+## `provider aws survey`
 
 Combined discovery report for a region.
 
@@ -971,20 +986,20 @@ Combined discovery report for a region.
 Example:
 
 ```bash
-spa aws survey --region eu-central-1
+spa provider aws survey --region eu-central-1
 ```
 
-## `aws regions list`
+## `provider aws regions list`
 
 List enabled regions. Marks the region from --region, AWS_REGION, AWS_DEFAULT_REGION, or ~/.aws/config.
 
 Example:
 
 ```bash
-spa aws regions list --json
+spa provider aws regions list --json
 ```
 
-## `aws amis list`
+## `provider aws amis list`
 
 List AMIs in a region
 
@@ -999,10 +1014,10 @@ List AMIs in a region
 Example:
 
 ```bash
-spa aws amis list --region eu-central-1 --json
+spa provider aws amis list --region eu-central-1 --json
 ```
 
-## `aws instance-types list`
+## `provider aws instance-types list`
 
 List instance types offered in a region
 
@@ -1014,10 +1029,10 @@ List instance types offered in a region
 Example:
 
 ```bash
-spa aws instance-types list --region eu-central-1 --family t3
+spa provider aws instance-types list --region eu-central-1 --family t3
 ```
 
-## `aws key-pairs list`
+## `provider aws key-pairs list`
 
 List EC2 key pairs
 
@@ -1028,10 +1043,10 @@ List EC2 key pairs
 Example:
 
 ```bash
-spa aws key-pairs list --region eu-central-1
+spa provider aws key-pairs list --region eu-central-1
 ```
 
-## `aws security-groups list`
+## `provider aws security-groups list`
 
 List security groups
 
@@ -1042,7 +1057,134 @@ List security groups
 Example:
 
 ```bash
-spa aws security-groups list --region eu-central-1
+spa provider aws security-groups list --region eu-central-1
+```
+
+## `provider ccm`
+
+CCM discovery. Bare spa provider ccm exits 2.
+
+Example:
+
+```bash
+spa --agent provider ccm check-auth
+```
+
+## `provider ccm check-auth`
+
+Verify CCM_TOKEN is set and CCM accepts Bearer via GET /api/v1/deployments. Reports the env var as set / not set.
+
+Example:
+
+```bash
+spa --agent provider ccm check-auth
+```
+
+## `provider ccm survey`
+
+Combined CCM meta dump plus GUI closed sets (operating systems, instance types, disk storage, business purposes, operation hours).
+
+Example:
+
+```bash
+spa --agent provider ccm survey
+```
+
+## `provider ccm operating-systems list`
+
+List CCM operating systems from GET /api/v1/meta.
+
+Example:
+
+```bash
+spa --agent provider ccm operating-systems list
+```
+
+## `provider ccm instance-types list`
+
+List CCM instance types from GET /api/v1/meta.
+
+Example:
+
+```bash
+spa --agent provider ccm instance-types list
+```
+
+## `provider ccm disk-storage list`
+
+List CCM disk storage sizes from GET /api/v1/meta.
+
+Example:
+
+```bash
+spa --agent provider ccm disk-storage list
+```
+
+## `provider ccm business-purposes list`
+
+List GUI business purposes. Not a CCM meta attribute.
+
+Example:
+
+```bash
+spa --agent provider ccm business-purposes list
+```
+
+## `provider ccm operation-hours list`
+
+List GUI/API operation hours. Not a CCM meta attribute.
+
+Example:
+
+```bash
+spa --agent provider ccm operation-hours list
+```
+
+## `provider ccm operation-hours set`
+
+PATCH the CCM deployment operation_hours. Mutating. Does not change hours on spa resume.
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `-y`, `--yes` | Confirm without prompting |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `HOURS` | yes | manual or business_hours |
+
+Example:
+
+```bash
+spa --agent provider ccm operation-hours set manual --yes
+```
+
+## `provider ccm ssh-keys list`
+
+List CCM SSH key names and fingerprints, and whether ccm.ssh_private_key_file exists locally. Never prints public_key bodies.
+
+Example:
+
+```bash
+spa --agent provider ccm ssh-keys list
+```
+
+## `provider ccm ttl extend`
+
+PATCH the CCM deployment ttl to now plus --days (1-30). Mutating. Fail if not provisioned or already terminated.
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `--days` | New TTL in days from now (1-30) |
+| `-y`, `--yes` | Confirm without prompting |
+
+Example:
+
+```bash
+spa --agent provider ccm ttl extend --days 7 --yes
 ```
 
 ## `architecture`

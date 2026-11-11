@@ -109,7 +109,7 @@ os:
 | --- | --- | --- | --- |
 | `terraform` | object | optional | Terraform provider settings. Holds no value itself. |
 | `terraform.aws` | object | optional | EC2 settings Terraform applies. Holds no value itself. |
-| `terraform.aws.ami_id` | string | optional; pattern=^ami-[0-9a-fA-F]+$ | EC2 AMI id. Default is the id shipped in defaults/aws.yml. Omit the key to keep that. spa config set writes an end-of-line comment with the image name and description when AWS can describe the id. Find a current Red Hat image with spa aws latest-ami --region eu-central-1 --os rhel, or list matches with spa aws amis list --region eu-central-1 --os rhel. ubuntu, amazon_linux, and debian use the same --os form. |
+| `terraform.aws.ami_id` | string | optional; pattern=^ami-[0-9a-fA-F]+$ | EC2 AMI id. Default is the id shipped in defaults/aws.yml. Omit the key to keep that. spa config set writes an end-of-line comment with the image name and description when AWS can describe the id. Find a current Red Hat image with spa provider aws latest-ami --region eu-central-1 --os rhel, or list matches with spa provider aws amis list --region eu-central-1 --os rhel. ubuntu, amazon_linux, and debian use the same --os form. |
 | `terraform.aws.instance_type` | string | optional; default='t2.micro' | EC2 instance type. |
 | `terraform.aws.key_name` | string | optional; default='aws_key' | EC2 key pair name. |
 | `terraform.aws.region` | string | optional; default='eu-central-1' | AWS region Terraform uses. |
@@ -117,7 +117,7 @@ os:
 | `terraform.aws.root_volume_type` | string | optional | EBS volume type. AWS defines the names. No default. Omit the key to keep the AMI volume type. Lab often uses gp3. Not a closed SPA list. |
 | `terraform.aws.security_group_names` | list[string] | optional; default=['Splunk_Basic'] | EC2 security group names. |
 | `terraform.aws.ssh_private_key_file` | string | optional | Path on the Ansible controller to the private key for key_name. Default ~/.ssh/aws_key.pem. Omit the key to keep that. |
-| `terraform.aws.ssh_username` | string | optional; default='ec2-user' | SSH login user for the AMI. Use ubuntu or admin when the AMI requires it. Login user must match the AMI (for example ec2-user, ubuntu, or admin). Pair with spa aws describe-ami. |
+| `terraform.aws.ssh_username` | string | optional; default='ec2-user' | SSH login user for the AMI. Use ubuntu or admin when the AMI requires it. Login user must match the AMI (for example ec2-user, ubuntu, or admin). Pair with spa provider aws describe-ami. |
 | `terraform.aws.subnet_id` | string | optional | VPC subnet id. No default. Omit the key to use the default subnet in the region. |
 | `terraform.aws.tags` | map[string, string] | optional | Map of AWS tag name to tag value. No default. Omit the key to set no tags. Include SPADirName "{{ spa_env_dir \| basename }}" so AWS tags name the env directory. |
 | `virtualbox` | object | optional | VirtualBox guest size and network for Vagrant. Holds no value itself. |
@@ -129,6 +129,22 @@ os:
 | `virtualbox.synced_folder` | list[object] | optional | Folders mounted from the Ansible controller into the guest. Holds no value itself. |
 | `virtualbox.synced_folder[].source` | string | required | Path on the Ansible controller to mount into the guest. Required. |
 | `virtualbox.synced_folder[].target` | string | required | Path inside the guest where the controller folder is mounted. Required. |
+| `ccm` | object | optional | Splunk Corporate Cloud Manager EC2 settings. Holds no value itself. Auth is lookup('env', 'CCM_TOKEN'), not a config key. |
+| `ccm.business_description` | string | optional | Free-text description next to business_purpose. No default. Omit the key to set no description. |
+| `ccm.business_purpose` | enum | optional; default='DeveloperInstance'; allowed=DeveloperInstance\|SalesOpportunity\|SupportCase | Reason shown in the CCM GUI. |
+| `ccm.disk_storage` | enum | optional; default=50; allowed=50\|100\|200\|250\|500\|1024\|2048 | CCM instance root disk size in GB. One of 50, 100, 200, 250, 500, 1024, or 2048. |
+| `ccm.ebs_storage` | object | optional | Extra attached volumes. Holds no value itself. Omit the key for no extra volumes. |
+| `ccm.ebs_storage.ebs_count` | integer | optional; ge=1; le=3 | Number of extra attached volumes. Minimum 1, maximum 3. No default. Omit ebs_storage for no extra volumes. |
+| `ccm.ebs_storage.ebs_size` | enum | optional; allowed=50\|100\|300 | Size in GB of each extra volume. One of 50, 100, or 300. No default. Omit ebs_storage for no extra volumes. |
+| `ccm.instance_type` | string | optional | CCM instance type. A live CCM catalog value, not an AWS AMI id. No default. Omit the key to set none. |
+| `ccm.key_name` | string | optional | CCM SSH key name (ssh_key_name on create). No default. Omit the key to set none. |
+| `ccm.name` | string | optional; min_length=5; max_length=100; pattern=^[a-zA-Z0-9][\w-]*[a-zA-Z0-9]$ | CCM deployment name. Default is the env directory basename when it matches CCM's 5-100 character pattern. Omit the key to keep that. |
+| `ccm.operating_system` | string | optional | CCM operating system id. A live CCM catalog value, not an AMI id. No default. Omit the key to set none. |
+| `ccm.operation_hours` | enum | optional; default='manual'; allowed=business_hours\|manual | When CCM may stop instances. manual leaves them running; business_hours follows the deployment timezone. |
+| `ccm.ssh_private_key_file` | string | optional | Path on the Ansible controller to the private key for key_name. Default ~/.ssh/CCM-Key.pem. Omit the key to keep that. |
+| `ccm.ssh_username` | string | optional; default='splunker' | SSH login user for the CCM image. Every CCM OS flavor uses splunker, not the AWS AMI user. |
+| `ccm.timezone` | string | optional; default='UTC' | IANA time zone on the CCM deployment. |
+| `ccm.ttl_days` | integer | optional; default=7; ge=1; le=30 | Days until CCM terminates the whole deployment. Minimum 1, maximum 30. |
 | `external` | ExternalConfig | optional | Bring-your-own SSH provider. Holds no value itself. No default. Set this when no terraform.aws or virtualbox block is present. |
 
 ### Snippets
@@ -137,7 +153,7 @@ os:
 
 `terraform.aws.ssh_username`
 
-Login user Terraform and Ansible use on the EC2 AMI. Must match the image (ec2-user on Amazon Linux and RHEL, ubuntu on Ubuntu, admin on Debian). Discover with spa aws describe-ami / latest-ami. Always set it explicitly for AWS labs.
+Login user Terraform and Ansible use on the EC2 AMI. Must match the image (ec2-user on Amazon Linux and RHEL, ubuntu on Ubuntu, admin on Debian). Discover with spa provider aws describe-ami / latest-ami. Always set it explicitly for AWS labs.
 
 ```yaml
 terraform:
@@ -566,7 +582,7 @@ splunk_systemd: {}
 | `splunk_hosts[].splunk_version` | string | optional; pattern=^(latest\|\d+(\.\d+)*)$ | Per-host override of splunk_defaults.splunk_version. Installer version for this host only. No default. Omit the key to inherit the global version. |
 | `splunk_hosts[].terraform` | object | optional | Per-host override of `terraform`: Terraform settings for this host only. Holds no value itself. |
 | `splunk_hosts[].terraform.aws` | object | optional | Per-host override of `terraform.aws`: EC2 settings Terraform applies. Holds no value itself. |
-| `splunk_hosts[].terraform.aws.ami_id` | string | optional; pattern=^ami-[0-9a-fA-F]+$ | Per-host override of `terraform.aws.ami_id`: EC2 AMI id. Default is the id shipped in defaults/aws.yml. Omit the key to keep that. spa config set writes an end-of-line comment with the image name and description when AWS can describe the id. Find a current Red Hat image with spa aws latest-ami --region eu-central-1 --os rhel, or list matches with spa aws amis list --region eu-central-1 --os rhel. ubuntu, amazon_linux, and debian use the same --os form. |
+| `splunk_hosts[].terraform.aws.ami_id` | string | optional; pattern=^ami-[0-9a-fA-F]+$ | Per-host override of `terraform.aws.ami_id`: EC2 AMI id. Default is the id shipped in defaults/aws.yml. Omit the key to keep that. spa config set writes an end-of-line comment with the image name and description when AWS can describe the id. Find a current Red Hat image with spa provider aws latest-ami --region eu-central-1 --os rhel, or list matches with spa provider aws amis list --region eu-central-1 --os rhel. ubuntu, amazon_linux, and debian use the same --os form. |
 | `splunk_hosts[].terraform.aws.instance_type` | string | optional; default='t2.micro' | Per-host override of `terraform.aws.instance_type`: EC2 instance type. |
 | `splunk_hosts[].terraform.aws.key_name` | string | optional; default='aws_key' | Per-host override of `terraform.aws.key_name`: EC2 key pair name. |
 | `splunk_hosts[].terraform.aws.region` | string | optional; default='eu-central-1' | Per-host override of `terraform.aws.region`: AWS region Terraform uses. |
@@ -574,7 +590,7 @@ splunk_systemd: {}
 | `splunk_hosts[].terraform.aws.root_volume_type` | string | optional | Per-host override of `terraform.aws.root_volume_type`: EBS volume type. AWS defines the names. No default. Omit the key to keep the AMI volume type. Lab often uses gp3. Not a closed SPA list. |
 | `splunk_hosts[].terraform.aws.security_group_names` | list[string] | optional; default=['Splunk_Basic'] | Per-host override of `terraform.aws.security_group_names`: EC2 security group names. |
 | `splunk_hosts[].terraform.aws.ssh_private_key_file` | string | optional | Per-host override of `terraform.aws.ssh_private_key_file`: Path on the Ansible controller to the private key for key_name. Default ~/.ssh/aws_key.pem. Omit the key to keep that. |
-| `splunk_hosts[].terraform.aws.ssh_username` | string | optional; default='ec2-user' | Per-host override of `terraform.aws.ssh_username`: SSH login user for the AMI. Use ubuntu or admin when the AMI requires it. Login user must match the AMI. Pair with spa aws describe-ami. |
+| `splunk_hosts[].terraform.aws.ssh_username` | string | optional; default='ec2-user' | Per-host override of `terraform.aws.ssh_username`: SSH login user for the AMI. Use ubuntu or admin when the AMI requires it. Login user must match the AMI. Pair with spa provider aws describe-ami. |
 | `splunk_hosts[].terraform.aws.subnet_id` | string | optional | Per-host override of `terraform.aws.subnet_id`: VPC subnet id. No default. Omit the key to use the default subnet in the region. |
 | `splunk_hosts[].terraform.aws.tags` | map[string, string] | optional | Per-host override of `terraform.aws.tags`: Map of AWS tag name to tag value. No default. Omit the key to set no tags. |
 | `splunk_hosts[].virtualbox` | object | optional | Per-host override of `virtualbox`: VirtualBox settings for this host only. Holds no value itself. |

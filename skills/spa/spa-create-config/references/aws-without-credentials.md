@@ -1,16 +1,16 @@
 # AWS API unavailable — skill behavior
 
-Use when `spa aws` cannot call AWS (no credentials, no boto3, or network blocked). The guided workflow **still works**; only live discovery and API validation are skipped.
+Use when `spa provider aws` cannot call AWS (no credentials, no boto3, or network blocked). The guided workflow **still works**; only live discovery and API validation are skipped.
 
 ## Detect early (Step 0)
 
 ```bash
-spa --agent aws check-auth
+spa --agent provider aws check-auth
 ```
 
 | Result | Meaning | Skill path |
 |--------|---------|------------|
-| `ok: true` + `data.account` | Credentials work | Phase 6 **with creds** (`spa --agent aws survey --region REGION`, `latest-ami`, optional `spa validate --splunk-config aws`). Report account ID only — see [secrets-handling.md](secrets-handling.md) |
+| `ok: true` + `data.account` | Credentials work | Phase 6 **with creds** (`spa --agent provider aws survey --region REGION`, `latest-ami`, optional `spa validate --splunk-config aws`). Report account ID only — see [secrets-handling.md](secrets-handling.md) |
 | `ok: false`, error mentions credentials | No AWS creds / expired session | Phase 6 **without creds** (this doc) |
 | Exit 2, `boto3 is required` | boto3 not installed | `pip install boto3`; until then, **without creds** path |
 | `ok: false`, other API error | Profile/region/permission issue | Fix AWS setup or fall back **without creds** and note in header |
@@ -29,23 +29,23 @@ Record in config header comment when API was not used:
 | `spa licenses list` | Yes (local Software scan) |
 | `spa validate` (default) | Yes — schema, inventory, license pairing, playbook syntax |
 | `./tests/run_schema_tests.sh` | Yes |
-| `spa aws` | **No** (needs boto3 + credentials for all operations except none) |
+| `spa provider aws` | **No** (needs boto3 + credentials for all operations except none) |
 
 ## What fails or is skipped
 
 | Command | Without credentials |
 |---------|---------------------|
-| `spa --agent aws check-auth` | `ok: false`, error (e.g. Unable to locate credentials) |
-| `spa --agent aws survey --region REGION`, `latest-ami`, or `validate` (`regions list` needs no region) | `ok: false` in JSON or non-zero exit |
+| `spa --agent provider aws check-auth` | `ok: false`, error (e.g. Unable to locate credentials) |
+| `spa --agent provider aws survey --region REGION`, `latest-ami`, or `validate` (`regions list` needs no region) | `ok: false` in JSON or non-zero exit |
 | `spa validate --splunk-config aws` | **Fails** if validate runs and AWS rejects the call — **do not use** without creds |
 
 Provision and deploy (`spa provision --yes`, then `spa deploy --yes`, each after its own chat yes in `/spa`) **require** working AWS credentials at run time — building config offline is fine, but user must configure creds before provision.
 
 ## Without-creds Phase 6 workflow
 
-1. **Region** — run `spa --agent aws regions list`. It works without credentials: `ok` is false and `data.items` is empty, but `data.aws_config_region` and `data.aws_config_profile` still come from `~/.aws/config`. Ask with AskQuestion: option 1 is **only** `data.aws_config_region` (marked as the default), labelled ``<region> (from AWS config, profile <aws_config_profile>)``, then "Other: type a region". Do not use `selected` or `region`. If `data.aws_config_region` is null, show no default. Never mark `us-east-1` as default unless `data.aws_config_region` is exactly that. Never choose a region from memory.
+1. **Region** — run `spa --agent provider aws regions list`. It works without credentials: `ok` is false and `data.items` is empty, but `data.aws_config_region` and `data.aws_config_profile` still come from `~/.aws/config`. Ask with AskQuestion: option 1 is **only** `data.aws_config_region` (marked as the default), labelled ``<region> (from AWS config, profile <aws_config_profile>)``, then "Other: type a region". Do not use `selected` or `region`. If `data.aws_config_region` is null, show no default. Never mark `us-east-1` as default unless `data.aws_config_region` is exactly that. Never choose a region from memory.
 2. **OS + SSH** — [aws-os-matrix.md](aws-os-matrix.md) templates (`ec2-user` / `ubuntu` / `admin`).
-3. **AMI** — copy from `examples/providers/aws.yml` or catalog `provider.aws`; add comment `# verify AMI in console or re-run spa aws when creds available`.
+3. **AMI** — copy from `examples/providers/aws.yml` or catalog `provider.aws`; add comment `# verify AMI in console or re-run spa provider aws when creds available`.
 4. **Instance type** — lab default `t3.medium` ([aws-baseline.md](aws-baseline.md)).
 5. **Key pair / security groups** — user supplies names that exist in their account (cannot list via API).
 6. **Local paths** — `ssh_private_key_file`, tags, volume size from baseline.
@@ -68,15 +68,15 @@ spa validate --check-licenses --config config/splunk_config.yml
 
 **Skip** `spa validate --splunk-config aws` until credentials work.
 
-Handoff note: user should run `spa --agent aws check-auth` and `spa validate --splunk-config aws` (or `spa aws validate`) before first provision.
+Handoff note: user should run `spa --agent provider aws check-auth` and `spa validate --splunk-config aws` (or `spa provider aws validate`) before first provision.
 
 ## After credentials become available
 
 ```bash
-spa --agent aws check-auth
-spa --agent aws survey --region <region>
-spa --agent aws validate --region <region> \
+spa --agent provider aws check-auth
+spa --agent provider aws survey --region <region>
+spa --agent provider aws validate --region <region> \
   --ami-id <ami> --key-name <key> --security-groups <sg> --instance-type t3.medium
 ```
 
-Update `ami_id`, `ssh_username` (from `spa --agent aws describe-ami --region REGION --ami-id AMI` if needed), and re-validate.
+Update `ami_id`, `ssh_username` (from `spa --agent provider aws describe-ami --region REGION --ami-id AMI` if needed), and re-validate.

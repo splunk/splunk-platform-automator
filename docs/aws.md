@@ -7,13 +7,13 @@ SPA provisions EC2 infrastructure with Terraform while keeping `config/splunk_co
 AWS credentials come from the normal AWS credential chain or vault/env references in config. Never commit or print access keys. Check authentication and inspect live regional values with:
 
 ```bash
-spa aws check-auth --json
-spa aws regions list
-spa aws survey --region REGION --json
+spa provider aws check-auth --json
+spa provider aws regions list
+spa provider aws survey --region REGION --json
 spa config explain provider.aws
 ```
 
-`spa aws` uses `--region` when you pass it. Otherwise it uses `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `region` in `~/.aws/config` for the active profile. Text output names that source on stderr, and the listing stays on stdout. `spa aws regions list` marks that region. `--json` and `--agent` print only JSON; the same source is `region_source` in that body, and error text is redacted. The body also carries `aws_config_region` and `aws_config_profile`, the `~/.aws/config` region even when an environment config sets `terraform.aws.region` first. `spa aws list regions` exits 2 and names `spa aws regions list`. Provision, suspend, resume, and destroy still use `terraform.aws.region` from the environment config.
+`spa provider aws` uses `--region` when you pass it. Otherwise it uses `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `region` in `~/.aws/config` for the active profile. Text output names that source on stderr, and the listing stays on stdout. `spa provider aws regions list` marks that region. `--json` and `--agent` print only JSON; the same source is `region_source` in that body, and error text is redacted. The body also carries `aws_config_region` and `aws_config_profile`, the `~/.aws/config` region even when an environment config sets `terraform.aws.region` first. `spa provider aws list regions` exits 2 and names `spa provider aws regions list`. Provision, suspend, resume, and destroy still use `terraform.aws.region` from the environment config.
 
 Configure `terraform.aws` with a region, AMI, EC2 key pair, SSH user/key, security groups, and defaults such as instance type and root volume. Per-host `terraform.aws` overrides global defaults. `iter` can generate numbered hosts. Terraform modules remain in `SPA_HOME`; generated variables and state remain in `SPA_ENV_DIR`.
 

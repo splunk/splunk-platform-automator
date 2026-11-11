@@ -21,6 +21,7 @@ CANONICAL_DOCS = {
     "apps.md",
     "architecture.md",
     "aws.md",
+    "ccm.md",
     "commands.md",
     "config-editing.md",
     "config-walkthrough.md",
@@ -127,13 +128,14 @@ def test_architecture_defines_cli_ux_and_output_conventions():
     assert "`--agent` is the documented selector" in architecture
     assert "`--json` stays a working synonym" in architecture
     assert "stdin is not a terminal" in architecture
-    assert "spa aws" in architecture
+    assert "spa provider aws" in architecture
     assert "spa licenses" in architecture
     assert "spa shell" in architecture
     assert "VirtualBox" in architecture
     assert "architecture.md#cli-ux-and-output-conventions" in contributing
     assert "When `CommandResult.data` includes `next`" in architecture
     assert "`Next:` line on stderr" in architecture
+    assert "Human `command` lines omit `--agent`" in architecture
     assert "If the session attaches `data.next`, the human renderer prints it." in contributing
 
 
@@ -439,6 +441,10 @@ class TestConfigMarkdown:
         assert "VirtualBox always turns this on" in text
         assert "Per-host override of `os.time_zone`" in text
         assert "default='splk'" in text
+        assert "spa provider aws latest-ami" in text
+        assert "spa provider aws describe-ami" in text
+        assert "spa aws latest-ami" not in text
+        assert "spa aws describe-ami" not in text
 
 
 class TestSpaSkill:
@@ -495,7 +501,7 @@ class TestSpaSkill:
         assert "unsupported" in text
         assert "do not read `examples/catalog/features.yml`" in text
         assert "spa --agent config set PATH VALUE" in text
-        assert "spa --agent aws regions list" in text
+        assert "spa --agent provider aws regions list" in text
         assert "spa aws --json regions list" not in text
         assert "spa aws list regions" not in text
         entry = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
@@ -758,7 +764,7 @@ class TestSpaSkill:
     def test_create_config_region_question_puts_aws_config_region_first(self):
         text = _create_config_workflow()
         phase4 = text[text.index("## Phase 6 — AWS settings"):text.index("## Phase 7 — Topology counts")]
-        assert "spa --agent aws regions list" in phase4
+        assert "spa --agent provider aws regions list" in phase4
         assert "spa aws --json" not in phase4
         assert "aws_config_region" in phase4
         assert "aws_config_profile" in phase4
@@ -857,6 +863,7 @@ class TestSpaSkill:
         assert "null" in phase4
         without_creds = (skills / "references" / "aws-without-credentials.md").read_text(encoding="utf-8")
         assert "do not call `spa aws regions list`" not in without_creds
+        assert "spa --agent provider aws regions list" in without_creds
         assert "aws_config_region" in without_creds
         assert "ok: false" in without_creds
 
@@ -994,11 +1001,13 @@ class TestSpaSkill:
         offenders = []
         for path in sorted(skills.rglob("*.md")):
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-                if (
-                    ("spa aws" in line or "--agent aws" in line)
-                    and any(t in line for t in triggers)
-                    and "--region" not in line
-                ):
+                aws_discovery = (
+                    "spa provider aws" in line
+                    or "spa --agent provider aws" in line
+                    or "spa aws" in line
+                    or "spa --agent aws" in line
+                )
+                if aws_discovery and any(t in line for t in triggers) and "--region" not in line:
                     offenders.append("%s:%d" % (path.relative_to(PROJECT_ROOT), number))
         assert offenders == [], offenders
 
@@ -1134,6 +1143,78 @@ class TestReviewFindings67:
         assert "--splunk-config-aws" in unreleased
         assert "--splunk-config aws" in unreleased
 
+    def test_operator_docs_and_skills_use_provider_aws(self):
+        """Live AWS discovery is spa provider aws, not top-level spa aws."""
+        live = (
+            "spa aws check-auth",
+            "spa aws regions list",
+            "spa aws latest-ami",
+            "spa aws describe-ami",
+            "spa aws validate",
+            "spa aws survey",
+            "spa aws amis list",
+            "spa aws instance-types list",
+            "spa aws key-pairs list",
+            "spa aws security-groups list",
+            "spa aws ...",
+            "spa --agent aws",
+            "`spa aws`",
+        )
+        skip = {"config.md", "commands.md"}
+        offenders = []
+        for path in _operator_text_paths():
+            if path.name in skip:
+                continue
+            text = path.read_text(encoding="utf-8")
+            for spelling in live:
+                if spelling in text:
+                    offenders.append("%s: %s" % (path.relative_to(PROJECT_ROOT), spelling))
+        assert offenders == [], offenders
+        aws = (_docs_dir() / "aws.md").read_text(encoding="utf-8")
+        assert "spa provider aws check-auth" in aws
+        assert "spa provider aws regions list" in aws
+        assert "spa provider aws survey" in aws
+        architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
+        assert "spa provider aws regions list" in architecture
+        contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
+        assert "spa provider aws regions list" in contributing
+        migrate = (_docs_dir() / "migrate.md").read_text(encoding="utf-8")
+        assert "spa provider aws" in migrate
+
+    def test_contributor_text_uses_provider_aws_not_live_spa_aws(self):
+        """Runtime strings, changelog examples, and contributor indexes name spa provider aws."""
+        live = (
+            "spa aws check-auth",
+            "spa aws regions list",
+            "spa aws latest-ami",
+            "spa aws describe-ami",
+            "spa aws validate",
+            "spa aws survey",
+            "spa aws amis list",
+            "spa aws list KIND",
+            "spa aws list has moved",
+            "spa --agent aws",
+        )
+        paths = (
+            PROJECT_ROOT / "CHANGELOG.md",
+            PROJECT_ROOT / "ROADMAP.md",
+            PROJECT_ROOT / "tests" / "README.md",
+            PROJECT_ROOT / "lib" / "spa" / "validate.py",
+            PROJECT_ROOT / "lib" / "spa" / "aws.py",
+            PROJECT_ROOT / "lib" / "spa" / "config_edit.py",
+        )
+        offenders = []
+        for path in paths:
+            text = path.read_text(encoding="utf-8")
+            for spelling in live:
+                if spelling in text:
+                    offenders.append("%s: %s" % (path.relative_to(PROJECT_ROOT), spelling))
+        assert offenders == [], offenders
+        readme = (PROJECT_ROOT / "tests" / "README.md").read_text(encoding="utf-8")
+        assert "spa provider aws" in readme
+        roadmap = (PROJECT_ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+        assert "spa provider aws" in roadmap
+
     def test_changelog_and_skills_use_named_aws_actions(self):
         banned = (
             "spa aws --check-auth",
@@ -1171,3 +1252,137 @@ def test_changelog_unreleased_names_schema_version_and_config_version():
     assert "`schema_version`" in unreleased
     assert "`config_version`" in unreleased
     assert "issues/117" in unreleased
+
+
+def test_roadmap_ccm_provider_is_done():
+    text = (PROJECT_ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+    lines = [line for line in text.splitlines() if "issues/146" in line]
+    assert lines, "ROADMAP needs a #146 line"
+    line = lines[0]
+    assert line.startswith("- [x]"), line
+    assert "CCM" in line
+
+
+def test_user_guide_names_employee_only_ccm():
+    """Public one-liners stay aws|virtualbox|external; CCM is an employee-only note."""
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    intro = guide.split("## Start here", 1)[0]
+    assert "Corporate Cloud Manager" not in intro
+    assert "employee-only" in guide.lower() or "employee only" in guide.lower()
+    assert "spa provider ccm survey" in guide
+    assert "spa config provider ccm" in guide
+    assert "spa provider ccm" in guide
+    assert "CCM_TOKEN" in guide
+    assert "set / not set" in guide or "set/not set" in guide
+    assert "ccm:" in guide
+    assert "(ccm.md)" in guide
+    blob = guide.lower()
+    assert "ubuntu_22.04" not in blob
+    assert "rhel_9" not in blob
+
+
+def test_ccm_operator_page_matches_aws_pattern():
+    page = (_docs_dir() / "ccm.md").read_text(encoding="utf-8")
+    assert "employee-only" in page.lower()
+    assert "spa config provider ccm" in page
+    assert "spa provider ccm survey" in page
+    assert "spa provider ccm" in page
+    assert "CCM_TOKEN" in page
+    assert "lookup('env', 'CCM_TOKEN')" in page
+    assert "set / not set" in page or "set/not set" in page
+    assert "splunker" in page
+    assert "remote-provider" in page
+    assert "-----BEGIN" not in page
+    assert "ubuntu_22.04" not in page.lower()
+    assert "rhel_9" not in page.lower()
+    assert "cannot mix external hosts" in page.lower()
+
+
+def test_create_config_proposes_ccm_remote_provider_and_live_survey():
+    """CCM sizing is live discovery, not a hardcoded catalog; YAML write is config provider."""
+    skill_dir = _create_config_dir()
+    create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
+    architecture = (skill_dir / "references" / "architecture-input.md").read_text(
+        encoding="utf-8"
+    )
+    text = "\n".join((create, phases, architecture))
+    assert "employee-only" in text.lower() or "employee only" in text.lower()
+    assert "spa provider ccm survey" in text
+    assert "spa config provider ccm" in text
+    assert "spa provider ccm" in text
+    assert "remote-provider" in architecture
+    assert "ccm" in architecture.lower()
+    assert "spa provider ccm" in phases
+    assert "CCM_TOKEN" in text
+    assert "set / not set" in text or "set/not set" in text
+    assert "-----BEGIN" not in text
+    for catalog_id in ("ubuntu_22.04", "rhel_9"):
+        assert catalog_id not in text, catalog_id
+
+
+CCM_ASK_GATE = (
+    "Do not AskQuestion CCM unless `CCM_TOKEN` is set, the env has a root `ccm:` "
+    "block, or the operator already named CCM."
+)
+
+
+def test_skills_do_not_ask_ccm_unless_available():
+    """Public provider AskQuestion stays aws/virtualbox/external. CCM is gated."""
+    skill_dir = _create_config_dir()
+    create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
+    secrets = (skill_dir / "references" / "secrets-handling.md").read_text(
+        encoding="utf-8"
+    )
+    design = (skill_dir / "assets" / "design-summary-template.md").read_text(
+        encoding="utf-8"
+    )
+    spa = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert CCM_ASK_GATE in create
+    assert CCM_ASK_GATE in spa
+    assert "aws, virtualbox, and external" in create
+    assert "splunker" in phases
+    assert "operating_system" in phases
+    assert "splunker" in design
+    assert "CCM_TOKEN" in design
+    assert "CCM_TOKEN" in secrets
+    assert "echo $CCM_TOKEN" in secrets
+    assert "only when ccm is in play" in (create + "\n" + phases).lower()
+
+
+def test_readme_secrets_and_contributing_name_ccm():
+    """Remaining slice-6 surfaces: README note, secrets CCM_TOKEN, catalog layout id."""
+    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    intro = readme.split("\n## ", 1)[0]
+    assert "Corporate Cloud Manager" not in intro
+    start = readme.split("## Start here", 1)[1].split("\n## ", 1)[0]
+    assert "employee-only" in start.lower() or "employee only" in start.lower()
+    assert "--provider ccm" in start
+    assert "docs/ccm.md" in readme
+    contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
+    assert "provider.ccm" in contributing
+    secrets = (_docs_dir() / "secrets.md").read_text(encoding="utf-8")
+    assert "CCM_TOKEN" in secrets
+    assert "lookup('env', 'CCM_TOKEN')" in secrets
+    assert "set / not set" in secrets or "set/not set" in secrets or "**set** or **not set**" in secrets
+
+
+def test_changelog_unreleased_finishes_ccm_docs():
+    text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
+    assert "issues/146" in unreleased
+    assert "user guide" in unreleased.lower() or "user-guide" in unreleased.lower()
+    assert "spa config provider ccm" in unreleased
+    assert "spa provider ccm" in unreleased
+
+
+def test_changelog_unreleased_retires_doctor_aws_and_virtualbox_flags():
+    text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
+    assert "spa doctor --provider" in unreleased
+    assert "spa doctor --aws" in unreleased
+    assert "--virtualbox" in unreleased
+    assert "repeatable" in unreleased.lower() or "repeat" in unreleased.lower()

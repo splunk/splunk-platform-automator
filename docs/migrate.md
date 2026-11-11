@@ -17,7 +17,7 @@ Only `bin/spa` and `bin/spa_venv.sh` remain in a clone. Operators can install a 
 | `bin/spa_env.sh` | Not needed by `spa`; `spa env --export` remains for external tools |
 | `bin/spa_doctor.sh` | `spa doctor` |
 | `bin/validate_splunk_config.sh` | `spa validate` |
-| `bin/splunk_config_aws.py` | `spa aws` |
+| `bin/splunk_config_aws.py` | `spa provider aws` |
 | `bin/splunk_config_licenses.py` | `spa licenses` |
 
 `spa shell` stays as an SSH alias. There is no `spa shell -l`; list hosts with `spa hosts list`.

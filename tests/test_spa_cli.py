@@ -140,23 +140,53 @@ def test_shell_list_flag_is_gone():
 @pytest.mark.parametrize(
     ("argv", "message"),
     [
-        (["aws", "--check-auth"], "Checking credentials is: spa aws check-auth"),
-        (["aws", "--latest-ami"], "Resolving the latest AMI is: spa aws latest-ami --os OS"),
-        (["aws", "--describe-ami"], "Describing an AMI is: spa aws describe-ami --ami-id AMI"),
-        (["aws", "--validate"], "Validating selections is: spa aws validate"),
-        (["aws", "--survey"], "Surveying a region is: spa aws survey"),
         (["shell", "-c", "local.txt", "idx1:/tmp/"], "Copying files is: spa hosts copy SRC DST"),
         (["shell", "--copy", "local.txt", "idx1:/tmp/"], "Copying files is: spa hosts copy SRC DST"),
+        (["doctor", "--aws"], "Checking AWS prerequisites is: spa doctor --provider aws"),
+        (
+            ["doctor", "--virtualbox"],
+            "Checking VirtualBox prerequisites is: spa doctor --provider virtualbox",
+        ),
+        (["doctor", "--ccm"], "Checking CCM prerequisites is: spa doctor --provider ccm"),
+        (["doc", "--ccm"], "Checking CCM prerequisites is: spa doctor --provider ccm"),
     ],
 )
 def test_retired_aws_and_shell_flags_name_the_legal_command(argv, message):
     _assert_usage_rejection(argv, message)
 
 
-def test_aws_help_uses_own_parser():
-    result = run_spa(["aws", "--help"])
+def test_provider_aws_help_uses_own_parser():
+    result = run_spa(["provider", "aws", "--help"])
     assert result.returncode == 0, result.stderr
-    assert "usage: spa aws" in result.stdout
+    assert "usage: spa provider aws" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["aws"],
+        ["aws", "--help"],
+        ["aws", "check-auth"],
+        ["aws", "--check-auth"],
+        ["aws", "--list-regions"],
+        ["ccm"],
+    ],
+)
+def test_top_level_aws_and_ccm_are_invalid_choices(argv):
+    """spa aws is not an alias of spa provider aws. Same invalid-choice path as spa ccm."""
+    command = argv[0]
+    human = run_spa(["--no-agent", *argv])
+    assert human.returncode == 2, human.stderr
+    assert "invalid choice: '%s'" % command in human.stderr
+    assert "spa provider aws needs an action." not in human.stderr
+    assert "spa provider aws check-auth" not in human.stderr
+    assert human.stdout.strip() == ""
+    agent = run_spa(["--json", *argv])
+    assert agent.returncode == 2, agent.stdout
+    payload = json.loads(agent.stdout)
+    assert payload["ok"] is False
+    assert "invalid choice: '%s'" % command in payload["error"]
+    assert "spa provider aws needs an action." not in payload["error"]
 
 
 @pytest.mark.parametrize(
@@ -486,7 +516,7 @@ def test_detected_agent_uses_json_for_aws(monkeypatch, capsys):
     monkeypatch.setattr(cli, "venv_required_error", lambda paths: None)
     monkeypatch.setattr("spa.aws.execute", fake_execute)
 
-    assert cli.main(["aws", "check-auth"]) == 0
+    assert cli.main(["provider", "aws", "check-auth"]) == 0
     agent = capsys.readouterr()
     assert seen["action"] == "check-auth"
     payload = json.loads(agent.out)
@@ -495,14 +525,14 @@ def test_detected_agent_uses_json_for_aws(monkeypatch, capsys):
     assert payload["data"]["account"] == "1"
     assert agent.err == ""
 
-    assert cli.main(["--no-agent", "aws", "check-auth"]) == 0
+    assert cli.main(["--no-agent", "provider", "aws", "check-auth"]) == 0
     human = capsys.readouterr()
     assert "Account: 1" in human.out
     assert not human.out.lstrip().startswith("{")
 
     seen.clear()
     monkeypatch.delenv("SPA_AGENT", raising=False)
-    assert cli.main(["aws", "check-auth"]) == 0
+    assert cli.main(["provider", "aws", "check-auth"]) == 0
     default = capsys.readouterr()
     assert "Account: 1" in default.out
     assert not default.out.lstrip().startswith("{")
@@ -1061,8 +1091,104 @@ def test_human_provision_prints_data_next(tmp_path, monkeypatch, capsys):
     err = capsys.readouterr().err
     assert "Next:" in err
     assert "Check provisioned hosts before deploy?" in err
-    assert "spa --agent hosts check" in err
+    assert "spa hosts check" in err
+    assert "spa deploy --yes" in err
+    assert "--agent" not in err
     assert "Deploy Splunk software?" in err
+
+
+def test_provision_preflight_error_skips_prompt_and_still_prints_with_yes(
+    tmp_path, monkeypatch, capsys
+):
+    """Provider preflight runs before Proceed?, and the same error prints with --yes."""
+    _stamped_lifecycle_env(tmp_path, monkeypatch)
+    prompted = []
+
+    class FakeProvider:
+        name = "ccm"
+
+        def lifecycle_preflight(self, action):
+            from spa.providers import ProviderError
+
+            del action
+            raise ProviderError(
+                "already provisioned: dep-9. Run: spa destroy --yes to replace the lab.",
+                code=2,
+            )
+
+        def provision(self, extra, **_kwargs):
+            raise AssertionError("provision must not run after preflight")
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda prompt="": prompted.append(prompt) or "y",
+    )
+    from spa.cli import main
+
+    rc = main(["--no-agent", "provision"])
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert prompted == []
+    assert "already provisioned: dep-9" in err
+    assert "Proceed?" not in err
+
+    rc = main(["--no-agent", "provision", "--yes"])
+    yes_err = capsys.readouterr().err
+    assert rc == 2
+    assert prompted == []
+    assert "already provisioned: dep-9" in yes_err
+    assert "Proceed?" not in yes_err
+
+
+def test_provision_warnings_print_after_success_and_with_yes(tmp_path, monkeypatch, capsys):
+    _stamped_lifecycle_env(tmp_path, monkeypatch)
+    warning = (
+        "CCM will terminate the whole deployment when "
+        "Tuesday, 17 Nov 2026 at 07:00 EST passes."
+    )
+
+    class FakeProvider:
+        name = "ccm"
+
+        def lifecycle_warnings(self, action):
+            del action
+            return [warning]
+
+        def provision(self, extra, **_kwargs):
+            return {"warnings": [warning]}
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    events = []
+    orig_write = sys.stderr.write
+
+    def write(text):
+        events.append(("stderr", text))
+        return orig_write(text)
+
+    monkeypatch.setattr(sys.stderr, "write", write)
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda prompt="": events.append(("prompt", prompt)) or "y",
+    )
+    from spa.cli import main
+
+    rc = main(["--no-agent", "provision"])
+    assert rc == 0
+    warn_at = next(i for i, event in enumerate(events) if event[0] == "stderr" and warning in event[1])
+    prompt_at = next(i for i, event in enumerate(events) if event[0] == "prompt")
+    assert prompt_at < warn_at
+    assert "Proceed?" in events[prompt_at][1]
+    next_at = next(i for i, event in enumerate(events) if event[0] == "stderr" and "Next:" in event[1])
+    assert warn_at < next_at
+
+    events.clear()
+    rc = main(["--no-agent", "provision", "--yes"])
+    assert rc == 0
+    assert any(event[0] == "stderr" and warning in event[1] for event in events)
+    assert all(event[0] != "prompt" for event in events)
 
 
 @pytest.mark.parametrize("argv", [["-y", "provision"], ["provision", "-y"]])
@@ -1654,7 +1780,8 @@ def _assert_usage_rejection(argv, message):
         (["licenses", "--json"], "spa licenses needs an action."),
         (["config", "templates"], "spa config templates needs an action."),
         (["config", "tpl"], "spa config templates needs an action."),
-        (["aws"], "spa aws check-auth"),
+        (["provider"], "spa provider aws check-auth"),
+        (["provider", "aws"], "spa provider aws check-auth"),
         (["shell"], "spa shell needs NAME."),
         (["sh"], "spa shell needs NAME."),
         (["logs"], "spa logs needs a run."),
@@ -1664,24 +1791,6 @@ def _assert_usage_rejection(argv, message):
 )
 def test_catalog_usage_names_the_legal_command(argv, message):
     _assert_usage_rejection(argv, message)
-
-
-@pytest.mark.parametrize(
-    ("argv", "message"),
-    [
-        (["aws", "--list-regions"], "Listing regions is: spa aws regions list"),
-        (["aws", "--list-amis"], "Listing amis is: spa aws amis list"),
-        (["aws", "--list-instance-types"], "Listing instance-types is: spa aws instance-types list"),
-        (["aws", "--list-key-pairs"], "Listing key-pairs is: spa aws key-pairs list"),
-        (["aws", "--list-security-groups"], "Listing security-groups is: spa aws security-groups list"),
-    ],
-)
-def test_aws_retired_list_flags_name_the_list_command(argv, message):
-    result = run_spa(["--no-agent", *argv])
-    assert result.returncode == 2, result.stderr
-    assert message in result.stderr
-    assert "Regions" not in result.stdout
-    assert not result.stdout.lstrip().startswith("{")
 
 
 def test_hidden_alias_expands_after_a_flag():
@@ -1702,20 +1811,8 @@ def test_hidden_alias_expands_after_a_flag():
     ]
 
 
-def test_aws_retired_list_flag_json_names_the_list_command():
-    result = run_spa(["--json", "aws", "--list-regions"])
-    assert result.returncode == 2
-    assert result.stderr == ""
-    payload = json.loads(result.stdout)
-    assert payload == {
-        "ok": False,
-        "schema_version": 1,
-        "error": "Listing regions is: spa aws regions list",
-    }
-
-
 def test_aws_list_help_keeps_flags_on_their_kind():
-    parent = run_spa(["--no-agent", "aws", "--help"])
+    parent = run_spa(["--no-agent", "provider", "aws", "--help"])
     assert parent.returncode == 0, parent.stderr
     options = set(re.findall(r"(?m)^\s+(?:-[A-Za-z],\s+)?(--[A-Za-z0-9-]+)", parent.stdout))
     for flag in (
@@ -1734,8 +1831,8 @@ def test_aws_list_help_keeps_flags_on_their_kind():
         "--details",
     ):
         assert flag not in options, flag
-    amis = run_spa(["aws", "amis", "list", "--help"])
-    types = run_spa(["aws", "instance-types", "list", "--help"])
+    amis = run_spa(["provider", "aws", "amis", "list", "--help"])
+    types = run_spa(["provider", "aws", "instance-types", "list", "--help"])
     assert amis.returncode == 0, amis.stderr
     assert "--family" not in amis.stdout
     assert "--name-filter" in amis.stdout

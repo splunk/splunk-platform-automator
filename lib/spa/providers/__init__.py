@@ -6,8 +6,6 @@ import importlib
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
 
-import yaml
-
 from spa.paths import SpaPaths
 
 
@@ -163,6 +161,8 @@ def check_provisioned(paths: SpaPaths) -> ProvisionState:
             return get_provider(paths).provision_state()
     if "virtualbox" in config:
         return get_provider(paths).provision_state()
+    if "ccm" in config:
+        return get_provider(paths).provision_state()
     if "external" in config:
         return get_provider(paths).provision_state()
     return ProvisionState(provider="none", provisioned=True)
@@ -172,11 +172,16 @@ def check_provisioned(paths: SpaPaths) -> ProvisionState:
 PROVIDER_MODULES = {
     "aws": "spa.providers.aws",
     "virtualbox": "spa.providers.virtualbox",
+    "ccm": "spa.providers.ccm",
     "external": "spa.providers.external",
 }
 
 
 def load_deployment_config(paths: SpaPaths) -> Dict[str, Any]:
+    # Parser construction imports this package for spa provider ccm help.
+    # spa doctor / spa venv must still run before a venv (and PyYAML) exists.
+    import yaml
+
     if not paths.config_file.is_file():
         raise ProviderError("Splunk config not found: %s" % paths.config_file)
     try:
@@ -205,6 +210,11 @@ def detect_provider(paths: SpaPaths) -> ProviderSelection:
             % ", ".join(sorted(configured))
         )
     if configured:
+        if "ccm" in config:
+            raise ProviderError(
+                "Multiple providers are configured (ccm, terraform.%s); select exactly one."
+                % configured[0]
+            )
         name = configured[0]
         if name not in PROVIDER_MODULES:
             raise ProviderError(
@@ -213,6 +223,15 @@ def detect_provider(paths: SpaPaths) -> ProviderSelection:
             )
         return ProviderSelection(name=name, config=terraform[name])
 
+    if "ccm" in config and "virtualbox" in config:
+        raise ProviderError(
+            "Multiple providers are configured (ccm, virtualbox); select exactly one."
+        )
+    if "ccm" in config:
+        ccm = config.get("ccm")
+        if ccm is not None and not isinstance(ccm, dict):
+            raise ProviderError("ccm must be a mapping in %s" % paths.config_file)
+        return ProviderSelection(name="ccm", config=ccm or {})
     if "virtualbox" in config:
         vbox = config.get("virtualbox")
         if vbox is not None and not isinstance(vbox, dict):
@@ -225,7 +244,8 @@ def detect_provider(paths: SpaPaths) -> ProviderSelection:
         return ProviderSelection(name="external", config=external or {})
     raise ProviderError(
         "No managed deployment provider found in %s "
-        "(expected terraform.<provider> or virtualbox; implemented: terraform.aws, virtualbox)."
+        "(expected terraform.<provider>, virtualbox, or ccm; "
+        "implemented: terraform.aws, virtualbox, ccm)."
         % paths.config_file
     )
 
@@ -234,3 +254,18 @@ def get_provider(paths: SpaPaths):
     selection = detect_provider(paths)
     module = importlib.import_module(PROVIDER_MODULES[selection.name])
     return module.Provider(paths, selection.config)
+
+
+def run_lifecycle_preflight(provider: Any, action: str) -> None:
+    """Raise ProviderError if this action cannot start. Default: allow."""
+    method = getattr(provider, "lifecycle_preflight", None)
+    if callable(method):
+        method(action)
+
+
+def lifecycle_warnings(provider: Any, action: str) -> List[str]:
+    """Human lines after a successful lifecycle action (and in the envelope)."""
+    method = getattr(provider, "lifecycle_warnings", None)
+    if not callable(method):
+        return []
+    return [str(row) for row in (method(action) or []) if str(row).strip()]

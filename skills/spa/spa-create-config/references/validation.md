@@ -43,12 +43,12 @@ When credentials are available:
 spa validate --splunk-config aws --config config/splunk_config.yml
 ```
 
-Parses `terraform.aws` from the YAML and runs `spa aws validate`.
+Parses `terraform.aws` from the YAML and runs `spa provider aws validate`.
 
 Or directly:
 
 ```bash
-spa aws validate --region eu-central-1 \
+spa provider aws validate --region eu-central-1 \
   --ami-id ami-xxx --key-name aws_key --security-groups Splunk_Basic \
   --instance-type t3.medium --json
 ```

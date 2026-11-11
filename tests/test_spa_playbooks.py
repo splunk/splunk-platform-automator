@@ -252,6 +252,24 @@ def test_ensure_confirmed_prints_hosts_not_extra_vars(monkeypatch, capsys):
     assert "password" not in captured.err.lower()
 
 
+def test_ensure_confirmed_prints_details_with_yes(monkeypatch, capsys):
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("prompted")),
+    )
+    ensure_confirmed(
+        "provision",
+        confirm=True,
+        agent=False,
+        risk="mutating",
+        details=["CCM will terminate the whole deployment when Tuesday, 17 Nov 2026 at 07:00 EST passes."],
+    )
+    captured = capsys.readouterr()
+    assert "Tuesday, 17 Nov 2026 at 07:00 EST" in captured.err
+    assert "Proceed?" not in captured.out
+    assert "Proceed?" not in captured.err
+
+
 def test_describe_apps_playbook_run_lists_curated_files():
     paths = resolve_spa_paths(start_dir=str(PROJECT_ROOT))
     data = describe("splunk_apps_playbook_run", paths)

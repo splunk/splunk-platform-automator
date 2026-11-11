@@ -28,6 +28,7 @@ from spa.executil import (
 from spa.paths import env_dir_required_error, resolve_spa_paths
 from spa.usage import (
     APP_ID_HELP,
+    DOCTOR_PROVIDER_HELP,
     MISSING_OPERAND,
     INIT_PROVIDER_HELP,
     PROVIDER_HELP,
@@ -35,12 +36,12 @@ from spa.usage import (
     SET_PATH_HELP,
     TOPOLOGY_HELP,
     UNSET_PATH_HELP,
+    unknown_doctor_provider,
 )
 from spa.skills import supported_platform_list
 
 
 # Accepted at the command position, omitted from parent help and agent errors.
-# ``env`` stays a visible argparse alias of ``environment``.
 _HIDDEN_ALIASES = {
     (): {
         "cfg": "config",
@@ -56,6 +57,8 @@ _HIDDEN_ALIASES = {
         "sh": "shell",
         "lic": "licenses",
         "agt": "agent",
+        "env": "environment",
+        "pro": "provider",
     },
     ("config",): {
         "tpl": "templates",
@@ -76,7 +79,7 @@ _HIDDEN_ALIASES = {
     ("environment",): {"rm": "remove"},
     ("env",): {"rm": "remove"},
 }
-_VISIBLE_ALIAS = {"environment": frozenset({"env"})}
+_VISIBLE_ALIAS: Dict[str, frozenset] = {}
 # These must keep working without a venv: they are how an operator inspects or
 # builds one. Every other command reads YAML or runs Ansible, so it is gated.
 VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills", "completion", "licenses"})
@@ -353,22 +356,21 @@ def _retired_catalog_flag(head: Sequence[str]) -> Optional[str]:
 
 
 def _retired_aws_shell_flag(head: Sequence[str]) -> Optional[str]:
-    """Rejection for a removed aws parent flag or spa shell -c."""
+    """Rejection for a removed spa shell -c / --copy flag. Top-level spa aws is not a command."""
     tokens = _positional_tokens(head)
-    if tokens and tokens[0] == "aws":
-        from spa import aws as aws_mod
-
-        listed = aws_mod._retired_list_message(list(tokens[1:]))
-        if listed:
-            return listed
-        for flag, kind in aws_mod._RETIRED_AWS_LISTS.items():
-            if flag in head:
-                return "Listing %s is: spa aws %s list" % (kind, kind)
-        for flag, message in _RETIRED_AWS_PARENT.items():
-            if flag in head:
-                return message
     if tokens and tokens[0] in {"shell", "sh"} and ("-c" in head or "--copy" in head):
         return "Copying files is: spa hosts copy SRC DST"
+    return None
+
+
+def _retired_doctor_provider_flag(head: Sequence[str]) -> Optional[str]:
+    """Rejection for removed spa doctor --aws / --virtualbox / --ccm."""
+    tokens = _positional_tokens(head)
+    if not tokens or tokens[0] not in {"doctor", "doc"}:
+        return None
+    for flag, message in _RETIRED_DOCTOR_PROVIDER.items():
+        if flag in head:
+            return message
     return None
 
 
@@ -656,13 +658,35 @@ LICENSES_NEEDS_ACTION = (
     "spa licenses needs an action.\n"
     "List: spa licenses list"
 )
+
+
+def _ccm_audience_visible(head: Sequence[str]) -> bool:
+    from spa.providers.ccm import audience_visible
+
+    values = _env_values_from_head(head)
+    if len(set(values)) > 1:
+        return audience_visible(paths=None)
+    try:
+        paths = _paths(_start_dir_from_head(head), _env_selector_from_head(head))
+    except Exception:
+        paths = None
+    return audience_visible(paths=paths)
+
+
+def _omit_parser_choice(message: str, name: str) -> str:
+    """Drop one quoted argparse choice from an invalid-choice error."""
+    quoted = "'%s'" % name
+    for token in (", %s" % quoted, "%s, " % quoted):
+        if token in message:
+            return message.replace(token, "", 1)
+    return message
+
+
 SHELL_NEEDS_NAME = "spa shell needs NAME.\nExample: spa shell NAME"
-_RETIRED_AWS_PARENT = {
-    "--check-auth": "Checking credentials is: spa aws check-auth",
-    "--latest-ami": "Resolving the latest AMI is: spa aws latest-ami --os OS",
-    "--describe-ami": "Describing an AMI is: spa aws describe-ami --ami-id AMI",
-    "--validate": "Validating selections is: spa aws validate",
-    "--survey": "Surveying a region is: spa aws survey",
+_RETIRED_DOCTOR_PROVIDER = {
+    "--aws": "Checking AWS prerequisites is: spa doctor --provider aws",
+    "--virtualbox": "Checking VirtualBox prerequisites is: spa doctor --provider virtualbox",
+    "--ccm": "Checking CCM prerequisites is: spa doctor --provider ccm",
 }
 
 CONFIG_NEEDS_ACTION = (
@@ -1052,6 +1076,10 @@ def _warning_text(warning: Any) -> str:
     return str(warning)
 
 
+def _human_next_command(command: str) -> str:
+    return " ".join(part for part in command.split() if part != "--agent")
+
+
 def _print_next(data: Optional[Dict[str, Any]]) -> None:
     items = (data or {}).get("next") or []
     if not items:
@@ -1061,7 +1089,7 @@ def _print_next(data: Optional[Dict[str, Any]]) -> None:
         if not isinstance(row, dict):
             continue
         ask = str(row.get("ask") or row.get("id") or "").strip()
-        command = str(row.get("command") or "").strip()
+        command = _human_next_command(str(row.get("command") or "").strip())
         if ask and command:
             print("%s\n  %s" % (ask, command), file=sys.stderr)
         elif ask:
@@ -1343,7 +1371,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 def _run(argv: Sequence[str]) -> int:
     argv = _expand_hidden_aliases(argv)
     head, extra = _split_passthrough(argv)
-    retired = _retired_catalog_flag(head) or _retired_aws_shell_flag(head)
+    retired = (
+        _retired_catalog_flag(head)
+        or _retired_aws_shell_flag(head)
+        or _retired_doctor_provider_flag(head)
+    )
     if retired:
         return _reject(
             retired,
@@ -1428,16 +1460,60 @@ def _run(argv: Sequence[str]) -> int:
                 from spa.completion import COMPLETION_AGENT, COMPLETION_NEEDS_SHELL
 
                 message = COMPLETION_AGENT if parse_as_agent else COMPLETION_NEEDS_SHELL
-            elif command_words[:1] == ["aws"]:
+            elif command_words[:2] == ["provider", "aws"]:
                 from spa import aws as aws_mod
 
-                resource = command_words[1] if len(command_words) > 1 else ""
+                resource = command_words[2] if len(command_words) > 2 else ""
                 if resource in aws_mod._AWS_LIST_KINDS and (
                     "required" in message or "invalid choice" in message
                 ):
                     message = "Listing %s is: %s" % (resource, aws_mod._listing_command(resource))
                 elif "invalid choice" in message and "'list'" in message:
                     message = aws_mod._listing_menu()
+                elif "required" in message or "invalid choice" in message:
+                    message = aws_mod.AWS_NEEDS_ACTION
+            elif command_words[:1] == ["provider"]:
+                from spa.providers import ccm as ccm_mod
+                from spa.usage import provider_needs_action
+
+                if len(command_words) == 1 and (
+                    "required" in message or "invalid choice" in message
+                ):
+                    message = provider_needs_action(
+                        ccm=parse_as_agent or _ccm_audience_visible(head)
+                    )
+                elif len(command_words) >= 2 and command_words[1] == "ccm":
+                    resource = command_words[2] if len(command_words) > 2 else ""
+                    if not resource and (
+                        "required" in message or "invalid choice" in message
+                    ):
+                        message = ccm_mod.PROVIDER_CCM_NEEDS_ACTION
+                    elif resource in {
+                        "operating-systems",
+                        "instance-types",
+                        "disk-storage",
+                        "business-purposes",
+                        "ssh-keys",
+                    } and ("required" in message or "invalid choice" in message):
+                        message = (
+                            "Listing %s is: spa provider ccm %s list"
+                            % (resource, resource)
+                        )
+                    elif resource == "operation-hours" and (
+                        "required" in message or "invalid choice" in message
+                    ):
+                        message = (
+                            "spa provider ccm operation-hours needs an action.\n"
+                            "List: spa provider ccm operation-hours list\n"
+                            "Set:  spa provider ccm operation-hours set manual|business_hours --yes"
+                        )
+                    elif resource == "ttl" and (
+                        "required" in message or "invalid choice" in message
+                    ):
+                        message = (
+                            "spa provider ccm ttl needs an action.\n"
+                            "Extend: spa provider ccm ttl extend --days N --yes"
+                        )
             elif message.startswith("the following arguments are required:"):
                 missing = message.split(":", 1)[1].strip()
                 named = _MISSING_OPERAND.get((self.prog, missing))
@@ -1446,6 +1522,12 @@ def _run(argv: Sequence[str]) -> int:
             if parse_as_agent:
                 emit(False, error=message, as_agent=True)
                 raise SystemExit(2)
+            if (
+                "invalid choice" in message
+                and command_words[:1] == ["provider"]
+                and not _ccm_audience_visible(head)
+            ):
+                message = _omit_parser_choice(message, "ccm")
             self.print_usage(sys.stderr)
             print("%s: error: %s" % (self.prog, message), file=sys.stderr)
             raise SystemExit(2)
@@ -2135,8 +2217,12 @@ def _run(argv: Sequence[str]) -> int:
 
     p_doc = _add_command(sub, "doctor", aliases=["doc"], help="Host prerequisite checks")
     p_doc.add_argument("--spa-home", metavar="DIR", help="Framework directory to inspect")
-    p_doc.add_argument("--aws", action="store_true", help="Check AWS prerequisites")
-    p_doc.add_argument("--virtualbox", action="store_true", help="Check VirtualBox prerequisites")
+    p_doc.add_argument(
+        "--provider",
+        action="append",
+        metavar="NAME",
+        help=DOCTOR_PROVIDER_HELP,
+    )
     p_doc.add_argument("--strict", action="store_true", help="Treat optional-tool warnings as failures")
     _add_env_selector(p_doc)
 
@@ -2185,7 +2271,7 @@ def _run(argv: Sequence[str]) -> int:
         sub,
         "environment",
         aliases=["env"],
-        help="List, init, set, or remove registered environments (alias: env)",
+        help="List, init, set, or remove registered environments",
         epilog=ENVIRONMENT_NEEDS_ACTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -2241,7 +2327,7 @@ def _run(argv: Sequence[str]) -> int:
         "--provider",
         dest="set_provider",
         metavar="NAME",
-        help="Save the default provider for init (aws, virtualbox, or external) in providers.yml, so init does not need --provider",
+        help="Save the default provider for init (aws, virtualbox, external, or ccm) in providers.yml, so init does not need --provider",
     )
     p_env_cleanup = _add_action(
         env_sub,
@@ -2498,16 +2584,33 @@ def _run(argv: Sequence[str]) -> int:
     shell_ssh_args.required = False
 
     from spa.aws import AWS_NEEDS_ACTION
+    from spa.providers import ccm as ccm_mod
+    from spa.usage import provider_needs_action
 
-    p_aws = _add_command(
+    p_provider = _add_command(
         sub,
+        "provider",
+        aliases=["pro"],
+        help="Provider discovery",
+        epilog=provider_needs_action(ccm=_ccm_audience_visible(head)),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_env_selector(p_provider)
+    provider_sub = p_provider.add_subparsers(
+        dest="provider_cmd",
+        metavar="ACTION",
+        required=False,
+        parser_class=AgentAwareArgumentParser,
+    )
+    p_provider_aws = _add_action(
+        provider_sub,
         "aws",
         help="AWS discovery for terraform.aws",
         epilog=AWS_NEEDS_ACTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    _add_env_selector(p_aws)
-    aws_sub = p_aws.add_subparsers(
+    _add_mode_flags(p_provider_aws)
+    aws_sub = p_provider_aws.add_subparsers(
         dest="aws_cmd",
         metavar="ACTION",
         parser_class=AgentAwareArgumentParser,
@@ -2575,6 +2678,108 @@ def _run(argv: Sequence[str]) -> int:
     aws_types.add_argument("--family", help="Instance type family prefix (e.g. t3)")
     _add_aws_catalog("key-pairs", "List EC2 key pairs")
     _add_aws_catalog("security-groups", "List security groups")
+
+    ccm_kwargs = {
+        "epilog": ccm_mod.PROVIDER_CCM_NEEDS_ACTION,
+        "formatter_class": argparse.RawDescriptionHelpFormatter,
+    }
+    if _ccm_audience_visible(head):
+        ccm_kwargs["help"] = "CCM discovery for a ccm: environment"
+    p_provider_ccm = _add_action(
+        provider_sub,
+        "ccm",
+        **ccm_kwargs,
+    )
+    _add_mode_flags(p_provider_ccm)
+    ccm_sub = p_provider_ccm.add_subparsers(
+        dest="ccm_cmd",
+        metavar="ACTION",
+        required=False,
+        parser_class=AgentAwareArgumentParser,
+    )
+    p_ccm_check = _add_action(ccm_sub, "check-auth", help="Verify CCM_TOKEN via GET /api/v1/deployments")
+    _add_mode_flags(p_ccm_check)
+    p_ccm_survey = _add_action(
+        ccm_sub,
+        "survey",
+        help="Combined CCM meta dump plus GUI closed sets",
+    )
+    _add_mode_flags(p_ccm_survey)
+
+    def _add_ccm_catalog(name: str, summary: str):
+        resource = _add_action(ccm_sub, name, help=summary)
+        actions = resource.add_subparsers(
+            dest="ccm_action",
+            required=True,
+            metavar="ACTION",
+            parser_class=AgentAwareArgumentParser,
+        )
+        listing = _add_action(actions, "list", help=summary)
+        _add_mode_flags(listing)
+        listing.set_defaults(ccm_list_kind=name)
+        return listing
+
+    _add_ccm_catalog("operating-systems", "List CCM operating systems from meta")
+    _add_ccm_catalog("instance-types", "List CCM instance types from meta")
+    _add_ccm_catalog("disk-storage", "List CCM disk storage sizes from meta")
+    _add_ccm_catalog("business-purposes", "List GUI business purposes")
+    _add_ccm_catalog("ssh-keys", "List CCM SSH key names and local private-key presence")
+    oh = _add_action(
+        ccm_sub,
+        "operation-hours",
+        help="List or set CCM operation hours",
+    )
+    oh_sub = oh.add_subparsers(
+        dest="ccm_action",
+        required=True,
+        metavar="ACTION",
+        parser_class=AgentAwareArgumentParser,
+    )
+    p_oh_list = _add_action(oh_sub, "list", help="List GUI/API operation hours")
+    _add_mode_flags(p_oh_list)
+    p_oh_list.set_defaults(ccm_list_kind="operation-hours")
+    p_oh_set = _add_action(
+        oh_sub,
+        "set",
+        help="PATCH deployment operation_hours (mutating)",
+    )
+    _add_mode_flags(p_oh_set)
+    p_oh_set.add_argument(
+        "hours",
+        choices=list(ccm_mod.OPERATION_HOURS),
+        help="manual or business_hours",
+    )
+    p_oh_set.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Confirm without prompting",
+    )
+    ttl = _add_action(ccm_sub, "ttl", help="Extend CCM deployment TTL")
+    ttl_sub = ttl.add_subparsers(
+        dest="ccm_action",
+        required=True,
+        metavar="ACTION",
+        parser_class=AgentAwareArgumentParser,
+    )
+    p_ttl_extend = _add_action(
+        ttl_sub,
+        "extend",
+        help="PATCH deployment ttl to now plus --days (mutating)",
+    )
+    _add_mode_flags(p_ttl_extend)
+    p_ttl_extend.add_argument(
+        "--days",
+        type=int,
+        required=True,
+        help="New TTL in days from now (1-30)",
+    )
+    p_ttl_extend.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Confirm without prompting",
+    )
     p_licenses = _add_command(
         sub,
         "licenses",
@@ -2787,12 +2992,16 @@ def _run(argv: Sequence[str]) -> int:
         args, "architecture_cmd"
     ) in {None, "plan"}
     licenses_without_env = args.command == "licenses"
+    provider_without_env = args.command == "provider" and getattr(
+        args, "ccm_action", None
+    ) not in {"set", "extend"}
     if (
         args.command not in {"init", "agent", "environment", "doctor", "venv", "skills", "completion"}
         and not apps_without_env
         and not config_without_env
         and not architecture_without_env
         and not licenses_without_env
+        and not provider_without_env
     ):
         missing = env_dir_required_error(paths)
         if missing:
@@ -3168,11 +3377,19 @@ def _run(argv: Sequence[str]) -> int:
     if args.command == "doctor":
         from spa.doctor import format_doctor_text
 
+        requested = list(getattr(args, "provider", None) or [])
+        from spa.registry import PROVIDER_ALIASES
+
+        names = []
+        for raw in requested:
+            key = (raw or "").strip().lower()
+            if key not in PROVIDER_ALIASES:
+                return _reject(unknown_doctor_provider(raw), as_agent)
+            names.append(PROVIDER_ALIASES[key])
         result = session.doctor(
             spa_home=args.spa_home,
             env_dir=_doctor_env_dir(env_selector, args.start_dir),
-            aws=args.aws,
-            virtualbox=args.virtualbox,
+            provider=names,
             strict=args.strict,
         )
         want_json = as_agent or bool(getattr(args, "json", False))
@@ -3303,7 +3520,10 @@ def _run(argv: Sequence[str]) -> int:
             print(result.error, file=sys.stderr)
         elif (result.data or {}).get("note"):
             print(result.data["note"])
-        _print_next(result.data if isinstance(result.data, dict) else {})
+        data = result.data if isinstance(result.data, dict) else {}
+        for warning in data.get("warnings") or []:
+            print(_warning_text(warning), file=sys.stderr)
+        _print_next(data)
         return result.code
 
     if args.command == "deploy":
@@ -3555,45 +3775,74 @@ def _run(argv: Sequence[str]) -> int:
             return exc.code if isinstance(exc.code, int) else 1
         return 0
 
-    if args.command == "aws":
+    if args.command == "provider":
         from spa import aws as aws_mod
+        from spa.providers import ccm as ccm_mod
+        from spa.usage import provider_needs_action
 
-        aws_cmd = _action(args, "aws_cmd")
-        if not aws_cmd:
-            return _reject(aws_mod.AWS_NEEDS_ACTION, as_agent)
-        paths = getattr(session, "paths", None)
-        env_region = aws_mod.environment_config_region(paths.config_file) if paths else None
-        result = aws_mod.execute(args, environment_region=env_region)
-        if as_agent:
-            shown = result.data
-            if (
-                aws_cmd == "validate"
-                and not getattr(args, "details", False)
-                and isinstance(shown, dict)
-            ):
-                shown = aws_mod._compact_validate_payload(shown)
-                result = CommandResult(
-                    ok=result.ok,
-                    data=shown,
-                    error=result.error,
-                    code=result.code,
+        child = getattr(args, "provider_cmd", None)
+        if child == "aws":
+            aws_cmd = getattr(args, "aws_cmd", None)
+            if not aws_cmd:
+                return _reject(aws_mod.AWS_NEEDS_ACTION, as_agent)
+            paths = getattr(session, "paths", None)
+            env_region = aws_mod.environment_config_region(paths.config_file) if paths else None
+            result = aws_mod.execute(args, environment_region=env_region)
+            if as_agent:
+                shown = result.data
+                if (
+                    aws_cmd == "validate"
+                    and not getattr(args, "details", False)
+                    and isinstance(shown, dict)
+                ):
+                    shown = aws_mod._compact_validate_payload(shown)
+                    result = CommandResult(
+                        ok=result.ok,
+                        data=shown,
+                        error=result.error,
+                        code=result.code,
+                    )
+                return _emit_result(result, True)
+            data = result.data if isinstance(result.data, dict) else {}
+            if data.get("region"):
+                notice = aws_mod.region_notice(
+                    aws_mod._ResolvedRegion(
+                        data.get("region"),
+                        data.get("region_source"),
+                        data.get("profile"),
+                    )
                 )
-            return _emit_result(result, True)
-        data = result.data if isinstance(result.data, dict) else {}
-        if data.get("region"):
-            notice = aws_mod.region_notice(
-                aws_mod._ResolvedRegion(
-                    data.get("region"),
-                    data.get("region_source"),
-                    data.get("profile"),
-                )
+                if notice:
+                    print(notice, file=sys.stderr)
+            if result.error:
+                print(result.error, file=sys.stderr)
+            if result.data is not None:
+                sys.stdout.write(aws_mod.format_aws_text(result.data))
+            return result.code
+        if child != "ccm":
+            return _reject(
+                provider_needs_action(ccm=as_agent or _ccm_audience_visible(head)),
+                as_agent,
             )
-            if notice:
-                print(notice, file=sys.stderr)
+        ccm_cmd = getattr(args, "ccm_cmd", None)
+        if not ccm_cmd:
+            return _reject(ccm_mod.PROVIDER_CCM_NEEDS_ACTION, as_agent)
+        result = session.provider(
+            child="ccm",
+            action=ccm_cmd,
+            resource=getattr(args, "ccm_list_kind", None),
+            subaction=getattr(args, "ccm_action", None),
+            hours=getattr(args, "hours", None),
+            days=getattr(args, "days", None),
+            confirm=bool(getattr(args, "yes", False)),
+            agent=as_agent,
+        )
+        if as_agent:
+            return _emit_result(result, True)
         if result.error:
             print(result.error, file=sys.stderr)
         if result.data is not None:
-            sys.stdout.write(aws_mod.format_aws_text(result.data))
+            sys.stdout.write(ccm_mod.format_ccm_text(result.data))
         return result.code
 
     if args.command == "licenses":

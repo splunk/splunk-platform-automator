@@ -14,6 +14,8 @@ def env_is_external_only(config: Mapping[str, Any]) -> bool:
         return False
     if "virtualbox" in config:
         return False
+    if "ccm" in config:
+        return False
     terraform = config.get("terraform") or {}
     if isinstance(terraform, dict) and any(isinstance(item, dict) for item in terraform.values()):
         return False

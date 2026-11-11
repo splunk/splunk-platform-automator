@@ -19,6 +19,7 @@ def test_root_explain_includes_topologies_and_os():
     for extra in ("topology.two_envs", "topology.dual_cm", "topology.ds_hf", "topology.idx_shc"):
         assert extra not in result.stdout
     assert "provider.aws" in result.stdout
+    assert "provider.ccm" in result.stdout
     assert "setting.os" not in result.stdout
     assert "\n  os " in result.stdout or "\n  os<" in result.stdout or "os <" in result.stdout
 
@@ -471,6 +472,15 @@ def test_schema_selectors_reject_old_ids_and_keep_snippets_examples_only():
     assert layout["data"].get("suggest")
     assert "apply" not in layout["data"]
 
+    ccm = json.loads(run_spa(["--json", "config", "explain", "provider.ccm"]).stdout)
+    assert ccm["data"]["path"] == "provider.ccm"
+    assert ccm["data"].get("suggest")
+    assert "apply" not in ccm["data"]
+    assert "employee" in (ccm["data"].get("when_to_use") or "").lower()
+    blob = json.dumps(ccm["data"])
+    assert "-----BEGIN" not in blob
+    assert "CCM_TOKEN" not in (ccm["data"].get("snippet") or "")
+
     shown = json.loads(run_spa(["--json", "config", "explain", "os"]).stdout)
     feature = shown["data"]
     assert "apply" not in feature
@@ -726,5 +736,6 @@ def test_explain_command_is_read_only_and_one_per_feature():
     assert by_path["os"]["command"] == "spa config set os VALUE"
     assert by_path["topology.c1"]["command"] == "spa config topology topology.c1"
     assert by_path["provider.aws"]["command"] == "spa config provider provider.aws"
+    assert by_path["provider.ccm"]["command"] == "spa config provider provider.ccm"
     assert feature_command({"id": "note.example", "kind": "note", "title": "Not configurable"}) is None
     assert commands

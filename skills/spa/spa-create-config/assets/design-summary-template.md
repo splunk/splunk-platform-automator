@@ -44,6 +44,8 @@ Replace `<...>` with phase outcomes. Delete unused sections.
 
 ## Platform (AWS Linux)
 
+Delete this section when CCM is in play.
+
 - **OS:** <AL2023 | RHEL 10 | Ubuntu 24.04> — `ssh_username`, polkit/policykit-1
 - **Region:** <region>
 - **AMI:** <id or “from example, verify in console”>
@@ -51,6 +53,17 @@ Replace `<...>` with phase outcomes. Delete unused sections.
 - **Key pair / SG:** <names>
 - **AWS API during plan:** available | not available
 - **Tags:** include `SPADirName` when writing config
+
+## Platform (CCM)
+
+Use this section only when CCM is in play. Delete the AWS Linux section.
+
+- **OS:** <live `operating_system` id from survey>
+- **ssh_username:** splunker
+- **Instance / disk:** <from `spa provider ccm survey`>
+- **key_name / local private key file:** <names; never PEM>
+- **CCM_TOKEN:** set | not set
+- **TTL / operation hours:** <ttl_days>, <manual | business_hours>
 
 ## Apps & licenses
 

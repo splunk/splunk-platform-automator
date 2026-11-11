@@ -4,7 +4,7 @@
 
 ## Recommended OS choices (pick one)
 
-Use the **latest** AMI in your region (AMIs expire). Discover with `spa aws` or AWS console — do not rely on example AMI IDs without verification.
+Use the **latest** AMI in your region (AMIs expire). Discover with `spa provider aws` or AWS console — do not rely on example AMI IDs without verification.
 
 **SPA preference order:** RHEL → Ubuntu LTS → Amazon Linux → Debian (Debian is least tested).
 
@@ -18,12 +18,12 @@ Use the **latest** AMI in your region (AMIs expire). Discover with `spa aws` or 
 Discover latest AMI (no hardcoded versions):
 
 ```bash
-spa --agent aws latest-ami --region eu-central-1 --os rhel
-spa --agent aws latest-ami --region eu-central-1 --os ubuntu
-spa --agent aws latest-ami --region eu-central-1 --os amazon_linux
-spa --agent aws latest-ami --region eu-central-1 --os debian
-spa --agent aws latest-ami --region eu-central-1 --os all
-spa --agent aws survey --region eu-central-1
+spa --agent provider aws latest-ami --region eu-central-1 --os rhel
+spa --agent provider aws latest-ami --region eu-central-1 --os ubuntu
+spa --agent provider aws latest-ami --region eu-central-1 --os amazon_linux
+spa --agent provider aws latest-ami --region eu-central-1 --os debian
+spa --agent provider aws latest-ami --region eu-central-1 --os all
+spa --agent provider aws survey --region eu-central-1
 ```
 
 | OS | Resolution method |
@@ -116,14 +116,14 @@ terraform:
 
 ## AMI → ssh_username heuristic
 
-`spa --agent aws describe-ami --region REGION --ami-id AMI_ID` suggests username from AMI name:
+`spa --agent provider aws describe-ami --region REGION --ami-id AMI_ID` suggests username from AMI name:
 
 - Contains `ubuntu` → `ubuntu`
 - Contains `debian` → `admin`
 - Amazon Linux, RHEL, Red Hat → `ec2-user`
 - Default → `ec2-user` (user confirms)
 
-Custom AMI search (optional): `spa aws amis list --region REGION --name-filter "your-pattern*"`
+Custom AMI search (optional): `spa provider aws amis list --region REGION --name-filter "your-pattern*"`
 
 ## Skill rules
 

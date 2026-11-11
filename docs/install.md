@@ -115,7 +115,7 @@ Put Splunk installers and Professional Services baseconfig apps in a `Software/`
 
 ## VirtualBox
 
-Needed only when `virtualbox:` is in `splunk_config.yml`. `spa doctor --virtualbox` (or `spa doctor` from a VirtualBox env) checks Vagrant, VirtualBox, the driver match, and `vagrant-vbguest`. `spa hosts ssh` / `copy` use inventory.
+Needed only when `virtualbox:` is in `splunk_config.yml`. `spa doctor --provider virtualbox` (or `spa doctor` from a VirtualBox env) checks Vagrant, VirtualBox, the driver match, and `vagrant-vbguest`. `spa hosts ssh` / `copy` use inventory.
 
 **macOS (Homebrew):**
 

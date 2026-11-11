@@ -124,8 +124,7 @@ class SpaSession(Protocol):
         self,
         spa_home: Optional[str] = None,
         env_dir: Optional[str] = None,
-        aws: bool = False,
-        virtualbox: bool = False,
+        provider: Optional[Sequence[str]] = None,
         strict: bool = False,
     ) -> CommandResult: ...
 
@@ -336,6 +335,18 @@ class SpaSession(Protocol):
     ) -> CommandResult: ...
 
     def aws(self, argv: Optional[List[str]] = None) -> CommandResult: ...
+
+    def provider(
+        self,
+        child: str = "",
+        action: Optional[str] = None,
+        resource: Optional[str] = None,
+        subaction: Optional[str] = None,
+        hours: Optional[str] = None,
+        days: Optional[int] = None,
+        confirm: bool = False,
+        agent: bool = False,
+    ) -> CommandResult: ...
 
     def architecture_plan(self, path: str) -> CommandResult: ...
 
@@ -1206,17 +1217,25 @@ class LocalSpaSession:
         self,
         spa_home: Optional[str] = None,
         env_dir: Optional[str] = None,
-        aws: bool = False,
-        virtualbox: bool = False,
+        provider: Optional[Sequence[str]] = None,
         strict: bool = False,
     ) -> CommandResult:
         from spa.doctor import collect_checks
+        from spa.registry import PROVIDER_ALIASES
+        from spa.usage import unknown_doctor_provider
 
+        requested: List[str] = []
+        for raw in provider or ():
+            key = (raw or "").strip().lower()
+            if key not in PROVIDER_ALIASES:
+                return CommandResult(
+                    ok=False, error=unknown_doctor_provider(raw), code=2
+                )
+            requested.append(PROVIDER_ALIASES[key])
         return collect_checks(
             spa_home=spa_home,
             env_dir=env_dir,
-            aws=aws,
-            virtualbox=virtualbox,
+            provider=requested,
             strict=strict,
         )
 
@@ -1665,6 +1684,14 @@ class LocalSpaSession:
                 "SPA does not provision external hosts: %s" % ", ".join(external),
                 file=sys.stderr,
             )
+        from spa.providers import run_lifecycle_preflight
+
+        try:
+            run_lifecycle_preflight(provider, action)
+        except ProviderError as exc:
+            return CommandResult(
+                ok=False, error=str(exc), code=getattr(exc, "code", 1) or 1
+            )
         blocked = self._confirm_gate(
             action,
             confirm=confirm,
@@ -1687,6 +1714,8 @@ class LocalSpaSession:
                 playbook = "external_%s" % action
             elif provider.name == "aws":
                 playbook = "aws_provision" if action == "provision" else "aws_destroy"
+            elif provider.name == "ccm":
+                playbook = "ccm_provision" if action == "provision" else "ccm_destroy"
             else:
                 playbook = "vagrant_up" if action == "provision" else "vagrant_destroy"
             log = self._run_log(
@@ -2238,6 +2267,51 @@ class LocalSpaSession:
         return aws_mod.execute_argv(
             list(argv or []),
             environment_region=aws_mod.environment_config_region(self.paths.config_file),
+        )
+
+    def provider(
+        self,
+        child: str = "",
+        action: Optional[str] = None,
+        resource: Optional[str] = None,
+        subaction: Optional[str] = None,
+        hours: Optional[str] = None,
+        days: Optional[int] = None,
+        confirm: bool = False,
+        agent: bool = False,
+    ) -> CommandResult:
+        from spa import aws as aws_mod
+        from spa.providers import ccm as ccm_mod
+        from spa.providers.ccm import audience_visible
+        from spa.usage import provider_needs_action
+
+        ccm = agent or audience_visible(paths=self.paths)
+        if child not in {"aws", "ccm"}:
+            return CommandResult(ok=False, error=provider_needs_action(ccm=ccm), code=2)
+        if child == "aws":
+            tokens = [part for part in (action, resource, subaction) if part]
+            if action and resource == action:
+                tokens = [action] + ([subaction] if subaction else [])
+            if not tokens:
+                return CommandResult(ok=False, error=aws_mod.AWS_NEEDS_ACTION, code=2)
+            return aws_mod.execute_argv(
+                tokens,
+                environment_region=aws_mod.environment_config_region(self.paths.config_file),
+            )
+        config: Dict[str, Any] = {}
+        loaded = self._app_deployment_config()
+        if isinstance(loaded, dict) and isinstance(loaded.get("ccm"), dict):
+            config = loaded["ccm"]
+        return ccm_mod.execute(
+            action=action or "",
+            resource=resource,
+            subaction=subaction,
+            hours=hours,
+            days=days,
+            confirm=confirm,
+            agent=agent,
+            paths=self.paths,
+            config=config,
         )
 
     def licenses(

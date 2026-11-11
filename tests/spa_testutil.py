@@ -125,6 +125,8 @@ def spa_env(extra: Optional[Mapping[str, str]] = None) -> dict:
     env = os.environ.copy()
     for name in (*AGENT_ENV_VARS, *INHERITED_PATH_VARS):
         env.pop(name, None)
+    # Tests mock CCM HTTP. Do not inherit an operator PAT into subprocess spa.
+    env.pop("CCM_TOKEN", None)
     env["PYTHONPATH"] = str(LIB) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     # Never let spa write the operator's ~/.config/spa (paths.yml, environments.yml).
     env.setdefault("XDG_CONFIG_HOME", _throwaway_xdg_config_home())
@@ -154,6 +156,8 @@ def run_spa_init(args: Sequence[str], env=None, cwd=None, extra_env=None):
     argv = list(args)
     if "--skip-doctor" not in argv:
         argv.insert(0, "--skip-doctor")
-    if "--provider" not in argv:
+    migrating = "--from" in argv or "--migrate" in argv
+    composing = "--example" in argv or "--architecture" in argv
+    if "--provider" not in argv and (composing or not migrating):
         argv[0:0] = ["--provider", "aws"]
     return run_spa(["init", *argv], env=env, cwd=cwd, extra_env=extra_env)

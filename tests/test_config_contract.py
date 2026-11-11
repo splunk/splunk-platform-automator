@@ -114,6 +114,37 @@ splunk_hosts:
         assert _load(path)["os"]["time_zone"] == "Europe/Berlin"
         assert _load(path)["os"]["time_zone"] != '"Europe/Berlin"'
 
+    def test_set_parses_integer_enum_as_json_integer(self, tmp_path):
+        """CFG-PATH-001. Integer Literal enums use strict JSON, not a string."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+ccm:
+  instance_type: t3a.medium
+  disk_storage: 100
+  operating_system: rhel_9
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        size = config_set(path, PROJECT_ROOT, "ccm.ebs_storage.ebs_size", "50")
+        assert size["changed"] is True
+        stored_size = _load(path)["ccm"]["ebs_storage"]["ebs_size"]
+        assert stored_size == 50
+        assert type(stored_size) is int
+        disk = config_set(path, PROJECT_ROOT, "ccm.disk_storage", "50")
+        assert disk["changed"] is True
+        stored_disk = _load(path)["ccm"]["disk_storage"]
+        assert stored_disk == 50
+        assert type(stored_disk) is int
+        hours = config_set(path, PROJECT_ROOT, "ccm.operation_hours", "business_hours")
+        assert hours["changed"] is True
+        assert _load(path)["ccm"]["operation_hours"] == "business_hours"
+
     def test_selector_get_set_and_unset_use_stable_identity(self, tmp_path):
         """CFG-PATH-002 CFG-PATH-004 CFG-PATH-005."""
         path = _config(tmp_path)
@@ -921,6 +952,8 @@ class TestLayoutContract:
         roots = [root for _, _, area_roots in CONFIG_AREAS for root in area_roots]
         assert roots[:3] == ["plugin", "schema_version", "config_version"]
         assert roots.index("splunk_shclusters") < roots.index("splunk_defaults")
+        provider_roots = next(area_roots for area_id, _, area_roots in CONFIG_AREAS if area_id == "provider")
+        assert "ccm" in provider_roots
 
     def test_set_schema_version_is_second_root_and_header_stays_leading(self, tmp_path):
         """CFG-LAYOUT-007. plugin first, schema_version second; header comments stay above them."""
@@ -1034,6 +1067,7 @@ splunk_app_deployment:
         """CFG-LAYOUT-002."""
         path = _config(tmp_path)
         assert config_provider(path, PROJECT_ROOT, "provider.aws")["provider"] == "aws"
+        assert config_provider(path, PROJECT_ROOT, "provider.ccm")["provider"] == "ccm"
         assert config_topology(path, PROJECT_ROOT, "topology.c1", validate=False)["topology"] == "cm_2idxc_sh"
 
     def test_all_clustered_topology_examples_use_iter_for_member_ranges(self):

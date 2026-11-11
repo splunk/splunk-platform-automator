@@ -174,7 +174,7 @@ def custom_playbook_dirs_error(playbook_dirs: List[Dict[str, Any]], env_dir: Any
 
 
 def aws_validate_argv(aws: Dict[str, Any]) -> List[str]:
-    """Named `spa aws validate` argv from terraform.aws. Not parent flags."""
+    """Named `spa provider aws validate` argv from terraform.aws. Not parent flags."""
     argv = ["validate", "--region", aws["region"]]
     if aws.get("ami_id"):
         argv.extend(["--ami-id", aws["ami_id"]])
@@ -247,6 +247,20 @@ def validate_env(
             data["env_lookups"] = env_lookup_readiness(loaded)
             steps.append({"id": "env_lookups", "ok": False, "message": env_error})
             return CommandResult(ok=False, error=env_error, data=data, code=1)
+
+    if loaded is not None and isinstance(loaded.get("ccm"), dict):
+        from spa.providers.ccm import validate_ccm
+
+        ccm_result = validate_ccm(paths, loaded.get("ccm") or {})
+        if not ccm_result.ok:
+            steps.append({"id": "ccm", "ok": False, "message": ccm_result.error})
+            return CommandResult(
+                ok=False,
+                error=ccm_result.error,
+                data=data,
+                code=ccm_result.code or 1,
+            )
+        steps.append({"id": "ccm", "ok": True, "message": "CCM validation OK"})
 
     plugin = str(paths.spa_home / "ansible" / "plugins" / "inventory")
     lib = str(paths.spa_home / "lib")
@@ -471,6 +485,7 @@ def format_validate_text(result: CommandResult) -> str:
         "syntax": "[5/5] Playbook syntax-check...",
         "license_files": "[optional] Software license content and entitlement check...",
         "aws": "[optional] AWS terraform.aws validation...",
+        "ccm": "[optional] CCM provider checks...",
     }
     for step in data.get("steps") or []:
         ident = step.get("id")

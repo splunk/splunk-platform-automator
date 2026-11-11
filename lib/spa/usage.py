@@ -12,13 +12,17 @@ TOPOLOGY_HELP = (
     "Example: spa config topology topology.c1"
 )
 PROVIDER_HELP = (
-    "aws, virtualbox, or external, or a provider feature id. "
+    "aws, virtualbox, external, or ccm, or a provider feature id. "
     "List them: spa init list. "
     "Example: spa config provider aws"
 )
 INIT_PROVIDER_HELP = (
-    "aws, virtualbox, or external. Required unless a default is saved "
+    "aws, virtualbox, external, or ccm. Required unless a default is saved "
     "(spa environment set --provider NAME)"
+)
+DOCTOR_PROVIDER_HELP = (
+    "aws, virtualbox, external, or ccm. Repeatable. "
+    "Example: spa doctor --provider ccm"
 )
 SET_PATH_HELP = (
     "A config path. Find one: spa config search QUERY. "
@@ -62,3 +66,18 @@ def unknown_topology(name: str) -> str:
 
 def unknown_provider(name: str) -> str:
     return "Unknown provider: %s\n%s" % (name, PROVIDER_HELP)
+
+
+def unknown_doctor_provider(name: str) -> str:
+    return "Unknown provider: %s\n%s" % (name, DOCTOR_PROVIDER_HELP)
+
+
+def provider_needs_action(*, ccm: bool = False) -> str:
+    """Bare spa provider menu. AWS is always named; CCM follows when in play."""
+    lines = [
+        "spa provider needs an action.",
+        "AWS: spa provider aws check-auth.",
+    ]
+    if ccm:
+        lines.append("CCM: spa provider ccm check-auth")
+    return "\n".join(lines)

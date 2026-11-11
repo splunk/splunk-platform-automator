@@ -105,8 +105,8 @@ class AwsTerraformConfig(BaseModel):
         description=(
             "EC2 AMI id. Default is the id shipped in defaults/aws.yml. Omit the key to keep that. "
             "spa config set writes an end-of-line comment with the image name and description when AWS can describe the id. "
-            "Find a current Red Hat image with spa aws latest-ami --region eu-central-1 --os rhel, "
-            "or list matches with spa aws amis list --region eu-central-1 --os rhel. "
+            "Find a current Red Hat image with spa provider aws latest-ami --region eu-central-1 --os rhel, "
+            "or list matches with spa provider aws amis list --region eu-central-1 --os rhel. "
             "ubuntu, amazon_linux, and debian use the same --os form."
         ),
     )
@@ -150,6 +150,94 @@ class TerraformConfig(BaseModel):
     aws: Optional[AwsTerraformConfig] = Field(
         None,
         description="EC2 settings Terraform applies. Holds no value itself.",
+    )
+
+
+CCM_NAME_PATTERN = r"^[a-zA-Z0-9][\w-]*[a-zA-Z0-9]$"
+
+
+class CcmEbsStorage(BaseModel):
+    """Extra attached CCM volumes."""
+    model_config = ConfigDict(extra='forbid')
+
+    ebs_count: Optional[int] = Field(
+        None,
+        ge=1,
+        le=3,
+        description="Number of extra attached volumes. Minimum 1, maximum 3. No default. Omit ebs_storage for no extra volumes.",
+    )
+    ebs_size: Optional[Literal[50, 100, 300]] = Field(
+        None,
+        description="Size in GB of each extra volume. One of 50, 100, or 300. No default. Omit ebs_storage for no extra volumes.",
+    )
+
+
+class CcmConfig(BaseModel):
+    """Corporate Cloud Manager EC2 settings."""
+    model_config = ConfigDict(extra='forbid')
+
+    name: Optional[str] = Field(
+        None,
+        min_length=5,
+        max_length=100,
+        pattern=CCM_NAME_PATTERN,
+        description=(
+            "CCM deployment name. Default is the env directory basename when it matches "
+            "CCM's 5-100 character pattern. Omit the key to keep that."
+        ),
+    )
+    instance_type: Optional[str] = Field(
+        None,
+        description="CCM instance type. A live CCM catalog value, not an AWS AMI id. No default. Omit the key to set none.",
+    )
+    disk_storage: Optional[Literal[50, 100, 200, 250, 500, 1024, 2048]] = Field(
+        None,
+        description=(
+            "CCM instance root disk size in GB. One of 50, 100, 200, 250, 500, 1024, or 2048. "
+            "Default 50. Omit the key to keep that."
+        ),
+    )
+    operating_system: Optional[str] = Field(
+        None,
+        description="CCM operating system id. A live CCM catalog value, not an AMI id. No default. Omit the key to set none.",
+    )
+    key_name: Optional[str] = Field(
+        None,
+        description="CCM SSH key name (ssh_key_name on create). No default. Omit the key to set none.",
+    )
+    ssh_private_key_file: Optional[str] = Field(
+        None,
+        description="Path on the Ansible controller to the private key for key_name. Default ~/.ssh/CCM-Key.pem. Omit the key to keep that.",
+    )
+    ssh_username: Optional[str] = Field(
+        None,
+        description="SSH login user for the CCM image. Default splunker. Omit the key to keep that. Every CCM OS flavor uses splunker, not the AWS AMI user.",
+    )
+    timezone: Optional[str] = Field(
+        None,
+        description="IANA time zone on the CCM deployment. Default UTC. Omit the key to keep that.",
+    )
+    ttl_days: Optional[int] = Field(
+        None,
+        ge=1,
+        le=30,
+        description="Days until CCM terminates the whole deployment. Minimum 1, maximum 30. Default 7. Omit the key to keep that.",
+    )
+    operation_hours: Optional[Literal["business_hours", "manual"]] = Field(
+        None,
+        description="When CCM may stop instances. manual leaves them running; business_hours follows the deployment timezone. Default manual. Omit the key to keep that.",
+    )
+    business_purpose: Optional[Literal["DeveloperInstance", "SalesOpportunity", "SupportCase"]] = Field(
+        None,
+        description="Reason shown in the CCM GUI. Default DeveloperInstance. Omit the key to keep that.",
+    )
+    business_description: Optional[str] = Field(
+        None,
+        description="Free-text description next to business_purpose. No default. Omit the key to set no description.",
+    )
+    ebs_storage: Optional[CcmEbsStorage] = Field(
+        None,
+        description="Extra attached volumes. Holds no value itself. Omit the key for no extra volumes.",
     )
 
 
@@ -1678,6 +1766,10 @@ class SplunkConfig(BaseModel):
     virtualbox: Optional[VirtualBoxConfig] = Field(
         None,
         description="VirtualBox guest size and network for Vagrant. Holds no value itself.",
+    )
+    ccm: Optional[CcmConfig] = Field(
+        None,
+        description="Splunk Corporate Cloud Manager EC2 settings. Holds no value itself. Auth is lookup('env', 'CCM_TOKEN'), not a config key.",
     )
     external: Optional[ExternalConfig] = Field(
         None,

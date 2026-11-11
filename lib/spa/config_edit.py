@@ -53,7 +53,7 @@ _APP_IDENTITY_LISTS = {
     ("splunk_app_deployment", "apps"),
     ("splunk_app_deployment", "apps", "content_pack_apps"),
 }
-_PROVIDER_ROOTS = ("terraform", "virtualbox", "aws", "external")
+_PROVIDER_ROOTS = ("terraform", "virtualbox", "aws", "external", "ccm")
 _TOPOLOGY_ROOTS = ("splunk_hosts", "splunk_idxclusters", "splunk_shclusters", "splunk_environments")
 _HEADER_FIELDS = (
     "intent",
@@ -308,9 +308,29 @@ def _schema_detail(path: str) -> Optional[Dict[str, Any]]:
     raise ConfigEditError("Unknown schema path: %s" % path)
 
 
+def _enum_scalar_json_type(allowed: Sequence[Any]) -> Optional[str]:
+    """Integer/number/bool Literal enums use JSON, like non-enum scalars."""
+    values = list(allowed)
+    if not values:
+        return None
+    if all(isinstance(item, bool) for item in values):
+        return "boolean"
+    if all(isinstance(item, int) and not isinstance(item, bool) for item in values):
+        return "integer"
+    if all(
+        isinstance(item, (int, float)) and not isinstance(item, bool) for item in values
+    ):
+        return "number"
+    return None
+
+
 def _parse_value(path: str, raw: str) -> Any:
     detail = _schema_detail(path)
     type_name = str((detail or {}).get("type") or "string")
+    if type_name == "enum":
+        json_type = _enum_scalar_json_type((detail or {}).get("allowed") or [])
+        if json_type:
+            type_name = json_type
     structured = type_name.startswith(("list", "map", "object"))
     scalar_json = type_name in {"boolean", "integer", "number", "null"}
     if structured or scalar_json:
@@ -1067,7 +1087,7 @@ def _attach_ami_comment(
     if region:
         warnings.append(
             "AMI %s was set in %s without an image comment. "
-            "spa aws describe-ami --region %s --ami-id %s can identify it."
+            "spa provider aws describe-ami --region %s --ami-id %s can identify it."
             % (value, region, region, value)
         )
     else:

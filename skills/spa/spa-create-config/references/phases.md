@@ -15,9 +15,9 @@ Load one section at a time from this file. Hard rules stay in [SKILL.md](../SKIL
    Infer **plan** from phrases like “design”, “discuss”, “plan architecture”; infer **write** from “create config”, “write yaml”, “approve and write”.
 3. Target: the environment chosen at the gate, or the named existing environment under "Add / change a setting". Its config is `<env path>/config/splunk_config.yml`. Never assume the current directory or the registry default is the target.
 4. If the target config already exists and **mode=write** (or approving plan): **merge vs overwrite** — AskQuestion if available, otherwise ask in chat, before any write. Skip in **plan** mode until Phase 12.
-5. **AWS API probe** — `spa --agent aws check-auth` (needs `boto3`; no region required). Read `ok` and `data.account`. Record result:
+5. **CCM availability, then AWS.** Report `CCM_TOKEN` as set / not set (never the value). Do not AskQuestion CCM unless `CCM_TOKEN` is set, the env has a root `ccm:` block, or the operator already named CCM. When CCM is in play, skip the AWS API probe. Otherwise run `spa --agent provider aws check-auth` (needs `boto3`; no region required). Read `ok` and `data.account`. Record result:
    - **Available** → Phase 6 uses API discovery; optional `spa validate --splunk-config aws` at validate.
-   - **Unavailable** → follow [aws-without-credentials.md](aws-without-credentials.md); do not block the workflow.
+   - **Unavailable** → follow [aws-without-credentials.md](aws-without-credentials.md); do not block the workflow. Do not run `spa provider ccm` unless CCM is in play.
 6. Read existing config if merging or revising an existing plan from prior config.
 7. Licenses are not scanned here. Phase 10 scans the Software directory once, after the apps decision.
 8. **Architecture input (optional).** Two entry points: [architecture-input.md](architecture-input.md). **Path A (no file):** keep this questionnaire and `spa init --example TOPOLOGY --provider` (write mode at the gate; plan mode at Phase 12). **Path B (confirmed 0.4.0 file):** skip the SVA questionnaire; run `spa architecture plan FILE`, then the same init timing, place/size with `spa config move`, then **`spa architecture check FILE` before validate**. Phases 9 and 10 are always asked, even when `confirmed` is true. SPA ignores `apps.by_role`; it installs PS baseconfigs internally. Do not import those folders as local apps.
@@ -79,6 +79,8 @@ Ask scale-out vs scale-up; default **scale out** for Splunk.
 | App lab | Larger SH if needed; ITSI Java 21 |
 | Production-like | Document overrides |
 
+If the provider is `ccm` (only when CCM is in play), size from `spa provider ccm survey` and the list commands, not this AWS `t3.medium` catalog.
+
 **Exit:** Default instance type and volume size for global block.
 
 ## Phase 5 — Linux OS
@@ -88,6 +90,8 @@ Pick OS via `spa --agent config search os`, then `spa --agent config explain os`
 **Recommended:** Amazon Linux 2023, RHEL 10, or Ubuntu 24.04 LTS (latest AMI in region).
 
 Set `os.packages` (acl plus **polkit** on AL/RHEL or `policykit-1` on Ubuntu), `os.set_hostname` if chosen, and `terraform.aws.ssh_username`.
+
+If the provider is `ccm` (only when CCM is in play): pick `ccm.operating_system` from `spa provider ccm survey` / `operating-systems list`. `ccm.ssh_username` is always `splunker`. Do not use AMI ids or `terraform.aws.ssh_username`.
 
 **Exit:** OS family chosen; `os:` template ready.
 
@@ -120,33 +124,35 @@ Run this before the first `spa init` or `spa environment init` for a new environ
 
 6. **Run init only after the yes, and only in write mode.** Plan mode skips this step; Phase 12 runs it. Write mode then continues with Phase 6 (AWS settings) and the later config steps, and the app step (Phase 9).
 
-**Write barrier.** Until step 6 has run, no writing command runs: no `spa init`, `spa environment init`, `spa architecture apply`, `spa config set|add|unset|merge|move|topology|provider|header set`, or `spa apps add|remove`. These stay allowed: `spa architecture plan`, `spa --agent config search|explain|get`, `spa aws ...`, `spa --agent environment list`, `spa --agent licenses list`, and `spa --agent apps search|snippet`.
+**Write barrier.** Until step 6 has run, no writing command runs: no `spa init`, `spa environment init`, `spa architecture apply`, `spa config set|add|unset|merge|move|topology|provider|header set`, or `spa apps add|remove`. These stay allowed: `spa architecture plan`, `spa --agent config search|explain|get`, `spa provider aws ...`, `spa --agent environment list`, `spa --agent licenses list`, and `spa --agent apps search|snippet`. `spa provider ccm ...` is allowed only when CCM is in play.
 
 **Target check (every write).** Pass `--env NAME` on each write, or run it from the target directory. Config and apps success envelopes include `resolved_env_name`, `env_dir`, and `config_file`. After each write, confirm they match the step 5 target. If they do not, stop, report the mismatch, and do not run another write. Never write to the registry default by accident.
 
 ## Phase 6 — AWS settings
 
-**With creds:** Run named `spa --agent aws` actions — see [aws-baseline.md](aws-baseline.md). Read `data.*` from the envelope.
+**With creds:** Run named `spa --agent provider aws` actions — see [aws-baseline.md](aws-baseline.md). Read `data.*` from the envelope.
 
-1. **Region.** Run `spa --agent aws regions list` immediately before AskQuestion. Option 1 is **only** `data.aws_config_region`, first, marked as the default, labelled exactly ``<region> (from AWS config, profile <aws_config_profile>)``.
+1. **Region.** Run `spa --agent provider aws regions list` immediately before AskQuestion. Option 1 is **only** `data.aws_config_region`, first, marked as the default, labelled exactly ``<region> (from AWS config, profile <aws_config_profile>)``.
    - Do not use `selected`, `region`, or `region_source`. Those can be `AWS_REGION` or scaffold `terraform.aws.region` (`eu-central-1` in `examples/providers/aws.yml`), not a choice.
    - Never mark `us-east-1` as default unless `data.aws_config_region` is exactly `us-east-1`. No city names. If `data.aws_config_region` is null, show no default. Never choose a default from your own knowledge.
    - Then up to four other names from `data.items`, common regions first (`us-east-1`, `us-west-2`, `eu-central-1`, `ap-southeast-1` when present), and "Other: type a region".
    - If `ok` is false, `data.items` is empty. Still show option 1 from `data.aws_config_region`, and offer "Other".
    - Use the "Recommended" label only on option 1, and only when it came from `data.aws_config_region`.
-2. AMI — if unknown, `spa --agent aws latest-ami --region REGION --os <rhel|ubuntu|amazon_linux|debian>` or `spa --agent aws survey --region REGION` → user picks from `data.recommended_amis` (preference: RHEL first). REGION is the Phase 6 region, the same as `terraform.aws.region`; every AMI lookup names it.
-3. `ssh_username` (`spa --agent aws describe-ami --region REGION --ami-id AMI_ID`)
-4. Instance type (`spa --agent aws instance-types list --family t3`; suggest `t3.medium` for config tests)
-5. Key pair (`spa --agent aws key-pairs list`)
-6. Security groups (`spa --agent aws security-groups list`)
+2. AMI — if unknown, `spa --agent provider aws latest-ami --region REGION --os <rhel|ubuntu|amazon_linux|debian>` or `spa --agent provider aws survey --region REGION` → user picks from `data.recommended_amis` (preference: RHEL first). REGION is the Phase 6 region, the same as `terraform.aws.region`; every AMI lookup names it.
+3. `ssh_username` (`spa --agent provider aws describe-ami --region REGION --ami-id AMI_ID`)
+4. Instance type (`spa --agent provider aws instance-types list --family t3`; suggest `t3.medium` for config tests)
+5. Key pair (`spa --agent provider aws key-pairs list`)
+6. Security groups (`spa --agent provider aws security-groups list`)
 7. Local: `ssh_private_key_file`, tags, volume size
-8. `spa --agent aws validate` before write
+8. `spa --agent provider aws validate` before write
 
 **Without creds:** [aws-without-credentials.md](aws-without-credentials.md) — static matrix, example AMIs, user-supplied key/SG names; **warn AMIs may be stale**; header note `AWS API: not available`. Do **not** run `spa validate --splunk-config aws`.
 
 Cap displayed API results (~10–15 AMIs, ~5 instance types).
 
-**Exit:** All `terraform.aws` fields chosen (API-validated if creds available, else documented as unverified).
+**CCM (only when CCM is in play):** skip the AWS AMI path. Write YAML with `spa config provider ccm`. Discover live values with `spa provider ccm survey` (and `operating-systems list` / `instance-types list` / `disk-storage list` / `ssh-keys list`). Never print PEM or `CCM_TOKEN`. `spa doctor --provider ccm` reports `CCM_TOKEN` as set / not set. Propose `spa config merge remote-provider --yes` after explicit yes.
+
+**Exit:** All `terraform.aws` fields chosen (API-validated if creds available, else documented as unverified), or CCM knobs chosen from live survey.
 
 ## Phase 7 — Topology counts
 
@@ -282,7 +288,7 @@ Answer every `Reconfirm now` row first. Then ask: "Confirm all values and write 
 
    After the operator confirms, run `spa --agent config header set` (`spa config header set`) with those values. Include a flag only when its phase produced a value. Omitted fields are removed, so a missing value is an open question for the operator, not a blank. Pass `--yes`. The field list and examples are in `spa config header set --help`.
 3. For OS, SSL, licenses, RF/SF, and other settings: choose with `spa --agent config search QUERY`, then `spa --agent config explain PATH`. Use the one command on that page. That is `spa --agent config set PATH VALUE` for an existing scalar or map, or `spa --agent config add SELECTOR JSON_OBJECT` for a new non-app identity. For a shipped bundle, `spa --agent config templates list` then `spa --agent config merge NAME --yes`. Use one intentional `spa --agent config merge --file FILE` for an operator-authored fragment. Never paste a feature snippet. For **apps**, load [spa-apps](../../spa-apps/SKILL.md), search, and call `spa --agent apps add`. ITSI is app_id 1841, not 5403. After every write, inspect `changed` and `ready` (`ok: false` means nothing was written). Humans pass `--show-diff` for the hunk. `spa --agent config get` the identity (`found`), then Phase 13.
-4. Global `terraform.aws` already comes from `--provider aws`; add **`ssh_username`** / AMI from catalog + discovery.
+4. Global `terraform.aws` already comes from `--provider aws`; add **`ssh_username`** / AMI from catalog + discovery. When CCM is in play, global `ccm:` already comes from `--provider ccm`; `ssh_username` is `splunker`. Omit `--aws` on the header.
 5. Matching global `os:` from selector `os` (not from the topology file).
 6. `splunk_defaults` (include `splunk_license_file` from Phase 10 when chosen).
 7. Cross-check authored paths against `spa --agent config explain PATH`.

@@ -4,7 +4,7 @@ This page is for contributors changing the Splunk Platform Automator framework. 
 
 The user guide explains how to use spa after it is installed. Install, uninstall, shell completion setup, controller Python, VirtualBox, and WSL belong in [install.md](install.md); do not copy those commands.
 
-Related guides cover [installation](install.md), [migration](migrate.md), [apps](apps.md), [AWS](aws.md), [secrets](secrets.md), the normative [config-editing.md](config-editing.md) contract, and detailed [contributing procedures](contributing.md). Future product work belongs in the [ROADMAP](../ROADMAP.md).
+Related guides cover [installation](install.md), [migration](migrate.md), [apps](apps.md), [AWS](aws.md), [CCM](ccm.md), [secrets](secrets.md), the normative [config-editing.md](config-editing.md) contract, and detailed [contributing procedures](contributing.md). Future product work belongs in the [ROADMAP](../ROADMAP.md).
 
 ## Current execution architecture
 
@@ -175,16 +175,16 @@ One command language for humans and agents. The CLI parses and renders. `SpaSess
 
 ### Command language
 
-- `list` is a catalog and the last word of the command (`spa hosts list`, `spa licenses list`, `spa apps content-packs list`, `spa aws regions list`). `get` is the current value. `explain` is one definition. `search` is ranked discovery. Mutations stay explicit: `set`, `add`, `remove`, `merge`, `deploy`, `destroy`, and the other existing verbs. Do not use two verbs for the same operation.
+- `list` is a catalog and the last word of the command (`spa hosts list`, `spa licenses list`, `spa apps content-packs list`, `spa provider aws regions list`). `get` is the current value. `explain` is one definition. `search` is ranked discovery. Mutations stay explicit: `set`, `add`, `remove`, `merge`, `deploy`, `destroy`, and the other existing verbs. Do not use two verbs for the same operation.
 - A noun with several actions owns subcommands (`spa config`, `spa apps`). A single operation stays top-level (`spa validate`, `spa deploy`).
 - A bare parent that needs an action prints the legal forms and exits 2. It does not dump a catalog.
-- `spa --help` lists canonical names. Human `--help` for one command uses `usage: spa validate` and a separate `Aliases:` line for a short form such as `val`. Parent help, invalid-choice text, `COMMAND_SCHEMA`, generated docs, and agent output omit those short forms. `spa init` and `spa env` stay documented human aliases. Schema examples use `spa environment`. `spa shell` stays the SSH command; `sh` appears only on its `Aliases:` line. Retired `feat` is an error, not an alias.
+- `spa --help` lists canonical names. Human `--help` for one command uses `usage: spa validate` and a separate `Aliases:` line for a short form such as `val`. Parent help, invalid-choice text, `COMMAND_SCHEMA`, generated docs, and agent output omit those short forms. `spa init` stays a documented top-level alias of `spa environment init`. `env` appears only on `spa environment --help` as `Aliases: env`. Schema examples use `spa environment`. `spa shell` stays the SSH command; `sh` appears only on its `Aliases:` line. Retired `feat` is an error, not an alias.
 
 ### Human output
 
 Successful data goes to stdout. Diagnostics, warnings, progress, and errors go to stderr. Usage errors exit 2. Runtime failures exit 1. Help exits 0. Name the legal command and a next action.
 
-When `CommandResult.data` includes `next`, print it for humans the same way agents receive it in the envelope: a `Next:` line on stderr, then each item's `ask` and `command`. Do not attach `next` that the human renderer omits. Agent mode still prints only the JSON envelope.
+When `CommandResult.data` includes `next`, print it for humans the same way agents receive it in the envelope: a `Next:` line on stderr, then each item's `ask` and `command`. Human `command` lines omit `--agent`. Do not attach `next` that the human renderer omits. Agent mode still prints only the JSON envelope.
 
 A usage error must name the legal values when the set is small (`aws` or `virtualbox`), or say what the operand is, name the command that lists the values, and give one example. `spa config topology` with no operand lists each `topology.*` id and the template it loads. An unknown topology points at `spa init list` (the same catalog as `spa environment init list`) and shows an example such as `spa config topology topology.c1`. An unknown topology or provider points at that list and does not stop at a filesystem path. Do not paste an open-ended catalog into the error. Human stderr and the agent `error` string carry the same sentences.
 

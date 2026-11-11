@@ -79,6 +79,8 @@ spa provision --yes && spa deploy --yes
 
 VirtualBox: `--provider virtualbox` (for example `single_node`). Full narrative: [user guide](docs/user-guide.md).
 
+Employee-only CCM: `--provider ccm`. See [CCM](docs/ccm.md).
+
 Existing servers: `spa init --example TOPOLOGY --provider external ENV`, then `spa hosts register NAME --ssh-host HOST --user USER --key PATH --yes`.
 
 ## Docs
@@ -86,6 +88,7 @@ Existing servers: `spa init --example TOPOLOGY --provider external ENV`, then `s
 | Audience | Link |
 | --- | --- |
 | Humans (and agents following examples) | [docs/user-guide.md](docs/user-guide.md) |
+| CCM (employee-only) | [docs/ccm.md](docs/ccm.md) |
 | Command catalog (generated) | [docs/commands.md](docs/commands.md) · `spa agent schema --markdown` |
 | Settings (generated) | [docs/config.md](docs/config.md) · `spa config schema --markdown` |
 | Contributors | [docs/architecture.md](docs/architecture.md) · [docs/contributing.md](docs/contributing.md) |

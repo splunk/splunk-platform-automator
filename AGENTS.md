@@ -29,7 +29,7 @@ Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 | Destroy | `spa destroy --yes` |
 | Schema | `spa --no-agent agent schema --markdown`, `spa --no-agent config schema --markdown` |
 
-Other flags: `spa --agent schema`. Provider is `terraform.aws` or `virtualbox:` in config.
+Other flags: `spa --agent schema`. Provider is `terraform.aws`, `virtualbox:`, or `ccm:` in config.
 
 ## Skills
 

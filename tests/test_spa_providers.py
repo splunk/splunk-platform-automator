@@ -60,6 +60,56 @@ def test_detects_virtualbox_from_config(tmp_path):
     assert selected.config["memory"] == 4096
 
 
+def test_detects_ccm_from_config(tmp_path):
+    paths = _paths(tmp_path, "ccm:\n  instance_type: t3a.medium\n")
+    selected = detect_provider(paths)
+    assert selected.name == "ccm"
+    assert selected.config["instance_type"] == "t3a.medium"
+
+
+def test_ccm_with_virtualbox_is_rejected(tmp_path):
+    paths = _paths(tmp_path, "ccm: {}\nvirtualbox: {}\n")
+    with pytest.raises(ProviderError, match="Multiple"):
+        detect_provider(paths)
+
+
+def test_ccm_with_terraform_aws_is_rejected(tmp_path):
+    paths = _paths(tmp_path, "ccm: {}\nterraform:\n  aws: {}\n")
+    with pytest.raises(ProviderError, match="Multiple"):
+        detect_provider(paths)
+
+
+def test_check_provisioned_ccm_missing_state_is_not_provisioned(tmp_path):
+    from spa.providers import check_provisioned
+
+    paths = _paths(
+        tmp_path,
+        "ccm: {}\nsplunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    state = check_provisioned(paths)
+    assert state.provider == "ccm"
+    assert state.provisioned is False
+    assert not (tmp_path / "ccm" / "state.json").exists()
+
+
+def test_ccm_suspend_resume_require_local_state(tmp_path):
+    from spa.providers.ccm import Provider as CcmProvider
+
+    paths = _paths(tmp_path, "ccm: {}\n")
+    provider = CcmProvider(paths, {})
+    with pytest.raises(ProviderError, match="No CCM state"):
+        provider.suspend(yes=True)
+    with pytest.raises(ProviderError, match="No CCM state"):
+        provider.resume(yes=True)
+
+
+def test_ccm_env_is_not_external_only():
+    from spa.providers.classify import env_is_external_only
+
+    assert env_is_external_only({"ccm": {}}) is False
+    assert env_is_external_only({"ccm": {}, "external": {}}) is False
+
+
 def test_top_level_aws_is_not_a_provider(tmp_path):
     paths = _paths(tmp_path, "aws:\n  region: eu-central-1\n")
     with pytest.raises(ProviderError, match="No managed deployment provider"):

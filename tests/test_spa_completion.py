@@ -136,8 +136,23 @@ def test_completion_offers_canonical_names_only():
     assert "shell" in names
     assert "hosts" in names
     assert "completion" in names
-    for alias in ("env", "sh", "cfg", "h", "feat", "features"):
+    for alias in ("env", "sh", "cfg", "h", "feat", "features", "pro"):
         assert alias not in names
+    assert "provider" in names
+    assert "aws" not in names
+
+
+def test_completion_offers_provider_when_ccm_token_is_set(monkeypatch):
+    monkeypatch.setenv("CCM_TOKEN", "test-ccm-pat-value")
+    names = complete(["spa", ""], 1)
+    assert "provider" in names
+    assert "pro" not in names
+    actions = complete(["spa", "provider", "ccm", ""], 3)
+    assert "check-auth" in actions
+    assert "survey" in actions
+    hours = complete(["spa", "provider", "ccm", "operation-hours", "set", ""], 5)
+    assert "manual" in hours
+    assert "business_hours" in hours
 
 
 def test_typed_alias_still_completes_the_canonical_subcommand():
@@ -145,17 +160,21 @@ def test_typed_alias_still_completes_the_canonical_subcommand():
     assert "exp" not in complete(["spa", "config", ""], 2)
 
 
-def test_aws_named_actions_are_offered():
-    actions = complete(["spa", "aws", ""], 2)
+def test_aws_named_actions_are_offered_under_provider():
+    children = complete(["spa", "provider", ""], 2)
+    assert "aws" in children
+    assert "ccm" not in children
+    actions = complete(["spa", "provider", "aws", ""], 3)
     for name in ("check-auth", "latest-ami", "describe-ami", "validate", "survey", "regions"):
         assert name in actions
-    flags = complete(["spa", "aws", "latest-ami", "--"], 3)
+    flags = complete(["spa", "provider", "aws", "latest-ami", "--"], 4)
     assert "--os" in flags
     assert "--region" in flags
     assert "--details" not in flags
-    validate = complete(["spa", "aws", "validate", "--"], 3)
+    validate = complete(["spa", "provider", "aws", "validate", "--"], 4)
     assert "--details" in validate
     assert "--os" not in validate
+    assert "check-auth" not in complete(["spa", "aws", ""], 2)
 
 
 def test_flags_belong_to_the_command_being_typed():
@@ -165,6 +184,19 @@ def test_flags_belong_to_the_command_being_typed():
     setting = complete(["spa", "config", "set", "--"], 3)
     assert "--yes" in setting
     assert "--hosts" not in setting
+
+
+def test_doctor_provider_flag_is_completable():
+    flags = complete(["spa", "doctor", "--"], 2)
+    assert "--provider" in flags
+    assert "--ccm" not in flags
+    assert "--aws" not in flags
+    assert "--virtualbox" not in flags
+    names = complete(["spa", "doctor", "--provider", ""], 3)
+    assert "ccm" in names
+    assert "aws" in names
+    assert "virtualbox" in names
+    assert "external" in names
 
 
 def test_provider_and_search_choices_come_from_the_schema():
@@ -177,6 +209,7 @@ def test_init_provider_tab_lists_shipped_providers():
     assert "aws" in names
     assert "virtualbox" in names
     assert "external" in names
+    assert "ccm" in names
     assert "external" in complete(["spa", "environment", "init", "--provider", ""], 4)
     assert "external" in complete(["spa", "environment", "set", "--provider", ""], 4)
     kinds = complete(["spa", "apps", "search", "--kind", ""], 4)

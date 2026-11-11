@@ -181,11 +181,55 @@ features:
         memory: 512
         cpus: 1
 
+  - id: provider.ccm
+    title: CCM provider
+    kind: provider
+    template: ccm
+    when_to_use: >-
+      Employee-only. Splunk staff with CCM access use this for EC2 labs through
+      Corporate Cloud Manager instead of Terraform. spa init --provider ccm copies
+      these knobs. operating_system and instance_type are live CCM catalog values,
+      not AMI ids. disk_storage is the CCM root-disk catalog, not terraform.aws.root_volume_size.
+      ssh_username is always splunker for every CCM OS flavor.
+    when_not_to_use: >-
+      Public aws, virtualbox, or external labs. Do not use a CCM Splunk install
+      (type=splunk); SPA keeps topology and the Splunk install.
+    suggest: spa init --example TOPOLOGY --provider ccm ENV
+    keys:
+      - ccm
+      - ccm.name
+      - ccm.instance_type
+      - ccm.disk_storage
+      - ccm.operating_system
+      - ccm.key_name
+      - ccm.ssh_private_key_file
+      - ccm.ssh_username
+      - ccm.timezone
+      - ccm.ttl_days
+      - ccm.operation_hours
+      - ccm.business_purpose
+      - ccm.business_description
+      - ccm.ebs_storage
+      - ccm.ebs_storage.ebs_count
+      - ccm.ebs_storage.ebs_size
+    snippet: |
+      ccm:
+        instance_type: t3a.medium
+        disk_storage: 50
+        operating_system: rhel_9
+        key_name: CCM-Key
+        ssh_private_key_file: ~/.ssh/CCM-Key.pem
+        ssh_username: splunker
+        timezone: UTC
+        ttl_days: 7
+        operation_hours: manual
+        business_purpose: DeveloperInstance
+
   - id: provider.aws
     title: AWS Terraform provider
     kind: provider
     template: aws
-    when_to_use: EC2 via terraform.aws. Pick region, AMI, instance type, and related live values with spa aws survey, spa aws latest-ami, spa aws instance-types list, and spa aws validate; do not copy a hardcoded cloud catalog.
+    when_to_use: EC2 via terraform.aws. Pick region, AMI, instance type, and related live values with spa provider aws survey, spa provider aws latest-ami, spa provider aws instance-types list, and spa provider aws validate; do not copy a hardcoded cloud catalog.
     when_not_to_use: "Local VirtualBox."
     suggest: spa init --example TOPOLOGY --provider aws ENV
     keys:
@@ -204,7 +248,7 @@ features:
         note: Include SPADirName "{{ spa_env_dir | basename }}" so AWS tags name the env directory.
       - terraform.aws.subnet_id
       - path: terraform.aws.ssh_username
-        note: Login user must match the AMI (for example ec2-user, ubuntu, or admin). Pair with spa aws describe-ami.
+        note: Login user must match the AMI (for example ec2-user, ubuntu, or admin). Pair with spa provider aws describe-ami.
       - "splunk_hosts[].terraform"
       - "splunk_hosts[].terraform.aws"
       - "splunk_hosts[].terraform.aws.region"
@@ -219,7 +263,7 @@ features:
       - "splunk_hosts[].terraform.aws.subnet_id"
       - "splunk_hosts[].terraform.aws.tags"
       - path: "splunk_hosts[].terraform.aws.ssh_username"
-        note: Login user must match the AMI. Pair with spa aws describe-ami.
+        note: Login user must match the AMI. Pair with spa provider aws describe-ami.
     snippet: |
       terraform:
         aws:
@@ -371,10 +415,10 @@ features:
     when_to_use: >-
       Login user Terraform and Ansible use on the EC2 AMI. Must match the image (ec2-user on
       Amazon Linux and RHEL, ubuntu on Ubuntu, admin on Debian). Discover with
-      spa aws describe-ami / latest-ami. Always set it explicitly for AWS labs.
+      spa provider aws describe-ami / latest-ami. Always set it explicitly for AWS labs.
     keys:
       - path: terraform.aws.ssh_username
-        note: Login user must match the AMI (for example ec2-user, ubuntu, or admin). Pair with spa aws describe-ami.
+        note: Login user must match the AMI (for example ec2-user, ubuntu, or admin). Pair with spa provider aws describe-ami.
     related: ["provider.aws", "setting.os"]
     snippet: |
       terraform:
