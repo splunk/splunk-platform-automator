@@ -5,15 +5,15 @@ AWS discovery and validation for splunk_config.yml terraform.aws settings.
 Requires boto3 and AWS credentials (env, profile, or instance role).
 
 Examples:
-  spa aws check-auth --json
-  spa aws regions list --json
-  spa aws latest-ami --region eu-central-1 --os amazon_linux --json
-  spa aws latest-ami --region eu-central-1 --os all --json
-  spa aws amis list --region eu-central-1 --name-filter "custom*" --json
-  spa aws validate --region eu-central-1 \\
+  spa provider aws check-auth --json
+  spa provider aws regions list --json
+  spa provider aws latest-ami --region eu-central-1 --os amazon_linux --json
+  spa provider aws latest-ami --region eu-central-1 --os all --json
+  spa provider aws amis list --region eu-central-1 --name-filter "custom*" --json
+  spa provider aws validate --region eu-central-1 \\
     --ami-id ami-xxx --key-name aws_key --security-groups Splunk_Basic \\
     --instance-type t3.medium --json
-  spa aws survey --region eu-central-1 --json
+  spa provider aws survey --region eu-central-1 --json
 """
 
 from __future__ import annotations
@@ -1002,7 +1002,7 @@ _RETIRED_AWS_LISTS = {
 _AWS_LIST_KINDS = ("regions", "amis", "instance-types", "key-pairs", "security-groups")
 
 def _listing_command(kind: str) -> str:
-    return "spa aws %s list" % kind
+    return "spa provider aws %s list" % kind
 
 
 def _listing_menu() -> str:
@@ -1024,31 +1024,31 @@ def _listing_menu() -> str:
 
 
 AWS_NEEDS_ACTION = (
-    "spa aws needs an action.\n"
-    "Auth:       spa aws check-auth\n"
-    "Latest AMI: spa aws latest-ami --os OS\n"
-    "Describe:   spa aws describe-ami --ami-id AMI\n"
-    "Validate:   spa aws validate\n"
-    "Survey:     spa aws survey\n"
-    "List:       spa aws regions list\n"
-    "            spa aws amis list --region REGION\n"
-    "            spa aws instance-types list --region REGION\n"
-    "            spa aws key-pairs list --region REGION\n"
-    "            spa aws security-groups list --region REGION"
+    "spa provider aws needs an action.\n"
+    "Auth:       spa provider aws check-auth\n"
+    "Latest AMI: spa provider aws latest-ami --os OS\n"
+    "Describe:   spa provider aws describe-ami --ami-id AMI\n"
+    "Validate:   spa provider aws validate\n"
+    "Survey:     spa provider aws survey\n"
+    "List:       spa provider aws regions list\n"
+    "            spa provider aws amis list --region REGION\n"
+    "            spa provider aws instance-types list --region REGION\n"
+    "            spa provider aws key-pairs list --region REGION\n"
+    "            spa provider aws security-groups list --region REGION"
 )
 
 AWS_LIST_EXAMPLES = """
 examples:
-  spa aws check-auth
-  spa aws latest-ami --os OS [--region REGION]
-  spa aws describe-ami --ami-id AMI [--region REGION]
-  spa aws validate [--region REGION]
-  spa aws survey [--region REGION]
-  spa aws regions list
-  spa aws amis list --region REGION [--os OS] [--name-filter PATTERN]
-  spa aws instance-types list --region REGION [--family FAMILY]
-  spa aws key-pairs list --region REGION
-  spa aws security-groups list --region REGION
+  spa provider aws check-auth
+  spa provider aws latest-ami --os OS [--region REGION]
+  spa provider aws describe-ami --ami-id AMI [--region REGION]
+  spa provider aws validate [--region REGION]
+  spa provider aws survey [--region REGION]
+  spa provider aws regions list
+  spa provider aws amis list --region REGION [--os OS] [--name-filter PATTERN]
+  spa provider aws instance-types list --region REGION [--family FAMILY]
+  spa provider aws key-pairs list --region REGION
+  spa provider aws security-groups list --region REGION
 """
 
 
@@ -1061,7 +1061,7 @@ class AwsArgumentParser(argparse.ArgumentParser):
                 message = "Listing %s is: %s" % (kind, _listing_command(kind))
                 break
         else:
-            resource = self.prog.removeprefix("spa aws ").strip()
+            resource = self.prog.removeprefix("spa provider aws ").strip()
             if resource in _AWS_LIST_KINDS and (
                 "required" in message or "invalid choice" in message
             ):
@@ -1084,7 +1084,7 @@ def _add_json_after_kind(parser: argparse.ArgumentParser) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     p = AwsArgumentParser(
-        prog="spa aws",
+        prog="spa provider aws",
         description="AWS discovery and validation for splunk_config.yml",
         epilog=AWS_NEEDS_ACTION + AWS_LIST_EXAMPLES,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1226,7 +1226,7 @@ def execute(args: Any, environment_region: Optional[str] = None):
     action = getattr(args, "aws_cmd", None) or getattr(args, "canonical_action", None)
     kind = getattr(args, "aws_list_kind", None)
     if kind and kind != "amis" and getattr(args, "os", None):
-        return CommandResult(ok=False, error="--os requires: spa aws amis list", code=2)
+        return CommandResult(ok=False, error="--os requires: spa provider aws amis list", code=2)
 
     if not kind and action not in {
         "check-auth",
@@ -1291,7 +1291,7 @@ def execute(args: Any, environment_region: Optional[str] = None):
         return CommandResult(
             ok=False,
             error=(
-                "--region is required for this operation (except spa aws regions list and spa aws check-auth). "
+                "--region is required for this operation (except spa provider aws regions list and spa provider aws check-auth). "
                 "Or set AWS_REGION, AWS_DEFAULT_REGION, or region in ~/.aws/config."
             ),
             code=1,
@@ -1308,7 +1308,7 @@ def execute(args: Any, environment_region: Optional[str] = None):
         if not os_name:
             return CommandResult(
                 ok=False,
-                error="--os is required for spa aws latest-ami (rhel, ubuntu, amazon_linux, debian, or all)",
+                error="--os is required for spa provider aws latest-ami (rhel, ubuntu, amazon_linux, debian, or all)",
                 code=1,
             )
         if os_name == "all":
@@ -1331,7 +1331,7 @@ def execute(args: Any, environment_region: Optional[str] = None):
     if action == "describe-ami":
         ami_id = getattr(args, "ami_id", None)
         if not ami_id:
-            return CommandResult(ok=False, error="--ami-id is required for spa aws describe-ami", code=1)
+            return CommandResult(ok=False, error="--ami-id is required for spa provider aws describe-ami", code=1)
         return _finish(_aws_result(describe_ami(session, args.region, ami_id)), resolved)
 
     if action == "validate":

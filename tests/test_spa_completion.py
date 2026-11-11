@@ -138,7 +138,8 @@ def test_completion_offers_canonical_names_only():
     assert "completion" in names
     for alias in ("env", "sh", "cfg", "h", "feat", "features", "pro"):
         assert alias not in names
-    assert "provider" not in names
+    assert "provider" in names
+    assert "aws" not in names
 
 
 def test_completion_offers_provider_when_ccm_token_is_set(monkeypatch):
@@ -159,17 +160,21 @@ def test_typed_alias_still_completes_the_canonical_subcommand():
     assert "exp" not in complete(["spa", "config", ""], 2)
 
 
-def test_aws_named_actions_are_offered():
-    actions = complete(["spa", "aws", ""], 2)
+def test_aws_named_actions_are_offered_under_provider():
+    children = complete(["spa", "provider", ""], 2)
+    assert "aws" in children
+    assert "ccm" not in children
+    actions = complete(["spa", "provider", "aws", ""], 3)
     for name in ("check-auth", "latest-ami", "describe-ami", "validate", "survey", "regions"):
         assert name in actions
-    flags = complete(["spa", "aws", "latest-ami", "--"], 3)
+    flags = complete(["spa", "provider", "aws", "latest-ami", "--"], 4)
     assert "--os" in flags
     assert "--region" in flags
     assert "--details" not in flags
-    validate = complete(["spa", "aws", "validate", "--"], 3)
+    validate = complete(["spa", "provider", "aws", "validate", "--"], 4)
     assert "--details" in validate
     assert "--os" not in validate
+    assert "check-auth" not in complete(["spa", "aws", ""], 2)
 
 
 def test_flags_belong_to_the_command_being_typed():

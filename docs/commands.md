@@ -896,27 +896,37 @@ Example:
 spa shell idx1 -- -L 8000:localhost:8000
 ```
 
-## `aws`
+## `provider`
 
-AWS discovery for terraform.aws. Bare spa aws exits 2.
+Provider discovery. Bare spa provider exits 2 and names AWS, then CCM when CCM is in play.
 
 Example:
 
 ```bash
-spa --agent aws check-auth
+spa --agent provider aws check-auth
 ```
 
-## `aws check-auth`
+## `provider aws`
+
+AWS discovery for terraform.aws. Bare spa provider aws exits 2.
+
+Example:
+
+```bash
+spa --agent provider aws check-auth
+```
+
+## `provider aws check-auth`
 
 Verify AWS credentials via STS. No --region required.
 
 Example:
 
 ```bash
-spa --agent aws check-auth
+spa --agent provider aws check-auth
 ```
 
-## `aws latest-ami`
+## `provider aws latest-ami`
 
 Resolve the latest AMI for a recommended OS.
 
@@ -928,10 +938,10 @@ Resolve the latest AMI for a recommended OS.
 Example:
 
 ```bash
-spa aws latest-ami --os rhel --region eu-central-1
+spa provider aws latest-ami --os rhel --region eu-central-1
 ```
 
-## `aws describe-ami`
+## `provider aws describe-ami`
 
 Describe one AMI.
 
@@ -943,10 +953,10 @@ Describe one AMI.
 Example:
 
 ```bash
-spa aws describe-ami --ami-id ami-xxx
+spa provider aws describe-ami --ami-id ami-xxx
 ```
 
-## `aws validate`
+## `provider aws validate`
 
 Validate AMI, key pair, security groups, and instance type in a region.
 
@@ -962,10 +972,10 @@ Validate AMI, key pair, security groups, and instance type in a region.
 Example:
 
 ```bash
-spa aws validate --region eu-central-1 --security-groups Splunk_Basic
+spa provider aws validate --region eu-central-1 --security-groups Splunk_Basic
 ```
 
-## `aws survey`
+## `provider aws survey`
 
 Combined discovery report for a region.
 
@@ -976,20 +986,20 @@ Combined discovery report for a region.
 Example:
 
 ```bash
-spa aws survey --region eu-central-1
+spa provider aws survey --region eu-central-1
 ```
 
-## `aws regions list`
+## `provider aws regions list`
 
 List enabled regions. Marks the region from --region, AWS_REGION, AWS_DEFAULT_REGION, or ~/.aws/config.
 
 Example:
 
 ```bash
-spa aws regions list --json
+spa provider aws regions list --json
 ```
 
-## `aws amis list`
+## `provider aws amis list`
 
 List AMIs in a region
 
@@ -1004,10 +1014,10 @@ List AMIs in a region
 Example:
 
 ```bash
-spa aws amis list --region eu-central-1 --json
+spa provider aws amis list --region eu-central-1 --json
 ```
 
-## `aws instance-types list`
+## `provider aws instance-types list`
 
 List instance types offered in a region
 
@@ -1019,10 +1029,10 @@ List instance types offered in a region
 Example:
 
 ```bash
-spa aws instance-types list --region eu-central-1 --family t3
+spa provider aws instance-types list --region eu-central-1 --family t3
 ```
 
-## `aws key-pairs list`
+## `provider aws key-pairs list`
 
 List EC2 key pairs
 
@@ -1033,10 +1043,10 @@ List EC2 key pairs
 Example:
 
 ```bash
-spa aws key-pairs list --region eu-central-1
+spa provider aws key-pairs list --region eu-central-1
 ```
 
-## `aws security-groups list`
+## `provider aws security-groups list`
 
 List security groups
 
@@ -1047,17 +1057,7 @@ List security groups
 Example:
 
 ```bash
-spa aws security-groups list --region eu-central-1
-```
-
-## `provider`
-
-Provider discovery. Bare spa provider exits 2 and names implemented children. Today that is ccm.
-
-Example:
-
-```bash
-spa --agent provider ccm check-auth
+spa provider aws security-groups list --region eu-central-1
 ```
 
 ## `provider ccm`

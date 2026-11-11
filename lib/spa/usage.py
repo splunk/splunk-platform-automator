@@ -70,3 +70,14 @@ def unknown_provider(name: str) -> str:
 
 def unknown_doctor_provider(name: str) -> str:
     return "Unknown provider: %s\n%s" % (name, DOCTOR_PROVIDER_HELP)
+
+
+def provider_needs_action(*, ccm: bool = False) -> str:
+    """Bare spa provider menu. AWS is always named; CCM follows when in play."""
+    lines = [
+        "spa provider needs an action.",
+        "AWS: spa provider aws check-auth.",
+    ]
+    if ccm:
+        lines.append("CCM: spa provider ccm check-auth")
+    return "\n".join(lines)

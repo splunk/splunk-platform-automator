@@ -140,11 +140,11 @@ def test_shell_list_flag_is_gone():
 @pytest.mark.parametrize(
     ("argv", "message"),
     [
-        (["aws", "--check-auth"], "Checking credentials is: spa aws check-auth"),
-        (["aws", "--latest-ami"], "Resolving the latest AMI is: spa aws latest-ami --os OS"),
-        (["aws", "--describe-ami"], "Describing an AMI is: spa aws describe-ami --ami-id AMI"),
-        (["aws", "--validate"], "Validating selections is: spa aws validate"),
-        (["aws", "--survey"], "Surveying a region is: spa aws survey"),
+        (["aws", "--check-auth"], "Checking credentials is: spa provider aws check-auth"),
+        (["aws", "--latest-ami"], "Resolving the latest AMI is: spa provider aws latest-ami --os OS"),
+        (["aws", "--describe-ami"], "Describing an AMI is: spa provider aws describe-ami --ami-id AMI"),
+        (["aws", "--validate"], "Validating selections is: spa provider aws validate"),
+        (["aws", "--survey"], "Surveying a region is: spa provider aws survey"),
         (["shell", "-c", "local.txt", "idx1:/tmp/"], "Copying files is: spa hosts copy SRC DST"),
         (["shell", "--copy", "local.txt", "idx1:/tmp/"], "Copying files is: spa hosts copy SRC DST"),
         (["doctor", "--aws"], "Checking AWS prerequisites is: spa doctor --provider aws"),
@@ -160,10 +160,32 @@ def test_retired_aws_and_shell_flags_name_the_legal_command(argv, message):
     _assert_usage_rejection(argv, message)
 
 
-def test_aws_help_uses_own_parser():
-    result = run_spa(["aws", "--help"])
+def test_provider_aws_help_uses_own_parser():
+    result = run_spa(["provider", "aws", "--help"])
     assert result.returncode == 0, result.stderr
-    assert "usage: spa aws" in result.stdout
+    assert "usage: spa provider aws" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["aws"],
+        ["aws", "--help"],
+        ["aws", "check-auth"],
+        ["aws", "--check-auth"],
+        ["aws", "--list-regions"],
+    ],
+)
+def test_retired_spa_aws_names_provider_aws(argv):
+    human = run_spa(["--no-agent", *argv])
+    assert human.returncode == 2, human.stderr
+    assert "spa provider aws" in human.stderr
+    assert human.stdout.strip() == ""
+    agent = run_spa(["--json", *argv])
+    assert agent.returncode == 2, agent.stdout
+    payload = json.loads(agent.stdout)
+    assert payload["ok"] is False
+    assert "spa provider aws" in payload["error"]
 
 
 @pytest.mark.parametrize(
@@ -493,7 +515,7 @@ def test_detected_agent_uses_json_for_aws(monkeypatch, capsys):
     monkeypatch.setattr(cli, "venv_required_error", lambda paths: None)
     monkeypatch.setattr("spa.aws.execute", fake_execute)
 
-    assert cli.main(["aws", "check-auth"]) == 0
+    assert cli.main(["provider", "aws", "check-auth"]) == 0
     agent = capsys.readouterr()
     assert seen["action"] == "check-auth"
     payload = json.loads(agent.out)
@@ -502,14 +524,14 @@ def test_detected_agent_uses_json_for_aws(monkeypatch, capsys):
     assert payload["data"]["account"] == "1"
     assert agent.err == ""
 
-    assert cli.main(["--no-agent", "aws", "check-auth"]) == 0
+    assert cli.main(["--no-agent", "provider", "aws", "check-auth"]) == 0
     human = capsys.readouterr()
     assert "Account: 1" in human.out
     assert not human.out.lstrip().startswith("{")
 
     seen.clear()
     monkeypatch.delenv("SPA_AGENT", raising=False)
-    assert cli.main(["aws", "check-auth"]) == 0
+    assert cli.main(["provider", "aws", "check-auth"]) == 0
     default = capsys.readouterr()
     assert "Account: 1" in default.out
     assert not default.out.lstrip().startswith("{")
@@ -1757,7 +1779,9 @@ def _assert_usage_rejection(argv, message):
         (["licenses", "--json"], "spa licenses needs an action."),
         (["config", "templates"], "spa config templates needs an action."),
         (["config", "tpl"], "spa config templates needs an action."),
-        (["aws"], "spa aws check-auth"),
+        (["aws"], "spa provider aws check-auth"),
+        (["provider"], "spa provider aws check-auth"),
+        (["provider", "aws"], "spa provider aws check-auth"),
         (["shell"], "spa shell needs NAME."),
         (["sh"], "spa shell needs NAME."),
         (["logs"], "spa logs needs a run."),
@@ -1772,11 +1796,11 @@ def test_catalog_usage_names_the_legal_command(argv, message):
 @pytest.mark.parametrize(
     ("argv", "message"),
     [
-        (["aws", "--list-regions"], "Listing regions is: spa aws regions list"),
-        (["aws", "--list-amis"], "Listing amis is: spa aws amis list"),
-        (["aws", "--list-instance-types"], "Listing instance-types is: spa aws instance-types list"),
-        (["aws", "--list-key-pairs"], "Listing key-pairs is: spa aws key-pairs list"),
-        (["aws", "--list-security-groups"], "Listing security-groups is: spa aws security-groups list"),
+        (["aws", "--list-regions"], "Listing regions is: spa provider aws regions list"),
+        (["aws", "--list-amis"], "Listing amis is: spa provider aws amis list"),
+        (["aws", "--list-instance-types"], "Listing instance-types is: spa provider aws instance-types list"),
+        (["aws", "--list-key-pairs"], "Listing key-pairs is: spa provider aws key-pairs list"),
+        (["aws", "--list-security-groups"], "Listing security-groups is: spa provider aws security-groups list"),
     ],
 )
 def test_aws_retired_list_flags_name_the_list_command(argv, message):
@@ -1813,12 +1837,12 @@ def test_aws_retired_list_flag_json_names_the_list_command():
     assert payload == {
         "ok": False,
         "schema_version": 1,
-        "error": "Listing regions is: spa aws regions list",
+        "error": "Listing regions is: spa provider aws regions list",
     }
 
 
 def test_aws_list_help_keeps_flags_on_their_kind():
-    parent = run_spa(["--no-agent", "aws", "--help"])
+    parent = run_spa(["--no-agent", "provider", "aws", "--help"])
     assert parent.returncode == 0, parent.stderr
     options = set(re.findall(r"(?m)^\s+(?:-[A-Za-z],\s+)?(--[A-Za-z0-9-]+)", parent.stdout))
     for flag in (
@@ -1837,8 +1861,8 @@ def test_aws_list_help_keeps_flags_on_their_kind():
         "--details",
     ):
         assert flag not in options, flag
-    amis = run_spa(["aws", "amis", "list", "--help"])
-    types = run_spa(["aws", "instance-types", "list", "--help"])
+    amis = run_spa(["provider", "aws", "amis", "list", "--help"])
+    types = run_spa(["provider", "aws", "instance-types", "list", "--help"])
     assert amis.returncode == 0, amis.stderr
     assert "--family" not in amis.stdout
     assert "--name-filter" in amis.stdout

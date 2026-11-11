@@ -95,7 +95,7 @@ Command table for every config change: [config-commands.md](references/config-co
 Follow [secrets-handling.md](references/secrets-handling.md) for the full list.
 
 - **Splunkbase:** Use `lookup('env', 'SPLUNKBASE_USERNAME')` / `lookup('env', 'SPLUNKBASE_PASSWORD')` in YAML only. In chat, plans, and terminal: **set** or **not set** — never username/email/password.
-- **AWS:** Prefer `spa --agent aws check-auth` for API status. Read `data.account`. Never show `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_SESSION_TOKEN` values. **OK:** account ID, ARN, `AWS_PROFILE` name, region.
+- **AWS:** Prefer `spa --agent provider aws check-auth` for API status. Read `data.account`. Never show `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_SESSION_TOKEN` values. **OK:** account ID, ARN, `AWS_PROFILE` name, region.
 - **Do not run** `echo` / `printenv` / `env | grep` on `SPLUNKBASE_*` or secret `AWS_*` vars; do not run `aws configure get aws_secret_access_key` or `aws configure list`.
 - **Safe checks:** set/not-set loops in [secrets-handling.md](references/secrets-handling.md).
 - Never paste resolved lookup values, private key contents, or credential file contents into chat or plan files.

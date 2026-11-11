@@ -806,17 +806,22 @@ COMMAND_SCHEMA = {
             "example": "spa shell idx1 -- -L 8000:localhost:8000",
         },
         {
-            "name": "aws",
-            "summary": "AWS discovery for terraform.aws. Bare spa aws exits 2.",
-            "example": "spa --agent aws check-auth",
+            "name": "provider",
+            "summary": "Provider discovery. Bare spa provider exits 2 and names AWS, then CCM when CCM is in play.",
+            "example": "spa --agent provider aws check-auth",
         },
         {
-            "name": "aws check-auth",
+            "name": "provider aws",
+            "summary": "AWS discovery for terraform.aws. Bare spa provider aws exits 2.",
+            "example": "spa --agent provider aws check-auth",
+        },
+        {
+            "name": "provider aws check-auth",
             "summary": "Verify AWS credentials via STS. No --region required.",
-            "example": "spa --agent aws check-auth",
+            "example": "spa --agent provider aws check-auth",
         },
         {
-            "name": "aws latest-ami",
+            "name": "provider aws latest-ami",
             "summary": "Resolve the latest AMI for a recommended OS.",
             "flags": [
                 {
@@ -828,10 +833,10 @@ COMMAND_SCHEMA = {
                     "help": "Recommended OS: rhel, ubuntu, amazon_linux, debian (or all). Aliases: al2023, rhel10, ubuntu2404",
                 },
             ],
-            "example": "spa aws latest-ami --os rhel --region eu-central-1",
+            "example": "spa provider aws latest-ami --os rhel --region eu-central-1",
         },
         {
-            "name": "aws describe-ami",
+            "name": "provider aws describe-ami",
             "summary": "Describe one AMI.",
             "flags": [
                 {
@@ -840,10 +845,10 @@ COMMAND_SCHEMA = {
                 },
                 {"long": "--ami-id", "help": "AMI ID"},
             ],
-            "example": "spa aws describe-ami --ami-id ami-xxx",
+            "example": "spa provider aws describe-ami --ami-id ami-xxx",
         },
         {
-            "name": "aws validate",
+            "name": "provider aws validate",
             "summary": "Validate AMI, key pair, security groups, and instance type in a region.",
             "flags": [
                 {
@@ -856,10 +861,10 @@ COMMAND_SCHEMA = {
                 {"long": "--security-groups", "help": "Comma-separated security group names for validate"},
                 {"long": "--instance-type", "help": "Instance type for validate"},
             ],
-            "example": "spa aws validate --region eu-central-1 --security-groups Splunk_Basic",
+            "example": "spa provider aws validate --region eu-central-1 --security-groups Splunk_Basic",
         },
         {
-            "name": "aws survey",
+            "name": "provider aws survey",
             "summary": "Combined discovery report for a region.",
             "flags": [
                 {
@@ -867,15 +872,15 @@ COMMAND_SCHEMA = {
                     "help": "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config.",
                 },
             ],
-            "example": "spa aws survey --region eu-central-1",
+            "example": "spa provider aws survey --region eu-central-1",
         },
         {
-            "name": "aws regions list",
+            "name": "provider aws regions list",
             "summary": "List enabled regions. Marks the region from --region, AWS_REGION, AWS_DEFAULT_REGION, or ~/.aws/config.",
-            "example": "spa aws regions list --json",
+            "example": "spa provider aws regions list --json",
         },
         {
-            "name": "aws amis list",
+            "name": "provider aws amis list",
             "summary": "List AMIs in a region",
             "flags": [
                 {
@@ -887,10 +892,10 @@ COMMAND_SCHEMA = {
                 {"long": "--max-results", "help": "Max AMIs to return"},
                 {"long": "--os", "help": "Recommended OS, or all"},
             ],
-            "example": "spa aws amis list --region eu-central-1 --json",
+            "example": "spa provider aws amis list --region eu-central-1 --json",
         },
         {
-            "name": "aws instance-types list",
+            "name": "provider aws instance-types list",
             "summary": "List instance types offered in a region",
             "flags": [
                 {
@@ -899,10 +904,10 @@ COMMAND_SCHEMA = {
                 },
                 {"long": "--family", "help": "Instance type family prefix (e.g. t3)"},
             ],
-            "example": "spa aws instance-types list --region eu-central-1 --family t3",
+            "example": "spa provider aws instance-types list --region eu-central-1 --family t3",
         },
         {
-            "name": "aws key-pairs list",
+            "name": "provider aws key-pairs list",
             "summary": "List EC2 key pairs",
             "flags": [
                 {
@@ -910,10 +915,10 @@ COMMAND_SCHEMA = {
                     "help": "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config.",
                 }
             ],
-            "example": "spa aws key-pairs list --region eu-central-1",
+            "example": "spa provider aws key-pairs list --region eu-central-1",
         },
         {
-            "name": "aws security-groups list",
+            "name": "provider aws security-groups list",
             "summary": "List security groups",
             "flags": [
                 {
@@ -921,13 +926,7 @@ COMMAND_SCHEMA = {
                     "help": "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config.",
                 }
             ],
-            "example": "spa aws security-groups list --region eu-central-1",
-        },
-        {
-            "name": "provider",
-            "summary": "Provider discovery. Bare spa provider exits 2 and names implemented children. Today that is ccm.",
-            "audience": "ccm",
-            "example": "spa --agent provider ccm check-auth",
+            "example": "spa provider aws security-groups list --region eu-central-1",
         },
         {
             "name": "provider ccm",

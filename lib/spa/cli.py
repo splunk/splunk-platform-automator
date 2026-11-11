@@ -356,20 +356,21 @@ def _retired_catalog_flag(head: Sequence[str]) -> Optional[str]:
 
 
 def _retired_aws_shell_flag(head: Sequence[str]) -> Optional[str]:
-    """Rejection for a removed aws parent flag or spa shell -c."""
+    """Rejection for top-level spa aws, a removed aws parent flag, or spa shell -c."""
     tokens = _positional_tokens(head)
     if tokens and tokens[0] == "aws":
         from spa import aws as aws_mod
 
-        listed = aws_mod._retired_list_message(list(tokens[1:]))
-        if listed:
-            return listed
         for flag, kind in aws_mod._RETIRED_AWS_LISTS.items():
             if flag in head:
-                return "Listing %s is: spa aws %s list" % (kind, kind)
+                return "Listing %s is: spa provider aws %s list" % (kind, kind)
         for flag, message in _RETIRED_AWS_PARENT.items():
             if flag in head:
                 return message
+        listed = aws_mod._retired_list_message(list(tokens[1:]))
+        if listed:
+            return listed
+        return aws_mod.AWS_NEEDS_ACTION
     if tokens and tokens[0] in {"shell", "sh"} and ("-c" in head or "--copy" in head):
         return "Copying files is: spa hosts copy SRC DST"
     return None
@@ -696,11 +697,11 @@ def _omit_parser_choice(message: str, name: str) -> str:
 
 SHELL_NEEDS_NAME = "spa shell needs NAME.\nExample: spa shell NAME"
 _RETIRED_AWS_PARENT = {
-    "--check-auth": "Checking credentials is: spa aws check-auth",
-    "--latest-ami": "Resolving the latest AMI is: spa aws latest-ami --os OS",
-    "--describe-ami": "Describing an AMI is: spa aws describe-ami --ami-id AMI",
-    "--validate": "Validating selections is: spa aws validate",
-    "--survey": "Surveying a region is: spa aws survey",
+    "--check-auth": "Checking credentials is: spa provider aws check-auth",
+    "--latest-ami": "Resolving the latest AMI is: spa provider aws latest-ami --os OS",
+    "--describe-ami": "Describing an AMI is: spa provider aws describe-ami --ami-id AMI",
+    "--validate": "Validating selections is: spa provider aws validate",
+    "--survey": "Surveying a region is: spa provider aws survey",
 }
 _RETIRED_DOCTOR_PROVIDER = {
     "--aws": "Checking AWS prerequisites is: spa doctor --provider aws",
@@ -1479,23 +1480,28 @@ def _run(argv: Sequence[str]) -> int:
                 from spa.completion import COMPLETION_AGENT, COMPLETION_NEEDS_SHELL
 
                 message = COMPLETION_AGENT if parse_as_agent else COMPLETION_NEEDS_SHELL
-            elif command_words[:1] == ["aws"]:
+            elif command_words[:2] == ["provider", "aws"]:
                 from spa import aws as aws_mod
 
-                resource = command_words[1] if len(command_words) > 1 else ""
+                resource = command_words[2] if len(command_words) > 2 else ""
                 if resource in aws_mod._AWS_LIST_KINDS and (
                     "required" in message or "invalid choice" in message
                 ):
                     message = "Listing %s is: %s" % (resource, aws_mod._listing_command(resource))
                 elif "invalid choice" in message and "'list'" in message:
                     message = aws_mod._listing_menu()
+                elif "required" in message or "invalid choice" in message:
+                    message = aws_mod.AWS_NEEDS_ACTION
             elif command_words[:1] == ["provider"]:
                 from spa.providers import ccm as ccm_mod
+                from spa.usage import provider_needs_action
 
                 if len(command_words) == 1 and (
                     "required" in message or "invalid choice" in message
                 ):
-                    message = ccm_mod.PROVIDER_NEEDS_ACTION
+                    message = provider_needs_action(
+                        ccm=parse_as_agent or _ccm_audience_visible(head)
+                    )
                 elif len(command_words) >= 2 and command_words[1] == "ccm":
                     resource = command_words[2] if len(command_words) > 2 else ""
                     if not resource and (
@@ -1538,10 +1544,10 @@ def _run(argv: Sequence[str]) -> int:
                 raise SystemExit(2)
             if (
                 "invalid choice" in message
-                and "argument COMMAND:" in message
+                and command_words[:1] == ["provider"]
                 and not _ccm_audience_visible(head)
             ):
-                message = _omit_parser_choice(message, "provider")
+                message = _omit_parser_choice(message, "ccm")
             self.print_usage(sys.stderr)
             print("%s: error: %s" % (self.prog, message), file=sys.stderr)
             raise SystemExit(2)
@@ -2598,16 +2604,33 @@ def _run(argv: Sequence[str]) -> int:
     shell_ssh_args.required = False
 
     from spa.aws import AWS_NEEDS_ACTION
+    from spa.providers import ccm as ccm_mod
+    from spa.usage import provider_needs_action
 
-    p_aws = _add_command(
+    p_provider = _add_command(
         sub,
+        "provider",
+        aliases=["pro"],
+        help="Provider discovery",
+        epilog=provider_needs_action(ccm=_ccm_audience_visible(head)),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_env_selector(p_provider)
+    provider_sub = p_provider.add_subparsers(
+        dest="provider_cmd",
+        metavar="ACTION",
+        required=False,
+        parser_class=AgentAwareArgumentParser,
+    )
+    p_provider_aws = _add_action(
+        provider_sub,
         "aws",
         help="AWS discovery for terraform.aws",
         epilog=AWS_NEEDS_ACTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    _add_env_selector(p_aws)
-    aws_sub = p_aws.add_subparsers(
+    _add_mode_flags(p_provider_aws)
+    aws_sub = p_provider_aws.add_subparsers(
         dest="aws_cmd",
         metavar="ACTION",
         parser_class=AgentAwareArgumentParser,
@@ -2676,33 +2699,16 @@ def _run(argv: Sequence[str]) -> int:
     _add_aws_catalog("key-pairs", "List EC2 key pairs")
     _add_aws_catalog("security-groups", "List security groups")
 
-    from spa.providers import ccm as ccm_mod
-
-    provider_kwargs = {
-        "epilog": ccm_mod.PROVIDER_NEEDS_ACTION,
+    ccm_kwargs = {
+        "epilog": ccm_mod.PROVIDER_CCM_NEEDS_ACTION,
         "formatter_class": argparse.RawDescriptionHelpFormatter,
     }
     if _ccm_audience_visible(head):
-        provider_kwargs["help"] = "Provider discovery. CCM is the first child."
-    p_provider = _add_command(
-        sub,
-        "provider",
-        aliases=["pro"],
-        **provider_kwargs,
-    )
-    _add_env_selector(p_provider)
-    provider_sub = p_provider.add_subparsers(
-        dest="provider_cmd",
-        metavar="ACTION",
-        required=False,
-        parser_class=AgentAwareArgumentParser,
-    )
+        ccm_kwargs["help"] = "CCM discovery for a ccm: environment"
     p_provider_ccm = _add_action(
         provider_sub,
         "ccm",
-        help="CCM discovery for a ccm: environment",
-        epilog=ccm_mod.PROVIDER_CCM_NEEDS_ACTION,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        **ccm_kwargs,
     )
     _add_mode_flags(p_provider_ccm)
     ccm_sub = p_provider_ccm.add_subparsers(
@@ -3789,53 +3795,55 @@ def _run(argv: Sequence[str]) -> int:
             return exc.code if isinstance(exc.code, int) else 1
         return 0
 
-    if args.command == "aws":
-        from spa import aws as aws_mod
-
-        aws_cmd = _action(args, "aws_cmd")
-        if not aws_cmd:
-            return _reject(aws_mod.AWS_NEEDS_ACTION, as_agent)
-        paths = getattr(session, "paths", None)
-        env_region = aws_mod.environment_config_region(paths.config_file) if paths else None
-        result = aws_mod.execute(args, environment_region=env_region)
-        if as_agent:
-            shown = result.data
-            if (
-                aws_cmd == "validate"
-                and not getattr(args, "details", False)
-                and isinstance(shown, dict)
-            ):
-                shown = aws_mod._compact_validate_payload(shown)
-                result = CommandResult(
-                    ok=result.ok,
-                    data=shown,
-                    error=result.error,
-                    code=result.code,
-                )
-            return _emit_result(result, True)
-        data = result.data if isinstance(result.data, dict) else {}
-        if data.get("region"):
-            notice = aws_mod.region_notice(
-                aws_mod._ResolvedRegion(
-                    data.get("region"),
-                    data.get("region_source"),
-                    data.get("profile"),
-                )
-            )
-            if notice:
-                print(notice, file=sys.stderr)
-        if result.error:
-            print(result.error, file=sys.stderr)
-        if result.data is not None:
-            sys.stdout.write(aws_mod.format_aws_text(result.data))
-        return result.code
-
     if args.command == "provider":
+        from spa import aws as aws_mod
         from spa.providers import ccm as ccm_mod
+        from spa.usage import provider_needs_action
 
         child = getattr(args, "provider_cmd", None)
+        if child == "aws":
+            aws_cmd = getattr(args, "aws_cmd", None)
+            if not aws_cmd:
+                return _reject(aws_mod.AWS_NEEDS_ACTION, as_agent)
+            paths = getattr(session, "paths", None)
+            env_region = aws_mod.environment_config_region(paths.config_file) if paths else None
+            result = aws_mod.execute(args, environment_region=env_region)
+            if as_agent:
+                shown = result.data
+                if (
+                    aws_cmd == "validate"
+                    and not getattr(args, "details", False)
+                    and isinstance(shown, dict)
+                ):
+                    shown = aws_mod._compact_validate_payload(shown)
+                    result = CommandResult(
+                        ok=result.ok,
+                        data=shown,
+                        error=result.error,
+                        code=result.code,
+                    )
+                return _emit_result(result, True)
+            data = result.data if isinstance(result.data, dict) else {}
+            if data.get("region"):
+                notice = aws_mod.region_notice(
+                    aws_mod._ResolvedRegion(
+                        data.get("region"),
+                        data.get("region_source"),
+                        data.get("profile"),
+                    )
+                )
+                if notice:
+                    print(notice, file=sys.stderr)
+            if result.error:
+                print(result.error, file=sys.stderr)
+            if result.data is not None:
+                sys.stdout.write(aws_mod.format_aws_text(result.data))
+            return result.code
         if child != "ccm":
-            return _reject(ccm_mod.PROVIDER_NEEDS_ACTION, as_agent)
+            return _reject(
+                provider_needs_action(ccm=as_agent or _ccm_audience_visible(head)),
+                as_agent,
+            )
         ccm_cmd = getattr(args, "ccm_cmd", None)
         if not ccm_cmd:
             return _reject(ccm_mod.PROVIDER_CCM_NEEDS_ACTION, as_agent)

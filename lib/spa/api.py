@@ -338,7 +338,7 @@ class SpaSession(Protocol):
 
     def provider(
         self,
-        child: str = "ccm",
+        child: str = "",
         action: Optional[str] = None,
         resource: Optional[str] = None,
         subaction: Optional[str] = None,
@@ -2271,7 +2271,7 @@ class LocalSpaSession:
 
     def provider(
         self,
-        child: str = "ccm",
+        child: str = "",
         action: Optional[str] = None,
         resource: Optional[str] = None,
         subaction: Optional[str] = None,
@@ -2280,10 +2280,24 @@ class LocalSpaSession:
         confirm: bool = False,
         agent: bool = False,
     ) -> CommandResult:
+        from spa import aws as aws_mod
         from spa.providers import ccm as ccm_mod
+        from spa.providers.ccm import audience_visible
+        from spa.usage import provider_needs_action
 
-        if child != "ccm":
-            return CommandResult(ok=False, error=ccm_mod.PROVIDER_NEEDS_ACTION, code=2)
+        ccm = agent or audience_visible(paths=self.paths)
+        if child not in {"aws", "ccm"}:
+            return CommandResult(ok=False, error=provider_needs_action(ccm=ccm), code=2)
+        if child == "aws":
+            tokens = [part for part in (action, resource, subaction) if part]
+            if action and resource == action:
+                tokens = [action] + ([subaction] if subaction else [])
+            if not tokens:
+                return CommandResult(ok=False, error=aws_mod.AWS_NEEDS_ACTION, code=2)
+            return aws_mod.execute_argv(
+                tokens,
+                environment_region=aws_mod.environment_config_region(self.paths.config_file),
+            )
         config: Dict[str, Any] = {}
         loaded = self._app_deployment_config()
         if isinstance(loaded, dict) and isinstance(loaded.get("ccm"), dict):

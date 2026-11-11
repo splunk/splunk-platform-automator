@@ -35,7 +35,7 @@ HELP_CONTRACTS = [
             "logs",
             "hosts",
             "shell",
-            "aws",
+            "provider",
             "licenses",
             "config",
             "apps",
@@ -359,9 +359,9 @@ HELP_CONTRACTS = [
         ["usage: spa shell", "Aliases: sh", "name", "ssh_args", "Inventory hostname", "passed to ssh"],
     ),
     (
-        ["aws", "--help"],
+        ["provider", "aws", "--help"],
         [
-            "usage: spa aws",
+            "usage: spa provider aws",
             "ACTION",
             "check-auth",
             "latest-ami",
@@ -370,45 +370,45 @@ HELP_CONTRACTS = [
             "survey",
             "regions",
             "amis",
-            "spa aws check-auth",
-            "spa aws regions list",
+            "spa provider aws check-auth",
+            "spa provider aws regions list",
         ],
     ),
     (
-        ["aws", "check-auth", "--help"],
-        ["usage: spa aws check-auth"],
+        ["provider", "aws", "check-auth", "--help"],
+        ["usage: spa provider aws check-auth"],
     ),
     (
-        ["aws", "latest-ami", "--help"],
-        ["usage: spa aws latest-ami", "--region", "--os"],
+        ["provider", "aws", "latest-ami", "--help"],
+        ["usage: spa provider aws latest-ami", "--region", "--os"],
     ),
     (
-        ["aws", "describe-ami", "--help"],
-        ["usage: spa aws describe-ami", "--ami-id"],
+        ["provider", "aws", "describe-ami", "--help"],
+        ["usage: spa provider aws describe-ami", "--ami-id"],
     ),
     (
-        ["aws", "validate", "--help"],
-        ["usage: spa aws validate", "--region", "--details", "--ami-id", "--key-name", "--security-groups", "--instance-type"],
+        ["provider", "aws", "validate", "--help"],
+        ["usage: spa provider aws validate", "--region", "--details", "--ami-id", "--key-name", "--security-groups", "--instance-type"],
     ),
     (
-        ["aws", "survey", "--help"],
-        ["usage: spa aws survey", "--region"],
+        ["provider", "aws", "survey", "--help"],
+        ["usage: spa provider aws survey", "--region"],
     ),
     (
-        ["aws", "regions", "--help"],
-        ["usage: spa aws regions", "list"],
+        ["provider", "aws", "regions", "--help"],
+        ["usage: spa provider aws regions", "list"],
     ),
     (
-        ["aws", "regions", "list", "--help"],
-        ["usage: spa aws regions list"],
+        ["provider", "aws", "regions", "list", "--help"],
+        ["usage: spa provider aws regions list"],
     ),
     (
-        ["aws", "amis", "list", "--help"],
-        ["usage: spa aws amis list", "--region", "--name-filter", "--owners", "--max-results", "--os"],
+        ["provider", "aws", "amis", "list", "--help"],
+        ["usage: spa provider aws amis list", "--region", "--name-filter", "--owners", "--max-results", "--os"],
     ),
     (
-        ["aws", "instance-types", "list", "--help"],
-        ["usage: spa aws instance-types list", "--region", "--family"],
+        ["provider", "aws", "instance-types", "list", "--help"],
+        ["usage: spa provider aws instance-types list", "--region", "--family"],
     ),
     (
         ["licenses", "--help"],
@@ -850,7 +850,7 @@ def test_agent_help_is_one_schema_entry_or_an_index():
     assert not forced_human.stdout.lstrip().startswith("{")
 
     for argv, name in (
-        (["--agent", "aws", "--help"], "aws"),
+        (["--agent", "provider", "aws", "--help"], "provider aws"),
         (["--agent", "shell", "--help"], "shell"),
     ):
         schema_help = run_spa(argv)
@@ -881,7 +881,7 @@ def test_start_dir_routes_before_and_after_subcommand(argv):
     [
         (["shell", "--help"], "usage: spa shell"),
         (["sh", "--help"], "usage: spa shell"),
-        (["aws", "--help"], "usage: spa aws"),
+        (["provider", "aws", "--help"], "usage: spa provider aws"),
     ],
 )
 def test_human_aws_and_shell_help_stays_text(argv, usage):
@@ -894,9 +894,9 @@ def test_human_aws_and_shell_help_stays_text(argv, usage):
 @pytest.mark.parametrize(
     ("argv", "name"),
     [
-        (["aws", "--json", "--help"], "aws"),
-        (["--agent", "aws", "--json", "--help"], "aws"),
-        (["--agent", "aws", "--help"], "aws"),
+        (["provider", "aws", "--json", "--help"], "provider aws"),
+        (["--agent", "provider", "aws", "--json", "--help"], "provider aws"),
+        (["--agent", "provider", "aws", "--help"], "provider aws"),
         (["--agent", "shell", "--help"], "shell"),
     ],
 )
@@ -1028,7 +1028,7 @@ def _help_action_names():
     names = set()
     for name, _alias in _command_rows(root.stdout):
         names.add("agent schema" if name == "agent" else name)
-    for parent in ("environment", "hosts", "apps", "config", "skills", "venv", "completion", "architecture", "licenses", "aws", "provider"):
+    for parent in ("environment", "hosts", "apps", "config", "skills", "venv", "completion", "architecture", "licenses", "provider"):
         child = run_spa(["--no-agent", parent, "--help"])
         assert child.returncode == 0, child.stderr
         for name, _alias in _command_rows(child.stdout):
@@ -1060,31 +1060,23 @@ def _help_action_names():
                 for nested_name, _nested_alias in _command_rows(nested.stdout):
                     names.add("config templates %s" % nested_name)
                 continue
-            if parent == "aws" and name in (
-                "regions",
-                "amis",
-                "instance-types",
-                "key-pairs",
-                "security-groups",
-            ):
-                continue
-            if parent == "provider" and name == "ccm":
-                names.add("provider ccm")
-                nested = run_spa(["--no-agent", "provider", "ccm", "--help"])
+            if parent == "provider" and name == "aws":
+                names.add("provider aws")
+                nested = run_spa(["--no-agent", "provider", "aws", "--help"])
                 assert nested.returncode == 0, nested.stderr
-                ccm_folders = {
-                    "operating-systems",
+                aws_folders = {
+                    "regions",
+                    "amis",
                     "instance-types",
-                    "disk-storage",
-                    "business-purposes",
-                    "operation-hours",
-                    "ssh-keys",
-                    "ttl",
+                    "key-pairs",
+                    "security-groups",
                 }
                 for nested_name, _nested_alias in _command_rows(nested.stdout):
-                    if nested_name in ccm_folders:
+                    if nested_name in aws_folders:
                         continue
-                    names.add("provider ccm %s" % nested_name)
+                    names.add("provider aws %s" % nested_name)
+                continue
+            if parent == "provider" and name == "ccm":
                 continue
             names.add("%s %s" % (parent, name))
     catalogs = (
@@ -1100,11 +1092,27 @@ def _help_action_names():
         assert phrase in flattened, phrase
         names.add(label)
     for resource in ("regions", "amis", "instance-types", "key-pairs", "security-groups"):
-        listed = run_spa(["--no-agent", "aws", resource, "--help"])
+        listed = run_spa(["--no-agent", "provider", "aws", resource, "--help"])
         assert listed.returncode == 0, listed.stderr
         for name, _alias in _command_rows(listed.stdout):
-            names.add("aws %s %s" % (resource, name))
+            names.add("provider aws %s %s" % (resource, name))
     names.add("provider")
+    names.add("provider ccm")
+    ccm_help = run_spa(["--no-agent", "provider", "ccm", "--help"])
+    assert ccm_help.returncode == 0, ccm_help.stderr
+    ccm_folders = {
+        "operating-systems",
+        "instance-types",
+        "disk-storage",
+        "business-purposes",
+        "operation-hours",
+        "ssh-keys",
+        "ttl",
+    }
+    for nested_name, _nested_alias in _command_rows(ccm_help.stdout):
+        if nested_name in ccm_folders:
+            continue
+        names.add("provider ccm %s" % nested_name)
     for resource in (
         "operating-systems",
         "instance-types",
@@ -1166,7 +1174,7 @@ def test_agent_schema_is_complete_and_documented():
         ("config", ("--keys", "--command")),
         ("hosts", ("--status", "--hosts")),
         (
-            "aws",
+            "provider aws",
             (
                 "--list-regions",
                 "--name-filter",
@@ -1182,11 +1190,11 @@ def test_agent_schema_is_complete_and_documented():
             ),
         ),
     ):
-        options = _defined_options(run_spa(["--no-agent", parent, "--help"]).stdout)
+        options = _defined_options(run_spa(["--no-agent", *parent.split(), "--help"]).stdout)
         for flag in banned:
             assert flag not in options, parent
-    amis = run_spa(["--no-agent", "aws", "list", "amis", "--help"]).stdout
-    types = run_spa(["--no-agent", "aws", "list", "instance-types", "--help"]).stdout
+    amis = run_spa(["--no-agent", "provider", "aws", "amis", "list", "--help"]).stdout
+    types = run_spa(["--no-agent", "provider", "aws", "instance-types", "list", "--help"]).stdout
     assert "--family" not in amis
     assert "--name-filter" not in types
 
@@ -1208,23 +1216,24 @@ def test_agent_schema_is_complete_and_documented():
         "run": ("spa run list", "spa run NAME --help", "spa run NAME"),
         "logs": ("spa logs list", "spa logs RUN_ID", "spa logs --last"),
         "licenses": ("spa licenses list",),
-        "aws": (
-            "spa aws check-auth",
-            "spa aws latest-ami --os OS",
-            "spa aws describe-ami --ami-id AMI",
-            "spa aws validate",
-            "spa aws survey",
-            "spa aws regions list",
+        "provider aws": (
+            "spa provider aws check-auth",
+            "spa provider aws latest-ami --os OS",
+            "spa provider aws describe-ami --ami-id AMI",
+            "spa provider aws validate",
+            "spa provider aws survey",
+            "spa provider aws regions list",
         ),
     }
     for parent, phrases in bare_parents.items():
-        human = run_spa(["--no-agent", parent])
+        argv = parent.split()
+        human = run_spa(["--no-agent", *argv])
         assert human.returncode == 2, parent
         assert human.stdout.strip() == "", parent
         assert "the following arguments are required" not in human.stderr, parent
         for phrase in phrases:
             assert phrase in human.stderr, (parent, phrase)
-        agent = run_spa(["--json", parent])
+        agent = run_spa(["--json", *argv])
         assert agent.returncode == 2, parent
         assert agent.stderr == "", parent
         body = json.loads(agent.stdout)
@@ -1257,16 +1266,16 @@ def test_agent_schema_is_complete_and_documented():
         assert body["ok"] is False and "data" not in body
         assert phrase in body["error"], argv
 
-    aws = run_spa(["--no-agent", "aws"])
+    aws = run_spa(["--no-agent", "provider", "aws"])
     assert aws.returncode == 2, aws.stderr
-    assert "spa aws needs an action." in aws.stderr
-    assert "spa aws regions list" in aws.stderr
-    assert "spa aws check-auth" in aws.stderr
+    assert "spa provider aws needs an action." in aws.stderr
+    assert "spa provider aws regions list" in aws.stderr
+    assert "spa provider aws check-auth" in aws.stderr
     assert "spa aws --check-auth" not in aws.stderr
     aws_list = run_spa(["--no-agent", "aws", "list"])
     assert aws_list.returncode == 2, aws_list.stderr
     for kind in ("regions", "amis", "instance-types", "key-pairs", "security-groups"):
-        assert "spa aws %s list" % kind in aws_list.stderr
+        assert "spa provider aws %s list" % kind in aws_list.stderr
 
 
 def test_licenses_list_is_the_catalog():
@@ -1390,6 +1399,10 @@ def test_templates_list_is_the_catalog():
 
 PROVIDER_NEEDS_ACTION = (
     "spa provider needs an action.\n"
+    "AWS: spa provider aws check-auth"
+)
+PROVIDER_NEEDS_ACTION_WITH_CCM = (
+    PROVIDER_NEEDS_ACTION + "\n"
     "CCM: spa provider ccm check-auth"
 )
 PROVIDER_CCM_NEEDS_ACTION = (
@@ -1407,11 +1420,12 @@ PROVIDER_CCM_NEEDS_ACTION = (
 )
 
 
-def test_human_parent_help_omits_provider_without_ccm_audience():
+def test_human_parent_help_lists_provider_without_ccm_audience():
     parent = run_spa(["--no-agent", "--help"])
     assert parent.returncode == 0, parent.stderr
     names = {name for name, _alias in _command_rows(parent.stdout)}
-    assert "provider" not in names
+    assert "provider" in names
+    assert "aws" not in names
     assert "pro" not in names
     assert "provider (pro)" not in parent.stdout
 
@@ -1446,12 +1460,12 @@ def test_human_parent_help_lists_canonical_provider_for_a_ccm_env(tmp_path):
     assert "pro" not in names
 
 
-def test_human_invalid_choice_omits_provider_without_ccm_audience():
+def test_human_invalid_choice_lists_provider_without_ccm_audience():
     result = run_spa(["--no-agent", "nosuch"])
     assert result.returncode == 2
     assert "invalid choice" in result.stderr
-    assert "'aws'" in result.stderr
-    assert "'provider'" not in result.stderr
+    assert "'provider'" in result.stderr
+    assert "'aws'" not in result.stderr
     assert "'pro'" not in result.stderr
 
 
@@ -1479,27 +1493,45 @@ def test_agent_invalid_choice_lists_provider_without_ccm_audience():
     assert result.stderr == ""
 
 
-def test_provider_help_shows_hidden_pro_alias():
+def test_provider_help_shows_hidden_pro_alias_and_public_aws():
     help_text = run_spa(["--no-agent", "provider", "--help"])
     assert help_text.returncode == 0, help_text.stderr
     assert "usage: spa provider" in help_text.stdout
     assert "Aliases: pro" in help_text.stdout
-    assert "ccm" in help_text.stdout
+    names = {name for name, _alias in _command_rows(help_text.stdout)}
+    assert "aws" in names
+    assert "ccm" not in names
     via_alias = run_spa(["--no-agent", "pro", "--help"])
     assert via_alias.returncode == 0, via_alias.stderr
     assert via_alias.stdout == help_text.stdout
+    with_ccm = run_spa(
+        ["--no-agent", "provider", "--help"],
+        extra_env={"CCM_TOKEN": "test-ccm-pat-value"},
+    )
+    assert with_ccm.returncode == 0, with_ccm.stderr
+    ccm_names = {name for name, _alias in _command_rows(with_ccm.stdout)}
+    assert "aws" in ccm_names
+    assert "ccm" in ccm_names
+    assert "test-ccm-pat-value" not in with_ccm.stdout
 
 
-def test_agent_schema_includes_provider_ccm_and_never_pro():
+def test_agent_schema_includes_provider_aws_and_gates_ccm():
     schema = json.loads(run_spa(["--agent", "agent", "schema"]).stdout)
     assert schema["ok"] is True
     encoded = json.dumps(schema)
     names = {row["name"] for row in schema["data"]["commands"]}
+    assert "provider aws check-auth" in names
+    assert "aws check-auth" not in names
+    assert "aws" not in names
     assert "provider ccm check-auth" in names
     assert "provider ccm survey" in names
     assert "provider ccm ttl extend" in names
     assert "provider ccm operation-hours set" in names
-    assert all(row.get("audience") == "ccm" for row in schema["data"]["commands"] if row["name"].startswith("provider"))
+    for row in schema["data"]["commands"]:
+        if row["name"].startswith("provider ccm"):
+            assert row.get("audience") == "ccm", row["name"]
+        elif row["name"] == "provider" or row["name"].startswith("provider aws"):
+            assert "audience" not in row, row["name"]
     assert "spa pro " not in encoded
     assert not any(
         (row.get("example") or "").startswith("spa pro ")
@@ -1507,20 +1539,24 @@ def test_agent_schema_includes_provider_ccm_and_never_pro():
         or row["name"].startswith("pro ")
         for row in schema["data"]["commands"]
     )
+    by_name = {row["name"]: row for row in schema["data"]["commands"]}
+    assert by_name["provider"]["example"] == "spa --agent provider aws check-auth"
 
 
 def test_provider_and_provider_ccm_bare_parents_exit_2():
-    for argv, message in (
-        (["provider"], PROVIDER_NEEDS_ACTION),
-        (["pro"], PROVIDER_NEEDS_ACTION),
-        (["provider", "ccm"], PROVIDER_CCM_NEEDS_ACTION),
-        (["pro", "ccm"], PROVIDER_CCM_NEEDS_ACTION),
+    for argv, human_message, agent_message in (
+        (["provider"], PROVIDER_NEEDS_ACTION, PROVIDER_NEEDS_ACTION_WITH_CCM),
+        (["pro"], PROVIDER_NEEDS_ACTION, PROVIDER_NEEDS_ACTION_WITH_CCM),
+        (["provider", "ccm"], PROVIDER_CCM_NEEDS_ACTION, PROVIDER_CCM_NEEDS_ACTION),
+        (["pro", "ccm"], PROVIDER_CCM_NEEDS_ACTION, PROVIDER_CCM_NEEDS_ACTION),
     ):
         human = run_spa(["--no-agent", *argv])
         assert human.returncode == 2, argv
         assert human.stdout.strip() == "", argv
-        for line in message.splitlines():
+        for line in human_message.splitlines():
             assert line.rstrip(".") in human.stderr, (argv, line)
+        if argv[0] in {"provider", "pro"} and len(argv) == 1:
+            assert "CCM:" not in human.stderr, argv
         agent = run_spa(["--json", *argv])
         assert agent.returncode == 2, argv
         assert agent.stderr == "", argv
@@ -1528,5 +1564,13 @@ def test_provider_and_provider_ccm_bare_parents_exit_2():
         assert body["ok"] is False
         assert body["schema_version"] == 1
         assert "data" not in body
-        for line in message.splitlines():
+        for line in agent_message.splitlines():
             assert line.rstrip(".") in body["error"], (argv, line)
+    with_ccm = run_spa(
+        ["--no-agent", "provider"],
+        extra_env={"CCM_TOKEN": "test-ccm-pat-value"},
+    )
+    assert with_ccm.returncode == 2, with_ccm.stderr
+    for line in PROVIDER_NEEDS_ACTION_WITH_CCM.splitlines():
+        assert line.rstrip(".") in with_ccm.stderr, line
+    assert "test-ccm-pat-value" not in with_ccm.stderr

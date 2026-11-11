@@ -59,10 +59,6 @@ OPERATION_HOURS = ("manual", "business_hours")
 BUSINESS_HOURS_START_HOUR = 8
 BUSINESS_HOURS_END_HOUR = 18
 META_ATTRIBUTES = ("operating_systems", "instance_types", "disk_storage")
-PROVIDER_NEEDS_ACTION = (
-    "spa provider needs an action.\n"
-    "CCM: spa provider ccm check-auth"
-)
 PROVIDER_CCM_NEEDS_ACTION = (
     "spa provider ccm needs an action.\n"
     "spa provider ccm check-auth.\n"

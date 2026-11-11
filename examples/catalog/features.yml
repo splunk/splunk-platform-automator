@@ -229,7 +229,7 @@ features:
     title: AWS Terraform provider
     kind: provider
     template: aws
-    when_to_use: EC2 via terraform.aws. Pick region, AMI, instance type, and related live values with spa aws survey, spa aws latest-ami, spa aws instance-types list, and spa aws validate; do not copy a hardcoded cloud catalog.
+    when_to_use: EC2 via terraform.aws. Pick region, AMI, instance type, and related live values with spa provider aws survey, spa provider aws latest-ami, spa provider aws instance-types list, and spa provider aws validate; do not copy a hardcoded cloud catalog.
     when_not_to_use: "Local VirtualBox."
     suggest: spa init --example TOPOLOGY --provider aws ENV
     keys:
@@ -248,7 +248,7 @@ features:
         note: Include SPADirName "{{ spa_env_dir | basename }}" so AWS tags name the env directory.
       - terraform.aws.subnet_id
       - path: terraform.aws.ssh_username
-        note: Login user must match the AMI (for example ec2-user, ubuntu, or admin). Pair with spa aws describe-ami.
+        note: Login user must match the AMI (for example ec2-user, ubuntu, or admin). Pair with spa provider aws describe-ami.
       - "splunk_hosts[].terraform"
       - "splunk_hosts[].terraform.aws"
       - "splunk_hosts[].terraform.aws.region"
@@ -263,7 +263,7 @@ features:
       - "splunk_hosts[].terraform.aws.subnet_id"
       - "splunk_hosts[].terraform.aws.tags"
       - path: "splunk_hosts[].terraform.aws.ssh_username"
-        note: Login user must match the AMI. Pair with spa aws describe-ami.
+        note: Login user must match the AMI. Pair with spa provider aws describe-ami.
     snippet: |
       terraform:
         aws:
@@ -415,10 +415,10 @@ features:
     when_to_use: >-
       Login user Terraform and Ansible use on the EC2 AMI. Must match the image (ec2-user on
       Amazon Linux and RHEL, ubuntu on Ubuntu, admin on Debian). Discover with
-      spa aws describe-ami / latest-ami. Always set it explicitly for AWS labs.
+      spa provider aws describe-ami / latest-ami. Always set it explicitly for AWS labs.
     keys:
       - path: terraform.aws.ssh_username
-        note: Login user must match the AMI (for example ec2-user, ubuntu, or admin). Pair with spa aws describe-ami.
+        note: Login user must match the AMI (for example ec2-user, ubuntu, or admin). Pair with spa provider aws describe-ami.
     related: ["provider.aws", "setting.os"]
     snippet: |
       terraform:

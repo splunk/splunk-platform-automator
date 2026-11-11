@@ -4,7 +4,7 @@ Canonical scripts live in the **repository** `bin/` directory. Run from project 
 
 | Script | Purpose |
 |--------|---------|
-| `spa aws` | AWS discovery: `check-auth`, `latest-ami`, `survey`, `validate`, `KIND list` (`regions list` and `check-auth` need no region; pass `--region` on the others) |
+| `spa provider aws` | AWS discovery: `check-auth`, `latest-ami`, `survey`, `validate`, `KIND list` (`regions list` and `check-auth` need no region; pass `--region` on the others) |
 | `spa licenses list` | Scan Software for `.lic` files; propose `splunk_license_file` (ITSI-aware from the env config) |
 | `spa validate` | Schema + inventory + playbook syntax-check; optional `--check-licenses` |
 | `spa architecture plan FILE` | Read a confirmed 0.4.0 architecture JSON file (read-only). See [references/architecture-input.md](../references/architecture-input.md). |
@@ -21,7 +21,7 @@ Canonical skills live under `skills/spa/` ([Agent Skills spec](https://agentskil
 
 ## Dependencies
 
-- `boto3` for `spa aws` (`pip install boto3`)
+- `boto3` for `spa provider aws` (`pip install boto3`)
 - `PyYAML` for `spa licenses list` (`pip install PyYAML`)
 - AWS credentials for API discovery/validate
 - Ansible + project venv for `spa validate` (uses `tests/run_venv.sh` pattern)

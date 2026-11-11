@@ -128,7 +128,7 @@ def test_architecture_defines_cli_ux_and_output_conventions():
     assert "`--agent` is the documented selector" in architecture
     assert "`--json` stays a working synonym" in architecture
     assert "stdin is not a terminal" in architecture
-    assert "spa aws" in architecture
+    assert "spa provider aws" in architecture
     assert "spa licenses" in architecture
     assert "spa shell" in architecture
     assert "VirtualBox" in architecture
@@ -441,6 +441,10 @@ class TestConfigMarkdown:
         assert "VirtualBox always turns this on" in text
         assert "Per-host override of `os.time_zone`" in text
         assert "default='splk'" in text
+        assert "spa provider aws latest-ami" in text
+        assert "spa provider aws describe-ami" in text
+        assert "spa aws latest-ami" not in text
+        assert "spa aws describe-ami" not in text
 
 
 class TestSpaSkill:
@@ -497,7 +501,7 @@ class TestSpaSkill:
         assert "unsupported" in text
         assert "do not read `examples/catalog/features.yml`" in text
         assert "spa --agent config set PATH VALUE" in text
-        assert "spa --agent aws regions list" in text
+        assert "spa --agent provider aws regions list" in text
         assert "spa aws --json regions list" not in text
         assert "spa aws list regions" not in text
         entry = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
@@ -760,7 +764,7 @@ class TestSpaSkill:
     def test_create_config_region_question_puts_aws_config_region_first(self):
         text = _create_config_workflow()
         phase4 = text[text.index("## Phase 6 — AWS settings"):text.index("## Phase 7 — Topology counts")]
-        assert "spa --agent aws regions list" in phase4
+        assert "spa --agent provider aws regions list" in phase4
         assert "spa aws --json" not in phase4
         assert "aws_config_region" in phase4
         assert "aws_config_profile" in phase4
@@ -859,6 +863,7 @@ class TestSpaSkill:
         assert "null" in phase4
         without_creds = (skills / "references" / "aws-without-credentials.md").read_text(encoding="utf-8")
         assert "do not call `spa aws regions list`" not in without_creds
+        assert "spa --agent provider aws regions list" in without_creds
         assert "aws_config_region" in without_creds
         assert "ok: false" in without_creds
 
@@ -996,11 +1001,13 @@ class TestSpaSkill:
         offenders = []
         for path in sorted(skills.rglob("*.md")):
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-                if (
-                    ("spa aws" in line or "--agent aws" in line)
-                    and any(t in line for t in triggers)
-                    and "--region" not in line
-                ):
+                aws_discovery = (
+                    "spa provider aws" in line
+                    or "spa --agent provider aws" in line
+                    or "spa aws" in line
+                    or "spa --agent aws" in line
+                )
+                if aws_discovery and any(t in line for t in triggers) and "--region" not in line:
                     offenders.append("%s:%d" % (path.relative_to(PROJECT_ROOT), number))
         assert offenders == [], offenders
 
@@ -1135,6 +1142,44 @@ class TestReviewFindings67:
         unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
         assert "--splunk-config-aws" in unreleased
         assert "--splunk-config aws" in unreleased
+
+    def test_operator_docs_and_skills_use_provider_aws(self):
+        """Live AWS discovery is spa provider aws, not top-level spa aws."""
+        live = (
+            "spa aws check-auth",
+            "spa aws regions list",
+            "spa aws latest-ami",
+            "spa aws describe-ami",
+            "spa aws validate",
+            "spa aws survey",
+            "spa aws amis list",
+            "spa aws instance-types list",
+            "spa aws key-pairs list",
+            "spa aws security-groups list",
+            "spa aws ...",
+            "spa --agent aws",
+            "`spa aws`",
+        )
+        skip = {"config.md", "commands.md"}
+        offenders = []
+        for path in _operator_text_paths():
+            if path.name in skip:
+                continue
+            text = path.read_text(encoding="utf-8")
+            for spelling in live:
+                if spelling in text:
+                    offenders.append("%s: %s" % (path.relative_to(PROJECT_ROOT), spelling))
+        assert offenders == [], offenders
+        aws = (_docs_dir() / "aws.md").read_text(encoding="utf-8")
+        assert "spa provider aws check-auth" in aws
+        assert "spa provider aws regions list" in aws
+        assert "spa provider aws survey" in aws
+        architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
+        assert "spa provider aws regions list" in architecture
+        contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
+        assert "spa provider aws regions list" in contributing
+        migrate = (_docs_dir() / "migrate.md").read_text(encoding="utf-8")
+        assert "spa provider aws" in migrate
 
     def test_changelog_and_skills_use_named_aws_actions(self):
         banned = (

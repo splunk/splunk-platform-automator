@@ -101,14 +101,20 @@ def test_agent_confirmation_failure_is_versioned_json(monkeypatch, capsys):
     }
 
 
-@pytest.mark.parametrize("command", ["aws", "shell"])
-def test_agent_aws_and_shell_help_is_the_schema_envelope(command):
-    """aws/shell --help in agent mode is COMMAND_SCHEMA, not native text."""
-    result = run_spa([command, "--help"], extra_env={"SPA_AGENT": "1"})
+@pytest.mark.parametrize(
+    ("argv", "name"),
+    [
+        (["provider", "aws"], "provider aws"),
+        (["shell"], "shell"),
+    ],
+)
+def test_agent_aws_and_shell_help_is_the_schema_envelope(argv, name):
+    """provider aws/shell --help in agent mode is COMMAND_SCHEMA, not native text."""
+    result = run_spa([*argv, "--help"], extra_env={"SPA_AGENT": "1"})
     assert result.returncode == 0, result.stderr
     payload = _payload(result)
     assert payload["ok"] is True
-    assert payload["data"]["name"] == command
+    assert payload["data"]["name"] == name
 
 
 def _assert_agent_json_only(result):
@@ -190,6 +196,8 @@ def test_agent_content_packs_list_prints_json_only(tmp_path, monkeypatch, capsys
     [
         ["--agent", "aws", "--bogus"],
         ["aws", "--json", "--bogus"],
+        ["--agent", "provider", "aws", "--bogus"],
+        ["provider", "aws", "--json", "--bogus"],
         ["--agent", "shell", "--bogus"],
         ["shell", "--json", "--bogus"],
     ],
