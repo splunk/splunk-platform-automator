@@ -31,6 +31,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **Init doctor rollback** ([#146](https://github.com/splunk/splunk-platform-automator/issues/146)): `spa init` removes a dest that did not exist when the command started if doctor fails or the env is not registered, and reports `ERROR: Environment has not been created`. `--force` on an existing dest leaves that directory in place.
+
 - **`spa doctor --provider NAME`** ([#146](https://github.com/splunk/splunk-platform-automator/issues/146)): `spa doctor --aws` / `--virtualbox` (and `--ccm`) are retired; they print the replacement command. `--provider` is repeatable (`spa doctor --provider aws --provider ccm`). Omit it to check the env's configured provider.
 
 - **Integer enum `spa config set`**: unquoted `50` on `ccm.disk_storage` / `ccm.ebs_storage.ebs_size` stores an integer, not the string `"50"`. String enums are unchanged.

@@ -147,6 +147,44 @@ def test_init_provider_ccm_writes_root_ccm_block(tmp_path):
     assert "CCM_TOKEN" not in (cfg.get("ccm") or {})
 
 
+def test_init_ccm_without_token_does_not_leave_dest(tmp_path):
+    dest = tmp_path / "cm_2idxc_sh"
+    extra = {"XDG_CONFIG_HOME": str(tmp_path / "xdg")}
+    result = run_spa(
+        ["init", "--example", "cm_2idxc_sh", "--provider", "ccm", str(dest)],
+        extra_env=extra,
+    )
+    out = result.stderr + result.stdout
+    assert result.returncode != 0
+    assert "CCM_TOKEN: not set" in out
+    assert "ERROR:" in out
+    assert "Environment has not been created" in out
+    assert "before provision/deploy" not in out
+    assert not dest.exists()
+    listed = run_spa(["environment", "list"], extra_env=extra)
+    assert dest.name not in listed.stdout
+
+
+def test_init_force_keeps_existing_dest_when_doctor_fails(tmp_path):
+    dest = tmp_path / "existing"
+    extra = {"XDG_CONFIG_HOME": str(tmp_path / "xdg")}
+    first = run_spa_init(
+        ["--example", "cm_2idxc_sh", "--provider", "ccm", str(dest)],
+        extra_env=extra,
+    )
+    assert first.returncode == 0, first.stderr + first.stdout
+    assert dest.exists()
+    result = run_spa(
+        ["init", "--force", "--example", "cm_2idxc_sh", "--provider", "ccm", str(dest)],
+        extra_env=extra,
+    )
+    out = result.stderr + result.stdout
+    assert result.returncode != 0
+    assert "CCM_TOKEN: not set" in out
+    assert "Environment has not been created" not in out
+    assert dest.exists()
+
+
 def test_scaffold_creates_env_without_ansible(tmp_path):
     dest = tmp_path / "my-env"
     result = run_spa_init(["--example", "single_node.yml", str(dest)])

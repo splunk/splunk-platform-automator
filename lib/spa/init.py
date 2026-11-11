@@ -57,6 +57,15 @@ class InitError(Exception):
         self.code = code
 
 
+DOCTOR_FAILED = (
+    "Host prerequisite check failed. Fix the items above before provision/deploy."
+)
+DOCTOR_FAILED_NOT_CREATED = (
+    "ERROR: Environment has not been created. Host prerequisite check failed. "
+    "Fix the items above and re-run spa init."
+)
+
+
 def has_config(root: Path) -> bool:
     return (root / "config" / "splunk_config.yml").is_file()
 
@@ -468,9 +477,7 @@ def run_doctor(dest: Path, spa_home: Path, skip: bool) -> None:
     for line in format_doctor_text(result).rstrip().splitlines():
         _say(line)
     if not result.ok:
-        raise InitError(
-            "Host prerequisite check failed. Fix the items above before provision/deploy."
-        )
+        raise InitError(DOCTOR_FAILED)
 
 
 def list_catalog_topologies(spa_home: Path) -> List[Dict[str, str]]:
@@ -792,6 +799,8 @@ def init_env(
     report: Optional[Dict[str, Any]] = None,
 ) -> int:
     token = _LOG.set(log) if log is not None else None
+    dest_resolved = dest.resolve()
+    created = not dest_resolved.exists()
     try:
         rc = _init_env(
             dest,
@@ -825,7 +834,19 @@ def init_env(
             except RegistryError as exc:
                 raise InitError(str(exc), exc.code)
             _report_env_references(dest / "config" / "splunk_config.yml")
+        if rc != 0 and created and dest_resolved.exists():
+            shutil.rmtree(dest_resolved)
         return rc
+    except InitError as exc:
+        if created and dest_resolved.exists():
+            shutil.rmtree(dest_resolved)
+        if created and str(exc) == DOCTOR_FAILED:
+            raise InitError(DOCTOR_FAILED_NOT_CREATED, code=exc.code) from exc
+        raise
+    except Exception:
+        if created and dest_resolved.exists():
+            shutil.rmtree(dest_resolved)
+        raise
     finally:
         if token is not None:
             _LOG.reset(token)
