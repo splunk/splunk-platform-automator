@@ -1215,6 +1215,7 @@ def test_ccm_operator_page_matches_aws_pattern():
     assert "-----BEGIN" not in page
     assert "ubuntu_22.04" not in page.lower()
     assert "rhel_9" not in page.lower()
+    assert "cannot mix external hosts" in page.lower()
 
 
 def test_create_config_proposes_ccm_remote_provider_and_live_survey():

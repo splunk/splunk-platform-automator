@@ -483,6 +483,9 @@ class Provider:
 
     def provision(self, extra: List[str], **kwargs: Any) -> Dict[str, Any]:
         del extra
+        mixed = _mixed_external_error(load_deployment_config(self.paths))
+        if mixed:
+            raise ProviderError(mixed, code=2)
         hosts = self._hostnames()
         if len(hosts) > MAX_INSTANCES:
             raise ProviderError(
@@ -939,6 +942,18 @@ def _ssh_key_items(payload: Any, config: Mapping[str, Any]) -> List[Dict[str, An
     return items
 
 
+MIXED_EXTERNAL_ERROR = "CCM envs cannot mix external hosts in v1"
+
+
+def _mixed_external_error(config: Mapping[str, Any]) -> Optional[str]:
+    from spa.providers.classify import classify_hostnames
+
+    _, external = classify_hostnames(config)
+    if external:
+        return MIXED_EXTERNAL_ERROR
+    return None
+
+
 def _fail(error: str, code: int = 1) -> Any:
     from spa.api import CommandResult
 
@@ -992,7 +1007,11 @@ def validate_ccm(
     """Local CCM checks, plus live account/key checks when a token or client is present."""
     from spa.api import CommandResult
 
-    hosts = expected_hostnames(load_deployment_config(paths))
+    document = load_deployment_config(paths)
+    mixed = _mixed_external_error(document)
+    if mixed:
+        return _fail(mixed, 2)
+    hosts = expected_hostnames(document)
     if len(hosts) > MAX_INSTANCES:
         return _fail(
             "This env has %s hosts; CCM accepts at most %s instances in one create."

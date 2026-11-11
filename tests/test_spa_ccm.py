@@ -222,6 +222,32 @@ def test_ccm_provision_rejects_illegal_derived_name(tmp_path):
     assert "idx1-lab" not in str(caught.value)
 
 
+def test_ccm_provision_rejects_mixed_external_hosts(tmp_path):
+    from spa.providers import ProviderError
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    paths = _ccm_paths(
+        tmp_path,
+        _CCM_MIN
+        + "splunk_hosts:\n"
+        + "  - name: idx1\n"
+        + "    roles: [indexer]\n"
+        + "  - name: byo1\n"
+        + "    roles: [search_head]\n"
+        + "    external:\n",
+    )
+    opener = FakeOpener()
+    provider = CcmProvider(
+        paths,
+        _CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    with pytest.raises(ProviderError, match=r"cannot mix external hosts") as caught:
+        provider.provision([])
+    assert caught.value.code == 2
+    assert opener.requests == []
+
+
 _CCM_CONFIG = {
     "instance_type": "t3a.medium",
     "disk_storage": 50,
@@ -1263,6 +1289,25 @@ def test_ccm_operation_hours_set_patches_manual(tmp_path):
     body = json.loads(req.data.decode("utf-8"))
     assert body["operation_hours"] == "manual"
     assert body["timezone"] == "UTC"
+
+
+def test_ccm_validate_rejects_mixed_external_hosts(tmp_path):
+    from spa.providers.ccm import validate_ccm
+
+    paths = _ccm_paths(
+        tmp_path,
+        _CCM_MIN
+        + "splunk_hosts:\n"
+        + "  - name: idx1\n"
+        + "    roles: [indexer]\n"
+        + "  - name: byo1\n"
+        + "    roles: [search_head]\n"
+        + "    external:\n",
+    )
+    result = validate_ccm(paths, _CCM_CONFIG)
+    assert result.ok is False
+    assert result.code == 2
+    assert "cannot mix external hosts" in (result.error or "")
 
 
 def test_ccm_validate_fails_when_host_count_exceeds_50(tmp_path):
