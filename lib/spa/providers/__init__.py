@@ -6,8 +6,6 @@ import importlib
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
 
-import yaml
-
 from spa.paths import SpaPaths
 
 
@@ -180,6 +178,10 @@ PROVIDER_MODULES = {
 
 
 def load_deployment_config(paths: SpaPaths) -> Dict[str, Any]:
+    # Parser construction imports this package for spa provider ccm help.
+    # spa doctor / spa venv must still run before a venv (and PyYAML) exists.
+    import yaml
+
     if not paths.config_file.is_file():
         raise ProviderError("Splunk config not found: %s" % paths.config_file)
     try:
