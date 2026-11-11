@@ -49,6 +49,6 @@ spa deploy --yes
 | Reconcile Splunk after resume/change | `spa deploy --yes` |
 | Tear down the CCM deployment and local state | `spa destroy --yes` |
 
-`spa resume --yes` is the wake-up after either `spa suspend` or a CCM business-hours stop. It does not change `operation_hours`. If hours are still `business_hours`, SPA warns that CCM may stop the instances again.
+`spa resume --yes` is the wake-up after either `spa suspend` or a CCM business-hours stop. It polls until selected instances are `running` with an `ip_address`, then refreshes inventory. `wait=False` skips that poll and the inventory refresh. `spa suspend --yes` waits for `stopped` the same way. Resume does not change `operation_hours`. If live hours are still `business_hours` (from `ccm/state.json` after `spa provider ccm operation-hours set`, otherwise YAML) and the current time in the deployment timezone is outside Monday–Friday 08:00–18:00, SPA warns that CCM may stop the instances again.
 
 When TTL has expired, the deployment is gone. `spa resume` / `suspend` / `deploy` cannot bring it back. `spa destroy --yes` clears local state (a missing CCM deployment is success). A new lab is `spa provision --yes`.

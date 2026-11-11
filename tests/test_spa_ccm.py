@@ -646,6 +646,31 @@ class CcmApiOpener:
         raise AssertionError("unexpected %s %s" % (method, req.full_url))
 
 
+class AfterPatchGetOpener(CcmApiOpener):
+    """Serve scripted GET bodies after the first instance PATCH (poll sequences)."""
+
+    def __init__(self, deployment, after_patch_gets, missing=False) -> None:
+        super().__init__(deployment, missing=missing)
+        self.after_patch_gets = list(after_patch_gets)
+
+    def open(self, req: object, timeout: object = None) -> _FakeResponse:
+        import urllib.parse
+
+        method = req.get_method()
+        path = urllib.parse.urlparse(req.full_url).path
+        dep_id = str(self.deployment.get("deployment_id") or "dep-9")
+        if (
+            method == "GET"
+            and self.patches
+            and self.after_patch_gets
+            and path.endswith("/deployments/" + dep_id)
+        ):
+            self.requests.append(req)
+            payload = self.after_patch_gets.pop(0)
+            return _FakeResponse(200, json.dumps({"data": payload}).encode("utf-8"))
+        return super().open(req, timeout)
+
+
 def test_ccm_suspend_patches_instances_stopped(tmp_path):
     from spa.providers.ccm import API_ROOT, Provider as CcmProvider, UrllibCcmClient
 
@@ -851,7 +876,176 @@ def test_ccm_resume_hosts_filter_merges_inventory(tmp_path):
     assert "2.2.2.2" in inventory
 
 
+def test_ccm_resume_polls_until_running_with_ip_and_refreshes_inventory(tmp_path):
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    _write_ccm_state(env)
+    hosts_file = env / "inventory" / "hosts"
+    hosts_file.write_text(
+        'idx1 ansible_host="1.1.1.1" ansible_user="ec2-user" '
+        'ansible_ssh_private_key_file="/tmp/ccm-test-key"\n',
+        encoding="utf-8",
+    )
+    pending = {
+        "deployment_id": "dep-9",
+        "req_state": "ready",
+        "instances_data": [
+            {"instance_id": "i-aaa", "ip_address": "", "state": "pending"},
+        ],
+    }
+    ready = {
+        "deployment_id": "dep-9",
+        "req_state": "ready",
+        "instances_data": [
+            {"instance_id": "i-aaa", "ip_address": "9.9.9.9", "state": "running"},
+        ],
+    }
+    opener = AfterPatchGetOpener(pending, after_patch_gets=[pending, ready])
+    slept = []
+    provider = CcmProvider(
+        paths,
+        _CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        sleep=slept.append,
+        poll_interval=5,
+    )
+    result = provider.resume(yes=True)
+    inventory = hosts_file.read_text(encoding="utf-8")
+    assert "9.9.9.9" in inventory
+    assert "1.1.1.1" not in inventory
+    assert slept == [5]
+    assert result.get("waited") is True
+    assert result.get("inventory") == str(hosts_file)
+
+
+def test_ccm_resume_poll_exhaustion_raises(tmp_path):
+    from spa.providers import ProviderError
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    _write_ccm_state(env)
+    pending = {
+        "deployment_id": "dep-9",
+        "req_state": "ready",
+        "instances_data": [
+            {"instance_id": "i-aaa", "ip_address": "", "state": "pending"},
+        ],
+    }
+    opener = AfterPatchGetOpener(pending, after_patch_gets=[pending, pending])
+    provider = CcmProvider(
+        paths,
+        _CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        sleep=lambda _seconds: None,
+        poll_attempts=2,
+    )
+    with pytest.raises(ProviderError, match=r"did not become running"):
+        provider.resume(yes=True)
+
+
+def test_ccm_resume_wait_false_skips_poll_and_inventory(tmp_path):
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    _write_ccm_state(env)
+    hosts_file = env / "inventory" / "hosts"
+    original = (
+        'idx1 ansible_host="1.1.1.1" ansible_user="ec2-user" '
+        'ansible_ssh_private_key_file="/tmp/ccm-test-key"\n'
+    )
+    hosts_file.write_text(original, encoding="utf-8")
+    opener = CcmApiOpener(
+        {
+            "deployment_id": "dep-9",
+            "req_state": "ready",
+            "instances_data": [
+                {"instance_id": "i-aaa", "ip_address": "9.9.9.9", "state": "stopped"},
+            ],
+        }
+    )
+    slept = []
+    provider = CcmProvider(
+        paths,
+        _CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        sleep=slept.append,
+    )
+    result = provider.resume(yes=True, wait=False)
+    assert result.get("waited") is False
+    assert "inventory" not in result
+    assert slept == []
+    assert hosts_file.read_text(encoding="utf-8") == original
+    methods = [req.get_method() for req in opener.requests]
+    assert methods.count("PATCH") == 1
+    assert methods.count("GET") == 1
+
+
+def test_ccm_suspend_polls_until_stopped(tmp_path):
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    _write_ccm_state(env)
+    stopping = {
+        "deployment_id": "dep-9",
+        "req_state": "ready",
+        "instances_data": [
+            {"instance_id": "i-aaa", "ip_address": "1.1.1.1", "state": "stopping"},
+        ],
+    }
+    stopped = {
+        "deployment_id": "dep-9",
+        "req_state": "ready",
+        "instances_data": [
+            {"instance_id": "i-aaa", "ip_address": "1.1.1.1", "state": "stopped"},
+        ],
+    }
+    opener = AfterPatchGetOpener(
+        {
+            "deployment_id": "dep-9",
+            "req_state": "ready",
+            "instances_data": [
+                {"instance_id": "i-aaa", "ip_address": "1.1.1.1", "state": "running"},
+            ],
+        },
+        after_patch_gets=[stopping, stopped],
+    )
+    slept = []
+    provider = CcmProvider(
+        paths,
+        _CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        sleep=slept.append,
+        poll_interval=5,
+    )
+    result = provider.suspend(yes=True)
+    assert slept == [5]
+    assert result.get("waited") is True
+
+
 def test_ccm_resume_warns_when_operation_hours_are_business_hours(tmp_path, capsys):
+    from datetime import datetime, timezone
+
     from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
 
     env = tmp_path / "mylab"
@@ -879,6 +1073,7 @@ def test_ccm_resume_warns_when_operation_hours_are_business_hours(tmp_path, caps
         config,
         client=UrllibCcmClient(token="test-ccm-token", opener=opener),
         sleep=lambda _seconds: None,
+        now=lambda: datetime(2026, 11, 13, 20, 0, tzinfo=timezone.utc),
     )
     result = provider.resume(yes=True)
     err = capsys.readouterr().err
@@ -887,6 +1082,94 @@ def test_ccm_resume_warns_when_operation_hours_are_business_hours(tmp_path, caps
     warnings = result.get("warnings") or []
     assert any("business_hours" in item and "stop" in item.lower() for item in warnings)
     assert all("operation_hours" not in row["body"] for row in opener.patches)
+
+
+def test_ccm_resume_skips_warning_inside_business_hours_window(tmp_path, capsys):
+    from datetime import datetime, timezone
+
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN
+        + "  operation_hours: business_hours\n"
+        + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    _write_ccm_state(env)
+    config = dict(_CCM_CONFIG)
+    config["operation_hours"] = "business_hours"
+    opener = CcmApiOpener(
+        {
+            "deployment_id": "dep-9",
+            "req_state": "ready",
+            "instances_data": [
+                {"instance_id": "i-aaa", "ip_address": "9.9.9.9", "state": "stopped"},
+            ],
+        }
+    )
+    provider = CcmProvider(
+        paths,
+        config,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        sleep=lambda _seconds: None,
+        now=lambda: datetime(2026, 11, 13, 10, 0, tzinfo=timezone.utc),
+    )
+    result = provider.resume(yes=True)
+    err = capsys.readouterr().err
+    assert "business_hours" not in err
+    assert not result.get("warnings")
+
+
+def test_ccm_operation_hours_set_records_state_and_resume_skips_stale_yaml_warning(
+    tmp_path, capsys
+):
+    from datetime import datetime, timezone
+
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN
+        + "  operation_hours: business_hours\n"
+        + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    _write_ccm_state(env)
+    config = dict(_CCM_CONFIG)
+    config["operation_hours"] = "business_hours"
+    config["timezone"] = "UTC"
+    setter = CcmProvider(
+        paths,
+        config,
+        client=UrllibCcmClient(token="test-ccm-token", opener=FakeOpener(status=200, body=b"{}")),
+    )
+    setter.set_operation_hours("manual")
+    state = json.loads((env / "ccm" / "state.json").read_text(encoding="utf-8"))
+    assert state["operation_hours"] == "manual"
+    assert state["deployment_id"] == "dep-9"
+    opener = CcmApiOpener(
+        {
+            "deployment_id": "dep-9",
+            "req_state": "ready",
+            "instances_data": [
+                {"instance_id": "i-aaa", "ip_address": "9.9.9.9", "state": "stopped"},
+            ],
+        }
+    )
+    provider = CcmProvider(
+        paths,
+        config,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        sleep=lambda _seconds: None,
+        now=lambda: datetime(2026, 11, 13, 20, 0, tzinfo=timezone.utc),
+    )
+    result = provider.resume(yes=True)
+    err = capsys.readouterr().err
+    assert "business_hours" not in err
+    assert not result.get("warnings")
 
 
 @pytest.mark.parametrize("action", ["suspend", "resume"])

@@ -17,6 +17,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, NoReturn, Optional, Sequence, Tuple
+from zoneinfo import ZoneInfo
 
 from spa.paths import SpaPaths
 from spa.providers import (
@@ -51,6 +52,10 @@ POLL_ATTEMPTS = 180
 TTL_MAX_DAYS = 30
 BUSINESS_PURPOSES = ("DeveloperInstance", "SalesOpportunity", "SupportCase")
 OPERATION_HOURS = ("manual", "business_hours")
+# CCM OpenAPI does not list window bounds. SPA treats business_hours as
+# Monday–Friday 08:00–18:00 in the deployment timezone.
+BUSINESS_HOURS_START_HOUR = 8
+BUSINESS_HOURS_END_HOUR = 18
 META_ATTRIBUTES = ("operating_systems", "instance_types", "disk_storage")
 PROVIDER_NEEDS_ACTION = (
     "spa provider needs an action.\n"
@@ -256,6 +261,19 @@ def _ttl_stamp(when: datetime, days: int) -> str:
     return expiry.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
+def _local_in_business_hours(when: datetime, tz_name: str) -> bool:
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:
+        tz = timezone.utc
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    local = when.astimezone(tz)
+    if local.weekday() >= 5:
+        return False
+    return BUSINESS_HOURS_START_HOUR <= local.hour < BUSINESS_HOURS_END_HOUR
+
+
 def _deployment_ids(payload: Any) -> List[str]:
     data = _unwrap(payload)
     rows: List[Any]
@@ -444,6 +462,7 @@ class Provider:
         ttl: str,
         hosts: Mapping[str, Mapping[str, Any]],
         req_state: Optional[str] = None,
+        operation_hours: Optional[str] = None,
     ) -> None:
         payload: Dict[str, Any] = {
             "deployment_id": deployment_id,
@@ -455,6 +474,14 @@ class Provider:
         }
         if req_state is not None:
             payload["req_state"] = req_state
+        hours = operation_hours
+        if hours is None:
+            recorded = self._read_state() or {}
+            existing = recorded.get("operation_hours")
+            if existing:
+                hours = str(existing)
+        if hours:
+            payload["operation_hours"] = hours
         self.state_dir.mkdir(parents=True, exist_ok=True)
         path = self.state_dir / "state.json"
         temporary = path.with_suffix(".tmp")
@@ -518,7 +545,10 @@ class Provider:
         deployment_id = created.get("deployment_id") if isinstance(created, dict) else None
         if not deployment_id:
             raise ProviderError("CCM create did not return a deployment_id")
-        self._write_state(str(deployment_id), ttl, {}, req_state="pending")
+        hours = str(body.get("operation_hours") or DEFAULT_OPERATION_HOURS)
+        self._write_state(
+            str(deployment_id), ttl, {}, req_state="pending", operation_hours=hours
+        )
         ready = self._poll_until_ready(str(deployment_id))
         instances = ready.get("instances_data") or []
         if len(instances) != len(hosts):
@@ -534,7 +564,13 @@ class Provider:
                 "ip_address": instance.get("ip_address"),
             }
         known_ttl = str(ready.get("ttl") or ttl)
-        self._write_state(str(deployment_id), known_ttl, mapped, req_state="ready")
+        self._write_state(
+            str(deployment_id),
+            known_ttl,
+            mapped,
+            req_state="ready",
+            operation_hours=hours,
+        )
         inventory = self._write_inventory(mapped)
         warning = "CCM will terminate the whole deployment when %s passes." % known_ttl
         if not kwargs.get("agent"):
@@ -667,17 +703,77 @@ class Provider:
                     status[str(identifier)] = record
         return status
 
+    def _poll_instances(
+        self,
+        deployment_id: str,
+        selected: Mapping[str, Mapping[str, Any]],
+        wanted_state: str,
+        require_ip: bool,
+    ) -> Dict[str, Any]:
+        wanted = wanted_state.lower()
+        for _ in range(self._poll_attempts):
+            deployment = self._get_deployment(deployment_id)
+            instances: Dict[str, Dict[str, Any]] = {}
+            for row in deployment.get("instances_data") or []:
+                if isinstance(row, dict) and row.get("instance_id"):
+                    instances[str(row["instance_id"])] = row
+            ready = True
+            for row in selected.values():
+                instance_id = str((row or {}).get("instance_id") or "")
+                instance = instances.get(instance_id) or {}
+                state = str(instance.get("state") or "").lower()
+                ip = str(instance.get("ip_address") or "").strip()
+                if state != wanted or (require_ip and not ip):
+                    ready = False
+                    break
+            if ready:
+                return deployment
+            self._sleep(self._poll_interval)
+        extra = " with an ip_address" if require_ip else ""
+        raise ProviderError(
+            "CCM deployment %s instances did not become %s%s"
+            % (deployment_id, wanted, extra)
+        )
+
+    def _effective_operation_hours(self, recorded: Mapping[str, Any]) -> str:
+        hours = recorded.get("operation_hours")
+        if hours:
+            return str(hours)
+        return str(self.config.get("operation_hours") or "")
+
+    def _resume_hours_warnings(
+        self, recorded: Mapping[str, Any], agent: Any
+    ) -> List[str]:
+        if self._effective_operation_hours(recorded) != "business_hours":
+            return []
+        tz_name = str(self.config.get("timezone") or DEFAULT_TIMEZONE)
+        if _local_in_business_hours(self._now(), tz_name):
+            return []
+        warning = (
+            "ccm.operation_hours is business_hours; CCM may stop instances "
+            "again outside the window."
+        )
+        if not agent:
+            print(warning, file=sys.stderr)
+        return [warning]
+
     def suspend(self, **kwargs: Any) -> Dict[str, Any]:
+        wait = kwargs.get("wait", True)
         hosts = kwargs.get("hosts")
         recorded = self._require_state()
         deployment_id = str(recorded["deployment_id"])
         selected = self._selected_hosts(recorded, hosts)
         deployment = self._get_deployment(deployment_id)
         self._patch_instances(deployment_id, selected, "stopped", deployment)
+        if wait:
+            self._poll_instances(
+                deployment_id, selected, "stopped", require_ip=False
+            )
         return {
             "provider": self.name,
             "action": "suspend",
             "deployment_id": deployment_id,
+            "waited": wait,
         }
 
     def _get_deployment(self, deployment_id: str) -> Dict[str, Any]:
@@ -715,30 +811,27 @@ class Provider:
         return mapped
 
     def resume(self, **kwargs: Any) -> Dict[str, Any]:
+        wait = kwargs.get("wait", True)
         hosts = kwargs.get("hosts")
         recorded = self._require_state()
         deployment_id = str(recorded["deployment_id"])
         selected = self._selected_hosts(recorded, hosts)
         deployment = self._get_deployment(deployment_id)
         self._patch_instances(deployment_id, selected, "running", deployment)
-        deployment = self._get_deployment(deployment_id)
-        mapped = self._map_instances(selected, deployment)
-        inventory = self._write_inventory(mapped, merge=bool(hosts))
-        warnings: List[str] = []
-        if str(self.config.get("operation_hours") or "") == "business_hours":
-            warning = (
-                "ccm.operation_hours is business_hours; CCM may stop instances "
-                "again outside the window."
-            )
-            warnings.append(warning)
-            if not kwargs.get("agent"):
-                print(warning, file=sys.stderr)
-        result = {
+        result: Dict[str, Any] = {
             "provider": self.name,
             "action": "resume",
             "deployment_id": deployment_id,
-            "inventory": str(inventory),
+            "waited": wait,
         }
+        if wait:
+            deployment = self._poll_instances(
+                deployment_id, selected, "running", require_ip=True
+            )
+            mapped = self._map_instances(selected, deployment)
+            inventory = self._write_inventory(mapped, merge=bool(hosts))
+            result["inventory"] = str(inventory)
+        warnings = self._resume_hours_warnings(recorded, kwargs.get("agent"))
         if warnings:
             result["warnings"] = warnings
         return result
@@ -779,9 +872,21 @@ class Provider:
         }
 
     def set_operation_hours(self, hours: str) -> Dict[str, Any]:
-        timezone = str(self.config.get("timezone") or DEFAULT_TIMEZONE)
-        self.patch_deployment({"operation_hours": hours, "timezone": timezone})
-        return {"operation_hours": hours, "timezone": timezone}
+        timezone_name = str(self.config.get("timezone") or DEFAULT_TIMEZONE)
+        recorded, _data = self.patch_deployment(
+            {"operation_hours": hours, "timezone": timezone_name}
+        )
+        hosts = recorded.get("hosts") if isinstance(recorded.get("hosts"), dict) else {}
+        ttl = str(recorded.get("ttl") or "")
+        req_state = recorded.get("req_state")
+        self._write_state(
+            str(recorded["deployment_id"]),
+            ttl,
+            hosts,
+            req_state=str(req_state) if req_state is not None else None,
+            operation_hours=hours,
+        )
+        return {"operation_hours": hours, "timezone": timezone_name}
 
 
 _META_ACTIONS = {
