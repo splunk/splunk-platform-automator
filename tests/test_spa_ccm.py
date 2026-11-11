@@ -546,6 +546,30 @@ def test_ccm_provision_refuses_when_state_is_pending(tmp_path):
     assert [req.get_method() for req in opener.requests] == ["GET"]
 
 
+def _validate_cap_env(tmp_path, host_count, deployment_id=None):
+    key = tmp_path / "CCM-Key.pem"
+    key.write_text("not-a-real-key\n", encoding="utf-8")
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN
+        + "splunk_hosts:\n"
+        + "  - iter:\n"
+        + "      prefix: h\n"
+        + '      numbers: "01..%02d"\n' % host_count
+        + "    roles: [indexer]\n",
+    )
+    if deployment_id is not None:
+        _write_ccm_state(env, deployment_id=deployment_id)
+    config = {
+        **_CCM_CONFIG,
+        "ssh_private_key_file": str(key),
+        "key_name": "CCM-Key",
+    }
+    return paths, config
+
+
 def _write_ccm_state(env, deployment_id="dep-9", hosts=None):
     state_dir = env / "ccm"
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -1310,6 +1334,112 @@ def test_ccm_validate_account_cap_and_key_name_when_token_set(tmp_path):
     text = result.error or ""
     assert "100" in text or "101" in text
     assert "CCM-Key" in text or "key_name" in text
+
+
+def test_ccm_validate_account_cap_excludes_this_env_deployment(tmp_path):
+    from spa.providers.ccm import UrllibCcmClient, validate_ccm
+
+    paths, config = _validate_cap_env(tmp_path, 40, deployment_id="dep-own")
+    deployments = [
+        {
+            "deployment_id": "other",
+            "instances_data": [
+                {"instance_id": "i-o-%s" % i, "state": "running"} for i in range(30)
+            ],
+        },
+        {
+            "deployment_id": "dep-own",
+            "instances_data": [
+                {"instance_id": "i-m-%s" % i, "state": "running"} for i in range(40)
+            ],
+        },
+    ]
+    opener = ScriptedOpener(
+        [
+            (200, deployments),
+            (200, [{"pub_key_name": "CCM-Key"}]),
+        ]
+    )
+    result = validate_ccm(
+        paths,
+        config,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    assert result.ok is True
+
+
+def test_ccm_validate_account_cap_skips_terminated_instances(tmp_path):
+    from spa.providers.ccm import UrllibCcmClient, validate_ccm
+
+    paths, config = _validate_cap_env(tmp_path, 40)
+    deployments = [
+        {
+            "deployment_id": "gone",
+            "instances_data": [
+                {"instance_id": "i-t-%s" % i, "state": "terminated"} for i in range(50)
+            ]
+            + [
+                {"instance_id": "i-s-%s" % i, "state": "shutting-down"}
+                for i in range(20)
+            ],
+        },
+        {
+            "deployment_id": "live",
+            "instances_data": [
+                {"instance_id": "i-r-%s" % i, "state": "running"} for i in range(30)
+            ],
+        },
+    ]
+    opener = ScriptedOpener(
+        [
+            (200, deployments),
+            (200, [{"pub_key_name": "CCM-Key"}]),
+        ]
+    )
+    result = validate_ccm(
+        paths,
+        config,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    assert result.ok is True
+
+
+def test_ccm_validate_account_cap_fails_when_other_instances_plus_hosts_exceed_100(
+    tmp_path,
+):
+    from spa.providers.ccm import UrllibCcmClient, validate_ccm
+
+    paths, config = _validate_cap_env(tmp_path, 40, deployment_id="dep-own")
+    deployments = [
+        {
+            "deployment_id": "other",
+            "instances_data": [
+                {"instance_id": "i-o-%s" % i, "state": "running"} for i in range(70)
+            ],
+        },
+        {
+            "deployment_id": "dep-own",
+            "instances_data": [
+                {"instance_id": "i-m-%s" % i, "state": "running"} for i in range(40)
+            ],
+        },
+    ]
+    opener = ScriptedOpener(
+        [
+            (200, deployments),
+            (200, [{"pub_key_name": "CCM-Key"}]),
+        ]
+    )
+    result = validate_ccm(
+        paths,
+        config,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    assert result.ok is False
+    text = result.error or ""
+    assert "40" in text
+    assert "70" in text
+    assert "100" in text
 
 
 def test_ccm_operating_systems_human_text_is_one_row_per_item():

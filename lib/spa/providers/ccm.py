@@ -35,6 +35,7 @@ META_PATH = "/api/v1/meta"
 SSH_KEYS_PATH = "/ssh_keys/"
 MAX_INSTANCES = 50
 ACCOUNT_INSTANCE_CAP = 100
+_INACTIVE_INSTANCE_STATES = frozenset({"terminated", "shutting-down"})
 NAME_MIN = 5
 NAME_MAX = 100
 NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][\w-]*[a-zA-Z0-9]$")
@@ -239,6 +240,17 @@ def _unwrap(payload: Any) -> Any:
     return payload
 
 
+def _load_state(paths: SpaPaths) -> Optional[Dict[str, Any]]:
+    path = paths.spa_env_dir / "ccm" / "state.json"
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def _ttl_stamp(when: datetime, days: int) -> str:
     expiry = when.astimezone(timezone.utc) + timedelta(days=int(days))
     return expiry.strftime("%Y-%m-%dT%H:%M:%S.000Z")
@@ -287,14 +299,7 @@ class Provider:
         self._poll_attempts = poll_attempts
 
     def _read_state(self) -> Optional[Dict[str, Any]]:
-        path = self.state_dir / "state.json"
-        if not path.is_file():
-            return None
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-            return None
-        return payload if isinstance(payload, dict) else None
+        return _load_state(self.paths)
 
     def _expired_state(self, deployment_id: str) -> ProvisionState:
         return ProvisionState(
@@ -871,7 +876,11 @@ def _private_key_path(config: Mapping[str, Any]) -> Path:
     return Path(raw).expanduser()
 
 
-def _instance_count(payload: Any) -> int:
+def _recorded_deployment_id(paths: SpaPaths) -> str:
+    return str((_load_state(paths) or {}).get("deployment_id") or "")
+
+
+def _instance_count(payload: Any, exclude_id: str = "") -> int:
     data = _unwrap(payload)
     if isinstance(data, list):
         rows = data
@@ -881,12 +890,22 @@ def _instance_count(payload: Any) -> int:
     else:
         rows = []
     total = 0
+    skip = str(exclude_id or "")
     for row in rows:
         if not isinstance(row, dict):
             continue
+        if skip and str(row.get("deployment_id") or "") == skip:
+            continue
         instances = row.get("instances_data")
-        if isinstance(instances, list):
-            total += len(instances)
+        if not isinstance(instances, list):
+            continue
+        for inst in instances:
+            state = ""
+            if isinstance(inst, dict):
+                state = str(inst.get("state") or "").lower()
+            if state in _INACTIVE_INSTANCE_STATES:
+                continue
+            total += 1
     return total
 
 
@@ -1026,7 +1045,7 @@ def validate_ccm(
         status, deployments = http.request("GET", DEPLOYMENTS_PATH)
         if status >= 400:
             raise CcmError("CCM API returned HTTP %s" % status)
-        current = _instance_count(deployments)
+        current = _instance_count(deployments, exclude_id=_recorded_deployment_id(paths))
         if current + len(hosts) > ACCOUNT_INSTANCE_CAP:
             problems.append(
                 "This env has %s hosts; the account already has %s instances; "

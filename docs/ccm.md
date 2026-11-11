@@ -35,7 +35,7 @@ spa provision --yes
 spa deploy --yes
 ```
 
-`spa validate` rejects `ttl_days` outside 1–30, host count over 50, a missing local private key file, and (when `CCM_TOKEN` is set) an unknown `key_name` or an account that would exceed 100 instances. Provision creates one CCM EC2 deployment and writes `$SPA_ENV_DIR/ccm/state.json` as soon as CCM returns a deployment id (never the PAT), then polls until ready and writes inventory. `spa provision` again while that id is live or pending is refused (`already provisioned: ID`); run `spa destroy --yes` to replace the lab. An expired id uses the TTL hint: `spa destroy --yes` then `spa provision --yes`. CCM terminates the **whole deployment** when TTL expires.
+`spa validate` rejects `ttl_days` outside 1–30, host count over 50, a missing local private key file, and (when `CCM_TOKEN` is set) an unknown `key_name` or an account that would exceed 100 non-terminated instances. The cap counts this env's hosts once (it leaves the recorded `ccm/state.json` deployment out of the live total). Provision creates one CCM EC2 deployment and writes `$SPA_ENV_DIR/ccm/state.json` as soon as CCM returns a deployment id (never the PAT), then polls until ready and writes inventory. `spa provision` again while that id is live or pending is refused (`already provisioned: ID`); run `spa destroy --yes` to replace the lab. An expired id uses the TTL hint: `spa destroy --yes` then `spa provision --yes`. CCM terminates the **whole deployment** when TTL expires.
 
 ## Operate the environment
 
