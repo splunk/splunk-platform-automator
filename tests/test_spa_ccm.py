@@ -141,6 +141,42 @@ def test_ccm_client_url_error_does_not_echo_token():
         client.request("GET", "/api/v1/deployments")
     assert token not in str(caught.value)
     assert token not in repr(caught.value)
+    assert "Check VPN" in str(caught.value)
+    assert "failed with" not in str(caught.value)
+
+
+def test_ccm_client_url_error_classifies_dns_tls_timeout_and_refused():
+    import socket
+    import ssl
+    import urllib.error
+
+    from spa.providers.ccm import CcmError, UrllibCcmClient
+
+    token = "test-ccm-pat-value"
+
+    cases = (
+        (socket.gaierror(8, "nodename nor servname provided, or not known"), "DNS"),
+        (ConnectionRefusedError(61, "Connection refused to %s" % token), "connection refused"),
+        (ssl.SSLError("certificate verify failed with %s" % token), "TLS"),
+        (TimeoutError("timed out talking to %s" % token), "timeout"),
+    )
+    for reason, label in cases:
+        class BoomOpener:
+            def open(self, req: object, timeout: object = None) -> None:
+                raise urllib.error.URLError(reason)
+
+        client = UrllibCcmClient(token=token, opener=BoomOpener())
+        with pytest.raises(CcmError, match="CCM API request failed") as caught:
+            client.request("GET", "/api/v1/deployments")
+        text = str(caught.value)
+        assert label in text
+        assert "Check VPN" in text
+        assert token not in text
+        assert "Authorization" not in text
+        assert "certificate verify failed" not in text
+        assert "nodename" not in text
+        assert "Connection refused to" not in text
+        assert "timed out talking" not in text
 
 
 def test_ccm_ping_reports_http_status_without_body_or_token():
@@ -1337,6 +1373,28 @@ def test_ccm_destroy_treats_404_as_success_and_clears_local_state(tmp_path):
     assert result["deployment_id"] == "dep-9"
 
 
+def test_ccm_destroy_raises_on_http_500(tmp_path):
+    from spa.providers import ProviderError
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    _write_ccm_state(env)
+    opener = FakeOpener(status=500, body=b"")
+    provider = CcmProvider(
+        paths,
+        _CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    with pytest.raises(ProviderError, match=r"HTTP 500"):
+        provider.destroy([])
+    assert (env / "ccm" / "state.json").is_file()
+
+
 def test_ccm_check_auth_reports_token_not_set(monkeypatch):
     monkeypatch.delenv("CCM_TOKEN", raising=False)
     from spa.providers.ccm import execute
@@ -1530,7 +1588,7 @@ def test_ccm_ttl_extend_patches_and_persists_expiry(tmp_path):
     assert req.get_method() == "PATCH"
     assert req.full_url == API_ROOT + "/api/v1/deployments/dep-9"
     body = json.loads(req.data.decode("utf-8"))
-    assert body == {"ttl": "2026-12-10T12:00:00.000Z", "timezone": "UTC"}
+    assert body == {"ttl": "2026-12-10T12:00:00.000Z"}
     state = json.loads((env / "ccm" / "state.json").read_text(encoding="utf-8"))
     assert state["ttl"] == "2026-12-10T12:00:00.000Z"
     assert result.data["ttl"] == "2026-12-10T12:00:00.000Z"
@@ -1572,6 +1630,23 @@ def test_ccm_operation_hours_set_patches_manual(tmp_path):
     body = json.loads(req.data.decode("utf-8"))
     assert body["operation_hours"] == "manual"
     assert body["timezone"] == "UTC"
+
+
+def test_ccm_validate_rejects_illegal_derived_name(tmp_path):
+    from spa.providers.ccm import validate_ccm
+
+    env = tmp_path / "lab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    result = validate_ccm(paths, _CCM_CONFIG)
+    assert result.ok is False
+    assert result.code == 2
+    assert "lab" in (result.error or "")
+    assert "ccm.name" in (result.error or "")
+    assert "idx1-lab" not in (result.error or "")
 
 
 def test_ccm_validate_rejects_mixed_external_hosts(tmp_path):
@@ -1831,6 +1906,23 @@ def test_ccm_ttl_extend_rejects_days_outside_1_to_30():
     assert result.ok is False
     assert result.code == 2
     assert "30" in (result.error or "")
+
+
+def test_ccm_ttl_extend_rejects_bad_days_before_confirm():
+    from spa.providers.ccm import execute
+
+    result = execute(action="ttl", subaction="extend", days=0, confirm=False, agent=False)
+    assert result.ok is False
+    assert result.code == 2
+    assert "--days" in (result.error or "")
+    assert "-y/--yes" not in (result.error or "")
+    missing = execute(
+        action="ttl", subaction="extend", days=None, confirm=False, agent=False
+    )
+    assert missing.ok is False
+    assert missing.code == 2
+    assert "--days" in (missing.error or "")
+    assert "-y/--yes" not in (missing.error or "")
 
 
 def test_ccm_ttl_extend_fails_when_not_provisioned(tmp_path):

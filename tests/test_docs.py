@@ -1297,3 +1297,12 @@ def test_changelog_unreleased_finishes_ccm_docs():
     assert "user guide" in unreleased.lower() or "user-guide" in unreleased.lower()
     assert "spa config provider ccm" in unreleased
     assert "spa provider ccm" in unreleased
+
+
+def test_changelog_unreleased_retires_doctor_aws_and_virtualbox_flags():
+    text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
+    assert "spa doctor --provider" in unreleased
+    assert "spa doctor --aws" in unreleased
+    assert "--virtualbox" in unreleased
+    assert "repeatable" in unreleased.lower() or "repeat" in unreleased.lower()

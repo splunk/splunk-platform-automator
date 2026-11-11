@@ -5,9 +5,11 @@ Auth is the process environment variable CCM_TOKEN only. Never print the PAT.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import re
+import socket
 import ssl
 import sys
 import time
@@ -221,7 +223,12 @@ class UrllibCcmClient:
             status = int(exc.code)
             raw = exc.read() or b""
         except urllib.error.URLError as exc:
-            raise CcmError(self._redact("CCM API request failed")) from exc
+            kind = _url_error_kind(exc)
+            if kind:
+                message = "CCM API request failed: %s. Check VPN." % kind
+            else:
+                message = "CCM API request failed. Check VPN."
+            raise CcmError(self._redact(message)) from exc
         text = raw.decode("utf-8", errors="replace")
         if not text.strip():
             return status, None
@@ -229,6 +236,54 @@ class UrllibCcmClient:
             return status, json.loads(text)
         except json.JSONDecodeError as exc:
             raise CcmError("CCM API returned invalid JSON") from exc
+
+
+def _url_error_kind(exc: urllib.error.URLError) -> str:
+    """Classify a URLError as DNS, connection refused, TLS, or timeout. Never echo reason text."""
+    reason = getattr(exc, "reason", None)
+    items: List[Any] = [reason]
+    if isinstance(reason, BaseException) and getattr(reason, "__cause__", None) is not None:
+        items.append(reason.__cause__)
+    for item in items:
+        if not isinstance(item, BaseException):
+            continue
+        if isinstance(item, ssl.SSLError):
+            return "TLS"
+        if isinstance(item, (socket.timeout, TimeoutError)):
+            return "timeout"
+        if isinstance(item, ConnectionRefusedError):
+            return "connection refused"
+        if isinstance(item, socket.gaierror):
+            return "DNS"
+        err = getattr(item, "errno", None)
+        if err is None:
+            continue
+        if err in {errno.ECONNREFUSED, getattr(errno, "WSAECONNREFUSED", None)}:
+            return "connection refused"
+        if err in {errno.ETIMEDOUT, getattr(errno, "WSAETIMEDOUT", None)}:
+            return "timeout"
+        if err in {
+            getattr(socket, "EAI_NONAME", None),
+            getattr(socket, "EAI_AGAIN", None),
+            getattr(socket, "EAI_FAIL", None),
+            getattr(socket, "EAI_NODATA", None),
+        }:
+            return "DNS"
+    if isinstance(reason, str):
+        text = reason.lower()
+        if "timed out" in text or "timeout" in text:
+            return "timeout"
+        if "connection refused" in text:
+            return "connection refused"
+        if (
+            "nodename" in text
+            or "name or service not known" in text
+            or "getaddrinfo" in text
+        ):
+            return "DNS"
+        if "ssl" in text or "certificate" in text:
+            return "TLS"
+    return ""
 
 
 def ping(client: Optional[UrllibCcmClient] = None) -> None:
@@ -272,6 +327,25 @@ def _local_in_business_hours(when: datetime, tz_name: str) -> bool:
     if local.weekday() >= 5:
         return False
     return BUSINESS_HOURS_START_HOUR <= local.hour < BUSINESS_HOURS_END_HOUR
+
+
+def _resolved_deployment_name(config: Mapping[str, Any], paths: SpaPaths) -> str:
+    explicit = str(config.get("name") or "").strip()
+    return explicit or paths.spa_env_dir.name
+
+
+def _deployment_name_error(name: str) -> Optional[str]:
+    if (
+        len(name) < NAME_MIN
+        or len(name) > NAME_MAX
+        or not NAME_PATTERN.match(name)
+    ):
+        return (
+            "CCM deployment name %r is invalid (5–100 characters, "
+            "letters/numbers/hyphens/underscores, no spaces). "
+            "Set ccm.name to a valid name." % name
+        )
+    return None
 
 
 def _deployment_ids(payload: Any) -> List[str]:
@@ -374,19 +448,10 @@ class Provider:
         return expected_hostnames(load_deployment_config(self.paths))
 
     def _deployment_name(self) -> str:
-        explicit = str(self.config.get("name") or "").strip()
-        name = explicit or self.paths.spa_env_dir.name
-        if (
-            len(name) < NAME_MIN
-            or len(name) > NAME_MAX
-            or not NAME_PATTERN.match(name)
-        ):
-            raise ProviderError(
-                "CCM deployment name %r is invalid (5–100 characters, "
-                "letters/numbers/hyphens/underscores, no spaces). "
-                "Set ccm.name to a valid name." % name,
-                code=2,
-            )
+        name = _resolved_deployment_name(self.config, self.paths)
+        error = _deployment_name_error(name)
+        if error:
+            raise ProviderError(error, code=2)
         return name
 
     def _create_body(self, name: str, hosts: List[str]) -> Tuple[Dict[str, Any], str]:
@@ -600,7 +665,7 @@ class Provider:
                 urllib.parse.quote(deployment_id, safe=""),
             )
             status, _payload = self._request("DELETE", path)
-            if status not in {200, 202, 204, 404} and status >= 400:
+            if status >= 400 and status != 404:
                 raise ProviderError("CCM API returned HTTP %s" % status)
         self._clear_local()
         return {"deployment_id": deployment_id or None, "cleared": True}
@@ -861,8 +926,7 @@ class Provider:
 
     def extend_ttl(self, days: int, when: Optional[datetime] = None) -> Dict[str, Any]:
         stamp = _ttl_stamp(when or self._now(), days)
-        timezone = str(self.config.get("timezone") or DEFAULT_TIMEZONE)
-        recorded, data = self.patch_deployment({"ttl": stamp, "timezone": timezone})
+        recorded, data = self.patch_deployment({"ttl": stamp})
         known = str(data.get("ttl") or stamp)
         hosts = recorded.get("hosts") if isinstance(recorded.get("hosts"), dict) else {}
         self._write_state(str(recorded["deployment_id"]), known, hosts)
@@ -1123,6 +1187,9 @@ def validate_ccm(
             % (len(hosts), MAX_INSTANCES),
             2,
         )
+    name_error = _deployment_name_error(_resolved_deployment_name(config, paths))
+    if name_error:
+        return _fail(name_error, 2)
     ttl_days = config.get("ttl_days")
     if ttl_days is not None:
         try:
@@ -1250,9 +1317,6 @@ def execute(
             return CommandResult(ok=True, data={"items": _ssh_key_items(payload, cfg)})
 
         if action == "ttl" and subaction == "extend":
-            blocked = _confirm("spa provider ccm ttl extend", confirm, agent)
-            if blocked is not None:
-                return blocked
             if days is None:
                 return _fail(
                     "--days must be 1–%s for spa provider ccm ttl extend." % TTL_MAX_DAYS,
@@ -1267,6 +1331,9 @@ def execute(
                     "--days must be 1–%s for spa provider ccm ttl extend." % TTL_MAX_DAYS,
                     2,
                 )
+            blocked = _confirm("spa provider ccm ttl extend", confirm, agent)
+            if blocked is not None:
+                return blocked
             when = now() if callable(now) else now
             data = _provider(paths, cfg, client, now=when).extend_ttl(day_count, when)
             return CommandResult(ok=True, data=data)
