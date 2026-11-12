@@ -15,7 +15,7 @@ Alias of spa environment init (spa init --example TOPOLOGY or --architecture FIL
 | Flag | Description |
 | --- | --- |
 | `--example` | Topology example id (exclusive with --architecture) |
-| `--architecture` | Confirmed 0.4.0 architecture JSON (exclusive with --example) |
+| `--architecture` | Confirmed schema 1 architecture JSON (exclusive with --example) |
 | `--provider` | aws, virtualbox, external, or ccm. Required unless a default is saved (spa environment set --provider NAME) |
 
 Example:
@@ -606,7 +606,7 @@ Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Plat
 | Flag | Description |
 | --- | --- |
 | `--example` | Topology example id (exclusive with --architecture) |
-| `--architecture` | Confirmed 0.4.0 architecture JSON (exclusive with --example) |
+| `--architecture` | Confirmed schema 1 architecture JSON (exclusive with --example) |
 | `--provider` | aws, virtualbox, external, or ccm. Required unless a default is saved (spa environment set --provider NAME) |
 | `--env-dir` | One-off parent (requires --name); does not change the default parent |
 | `--name` | Registry name (default: folder basename) |
@@ -1199,7 +1199,7 @@ spa --agent architecture plan examples/architectures/c3.json
 
 ## `architecture plan`
 
-Validate a splunk.architecture 0.4.0 file and print the overlay plan (read-only). Needs no environment.
+Validate a splunk.architecture schema 1 file and print the overlay plan (read-only). Needs no environment.
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -1236,7 +1236,7 @@ spa --agent architecture apply examples/architectures/c3.json --yes
 
 ## `architecture check`
 
-Subset-match a splunk.architecture 0.4.0 file against the current environment config.
+Subset-match a splunk.architecture schema 1 file against the current environment config.
 
 | Argument | Required | Description |
 | --- | --- | --- |

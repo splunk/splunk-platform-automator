@@ -1,4 +1,4 @@
-"""splunk.architecture 0.4.0: plan, overlay, and check against SPA config."""
+"""splunk.architecture schema 1: plan, overlay, and check against SPA config."""
 
 from __future__ import annotations
 
@@ -10,10 +10,10 @@ from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional,
 
 from spa.hosts import allowed_role_names
 
-SUPPORTED_ARCHITECTURE_VERSION = "0.4.0"
+SUPPORTED_ARCHITECTURE_VERSION = 1
 ARCHITECTURE_KIND = "splunk.architecture"
-# Older architecture schema_version → callable(doc). Empty: 0.3.0 was never released.
-ARCHITECTURE_MIGRATORS: Dict[str, Any] = {}
+# Older architecture schema_version → callable(doc). Empty: no 0.4.0 migrator.
+ARCHITECTURE_MIGRATORS: Dict[int, Any] = {}
 
 SVA_TO_SPA_ROLE = {
     "cluster_master": "cluster_manager",
@@ -108,18 +108,13 @@ def gate_architecture_version(doc: Mapping[str, Any]) -> None:
         raise ArchitectureError("architecture file needs kind and schema_version")
     if kind != ARCHITECTURE_KIND:
         raise ArchitectureError("architecture file kind must be splunk.architecture")
-    if not isinstance(version, str):
-        raise ArchitectureError("schema_version must be a string")
+    if isinstance(version, bool):
+        raise ArchitectureError("schema_version must be an integer, not a boolean")
+    if not isinstance(version, int):
+        raise ArchitectureError("schema_version must be an integer")
     if version == SUPPORTED_ARCHITECTURE_VERSION:
         return
-    file_tuple = _version_tuple(version)
-    supported_tuple = _version_tuple(SUPPORTED_ARCHITECTURE_VERSION)
-    if file_tuple is None or supported_tuple is None:
-        raise ArchitectureError(
-            "architecture schema_version %s is not supported; this spa reads %s"
-            % (version, SUPPORTED_ARCHITECTURE_VERSION)
-        )
-    if file_tuple > supported_tuple:
+    if version > SUPPORTED_ARCHITECTURE_VERSION:
         raise ArchitectureError(
             "this spa reads architecture schema_version %s; the file is %s. Upgrade spa."
             % (SUPPORTED_ARCHITECTURE_VERSION, version)
@@ -131,13 +126,6 @@ def gate_architecture_version(doc: Mapping[str, Any]) -> None:
             % (version, SUPPORTED_ARCHITECTURE_VERSION)
         )
     migrator(doc)
-
-
-def _version_tuple(value: str) -> Optional[Tuple[int, ...]]:
-    parts = str(value).split(".")
-    if not parts or any(not part.isdigit() for part in parts):
-        return None
-    return tuple(int(part) for part in parts)
 
 
 def expand_host_names(host: Mapping[str, Any]) -> List[str]:

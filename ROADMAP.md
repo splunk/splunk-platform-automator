@@ -75,7 +75,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [x] Docs include a verify-after-write practice — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
 - [x] `spa config audit --check-hand-edits` — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
 - [x] Unresolved `spa config` / `spa apps` writes return `ok: false` and exit 1 — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
-- [x] Architecture-file apply is explicit and reports what was ingested (`spa architecture plan` stays read-only; `spa init --architecture` and `spa architecture apply` overlay 0.4.0 and report ingested/skipped/remaining)
+- [x] Architecture-file apply is explicit and reports what was ingested (`spa architecture plan` stays read-only; `spa init --architecture` and `spa architecture apply` overlay schema 1 and report ingested/skipped/remaining)
 - [x] Version `splunk_config.yml` with SPA-owned `schema_version` (current is 1). Optional operator `config_version` is stored and never used for schema dispatch. A missing stamp is read as version 1; `spa validate` reports it and does not write; `spa deploy` / `spa provision` refuse until `spa config migrate --yes`. A later incompatible change ships a migration. — [#117](https://github.com/splunk/splunk-platform-automator/issues/117)
 - [ ] `spa validate` checks Splunk installers in Software for the provider and architecture in use — [#74](https://github.com/splunk/splunk-platform-automator/issues/74)
 - [x] Host ranges (`iter.numbers: "1..N"`)

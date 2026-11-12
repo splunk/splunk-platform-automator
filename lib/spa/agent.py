@@ -149,7 +149,7 @@ COMMAND_SCHEMA = {
                 {"long": "--example", "help": "Topology example id (exclusive with --architecture)", "takes_value": True, "completes_from": "init list"},
                 {
                     "long": "--architecture",
-                    "help": "Confirmed 0.4.0 architecture JSON (exclusive with --example)",
+                    "help": "Confirmed schema 1 architecture JSON (exclusive with --example)",
                     "takes_value": True,
                 },
                 {
@@ -589,7 +589,7 @@ COMMAND_SCHEMA = {
                 {"long": "--example", "help": "Topology example id (exclusive with --architecture)", "takes_value": True, "completes_from": "init list"},
                 {
                     "long": "--architecture",
-                    "help": "Confirmed 0.4.0 architecture JSON (exclusive with --example)",
+                    "help": "Confirmed schema 1 architecture JSON (exclusive with --example)",
                     "takes_value": True,
                 },
                 {
@@ -1022,7 +1022,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "architecture plan",
-            "summary": "Validate a splunk.architecture 0.4.0 file and print the overlay plan (read-only). Needs no environment.",
+            "summary": "Validate a splunk.architecture schema 1 file and print the overlay plan (read-only). Needs no environment.",
             "positionals": [
                 {"name": "FILE", "required": True, "help": "Architecture JSON file"},
             ],
@@ -1045,7 +1045,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "architecture check",
-            "summary": "Subset-match a splunk.architecture 0.4.0 file against the current environment config.",
+            "summary": "Subset-match a splunk.architecture schema 1 file against the current environment config.",
             "positionals": [
                 {"name": "FILE", "required": True, "help": "Architecture JSON file"},
             ],

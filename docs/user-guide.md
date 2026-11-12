@@ -82,11 +82,11 @@ spa validate
 
 ### Start from a confirmed architecture file
 
-A confirmed `splunk.architecture` 0.4.0 file (from the SVA skill or `examples/architectures/c3.json`) selects the catalog topology and overlays counts, RF/SF, `org_prefix`, and extra roles. Provider is required at init. Hardware sizing, OS, AWS, apps, and licenses stay ordinary `spa config` / `spa apps` questions after the host list exists.
+A confirmed `splunk.architecture` schema 1 file (from the SVA skill or `examples/architectures/c3.json`) selects the catalog topology and overlays counts, RF/SF, `org_prefix`, and extra roles. Provider is required at init. Hardware sizing, OS, AWS, apps, and licenses stay ordinary `spa config` / `spa apps` questions after the host list exists.
 
 ```mermaid
 flowchart TD
-  file["Confirmed 0.4.0 file"] --> planCmd["spa architecture plan FILE"]
+  file["Confirmed schema 1 file"] --> planCmd["spa architecture plan FILE"]
   planCmd --> provider["Ask provider: aws / virtualbox / external"]
   provider --> gate["Env location + name"]
   gate --> initCmd["spa init --architecture FILE --provider"]

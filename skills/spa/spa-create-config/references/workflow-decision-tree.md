@@ -5,7 +5,7 @@ Classify the user message, then load the one skill that owns the next step. Fini
 ```
 User message
 ├─ New environment or lab ("I need a Splunk environment...")
-│     ├─ Confirmed 0.4.0 architecture file given
+│     ├─ Confirmed schema 1 architecture file given
 │     │     → /spa-create-config path B (skip SVA questionnaire)
 │     │     → spa architecture plan FILE → provider → location/name gate
 │     │     → write: spa environment init --architecture FILE --provider

@@ -1,6 +1,6 @@
-# Architecture input (splunk.architecture 0.4.0)
+# Architecture input (splunk.architecture schema 1)
 
-`/spa-create-config` can start from a confirmed `kind: splunk.architecture` file (schema `0.4.0`). Checked-in examples: `examples/architectures/c1.json`, `c3.json`, `m4.json`. Operator flow, mermaid diagram, and commands: [Configure an environment](../../../../docs/user-guide.md#configure-an-environment).
+`/spa-create-config` can start from a confirmed `kind: splunk.architecture` file (schema `1`, JSON integer). Checked-in examples: `examples/architectures/c1.json`, `c3.json`, `m4.json`. Operator flow, mermaid diagram, and commands: [Configure an environment](../../../../docs/user-guide.md#configure-an-environment).
 
 This skill has two first-class entry points. An architecture file is optional.
 
@@ -8,7 +8,7 @@ This skill has two first-class entry points. An architecture file is optional.
 
 Keep the existing questionnaire (Phases 1–5), location/name gate, then `spa init --example TOPOLOGY --provider`. Do not run `spa architecture plan`, `apply`, or `check`.
 
-## Path B — confirmed 0.4.0 file present
+## Path B — confirmed schema 1 file present
 
 Do not run the SVA questionnaire. Check is mandatory on this path, before validate:
 
@@ -40,7 +40,7 @@ Do not parse the architecture file in this skill. `spa architecture plan FILE` i
 
 ## Version gate
 
-Supported version is `0.4.0`. Missing `kind` or `schema_version` is an error. Newer than `0.4.0`: upgrade spa. Older (including unreleased `0.3.0`): not supported. Do not default a missing version.
+Supported version is JSON integer `1`. Missing `kind` or `schema_version` is an error. Bool and string values (including `"1"` and `"0.4.0"`) are rejected. Newer integer: upgrade spa. Older integers are not supported. There is no 0.4.0 migrator. Do not default a missing version.
 
 ## Rules
 

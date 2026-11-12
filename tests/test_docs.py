@@ -745,8 +745,10 @@ class TestSpaSkill:
         assert "--architecture-file" not in create
         assert "--architecture-stdin" not in create
         contract = ref.read_text(encoding="utf-8")
-        for key in ("0.4.0", "Path A", "Path B", "kind", "schema_version", "confirmed"):
+        for key in ("schema 1", "Path A", "Path B", "kind", "schema_version", "confirmed"):
             assert key in contract, key
+        assert "Supported version is JSON integer `1`" in contract
+        assert "schema `0.4.0`" not in contract
         assert "```json" not in contract
         assert "examples/architectures/c3.json" in contract
         assert "architecture check" in contract.lower()
@@ -789,7 +791,8 @@ class TestSpaSkill:
         phase12 = text[text.index("## Phase 12 — Write config") : text.index("## Phase 13")]
         assert "In plan mode, run steps 2–6 here first" in phase12
         tree = (skills / "references" / "workflow-decision-tree.md").read_text(encoding="utf-8")
-        path_b = tree[tree.index("Confirmed 0.4.0") : tree.index("No architecture file")]
+        path_b = tree[tree.index("Confirmed schema 1") : tree.index("No architecture file")]
+        assert "0.4.0" not in tree
         assert "Phase 12" in path_b
         arch = (skills / "references" / "architecture-input.md").read_text(encoding="utf-8")
         assert "do **not** init until Phase 12" in arch
@@ -1233,6 +1236,20 @@ class TestReviewFindings67:
             text = path.read_text(encoding="utf-8")
             for spelling in banned:
                 assert spelling not in text, "%s: %s" % (path.relative_to(PROJECT_ROOT), spelling)
+
+
+def test_roadmap_architecture_overlay_names_schema_1():
+    text = (PROJECT_ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+    lines = [
+        line
+        for line in text.splitlines()
+        if "spa architecture apply" in line and "spa architecture plan" in line
+    ]
+    assert lines, "ROADMAP needs the architecture overlay line"
+    line = lines[0]
+    assert line.startswith("- [x]"), line
+    assert "schema 1" in line
+    assert "0.4.0" not in line
 
 
 def test_roadmap_schema_version_stamp_is_done():

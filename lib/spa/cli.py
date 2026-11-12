@@ -922,7 +922,7 @@ def _add_init_arguments(parser) -> None:
     parser.add_argument(
         "--architecture",
         metavar="FILE",
-        help="Confirmed 0.4.0 architecture JSON (exclusive with --example). Example: examples/architectures/c3.json",
+        help="Confirmed schema 1 architecture JSON (exclusive with --example). Example: examples/architectures/c3.json",
     )
     parser.add_argument(
         "--provider",
@@ -2819,7 +2819,7 @@ def _run(argv: Sequence[str]) -> int:
     p_architecture = _add_command(
         sub,
         "architecture",
-        help="Plan, apply, or check a splunk.architecture 0.4.0 file",
+        help="Plan, apply, or check a splunk.architecture schema 1 file",
         epilog=ARCHITECTURE_NEEDS_ACTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -2829,7 +2829,7 @@ def _run(argv: Sequence[str]) -> int:
         "plan",
         help="Validate the architecture file and print the overlay plan (writes nothing)",
         description=(
-            "Read a confirmed splunk.architecture 0.4.0 JSON file. "
+            "Read a confirmed splunk.architecture schema 1 JSON file. "
             "Print topology, proposed hosts, skipped fields, and remaining questions. "
             "Needs no environment. Example: spa architecture plan examples/architectures/c3.json"
         ),

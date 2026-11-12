@@ -1,4 +1,4 @@
-"""Tests for spa architecture plan / apply / check (splunk.architecture 0.4.0)."""
+"""Tests for spa architecture plan / apply / check (splunk.architecture schema 1)."""
 
 from __future__ import annotations
 
@@ -48,11 +48,13 @@ def roles_on(hosts, role):
     return found
 
 
-def test_examples_are_confirmed_0_4_0_without_secrets_or_delivery():
+def test_examples_are_confirmed_schema_1_without_secrets_or_delivery():
     for path in (C1, C3, M4):
         doc = _load(path)
         assert doc["kind"] == "splunk.architecture"
-        assert doc["schema_version"] == "0.4.0"
+        assert doc["schema_version"] == 1
+        assert isinstance(doc["schema_version"], int)
+        assert doc["generator"]["version"] == "0.3.0"
         assert doc["confirmed"] is True
         assert doc["apps"]["by_role"] == {}
         assert "secrets" not in doc
@@ -172,34 +174,55 @@ def test_missing_kind_or_schema_version_is_an_error():
     assert "kind" in joined or "schema_version" in joined
 
 
-def test_older_0_3_0_file_is_rejected():
-    doc = {
-        "kind": "splunk.architecture",
-        "schema_version": "0.3.0",
-        "confirmed": True,
-        "sva": {"code": "C3"},
-        "environment": {"name": "old", "org_prefix": "acme"},
-        "deployment": {"sites": [], "roles": []},
-        "apps": {"by_role": {}},
-        "extensions": [],
-        "generator": {"name": "x", "version": "0.3.0"},
-    }
+def test_gate_architecture_version_accepts_int_1():
+    from spa.architecture import gate_architecture_version
+
+    gate_architecture_version({"kind": "splunk.architecture", "schema_version": 1})
+
+
+@pytest.mark.parametrize("value", [True, False, "1", "0.4.0"])
+def test_gate_architecture_version_rejects_bool_and_strings(value):
+    from spa.architecture import ArchitectureError, gate_architecture_version
+
+    with pytest.raises(ArchitectureError, match="integer"):
+        gate_architecture_version({"kind": "splunk.architecture", "schema_version": value})
+
+
+def test_gate_architecture_version_rejects_older_int_without_upgrade():
+    from spa.architecture import ArchitectureError, gate_architecture_version
+
+    with pytest.raises(ArchitectureError, match="not supported") as exc:
+        gate_architecture_version({"kind": "splunk.architecture", "schema_version": 0})
+    assert "Upgrade spa" not in str(exc.value)
+
+
+def test_gate_architecture_version_newer_int_asks_to_upgrade_spa():
+    from spa.architecture import ArchitectureError, gate_architecture_version
+
+    with pytest.raises(ArchitectureError, match="Upgrade spa") as exc:
+        gate_architecture_version({"kind": "splunk.architecture", "schema_version": 2})
+    text = str(exc.value)
+    assert "2" in text
+    assert "1" in text
+
+
+def test_legacy_0_4_0_string_is_rejected_with_no_migrator():
+    doc = _load(C3)
+    doc["schema_version"] = "0.4.0"
     plan = plan_for(doc)
     assert plan["ok"] is False
-    joined = " ".join(plan["errors"])
-    assert "0.3.0" in joined
-    assert "0.4.0" in joined
-    assert "upgrade spa" not in joined.lower()
+    joined = " ".join(plan["errors"]).lower()
+    assert "integer" in joined
+    assert "upgrade spa" not in joined
 
 
 def test_newer_schema_version_asks_to_upgrade_spa():
     doc = _load(C3)
-    doc["schema_version"] = "0.5.0"
+    doc["schema_version"] = 2
     plan = plan_for(doc)
     assert plan["ok"] is False
     joined = " ".join(plan["errors"]).lower()
-    assert "0.5.0" in joined
-    assert "0.4.0" in joined
+    assert "2" in joined
     assert "upgrade spa" in joined
 
 
@@ -231,7 +254,24 @@ def test_cli_plan_returns_one_json_object_for_c3():
     assert payload["ok"] is True
     assert payload["data"]["ok"] is True
     assert payload["data"]["topology"] == "topology.c3"
+    assert payload["data"]["schema_version"] == 1
     assert "data" in payload
+
+
+def test_agent_schema_and_human_help_name_architecture_schema_1():
+    markdown = run_spa(["--no-agent", "agent", "schema", "--markdown"])
+    assert markdown.returncode == 0, markdown.stderr
+    assert "Confirmed schema 1 architecture JSON" in markdown.stdout
+    assert "splunk.architecture schema 1" in markdown.stdout
+    assert "0.4.0" not in markdown.stdout
+    plan_help = run_spa(["--no-agent", "architecture", "plan", "--help"])
+    plan_text = plan_help.stdout + plan_help.stderr
+    assert "schema 1" in plan_text
+    assert "0.4.0" not in plan_text
+    init_help = run_spa(["--no-agent", "init", "--help"])
+    init_text = init_help.stdout + init_help.stderr
+    assert "schema 1" in init_text
+    assert "0.4.0" not in init_text
 
 
 def test_cli_plan_does_not_require_an_env(tmp_path):
