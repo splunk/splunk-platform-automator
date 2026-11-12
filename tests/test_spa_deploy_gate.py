@@ -14,7 +14,7 @@ from spa.providers import (
     expected_hostnames,
     inventory_hostnames_from_file,
 )
-from spa_testutil import PROJECT_ROOT, min_env_vars, run_spa, seed_software_dir
+from spa_testutil import PROJECT_ROOT, min_env_vars, run_spa, run_spa_inprocess, seed_software_dir
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -631,7 +631,7 @@ def test_provision_refuses_unstamped_config_before_playbook(tmp_path, monkeypatc
 
 
 def test_help_and_schema_omit_allow_unprovisioned():
-    help_result = run_spa(["deploy", "--help"])
+    help_result = run_spa_inprocess(["deploy", "--help"])
     assert help_result.returncode == 0
     assert "--allow-unprovisioned" not in help_result.stdout
     schema = json.loads(run_spa(["agent", "schema"]).stdout)

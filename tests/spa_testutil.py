@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import ast
+import io
 import itertools
 import os
 import re
 import subprocess
 import sys
 import tempfile
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
@@ -254,6 +256,56 @@ def run_spa(args: Sequence[str], env=None, cwd=None, extra_env=None, stdin=None)
         text=True,
         env=full,
         input=stdin,
+    )
+
+
+def run_spa_inprocess(args: Sequence[str], env=None, cwd=None, extra_env=None, stdin=None):
+    """Call spa.cli.main with redirected streams. Not a process-boundary check."""
+    from spa.cli import main
+
+    full = spa_env(DEFAULT_SUBPROCESS_ENV)
+    if extra_env:
+        full.update(extra_env)
+    if env:
+        full.update(env)
+    # argparse wrapping follows COLUMNS, then the real TTY on sys.__stdout__.
+    # Subprocess capture is a pipe (80 columns when COLUMNS is unset); pin it.
+    full.setdefault("COLUMNS", "80")
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    stdin_buf = io.StringIO("" if stdin is None else stdin)
+    old_env = os.environ.copy()
+    old_cwd = os.getcwd()
+    old_stdin = sys.stdin
+    rc: object = 1
+    try:
+        os.environ.clear()
+        os.environ.update(full)
+        os.chdir(cwd or PROJECT_ROOT)
+        sys.stdin = stdin_buf
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            try:
+                rc = main(list(args))
+            except SystemExit as exc:
+                rc = 0 if exc.code is None else exc.code
+    finally:
+        os.environ.clear()
+        os.environ.update(old_env)
+        os.chdir(old_cwd)
+        sys.stdin = old_stdin
+    if rc is None:
+        returncode = 0
+    elif isinstance(rc, bool):
+        returncode = 0 if rc else 1
+    elif isinstance(rc, int):
+        returncode = rc
+    else:
+        returncode = 1
+    return subprocess.CompletedProcess(
+        args=[str(SPA), *args],
+        returncode=returncode,
+        stdout=stdout.getvalue(),
+        stderr=stderr.getvalue(),
     )
 
 

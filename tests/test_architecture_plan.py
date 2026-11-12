@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init
+from spa_testutil import PROJECT_ROOT, run_spa, run_spa_inprocess, run_spa_init
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -227,16 +227,16 @@ def test_cli_plan_returns_one_json_object_for_c3():
 
 
 def test_agent_schema_and_human_help_name_architecture_schema_1():
-    markdown = run_spa(["--no-agent", "agent", "schema", "--markdown"])
+    markdown = run_spa_inprocess(["--no-agent", "agent", "schema", "--markdown"])
     assert markdown.returncode == 0, markdown.stderr
     assert "Confirmed schema 1 architecture JSON" in markdown.stdout
     assert "splunk.architecture schema 1" in markdown.stdout
     assert "0.4.0" not in markdown.stdout
-    plan_help = run_spa(["--no-agent", "architecture", "plan", "--help"])
+    plan_help = run_spa_inprocess(["--no-agent", "architecture", "plan", "--help"])
     plan_text = plan_help.stdout + plan_help.stderr
     assert "schema 1" in plan_text
     assert "0.4.0" not in plan_text
-    init_help = run_spa(["--no-agent", "init", "--help"])
+    init_help = run_spa_inprocess(["--no-agent", "init", "--help"])
     init_text = init_help.stdout + init_help.stderr
     assert "schema 1" in init_text
     assert "0.4.0" not in init_text

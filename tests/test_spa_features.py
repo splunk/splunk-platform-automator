@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from spa_testutil import PROJECT_ROOT, run_spa
+from spa_testutil import PROJECT_ROOT, run_spa, run_spa_inprocess
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -268,13 +268,13 @@ def test_config_keys_rejects_an_extra_argument():
 
 
 def test_config_action_help_lists_only_that_actions_arguments():
-    explain = run_spa(["config", "explain", "--help"])
+    explain = run_spa_inprocess(["config", "explain", "--help"])
     assert explain.returncode == 0, explain.stderr
     assert "PATH" in explain.stdout
     assert "--keys" not in explain.stdout
     assert "--command" not in explain.stdout
     assert "--markdown" not in explain.stdout
-    schema = run_spa(["config", "schema", "--help"])
+    schema = run_spa_inprocess(["config", "schema", "--help"])
     assert schema.returncode == 0, schema.stderr
     assert "--markdown" in schema.stdout
     assert "rejected_path" not in schema.stdout

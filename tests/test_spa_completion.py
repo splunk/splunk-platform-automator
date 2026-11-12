@@ -9,7 +9,7 @@ import sys
 import pytest
 
 from spa.completion import complete, words_from_line
-from spa_testutil import PROJECT_ROOT, SPA, run_spa, write_min_env
+from spa_testutil import PROJECT_ROOT, SPA, run_spa, run_spa_inprocess, write_min_env
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -82,7 +82,7 @@ def test_agent_completion_is_refused():
 
 
 def test_completion_help_is_the_install_page():
-    result = run_spa(["--no-agent", "completion", "--help"])
+    result = run_spa_inprocess(["--no-agent", "completion", "--help"])
     assert result.returncode == 0
     assert 'eval "$(spa --no-agent completion zsh)"' in result.stdout
     assert "~/.zsh/completions/_spa" in result.stdout

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init
+from spa_testutil import PROJECT_ROOT, run_spa, run_spa_inprocess, run_spa_init
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -149,7 +149,7 @@ def test_init_unknown_topology_does_not_create_an_env(tmp_path):
 
 
 def test_init_provider_help_names_external():
-    result = run_spa(["init", "--help"])
+    result = run_spa_inprocess(["init", "--help"])
     assert result.returncode == 0
     assert "ccm" in result.stdout
     assert "aws, virtualbox, external, or ccm" in result.stdout

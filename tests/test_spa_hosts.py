@@ -5,7 +5,14 @@ import sys
 
 import pytest
 
-from spa_testutil import LIB, PROJECT_ROOT, run_spa, satisfy_env_lookups, write_min_env
+from spa_testutil import (
+    LIB,
+    PROJECT_ROOT,
+    run_spa,
+    run_spa_inprocess,
+    satisfy_env_lookups,
+    write_min_env,
+)
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -135,7 +142,7 @@ def test_session_deploy_injects_limit(tmp_path, monkeypatch):
 
 
 def test_copy_help_shows_syntax_and_examples():
-    result = run_spa(["hosts", "copy", "--help"])
+    result = run_spa_inprocess(["hosts", "copy", "--help"])
     assert result.returncode == 0, result.stderr
     assert "spa hosts copy [-r] SRC [SRC ...] DST" in result.stdout
     assert "HOST:PATH" in result.stdout

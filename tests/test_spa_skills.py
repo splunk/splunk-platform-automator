@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from spa.skills import SkillsError, install_skills, remove_skills
-from spa_testutil import run_spa, spa_env
+from spa_testutil import run_spa, run_spa_inprocess, spa_env
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -247,7 +247,7 @@ def _cli_env(tmp_path: Path, **extra: str) -> dict:
 
 
 def test_skills_help_lists_platforms():
-    result = run_spa(["--no-agent", "sk", "--help"])
+    result = run_spa_inprocess(["--no-agent", "sk", "--help"])
     assert result.returncode == 0, result.stderr
     for name in (
         "claude-code (claude)",
