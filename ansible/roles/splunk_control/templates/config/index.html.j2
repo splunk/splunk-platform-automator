@@ -1,77 +1,289 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <!-- Required meta tags -->
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-
-    <!-- Bootstrap CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css" integrity="sha384-B0vP5xmATw1+K9KRQjQERJvTumQW0nPEzvF6L/Z6nronJ3oUOFUFpCjEUQouq2+l" crossorigin="anonymous">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Splunk Platform Automator Host List</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #101418;
+        --surface: #1a2128;
+        --text: #f3f6f4;
+        --muted: #9aa59b;
+        --accent: #5b8a3c;
+        --accent-text: #f3f6f4;
+        --border: #2c3630;
+        --badge-bg: #24301c;
+        --badge-text: #c6e39a;
+        --focus: #8fce63;
+        --shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+        font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #eef2ec;
+          --surface: #ffffff;
+          --text: #142017;
+          --muted: #5b675e;
+          --accent: #3f6b1a;
+          --accent-text: #ffffff;
+          --border: #d5ddd4;
+          --badge-bg: #e7f3d8;
+          --badge-text: #2c4a16;
+          --focus: #3f6b1a;
+          --shadow: 0 10px 24px rgba(20, 32, 23, 0.08);
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.45;
+      }
+      header, main {
+        width: min(1120px, calc(100% - 2rem));
+        margin-inline: auto;
+      }
+      header {
+        padding: 2rem 0 1.25rem;
+      }
+      .kicker {
+        margin: 0 0 0.35rem;
+        color: var(--muted);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+      }
+      h1 {
+        margin: 0 0 0.75rem;
+        font-size: 1.8rem;
+      }
+      header p {
+        margin: 0.35rem 0;
+        color: var(--muted);
+      }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.92em;
+      }
+      .hosts {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+        gap: 1rem;
+        padding: 0 0 2.5rem;
+      }
+      article {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 0.9rem;
+        box-shadow: var(--shadow);
+        padding: 1rem 1.1rem 1.15rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      article h2 {
+        margin: 0;
+        font-size: 1.15rem;
+      }
+      .roles {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .roles li {
+        background: var(--badge-bg);
+        color: var(--badge-text);
+        border-radius: 999px;
+        padding: 0.15rem 0.6rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+      }
+      dl {
+        margin: 0;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.25rem 0.75rem;
+        font-size: 0.92rem;
+      }
+      dt {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        margin: 0;
+      }
+      a.action {
+        display: inline-block;
+        background: var(--accent);
+        color: var(--accent-text);
+        text-decoration: none;
+        border-radius: 0.45rem;
+        padding: 0.4rem 0.7rem;
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+      a.action.secondary {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+      a.action:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 2px;
+      }
+      .note {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+    </style>
   </head>
   <body>
-
-    <div class="container-fluid" class="mx-auto" class="border border-primary">
-      <h1><p class="text-center">Splunk Platform Automator Host List</p></h1>
-    </div>
-
-    <div class="container-fluid">
-      <div class="row">
-      {%- for splunk_env in groups|map('regex_search','splunk_env_.*')|select('string')|list -%}
-        {%- for hostname in groups[splunk_env] -%}
-        <div class="col-sm-3">
-          <div class="card text-white bg-secondary mb-3">
-            <div class="card-header">{{ hostname }}</div>
-            <div class="card-body">
-              <p class="card-text">Env: {{ hostvars[hostname]['splunk_env_name'] }}</p>
-              <p class="card-text">IP Addr: {{ hostvars[hostname]['ip_addr'] | default(hostvars[hostname]['ansible_host'] | default('unknown', true), true) }}</p>
-            </div>
-            <div class="card-footer">
-        {%- set web_port = '8000' -%}
-        {%- set link_host = hostvars[hostname]['public_dns_name'] | default(hostvars[hostname]['ansible_host'] | default(hostvars[hostname]['ip_addr'] | default('unknown', true), true), true) -%}
-        {%- if hostvars[hostname]['splunk_ssl']['web']['enable'] -%}
-          {%- set url = 'https://' -%}
-        {%- else -%}
-          {%- set url = 'http://' -%}
+{%- set web_roles = [
+  'role_search_head',
+  'role_license_manager',
+  'role_cluster_manager',
+  'role_deployment_server',
+  'role_deployer',
+  'role_monitoring_console',
+  'role_heavy_forwarder',
+] -%}
+{%- set role_labels = {
+  'role_search_head': 'Search Head',
+  'role_indexer': 'Indexer',
+  'role_license_manager': 'License Manager',
+  'role_cluster_manager': 'Cluster Manager',
+  'role_deployment_server': 'Deployment Server',
+  'role_deployer': 'Deployer',
+  'role_monitoring_console': 'Monitoring Console',
+  'role_heavy_forwarder': 'Heavy Forwarder',
+  'role_universal_forwarder': 'Universal Forwarder',
+  'role_universal_forwarder_windows': 'Universal Forwarder (Windows)',
+} -%}
+{%- set role_order = [
+  'role_search_head',
+  'role_indexer',
+  'role_license_manager',
+  'role_cluster_manager',
+  'role_deployment_server',
+  'role_deployer',
+  'role_monitoring_console',
+  'role_heavy_forwarder',
+  'role_universal_forwarder',
+  'role_universal_forwarder_windows',
+] -%}
+{%- set env_ns = namespace(names=[]) -%}
+{%- for splunk_env in groups|map('regex_search','splunk_env_.*')|select('string')|list -%}
+  {%- for hostname in groups[splunk_env] -%}
+    {%- set env_name = hostvars[hostname]['splunk_env_name'] | default('', true) -%}
+    {%- if env_name and env_name not in env_ns.names -%}
+      {%- set env_ns.names = env_ns.names + [env_name] -%}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endfor -%}
+    <header>
+      <p class="kicker">Splunk Platform Automator Host List</p>
+      <h1>{{ env_ns.names | join(', ') | default('Splunk lab', true) }}</h1>
+{%- if ansible_date_time is defined and ansible_date_time.iso8601 is defined %}
+      <p>Generated {{ ansible_date_time.iso8601 }}</p>
+{%- endif %}
+      <p>Splunk Web user is <code>admin</code>. This page does not include the password.</p>
+      <p>SSH with <code>spa hosts ssh HOST</code>. Inventory: <code>spa hosts list --status</code>.</p>
+    </header>
+    <main class="hosts">
+{%- for splunk_env in groups|map('regex_search','splunk_env_.*')|select('string')|list -%}
+  {%- for hostname in groups[splunk_env] -%}
+    {%- set web_port = '8000' -%}
+    {%- set link_host = hostvars[hostname]['public_dns_name'] | default(hostvars[hostname]['ansible_host'] | default(hostvars[hostname]['ip_addr'] | default('unknown', true), true), true) -%}
+    {%- set ip_addr = hostvars[hostname]['ip_addr'] | default('', true) -%}
+    {%- set site = hostvars[hostname]['site'] | default('', true) -%}
+    {%- if hostvars[hostname]['splunk_ssl']['web']['enable'] -%}
+      {%- set url = 'https://' -%}
+    {%- else -%}
+      {%- set url = 'http://' -%}
+    {%- endif -%}
+    {%- set host_ns = namespace(roles=[], has_web=false, idxcluster='', shcluster='') -%}
+    {%- for role_name in role_order -%}
+      {%- if role_name in groups and hostname in groups[role_name] -%}
+        {%- set host_ns.roles = host_ns.roles + [role_name] -%}
+        {%- if role_name in web_roles -%}
+          {%- set host_ns.has_web = true -%}
         {%- endif -%}
-          {%- for role_name in groups|map('regex_search','role_.*')|select('string')|list -%}
-            {%- if hostname in groups[role_name] -%}
-              {%- if role_name == "role_search_head" -%}
-              <a class="btn btn-success" target="_blank" href="{{ url }}{{ link_host }}:{{web_port}}/{{ url_locale|default("en-GB") }}/app/launcher/home">Search Head</a>
-              {%- elif role_name == "role_indexer" -%}
-              <span class="d-inline-block" tabindex="0" data-toggle="tooltip" title="No web access on indexer">
-                <button class="btn btn-primary" style="pointer-events: none;" type="button" disabled="">Indexer</button>
-              </span>
-              {%- elif role_name == "role_license_manager" -%}
-              <a class="btn btn-success" target="_blank" href="{{ url }}{{ link_host }}:{{web_port}}/{{ url_locale|default("en-GB") }}/manager/system/licensing">License Manager</a>
-              {%- elif role_name == "role_cluster_manager" -%}
-              <a class="btn btn-success" target="_blank" href="{{ url }}{{ link_host }}:{{web_port}}/{{ url_locale|default("en-GB") }}/manager/system/clustering">Cluster Manager</a>
-              {%- elif role_name == "role_deployment_server" -%}
-              <a class="btn btn-success" target="_blank" href="{{ url }}{{ link_host }}:{{web_port}}/{{ url_locale|default("en-GB") }}/manager/system/deploymentserver">Deployment Server</a>
-              {%- elif role_name == "role_deployer" -%}
-              <a class="btn btn-success" target="_blank" href="{{ url }}{{ link_host }}:{{web_port}}/{{ url_locale|default("en-GB") }}/app/launcher/home">Deployer</a>
-              {%- elif role_name == "role_monitoring_console" -%}
-              <a class="btn btn-success" target="_blank" href="{{ url }}{{ link_host }}:{{web_port}}/{{ url_locale|default("en-GB") }}/app/splunk_monitoring_console">Monitoring Console</a>
-              {%- elif role_name == "role_heavy_forwarder" -%}
-              <a class="btn btn-success" target="_blank" href="{{ url }}{{ link_host }}:{{web_port}}/{{ url_locale|default("en-GB") }}/app/launcher/home">Heavy Forwarder</a>
-              {%- elif role_name == "role_universal_forwarder" -%}
-              <span class="d-inline-block" tabindex="0" data-toggle="tooltip" title="No web access on universal forwarder">
-                <button class="btn btn-primary" style="pointer-events: none;" type="button" disabled="">Universal Forwarder</button>
-              </span>
-              {%- elif role_name == "role_universal_forwarder_windows" -%}
-              <span class="d-inline-block" tabindex="0" data-toggle="tooltip" title="No web access on universal forwarder">
-                <button class="btn btn-primary" style="pointer-events: none;" type="button" disabled="">Universal Forwarder (Windows)</button>
-              </span>
-              {%- endif -%}
-            {%- endif -%}
-          {%- endfor -%}
-            </div>
-          </div>
-        </div>
-        {%- endfor -%}
-      {%- endfor -%}
-      </div>
-    </div>
+      {%- endif -%}
+    {%- endfor -%}
+    {%- for group_name in groups -%}
+      {%- if hostname in groups[group_name] -%}
+        {%- if group_name is match('^idxcluster_.+_site[0-9]+$') -%}
+        {%- elif group_name is match('^idxcluster_.+$') -%}
+          {%- set host_ns.idxcluster = group_name[11:] -%}
+        {%- elif group_name is match('^shcluster_.+_site[0-9]+$') -%}
+        {%- elif group_name is match('^shcluster_.+$') -%}
+          {%- set host_ns.shcluster = group_name[10:] -%}
+        {%- endif -%}
+      {%- endif -%}
+    {%- endfor -%}
+      <article>
+        <h2>{{ hostname }}</h2>
+        <ul class="roles">
+    {%- for role_name in host_ns.roles %}
+          <li>{{ role_labels[role_name] }}</li>
+    {%- endfor %}
+        </ul>
+        <dl>
+          <dt>Reachable address</dt>
+          <dd><code>{{ link_host }}</code></dd>
+    {%- if ip_addr and ip_addr != link_host %}
+          <dt>Private IP</dt>
+          <dd><code>{{ ip_addr }}</code></dd>
+    {%- endif %}
+    {%- if site %}
+          <dt>Site</dt>
+          <dd>{{ site }}</dd>
+    {%- endif %}
+    {%- if host_ns.idxcluster %}
+          <dt>idxcluster</dt>
+          <dd>{{ host_ns.idxcluster }}</dd>
+    {%- endif %}
+    {%- if host_ns.shcluster %}
+          <dt>shcluster</dt>
+          <dd>{{ host_ns.shcluster }}</dd>
+    {%- endif %}
+        </dl>
+    {%- if host_ns.has_web %}
+        <p class="actions">
+          <a class="action" target="_blank" rel="noopener noreferrer" href="{{ url }}{{ link_host }}:{{ web_port }}/{{ url_locale|default('en-GB') }}/app/launcher/home">Splunk Web</a>
+      {%- if 'role_license_manager' in host_ns.roles %}
+          <a class="action secondary" target="_blank" rel="noopener noreferrer" href="{{ url }}{{ link_host }}:{{ web_port }}/{{ url_locale|default('en-GB') }}/manager/system/licensing">Licensing</a>
+      {%- endif %}
+      {%- if 'role_cluster_manager' in host_ns.roles %}
+          <a class="action secondary" target="_blank" rel="noopener noreferrer" href="{{ url }}{{ link_host }}:{{ web_port }}/{{ url_locale|default('en-GB') }}/manager/system/clustering">Clustering</a>
+      {%- endif %}
+      {%- if 'role_deployment_server' in host_ns.roles %}
+          <a class="action secondary" target="_blank" rel="noopener noreferrer" href="{{ url }}{{ link_host }}:{{ web_port }}/{{ url_locale|default('en-GB') }}/manager/system/deploymentserver">Deployment Server</a>
+      {%- endif %}
+      {%- if 'role_monitoring_console' in host_ns.roles %}
+          <a class="action secondary" target="_blank" rel="noopener noreferrer" href="{{ url }}{{ link_host }}:{{ web_port }}/{{ url_locale|default('en-GB') }}/app/splunk_monitoring_console">Monitoring Console</a>
+      {%- endif %}
+        </p>
+    {%- else %}
+        <p class="note">No Splunk Web</p>
+    {%- endif %}
+      </article>
+  {%- endfor -%}
+{%- endfor %}
+    </main>
   </body>
 </html>

@@ -345,7 +345,18 @@ def test_hosts_entries_use_ansible_host_when_external_hosts_have_no_ip_addr():
     assert "203.0.113.5" not in rendered
 
 
-def test_link_page_uses_ansible_host_when_dns_and_ip_addr_are_absent():
+def _link_page_host(hostname="shidx", **overrides):
+    """Hostvars for one link-page host. Tests must not put secrets in the HTML."""
+    values = {
+        "splunk_env_name": "lab",
+        "ansible_host": "10.1.2.3",
+        "splunk_ssl": {"web": {"enable": True}},
+    }
+    values.update(overrides)
+    return {hostname: values}
+
+
+def _render_link_page(groups=None, hostvars=None, extra=None):
     from ansible.parsing.dataloader import DataLoader
     from ansible.template import Templar, trust_as_template
 
@@ -354,27 +365,32 @@ def test_link_page_uses_ansible_host_when_dns_and_ip_addr_are_absent():
     text = (
         PROJECT_ROOT / "ansible" / "roles" / "splunk_control" / "templates" / "config" / "index.html.j2"
     ).read_text(encoding="utf-8")
-    templar = Templar(
-        loader=DataLoader(),
-        variables={
-            "groups": {
-                "splunk_env_lab": ["shidx"],
-                "role_search_head": ["shidx"],
-            },
-            "hostvars": {
-                "shidx": {
-                    "splunk_env_name": "lab",
-                    "ansible_host": "10.1.2.3",
-                    "splunk_ssl": {"web": {"enable": True}},
-                }
-            },
-            "url_locale": "en-GB",
+    variables = {
+        "groups": groups or {
+            "splunk_env_lab": ["shidx"],
+            "role_search_head": ["shidx"],
         },
-    )
-    rendered = str(templar.template(trust_as_template(text)))
+        "hostvars": hostvars if hostvars is not None else _link_page_host(),
+        "url_locale": "en-GB",
+    }
+    if extra:
+        variables.update(extra)
+    return str(Templar(loader=DataLoader(), variables=variables).template(trust_as_template(text)))
+
+
+def _link_page_anchor_tags(rendered):
+    import re
+
+    return re.findall(r"<a\b[^>]*>", rendered, flags=re.IGNORECASE)
+
+
+def test_link_page_uses_ansible_host_when_dns_and_ip_addr_are_absent():
+    rendered = _render_link_page()
     assert "https://10.1.2.3:8000/" in rendered
     assert "https://unknown:" not in rendered
-    assert "IP Addr: 10.1.2.3" in rendered
+    assert "Reachable address" in rendered
+    assert "10.1.2.3" in rendered
+    assert "Private IP" not in rendered
 
 
 def test_tfvars_omits_external_hosts():
@@ -627,36 +643,163 @@ def test_register_ssh_host_and_optional_ip_addr(tmp_path):
 
 
 def test_link_page_keeps_the_ssh_host_when_ip_addr_is_internal():
-    from ansible.parsing.dataloader import DataLoader
-    from ansible.template import Templar, trust_as_template
-
-    from spa_testutil import PROJECT_ROOT
-
-    text = (
-        PROJECT_ROOT / "ansible" / "roles" / "splunk_control" / "templates" / "config" / "index.html.j2"
-    ).read_text(encoding="utf-8")
-    templar = Templar(
-        loader=DataLoader(),
-        variables={
-            "groups": {
-                "splunk_env_lab": ["shidx"],
-                "role_search_head": ["shidx"],
-            },
-            "hostvars": {
-                "shidx": {
-                    "splunk_env_name": "lab",
-                    "ansible_host": "203.0.113.10",
-                    "ip_addr": "10.0.0.10",
-                    "splunk_ssl": {"web": {"enable": True}},
-                }
-            },
-            "url_locale": "en-GB",
-        },
+    rendered = _render_link_page(
+        hostvars=_link_page_host(ansible_host="203.0.113.10", ip_addr="10.0.0.10"),
     )
-    rendered = str(templar.template(trust_as_template(text)))
     assert "https://203.0.113.10:8000/" in rendered
     assert "https://10.0.0.10:8000/" not in rendered
-    assert "IP Addr: 10.0.0.10" in rendered
+    assert "Reachable address" in rendered
+    assert "203.0.113.10" in rendered
+    assert "Private IP" in rendered
+    assert "10.0.0.10" in rendered
+
+
+def test_link_page_uses_public_dns_name_as_reachable_address():
+    rendered = _render_link_page(
+        hostvars=_link_page_host(
+            public_dns_name="ec2-1-2-3-4.compute.example",
+            ansible_host="203.0.113.10",
+            ip_addr="10.0.0.10",
+        ),
+    )
+    assert "https://ec2-1-2-3-4.compute.example:8000/" in rendered
+    assert "https://203.0.113.10:8000/" not in rendered
+    assert "Reachable address" in rendered
+    assert "ec2-1-2-3-4.compute.example" in rendered
+    assert "Private IP" in rendered
+    assert "10.0.0.10" in rendered
+
+
+def test_link_page_styles_offline_without_bootstrap():
+    rendered = _render_link_page()
+    lower = rendered.lower()
+    assert "jsdelivr" not in lower
+    assert "bootstrap" not in lower
+    assert "cdn.jsdelivr.net" not in lower
+    assert "<style>" in lower
+    assert "prefers-color-scheme" in lower
+    assert "auto-fill" in lower
+    assert ":focus" in lower
+    assert "--" in rendered
+
+
+def test_link_page_header_names_the_env_and_ssh_commands():
+    sentinel_password = "sentinel-admin-password-do-not-emit"
+    sentinel_key = "/tmp/sentinel-key-path-do-not-emit"
+    rendered = _render_link_page(
+        hostvars=_link_page_host(
+            splunk_admin_password=sentinel_password,
+            ansible_ssh_private_key_file=sentinel_key,
+        ),
+    )
+    assert "<header>" in rendered
+    header = rendered[rendered.index("<header>") : rendered.index("</header>")]
+    assert "lab" in header
+    assert "spa hosts ssh HOST" in header
+    assert "spa hosts list --status" in header
+    assert "admin" in header
+    assert "Env: lab" not in rendered
+    assert sentinel_password not in rendered
+    assert sentinel_key not in rendered
+    assert "<h1><p" not in rendered
+    assert 'class="container-fluid" class=' not in rendered
+
+
+def test_link_page_omits_generated_time_without_facts():
+    rendered = _render_link_page()
+    assert "Generated" not in rendered
+    stamped = _render_link_page(extra={"ansible_date_time": {"iso8601": "2026-11-12T22:00:00Z"}})
+    header = stamped[stamped.index("<header>") : stamped.index("</header>")]
+    assert "2026-11-12T22:00:00Z" in header
+
+
+def test_link_page_uses_semantic_host_articles():
+    rendered = _render_link_page()
+    assert "<main" in rendered
+    assert "<article>" in rendered
+    article = rendered[rendered.index("<article>") : rendered.index("</article>")]
+    assert "shidx" in article
+    assert "Search Head" in article
+
+
+def test_link_page_web_links_open_with_noopener():
+    rendered = _render_link_page()
+    anchors = _link_page_anchor_tags(rendered)
+    assert anchors
+    for tag in anchors:
+        if 'target="_blank"' in tag or "target='_blank'" in tag:
+            assert 'rel="noopener noreferrer"' in tag
+    assert any('href="https://10.1.2.3:8000/en-GB/app/launcher/home"' in tag for tag in anchors)
+
+
+def test_link_page_http_when_ssl_web_is_disabled():
+    rendered = _render_link_page(
+        hostvars=_link_page_host(splunk_ssl={"web": {"enable": False}}),
+    )
+    assert "http://10.1.2.3:8000/" in rendered
+    assert "https://10.1.2.3:8000/" not in rendered
+
+
+def test_link_page_no_web_roles_are_plain_text():
+    rendered = _render_link_page(
+        groups={
+            "splunk_env_lab": ["idx1", "uf1"],
+            "role_indexer": ["idx1"],
+            "role_universal_forwarder": ["uf1"],
+        },
+        hostvars={
+            **_link_page_host("idx1", ansible_host="10.1.2.11"),
+            **_link_page_host("uf1", ansible_host="10.1.2.12"),
+        },
+    )
+    assert "<button" not in rendered.lower()
+    assert "data-toggle" not in rendered
+    assert "disabled" not in rendered.lower()
+    assert "Indexer" in rendered
+    assert "Universal Forwarder" in rendered
+    assert "No Splunk Web" in rendered
+    assert ":8000/" not in rendered
+
+
+def test_link_page_combined_roles_keep_web_and_show_cluster_fields():
+    rendered = _render_link_page(
+        groups={
+            "splunk_env_lab": ["shidx"],
+            "role_search_head": ["shidx"],
+            "role_indexer": ["shidx"],
+            "idxcluster_idxc1": ["shidx"],
+            "shcluster_shc1": ["shidx"],
+        },
+        hostvars=_link_page_host(site="site1"),
+    )
+    assert "Search Head" in rendered
+    assert "Indexer" in rendered
+    assert "https://10.1.2.3:8000/en-GB/app/launcher/home" in rendered
+    assert "No Splunk Web" not in rendered
+    assert "site1" in rendered
+    assert "idxc1" in rendered
+    assert "shc1" in rendered
+
+
+def test_link_page_manager_roles_keep_deep_links():
+    rendered = _render_link_page(
+        groups={
+            "splunk_env_lab": ["mgr"],
+            "role_license_manager": ["mgr"],
+            "role_cluster_manager": ["mgr"],
+            "role_deployment_server": ["mgr"],
+            "role_monitoring_console": ["mgr"],
+        },
+        hostvars=_link_page_host("mgr"),
+    )
+    assert "https://10.1.2.3:8000/en-GB/app/launcher/home" in rendered
+    assert "https://10.1.2.3:8000/en-GB/manager/system/licensing" in rendered
+    assert "https://10.1.2.3:8000/en-GB/manager/system/clustering" in rendered
+    assert "https://10.1.2.3:8000/en-GB/manager/system/deploymentserver" in rendered
+    assert "https://10.1.2.3:8000/en-GB/app/splunk_monitoring_console" in rendered
+    for tag in _link_page_anchor_tags(rendered):
+        if 'target="_blank"' in tag or "target='_blank'" in tag:
+            assert 'rel="noopener noreferrer"' in tag
 
 
 def test_register_writes_inventory_and_agent_json_hides_the_key_body(tmp_path):
