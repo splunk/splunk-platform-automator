@@ -1236,7 +1236,7 @@ COMMAND_SCHEMA = {
                 {"long": "--local", "help": "Shorthand for --source local. Mutually exclusive with --source"},
                 {
                     "long": "--customize",
-                    "help": "Attach an exact matching curated SPA playbook to this top-level app entry",
+                    "help": "Attach matching curated SPA playbook(s) to the app entry or named content pack",
                 },
                 {
                     "long": "--set",

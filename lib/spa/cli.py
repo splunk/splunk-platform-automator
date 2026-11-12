@@ -2020,7 +2020,7 @@ def _run(argv: Sequence[str]) -> int:
     p_apps_add.add_argument(
         "--customize",
         action="store_true",
-        help="Attach an exact matching curated SPA playbook to this top-level app entry",
+        help="Attach matching curated SPA playbook(s) to the app entry or named content pack",
     )
     p_apps_add.add_argument(
         "--set",

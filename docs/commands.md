@@ -1417,7 +1417,7 @@ Idempotently add or update one apps[] entry; edits config and does not deploy
 | `--new` | Append another apps[] row for this app_id; without it, extra copies match by exact --roles |
 | `--source` | Use Splunkbase metadata, or a folder/archive already in apps_dir (default splunkbase). Mutually exclusive with --local |
 | `--local` | Shorthand for --source local. Mutually exclusive with --source |
-| `--customize` | Attach an exact matching curated SPA playbook to this top-level app entry |
+| `--customize` | Attach matching curated SPA playbook(s) to the app entry or named content pack |
 | `--set` | Set another schema-backed app FIELD from strict JSON; repeatable |
 | `--content-pack` | 5391 only: add exact bundled folder NAME; repeatable and mutually exclusive with --install-all-content-packs |
 | `--install-all-content-packs` | 5391 only: install every bundled pack; mutually exclusive with --content-pack |

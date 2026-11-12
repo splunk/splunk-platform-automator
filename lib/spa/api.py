@@ -1134,6 +1134,7 @@ class LocalSpaSession:
                     app_id=built.get("app_id"),
                     playbooks=built.get("playbooks") or [],
                     customize=bool(customize),
+                    content_packs=content_packs,
                 )
                 if follow:
                     data["next"] = follow

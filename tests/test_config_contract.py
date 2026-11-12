@@ -2994,6 +2994,35 @@ splunk_app_deployment:
         assert "content_pack_api" not in built["entry"]
         assert "content_pack_apps" not in built["entry"]
 
+    def test_content_pack_customize_matches_pack_folder_playbooks(self):
+        """CFG-APP-011."""
+        library = {
+            "uid": 5391,
+            "appid": "DA-ITSI-ContentLibrary",
+            "title": "Content Pack for Splunk App for Content Packs",
+        }
+        built = build_entry(
+            5391,
+            content_packs=["DA-ITSI-CP-nix"],
+            spa_home=PROJECT_ROOT,
+            client=self._client(library),
+        )
+        assert [row["kind"] for row in built["playbooks"]] == ["itsi_content_pack_single"]
+        assert "DA-ITSI-CP-nix_configure.yml" in built["playbooks"][0]["path"]
+        assert "customizations" not in built["entry"]
+        customized = build_entry(
+            5391,
+            content_packs=["DA-ITSI-CP-nix"],
+            spa_home=PROJECT_ROOT,
+            customize=True,
+            client=self._client(library),
+        )
+        pack = customized["entry"]["content_pack_apps"][0]
+        assert pack["name"] == "DA-ITSI-CP-nix"
+        assert pack["customizations"]["run_playbook_after_restart"].endswith(
+            "DA-ITSI-CP-nix_configure.yml"
+        )
+
     def test_content_pack_kind_and_policy_combinations_are_enforced(self):
         """CFG-APP-005 CFG-APP-006."""
         library = {

@@ -451,6 +451,15 @@ app kinds. Named packs append idempotently. An existing library cannot be
 silently switched to the other policy. Removing one named pack leaves the
 library and ITSI entries.
 
+### CFG-APP-011 — content-pack customize next
+
+`spa apps add 5391 --content-pack NAME` matches curated playbooks by pack
+folder (`itsi_content_pack_single`). Without `--customize`, successful add
+puts `apps.customize` on `data.next` (not required) when a playbook matches.
+`--customize` attaches that pack's playbook on the `content_pack_apps` item.
+A later add of the same named pack with `--customize` updates that item.
+Skills follow `data.next` and never assume yes.
+
 ### CFG-APP-007 — deterministic ITSI dependency
 
 Adding a content pack may add missing ITSI app 1841 in the same candidate.
@@ -577,6 +586,7 @@ Each contract ID maps to executable behavioral evidence:
 - `CFG-APP-008`: `tests/test_config_contract.py::TestAppContract::test_app_add_and_remove_use_transaction_controls`
 - `CFG-APP-009`: `tests/test_config_contract.py::TestDependencyContract::test_ambiguous_itsi_search_tier_preserves_bytes_until_one_filter`
 - `CFG-APP-010`: `tests/test_config_contract.py::TestAppContract::test_content_pack_discovery_and_add_help_are_actionable`
+- `CFG-APP-011`: `tests/test_config_contract.py::TestAppContract::test_content_pack_customize_matches_pack_folder_playbooks`
 - `CFG-SEC-001`: `tests/test_config_contract.py::TestPathContract::test_from_env_authors_lookup_and_get_redacts_secret`
 - `CFG-SEC-002`: `tests/test_config_contract.py::TestSecurityContract::test_catalog_and_documentation_examples_are_credential_and_certificate_safe`
 - `CFG-SEC-003`: `tests/test_config_contract.py::TestSecurityContract::test_explicit_env_lookup_requires_a_non_empty_value`

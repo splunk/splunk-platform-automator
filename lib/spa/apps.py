@@ -11,7 +11,7 @@ import tarfile
 import tempfile
 import unicodedata
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
 from spa.splunkbase import (
@@ -515,6 +515,19 @@ def _refuse_ite_work(app_id: int) -> None:
         raise AppsError(ITE_WORK_ERROR)
 
 
+def _customizations_from_playbooks(
+    rows: Sequence[Dict[str, Any]],
+) -> Tuple[Optional[Dict[str, Any]], List[str]]:
+    from spa.app_playbooks import customization_yaml_lines
+    import yaml
+
+    lines = customization_yaml_lines(rows)
+    if not lines:
+        return None, []
+    rendered = "- name: placeholder\n%s\n" % "\n".join(lines)
+    return yaml.safe_load(rendered)[0].get("customizations"), lines
+
+
 def build_entry(
     app_id_raw: Any,
     *,
@@ -663,24 +676,45 @@ def build_entry(
         from spa.app_playbooks import (
             advertise_notes,
             compact_playbooks,
-            customization_yaml_lines,
             match_app_playbooks,
         )
 
-        related = match_app_playbooks(spa_home, kind=kind, name=name, app_id=app_id)
-        if related and customize:
-            customization_lines = customization_yaml_lines(related)
-            if customization_lines:
-                import yaml
-
-                rendered = "- name: placeholder\n%s\n" % "\n".join(
-                    customization_lines
+        if kind == "itsi_content_library" and content_packs:
+            related = []
+            pack_matches: List[tuple] = []
+            for pack in content_packs:
+                matches = match_app_playbooks(
+                    spa_home,
+                    kind="itsi_content_pack_single",
+                    name=str(pack),
                 )
-                customization = yaml.safe_load(rendered)[0].get("customizations")
-                if customization is not None:
-                    entry["customizations"] = customization
-        elif related:
-            notes.extend(advertise_notes(related))
+                if matches:
+                    pack_matches.append((str(pack), matches))
+                    related.extend(matches)
+            if related and customize:
+                items = {
+                    str(item.get("name")): item
+                    for item in entry.get("content_pack_apps") or []
+                    if isinstance(item, dict)
+                }
+                for pack_name, matches in pack_matches:
+                    attached, lines = _customizations_from_playbooks(matches)
+                    customization_lines.extend(lines)
+                    target = items.get(pack_name)
+                    if attached is not None and target is not None:
+                        target["customizations"] = attached
+            elif related:
+                notes.extend(advertise_notes(related))
+        else:
+            related = match_app_playbooks(
+                spa_home, kind=kind, name=name, app_id=app_id
+            )
+            if related and customize:
+                attached, customization_lines = _customizations_from_playbooks(related)
+                if attached is not None:
+                    entry["customizations"] = attached
+            elif related:
+                notes.extend(advertise_notes(related))
 
     data: Dict[str, Any] = {
         "kind": kind,

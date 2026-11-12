@@ -31,6 +31,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **Content-pack customize next**: `spa apps add 5391 --content-pack NAME` matches curated playbooks by pack folder. Without `--customize`, `data.next` offers `apps.customize` (not required). `--customize` attaches that pack's playbook. Skills follow `data.next` and never assume yes.
+
 - **Init doctor stays quiet unless it warns or fails**: `spa init` still runs host prerequisite checks in-process. All-ok prints nothing from doctor. Warnings and failures print only those WARN / FAIL rows and their fix lines, not the OK catalog or the `SPA host prerequisites` banner. Failures still roll back a dest that did not exist when init started. Agent init failure keeps `{ok:false,error}` with no `data`; the error names the WARN / FAIL rows. Skills do not run `spa doctor` as a bring-up step. `spa doctor` still prints the full report.
 
 - **Init merges remote-provider defaults**: `spa init --example` for a remote provider (AWS, CCM, external) deep-merges [examples/templates/remote-provider.yml](examples/templates/remote-provider.yml) (inventory hostname, host-side Splunk download, Splunkbase `target_download`, TLS). Init then prints `merged: remote-provider`. VirtualBox is local and skips that merge. `--from` / `--migrate` copies stay as-is. `spa config merge remote-provider` remains for existing envs. Each `Provider` declares `remote`; init reads that flag from the registry.

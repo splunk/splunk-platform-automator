@@ -676,6 +676,7 @@ def test_apps_add_help_names_kinds_flags_and_the_next_action():
         "repeatable",
         "mutually exclusive with --install-all-content-packs",
         "mutually exclusive with --content-pack",
+        "named content pack",
         "without prompting or writing",
         "SHA-256 revision",
         "strict JSON",

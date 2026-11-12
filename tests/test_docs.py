@@ -850,6 +850,24 @@ class TestSpaSkill:
         assert "content-packs list 5391" in step8
         assert step8.index("content-packs list 5391") < step8.index("Add another app?")
 
+    def test_apps_skill_follows_customize_next_for_content_packs(self):
+        apps = (PROJECT_ROOT / "skills" / "spa" / "spa-apps" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        workflow = apps[apps.index("## Workflow") : apps.index("ITSI / ITE Work")]
+        assert "no-op" not in workflow
+        assert "apps.customize" in workflow
+        assert "do not assume yes" in workflow.lower()
+        questionnaire = (
+            PROJECT_ROOT
+            / "skills"
+            / "spa"
+            / "spa-create-config"
+            / "references"
+            / "apps-questionnaire.md"
+        ).read_text(encoding="utf-8")
+        assert "no-op" not in questionnaire
+
     def test_apps_skill_asks_roles_for_every_normal_app(self):
         apps = (PROJECT_ROOT / "skills" / "spa" / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
         workflow = apps[apps.index("## Workflow"):apps.index("ITSI / ITE Work")]
