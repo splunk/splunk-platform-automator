@@ -1,5 +1,6 @@
 """Framework tarball and install.sh (Distribution M3)."""
 
+import ast
 import os
 import subprocess
 import sys
@@ -17,8 +18,9 @@ PACK = PROJECT_ROOT / "scripts" / "pack-framework.sh"
 INSTALL = PROJECT_ROOT / "install.sh"
 
 
-def _pack(tmp_path: Path) -> Path:
-    out = tmp_path / "spa-framework.tgz"
+@pytest.fixture(scope="session")
+def framework_tarball(tmp_path_factory):
+    out = tmp_path_factory.mktemp("framework") / "spa-framework.tgz"
     result = subprocess.run(
         ["bash", str(PACK), "-o", str(out)],
         cwd=PROJECT_ROOT,
@@ -28,6 +30,44 @@ def _pack(tmp_path: Path) -> Path:
     assert result.returncode == 0, result.stderr + result.stdout
     assert out.is_file()
     return out
+
+
+def _fixture_scope(fn: ast.FunctionDef):
+    for deco in fn.decorator_list:
+        if not isinstance(deco, ast.Call):
+            continue
+        func = deco.func
+        attr = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+        if attr != "fixture":
+            continue
+        for kw in deco.keywords:
+            if kw.arg == "scope" and isinstance(kw.value, ast.Constant):
+                return kw.value.value
+        return "function"
+    return None
+
+
+def test_framework_tarball_is_packed_once_per_session():
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    scopes = [
+        _fixture_scope(node)
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "framework_tarball"
+    ]
+    pack_callers = [
+        node.name
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name.startswith("test_")
+        and any(
+            isinstance(child, ast.Call)
+            and isinstance(child.func, ast.Name)
+            and child.func.id == "_pack"
+            for child in ast.walk(node)
+        )
+    ]
+    assert scopes == ["session"], scopes
+    assert pack_callers == [], pack_callers
 
 
 def _install_env(home: Path, extra=None):
@@ -53,8 +93,8 @@ def _run_install(archive: Path, env, extra_args=None):
     return subprocess.run(cmd, capture_output=True, text=True, env=env)
 
 
-def test_pack_framework_excludes_tests_and_lab_config(tmp_path):
-    archive = _pack(tmp_path)
+def test_pack_framework_excludes_tests_and_lab_config(framework_tarball):
+    archive = framework_tarball
     names = [
         name[2:] if name.startswith("./") else name
         for name in tarfile.open(archive).getnames()
@@ -70,8 +110,8 @@ def test_pack_framework_excludes_tests_and_lab_config(tmp_path):
     assert not any(n.startswith("inventory/") for n in names)
 
 
-def test_install_from_tarball_and_extract_anywhere(tmp_path):
-    archive = _pack(tmp_path)
+def test_install_from_tarball_and_extract_anywhere(tmp_path, framework_tarball):
+    archive = framework_tarball
     prefix = tmp_path / "prefix"
     bindir = tmp_path / "bin"
     result = subprocess.run(
@@ -147,8 +187,8 @@ def test_install_from_tarball_and_extract_anywhere(tmp_path):
     assert not (dest / "ansible").exists()
 
 
-def test_install_refuses_existing_prefix_without_force(tmp_path):
-    archive = _pack(tmp_path)
+def test_install_refuses_existing_prefix_without_force(tmp_path, framework_tarball):
+    archive = framework_tarball
     prefix = tmp_path / "prefix"
     prefix.mkdir()
     (prefix / "keep.txt").write_text("no")
@@ -172,8 +212,8 @@ def test_install_refuses_existing_prefix_without_force(tmp_path):
     assert (prefix / "keep.txt").read_text() == "no"
 
 
-def test_install_default_uses_xdg_data_home_and_local_bin(tmp_path):
-    archive = _pack(tmp_path)
+def test_install_default_uses_xdg_data_home_and_local_bin(tmp_path, framework_tarball):
+    archive = framework_tarball
     home = tmp_path / "home"
     home.mkdir()
     result = _run_install(archive, _install_env(home))
@@ -189,8 +229,8 @@ def test_install_default_uses_xdg_data_home_and_local_bin(tmp_path):
     assert "SPA_HOME=" + str(prefix) in result.stdout
 
 
-def test_install_honors_absolute_xdg_data_home(tmp_path):
-    archive = _pack(tmp_path)
+def test_install_honors_absolute_xdg_data_home(tmp_path, framework_tarball):
+    archive = framework_tarball
     home = tmp_path / "home"
     home.mkdir()
     data = tmp_path / "xdg-data"
@@ -203,8 +243,8 @@ def test_install_honors_absolute_xdg_data_home(tmp_path):
     assert (home / ".local" / "bin" / "spa").is_file()
 
 
-def test_install_ignores_relative_xdg_data_home(tmp_path):
-    archive = _pack(tmp_path)
+def test_install_ignores_relative_xdg_data_home(tmp_path, framework_tarball):
+    archive = framework_tarball
     home = tmp_path / "home"
     home.mkdir()
     result = _run_install(
@@ -215,8 +255,8 @@ def test_install_ignores_relative_xdg_data_home(tmp_path):
     assert not (Path.cwd() / "relative-data" / "spa").exists()
 
 
-def test_install_prefix_and_bindir_override_xdg(tmp_path):
-    archive = _pack(tmp_path)
+def test_install_prefix_and_bindir_override_xdg(tmp_path, framework_tarball):
+    archive = framework_tarball
     home = tmp_path / "home"
     home.mkdir()
     prefix = tmp_path / "custom-prefix"
@@ -233,8 +273,8 @@ def test_install_prefix_and_bindir_override_xdg(tmp_path):
     assert not (home / ".local" / "share" / "spa").exists()
 
 
-def test_install_from_stdin_pipe(tmp_path):
-    archive = _pack(tmp_path)
+def test_install_from_stdin_pipe(tmp_path, framework_tarball):
+    archive = framework_tarball
     home = tmp_path / "home"
     home.mkdir()
     prefix = tmp_path / "prefix"
@@ -269,8 +309,8 @@ def _run_uninstall(env, extra_args=None):
     return subprocess.run(cmd, capture_output=True, text=True, env=env)
 
 
-def test_uninstall_default_prefix_and_wrapper(tmp_path):
-    archive = _pack(tmp_path)
+def test_uninstall_default_prefix_and_wrapper(tmp_path, framework_tarball):
+    archive = framework_tarball
     home = tmp_path / "home"
     home.mkdir()
     env = _install_env(home)
@@ -308,8 +348,8 @@ def test_uninstall_refuses_non_spa_directory(tmp_path):
     assert "not an SPA install prefix" in result.stderr
 
 
-def test_uninstall_leaves_sibling_env_dir(tmp_path):
-    archive = _pack(tmp_path)
+def test_uninstall_leaves_sibling_env_dir(tmp_path, framework_tarball):
+    archive = framework_tarball
     home = tmp_path / "home"
     home.mkdir()
     env = _install_env(home)
@@ -324,8 +364,8 @@ def test_uninstall_leaves_sibling_env_dir(tmp_path):
     assert (sibling / "config" / "splunk_config.yml").is_file()
 
 
-def test_uninstall_leaves_unrelated_wrapper(tmp_path):
-    archive = _pack(tmp_path)
+def test_uninstall_leaves_unrelated_wrapper(tmp_path, framework_tarball):
+    archive = framework_tarball
     home = tmp_path / "home"
     home.mkdir()
     prefix = tmp_path / "prefix"
@@ -350,8 +390,8 @@ def test_uninstall_leaves_unrelated_wrapper(tmp_path):
     assert "Leaving" in result.stderr
 
 
-def test_uninstall_agent_without_yes_does_not_delete(tmp_path):
-    archive = _pack(tmp_path)
+def test_uninstall_agent_without_yes_does_not_delete(tmp_path, framework_tarball):
+    archive = framework_tarball
     home = tmp_path / "home"
     home.mkdir()
     env = _install_env(home, {"SPA_AGENT": "1"})
