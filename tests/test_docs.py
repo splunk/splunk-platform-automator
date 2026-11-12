@@ -114,6 +114,28 @@ def test_agents_md_points_at_command_authoring():
     assert "[docs/config.md]" not in text
 
 
+def test_agents_md_install_from_this_checkout():
+    """In-clone first-run is venv, skills, doctor, software-dir — not curl|sh or pip."""
+    text = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    heading = "## Install from this checkout"
+    assert heading in text
+    assert text.index(heading) < text.index("## Start here")
+    section = text.split(heading, 1)[1].split("\n## ", 1)[0]
+    assert "ansible.cfg" in section
+    assert "bin/spa" in section
+    assert "bin/spa venv create --shared --yes" in section
+    assert "spa skills install" in section
+    assert "spa doctor" in section
+    assert "spa environment set --software-dir" in section
+    assert "./install.sh" in section
+    assert "WARN" in section and "FAIL" in section
+    assert "do not download" in section.lower()
+    assert "spa init" in section and "spa deploy" in section
+    assert "curl | sh" not in section
+    assert "pip install" not in section
+    assert "`/spa`" not in section
+
+
 def test_architecture_defines_cli_ux_and_output_conventions():
     architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
     contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")

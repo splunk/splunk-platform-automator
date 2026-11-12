@@ -16,6 +16,15 @@ Load **`/spa`** only for a Splunk lab, Splunk environment, or env lifecycle (inc
 
 Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 
+## Install from this checkout
+
+When this directory has `ansible.cfg` and `bin/spa` and spa is not yet usable (in-place venv; `./install.sh` stays the prefix path):
+
+1. `bin/spa venv create --shared --yes` (clone is `SPA_HOME`)
+2. `spa skills install` (or `spa skills install cursor`)
+3. `spa doctor` — surface every WARN/FAIL Software row; do not download; do not `spa init` / `spa deploy` until Enterprise + UF tarballs and extracted PS baseconfigs are present (licenses may stay absent for a trial lab)
+4. If Software is not a sibling of the env or of `SPA_HOME`: `spa environment set --software-dir DIR`
+
 ## Start here
 
 | Task | Command |
