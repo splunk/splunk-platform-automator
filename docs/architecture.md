@@ -238,17 +238,22 @@ Do not present a convention as an enforced standard. Promote one to policy only 
 
 ## Test layers
 
-Use the narrowest gate that proves the changed contract:
+Use the narrowest gate that proves the changed contract. Markers are in [`tests/pytest.ini`](../tests/pytest.ini):
 
-- `./tests/run_cli_tests.sh` runs parser, help, routing, schema, session, and provider contracts marked `cli`.
-- `./tests/run_local_tests.sh` runs the complete local suite without AWS or a live Splunk deployment. It is optional locally on every slice; PR CI is the full-suite merge gate.
-- PR CI jobs `Syntax`, `CLI tests`, `Ansible tests`, and `Unit tests` (`.github/workflows/ci.yml`) are required to merge. Push CI on `master` / `distribution` is background insurance, not a promotion wait.
+- `cli`: parser, help, routing, schema, session, and provider contracts. `./tests/run_cli_tests.sh` (`pytest -m "local and cli"`). Contributor inner loop; serial by default.
+- `ansible`: tests that shell out to `ansible-playbook`. `./tests/run_ansible_tests.sh` (`pytest -m "local and ansible"`).
+- `unit`: every other local test. `./tests/run_unit_tests.sh` (`pytest -m "local and not cli and not ansible"`). Schema, docs, runlog, venv, paths, licenses, secrets, pack/install.
+
+PR CI always runs all three pytest jobs after `Syntax` (`CLI tests`, `Ansible tests`, `Unit tests` in `.github/workflows/ci.yml`). There is no path filter that skips a group. Each job passes `-n auto --durations=25` (xdist). Tag release stays one `./tests/run_local_tests.sh -n auto --durations=25` invocation. Push CI on `master` / `distribution` is background insurance, not a promotion wait.
+
+`./tests/run_local_tests.sh` runs the complete local suite without AWS or a live Splunk deployment. It is optional locally on every slice; PR CI is the full-suite merge gate. Pass `-n auto --durations=25` through that script for a CI-shaped local run. Do not bake `-n auto` into `run_cli_tests.sh`.
+
 - [`tests/test_spa_playbooks.py`](../tests/test_spa_playbooks.py) covers playbook metadata and resolution.
 - [`tests/test_spa_runlog.py`](../tests/test_spa_runlog.py) and [`tests/test_spa_jsonl_callback.py`](../tests/test_spa_jsonl_callback.py) cover progress and execution events.
 - Schema and example tests cover inventory changes; app-scope scenarios cover app routing changes.
-- `@pytest.mark.aws` is only for changes that require provisioned infrastructure or a live deployment.
+- `@pytest.mark.aws` is only for changes that require provisioned infrastructure or a live deployment. Live AWS and live CCM stay out of PR CI. Never put `CCM_TOKEN` or AWS keys in the workflow. PR CI covers mocked CCM (`tests/test_spa_ccm.py`) as a `cli` contract.
 
-A parser or documentation change does not need an AWS run. Test marker definitions are in [`tests/pytest.ini`](../tests/pytest.ini).
+A parser or documentation change does not need an AWS run.
 
 ## Test-driven development
 
@@ -277,6 +282,10 @@ regenerated only after its drift test has gone red. Documentation and skill
 contracts start with a failing assertion when a test can express the
 requirement. Ask before making an exception; a throwaway prototype is deleted
 and is never adapted into production.
+
+Tests specify current public contracts. Do not leave a test whose
+only plausible failure is reversing a completed change (`test_retired_*`,
+`*_is_gone`, Unreleased/ROADMAP checkbox locks). Retire/rename scaffolding is branch-only until merge; it is not a standing merge-gate test.
 
 ## Feature completion review
 

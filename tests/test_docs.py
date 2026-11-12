@@ -277,6 +277,57 @@ def test_development_docs_require_tdd_and_feature_review():
     assert "After merge succeeds, close the linked GitHub issue" in contributing
 
 
+def test_docs_teach_living_spec_and_local_test_layers():
+    """Standing tests specify today's contracts; contributors run the matching local group."""
+    architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
+    contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
+    tests_readme = (PROJECT_ROOT / "tests" / "README.md").read_text(encoding="utf-8")
+
+    tdd = architecture.split("## Test-driven development", 1)[1].split("\n## ", 1)[0]
+    layers = architecture.split("## Test layers", 1)[1].split("\n## ", 1)[0]
+    adding_command = contributing.split("## Adding a spa command", 1)[1].split(
+        "\n## ", 1
+    )[0]
+    adding_config = contributing.split("## Adding a configuration feature", 1)[1].split(
+        "\n## ", 1
+    )[0]
+    which_runner = tests_readme.split("### When to run which runner", 1)[1].split(
+        "\n### ", 1
+    )[0]
+
+    assert "current public contracts" in tdd
+    assert "only plausible failure is reversing a completed change" in tdd
+    assert "Retire/rename scaffolding is branch-only" in tdd
+
+    assert 'pytest -m "local and cli"' in layers
+    assert 'pytest -m "local and ansible"' in layers
+    assert 'pytest -m "local and not cli and not ansible"' in layers
+    assert "-n auto" in layers
+    assert "--durations" in layers
+    assert "PR CI always runs all three" in layers
+    assert "Live AWS" in layers
+    assert "live CCM" in layers
+    assert "mocked CCM" in layers
+    assert "CCM_TOKEN" in layers
+
+    assert "new contract tests" in adding_command
+    assert "museum of the old path" in adding_command
+    assert "process rule, not a per-flag" in adding_command
+    assert "new contract tests" in adding_config
+    assert "museum of the old path" in adding_config
+
+    assert "./tests/run_cli_tests.sh" in which_runner
+    assert "./tests/run_ansible_tests.sh" in which_runner
+    assert "./tests/run_unit_tests.sh" in which_runner
+    assert 'pytest -m "local and cli"' in which_runner
+    assert 'pytest -m "local and ansible"' in which_runner
+    assert 'pytest -m "local and not cli and not ansible"' in which_runner
+    assert "--durations" in which_runner
+    assert "-n auto" in which_runner
+    assert "CI default" in which_runner
+    assert "mocked CCM" in which_runner
+
+
 def test_ci_cancels_stale_pull_request_runs():
     ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
 
