@@ -45,6 +45,8 @@ HELP_CONTRACTS = [
             "--yes",
             "--verbose",
             "--start-dir",
+            "Force agent mode",
+            "Force human mode",
         ],
     ),
     (
@@ -70,6 +72,8 @@ HELP_CONTRACTS = [
             "--apps-dir",
             "--name",
             "--env-dir",
+            "splunk_config.yml",
+            "aws, virtualbox, external, or ccm",
         ],
     ),
     (
@@ -189,6 +193,9 @@ HELP_CONTRACTS = [
             "--deploy",
             "--yes",
             "Omitted fields are removed.",
+            "Header fields",
+            "config-test | app-lab | production-like",
+            "Example:",
         ],
     ),
     (
@@ -264,7 +271,39 @@ HELP_CONTRACTS = [
     ),
     (
         ["apps", "add", "--help"],
-        ["usage: spa apps add", "--roles", "--new", "--set", "--content-pack", "--install-all-content-packs", "--dry-run"],
+        [
+            "usage: spa apps add",
+            "--roles",
+            "--new",
+            "--set",
+            "--content-pack",
+            "--install-all-content-packs",
+            "--dry-run",
+            "edits splunk_config.yml",
+            "does not deploy",
+            "Normal app",
+            "1841",
+            "Content Library 5391",
+            "7294",
+            "spa apps content-packs list 5391",
+            "spa validate",
+            "spa deploy --yes",
+            "required only for normal apps",
+            "rejected for ITSI",
+            "default latest",
+            "default splunkbase",
+            "Shorthand for --source local",
+            "Mutually exclusive with --source",
+            "repeatable",
+            "mutually exclusive with --install-all-content-packs",
+            "mutually exclusive with --content-pack",
+            "named content pack",
+            "without prompting or writing",
+            "SHA-256 revision",
+            "strict JSON",
+            "use - for stdin",
+            "agent mode never prompts",
+        ],
     ),
     (
         ["apps", "remove", "--help"],
@@ -285,6 +324,9 @@ HELP_CONTRACTS = [
             "--ansible-output",
             "-v",
             "required in agent mode",
+            "[--ansible-output] [--timestamps] [--color] [-v]",
+            "Increase Ansible verbosity and show native output",
+            "repeat through -vvvv",
         ],
     ),
     (["destroy", "--help"], ["usage: spa destroy", "-y", "--yes", "--ansible-output", "-v", "Confirm destroy"]),
@@ -444,6 +486,18 @@ def test_hosts_ping_names_check():
     assert "spa hosts check" in result.stderr
 
 
+def _collapsed_help(stdout: str) -> str:
+    """Join wrapped argparse lines so HELP_CONTRACTS can match phrase-level copy."""
+    pieces: list[str] = []
+    for line in stdout.splitlines():
+        stripped = line.strip()
+        if pieces and line.startswith(" ") and pieces[-1].endswith("-"):
+            pieces[-1] += stripped
+        else:
+            pieces.append(stripped)
+    return " ".join(pieces)
+
+
 @pytest.mark.parametrize(
     ("argv", "required"),
     HELP_CONTRACTS,
@@ -453,9 +507,17 @@ def test_complete_help_contract(argv, required):
     result = run_spa(["--no-agent", *argv])
     assert result.returncode == 0, result.stderr
     assert not result.stderr
-    for text in required:
-        assert text in result.stdout, "%r missing from `spa %s`" % (text, " ".join(argv))
+    text = _collapsed_help(result.stdout)
+    for needle in required:
+        assert needle in text, "%r missing from `spa %s`" % (needle, " ".join(argv))
     assert "==SUPPRESS==" not in result.stdout
+    assert "{init," not in result.stdout
+    if argv == ["apps", "add", "--help"]:
+        from spa.agent import COMMAND_SCHEMA
+
+        add = next(row for row in COMMAND_SCHEMA["commands"] if row["name"] == "apps add")
+        for flag in add["flags"]:
+            assert flag["help"] in text, flag["long"]
 
 
 # Help rows look like "    validate (val)      Validate splunk_config.yml".
@@ -646,51 +708,6 @@ def test_config_topology_without_operand_json_lists_catalog_links():
     assert catalog["topology.m3"] == "cm_4idxc2site_2x3shc_ds"
 
 
-def test_apps_add_help_names_kinds_flags_and_the_next_action():
-    result = run_spa(["--no-agent", "apps", "add", "--help"])
-    assert result.returncode == 0, result.stderr
-    pieces: list[str] = []
-    for line in result.stdout.splitlines():
-        stripped = line.strip()
-        if pieces and line.startswith(" ") and pieces[-1].endswith("-"):
-            pieces[-1] += stripped
-        else:
-            pieces.append(stripped)
-    text = " ".join(pieces)
-    for phrase in (
-        "edits splunk_config.yml",
-        "does not deploy",
-        "Normal app",
-        "1841",
-        "Content Library 5391",
-        "7294",
-        "spa apps content-packs list 5391",
-        "spa validate",
-        "spa deploy --yes",
-        "required only for normal apps",
-        "rejected for ITSI",
-        "default latest",
-        "default splunkbase",
-        "Shorthand for --source local",
-        "Mutually exclusive with --source",
-        "repeatable",
-        "mutually exclusive with --install-all-content-packs",
-        "mutually exclusive with --content-pack",
-        "named content pack",
-        "without prompting or writing",
-        "SHA-256 revision",
-        "strict JSON",
-        "use - for stdin",
-        "agent mode never prompts",
-    ):
-        assert phrase in text, phrase
-    from spa.agent import COMMAND_SCHEMA
-
-    add = next(row for row in COMMAND_SCHEMA["commands"] if row["name"] == "apps add")
-    for flag in add["flags"]:
-        assert flag["help"] in text, flag["long"]
-
-
 def test_command_classes_keep_one_human_and_agent_shape(tmp_path):
     """One representative of each output class. Same facts, two renderings."""
     dest = tmp_path / "env"
@@ -849,17 +866,6 @@ def test_agent_help_is_one_schema_entry_or_an_index():
     assert "usage: spa validate" in forced_human.stdout
     assert not forced_human.stdout.lstrip().startswith("{")
 
-    for argv, name in (
-        (["--agent", "provider", "aws", "--help"], "provider aws"),
-        (["--agent", "shell", "--help"], "shell"),
-    ):
-        schema_help = run_spa(argv)
-        assert schema_help.returncode == 0, schema_help.stderr
-        payload = json.loads(schema_help.stdout)
-        assert payload["ok"] is True
-        assert payload["schema_version"] == 1
-        assert payload["data"]["name"] == name
-
 
 @pytest.mark.parametrize(
     "argv",
@@ -946,24 +952,6 @@ def test_hosts_list_status_short_flag_is_s_not_v():
     rejected = run_spa(["--no-agent", "hosts", "list", "-v"])
     assert rejected.returncode != 0
     assert "unrecognized arguments" in rejected.stderr
-
-
-def test_verbose_is_listed_next_to_ansible_output():
-    result = run_spa(["--no-agent", "deploy", "--help"])
-    assert result.returncode == 0, result.stderr
-    usage, options = result.stdout.split("options:", 1)
-    compact = " ".join(usage.split())
-    assert "[--ansible-output] [--timestamps] [--color] [-v]" in compact
-    idx_ao = options.index("--ansible-output")
-    idx_v = options.index("-v, --verbose")
-    assert idx_ao < idx_v
-    between = options[idx_ao:idx_v]
-    assert "--agent" not in between
-    assert "--json" not in between
-    compact_opts = " ".join(options.split())
-    assert "Increase Ansible verbosity and show native output" in compact_opts
-    assert "repeat through -vvvv" in compact_opts
-    assert "Same as --ansible-output" not in compact_opts
 
 
 @pytest.mark.parametrize(

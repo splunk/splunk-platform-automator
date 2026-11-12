@@ -148,12 +148,6 @@ def test_init_unknown_topology_does_not_create_an_env(tmp_path):
     assert not dest.exists()
 
 
-def test_init_help():
-    result = run_spa(["init", "--help"])
-    assert result.returncode == 0
-    assert "splunk_config.yml" in result.stdout
-
-
 def test_init_provider_help_names_external():
     result = run_spa(["init", "--help"])
     assert result.returncode == 0

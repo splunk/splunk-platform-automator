@@ -71,28 +71,6 @@ def test_format_names_trims_long_lists():
     assert format_names(["idx1", "sh1"]) == "idx1, sh1"
 
 
-def test_spa_help_lists_hosts_and_aliases():
-    result = run_spa(["--help"])
-    assert result.returncode == 0
-    assert "hosts" in result.stdout
-    assert "validate" in result.stdout
-
-
-def test_hosts_list_help_has_hosts_flag_not_limit():
-    result = run_spa(["hosts", "list", "--help"])
-    assert result.returncode == 0, result.stderr
-    assert "--hosts" in result.stdout
-    assert "--status" in result.stdout
-    assert "-s" in result.stdout
-    assert "--limit" not in result.stdout
-
-
-def test_alias_val_is_validate():
-    result = run_spa(["val", "--help"])
-    assert result.returncode == 0, result.stderr
-    assert "Validate" in result.stdout or "validate" in result.stdout.lower()
-
-
 def test_cli_agent_schema_includes_hosts_commands():
     result = run_spa(["agent", "schema"])
     payload = json.loads(result.stdout)

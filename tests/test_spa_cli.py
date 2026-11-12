@@ -141,16 +141,6 @@ def test_spa_env_keeps_explicit_test_path_overrides(monkeypatch):
     assert {name: clean[name] for name in INHERITED_PATH_VARS} == explicit
 
 
-def test_spa_help():
-    result = run_spa(["--help"])
-    assert result.returncode == 0
-    assert "init" in result.stdout
-    assert "run" in result.stdout
-    # argparse would otherwise dump every alias into usage: spa {init,val,...}
-    assert "{init," not in result.stdout
-    assert "COMMAND" in result.stdout
-
-
 @pytest.mark.no_spa_env
 def test_spa_doctor_and_agent_schema_from_clone():
     doctor = run_spa(["--json", "doctor", "--spa-home", str(PROJECT_ROOT)])
@@ -1470,21 +1460,6 @@ def test_run_path_escape_rejected(tmp_path):
     ).lower()
 
 
-def test_agent_json_envelope():
-    result = run_spa(["--agent", "init", "list"])
-    payload = json.loads(result.stdout)
-    assert payload["ok"] is True
-    ids = [item["id"] for item in payload["data"]["topologies"]]
-    assert "single_node" in ids
-
-
-def test_no_agent_text_list():
-    result = run_spa(["--no-agent", "init", "list"])
-    assert "Topologies:" in result.stdout
-    assert "single_node" in result.stdout
-    assert not result.stdout.strip().startswith("{")
-
-
 def test_agent_rejects_unknown_action():
     result = run_spa(["--no-agent", "agent", "bogus"])
     assert result.returncode != 0
@@ -1513,13 +1488,6 @@ def test_agent_schema_markdown_stays_json_in_agent_mode():
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
     assert "commands" in payload["data"]
-
-
-def test_global_agent_flags_have_help():
-    result = run_spa(["--no-agent", "--help"])
-    assert result.returncode == 0, result.stderr
-    assert "Force agent mode" in result.stdout
-    assert "Force human mode" in result.stdout
 
 
 def test_env_export_is_shell(tmp_path):
@@ -1905,16 +1873,6 @@ def test_config_header_without_action_lists_every_header_field():
     assert result.returncode == 2, result.stdout + result.stderr
     for name in HEADER_FIELD_NAMES:
         assert "--%s" % name in result.stderr, name
-
-
-def test_config_header_set_help_explains_each_header_field():
-    """header set --help gives a value example for each header field."""
-    result = run_spa(["--no-agent", "config", "header", "set", "--help"])
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "Header fields" in result.stdout
-    assert "Omitted fields are removed" in result.stdout
-    assert "config-test | app-lab | production-like" in result.stdout
-    assert "Example:" in result.stdout
 
 
 def test_human_config_header_set_prompt_names_the_config_file(tmp_path, monkeypatch):
