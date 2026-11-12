@@ -150,7 +150,7 @@ Run this before the first `spa init` or `spa environment init` for a new environ
 
 Cap displayed API results (~10–15 AMIs, ~5 instance types).
 
-**CCM (only when CCM is in play):** skip the AWS AMI path. Write YAML with `spa config provider ccm`. Discover live values with `spa provider ccm survey` (and `operating-systems list` / `instance-types list` / `disk-storage list` / `ssh-keys list`). Never print PEM or `CCM_TOKEN`. `spa doctor --provider ccm` reports `CCM_TOKEN` as set / not set. Fresh `spa init --provider ccm` already merges remote-provider defaults. For an existing env, `spa config merge remote-provider --yes` after explicit yes.
+**CCM (only when CCM is in play):** skip the AWS AMI path. Write YAML with `spa config provider ccm`. Discover live values with `spa provider ccm survey` (and `operating-systems list` / `instance-types list` / `disk-storage list` / `ssh-keys list`). Never print PEM or `CCM_TOKEN`. Auth is `CCM_TOKEN` (set / not set). Fresh `spa init --provider ccm` already merges remote-provider defaults and reports the token as set / not set. For an existing env, `spa config merge remote-provider --yes` after explicit yes.
 
 **Exit:** All `terraform.aws` fields chosen (API-validated if creds available, else documented as unverified), or CCM knobs chosen from live survey.
 

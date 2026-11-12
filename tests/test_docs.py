@@ -523,6 +523,28 @@ class TestSpaSkill:
         assert "spa --agent config templates`" not in text
         assert "spa --agent config templates\n" not in text
 
+    def test_skills_do_not_run_doctor_as_a_bring_up_step(self):
+        """Init already runs host checks. Skills do not tell operators to run spa doctor."""
+        skill = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        prerequisites = (
+            PROJECT_ROOT / "skills" / "spa" / "spa" / "references" / "prerequisites.md"
+        ).read_text(encoding="utf-8")
+        phases = (
+            PROJECT_ROOT
+            / "skills"
+            / "spa"
+            / "spa-create-config"
+            / "references"
+            / "phases.md"
+        ).read_text(encoding="utf-8")
+        software = skill.split("## Software", 1)[1].split("\n## ", 1)[0]
+        assert "spa doctor" not in software
+        assert "Run `spa doctor`" not in prerequisites
+        assert "spa doctor --provider ccm" not in phases
+        assert "spa validate" in prerequisites
+
     def test_spa_skill_confirms_before_destroy(self):
         skill_root = PROJECT_ROOT / "skills" / "spa" / "spa"
         skill = (skill_root / "SKILL.md").read_text(encoding="utf-8")
@@ -1435,3 +1457,17 @@ def test_changelog_unreleased_retires_doctor_aws_and_virtualbox_flags():
     assert "spa doctor --aws" in unreleased
     assert "--virtualbox" in unreleased
     assert "repeatable" in unreleased.lower() or "repeat" in unreleased.lower()
+
+
+def test_changelog_unreleased_init_doctor_quiet_unless_problems():
+    text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
+    assert "Init doctor" in unreleased
+    assert "quiet" in unreleased.lower() or "silent" in unreleased.lower()
+    assert "spa doctor" in unreleased
+    assert "PATH symlink" in unreleased
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    start = guide.split("## Start here", 1)[1].split("\n## ", 1)[0]
+    assert "fails the host prerequisite check" in start
+    assert "only" in start.lower()
+    assert "warning" in start.lower()

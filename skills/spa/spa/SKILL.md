@@ -85,7 +85,6 @@ spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
 spa venv reinstall --shared --yes                    # repair shared Python requirements
 spa venv upgrade --shared --yes                      # bump Ansible and other requirements
 spa venv rebuild --shared --yes                      # recreate the shared venv
-spa doctor
 spa validate
 spa deploy --yes
 spa hosts list --status

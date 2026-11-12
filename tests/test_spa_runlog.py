@@ -101,6 +101,14 @@ def test_redact_secrets():
     assert "***" in text or "[REDACTED]" in text
 
 
+def test_redact_keeps_token_set_not_set():
+    from spa.runlog import redact
+
+    assert redact("CCM_TOKEN: not set") == "CCM_TOKEN: not set"
+    assert redact("CCM_TOKEN: set") == "CCM_TOKEN: set"
+    assert "secret" not in redact("token=abcd")
+
+
 def test_ansible_output_events_are_timestamped_ordered_and_replayed(tmp_path):
     from spa.runlog import replay_jsonl
 

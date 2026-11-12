@@ -31,6 +31,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **Init doctor stays quiet unless it warns or fails**: `spa init` still runs host prerequisite checks in-process. All-ok prints nothing from doctor. Warnings and failures print only those WARN / FAIL rows and their fix lines, not the OK catalog or the `SPA host prerequisites` banner. Failures still roll back a dest that did not exist when init started. Agent init failure keeps `{ok:false,error}` with no `data`; the error names the WARN / FAIL rows. Skills do not run `spa doctor` as a bring-up step. `spa doctor` still prints the full report.
+
 - **Init merges remote-provider defaults**: `spa init --example` for a remote provider (AWS, CCM, external) deep-merges [examples/templates/remote-provider.yml](examples/templates/remote-provider.yml) (inventory hostname, host-side Splunk download, Splunkbase `target_download`, TLS). Init then prints `merged: remote-provider`. VirtualBox is local and skips that merge. `--from` / `--migrate` copies stay as-is. `spa config merge remote-provider` remains for existing envs. Each `Provider` declares `remote`; init reads that flag from the registry.
 
 - **Fold host create into deploy**: Lab bring-up is `spa deploy --yes`, which creates missing hosts if needed, waits until they accept SSH, then always runs hosts check before `deploy_site.yml`. One `--yes` covers create plus Splunk. Adding a host is `spa config add` then `spa deploy --yes` on AWS and VirtualBox; CCM host count is fixed at create. Host-only create remains `spa hosts provision --yes`. `spa prov` completes to `spa provider`. Missing-host hints name `spa deploy --yes`.
@@ -111,6 +113,10 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 - **Hidden per-environment fact cache**: the Ansible fact cache for each environment moved from `$SPA_ENV_DIR/ansible_facts` to the hidden `$SPA_ENV_DIR/.ansible_facts`. An existing visible `ansible_facts` directory is left in place and is no longer read; the cache rebuilds on the next run.
 
 - **Baseconfig check looks for `org_s2_indexer_indexes`**: the Software check (`spa validate`, deploy preflight, and the Ansible inventory check) now requires `*/org_s2_indexer_indexes` and `*/org_cluster_manager_base`. A Software directory that has only `org_ds_secure_server` now fails the check.
+
+### Fixed
+
+- **`spa doctor` follows a PATH symlink**: a `spa` on PATH that is a symlink to this checkout's `bin/spa` is the same launcher, so doctor no longer warns that another checkout wins.
 
 ### Added
 

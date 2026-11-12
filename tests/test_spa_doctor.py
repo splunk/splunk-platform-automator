@@ -17,6 +17,8 @@ def test_doctor_passes_on_dev_machine():
     result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)])
     assert result.returncode == 0, result.stderr + result.stdout
     assert "python3" in (result.stdout + result.stderr).lower()
+    assert "SPA host prerequisites" in result.stdout
+    assert "All checks passed." in result.stdout
 
 
 def test_doctor_warns_when_spa_comes_from_another_clone(tmp_path):
@@ -40,6 +42,19 @@ def test_doctor_ok_when_spa_comes_from_spa_home():
     assert f"spa resolves to {PROJECT_ROOT}/bin/spa" in result.stdout
 
 
+def test_doctor_ok_when_path_spa_is_symlink_to_spa_home(tmp_path):
+    other_bin = tmp_path / "local" / "bin"
+    other_bin.mkdir(parents=True)
+    (other_bin / "spa").symlink_to(PROJECT_ROOT / "bin" / "spa")
+    env = spa_env()
+    env["PATH"] = str(other_bin) + os.pathsep + env["PATH"]
+    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "another checkout wins" not in output
+    assert f"spa resolves to {PROJECT_ROOT}/bin/spa" in result.stdout
+
+
 def test_doctor_aws_strict_fails_without_terraform():
     env = spa_env()
     env["PATH"] = "/usr/bin:/bin"
@@ -48,16 +63,140 @@ def test_doctor_aws_strict_fails_without_terraform():
     assert "terraform" in (result.stdout + result.stderr).lower()
 
 
-def test_init_runs_doctor_by_default(tmp_path):
+def _doctor_result(checks, *, ok=True, warnings=0, errors=0, error=None):
+    from spa.api import CommandResult
+
+    return CommandResult(
+        ok=ok,
+        code=0 if ok else 1,
+        error=error,
+        data={
+            "spa_home": str(PROJECT_ROOT),
+            "errors": errors,
+            "warnings": warnings,
+            "checks": checks,
+            "notes": ["ignored banner note"],
+        },
+    )
+
+
+def _capture_run_doctor(monkeypatch, result, tmp_path):
+    from spa.init import InitError, _LOG, run_doctor
+
+    monkeypatch.setattr("spa.doctor.collect_checks", lambda **kwargs: result)
+    log = []
+    token = _LOG.set(log)
+    raised = None
+    try:
+        run_doctor(tmp_path / "env", PROJECT_ROOT, skip=False)
+    except InitError as exc:
+        raised = exc
+    finally:
+        _LOG.reset(token)
+    return log, raised
+
+
+def test_run_doctor_silent_when_all_ok(monkeypatch, tmp_path):
+    result = _doctor_result(
+        [
+            {
+                "level": "ok",
+                "id": "python",
+                "message": "python3 (3.12) with venv module",
+                "fix": "",
+            }
+        ]
+    )
+    log, raised = _capture_run_doctor(monkeypatch, result, tmp_path)
+    assert raised is None
+    assert log == []
+
+
+def test_run_doctor_prints_only_warn_and_fail_rows(monkeypatch, tmp_path):
+    from spa.init import InitError
+
+    result = _doctor_result(
+        [
+            {
+                "level": "ok",
+                "id": "python",
+                "message": "python3 (3.12) with venv module",
+                "fix": "",
+            },
+            {
+                "level": "warn",
+                "id": "spa",
+                "message": "another checkout wins",
+                "fix": "put this checkout first on PATH",
+            },
+            {
+                "level": "error",
+                "id": "ccm_token",
+                "message": "CCM_TOKEN: not set",
+                "fix": "Set CCM_TOKEN to a CCM personal access token",
+            },
+        ],
+        ok=False,
+        warnings=1,
+        errors=1,
+        error="1 required check(s) failed.",
+    )
+    log, raised = _capture_run_doctor(monkeypatch, result, tmp_path)
+    assert isinstance(raised, InitError)
+    blob = str(raised)
+    assert log == []
+    assert "Host prerequisite check failed" in blob
+    assert "SPA host prerequisites" not in blob
+    assert "All checks passed." not in blob
+    assert "python3 (3.12) with venv module" not in blob
+    assert "ignored banner note" not in blob
+    assert "WARN another checkout wins" in blob
+    assert "put this checkout first on PATH" in blob
+    assert "FAIL CCM_TOKEN: not set" in blob
+    assert "Set CCM_TOKEN to a CCM personal access token" in blob
+
+
+def test_run_doctor_prints_warnings_and_still_succeeds(monkeypatch, tmp_path):
+    result = _doctor_result(
+        [
+            {
+                "level": "ok",
+                "id": "python",
+                "message": "python3 (3.12) with venv module",
+                "fix": "",
+            },
+            {
+                "level": "warn",
+                "id": "spa",
+                "message": "another checkout wins",
+                "fix": "put this checkout first on PATH",
+            },
+        ],
+        warnings=1,
+    )
+    log, raised = _capture_run_doctor(monkeypatch, result, tmp_path)
+    assert raised is None
+    blob = "\n".join(log)
+    assert "SPA host prerequisites" not in blob
+    assert "All checks passed." not in blob
+    assert "python3 (3.12) with venv module" not in blob
+    assert "WARN another checkout wins" in blob
+    assert "put this checkout first on PATH" in blob
+
+
+def test_init_stays_quiet_when_doctor_passes_and_surfaces_failures(tmp_path):
     dest = tmp_path / "env"
     result = run_spa(
         ["init", "--example", "cm_2idxc_sh", "--provider", "aws", str(dest)],
         extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
     )
     out = result.stderr + result.stdout
-    assert "SPA host prerequisites" in out
+    assert "SPA host prerequisites" not in out
+    assert "All checks passed." not in out
     if result.returncode != 0:
-        assert "terraform" in out.lower()
+        assert "terraform" in out.lower() or "FAIL" in out or "WARN" in out
+    else:
+        assert dest.exists()
 
 
 def test_init_skip_doctor(tmp_path):

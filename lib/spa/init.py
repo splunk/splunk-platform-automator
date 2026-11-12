@@ -469,16 +469,17 @@ def create_venv(
 def run_doctor(dest: Path, spa_home: Path, skip: bool) -> None:
     if skip:
         return
-    from spa.doctor import collect_checks, format_doctor_text
+    from spa.doctor import collect_checks, format_doctor_problems
 
     result = collect_checks(
         spa_home=str(spa_home),
         env_dir=str(dest),
     )
-    for line in format_doctor_text(result).rstrip().splitlines():
-        _say(line)
+    problems = format_doctor_problems(result).rstrip()
     if not result.ok:
-        raise InitError(DOCTOR_FAILED)
+        raise InitError("%s\n%s" % (problems, DOCTOR_FAILED) if problems else DOCTOR_FAILED)
+    for line in problems.splitlines():
+        _say(line)
 
 
 def list_catalog_topologies(spa_home: Path) -> List[Dict[str, str]]:
@@ -873,8 +874,11 @@ def init_env(
     except InitError as exc:
         if created and dest_resolved.exists():
             shutil.rmtree(dest_resolved)
-        if created and str(exc) == DOCTOR_FAILED:
-            raise InitError(DOCTOR_FAILED_NOT_CREATED, code=exc.code) from exc
+        if created and DOCTOR_FAILED in str(exc):
+            raise InitError(
+                str(exc).replace(DOCTOR_FAILED, DOCTOR_FAILED_NOT_CREATED),
+                code=exc.code,
+            ) from exc
         raise
     except Exception:
         if created and dest_resolved.exists():

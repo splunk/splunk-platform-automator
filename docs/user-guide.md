@@ -14,7 +14,7 @@ spa validate
 spa deploy --yes
 ```
 
-If `spa init` fails the host prerequisite check, a dest that did not exist before the command is removed and the command reports that the environment has not been created.
+If `spa init` fails the host prerequisite check, a dest that did not exist before the command is removed and the command reports that the environment has not been created. Init stays silent when those checks pass and prints only warnings and failures; `spa doctor` still prints the full report.
 
 `spa deploy` creates missing hosts if needed, then runs an Ansible ping with become for the selected hosts after you confirm and before the playbook, then compares `splunk_architecture` with the machine. The expected value is the host override, then that host's `splunk_environments` entry, then `splunk_defaults`, then `amd64`. A failed check fails deploy; it does not recreate hosts. `spa hosts check` is that check on its own. Before `spa run` of a playbook that needs root, run `spa hosts check`.
 

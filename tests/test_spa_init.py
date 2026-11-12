@@ -237,6 +237,8 @@ def test_init_ccm_without_token_does_not_leave_dest(tmp_path):
     out = result.stderr + result.stdout
     assert result.returncode != 0
     assert "CCM_TOKEN: not set" in out
+    assert "SPA host prerequisites" not in out
+    assert "All checks passed." not in out
     assert "ERROR:" in out
     assert "Environment has not been created" in out
     assert "before provision/deploy" not in out
@@ -1216,6 +1218,28 @@ def test_init_requires_provider_when_no_default_is_saved(tmp_path):
     for name in ("aws", "virtualbox", "external", "ccm"):
         assert name in result.stderr, name
     assert "spa environment set --provider NAME" in result.stderr
+    assert not dest.exists()
+
+
+def test_init_agent_doctor_failure_omits_ok_catalog(tmp_path):
+    """Agent init puts doctor WARN/FAIL in error, with no data and no init log."""
+    import json
+
+    dest = tmp_path / "lab"
+    result = run_spa(
+        ["--agent", "init", "--example", "cm_2idxc_sh", "--provider", "ccm", str(dest)],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert "data" not in payload
+    error = payload.get("error") or ""
+    assert "SPA host prerequisites" not in error
+    assert "All checks passed." not in error
+    assert "CCM_TOKEN: not set" in error
+    assert "venv:" not in error
+    assert "paths:" not in error
     assert not dest.exists()
 
 
