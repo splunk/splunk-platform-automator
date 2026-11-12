@@ -564,6 +564,13 @@ class LocalSpaSession:
                 return False, None
         else:
             missing = list(state.missing)
+            if not missing:
+                return False, CommandResult(
+                    ok=False,
+                    code=1,
+                    error=state.message(state.reason or None),
+                    data=state.payload(),
+                )
         external_missing = [name for name in missing if name in external]
         managed_missing = [name for name in missing if name not in set(external)]
         if external_missing and not managed_missing:
@@ -1767,6 +1774,15 @@ class LocalSpaSession:
             error=None if rc == 0 else "%s failed" % action,
         )
 
+    def _provider_creates_hosts(self) -> bool:
+        from spa.providers import get_provider
+
+        try:
+            provider = get_provider(self.paths)
+        except Exception:
+            return False
+        return bool(getattr(provider, "creates_hosts", False))
+
     def _classified_hosts(self):
         from spa.providers import load_deployment_config
         from spa.providers.classify import classify_hostnames
@@ -2023,7 +2039,10 @@ class LocalSpaSession:
             log.finish(1)
             data = log.envelope_fields()
             data["host_check_reported"] = True
-            return CommandResult(ok=False, error=str(exc), code=1, data=data)
+            error = str(exc)
+            if any(row.get("ssh") is False for row in exc.rows) and self._provider_creates_hosts():
+                error = "%s\nIf the hosts are suspended, run: spa resume --yes" % error
+            return CommandResult(ok=False, error=error, code=1, data=data)
         log.emit_host_check(checked.get("hosts") or [])
         args = with_ansible_limit(extra, resolved)
         try:

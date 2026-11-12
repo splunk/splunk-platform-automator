@@ -292,11 +292,23 @@ def lifecycle_warnings(provider: Any, action: str) -> List[str]:
     return [str(row) for row in (method(action) or []) if str(row).strip()]
 
 
-def wait_managed_ssh(paths: SpaPaths, **kwargs: Any) -> Dict[str, Any]:
-    """Wait until managed hosts accept SSH. Architecture mismatch fails immediately."""
-    from spa.hosts import HostsError, wait_for_ssh
+def wait_managed_ssh(
+    paths: SpaPaths, hosts: Optional[Sequence[str]] = None, **kwargs: Any
+) -> Dict[str, Any]:
+    """Wait until managed hosts accept SSH. Architecture mismatch fails immediately.
 
+    External hosts are never waited on: their inventory lines are merged back
+    only after the provider returns.
+    """
+    from spa.hosts import HostsError, wait_for_ssh
+    from spa.providers.classify import classify_hostnames
+
+    if not hosts:
+        managed, _external = classify_hostnames(load_deployment_config(paths))
+        if not managed:
+            return {"hosts": []}
+        hosts = managed
     try:
-        return wait_for_ssh(paths, **kwargs)
+        return wait_for_ssh(paths, hosts, **kwargs)
     except HostsError as exc:
         raise ProviderError(str(exc)) from exc

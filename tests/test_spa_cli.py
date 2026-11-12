@@ -1417,14 +1417,25 @@ def test_run_legacy_stem_help():
     assert "use spa run splunk_cli" in result.stdout
 
 
-def test_run_help_passthrough_after_dashdash(monkeypatch):
+def test_run_help_passthrough_after_dashdash(tmp_path, monkeypatch):
+    from spa.providers import ProvisionState
+
+    _stamped_lifecycle_env(tmp_path, monkeypatch)
+    monkeypatch.chdir(tmp_path)
     captured = {}
+
+    class FakeProvider:
+        name = "test"
+
+        def provision_state(self):
+            return ProvisionState(provider="test", provisioned=True)
 
     def fake_run(playbook, paths, extra, on_progress=None, **_kwargs):
         captured["extra"] = extra
         captured["playbook"] = str(playbook)
         return 0
 
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
     monkeypatch.setattr("spa.playbooks.run_playbook", fake_run)
     from spa.cli import main
 

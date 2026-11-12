@@ -369,11 +369,12 @@ def test_aws_provision_waits_for_ssh_after_playbook(tmp_path, monkeypatch):
     monkeypatch.setattr("spa.providers.aws.resolve", lambda *a, **k: "aws_provision")
     monkeypatch.setattr(
         "spa.hosts.wait_for_ssh",
-        lambda paths, **k: waited.append(paths) or {"hosts": []},
+        lambda paths, hosts=None, **k: waited.append(list(hosts or [])) or {"hosts": []},
     )
     provider = _aws_provider(tmp_path)
+    provider.paths.config_file.write_text(MIXED_AWS_EXTERNAL)
     assert provider.provision([]) == 0
-    assert waited
+    assert waited == [["idx1"]]
 
 
 def test_aws_failed_provision_does_not_wait_for_ssh(tmp_path, monkeypatch):
@@ -387,6 +388,51 @@ def test_aws_failed_provision_does_not_wait_for_ssh(tmp_path, monkeypatch):
     provider = _aws_provider(tmp_path)
     assert provider.provision([]) == 1
     assert waited == []
+
+
+MIXED_AWS_EXTERNAL = """
+terraform:
+  aws:
+    region: eu-central-1
+splunk_hosts:
+  - name: idx1
+  - name: byo1
+    external: {}
+"""
+
+
+def test_wait_managed_ssh_pings_only_managed_hosts(tmp_path, monkeypatch):
+    from spa.hosts import HostsError
+    from spa.providers import wait_managed_ssh
+
+    pinged = []
+
+    def fake_ping(paths, hosts=None, run=None):
+        pinged.append(list(hosts or []))
+        if not hosts or "byo1" in hosts:
+            raise HostsError("byo1 is external. Run: spa hosts register byo1 ...")
+        return {"hosts": [{"name": name, "ok": True} for name in hosts]}
+
+    monkeypatch.setattr("spa.hosts.ping_hosts", fake_ping)
+    paths = _paths(tmp_path, MIXED_AWS_EXTERNAL)
+    result = wait_managed_ssh(paths)
+    assert pinged == [["idx1"]]
+    assert [row["name"] for row in result["hosts"]] == ["idx1"]
+
+
+def test_wait_managed_ssh_skips_ping_when_every_host_is_external(tmp_path, monkeypatch):
+    from spa.providers import wait_managed_ssh
+
+    monkeypatch.setattr(
+        "spa.hosts.ping_hosts",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("ping")),
+    )
+    paths = _paths(
+        tmp_path,
+        "terraform:\n  aws:\n    region: eu-central-1\n"
+        "splunk_hosts:\n  - name: byo1\n    external: {}\n",
+    )
+    assert wait_managed_ssh(paths) == {"hosts": []}
 
 
 def test_resume_starts_waits_and_refreshes_inventory(tmp_path):

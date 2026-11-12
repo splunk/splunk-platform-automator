@@ -1151,6 +1151,65 @@ def test_wait_for_ssh_retries_connection_refused_then_succeeds(tmp_path, monkeyp
     assert result["hosts"][0]["ok"] is True
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Connection timed out during banner exchange",
+        "Permission denied (publickey).",
+        "ssh: connect to host 10.0.0.8 port 22: Operation timed out",
+    ],
+)
+def test_wait_for_ssh_retries_any_unreachable_host(tmp_path, monkeypatch, message):
+    from spa.hosts import wait_for_ssh
+
+    paths = _paths(tmp_path, "external: {}\nsplunk_hosts:\n  - name: idx1\n")
+    calls = {"n": 0}
+    sleeps = []
+
+    def fake_ansible_ping(names, paths=None, become=False, run=None):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            return [
+                {"name": "idx1", "ok": False, "ssh": False, "become": False, "message": message}
+            ], None
+        return [{"name": "idx1", "ok": True, "ssh": True, "become": True, "message": ""}], None
+
+    monkeypatch.setattr("spa.shell.ansible_ping", fake_ansible_ping)
+    monkeypatch.setattr(
+        "spa.shell.ansible_architecture", lambda names, paths=None, run=None: ({"idx1": "x86_64"}, None)
+    )
+    monkeypatch.setattr("spa.shell.drop_discovered_interpreter_cache", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "spa.providers.inventory_hostnames_from_file", lambda _paths: ["idx1"]
+    )
+    result = wait_for_ssh(paths, ["idx1"], sleep=sleeps.append, attempts=5, delay=1)
+    assert calls["n"] == 3
+    assert sleeps == [1, 1]
+    assert result["hosts"][0]["ok"] is True
+
+
+def test_wait_for_ssh_fails_immediately_when_sudo_fails(tmp_path, monkeypatch):
+    from spa.hosts import HostsError, wait_for_ssh
+
+    paths = _paths(tmp_path, "external: {}\nsplunk_hosts:\n  - name: idx1\n")
+    calls = {"n": 0}
+
+    def fake_ansible_ping(names, paths=None, become=False, run=None):
+        calls["n"] += 1
+        return [
+            {"name": "idx1", "ok": False, "ssh": True, "become": False, "message": "sudo: a password is required"}
+        ], None
+
+    monkeypatch.setattr("spa.shell.ansible_ping", fake_ansible_ping)
+    monkeypatch.setattr("spa.shell.drop_discovered_interpreter_cache", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "spa.providers.inventory_hostnames_from_file", lambda _paths: ["idx1"]
+    )
+    with pytest.raises(HostsError, match="passwordless sudo"):
+        wait_for_ssh(paths, ["idx1"], sleep=lambda _delay: None, attempts=5)
+    assert calls["n"] == 1
+
+
 def test_wait_for_ssh_fails_immediately_on_architecture_mismatch(tmp_path, monkeypatch):
     from spa.hosts import HostsError, wait_for_ssh
 

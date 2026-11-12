@@ -317,7 +317,7 @@ def ping_hosts(
     if problem:
         raise HostsError(problem)
     if any(not row.get("ok") for row in rows):
-        raise HostsError(_ping_failure_text(rows))
+        raise HostsError(_ping_failure_text(rows), rows)
     facts, problem = ansible_architecture(selected, paths=paths, run=run)
     if problem:
         raise HostsError(problem)
@@ -334,9 +334,11 @@ def ping_hosts(
 
 
 def _retryable_ssh_failure(exc: HostsError) -> bool:
-    """Connection refused while SSH is coming up. Architecture mismatch is not retryable."""
+    """Unreachable hosts retry while SSH comes up. Sudo or architecture failures do not."""
     if any(row.get("expected_architecture") for row in exc.rows):
         return False
+    if any(row.get("ssh") is False for row in exc.rows):
+        return True
     return "connection refused" in str(exc).lower()
 
 
@@ -349,7 +351,7 @@ def wait_for_ssh(
     attempts: int = SSH_WAIT_ATTEMPTS,
     delay: float = SSH_WAIT_DELAY,
 ) -> Dict[str, Any]:
-    """Ping with become until SSH works. Connection refused retries; architecture mismatch fails."""
+    """Ping with become until SSH works. Unreachable retries; sudo or architecture failures fail."""
     sleeper = time.sleep if sleep is None else sleep
     last: Optional[HostsError] = None
     for attempt in range(max(1, attempts)):

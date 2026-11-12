@@ -83,6 +83,35 @@ def selects_local_tests(markexpr: str) -> bool:
     return False
 
 
+# Only pytest.mark.aws tests (manual) may reach AWS or CCM. Everything else
+# runs without credentials so a missed mock fails instead of creating hosts.
+LIVE_CLOUD_ENV_VARS = (
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "AWS_SECURITY_TOKEN",
+    "AWS_PROFILE",
+    "AWS_DEFAULT_PROFILE",
+    "AWS_ROLE_ARN",
+    "AWS_WEB_IDENTITY_TOKEN_FILE",
+    "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+    "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+    "AWS_CONTAINER_AUTHORIZATION_TOKEN",
+    "CCM_TOKEN",
+)
+NO_LIVE_CLOUD_ENV: Mapping[str, str] = {
+    "AWS_SHARED_CREDENTIALS_FILE": os.devnull,
+    "AWS_CONFIG_FILE": os.devnull,
+    "AWS_EC2_METADATA_DISABLED": "true",
+}
+
+
+def strip_live_cloud(env) -> None:
+    for name in LIVE_CLOUD_ENV_VARS:
+        env.pop(name, None)
+    env.update(NO_LIVE_CLOUD_ENV)
+
+
 _THROWAWAY_XDG: Optional[str] = None
 DEFAULT_SUBPROCESS_ENV: Mapping[str, str] = {}
 
@@ -125,8 +154,7 @@ def spa_env(extra: Optional[Mapping[str, str]] = None) -> dict:
     env = os.environ.copy()
     for name in (*AGENT_ENV_VARS, *INHERITED_PATH_VARS):
         env.pop(name, None)
-    # Tests mock CCM HTTP. Do not inherit an operator PAT into subprocess spa.
-    env.pop("CCM_TOKEN", None)
+    strip_live_cloud(env)
     env["PYTHONPATH"] = str(LIB) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     # Never let spa write the operator's ~/.config/spa (paths.yml, environments.yml).
     env.setdefault("XDG_CONFIG_HOME", _throwaway_xdg_config_home())

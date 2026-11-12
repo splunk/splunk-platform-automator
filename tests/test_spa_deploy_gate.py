@@ -267,6 +267,77 @@ def test_deploy_failed_check_does_not_recreate_hosts(tmp_path, monkeypatch):
     assert "SSH failed for idx1" in result.error
 
 
+@pytest.mark.parametrize(
+    "creates_hosts, ssh, expect_hint",
+    [(True, False, True), (False, False, False), (True, True, False)],
+)
+def test_deploy_unreachable_hosts_suggest_resume(
+    tmp_path, monkeypatch, creates_hosts, ssh, expect_hint
+):
+    from spa.hosts import HostsError
+    from spa.providers import ProvisionState
+
+    class FakeProvider:
+        name = "aws"
+
+        def provision_state(self):
+            return ProvisionState(provider="aws", provisioned=True)
+
+    FakeProvider.creates_hosts = creates_hosts
+    rows = [{"name": "idx1", "ok": False, "ssh": ssh, "become": False, "message": "timed out"}]
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    monkeypatch.setattr(
+        "spa.hosts.ping_hosts",
+        lambda *a, **k: (_ for _ in ()).throw(HostsError("SSH failed for idx1.", rows)),
+    )
+    monkeypatch.setattr(
+        "spa.playbooks.run_playbook",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("deploy must not run")),
+    )
+    paths, session = _session_env(tmp_path)
+    _write_state(paths)
+    _write_inventory(paths, "idx1", "idx2")
+    result = session.deploy(confirm=True)
+    assert result.ok is False
+    assert "SSH failed for idx1." in result.error
+    assert ("spa resume --yes" in result.error) is expect_hint
+
+
+def test_deploy_blocks_when_not_provisioned_and_nothing_to_create(tmp_path, monkeypatch):
+    from spa.providers import ProvisionState
+
+    class FakeProvider:
+        name = "ccm"
+
+        def provision(self, extra, **_kwargs):
+            raise AssertionError("must not create hosts")
+
+        def provision_state(self):
+            return ProvisionState(
+                provider="ccm",
+                provisioned=False,
+                reason="CCM terminated this deployment (TTL expiry or CCM terminate): d-1",
+                hint="spa destroy --yes then spa deploy --yes",
+            )
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    monkeypatch.setattr(
+        "spa.hosts.ping_hosts",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("hosts check must not run")),
+    )
+    monkeypatch.setattr(
+        "spa.playbooks.run_playbook",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("deploy must not run")),
+    )
+    paths, session = _session_env(tmp_path)
+    _write_state(paths)
+    _write_inventory(paths, "idx1", "idx2")
+    result = session.deploy(confirm=True)
+    assert result.ok is False
+    assert "CCM terminated this deployment" in result.error
+    assert "spa destroy --yes then spa deploy --yes" in result.error
+
+
 def test_deploy_confirm_names_create_and_deploy_when_hosts_missing(
     tmp_path, monkeypatch
 ):
