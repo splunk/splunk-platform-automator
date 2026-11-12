@@ -13,13 +13,11 @@ from typing import Dict, List, Optional, Sequence
 from spa.api import CommandResult
 from spa.executil import SPA_VENV_MODULES, resolve_venv_dir, venv_has_requirements
 from spa.paths import resolve_spa_paths
-from spa.preflight import _has_baseconfig_apps
+from spa.preflight import ENTERPRISE_DOWNLOAD, FORWARDER_DOWNLOAD, _has_baseconfig_apps
 
 
 VAGRANT_REQUIRED_PLUGINS = ("vagrant-vbguest",)
 VAGRANT_WSL_PLUGINS = ("virtualbox_WSL2",)
-ENTERPRISE_DOWNLOAD = "https://www.splunk.com/en_us/download/splunk-enterprise.html"
-FORWARDER_DOWNLOAD = "https://www.splunk.com/en_us/download/universal-forwarder.html"
 _MISSING_SOFTWARE_DIR_FIX = "spa environment set --software-dir DIR"
 
 

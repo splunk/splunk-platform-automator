@@ -240,6 +240,14 @@ def seed_software_dir(root: Path) -> Path:
     software = Path(root) / "Software"
     for name in ("org_s2_indexer_indexes", "org_cluster_manager_base"):
         (software / "ps" / name).mkdir(parents=True, exist_ok=True)
+    for arch_type, architecture in (
+        ("splunk", "amd64"),
+        ("splunk", "arm64"),
+        ("splunkforwarder", "amd64"),
+        ("splunkforwarder", "arm64"),
+    ):
+        name = "%s-9.3.2-000000000000-linux-%s.tgz" % (arch_type, architecture)
+        (software / name).write_bytes(b"dummy")
     return software
 
 

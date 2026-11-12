@@ -43,7 +43,7 @@ When credentials are available:
 spa validate --splunk-config aws --config config/splunk_config.yml
 ```
 
-Parses `terraform.aws` from the YAML and runs `spa provider aws validate`.
+Parses `terraform.aws` from the YAML and checks that named security groups exist. It does not read port rules or emit `0.0.0.0/0` warnings. `spa provider aws validate` remains the command that warns on exposure.
 
 Or directly:
 

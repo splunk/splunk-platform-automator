@@ -1923,7 +1923,13 @@ class LocalSpaSession:
     ) -> CommandResult:
         from spa.hosts import with_ansible_limit
         from spa.playbooks import PlaybookError, resolve, run_playbook
-        from spa.preflight import check_controller_data, controller_data_error
+        from spa.preflight import (
+            check_controller_data,
+            controller_data_error,
+            guest_mismatch_archive_reason,
+            load_config_mapping,
+            software_archive_error,
+        )
 
         controller = check_controller_data(self.paths)
         if not controller.ok:
@@ -2005,8 +2011,26 @@ class LocalSpaSession:
             error = str(exc)
             if any(row.get("ssh") is False for row in exc.rows) and self._provider_creates_hosts():
                 error = "%s\nIf the hosts are suspended, run: spa resume --yes" % error
+            if any(
+                row.get("expected_architecture") and not row.get("ok") for row in exc.rows
+            ):
+                guest_note = guest_mismatch_archive_reason(
+                    Path(controller.software_dir or self.paths.software_dir),
+                    load_config_mapping(Path(self.paths.config_file)),
+                    exc.rows,
+                )
+                if guest_note:
+                    error = "%s\n%s" % (error, guest_note)
             return CommandResult(ok=False, error=error, code=1, data=data)
         log.emit_host_check(checked.get("hosts") or [])
+        confirmed = software_archive_error(
+            Path(controller.software_dir or self.paths.software_dir),
+            load_config_mapping(Path(self.paths.config_file)),
+        )
+        if confirmed:
+            log.finish(1)
+            data = log.envelope_fields()
+            return CommandResult(ok=False, error=confirmed, code=1, data=data)
         args = with_ansible_limit(extra, resolved)
         try:
             playbook = resolve("deploy_site", self.paths)

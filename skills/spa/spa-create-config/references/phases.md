@@ -16,7 +16,7 @@ Load one section at a time from this file. Hard rules stay in [SKILL.md](../SKIL
 3. Target: the environment chosen at the gate, or the named existing environment under "Add / change a setting". Its config is `<env path>/config/splunk_config.yml`. Never assume the current directory or the registry default is the target.
 4. If the target config already exists and **mode=write** (or approving plan): **merge vs overwrite** — AskQuestion if available, otherwise ask in chat, before any write. Skip in **plan** mode until Phase 12.
 5. **CCM availability, then AWS.** Report `CCM_TOKEN` as set / not set (never the value). Do not AskQuestion CCM unless `CCM_TOKEN` is set, the env has a root `ccm:` block, or the operator already named CCM. When CCM is in play, skip the AWS API probe. Otherwise run `spa --agent provider aws check-auth` (needs `boto3`; no region required). Read `ok` and `data.account`. Record result:
-   - **Available** → Phase 6 uses API discovery; optional `spa validate --splunk-config aws` at validate.
+   - **Available** → Phase 6 uses latest-ami then `spa validate --splunk-config aws`; listings only if that fails.
    - **Unavailable** → create IAM access keys at https://console.aws.amazon.com/iam/ or use `AWS_PROFILE`; follow [aws-without-credentials.md](aws-without-credentials.md); do not block the workflow. Do not run `spa provider ccm` unless CCM is in play.
 6. Read existing config if merging or revising an existing plan from prior config.
 7. Licenses are not scanned here. Phase 10 scans the Software directory once, after the apps decision.
@@ -130,21 +130,24 @@ Run this before the first `spa init` or `spa environment init` for a new environ
 
 ## Phase 6 — AWS settings
 
-**With creds:** Run named `spa --agent provider aws` actions — see [aws-baseline.md](aws-baseline.md). Read `data.*` from the envelope.
+**With creds:** After `spa init --example TOPOLOGY --provider aws`, the write path already has `terraform.aws` from the provider example. Shorten to `spa config header set` (Phase 12), `spa --agent provider aws latest-ami --region REGION`, `spa config set`, `spa validate --splunk-config aws`, then one `spa config explain` per authored path (Phase 12). See [aws-baseline.md](aws-baseline.md). Read `data.*` from the envelope.
 
-1. **Region.** Run `spa --agent provider aws regions list` immediately before AskQuestion. Option 1 is **only** `data.aws_config_region`, first, marked as the default, labelled exactly ``<region> (from AWS config, profile <aws_config_profile>)``.
-   - Do not use `selected`, `region`, or `region_source`. Those can be `AWS_REGION` or scaffold `terraform.aws.region` (`eu-central-1` in `examples/providers/aws.yml`), not a choice.
-   - Never mark `us-east-1` as default unless `data.aws_config_region` is exactly `us-east-1`. No city names. If `data.aws_config_region` is null, show no default. Never choose a default from your own knowledge.
-   - Then up to four other names from `data.items`, common regions first (`us-east-1`, `us-west-2`, `eu-central-1`, `ap-southeast-1` when present), and "Other: type a region".
-   - If `ok` is false, `data.items` is empty. Still show option 1 from `data.aws_config_region`, and offer "Other".
-   - Use the "Recommended" label only on option 1, and only when it came from `data.aws_config_region`.
-2. AMI — if unknown, `spa --agent provider aws latest-ami --region REGION --os <rhel|ubuntu|amazon_linux|debian>` or `spa --agent provider aws survey --region REGION` → user picks from `data.recommended_amis` (preference: RHEL first). REGION is the Phase 6 region, the same as `terraform.aws.region`; every AMI lookup names it.
-3. `ssh_username` (`spa --agent provider aws describe-ami --region REGION --ami-id AMI_ID`)
-4. Instance type (`spa --agent provider aws instance-types list --family t3`; suggest `t3.medium` for config tests)
-5. Key pair (`spa --agent provider aws key-pairs list`)
-6. Security groups (`spa --agent provider aws security-groups list`)
-7. Local: `ssh_private_key_file`, tags, volume size
-8. `spa --agent provider aws validate` before write
+1. AMI — `spa --agent provider aws latest-ami --region REGION --os <rhel|ubuntu|amazon_linux|debian>` or `spa --agent provider aws survey --region REGION` → user picks from `data.recommended_amis` (preference: RHEL first). REGION is the example's `terraform.aws.region`; every AMI lookup names it. Then `spa config set` for `terraform.aws.ami_id`.
+2. `ssh_username` (`spa --agent provider aws describe-ami --region REGION --ami-id AMI_ID`) then `spa config set`.
+3. `spa validate --splunk-config aws`. When that validate succeeds, skip region, key, security-group, and instance-type listings.
+4. **On failure,** keep today's listings. Run named `spa --agent provider aws` actions:
+
+   1. **Region.** Run `spa --agent provider aws regions list` immediately before AskQuestion. Option 1 is **only** `data.aws_config_region`, first, marked as the default, labelled exactly ``<region> (from AWS config, profile <aws_config_profile>)``.
+      - Do not use `selected`, `region`, or `region_source`. Those can be `AWS_REGION` or scaffold `terraform.aws.region` (`eu-central-1` in `examples/providers/aws.yml`), not a choice.
+      - Never mark `us-east-1` as default unless `data.aws_config_region` is exactly `us-east-1`. No city names. If `data.aws_config_region` is null, show no default. Never choose a default from your own knowledge.
+      - Then up to four other names from `data.items`, common regions first (`us-east-1`, `us-west-2`, `eu-central-1`, `ap-southeast-1` when present), and "Other: type a region".
+      - If `ok` is false, `data.items` is empty. Still show option 1 from `data.aws_config_region`, and offer "Other".
+      - Use the "Recommended" label only on option 1, and only when it came from `data.aws_config_region`.
+   2. Instance type (`spa --agent provider aws instance-types list --family t3`; suggest `t3.medium` for config tests)
+   3. Key pair (`spa --agent provider aws key-pairs list`)
+   4. Security groups (`spa --agent provider aws security-groups list`)
+   5. Local: `ssh_private_key_file`, tags, volume size
+   6. `spa --agent provider aws validate` before write
 
 **Without creds:** [aws-without-credentials.md](aws-without-credentials.md) — static matrix, example AMIs, user-supplied key/SG names; **warn AMIs may be stale**; header note `AWS API: not available`. Do **not** run `spa validate --splunk-config aws`.
 

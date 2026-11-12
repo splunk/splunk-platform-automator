@@ -11,6 +11,7 @@ from spa_testutil import (
     run_spa,
     run_spa_inprocess,
     satisfy_env_lookups,
+    seed_software_dir,
     write_min_env,
 )
 
@@ -130,9 +131,10 @@ def test_session_deploy_injects_limit(tmp_path, monkeypatch):
     )
     from spa.preflight import ControllerDataState
 
+    software = seed_software_dir(env_dir)
     monkeypatch.setattr(
         "spa.preflight.check_controller_data",
-        lambda paths: ControllerDataState(ok=True),
+        lambda paths: ControllerDataState(ok=True, software_dir=str(software)),
     )
     session = open_session(start_dir=str(env_dir))
     result = session.deploy(hosts=["indexer"], confirm=True)

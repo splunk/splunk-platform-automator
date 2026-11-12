@@ -217,8 +217,8 @@ splunk_shclusters:
 | `splunk_defaults.splunk_architecture` | string | optional; default='amd64'; pattern=^(amd64\|x86_64\|arm64)$ | CPU suffix of the Splunk tarball: amd64, x86_64, or arm64. This is not the machine running spa. |
 | `splunk_defaults.splunk_conf` | map[string, map[string, any]] | optional | Extra Splunk conf stanzas: file name, then stanza, then key. No default. Omit the key to add none. |
 | `splunk_defaults.splunk_download` | object | optional | Whether the host downloads installers or the controller uploads them from Software. Holds no value itself. |
-| `splunk_defaults.splunk_download.splunk` | boolean | optional; default=False | When true, the host downloads the Splunk Enterprise tarball. When false, the controller uploads the archive from Software. |
-| `splunk_defaults.splunk_download.splunkforwarder` | boolean | optional; default=False | When true, the host downloads the universal forwarder tarball. When false, the controller uploads the archive from Software. |
+| `splunk_defaults.splunk_download.splunk` | boolean | optional; default=False | When true, the host downloads the Splunk Enterprise tarball whose basename is already in Software. The build number cannot be guessed. When false, the controller uploads the archive from Software. |
+| `splunk_defaults.splunk_download.splunkforwarder` | boolean | optional; default=False | When true, the host downloads the universal forwarder tarball whose basename is already in Software. The build number cannot be guessed. When false, the controller uploads the archive from Software. |
 | `splunk_defaults.splunk_env_name` | string | optional; default='splk' | Short name for this Splunk environment. |
 | `splunk_defaults.splunk_fips` | boolean | optional; default=False | When true, install Splunk in FIPS mode. |
 | `splunk_defaults.splunk_group` | string | optional; default='splunk' | Primary OS group for the Splunk account. |
@@ -324,7 +324,7 @@ splunk_defaults:
 
 `splunk_defaults.splunk_download`
 
-The host downloads the Enterprise or Universal Forwarder tarball when splunk or splunkforwarder is true. The controller uploads the archive from Software when that flag is false.
+The host downloads the Enterprise or Universal Forwarder tarball whose basename is already in Software when splunk or splunkforwarder is true. The build number cannot be guessed. The controller uploads the archive from Software when that flag is false.
 
 ```yaml
 splunk_defaults:

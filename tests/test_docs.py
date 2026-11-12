@@ -827,6 +827,33 @@ class TestSpaSkill:
             assert "terraform apply" not in text
             assert "Apply complete" not in text
 
+    def test_entry_skill_points_at_upgrade_and_health_references(self):
+        skill_root = PROJECT_ROOT / "skills" / "spa" / "spa"
+        skill = (skill_root / "SKILL.md").read_text(encoding="utf-8")
+        upgrade = skill_root / "references" / "upgrade.md"
+        health = skill_root / "references" / "health.md"
+        assert upgrade.is_file(), upgrade
+        assert health.is_file(), health
+        upgrade_text = upgrade.read_text(encoding="utf-8")
+        health_text = health.read_text(encoding="utf-8")
+        contract = skill.split("## Contract", 1)[1].split("\n## ", 1)[0]
+        dispatch = skill.split("## Dispatch", 1)[1].split("\n## ", 1)[0]
+        assert "references/upgrade.md" in contract
+        assert "references/health.md" in contract
+        assert "references/upgrade.md" in dispatch
+        assert "references/health.md" in dispatch
+        assert "## Long runs" in skill
+        long_runs = skill.split("## Long runs", 1)[1].split("\n## ", 1)[0]
+        assert "references/long-runs.md" in long_runs
+        assert "Do not load it until that command is running." in long_runs
+        assert "spa run list" in upgrade_text
+        assert "upgrade_splunk" in upgrade_text
+        assert "docs/upgrade.md" in upgrade_text
+        assert "spa upgrade" not in upgrade_text
+        assert "spa upgrade" not in skill
+        assert "spa hosts list --status" in health_text
+        assert "spa hosts check" in health_text
+
     def test_create_config_asks_location_name_and_summary_before_init(self):
         text = _create_config_workflow()
         gate_heading = "## Environment location, name, and summary (mandatory before init)"
@@ -1023,6 +1050,38 @@ class TestSpaSkill:
         assert "`region`" in phase4 or "`region_source`" in phase4
         assert "us-east-1" in phase4
         assert "exactly" in phase4
+
+    def test_create_config_aws_validate_success_skips_listings(self):
+        text = _create_config_workflow()
+        phase6 = text[
+            text.index("## Phase 6 — AWS settings") : text.index("## Phase 7 — Topology counts")
+        ]
+        assert "spa --agent provider aws latest-ami" in phase6
+        assert "spa aws --latest-ami" not in phase6
+        assert "spa validate --splunk-config aws" in phase6
+        assert "When that validate succeeds, skip region, key, security-group, and instance-type listings" in phase6
+        assert "On failure" in phase6
+        assert "spa --agent provider aws regions list" in phase6
+        assert "spa --agent provider aws key-pairs list" in phase6
+        assert "spa --agent provider aws security-groups list" in phase6
+        assert "spa --agent provider aws instance-types list" in phase6
+        assert "spa config header set" in text
+        assert "spa --agent config explain" in text
+        validation = (_create_config_dir() / "references" / "validation.md").read_text(
+            encoding="utf-8"
+        )
+        assert "spa validate --splunk-config aws" in validation
+        assert "security group" in validation.lower()
+        assert "port rules" in validation.lower()
+        for path in (
+            _create_config_dir() / "references" / "phases.md",
+            _create_config_dir() / "references" / "validation.md",
+            _create_config_dir() / "references" / "aws-without-credentials.md",
+            _create_config_dir() / "references" / "secrets-handling.md",
+        ):
+            body = path.read_text(encoding="utf-8")
+            assert "spa validate --splunk-config aws" in body, path.name
+            assert "--splunk-config-aws" not in body, path.name
 
     def test_create_config_plan_mode_delays_init_until_phase_12(self):
         skills = PROJECT_ROOT / "skills" / "spa" / "spa-create-config"
@@ -1299,6 +1358,50 @@ class TestSpaSkill:
         agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
         assert "Splunk lab" in agents
         assert "AWS CLI" in agents
+
+
+class TestIssue125AppsSkill:
+    """Slice 4 of #125: spa-apps placement, Unix TA URL, itsi-minimal, auth check."""
+
+    def _texts(self):
+        skills = PROJECT_ROOT / "skills" / "spa"
+        apps = (skills / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
+        questionnaire = (
+            skills / "spa-create-config" / "references" / "apps-questionnaire.md"
+        ).read_text(encoding="utf-8")
+        return apps, questionnaire
+
+    def test_apps_skill_takes_roles_from_search_row_when_placement_confidence_is_high(self):
+        for text in self._texts():
+            assert "placement_confidence" in text
+            assert "install_docs_url" in text
+            lower = text.lower()
+            assert "search row" in lower or "search-row" in lower
+            window = text[text.index("placement_confidence") : text.index("placement_confidence") + 280]
+            assert "high" in window
+
+    def test_apps_skill_includes_unix_ta_install_url(self):
+        url = "https://splunk.github.io/splunk-add-on-for-unix-and-linux/Install/"
+        for text in self._texts():
+            assert url in text
+
+    def test_apps_skill_merges_itsi_minimal_then_asks_once_about_java(self):
+        for text in self._texts():
+            assert "spa config merge itsi-minimal" in text
+            merge_at = text.index("spa config merge itsi-minimal")
+            after = text[merge_at:]
+            assert "ask once" in after.lower()
+            assert "os.packages" in after
+            assert "spa config set" in after
+            assert "java-21-openjdk" in after
+            assert "openjdk-21-jdk" in after
+            assert "aws-os-matrix.md" in after
+
+    def test_apps_skill_auth_points_at_apps_auth_check(self):
+        for text in self._texts():
+            assert "spa apps auth check" in text
+            assert "${!v}" not in text
+            assert "set / not-set loop" not in text.lower()
 
 
 def _operator_text_paths():
