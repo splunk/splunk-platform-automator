@@ -66,7 +66,9 @@ On every pull request, and on every push to a branch listed under `on.push.branc
 
 CI does **not** provision AWS, download Splunkbase apps, or read `config/splunk_config.yml`.
 
-After the workflow exists, enable **branch protection on `master`**: require the `CI / Syntax`, `CI / CLI tests`, `CI / Ansible tests`, and `CI / Unit tests` checks, and disallow force-push.
+`master` is protected by the repository **ruleset `master`** (Settings → Rules → Rulesets, target: default branch), not classic branch protection. It requires a pull request, blocks deletion and force-push, and requires the status checks `Syntax`, `CLI tests`, `Ansible tests`, and `Unit tests` (shown as `CI / Syntax` and so on). Rename a CI job and you must update the ruleset in the same merge to `master`, or every PR into `master` waits for a check that never reports. The ruleset does not cover `distribution`.
+
+Until `distribution` is merged into `master`, the ruleset still requires the old single check `Local tests`. Swap it in that merge, not earlier: [#155](https://github.com/splunk/splunk-platform-automator/issues/155).
 
 Merged PR head branches are deleted automatically (`delete_branch_on_merge` on the GitHub repo). This is a repository setting, not an in-tree file: Settings → General → Pull Requests → **Automatically delete head branches**.
 
