@@ -430,7 +430,7 @@ def test_conftest_assigns_xdist_group_from_scenario_scope_result():
 
 def test_ansible_parallel_runs_use_loadgroup():
     """-n must use loadgroup so app-scope xdist_group markers keep a scenario on one worker."""
-    for name in ("run_ansible_tests.sh", "run_app_scope_scenarios_tests.sh"):
+    for name in ("run_local_tests.sh", "run_ansible_tests.sh", "run_app_scope_scenarios_tests.sh"):
         text = (PROJECT_ROOT / "tests" / name).read_text(encoding="utf-8")
         assert '"$arg" == "-n"' in text, name
         assert "--dist=loadgroup" in text, name
@@ -1240,7 +1240,11 @@ class TestReviewFindings67:
         offenders = []
         pattern = re.compile(r"\bspa (?:environment |env )?init\b")
         for path in _operator_text_paths():
-            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            text = path.read_text(encoding="utf-8")
+            for claim in ("aws is implicit", "aws is the implicit default"):
+                if claim in text:
+                    offenders.append("%s: %s" % (path.relative_to(PROJECT_ROOT), claim))
+            for number, line in enumerate(text.splitlines(), 1):
                 # Prose that names the flag or negates a topology (not a command) is not an operator example.
                 negated = "not `spa init" in line or "not a spa init" in line or "`--example`" in line
                 if pattern.search(line) and "--example" in line and "--provider" not in line and not negated:
@@ -1291,8 +1295,14 @@ class TestReviewFindings67:
             "`spa aws`",
         )
         skip = {"config.md", "commands.md"}
+        runtime = [
+            PROJECT_ROOT / "tests" / "README.md",
+            PROJECT_ROOT / "lib" / "spa" / "validate.py",
+            PROJECT_ROOT / "lib" / "spa" / "aws.py",
+            PROJECT_ROOT / "lib" / "spa" / "config_edit.py",
+        ]
         offenders = []
-        for path in _operator_text_paths():
+        for path in _operator_text_paths() + runtime:
             if path.name in skip:
                 continue
             text = path.read_text(encoding="utf-8")

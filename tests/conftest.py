@@ -537,11 +537,21 @@ def pytest_collection_modifyitems(items):
 
     config_file groups keep a deployment config on one worker. scenario_scope_result
     keeps succeeds/assertions/snapshot for one app-scope scenario on one worker.
-    Requires --dist=loadgroup (run_ansible_tests.sh adds it with -n).
+    Requires --dist=loadgroup (run_local_tests.sh and run_ansible_tests.sh add it with -n).
 
-    Note: tryfirst=True ensures this runs BEFORE xdist's hook processes markers.
+    Also rejects a local node that the cli, ansible, and unit CI jobs would each
+    select more than once, so no node runs in two jobs.
+
+    Note: tryfirst=True ensures this runs BEFORE xdist's hook processes markers
+    and before -m deselects anything.
     """
-    from spa_testutil import xdist_group_name
+    from spa_testutil import local_job_partition_errors, xdist_group_name
+
+    errors = local_job_partition_errors(
+        (item.nodeid, {mark.name for mark in item.iter_markers()}) for item in items
+    )
+    if errors:
+        raise pytest.UsageError("Local CI job overlap:\n  " + "\n  ".join(errors))
 
     for item in items:
         if not hasattr(item, "callspec"):

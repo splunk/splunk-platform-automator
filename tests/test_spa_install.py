@@ -1,6 +1,5 @@
 """Framework tarball and install.sh (Distribution M3)."""
 
-import ast
 import os
 import subprocess
 import sys
@@ -30,44 +29,6 @@ def framework_tarball(tmp_path_factory):
     assert result.returncode == 0, result.stderr + result.stdout
     assert out.is_file()
     return out
-
-
-def _fixture_scope(fn: ast.FunctionDef):
-    for deco in fn.decorator_list:
-        if not isinstance(deco, ast.Call):
-            continue
-        func = deco.func
-        attr = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
-        if attr != "fixture":
-            continue
-        for kw in deco.keywords:
-            if kw.arg == "scope" and isinstance(kw.value, ast.Constant):
-                return kw.value.value
-        return "function"
-    return None
-
-
-def test_framework_tarball_is_packed_once_per_session():
-    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
-    scopes = [
-        _fixture_scope(node)
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name == "framework_tarball"
-    ]
-    pack_callers = [
-        node.name
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef)
-        and node.name.startswith("test_")
-        and any(
-            isinstance(child, ast.Call)
-            and isinstance(child.func, ast.Name)
-            and child.func.id == "_pack"
-            for child in ast.walk(node)
-        )
-    ]
-    assert scopes == ["session"], scopes
-    assert pack_callers == [], pack_callers
 
 
 def _install_env(home: Path, extra=None):

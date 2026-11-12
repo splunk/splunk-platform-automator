@@ -157,6 +157,11 @@ def test_broken_ansible_import_asks_for_a_rebuild(tmp_path):
     assert ansible_controller_problem(venv) is None
 
 
+def test_venv_script_rebuild_hint_names_the_action():
+    text = (PROJECT_ROOT / "bin" / "spa_venv.sh").read_text(encoding="utf-8")
+    assert "spa venv rebuild --shared --python python3.14 --yes" in text
+
+
 def test_reinstall_checks_that_ansible_can_start_before_galaxy(tmp_path):
     venv = tmp_path / "venv"
     bin_dir = venv / "bin"
@@ -390,6 +395,13 @@ def test_launcher_reexecs_into_shared_venv_when_interpreter_is_incomplete(tmp_pa
     )
     assert result.returncode == 0, result.stderr + result.stdout
     assert result.stdout.strip() == str(PROJECT_ROOT / ".venv")
+
+
+def test_launcher_reexec_is_skipped_when_guard_is_set():
+    """One hop only: the guard prevents an exec loop if no venv can run spa."""
+    body = (PROJECT_ROOT / "bin" / "spa").read_text(encoding="utf-8")
+    assert "SPA_VENV_REEXEC" in body
+    assert "os.execv" in body
 
 
 def _bare_interpreter(tmp_path: Path) -> Path:

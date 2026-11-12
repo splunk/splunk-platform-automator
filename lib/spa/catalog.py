@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import re
-import shutil
 import sys
-import textwrap
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Literal, Optional, Set, Tuple, get_args, get_origin
@@ -84,13 +82,6 @@ def search_features(features: Iterable[Dict[str, Any]], query: str) -> List[Dict
 
 def _without_brackets(value: str) -> str:
     return value.replace("[]", "")
-
-
-def shell_label(label: str) -> str:
-    """Quote selectors that zsh would treat as a glob."""
-    if "[]" in label:
-        return "'%s'" % label
-    return label
 
 
 def _selector_parts(selector: str) -> List[Tuple[str, bool]]:
@@ -703,16 +694,6 @@ def public_label(item: Dict[str, Any]) -> str:
     return str(item.get("title") or "")
 
 
-def _row_label(item: Dict[str, Any]) -> str:
-    if item.get("label"):
-        return str(item["label"])
-    if item.get("selector"):
-        return str(item["selector"])
-    ident = str(item.get("id") or "")
-    if ident and not ident.startswith("setting."):
-        return ident
-    return str(item.get("title") or "")
-
 
 def decision_guidance(item: Dict[str, Any]) -> str:
     return str(item.get("when_to_use") or item.get("when_not_to_use") or "").strip()
@@ -832,12 +813,6 @@ def summarize_feature(
     return public_feature(item, features if features is not None else [item])
 
 
-def list_payload(spa_home: Path) -> Dict[str, Any]:
-    features = load_features(spa_home)
-    validate_feature_catalog(features)
-    return {"features": [summarize_feature(item, features) for item in features]}
-
-
 def search_payload(features: Iterable[Dict[str, Any]], query: str) -> List[Dict[str, Any]]:
     items = list(features)
     schema = schema_key_details()
@@ -854,37 +829,6 @@ def search_payload(features: Iterable[Dict[str, Any]], query: str) -> List[Dict[
         ranked.append((rank, public_label(item), row))
     ranked.sort(key=lambda entry: (entry[0], entry[1]))
     return [row for _rank, _label, row in ranked]
-
-
-def format_feature_rows(features: List[Dict[str, Any]], width: Optional[int] = None) -> str:
-    """One record per block: public label, title, then guidance under the title."""
-    rows = [item for item in features if _row_label(item)]
-    if not rows:
-        return ""
-    id_width = max(len(shell_label(_row_label(item))) for item in rows)
-    indent = " " * (id_width + 2)
-    if width is None:
-        width = shutil.get_terminal_size(fallback=(100, 24)).columns
-    text_width = max(width - len(indent), 40)
-    lines: List[str] = []
-    for item in rows:
-        label = shell_label(_row_label(item))
-        title = str(item.get("title") or "")
-        marker = item.get("marker")
-        if marker and _row_label(item) == title:
-            head = "%s  %s" % (title, marker)
-        else:
-            head = "%s  %s" % (label.ljust(id_width), title)
-        if item.get("sva"):
-            head = "%s  [SVA %s]" % (head.rstrip(), item["sva"])
-        lines.append(head.rstrip())
-        guidance = item.get("when_to_use") or item.get("when_not_to_use")
-        if guidance:
-            lines.extend(
-                indent + line
-                for line in textwrap.wrap(str(guidance), width=text_width) or [""]
-            )
-    return "\n".join(lines)
 
 
 def feature_key_details(item: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1036,71 +980,6 @@ def public_key_description(
         notes = _catalog_notes(path, features)
         text = " ".join(notes)
     return _scrub_catalog_ids(text)
-
-
-def _wrap_prose(label: str, text: str, width: int, indent: str = "") -> List[str]:
-    """Wrap a label: prose pair; key lines and snippets stay verbatim."""
-    wrapped = textwrap.wrap(
-        "%s%s: %s" % (indent, label, text),
-        width=width,
-        subsequent_indent=indent + "  ",
-        break_long_words=False,
-        break_on_hyphens=False,
-    )
-    return wrapped or ["%s%s: %s" % (indent, label, text)]
-
-
-def format_feature_text(
-    item: Dict[str, Any],
-    key_details: Optional[List[Dict[str, Any]]] = None,
-    width: Optional[int] = None,
-) -> str:
-    if width is None:
-        width = shutil.get_terminal_size(fallback=(100, 24)).columns
-    label = shell_label(_row_label(item))
-    title = str(item.get("title") or "")
-    if item.get("marker") and _row_label(item) == title:
-        lines = ["%s  %s" % (title, item["marker"])]
-    else:
-        lines = ["%s  %s" % (label, title)]
-    lines.append("kind: %s" % (item.get("kind") or ""))
-    if item.get("marker") and label != title:
-        lines.append(str(item["marker"]))
-    if item.get("sva"):
-        lines.append("sva: %s" % item["sva"])
-    for field in ("when_to_use", "when_not_to_use", "suggest", "constraints"):
-        if item.get(field):
-            lines.extend(_wrap_prose(field, str(item[field]), width))
-    if key_details is not None:
-        lines.append("keys:")
-        for detail in key_details:
-            qualifiers = [str(detail.get("type") or "undocumented type")]
-            qualifiers.append("required" if detail.get("required") else "optional")
-            if detail.get("default") is not None:
-                qualifiers.append("default=%r" % detail["default"])
-            if detail.get("allowed"):
-                qualifiers.append(
-                    "allowed=%s" % "|".join(str(value) for value in detail["allowed"])
-                )
-            constraints = detail.get("constraints") or {}
-            qualifiers.extend("%s=%s" % pair for pair in constraints.items())
-            lines.append("  %s — %s" % (shell_label(str(detail["path"])), "; ".join(qualifiers)))
-            for field in ("description", "note"):
-                if detail.get(field):
-                    lines.extend(
-                        _wrap_prose(field, str(detail[field]), width, indent="    ")
-                    )
-    related = item.get("related") or []
-    if related:
-        lines.append("related: %s" % ", ".join(str(item) for item in related))
-    snippet = (item.get("snippet") or "").rstrip()
-    if snippet:
-        lines.append("snippet:")
-        lines.extend("  %s" % line for line in snippet.splitlines())
-    command = item.get("command") or {}
-    if isinstance(command, dict) and command.get("command"):
-        lines.append("command: %s" % command["command"])
-    return "\n".join(lines)
 
 
 def features_for_paths(paths: SpaPaths) -> List[Dict[str, Any]]:

@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -92,6 +93,50 @@ def test_local_job_markexprs_partition_a_node(markers, jobs):
     from spa_testutil import matching_local_job_markexprs
 
     assert matching_local_job_markexprs(markers) == jobs
+
+
+def test_local_job_partition_errors_name_each_node_in_two_jobs():
+    from spa_testutil import local_job_partition_errors
+
+    nodes = [
+        ("tests/test_a.py::test_unit", {"local"}),
+        ("tests/test_a.py::test_both", {"local", "cli", "ansible"}),
+        ("tests/test_b.py::test_aws", {"aws", "cli"}),
+    ]
+
+    errors = local_job_partition_errors(nodes)
+
+    assert len(errors) == 1
+    assert "tests/test_a.py::test_both" in errors[0]
+
+
+def test_collection_rejects_a_local_node_in_two_ci_jobs(tmp_path):
+    tests_dir = PROJECT_ROOT / "tests"
+    (tmp_path / "test_overlap.py").write_text(
+        "import pytest\n"
+        "pytestmark = pytest.mark.local\n"
+        "@pytest.mark.cli\n"
+        "@pytest.mark.ansible\n"
+        "def test_both():\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "conftest.py").write_text(
+        (tests_dir / "conftest.py").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (tmp_path / "pytest.ini").write_text(
+        (tests_dir / "pytest.ini").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider", str(tmp_path)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": os.pathsep.join([str(tests_dir), str(LIB)])},
+    )
+
+    assert result.returncode != 0, result.stdout
+    assert "test_overlap.py::test_both" in result.stdout + result.stderr
 
 
 def test_pytest_ini_registers_ansible_marker():
@@ -1534,6 +1579,20 @@ def test_agent_default_action_is_schema():
     explicit = run_spa(["agent", "schema"])
     assert bare.returncode == 0, bare.stderr
     assert json.loads(bare.stdout) == json.loads(explicit.stdout)
+
+
+def test_agent_schema_marks_lifecycle_commands_as_requiring_confirmation():
+    result = run_spa_inprocess(["--agent", "agent", "schema"])
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    by_name = {c["name"]: c for c in payload["data"]["commands"]}
+    assert {"run", "config explain", "shell"} <= set(by_name)
+    flags = [item["long"] for item in by_name["run"].get("flags") or []]
+    assert "--hosts" in flags
+    assert "--yes" in flags
+    assert "spa --agent run list" in by_name["run"]["summary"]
+    for name in ("hosts provision", "destroy", "deploy", "suspend", "resume"):
+        assert by_name[name].get("requires_confirmation") is True, name
 
 
 def test_agent_schema_markdown_is_not_json():

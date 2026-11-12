@@ -158,6 +158,12 @@ def test_config_json_search():
     assert set(rows[0]) == {"path", "description"}
 
 
+def test_config_search_os():
+    result = run_spa_inprocess(["--no-agent", "config", "search", "os"])
+    assert result.returncode == 0, result.stderr
+    assert "os " in result.stdout or result.stdout.startswith("os ")
+
+
 def test_config_schema_payload_lists_each_schema_path_once():
     from spa.catalog import config_schema_payload, schema_key_details
 

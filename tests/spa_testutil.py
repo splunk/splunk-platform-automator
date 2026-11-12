@@ -132,6 +132,19 @@ def matching_local_job_markexprs(markers: Sequence[str]) -> tuple[str, ...]:
     return tuple(hits)
 
 
+def local_job_partition_errors(nodes) -> list[str]:
+    """One message per local node that would run in more than one CI job.
+
+    nodes: iterable of (nodeid, marker names).
+    """
+    errors = []
+    for nodeid, markers in nodes:
+        jobs = matching_local_job_markexprs(tuple(markers))
+        if len(jobs) > 1:
+            errors.append("%s runs in %s" % (nodeid, " and ".join(repr(job) for job in jobs)))
+    return errors
+
+
 def module_pytestmark_names(path: Path) -> set[str]:
     """Marker names assigned to module-level pytestmark in a test file."""
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))

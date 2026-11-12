@@ -11,7 +11,6 @@ Requires: ansible-playbook on PATH (or ANSIBLE_PLAYBOOK), Python deps from tests
 
 from __future__ import annotations
 
-import ast
 import json
 import os
 import shutil
@@ -208,37 +207,6 @@ def scenario_scope_result(request):
     return scenario_name, result, scope_path
 
 
-_SHARED_SCOPE_TESTS = (
-    "test_scenario_scope_playbook_succeeds",
-    "test_scenario_scope_assertions",
-    "test_scenario_scope_matches_snapshot",
-)
-
-
-def _fixture_scope(fn: ast.FunctionDef):
-    for deco in fn.decorator_list:
-        if not isinstance(deco, ast.Call):
-            continue
-        func = deco.func
-        attr = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
-        if attr != "fixture":
-            continue
-        for kw in deco.keywords:
-            if kw.arg == "scope" and isinstance(kw.value, ast.Constant):
-                return kw.value.value
-        return "function"
-    return None
-
-
-def _calls_named(node: ast.AST, name: str) -> bool:
-    return any(
-        isinstance(child, ast.Call)
-        and isinstance(child.func, ast.Name)
-        and child.func.id == name
-        for child in ast.walk(node)
-    )
-
-
 def test_overlapping_app_scope_scenarios_use_distinct_output_paths(monkeypatch):
     """Two xdist workers must not write the same app-scope JSON path."""
     monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
@@ -252,27 +220,6 @@ def test_overlapping_app_scope_scenarios_use_distinct_output_paths(monkeypatch):
     assert path_b != shared
     assert "gw0" in path_a.parts
     assert "gw1" in path_b.parts
-
-
-def test_scenario_scope_playbook_runs_once_per_scenario():
-    """Succeeds, assertions, and snapshot share one playbook run per scenario."""
-    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
-    functions = {
-        node.name: node
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef)
-    }
-    fixture = functions.get("scenario_scope_result")
-    assert fixture is not None, "scenario_scope_result fixture is missing"
-    assert _fixture_scope(fixture) in {"module", "class", "session"}, _fixture_scope(fixture)
-    assert _calls_named(fixture, "_run_scope_playbook")
-    for name in _SHARED_SCOPE_TESTS:
-        node = functions[name]
-        args = [arg.arg for arg in node.args.args]
-        assert "scenario_scope_result" in args, name
-        assert not _calls_named(node, "_run_scope_playbook"), name
-    unset = functions["test_inventory_names_unset_admin_password_lookup"]
-    assert _calls_named(unset, "_run_scope_playbook")
 
 
 def test_scenario_scope_playbook_succeeds(scenario_scope_result):

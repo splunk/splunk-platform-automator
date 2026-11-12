@@ -39,7 +39,16 @@ source "$SCRIPT_DIR/run_venv.sh" 'pydantic>=2.0' 'ansible-core' 'jmespath' 'lxml
 
 export PYTHONPATH="$(cd "$SCRIPT_DIR/.." && pwd)/lib${PYTHONPATH:+:$PYTHONPATH}"
 
+DIST_ARGS=()
+for arg in "$@"; do
+    if [[ "$arg" == "-n" ]] || [[ "$arg" =~ ^-n[0-9]+ ]]; then
+        # loadgroup honors xdist_group so one app-scope scenario stays on one worker
+        DIST_ARGS=(--dist=loadgroup)
+        break
+    fi
+done
+
 echo -e "${GREEN}Running pytest -m local ...${NC}"
-pytest -m local tests/ "$@"
+pytest -m local tests/ "$@" "${DIST_ARGS[@]}"
 
 echo -e "${GREEN}=== All local tests complete ===${NC}"
