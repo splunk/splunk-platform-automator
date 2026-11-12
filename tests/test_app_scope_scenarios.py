@@ -222,6 +222,35 @@ def test_overlapping_app_scope_scenarios_use_distinct_output_paths(monkeypatch):
     assert "gw1" in path_b.parts
 
 
+def test_loadgroup_keeps_one_scenario_on_one_xdist_group(tmp_path):
+    """xdist must see the scenario group, or each test reruns the playbook on another worker."""
+    (tmp_path / "test_grouped.py").write_text(
+        "import pytest\n"
+        "pytestmark = pytest.mark.local\n"
+        "@pytest.fixture(scope='module', params=['ds_only'])\n"
+        "def scenario_scope_result(request):\n"
+        "    return request.param\n"
+        "def test_one(scenario_scope_result):\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+    for name in ("conftest.py", "pytest.ini"):
+        shutil.copy(_tests_dir / name, tmp_path / name)
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "pytest", "-n", "1", "--dist=loadgroup",
+            "-p", "no:cacheprovider", "--durations=0", "--durations-min=0", str(tmp_path),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": os.pathsep.join([str(_tests_dir), str(_project_root() / "lib")])},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "test_one[ds_only]@app_scope_ds_only" in result.stdout, result.stdout
+
+
 def test_scenario_scope_playbook_succeeds(scenario_scope_result):
     """Run debug_app_scope for the scenario and assert playbook succeeds."""
     scenario_name, result, scope_path = scenario_scope_result

@@ -1,4 +1,6 @@
-pytest>=7.0.0
+# pytest 9.2 derives nodeid from Node._id; pytest-xdist 3.8 still sets _nodeid, so
+# --dist=loadgroup stops grouping and app-scope scenarios rerun their playbook.
+pytest>=7.0.0,<9.2
 pytest-xdist>=3.0.0
 PyYAML>=6.0
 ruamel.yaml==0.18.16
