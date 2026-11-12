@@ -11,7 +11,7 @@ spa --agent provider aws check-auth
 | Result | Meaning | Skill path |
 |--------|---------|------------|
 | `ok: true` + `data.account` | Credentials work | Phase 6 **with creds** (`spa --agent provider aws survey --region REGION`, `latest-ami`, optional `spa validate --splunk-config aws`). Report account ID only — see [secrets-handling.md](secrets-handling.md) |
-| `ok: false`, error mentions credentials | No AWS creds / expired session | Phase 6 **without creds** (this doc) |
+| `ok: false`, error mentions credentials | No AWS creds / expired session | Create IAM access keys at https://console.aws.amazon.com/iam/ (or `AWS_PROFILE`). Create the EC2 key pair at https://console.aws.amazon.com/ec2/. Until then, Phase 6 **without creds** (this doc) |
 | Exit 2, `boto3 is required` | boto3 not installed | `pip install boto3`; until then, **without creds** path |
 | `ok: false`, other API error | Profile/region/permission issue | Fix AWS setup or fall back **without creds** and note in header |
 

@@ -22,7 +22,6 @@ class ConfirmationUsageError(ConfirmationError):
 LIFECYCLE_RISK = {
     "provision": "mutating",
     "hosts provision": "mutating",
-    "create hosts and deploy": "mutating",
     "destroy": "destructive",
     "deploy": "mutating",
     "suspend": "mutating",

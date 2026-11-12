@@ -31,6 +31,7 @@ from spa.providers import (
     wait_managed_ssh,
 )
 from spa.providers.external import inventory_line, upsert_inventory
+from spa.runlog import PROVIDER_SOURCE
 
 TOKEN_ENV = "CCM_TOKEN"
 API_ROOT = "https://api.ccm.splunkits.io"
@@ -420,6 +421,7 @@ class Provider:
                 provisioned=False,
                 reason="No CCM state for this env: %s" % self.state_dir,
                 hint=DEPLOY_HINT,
+                missing=tuple(self._hostnames()),
             )
         if self._client is None and not token_present():
             return ProvisionState(provider=self.name, provisioned=True)
@@ -629,12 +631,28 @@ class Provider:
             "CCM will terminate the whole deployment when %s passes." % shown
         ]
 
+    def _progress(self, run_log: Any, phase: str, task: str) -> None:
+        if run_log is None:
+            return
+        run_log.emit(
+            {
+                "status": "ok",
+                "source": PROVIDER_SOURCE,
+                "phase": phase,
+                "task": task,
+                "msg": task,
+                "kind": "task_start",
+            }
+        )
+
     def provision(self, extra: List[str], **kwargs: Any) -> Dict[str, Any]:
         del extra
+        run_log = kwargs.get("run_log")
         self.lifecycle_preflight("provision")
         hosts = self._hostnames()
         name = self._deployment_name()
         body, ttl = self._create_body(name, hosts)
+        self._progress(run_log, "ccm_create", "Create CCM deployment %s" % name)
         status, payload = self._request(
             "POST",
             DEPLOYMENTS_PATH,
@@ -651,6 +669,11 @@ class Provider:
         self._write_state(
             str(deployment_id), ttl, {}, req_state="pending", operation_hours=hours
         )
+        self._progress(
+            run_log, "ccm_ready", "Waiting for CCM deployment %s" % deployment_id
+        )
+        if run_log is not None:
+            run_log.start_heartbeat()
         ready = self._poll_until_ready(str(deployment_id))
         instances = ready.get("instances_data") or []
         if len(instances) != len(hosts):
@@ -674,6 +697,7 @@ class Provider:
             operation_hours=hours,
         )
         inventory = self._write_inventory(mapped)
+        self._progress(run_log, "wait_ssh", "Wait for SSH")
         wait_managed_ssh(self.paths)
         return {
             "deployment_id": str(deployment_id),

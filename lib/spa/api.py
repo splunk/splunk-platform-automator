@@ -464,13 +464,19 @@ class LocalSpaSession:
         )
 
     def _lifecycle_next(self, action: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        if action != "provision":
-            return data
-        from spa.next_steps import provision_next
+        if action == "provision":
+            from spa.next_steps import provision_next
 
-        payload = dict(data)
-        payload["next"] = provision_next(Path(self.paths.spa_env_dir).name)
-        return payload
+            payload = dict(data)
+            payload["next"] = provision_next(Path(self.paths.spa_env_dir).name)
+            return payload
+        if action == "deploy":
+            from spa.next_steps import deploy_next
+
+            payload = dict(data)
+            payload["next"] = deploy_next(self.paths.spa_env_dir)
+            return payload
+        return data
 
     def _env_lookup_gate(self) -> Optional[CommandResult]:
         """Reject missing lookup targets before confirmation, inventory, or providers."""
@@ -541,54 +547,14 @@ class LocalSpaSession:
         self, hosts: Optional[Sequence[str]]
     ) -> Tuple[bool, Optional[CommandResult]]:
         """Whether deploy should create missing managed hosts before the playbook."""
-        state = self._provision_state()
-        if state is None or state.provisioned:
-            return False, None
-        from spa.hosts import parse_host_tokens
+        from spa.providers import deploy_create_plan
 
-        tokens = parse_host_tokens(hosts)
-        _managed, external = self._classified_hosts()
-        if tokens:
-            from spa.providers import load_deployment_config
-            from spa.providers.classify import hostnames_for_tokens
-
-            try:
-                document = load_deployment_config(self.paths)
-            except Exception:
-                document = {}
-            selected = hostnames_for_tokens(document, tokens)
-            if not selected:
-                return False, None
-            missing = [name for name in state.missing if name in selected]
-            if not missing:
-                return False, None
-        else:
-            missing = list(state.missing)
-            if not missing:
-                return False, CommandResult(
-                    ok=False,
-                    code=1,
-                    error=state.message(state.reason or None),
-                    data=state.payload(),
-                )
-        external_missing = [name for name in missing if name in external]
-        managed_missing = [name for name in missing if name not in set(external)]
-        if external_missing and not managed_missing:
-            from spa.providers.external import _register_sentence
-
-            hint = _register_sentence(external_missing[0]).split("Run: ", 1)[-1]
-            lines = [
-                "hosts not provisioned: %s" % ", ".join(missing),
-                "provider: %s" % state.provider,
-                "Run: %s" % hint,
-            ]
+        plan = deploy_create_plan(self.paths, hosts)
+        if plan.error:
             return False, CommandResult(
-                ok=False,
-                code=1,
-                error="\n".join(lines),
-                data=state.payload(),
+                ok=False, code=1, error=plan.error, data=plan.data
             )
-        return bool(managed_missing), None
+        return plan.will_create, None
 
     def _progress(self, event: Dict[str, Any]) -> None:
         if self.on_progress:
@@ -1982,11 +1948,8 @@ class LocalSpaSession:
         except HostLookupError as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
         details = list(self._confirm_details(resolved) or [])
-        if will_create:
-            details.insert(0, "will create missing hosts, then deploy Splunk")
-        confirm_label = "create hosts and deploy" if will_create else "deploy"
         blocked = self._confirm_gate(
-            confirm_label,
+            "deploy",
             confirm=confirm,
             agent=agent,
             details=details or None,
@@ -2071,6 +2034,8 @@ class LocalSpaSession:
         data.update(log.envelope_fields())
         if resolved:
             data["hosts"] = resolved
+        if rc == 0:
+            data = self._lifecycle_next("deploy", data)
         return CommandResult(
             ok=rc == 0,
             code=rc,

@@ -9,10 +9,10 @@ A missing local Splunk archive message names the glob, the resolved Software dir
 
 The local installer stays in the Software directory when `splunk_download.splunk` or `splunk_download.splunkforwarder` is true. The host URL uses that file's basename. The build number is in the filename and cannot be guessed.
 
-Missing credentials are reported as **set** or **not set**. Repeat the names from `spa validate`. Never print a value. Never suggest `echo`, `printenv`, `env | grep`, or a zsh indirect expansion.
+Missing credentials are reported as **set** or **not set**. Repeat the names from `spa validate`. Never print a value. Never suggest `echo`, `printenv`, `env | grep`, or a zsh indirect expansion. Tell the operator where to create them; they export in the shell and paste nothing into chat.
 
-- Splunkbase, when an app will be downloaded: `SPLUNKBASE_USERNAME` and `SPLUNKBASE_PASSWORD`.
-- AWS, when `spa --agent provider aws check-auth` fails: prefer `AWS_PROFILE`; otherwise name `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, plus `AWS_SESSION_TOKEN` for temporary credentials.
-- CCM, only when CCM is in play (`CCM_TOKEN` set, the env has `ccm:`, or the operator named CCM): `CCM_TOKEN`.
+- Splunkbase, when an app will be downloaded: `SPLUNKBASE_USERNAME` and `SPLUNKBASE_PASSWORD`. Create a Splunk.com account at https://splunkbase.splunk.com/.
+- AWS, when `spa --agent provider aws check-auth` fails: prefer `AWS_PROFILE`; otherwise name `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, plus `AWS_SESSION_TOKEN` for temporary credentials. Create IAM access keys at https://console.aws.amazon.com/iam/. Create the EC2 key pair at https://console.aws.amazon.com/ec2/ in the env region; keep the PEM at `ssh_private_key_file`.
+- CCM, only when CCM is in play (`CCM_TOKEN` set, the env has `ccm:`, or the operator named CCM): `CCM_TOKEN`. If it is not set, mint a PAT and SSH key at https://ccm.splunkits.io/, then export `CCM_TOKEN`. SPA does not create CCM keys.
 
 `spa validate --splunk-config aws` reads `terraform.aws` from the environment config. `aws` is the only legal value. Skills do not assemble `spa provider aws validate` with region, AMI, key, security groups, and instance type when those values are already in the config. `spa provider aws validate` remains the low-level command.

@@ -534,14 +534,14 @@ def collect_checks(
                     "error",
                     "ccm_api",
                     str(exc),
-                    "Check CCM_TOKEN and https://api.ccm.splunkits.io",
+                    "Check CCM_TOKEN (mint at https://ccm.splunkits.io/) and https://api.ccm.splunkits.io",
                 )
         else:
             rec(
                 "error",
                 "ccm_token",
                 "%s: not set" % ccm_mod.TOKEN_ENV,
-                "Set CCM_TOKEN to a CCM personal access token (mint in the CCM UI)",
+                "Set CCM_TOKEN to a PAT minted at https://ccm.splunkits.io/",
             )
 
     if require_external:

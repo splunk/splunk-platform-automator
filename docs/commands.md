@@ -695,7 +695,7 @@ spa environment --export
 
 ## `deploy`
 
-Create missing hosts if needed, then deploy Splunk (deploy_site.yml). After you confirm, ping with become before the playbook. Requires Software/baseconfig and local app sources
+Deploy Splunk (deploy_site.yml). After you confirm, ping with become before the playbook. Requires Software/baseconfig and local app sources
 
 Requires confirmation: yes (`--yes`).
 

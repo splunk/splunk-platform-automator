@@ -108,5 +108,8 @@ Use lookup templates from examples — never substitute live env values into sni
 
 ## If credentials missing
 
-- Splunkbase: [docs/apps.md](../../../../docs/apps.md) — user exports locally; do not ask them to paste passwords in chat.
-- AWS: [aws-without-credentials.md](aws-without-credentials.md) — static AMI fallback; user configures profile or env before provision.
+Do not ask the operator to paste secret values in chat. Point them at the GUI, then they export in the shell.
+
+- Splunkbase: sign in at https://splunkbase.splunk.com/, export `SPLUNKBASE_USERNAME` and `SPLUNKBASE_PASSWORD`. Docs: [docs/apps.md](../../../../docs/apps.md).
+- AWS API: create access keys at https://console.aws.amazon.com/iam/ or use `AWS_PROFILE`. EC2 key pair: https://console.aws.amazon.com/ec2/ in the env region. Docs: [docs/aws.md](../../../../docs/aws.md). Static AMI fallback: [aws-without-credentials.md](aws-without-credentials.md).
+- CCM (only when CCM is in play): mint `CCM_TOKEN` and the SSH key at https://ccm.splunkits.io/. Docs: [docs/ccm.md](../../../../docs/ccm.md).

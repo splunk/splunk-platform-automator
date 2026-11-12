@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shlex
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from spa.apps import CONTENT_LIBRARY_ID, ES_ID, ITSI_ID
@@ -166,6 +167,17 @@ def licenses_list_next(scan: Dict[str, Any]) -> List[Dict[str, Any]]:
             '\'{"roles":["monitoring_console","license_manager"]}\' --yes',
             required=unsatisfied,
         ),
+    ]
+
+
+def deploy_next(env_dir: str) -> List[Dict[str, Any]]:
+    path = str((Path(env_dir) / "config" / "index.html").resolve())
+    return [
+        item(
+            "hosts.linkpage",
+            "Paste %s into a browser to log in to Splunk hosts." % path,
+            required=False,
+        )
     ]
 
 

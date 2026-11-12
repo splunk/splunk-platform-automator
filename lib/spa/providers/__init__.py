@@ -139,6 +139,15 @@ def inventory_hostnames_from_file(paths: SpaPaths) -> List[str]:
     return names
 
 
+@dataclass(frozen=True)
+class DeployCreatePlan:
+    """Whether spa deploy should create managed hosts before the playbook."""
+
+    will_create: bool
+    error: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
+
+
 def lookup_provision_state(paths: SpaPaths) -> Optional[ProvisionState]:
     """Return provision state, or None when the provider lookup itself fails."""
     try:
@@ -147,8 +156,56 @@ def lookup_provision_state(paths: SpaPaths) -> Optional[ProvisionState]:
         return None
 
 
+def deploy_create_plan(
+    paths: SpaPaths, hosts: Optional[Sequence[str]] = None
+) -> DeployCreatePlan:
+    """Create-or-refuse decision for spa deploy. Same path for every provider."""
+    state = lookup_provision_state(paths)
+    if state is None or state.provisioned:
+        return DeployCreatePlan(will_create=False)
+    from spa.hosts import parse_host_tokens
+    from spa.providers.classify import classify_hostnames, hostnames_for_tokens
+
+    try:
+        document = load_deployment_config(paths)
+    except Exception:
+        document = {}
+    _managed, external = classify_hostnames(document)
+    tokens = parse_host_tokens(hosts)
+    if tokens:
+        selected = hostnames_for_tokens(document, tokens)
+        if not selected:
+            return DeployCreatePlan(will_create=False)
+        missing = [name for name in state.missing if name in selected]
+        if not missing:
+            return DeployCreatePlan(will_create=False)
+    else:
+        missing = list(state.missing)
+        if not missing and state.hint == DEPLOY_HINT:
+            missing = [name for name in expected_hostnames(document) if name not in set(external)]
+        if not missing:
+            lines = [line for line in (state.reason, ("Run: %s" % state.hint) if state.hint else "") if line]
+            return DeployCreatePlan(
+                will_create=False,
+                error="\n".join(lines) or state.message(),
+                data=state.payload(),
+            )
+    external_set = set(external)
+    external_missing = [name for name in missing if name in external_set]
+    managed_missing = [name for name in missing if name not in external_set]
+    if external_missing and not managed_missing:
+        from spa.providers.external import _register_sentence
+
+        return DeployCreatePlan(
+            will_create=False,
+            error=_register_sentence(external_missing[0]),
+            data=state.payload(),
+        )
+    return DeployCreatePlan(will_create=bool(managed_missing))
+
+
 def check_provisioned(paths: SpaPaths) -> ProvisionState:
-    """Block spa deploy only when a spa-managed provider can prove hosts are missing."""
+    """Whether every config host is present. Deploy uses this internally; other commands may refuse."""
     try:
         config = load_deployment_config(paths)
     except ProviderError:

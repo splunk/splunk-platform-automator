@@ -6,7 +6,7 @@ Human `spa --help`, invalid-choice text, and skills omit CCM unless `CCM_TOKEN` 
 
 ## Discover and configure
 
-Auth is `CCM_TOKEN` in the process environment (`lookup('env', 'CCM_TOKEN')`). It is not a config key. Mint the PAT in the CCM UI. `spa doctor` and `spa provider ccm check-auth` report the env var as **set / not set** and never print the token.
+Auth is `CCM_TOKEN` in the process environment (`lookup('env', 'CCM_TOKEN')`). It is not a config key. Mint the PAT in the CCM UI at [https://ccm.splunkits.io/](https://ccm.splunkits.io/), then export `CCM_TOKEN` in the shell. `spa doctor` and `spa provider ccm check-auth` report the env var as **set / not set** and never print the token.
 
 `spa config provider ccm` writes the `ccm:` YAML block. `spa provider ccm` is discovery, not that write:
 
@@ -22,7 +22,7 @@ spa config explain provider.ccm
 
 Size OS, instance type, and disk from that live catalog. Do not hardcode those lists. GUI closed sets (`business_purpose`, `operation_hours`) are `spa provider ccm business-purposes list` and `operation-hours list`.
 
-`ccm.ssh_username` is always `splunker` for every CCM OS flavor. Operators create the SSH key in the CCM GUI, set `ccm.key_name`, and keep the private file locally. `spa provider ccm ssh-keys list` shows CCM names and whether the local file exists. SPA does not create keys or download PEM material.
+`ccm.ssh_username` is always `splunker` for every CCM OS flavor. Operators create the SSH key in the CCM GUI at [https://ccm.splunkits.io/](https://ccm.splunkits.io/), set `ccm.key_name`, and keep the private file locally. `spa provider ccm ssh-keys list` shows CCM names and whether the local file exists. SPA does not create keys or download PEM material.
 
 CCM is remote (like AWS). `spa init --provider ccm` already merges remote-provider defaults (hostname, host-side download, TLS). For an existing env, `spa config merge remote-provider --yes`.
 

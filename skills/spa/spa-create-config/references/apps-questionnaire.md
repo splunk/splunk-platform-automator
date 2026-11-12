@@ -14,6 +14,7 @@ Prefer environment variables on controller — see [secrets-handling.md](secrets
 
 - `SPLUNKBASE_USERNAME` — **set / not set** only in chat; never display the value
 - `SPLUNKBASE_PASSWORD` — **set / not set** only in chat; never display the value
+- If not set: create a Splunk.com account at https://splunkbase.splunk.com/, export both variables, paste nothing in chat.
 
 In `splunk_config.yml` use lookups only (never hardcode):
 

@@ -494,6 +494,56 @@ def test_ccm_provision_polls_until_req_state_ready(tmp_path):
     assert slept == [5]
 
 
+def test_ccm_provision_emits_run_log_progress(tmp_path):
+    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
+
+    class RecordingLog:
+        def __init__(self) -> None:
+            self.events = []
+            self.heartbeats = 0
+
+        def emit(self, raw):
+            self.events.append(dict(raw))
+            return raw
+
+        def start_heartbeat(self) -> None:
+            self.heartbeats += 1
+
+    env = tmp_path / "mylab"
+    env.mkdir()
+    paths = _ccm_paths(
+        env,
+        _CCM_MIN
+        + "splunk_hosts:\n"
+        + "  - name: idx1\n"
+        + "    roles: [indexer]\n"
+        + "  - name: sh1\n"
+        + "    roles: [search_head]\n",
+    )
+    opener = ScriptedOpener(
+        [
+            (200, {"data": {"deployment_id": "dep-9"}}),
+            (200, _ready_deployment()),
+        ]
+    )
+    log = RecordingLog()
+    provider = CcmProvider(
+        paths,
+        _CCM_CONFIG,
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+        sleep=lambda _seconds: None,
+    )
+    provider.provision([], run_log=log)
+    phases = [row.get("phase") for row in log.events]
+    tasks = " ".join(str(row.get("task") or "") for row in log.events)
+    assert "ccm_create" in phases
+    assert "ccm_ready" in phases
+    assert "wait_ssh" in phases
+    assert "CCM" in tasks
+    assert "dep-9" in tasks
+    assert log.heartbeats == 1
+
+
 def test_ccm_provision_refuses_when_state_has_live_deployment(tmp_path):
     from spa.providers import ProviderError
     from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
