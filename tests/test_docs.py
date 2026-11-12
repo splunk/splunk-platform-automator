@@ -16,6 +16,10 @@ import pytest
 pytestmark = pytest.mark.local
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RELEASE_INSTALL_ONE_LINER = (
+    "curl -fsSL https://github.com/splunk/splunk-platform-automator/"
+    "releases/latest/download/install.sh | sh"
+)
 
 CANONICAL_DOCS = {
     "apps.md",
@@ -134,6 +138,57 @@ def test_agents_md_install_from_this_checkout():
     assert "curl | sh" not in section
     assert "pip install" not in section
     assert "`/spa`" not in section
+
+
+def test_non_clone_install_uses_the_release_prefix_one_liner():
+    """URL / manual install is the release prefix installer, not git clone."""
+    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
+    agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+
+    readme_install = readme.split("## Install", 1)[1].split("\n## ", 1)[0]
+    assert RELEASE_INSTALL_ONE_LINER in readme_install
+    assert "spa skills install cursor" in readme_install
+    assert "docs/install.md" in readme_install
+    assert "git clone" not in readme_install
+    assert "venv create" not in readme_install
+    assert "~/.local/share/spa" in readme_install
+    assert "~/.local/bin/spa" in readme_install
+
+    assert RELEASE_INSTALL_ONE_LINER in install
+    assert "${XDG_DATA_HOME:-~/.local/share}/spa" in install
+    assert "~/.local/bin/spa" in install
+    assert "./install.sh" in install
+    assert "--force" in install
+    assert "--skip-venv" in install
+    assert "--skip-doctor" in install
+    assert "## Uninstall" in install
+    assert "## Extract anywhere" in install
+    assert "## Develop SPA (git clone)" in install
+    installer = install.split("## Installer (recommended)", 1)[1].split("\n## ", 1)[0]
+    assert "spa skills install cursor" in installer
+    assert "git clone" not in installer
+    develop = install.split("## Develop SPA (git clone)", 1)[1].split("\n## ", 1)[0]
+    assert "git clone" in develop
+
+    heading = "## Install from a repo URL"
+    assert heading in agents
+    checkout = "## Install from this checkout"
+    assert agents.index(checkout) < agents.index(heading) < agents.index("## Start here")
+    section = agents.split(heading, 1)[1].split("\n## ", 1)[0]
+    assert RELEASE_INSTALL_ONE_LINER in section
+    assert "./install.sh --from tarball" in section
+    assert "spa skills install" in section
+    assert "spa doctor" in section
+    assert "spa environment set --software-dir" in section
+    assert "do not download" in section.lower()
+    assert "spa init" in section and "spa deploy" in section
+    assert "do not" in section.lower() and "clone" in section.lower()
+    assert "git clone https://" not in section
+    assert "`/spa`" not in section
+    checkout_section = agents.split(checkout, 1)[1].split("\n## ", 1)[0]
+    assert "curl | sh" not in checkout_section
+    assert "pip install" not in checkout_section
 
 
 def test_architecture_defines_cli_ux_and_output_conventions():
@@ -279,7 +334,7 @@ def test_development_docs_require_tdd_and_feature_review():
     assert "including Plan mode" in agents
     assert "Do not load `/spa` or Read a `SKILL.md` when changing spa itself." in agents
     assert "Do not Read `lib/spa/cli.py`" in agents
-    assert len(agents.splitlines()) <= 55
+    assert len(agents.splitlines()) <= 60
 
     # Stop at each gate. Completing todos is not ship authorization.
     assert "names **one** next step" in architecture
