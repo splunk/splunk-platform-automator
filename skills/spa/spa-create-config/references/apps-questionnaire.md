@@ -10,11 +10,7 @@ If no → omit `splunk_app_deployment` entirely.
 
 ## 2. Credentials
 
-Prefer environment variables on controller — see [secrets-handling.md](secrets-handling.md):
-
-- `SPLUNKBASE_USERNAME` — **set / not set** only in chat; never display the value
-- `SPLUNKBASE_PASSWORD` — **set / not set** only in chat; never display the value
-- If not set: create a Splunk.com account at https://splunkbase.splunk.com/, export both variables, paste nothing in chat.
+Check Splunkbase with `spa apps auth check`. Report **set / not set** only in chat; never display the values. Prefer environment variables on controller — see [secrets-handling.md](secrets-handling.md). If not set: create a Splunk.com account at https://splunkbase.splunk.com/, export both variables, paste nothing in chat.
 
 In `splunk_config.yml` use lookups only (never hardcode):
 
@@ -32,19 +28,20 @@ See [docs/apps.md](../../../../docs/apps.md). Optional vault in config. Do not v
 
 ## 4. Target roles
 
+When search-row `placement_confidence` is `high`, take roles from that row. Otherwise read `install_docs_url` (Unix TA: https://splunk.github.io/splunk-add-on-for-unix-and-linux/Install/).
+
 For **normal** apps, `target_roles`: `search_head`, `indexer`, `universal_forwarder`, `heavy_forwarder` (maps to deployer/CM/DS/direct per SPA). SPA places TAs by role, not by host. Follow `data.next` after each add. If add returns `ready: false` with a roles choice, AskQuestion over `allowed` (pre-check `suggested`), then retry with `--roles`. Do not guess.
 
 Do **not** set `target_roles` on `premium_app: itsi` or `itsi_content_pack: true` entries. Do not ask for roles on those entries.
 
 ## 5. Premium ITSI?
 
-ITSI / ITE Work → Splunkbase **1841** only (`spa --agent apps add 1841`). Not 5403.
+ITSI / ITE Work → Splunkbase **1841** only. Not 5403. Minimal ITSI is `spa config merge itsi-minimal`. After the operator accepts that merge, ask once about Java on the search host via `spa config set` on that host's `os.packages` (`java-21-openjdk` on Amazon Linux/RHEL, `openjdk-21-jdk` on Ubuntu) — see [aws-os-matrix.md](aws-os-matrix.md).
 
-Discover Java and license paths with `spa --agent config explain PATH`, then set chosen values with `spa --agent config set PATH VALUE`.
+Discover license paths with `spa --agent config explain PATH`, then set chosen values with `spa --agent config set PATH VALUE`.
 
 - Main app: `premium_app: itsi`, no `target_roles`
 - Licenses: follow `data.next` after adding ITSI (`spa --env NAME --agent licenses list`) — proposes `Splunk_Enterprise.lic` + `Splunk_ITSI.lic` from Software; see [licenses.md](licenses.md)
-- **Java 21 max** on the search/ITSI host `splunk_hosts[].os.packages` (not the global `os:` block) — see [aws-os-matrix.md](aws-os-matrix.md)
 - Full lab (not `spa init --example`): `examples/single_node_itsi.yml`
 
 ## 6. ITSI content packs?

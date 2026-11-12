@@ -1360,6 +1360,50 @@ class TestSpaSkill:
         assert "AWS CLI" in agents
 
 
+class TestIssue125AppsSkill:
+    """Slice 4 of #125: spa-apps placement, Unix TA URL, itsi-minimal, auth check."""
+
+    def _texts(self):
+        skills = PROJECT_ROOT / "skills" / "spa"
+        apps = (skills / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
+        questionnaire = (
+            skills / "spa-create-config" / "references" / "apps-questionnaire.md"
+        ).read_text(encoding="utf-8")
+        return apps, questionnaire
+
+    def test_apps_skill_takes_roles_from_search_row_when_placement_confidence_is_high(self):
+        for text in self._texts():
+            assert "placement_confidence" in text
+            assert "install_docs_url" in text
+            lower = text.lower()
+            assert "search row" in lower or "search-row" in lower
+            window = text[text.index("placement_confidence") : text.index("placement_confidence") + 280]
+            assert "high" in window
+
+    def test_apps_skill_includes_unix_ta_install_url(self):
+        url = "https://splunk.github.io/splunk-add-on-for-unix-and-linux/Install/"
+        for text in self._texts():
+            assert url in text
+
+    def test_apps_skill_merges_itsi_minimal_then_asks_once_about_java(self):
+        for text in self._texts():
+            assert "spa config merge itsi-minimal" in text
+            merge_at = text.index("spa config merge itsi-minimal")
+            after = text[merge_at:]
+            assert "ask once" in after.lower()
+            assert "os.packages" in after
+            assert "spa config set" in after
+            assert "java-21-openjdk" in after
+            assert "openjdk-21-jdk" in after
+            assert "aws-os-matrix.md" in after
+
+    def test_apps_skill_auth_points_at_apps_auth_check(self):
+        for text in self._texts():
+            assert "spa apps auth check" in text
+            assert "${!v}" not in text
+            assert "set / not-set loop" not in text.lower()
+
+
 def _operator_text_paths():
     """Every markdown file an operator or agent reads for commands."""
     paths = [PROJECT_ROOT / "README.md", PROJECT_ROOT / "AGENTS.md"]
