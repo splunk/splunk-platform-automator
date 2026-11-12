@@ -464,13 +464,19 @@ class LocalSpaSession:
         )
 
     def _lifecycle_next(self, action: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        if action != "provision":
-            return data
-        from spa.next_steps import provision_next
+        if action == "provision":
+            from spa.next_steps import provision_next
 
-        payload = dict(data)
-        payload["next"] = provision_next(Path(self.paths.spa_env_dir).name)
-        return payload
+            payload = dict(data)
+            payload["next"] = provision_next(Path(self.paths.spa_env_dir).name)
+            return payload
+        if action == "deploy":
+            from spa.next_steps import deploy_next
+
+            payload = dict(data)
+            payload["next"] = deploy_next(self.paths.spa_env_dir)
+            return payload
+        return data
 
     def _env_lookup_gate(self) -> Optional[CommandResult]:
         """Reject missing lookup targets before confirmation, inventory, or providers."""
@@ -2028,6 +2034,8 @@ class LocalSpaSession:
         data.update(log.envelope_fields())
         if resolved:
             data["hosts"] = resolved
+        if rc == 0:
+            data = self._lifecycle_next("deploy", data)
         return CommandResult(
             ok=rc == 0,
             code=rc,

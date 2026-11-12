@@ -31,6 +31,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **Deploy host link page**: after a successful `spa deploy`, humans see `Next:` with the path to `$SPA_ENV_DIR/config/index.html` to paste into a browser for Splunk Web on each host. Agent envelopes attach the same `data.next` item (`hosts.linkpage`, no `command`). Failed deploy omits it.
+
 - **Missing-credential portals**: when `CCM_TOKEN`, AWS keys, or Splunkbase env vars are unset, docs and skills name the GUI: [CCM UI](https://ccm.splunkits.io/) for the PAT and SSH key, [IAM](https://console.aws.amazon.com/iam/) / [EC2](https://console.aws.amazon.com/ec2/) for AWS keys and key pairs, [Splunkbase](https://splunkbase.splunk.com/) for download credentials. `spa doctor` missing-token fix uses the CCM URL. Never paste secret values in chat.
 
 - **CCM provision progress**: `spa deploy` / `spa hosts provision` for a `ccm:` env write run-log groups (CCM create, wait for ready, wait for SSH) with heartbeats while CCM polls, matching AWS/VirtualBox compact progress instead of a silent HTTP wait.

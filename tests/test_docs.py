@@ -1418,6 +1418,14 @@ def test_user_guide_teaches_adding_a_host_then_deploy():
     assert "Adding a host to a live CCM deployment does not add an instance" in ccm
 
 
+def test_user_guide_says_deploy_prints_index_html_path():
+    """Operators paste the printed index.html path into a browser after deploy."""
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    assert "$SPA_ENV_DIR/config/index.html" in guide
+    assert "browser" in guide.lower()
+    assert "prints" in guide.lower()
+
+
 def test_user_guide_names_employee_only_ccm():
     """Public one-liners stay aws|virtualbox|external; CCM is an employee-only note."""
     guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")

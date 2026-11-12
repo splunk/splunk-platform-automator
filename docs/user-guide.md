@@ -196,7 +196,7 @@ flowchart LR
   config --> apps
 ```
 
-Open `$SPA_ENV_DIR/config/index.html` after deploy for Splunk Web links. Use:
+`spa deploy` prints the path to `$SPA_ENV_DIR/config/index.html` after a successful run. Paste that path into a browser for Splunk Web links on each host. Use:
 
 ```bash
 spa hosts list --status

@@ -679,6 +679,82 @@ def test_provision_refuses_unstamped_config_before_playbook(tmp_path, monkeypatc
     assert paths.config_file.read_bytes() == before
 
 
+def _stub_deploy_playbook(monkeypatch, rc=0):
+    monkeypatch.setattr("spa.playbooks.resolve", lambda *a, **k: "deploy_site.yml")
+    monkeypatch.setattr("spa.playbooks.run_playbook", lambda *a, **k: rc)
+    monkeypatch.setattr("spa.hosts.ping_hosts", lambda *a, **k: {"hosts": []})
+
+
+def _index_html(paths):
+    return str((Path(paths.spa_env_dir) / "config" / "index.html").resolve())
+
+
+def test_deploy_success_attaches_index_html_next(tmp_path, monkeypatch):
+    _stub_deploy_playbook(monkeypatch)
+    paths, session = _session_env(tmp_path)
+    _write_state(paths)
+    _write_inventory(paths, "idx1", "idx2")
+    result = session.deploy(confirm=True)
+    assert result.ok
+    rows = result.data.get("next") or []
+    assert [row.get("id") for row in rows] == ["hosts.linkpage"]
+    row = rows[0]
+    assert row.get("required") is False
+    assert "command" not in row
+    assert _index_html(paths) in row["ask"]
+    assert "browser" in row["ask"].lower()
+    assert "Splunk" in row["ask"]
+
+
+def test_deploy_playbook_failure_omits_index_html_next(tmp_path, monkeypatch):
+    _stub_deploy_playbook(monkeypatch, rc=1)
+    paths, session = _session_env(tmp_path)
+    _write_state(paths)
+    _write_inventory(paths, "idx1", "idx2")
+    result = session.deploy(confirm=True)
+    assert result.ok is False
+    assert not (result.data or {}).get("next")
+
+
+def test_human_deploy_prints_index_html_path(tmp_path, monkeypatch, capsys):
+    _stub_deploy_playbook(monkeypatch)
+    paths = _paths(tmp_path, AWS_TWO_HOSTS)
+    _write_state(paths)
+    _write_inventory(paths, "idx1", "idx2")
+    for key, value in _cli_env(paths).items():
+        monkeypatch.setenv(key, value)
+    from spa.cli import main
+
+    rc = main(["--no-agent", "deploy", "--yes"])
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "Next:" in err
+    assert _index_html(paths) in err
+    assert "browser" in err.lower()
+    assert "--agent" not in err
+
+
+def test_agent_deploy_includes_index_html_next(tmp_path, monkeypatch, capsys):
+    _stub_deploy_playbook(monkeypatch)
+    paths = _paths(tmp_path, AWS_TWO_HOSTS)
+    _write_state(paths)
+    _write_inventory(paths, "idx1", "idx2")
+    for key, value in _cli_env(paths).items():
+        monkeypatch.setenv(key, value)
+    from spa.cli import main
+
+    rc = main(["--agent", "deploy", "--yes"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert rc == 0
+    assert payload["ok"] is True
+    rows = payload["data"]["next"]
+    assert [row.get("id") for row in rows] == ["hosts.linkpage"]
+    assert _index_html(paths) in rows[0]["ask"]
+    assert "command" not in rows[0]
+    assert "Next:" not in captured.err
+
+
 def test_help_and_schema_omit_allow_unprovisioned():
     help_result = run_spa_inprocess(["deploy", "--help"])
     assert help_result.returncode == 0

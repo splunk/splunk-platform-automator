@@ -3552,6 +3552,7 @@ def _run(argv: Sequence[str]) -> int:
         reported = bool((result.data or {}).get("host_check_reported"))
         if result.error and not reported:
             print(result.error, file=sys.stderr)
+        _print_next(result.data if isinstance(result.data, dict) else {})
         return result.code
 
     if args.command in {"suspend", "resume"}:
