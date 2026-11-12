@@ -36,7 +36,7 @@ jobs:
           bash -n bin/*.sh tests/run_*.sh scripts/*.sh install.sh
 
       - name: Run local tests
-        run: ./tests/run_local_tests.sh
+        run: ./tests/run_local_tests.sh --durations=25
 
       - name: Pack framework tarball
         run: |

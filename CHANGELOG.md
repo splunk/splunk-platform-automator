@@ -31,6 +31,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **Local CI reports the slowest tests** ([#151](https://github.com/splunk/splunk-platform-automator/issues/151)): PR and tag workflows pass `--durations=25` through `./tests/run_local_tests.sh` so GitHub Actions logs the 25 slowest local tests.
+
 - **Content-pack customize next**: `spa apps add 5391 --content-pack NAME` matches curated playbooks by pack folder. Without `--customize`, `data.next` offers `apps.customize` (not required). `--customize` attaches that pack's playbook. Skills follow `data.next` and never assume yes.
 
 - **Init doctor stays quiet unless it warns or fails**: `spa init` still runs host prerequisite checks in-process. All-ok prints nothing from doctor. Warnings and failures print only those WARN / FAIL rows and their fix lines, not the OK catalog or the `SPA host prerequisites` banner. Failures still roll back a dest that did not exist when init started. Agent init failure keeps `{ok:false,error}` with no `data`; the error names the WARN / FAIL rows. Skills do not run `spa doctor` as a bring-up step. `spa doctor` still prints the full report.
