@@ -827,6 +827,33 @@ class TestSpaSkill:
             assert "terraform apply" not in text
             assert "Apply complete" not in text
 
+    def test_entry_skill_points_at_upgrade_and_health_references(self):
+        skill_root = PROJECT_ROOT / "skills" / "spa" / "spa"
+        skill = (skill_root / "SKILL.md").read_text(encoding="utf-8")
+        upgrade = skill_root / "references" / "upgrade.md"
+        health = skill_root / "references" / "health.md"
+        assert upgrade.is_file(), upgrade
+        assert health.is_file(), health
+        upgrade_text = upgrade.read_text(encoding="utf-8")
+        health_text = health.read_text(encoding="utf-8")
+        contract = skill.split("## Contract", 1)[1].split("\n## ", 1)[0]
+        dispatch = skill.split("## Dispatch", 1)[1].split("\n## ", 1)[0]
+        assert "references/upgrade.md" in contract
+        assert "references/health.md" in contract
+        assert "references/upgrade.md" in dispatch
+        assert "references/health.md" in dispatch
+        assert "## Long runs" in skill
+        long_runs = skill.split("## Long runs", 1)[1].split("\n## ", 1)[0]
+        assert "references/long-runs.md" in long_runs
+        assert "Do not load it until that command is running." in long_runs
+        assert "spa run list" in upgrade_text
+        assert "upgrade_splunk" in upgrade_text
+        assert "docs/upgrade.md" in upgrade_text
+        assert "spa upgrade" not in upgrade_text
+        assert "spa upgrade" not in skill
+        assert "spa hosts list --status" in health_text
+        assert "spa hosts check" in health_text
+
     def test_create_config_asks_location_name_and_summary_before_init(self):
         text = _create_config_workflow()
         gate_heading = "## Environment location, name, and summary (mandatory before init)"
