@@ -359,6 +359,32 @@ def test_worker_local_dir_isolates_xdist_workers(tmp_path, monkeypatch):
     assert serial.name == "master"
 
 
+def test_xdist_group_name_keeps_app_scope_scenario_together():
+    from spa_testutil import xdist_group_name
+
+    ds_only = xdist_group_name({"scenario_scope_result": "ds_only"})
+    other = xdist_group_name({"scenario_scope_result": "minimal_direct"})
+    assert ds_only == "app_scope_ds_only"
+    assert other == "app_scope_minimal_direct"
+    assert ds_only != other
+    assert xdist_group_name({"config_file": "lab.yml"}) == "lab"
+    assert xdist_group_name({}) is None
+
+
+def test_conftest_assigns_xdist_group_from_scenario_scope_result():
+    conftest = (PROJECT_ROOT / "tests" / "conftest.py").read_text(encoding="utf-8")
+    assert "xdist_group_name" in conftest
+    assert "scenario_scope_result" in conftest
+
+
+def test_ansible_parallel_runs_use_loadgroup():
+    """-n must use loadgroup so app-scope xdist_group markers keep a scenario on one worker."""
+    for name in ("run_ansible_tests.sh", "run_app_scope_scenarios_tests.sh"):
+        text = (PROJECT_ROOT / "tests" / name).read_text(encoding="utf-8")
+        assert '"$arg" == "-n"' in text, name
+        assert "--dist=loadgroup" in text, name
+
+
 def test_config_editing_contract_is_linked_from_development_docs():
     architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
     contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")

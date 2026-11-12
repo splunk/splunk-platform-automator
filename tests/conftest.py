@@ -533,21 +533,22 @@ def pytest_runtest_setup(item):
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items):
     """
-    Assign xdist_group markers based on config_file parameter.
-    
-    This ensures that all tests for the same config_file run on the same worker,
-    while different config_files can run in parallel on different workers.
-    
+    Assign xdist_group markers from parametrized fixtures.
+
+    config_file groups keep a deployment config on one worker. scenario_scope_result
+    keeps succeeds/assertions/snapshot for one app-scope scenario on one worker.
+    Requires --dist=loadgroup (run_ansible_tests.sh adds it with -n).
+
     Note: tryfirst=True ensures this runs BEFORE xdist's hook processes markers.
     """
+    from spa_testutil import xdist_group_name
+
     for item in items:
-        # Get the config_file from the test's parametrization
-        if hasattr(item, 'callspec') and 'config_file' in item.callspec.params:
-            config_file = item.callspec.params['config_file']
-            # Use config file name (without extension) as the group name
-            group_name = os.path.splitext(config_file)[0]
-            # Add xdist_group marker for parallel distribution
-            # Note: pytest-xdist requires positional argument, not name=
+        if not hasattr(item, "callspec"):
+            continue
+        group_name = xdist_group_name(item.callspec.params)
+        if group_name is not None:
+            # pytest-xdist requires a positional argument, not name=
             item.add_marker(pytest.mark.xdist_group(group_name))
 
 

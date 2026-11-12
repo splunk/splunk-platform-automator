@@ -10,4 +10,13 @@ source "$SCRIPT_DIR/run_venv.sh" \
 
 export PYTHONPATH="$(cd "$SCRIPT_DIR/.." && pwd)/lib${PYTHONPATH:+:$PYTHONPATH}"
 
-pytest -m "local and ansible" tests/ "$@"
+DIST_ARGS=()
+for arg in "$@"; do
+    if [[ "$arg" == "-n" ]] || [[ "$arg" =~ ^-n[0-9]+ ]]; then
+        # loadgroup honors xdist_group so one app-scope scenario stays on one worker
+        DIST_ARGS=(--dist=loadgroup)
+        break
+    fi
+done
+
+pytest -m "local and ansible" tests/ "$@" "${DIST_ARGS[@]}"

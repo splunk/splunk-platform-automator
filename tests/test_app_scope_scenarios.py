@@ -1,8 +1,8 @@
 """
 Scenario-based tests for app scope (debug_app_scope.yml).
 
-Runs debug_app_scope.yml with run_scope_locally=true per scenario config,
-then asserts on the produced scope_debug.json. No SSH or real hosts required.
+Runs debug_app_scope.yml with run_scope_locally=true once per scenario
+(shared by succeeds, assertions, and snapshot). No SSH or real hosts required.
 
 Scenarios live under tests/configs/app_scope/<name>/splunk_config.yml.
 
@@ -11,6 +11,7 @@ Requires: ansible-playbook on PATH (or ANSIBLE_PLAYBOOK), Python deps from tests
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import shutil
@@ -197,13 +198,45 @@ def _normalize_scope(obj: dict | list) -> dict | list:
     return obj
 
 
-def _scenarios_with_expected_snapshot():
-    """Scenario names that have expected_scope.json in their scenario directory."""
-    names = []
-    for scenario_name in _collect_scenario_names():
-        if (_scenarios_dir() / scenario_name / "expected_scope.json").is_file():
-            names.append(scenario_name)
-    return sorted(names)
+@pytest.fixture(scope="module", params=_collect_scenario_names())
+def scenario_scope_result(request):
+    """One debug_app_scope.yml run per scenario, shared by succeeds/assertions/snapshot."""
+    scenario_name = request.param
+    scope_path = _scope_output_path(scenario_name)
+    scope_path.parent.mkdir(parents=True, exist_ok=True)
+    result = _run_scope_playbook(scenario_name, scope_path)
+    return scenario_name, result, scope_path
+
+
+_SHARED_SCOPE_TESTS = (
+    "test_scenario_scope_playbook_succeeds",
+    "test_scenario_scope_assertions",
+    "test_scenario_scope_matches_snapshot",
+)
+
+
+def _fixture_scope(fn: ast.FunctionDef):
+    for deco in fn.decorator_list:
+        if not isinstance(deco, ast.Call):
+            continue
+        func = deco.func
+        attr = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+        if attr != "fixture":
+            continue
+        for kw in deco.keywords:
+            if kw.arg == "scope" and isinstance(kw.value, ast.Constant):
+                return kw.value.value
+        return "function"
+    return None
+
+
+def _calls_named(node: ast.AST, name: str) -> bool:
+    return any(
+        isinstance(child, ast.Call)
+        and isinstance(child.func, ast.Name)
+        and child.func.id == name
+        for child in ast.walk(node)
+    )
 
 
 def test_overlapping_app_scope_scenarios_use_distinct_output_paths(monkeypatch):
@@ -221,12 +254,30 @@ def test_overlapping_app_scope_scenarios_use_distinct_output_paths(monkeypatch):
     assert "gw1" in path_b.parts
 
 
-@pytest.mark.parametrize("scenario_name", _collect_scenario_names())
-def test_scenario_scope_playbook_succeeds(scenario_name: str):
+def test_scenario_scope_playbook_runs_once_per_scenario():
+    """Succeeds, assertions, and snapshot share one playbook run per scenario."""
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    functions = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+    }
+    fixture = functions.get("scenario_scope_result")
+    assert fixture is not None, "scenario_scope_result fixture is missing"
+    assert _fixture_scope(fixture) in {"module", "class", "session"}, _fixture_scope(fixture)
+    assert _calls_named(fixture, "_run_scope_playbook")
+    for name in _SHARED_SCOPE_TESTS:
+        node = functions[name]
+        args = [arg.arg for arg in node.args.args]
+        assert "scenario_scope_result" in args, name
+        assert not _calls_named(node, "_run_scope_playbook"), name
+    unset = functions["test_inventory_names_unset_admin_password_lookup"]
+    assert _calls_named(unset, "_run_scope_playbook")
+
+
+def test_scenario_scope_playbook_succeeds(scenario_scope_result):
     """Run debug_app_scope for the scenario and assert playbook succeeds."""
-    scope_path = _scope_output_path(scenario_name)
-    scope_path.parent.mkdir(parents=True, exist_ok=True)
-    result = _run_scope_playbook(scenario_name, scope_path)
+    scenario_name, result, scope_path = scenario_scope_result
     assert result.returncode == 0, (
         f"debug_app_scope.yml failed for scenario {scenario_name!r}"
     )
@@ -240,16 +291,9 @@ def test_inventory_names_unset_admin_password_lookup(tmp_path):
     assert "are not set: SPLUNK_ADMIN_PASSWORD" in result.stderr
 
 
-@pytest.mark.parametrize("scenario_name", _collect_scenario_names())
-def test_scenario_scope_assertions(scenario_name: str):
-    """Run scope playbook (if needed), load JSON, run scenario-specific assertions."""
-    scope_path = _scope_output_path(scenario_name)
-    if not scope_path.is_file():
-        scope_path.parent.mkdir(parents=True, exist_ok=True)
-        result = _run_scope_playbook(scenario_name, scope_path)
-        assert result.returncode == 0, (
-            f"debug_app_scope.yml failed for scenario {scenario_name!r}; run test_scenario_scope_playbook_succeeds first"
-        )
+def test_scenario_scope_assertions(scenario_scope_result):
+    """Load shared scope JSON and run scenario-specific assertions."""
+    scenario_name, _result, scope_path = scenario_scope_result
     scope = _load_scope_output(scope_path)
 
     # Scenario-specific assertions
@@ -395,8 +439,7 @@ def test_scenario_scope_assertions(scenario_name: str):
         assert isinstance(scope.get("deployment_server"), list)
 
 
-@pytest.mark.parametrize("scenario_name", _scenarios_with_expected_snapshot())
-def test_scenario_scope_matches_snapshot(scenario_name: str):
+def test_scenario_scope_matches_snapshot(scenario_scope_result):
     """When <scenario>/expected_scope.json exists, actual scope must match the snapshot.
 
     Expected file lives in each scenario directory (e.g. minimal_direct/expected_scope.json).
@@ -404,16 +447,11 @@ def test_scenario_scope_matches_snapshot(scenario_name: str):
     To update snapshots after intentional changes:
       UPDATE_SCOPE_SNAPSHOTS=1 pytest tests/test_app_scope_scenarios.py -k snapshot
     """
-    scope_path = _scope_output_path(scenario_name)
-    if not scope_path.is_file():
-        scope_path.parent.mkdir(parents=True, exist_ok=True)
-        result = _run_scope_playbook(scenario_name, scope_path)
-        assert result.returncode == 0, (
-            f"debug_app_scope.yml failed for scenario {scenario_name!r}"
-        )
-    actual = _load_scope_output(scope_path)
+    scenario_name, _result, scope_path = scenario_scope_result
     expected_path = _expected_scope_path(scenario_name)
-    assert expected_path.is_file(), f"Expected snapshot missing: {expected_path}"
+    if not expected_path.is_file():
+        pytest.skip(f"No expected snapshot for {scenario_name}")
+    actual = _load_scope_output(scope_path)
 
     update_snapshots = os.environ.get("UPDATE_SCOPE_SNAPSHOTS", "").strip() in ("1", "true", "yes")
     norm_actual = _normalize_scope(actual)

@@ -49,6 +49,16 @@ def worker_local_dir(base: Path) -> Path:
     return Path(base) / worker
 
 
+def xdist_group_name(params: Mapping) -> Optional[str]:
+    """xdist loadgroup name so related parametrized tests share a worker."""
+    if "config_file" in params:
+        return os.path.splitext(str(params["config_file"]))[0]
+    scenario = params.get("scenario_scope_result")
+    if scenario:
+        return f"app_scope_{scenario}"
+    return None
+
+
 _MARK_KEYWORDS = frozenset({"and", "or", "not"})
 _MARKER_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 LOCAL_JOB_MARKEXPRS = (
