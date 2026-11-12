@@ -59,16 +59,76 @@ def test_spa_env_drops_inherited_spa_and_ansible_paths(monkeypatch):
     [
         ("local", True),
         ("local and cli", True),
+        ("local and ansible", True),
+        ("local and not cli and not ansible", True),
         ("local or aws", True),
         ("not local", False),
         ("aws", False),
         ("cli", False),
+        ("ansible", False),
     ],
 )
 def test_local_marker_expression_selects_only_local_runs(markexpr, selects_local):
     from spa_testutil import selects_local_tests
 
     assert selects_local_tests(markexpr) is selects_local
+
+
+@pytest.mark.parametrize(
+    ("markers", "jobs"),
+    [
+        ({"local"}, ("local and not cli and not ansible",)),
+        ({"local", "cli"}, ("local and cli",)),
+        ({"local", "ansible"}, ("local and ansible",)),
+        ({"local", "itsi"}, ("local and not cli and not ansible",)),
+        ({"local", "cli", "ansible"}, ("local and cli", "local and ansible")),
+        ({"aws"}, ()),
+        ({"cli"}, ()),
+        ({"ansible"}, ()),
+    ],
+)
+def test_local_job_markexprs_partition_a_node(markers, jobs):
+    from spa_testutil import matching_local_job_markexprs
+
+    assert matching_local_job_markexprs(markers) == jobs
+
+
+def test_pytest_ini_registers_ansible_marker():
+    ini = (PROJECT_ROOT / "tests" / "pytest.ini").read_text(encoding="utf-8")
+
+    assert re.search(r"(?m)^\s*ansible:\s", ini)
+
+
+def test_cli_runner_selects_local_and_cli():
+    text = (PROJECT_ROOT / "tests" / "run_cli_tests.sh").read_text(encoding="utf-8")
+
+    assert 'pytest -m "local and cli" tests/' in text
+
+
+def test_local_modules_partition_into_cli_ansible_unit_jobs():
+    from spa_testutil import (
+        LOCAL_JOB_MARKEXPRS,
+        PLAYBOOK_SPAWNING_MODULES,
+        matching_local_job_markexprs,
+        module_pytestmark_names,
+    )
+
+    jobs = {expr: [] for expr in LOCAL_JOB_MARKEXPRS}
+    for path in sorted((PROJECT_ROOT / "tests").glob("test_*.py")):
+        marks = module_pytestmark_names(path)
+        if "local" not in marks:
+            continue
+        matched = matching_local_job_markexprs(marks)
+        assert len(matched) == 1, (path.name, sorted(marks), matched)
+        jobs[matched[0]].append(path.name)
+
+    assert "test_spa_install.py" not in jobs["local and cli"]
+    assert "test_spa_install.py" in jobs["local and not cli and not ansible"]
+    for name in PLAYBOOK_SPAWNING_MODULES:
+        assert name in jobs["local and ansible"], name
+    assert jobs["local and cli"]
+    assert jobs["local and ansible"]
+    assert jobs["local and not cli and not ansible"]
 
 
 def test_spa_env_keeps_explicit_test_path_overrides(monkeypatch):

@@ -65,6 +65,8 @@ tests/
 ├── run_app_scope_scenarios_tests.sh # App scope scenario tests (debug_app_scope per scenario)
 ├── run_itsi_content_pack_tests.sh # ITSI content pack tests (role wiring, schema, scope)
 ├── run_cli_tests.sh           # Fast CLI help, routing, schema, and session suite
+├── run_ansible_tests.sh       # Local tests that shell out to ansible-playbook
+├── run_unit_tests.sh          # Local tests that are neither cli nor ansible
 ├── run_local_tests.sh         # Run all local suites above (no AWS)
 ├── run_schema_tests.sh        # Helper script for schema validation tests
 ├── run_verification_tests.sh  # Helper script for verification tests
@@ -201,8 +203,9 @@ App-scope scenarios live under `tests/configs/app_scope/<name>/`. Each has a dis
 
 - While coding: the new test, then existing tests for every touched module.
 - CLI surface (parser, help, routing, schema, session, or provider contracts): `./tests/run_cli_tests.sh`.
-- Optional before a PR: `./tests/run_local_tests.sh` (the same suite PR CI runs).
-- Merge gate: PR CI job `Local tests`. Push CI on `master` / `distribution` is background insurance.
+- Playbook-spawning tests: `./tests/run_ansible_tests.sh` (`pytest -m "local and ansible"`).
+- Optional before a PR: `./tests/run_local_tests.sh` (the same suite PR CI runs, one invocation).
+- Merge gate: PR CI jobs `Syntax`, `CLI tests`, `Ansible tests`, and `Unit tests`. Push CI on `master` / `distribution` is background insurance.
 
 ### Run SPA CLI Release Tests
 
@@ -210,7 +213,7 @@ App-scope scenarios live under `tests/configs/app_scope/<name>/`. Each has a dis
 ./tests/run_cli_tests.sh
 ./tests/run_cli_tests.sh -v
 # Equivalent after activating the test venv:
-pytest -m cli tests/
+pytest -m "local and cli" tests/
 ```
 
 This fast suite checks every public command and subcommand help surface, every

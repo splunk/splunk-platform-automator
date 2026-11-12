@@ -288,14 +288,35 @@ def test_ci_cancels_stale_pull_request_runs():
 
 
 def test_ci_and_release_report_slowest_local_tests():
-    invocation = "./tests/run_local_tests.sh -n auto --durations=25"
+    xdist = "-n auto --durations=25"
     ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     release = (PROJECT_ROOT / ".github/workflows/release.yml").read_text(
         encoding="utf-8"
     )
 
-    assert invocation in ci
-    assert invocation in release
+    assert xdist in ci
+    assert "./tests/run_local_tests.sh %s" % xdist in release
+    assert "./tests/run_local_tests.sh %s" % xdist not in ci
+
+
+def test_ci_runs_syntax_then_parallel_local_jobs():
+    ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert "needs: syntax" in ci
+    assert "name: Local tests" not in ci
+    for marker in (
+        "local and cli",
+        "local and ansible",
+        "local and not cli and not ansible",
+    ):
+        assert marker in ci
+    assert ci.count("-n auto --durations=25") >= 3
+    for runner in (
+        "./tests/run_cli_tests.sh -n auto --durations=25",
+        "./tests/run_ansible_tests.sh -n auto --durations=25",
+        "./tests/run_unit_tests.sh -n auto --durations=25",
+    ):
+        assert runner in ci
 
 
 def test_local_and_cli_runners_do_not_share_one_ansible_tmp():
@@ -303,6 +324,8 @@ def test_local_and_cli_runners_do_not_share_one_ansible_tmp():
     runners = (
         "run_local_tests.sh",
         "run_cli_tests.sh",
+        "run_ansible_tests.sh",
+        "run_unit_tests.sh",
         "run_app_deployment_tests.sh",
     )
     conftest = (PROJECT_ROOT / "tests" / "conftest.py").read_text(encoding="utf-8")

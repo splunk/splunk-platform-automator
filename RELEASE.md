@@ -59,12 +59,14 @@ Pull-request CI is the merge gate. The same workflow on `push` to `master` or `d
 
 On every pull request, and on every push to a branch listed under `on.push.branches` in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), that workflow runs:
 
-- `bash -n` on `bin/*.sh`, `tests/run_*.sh`, `scripts/*.sh`
-- `./tests/run_local_tests.sh` (`pytest -m local`)
+- `Syntax`: `bash -n` on `bin/*.sh`, `tests/run_*.sh`, `scripts/*.sh`, and `python -m compileall`
+- `CLI tests`: `./tests/run_cli_tests.sh -n auto --durations=25` (`pytest -m "local and cli"`)
+- `Ansible tests`: `./tests/run_ansible_tests.sh -n auto --durations=25` (`pytest -m "local and ansible"`)
+- `Unit tests`: `./tests/run_unit_tests.sh -n auto --durations=25` (`pytest -m "local and not cli and not ansible"`)
 
 CI does **not** provision AWS, download Splunkbase apps, or read `config/splunk_config.yml`.
 
-After the workflow exists, enable **branch protection on `master`**: require the `CI / Local tests` check, and disallow force-push.
+After the workflow exists, enable **branch protection on `master`**: require the `CI / Syntax`, `CI / CLI tests`, `CI / Ansible tests`, and `CI / Unit tests` checks, and disallow force-push.
 
 Merged PR head branches are deleted automatically (`delete_branch_on_merge` on the GitHub repo). This is a repository setting, not an in-tree file: Settings → General → Pull Requests → **Automatically delete head branches**.
 

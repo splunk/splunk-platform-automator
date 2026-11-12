@@ -242,7 +242,7 @@ Use the narrowest gate that proves the changed contract:
 
 - `./tests/run_cli_tests.sh` runs parser, help, routing, schema, session, and provider contracts marked `cli`.
 - `./tests/run_local_tests.sh` runs the complete local suite without AWS or a live Splunk deployment. It is optional locally on every slice; PR CI is the full-suite merge gate.
-- PR CI job `Local tests` (`.github/workflows/ci.yml`) is required to merge. Push CI on `master` / `distribution` is background insurance, not a promotion wait.
+- PR CI jobs `Syntax`, `CLI tests`, `Ansible tests`, and `Unit tests` (`.github/workflows/ci.yml`) are required to merge. Push CI on `master` / `distribution` is background insurance, not a promotion wait.
 - [`tests/test_spa_playbooks.py`](../tests/test_spa_playbooks.py) covers playbook metadata and resolution.
 - [`tests/test_spa_runlog.py`](../tests/test_spa_runlog.py) and [`tests/test_spa_jsonl_callback.py`](../tests/test_spa_jsonl_callback.py) cover progress and execution events.
 - Schema and example tests cover inventory changes; app-scope scenarios cover app routing changes.

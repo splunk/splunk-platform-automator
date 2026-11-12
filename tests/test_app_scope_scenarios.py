@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.local
+pytestmark = [pytest.mark.local, pytest.mark.ansible]
 
 
 def _ansible_playbook_executable() -> str:

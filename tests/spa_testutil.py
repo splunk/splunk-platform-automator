@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import itertools
 import os
 import re
@@ -50,6 +51,17 @@ def worker_local_dir(base: Path) -> Path:
 
 _MARK_KEYWORDS = frozenset({"and", "or", "not"})
 _MARKER_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+LOCAL_JOB_MARKEXPRS = (
+    "local and cli",
+    "local and ansible",
+    "local and not cli and not ansible",
+)
+PLAYBOOK_SPAWNING_MODULES = (
+    "test_app_scope_scenarios.py",
+    "test_app_deployment.py",
+    "test_spa_jsonl_callback.py",
+    "test_env_scaffold.py",
+)
 
 
 def satisfy_env_lookups(monkeypatch, start_dir: Optional[Path] = None) -> None:
@@ -87,6 +99,56 @@ def selects_local_tests(markexpr: str) -> bool:
         if expression.evaluate(matches):
             return True
     return False
+
+
+def matching_local_job_markexprs(markers: Sequence[str]) -> tuple[str, ...]:
+    """CI local-job expressions that would select a node with these markers."""
+    from _pytest.mark.expression import Expression
+
+    enabled = set(markers)
+    if "local" not in enabled:
+        return ()
+    hits = []
+    for expr in LOCAL_JOB_MARKEXPRS:
+        compiled = Expression.compile(expr)
+
+        def matches(name: str, /, enabled: set[str] = enabled, **kwargs: object) -> bool:
+            return not kwargs and name in enabled
+
+        if compiled.evaluate(matches):
+            hits.append(expr)
+    return tuple(hits)
+
+
+def module_pytestmark_names(path: Path) -> set[str]:
+    """Marker names assigned to module-level pytestmark in a test file."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    names: set[str] = set()
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(target, ast.Name) and target.id == "pytestmark" for target in node.targets):
+            continue
+        names.update(_pytest_mark_names(node.value))
+    return names
+
+
+def _pytest_mark_names(node: ast.AST) -> set[str]:
+    if isinstance(node, ast.List):
+        names: set[str] = set()
+        for elt in node.elts:
+            names.update(_pytest_mark_names(elt))
+        return names
+    if isinstance(node, ast.Call):
+        return _pytest_mark_names(node.func)
+    if (
+        isinstance(node, ast.Attribute)
+        and node.attr
+        and isinstance(node.value, ast.Attribute)
+        and node.value.attr == "mark"
+    ):
+        return {node.attr}
+    return set()
 
 
 # Only pytest.mark.aws tests (manual) may reach AWS or CCM. Everything else

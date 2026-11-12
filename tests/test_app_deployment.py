@@ -15,7 +15,7 @@ import subprocess
 import yaml
 import pytest
 
-pytestmark = pytest.mark.local
+pytestmark = [pytest.mark.local, pytest.mark.ansible]
 
 
 def _project_root():

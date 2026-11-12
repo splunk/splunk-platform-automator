@@ -11,7 +11,7 @@ import yaml
 
 from spa_testutil import PROJECT_ROOT, spa_env
 
-pytestmark = [pytest.mark.local, pytest.mark.cli]
+pytestmark = pytest.mark.local
 
 PACK = PROJECT_ROOT / "scripts" / "pack-framework.sh"
 INSTALL = PROJECT_ROOT / "install.sh"

@@ -31,7 +31,7 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
-- **Local CI parallelizes pytest** ([#151](https://github.com/splunk/splunk-platform-automator/issues/151)): PR and tag workflows pass `-n auto --durations=25` through `./tests/run_local_tests.sh` so GitHub Actions uses every runner CPU and logs the 25 slowest tests. Ansible tmp and app-scope output are per xdist worker.
+- **Local CI parallelizes pytest** ([#151](https://github.com/splunk/splunk-platform-automator/issues/151)): PR CI runs a `Syntax` job, then three required pytest jobs (`CLI tests`, `Ansible tests`, `Unit tests`) each with `-n auto --durations=25`. Tag release stays one `./tests/run_local_tests.sh -n auto --durations=25` job. Ansible tmp and app-scope output are per xdist worker. `pytest.mark.ansible` covers playbook-spawning tests; pack/install is not `cli`.
 
 - **Content-pack customize next**: `spa apps add 5391 --content-pack NAME` matches curated playbooks by pack folder. Without `--customize`, `data.next` offers `apps.customize` (not required). `--customize` attaches that pack's playbook. Skills follow `data.next` and never assume yes.
 
@@ -69,7 +69,7 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 - **License manager and ITSI without license files** ([#138](https://github.com/splunk/splunk-platform-automator/issues/138)): a `license_manager` host and ITSI app 1841 are valid without `.lic` files. `spa validate` stays `ok: true` with warning ids `license_manager.license_file` and `itsi.license_file`, plus `data.next` so agents AskQuestion. Unlicensed ITSI runs as IT Essentials Work. License files without a `license_manager` role, and ES without an ES-capable license, still fail. Java and topology still block `apps add 1841`.
 
-- **CI is the full-suite merge gate**: close a feature slice on the required local gates (the new test, tests for every touched module, and `./tests/run_cli_tests.sh` when the CLI surface changed). PR CI job `Local tests` is required to merge. Push CI on `master` / `distribution` is background insurance. A new push to a pull request cancels the previous PR run.
+- **CI is the full-suite merge gate**: close a feature slice on the required local gates (the new test, tests for every touched module, and `./tests/run_cli_tests.sh` when the CLI surface changed). PR CI jobs `Syntax`, `CLI tests`, `Ansible tests`, and `Unit tests` are required to merge. Push CI on `master` / `distribution` is background insurance. A new push to a pull request cancels the previous PR run.
 
 - **Contributor gates and token budget**: agents stop at each gate, name one next step, and wait. Completing todos is not authorization to implement, commit, or merge. `spa skills install` places thin `alwaysApply: false` Cursor (`~/.cursor/rules/spa-*.mdc`) and Claude (`~/.claude/rules/spa.md`) adapters. Canonical text is `skills/spa/spa/references/token-budget.md` and `contribute.md`. `/spa-create-config` phase bodies live in `references/phases.md`.
 
