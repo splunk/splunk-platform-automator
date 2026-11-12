@@ -667,7 +667,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "deploy",
-            "summary": "Create missing hosts if needed, then deploy Splunk (deploy_site.yml). After you confirm, ping with become before the playbook. Requires Software/baseconfig and local app sources",
+            "summary": "Deploy Splunk (deploy_site.yml). After you confirm, ping with become before the playbook. Requires Software/baseconfig and local app sources",
             "requires_confirmation": True,
             "flags": [
                 {"long": "--yes", "short": "-y", "help": "Confirm deploy (required in agent mode)"},

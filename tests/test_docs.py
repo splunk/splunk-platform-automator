@@ -1451,6 +1451,41 @@ def test_ccm_operator_page_matches_aws_pattern():
     assert "ubuntu_22.04" not in page.lower()
     assert "rhel_9" not in page.lower()
     assert "cannot mix external hosts" in page.lower()
+    assert "https://ccm.splunkits.io/" in page
+
+
+def test_missing_credential_portals_are_documented():
+    """When CCM_TOKEN, AWS keys, or Splunkbase creds are missing, name the GUI."""
+    ccm = (_docs_dir() / "ccm.md").read_text(encoding="utf-8")
+    aws = (_docs_dir() / "aws.md").read_text(encoding="utf-8")
+    apps = (_docs_dir() / "apps.md").read_text(encoding="utf-8")
+    secrets = (_docs_dir() / "secrets.md").read_text(encoding="utf-8")
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    prerequisites = (
+        PROJECT_ROOT / "skills" / "spa" / "spa" / "references" / "prerequisites.md"
+    ).read_text(encoding="utf-8")
+    handling = (
+        PROJECT_ROOT
+        / "skills"
+        / "spa"
+        / "spa-create-config"
+        / "references"
+        / "secrets-handling.md"
+    ).read_text(encoding="utf-8")
+    spa_apps = (PROJECT_ROOT / "skills" / "spa" / "spa-apps" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    portal = "https://ccm.splunkits.io/"
+    iam = "https://console.aws.amazon.com/iam/"
+    ec2 = "https://console.aws.amazon.com/ec2/"
+    splunkbase = "https://splunkbase.splunk.com/"
+    for text in (ccm, secrets, guide, prerequisites, handling):
+        assert portal in text
+    for text in (aws, secrets, prerequisites, handling):
+        assert iam in text
+        assert ec2 in text
+    for text in (apps, secrets, prerequisites, handling, spa_apps):
+        assert splunkbase in text
 
 
 def test_create_config_proposes_ccm_remote_provider_and_live_survey():

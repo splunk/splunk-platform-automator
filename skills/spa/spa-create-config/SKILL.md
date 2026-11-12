@@ -54,7 +54,7 @@ Use this skill for a new environment or a change to an existing config. Load [/s
 
 The design phases exist so the first `--example` template is not accepted blindly: intent (1), requirements (2), topology (3), sizing (4), OS (5), AWS (6), counts and placement (7, 8), apps and licenses (9, 10), plan (11), write (12), validate (13), handoff (14).
 
-**Provider:** `spa init` requires `--provider aws|virtualbox|external` unless the operator has saved a default with `spa environment set --provider NAME`. Ask the operator which provider to use before any init (AskQuestion options: aws, virtualbox, and external), then record it with `--aws` in the header when it is AWS. Employee-only CCM is hidden unless it is available. Report `CCM_TOKEN` as set / not set (never the value). Do not AskQuestion CCM unless `CCM_TOKEN` is set, the env has a root `ccm:` block, or the operator already named CCM. Do not probe the network to decide. When CCM is in play: compose with `--provider ccm`. `spa config provider ccm` writes the YAML block; `spa provider ccm` is discovery (`survey` and the list commands). See [config-header-best-practices.md](references/config-header-best-practices.md).
+**Provider:** `spa init` requires `--provider aws|virtualbox|external` unless the operator has saved a default with `spa environment set --provider NAME`. Ask the operator which provider to use before any init (AskQuestion options: aws, virtualbox, and external), then record it with `--aws` in the header when it is AWS. Employee-only CCM is hidden unless it is available. Report `CCM_TOKEN` as set / not set (never the value). Do not AskQuestion CCM unless `CCM_TOKEN` is set, the env has a root `ccm:` block, or the operator already named CCM. If they named CCM and the token is not set, tell them to mint a PAT and SSH key at https://ccm.splunkits.io/ and export `CCM_TOKEN`. Do not probe the network to decide. When CCM is in play: compose with `--provider ccm`. `spa config provider ccm` writes the YAML block; `spa provider ccm` is discovery (`survey` and the list commands). See [config-header-best-practices.md](references/config-header-best-practices.md).
 
 ## Never edit by hand (mandatory)
     
@@ -94,8 +94,8 @@ Command table for every config change: [config-commands.md](references/config-co
 
 Follow [secrets-handling.md](references/secrets-handling.md) for the full list.
 
-- **Splunkbase:** Use `lookup('env', 'SPLUNKBASE_USERNAME')` / `lookup('env', 'SPLUNKBASE_PASSWORD')` in YAML only. In chat, plans, and terminal: **set** or **not set** — never username/email/password.
-- **AWS:** Prefer `spa --agent provider aws check-auth` for API status. Read `data.account`. Never show `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_SESSION_TOKEN` values. **OK:** account ID, ARN, `AWS_PROFILE` name, region.
+- **Splunkbase:** Use `lookup('env', 'SPLUNKBASE_USERNAME')` / `lookup('env', 'SPLUNKBASE_PASSWORD')` in YAML only. In chat, plans, and terminal: **set** or **not set** — never username/email/password. If not set, create a Splunk.com account at https://splunkbase.splunk.com/ and export in the shell.
+- **AWS:** Prefer `spa --agent provider aws check-auth` for API status. Read `data.account`. Never show `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_SESSION_TOKEN` values. **OK:** account ID, ARN, `AWS_PROFILE` name, region. If not set, create IAM access keys at https://console.aws.amazon.com/iam/ and the EC2 key pair at https://console.aws.amazon.com/ec2/.
 - **Do not run** `echo` / `printenv` / `env | grep` on `SPLUNKBASE_*` or secret `AWS_*` vars; do not run `aws configure get aws_secret_access_key` or `aws configure list`.
 - **Safe checks:** set/not-set loops in [secrets-handling.md](references/secrets-handling.md).
 - Never paste resolved lookup values, private key contents, or credential file contents into chat or plan files.

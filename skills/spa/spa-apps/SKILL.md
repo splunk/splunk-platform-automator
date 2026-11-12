@@ -37,7 +37,7 @@ Follow [secrets-handling.md](../spa-create-config/references/secrets-handling.md
 
 **Splunkbase credentials check (before a Splunkbase add or download):** run the set / not-set loop from [secrets-handling.md](../spa-create-config/references/secrets-handling.md). Do not use `env | grep` or `printenv`. If either variable is not set, ask (AskQuestion if available):
 
-1. **Export them in your shell, then restart the session.** Paste nothing into chat.
+1. **Export them in your shell, then restart the session.** Paste nothing into chat. Create the Splunk.com account at https://splunkbase.splunk.com/.
 2. **Skip Splunkbase apps** and use a local archive in `apps_dir` (step 5), or stay trial-only.
 3. **Show the setup docs**: [docs/apps.md](../../../docs/apps.md).
 

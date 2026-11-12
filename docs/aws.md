@@ -4,7 +4,7 @@ SPA provisions EC2 infrastructure with Terraform while keeping `config/splunk_co
 
 ## Discover and configure
 
-AWS credentials come from the normal AWS credential chain or vault/env references in config. Never commit or print access keys. Check authentication and inspect live regional values with:
+AWS credentials come from the normal AWS credential chain or vault/env references in config. Never commit or print access keys. Create IAM access keys in the [IAM console](https://console.aws.amazon.com/iam/) or use `AWS_PROFILE` from `aws configure` / IAM Identity Center. Create the EC2 key pair in the region in the [EC2 console](https://console.aws.amazon.com/ec2/), download the PEM once, and set `terraform.aws.key_name` plus `ssh_private_key_file`. SPA does not create IAM users or key pairs. Check authentication and inspect live regional values with:
 
 ```bash
 spa provider aws check-auth --json

@@ -35,6 +35,12 @@ PROVISION_PHASES: List[Dict[str, str]] = [
     {"id": "wait_ssh", "title": "Wait for SSH"},
 ]
 
+CCM_PHASES: List[Dict[str, str]] = [
+    {"id": "ccm_create", "title": "CCM create"},
+    {"id": "ccm_ready", "title": "CCM wait for ready"},
+    {"id": "wait_ssh", "title": "Wait for SSH"},
+]
+
 TF_CHANGE_PHASES = {"tf_plan", "tf_apply"}
 
 POWER_PHASES: List[Dict[str, str]] = [
@@ -96,6 +102,8 @@ GROUP_TITLES: Dict[str, str] = {
     "tf_plan": "Terraform plan",
     "tf_apply": "Terraform apply",
     "wait_ssh": "Wait for SSH",
+    "ccm_create": "CCM create",
+    "ccm_ready": "CCM wait for ready",
     "power": "Instance power",
     VAGRANT_GROUP: "Vagrant",
 }
@@ -484,9 +492,11 @@ def upgrade_version_fields(task: str, msg: Any) -> Dict[str, Any]:
 
 def phases_for_command(command: str, provider: str = "") -> List[Dict[str, str]]:
     if command in {"provision", "destroy"}:
-        # Terraform runs a known sequence; Vagrant does not.
+        # Terraform runs a known sequence; Vagrant does not. CCM is HTTP poll.
         if provider == "virtualbox":
             return []
+        if provider == "ccm":
+            return list(CCM_PHASES) if command == "provision" else []
         return list(PROVISION_PHASES)
     if command in {"suspend", "resume"}:
         return list(POWER_PHASES)
@@ -522,6 +532,8 @@ def map_phase(
     if command in {"provision", "destroy"}:
         if provider == "virtualbox":
             # Vagrant lines already carry the machine group they belong to.
+            return None
+        if provider == "ccm":
             return None
         mapped = PLAYBOOK_GROUP.get(origin) or PLAYBOOK_GROUP.get(entry)
         return _provision_phase_from_task(task or play, mapped)
@@ -910,6 +922,8 @@ _ROLE_PAUSE_PHASES = frozenset(
 )
 
 _PHASE_SENTENCES = {
+    "ccm_create": "Creating the CCM lab.",
+    "ccm_ready": "Waiting for CCM instances.",
     "conf": "Configuring Splunk.",
     "other_roles": "Configuring helper roles.",
     "baseconfig": "Installing baseconfig apps.",

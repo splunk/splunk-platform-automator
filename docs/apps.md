@@ -11,6 +11,8 @@ spa apps snippet APP_ID
 
 Sources can be Splunkbase, a local app repository, or a configured URL. Pin versions for controlled environments. `spa apps download APP_ID --yes` downloads to `apps_dir`; `--extract` expands folder-backed apps. Download never edits config.
 
+Splunkbase downloads need a Splunk.com account. Sign in at [https://splunkbase.splunk.com/](https://splunkbase.splunk.com/), then export `SPLUNKBASE_USERNAME` and `SPLUNKBASE_PASSWORD` in the shell. Report them as **set / not set**; never paste them in chat. YAML stays `lookup('env', ...)`. Local archives in `apps_dir` skip Splunkbase.
+
 ## Choose where an app goes
 
 Normal apps require `target_roles`. SPA then selects the distribution mechanism from the target topology:

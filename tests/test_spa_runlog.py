@@ -457,6 +457,14 @@ def test_provision_groups_follow_the_provider():
     assert phases_for_command("provision", provider="virtualbox") == []
     assert map_phase(command="provision", task="Run Terraform Plan", provider="virtualbox") is None
     assert group_title("vm:idx1") == "VM idx1"
+    assert [row["id"] for row in phases_for_command("provision", provider="ccm")] == [
+        "ccm_create",
+        "ccm_ready",
+        "wait_ssh",
+    ]
+    assert map_phase(command="provision", task="Create CCM deployment", provider="ccm") is None
+    assert group_title("ccm_create") == "CCM create"
+    assert group_title("ccm_ready") == "CCM wait for ready"
 
 
 def test_vagrant_lines_map_to_machines_and_failures():

@@ -1,4 +1,4 @@
-"""spa deploy refuses until every config host is in the provisioned inventory."""
+"""spa deploy creates missing hosts after --yes; other commands refuse until provisioned."""
 
 import fcntl
 import json
@@ -39,6 +39,28 @@ splunk_hosts:
   - iter:
       prefix: idx
       numbers: 1..2
+"""
+
+CCM_TWO_HOSTS = """
+plugin: splunk-platform-automator
+schema_version: 1
+ccm:
+  instance_type: t3a.medium
+  disk_storage: 50
+  operating_system: rhel_9
+splunk_hosts:
+  - name: idx1
+  - name: idx2
+"""
+
+VBOX_TWO_HOSTS = """
+plugin: splunk-platform-automator
+schema_version: 1
+virtualbox:
+  memory: 4096
+splunk_hosts:
+  - name: idx1
+  - name: idx2
 """
 
 STATE_WITH_RESOURCE = json.dumps({"resources": [{"type": "aws_instance"}]})
@@ -184,6 +206,29 @@ def _cli_env(paths):
         "SPA_SOFTWARE_DIR": str(paths.software_dir),
         "SPA_BASECONFIG_DIR": str(paths.baseconfig_dir),
     }
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        pytest.param(AWS_TWO_HOSTS, id="aws"),
+        pytest.param(CCM_TWO_HOSTS, id="ccm"),
+        pytest.param(VBOX_TWO_HOSTS, id="virtualbox"),
+    ],
+)
+def test_deploy_without_yes_asks_to_create_when_unprovisioned(tmp_path, config):
+    """First-time spa deploy has no hosts yet. Ask for --yes; do not refuse as unprovisioned."""
+    from spa.providers import deploy_create_plan
+
+    _paths_for_env, session = _session_env(tmp_path, config)
+    plan = deploy_create_plan(_paths_for_env)
+    assert plan.error is None
+    assert plan.will_create is True
+    result = session.deploy(confirm=False, agent=True)
+    assert result.ok is False
+    assert "hosts not provisioned" not in (result.error or "")
+    assert "create hosts and deploy" not in (result.error or "")
+    assert "deploy requires -y/--yes" in (result.error or "")
 
 
 def test_deploy_creates_missing_hosts_then_checks_then_deploys(tmp_path, monkeypatch):
@@ -336,11 +381,10 @@ def test_deploy_blocks_when_not_provisioned_and_nothing_to_create(tmp_path, monk
     assert result.ok is False
     assert "CCM terminated this deployment" in result.error
     assert "spa destroy --yes then spa deploy --yes" in result.error
+    assert "hosts not provisioned" not in result.error
 
 
-def test_deploy_confirm_names_create_and_deploy_when_hosts_missing(
-    tmp_path, monkeypatch
-):
+def test_deploy_confirm_is_deploy_when_hosts_missing(tmp_path, monkeypatch, capsys):
     seen = []
 
     class FakeProvider:
@@ -369,7 +413,12 @@ def test_deploy_confirm_names_create_and_deploy_when_hosts_missing(
     assert result.ok is False
     assert seen
     prompt = seen[0].lower()
-    assert "create" in prompt and "deploy" in prompt
+    assert prompt.startswith("deploy ")
+    assert "create" not in prompt
+    assert "provision" not in prompt
+    stderr = capsys.readouterr().err.lower()
+    assert "will create missing hosts" not in stderr
+    assert "hosts not provisioned" not in stderr
 
 
 def test_deploy_hosts_role_creates_missing_members_then_deploys(
@@ -638,3 +687,12 @@ def test_help_and_schema_omit_allow_unprovisioned():
     deploy = next(row for row in schema["data"]["commands"] if row["name"] == "deploy")
     flags = [item["long"] for item in deploy.get("flags") or []]
     assert "--allow-unprovisioned" not in flags
+
+
+def test_deploy_schema_does_not_mention_creating_hosts():
+    schema = json.loads(run_spa(["agent", "schema"]).stdout)
+    deploy = next(row for row in schema["data"]["commands"] if row["name"] == "deploy")
+    summary = deploy["summary"]
+    assert summary.startswith("Deploy Splunk")
+    assert "missing hosts" not in summary.lower()
+    assert "provision" not in summary.lower()

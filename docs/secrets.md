@@ -13,6 +13,17 @@ Use CI or operating-system secret storage to set the variable. `spa validate` re
 
 `CCM_TOKEN` is a process environment variable for employee-only Corporate Cloud Manager, not a `splunk_config.yml` key. SPA reports it as **set** or **not set**. Schema and comments may say `lookup('env', 'CCM_TOKEN')`; do not add a `CCM_TOKEN:` YAML key. Never echo the value. Operator page: [CCM](ccm.md).
 
+## Where to create missing credentials
+
+Do not paste secret values into chat. Export them in the shell, then re-run `spa doctor` / `spa validate`.
+
+| Need | Create in | Then |
+| --- | --- | --- |
+| `CCM_TOKEN` and the CCM SSH key | [CCM UI](https://ccm.splunkits.io/) | Export `CCM_TOKEN`. Set `ccm.key_name` and keep the private file at `ccm.ssh_private_key_file`. |
+| AWS access keys or a named profile | [IAM console](https://console.aws.amazon.com/iam/) | Prefer `AWS_PROFILE`; otherwise `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (and `AWS_SESSION_TOKEN` when required). |
+| AWS EC2 key pair | [EC2 console](https://console.aws.amazon.com/ec2/) in the env region | Download the PEM once. Set `terraform.aws.key_name` and `ssh_private_key_file`. |
+| Splunkbase downloads | [Splunkbase](https://splunkbase.splunk.com/) (Splunk.com account) | Export `SPLUNKBASE_USERNAME` and `SPLUNKBASE_PASSWORD`. |
+
 ## Ansible Vault
 
 Generate an encrypted string with `ansible-vault encrypt_string`, then quote the entire multiline value in YAML. The quote is required because SPA's inventory loader first parses standard YAML; a raw `!vault` tag is not a registered YAML constructor at that stage.

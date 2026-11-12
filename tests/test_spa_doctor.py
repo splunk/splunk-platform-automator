@@ -520,6 +520,7 @@ def test_doctor_ccm_flag_fails_when_token_not_set(monkeypatch):
     by_id = {row["id"]: row for row in result.data["checks"]}
     assert by_id["ccm_token"]["level"] == "error"
     assert by_id["ccm_token"]["message"] == "CCM_TOKEN: not set"
+    assert "https://ccm.splunkits.io/" in by_id["ccm_token"]["fix"]
     assert result.ok is False
     assert "ccm_api" not in by_id
 

@@ -124,7 +124,7 @@ spa init --example TOPOLOGY --provider ccm ENV
 
 `spa config provider ccm` writes the `ccm:` YAML block. `spa provider ccm` is discovery, not that write: size OS, instance type, and disk from `spa provider ccm survey` (or `operating-systems list` / `instance-types list` / `disk-storage list`). Do not hardcode those catalogs.
 
-Auth is `CCM_TOKEN` in the process environment (`lookup('env', 'CCM_TOKEN')`). `spa doctor` reports it as **set / not set** and never prints the token. CCM is remote; `spa init --provider ccm` already merges remote-provider defaults. For an existing env, `spa config merge remote-provider --yes`. Full operator page: [CCM](ccm.md).
+Auth is `CCM_TOKEN` in the process environment (`lookup('env', 'CCM_TOKEN')`). Mint the PAT and SSH key at [https://ccm.splunkits.io/](https://ccm.splunkits.io/), then export `CCM_TOKEN`. `spa doctor` reports it as **set / not set** and never prints the token. CCM is remote; `spa init --provider ccm` already merges remote-provider defaults. For an existing env, `spa config merge remote-provider --yes`. Full operator page: [CCM](ccm.md).
 
 Universal-forwarder outputs always go to all indexers today. UF → heavy forwarder (or a single indexer) is not a config knob; see `spa config explain splunk_hosts.splunk_outputs` and [ROADMAP](../ROADMAP.md).
 

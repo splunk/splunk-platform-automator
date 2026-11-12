@@ -125,6 +125,8 @@ def test_check_provisioned_ccm_missing_state_is_not_provisioned(tmp_path):
     state = check_provisioned(paths)
     assert state.provider == "ccm"
     assert state.provisioned is False
+    assert state.missing == ("idx1",)
+    assert state.hint == "spa deploy --yes"
     assert not (tmp_path / "ccm" / "state.json").exists()
 
 
