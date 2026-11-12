@@ -434,7 +434,7 @@ def test_explain_os_children_show_schema_defaults():
     assert cron["default"] is False
 
 
-def test_provision_success_envelope_includes_hosts_check_then_deploy(
+def test_hosts_provision_envelope_next_is_deploy_not_hosts_check(
     tmp_path, monkeypatch, capsys
 ):
     from spa_testutil import satisfy_env_lookups, write_min_env
@@ -454,14 +454,12 @@ def test_provision_success_envelope_includes_hosts_check_then_deploy(
             return 0
 
     monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
-    rc = _run(["--agent", "--start-dir", str(env), "provision", "--yes"])
+    rc = _run(["--agent", "--start-dir", str(env), "hosts", "provision", "--yes"])
     payload = json.loads(capsys.readouterr().out)
     assert rc == 0
     assert payload["ok"] is True
-    assert _next_ids(payload["data"]) == ["hosts.check", "logs.follow", "deploy"]
-    check, follow, deploy = payload["data"]["next"]
-    assert check["required"] is True
-    assert check["command"] == "spa --agent hosts check"
+    assert _next_ids(payload["data"]) == ["logs.follow", "deploy"]
+    follow, deploy = payload["data"]["next"]
     assert follow["required"] is False
     assert follow["command"] == (
         "spa --env %s logs --follow --wait --ansible-output --color" % env.name
@@ -471,3 +469,6 @@ def test_provision_success_envelope_includes_hosts_check_then_deploy(
     assert deploy["required"] is False
     assert deploy["command"] == "spa --agent deploy --yes"
     assert "Deploy" in deploy["ask"]
+    encoded = json.dumps(payload["data"]["next"])
+    assert "hosts check" not in encoded
+    assert "hosts.check" not in encoded

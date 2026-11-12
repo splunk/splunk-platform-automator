@@ -14,6 +14,13 @@ from spa_testutil import LIB, PROJECT_ROOT
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
+
+@pytest.fixture(autouse=True)
+def _noop_ssh_wait(monkeypatch):
+    monkeypatch.setattr(
+        "spa.providers.ccm.wait_managed_ssh", lambda *a, **k: {"hosts": []}
+    )
+
 sys.path.insert(0, str(LIB))
 
 
@@ -551,7 +558,7 @@ def test_ccm_provision_refuses_when_state_has_expired_deployment(tmp_path):
         client=UrllibCcmClient(token="test-ccm-token", opener=opener),
         sleep=lambda _seconds: None,
     )
-    with pytest.raises(ProviderError, match=r"spa destroy --yes then spa provision --yes") as caught:
+    with pytest.raises(ProviderError, match=r"spa destroy --yes then spa deploy --yes") as caught:
         provider.provision([])
     text = str(caught.value)
     assert "TTL" in text or "terminate" in text.lower()
@@ -1281,7 +1288,7 @@ def test_ccm_power_fails_when_deployment_expired(tmp_path, action):
     message = str(caught.value)
     assert "TTL" in message or "terminate" in message.lower()
     assert "spa destroy --yes" in message
-    assert "spa provision --yes" in message
+    assert "spa deploy --yes" in message
     assert opener.patches == []
 
 
@@ -1358,7 +1365,7 @@ def test_ccm_provision_state_404_is_not_provisioned(tmp_path):
     assert state.provisioned is False
     assert "TTL" in state.reason or "terminate" in state.reason.lower()
     assert "spa destroy --yes" in state.hint
-    assert "spa provision --yes" in state.hint
+    assert "spa deploy --yes" in state.hint
 
 
 def test_ccm_provision_state_missing_from_list_is_not_provisioned(tmp_path):

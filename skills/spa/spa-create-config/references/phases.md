@@ -332,16 +332,15 @@ Do not hand off until validation passes. See [validation.md](validation.md).
 
 Validation passed. **Always** ask which way to continue with an AskQuestion call, even when AskQuestion is not the usual choice. Never end with only a message such as "Ready for deployment, use /spa": the operator must be able to pick the handoff in the question. Put A first and mark it "(Recommended)":
 
-- **A) Hand off to `/spa` now (Recommended):** load [/spa](../../spa/SKILL.md) and run provision, then deploy, under its gates ("Handoff from spa-create-config" there). This skill runs no lifecycle command. Asking here does not approve provision or deploy; `/spa` asks for those yeses itself.
-- **B) Show me the command:** print the commands below; you run them.
-- **C) Wait:** stop here; you run them later.
+- **A) Hand off to `/spa` now (Recommended):** load [/spa](../../spa/SKILL.md) and run deploy under its gates ("Handoff from spa-create-config" there). This skill runs no lifecycle command. Asking here does not approve deploy; `/spa` asks for that yes itself.
+- **B) Show me the command:** print the command below; you run it.
+- **C) Wait:** stop here; you run it later.
 
 ```bash
-spa provision --yes
 spa deploy --yes
 ```
 
-Each run waits for its own explicit yes in chat. A request earlier in the chat is not that yes. Provision, deploy, `spa hosts check`, destroy, suspend, resume, and logs belong to `/spa`. Do not run them from this skill.
+The run waits for its own explicit yes in chat. A request earlier in the chat is not that yes. Deploy (creates hosts if needed), `spa hosts check`, destroy, suspend, resume, and logs belong to `/spa`. Do not run them from this skill.
 
 **B and C:** print the commands and the log command (`spa logs --last`), then stop.
 

@@ -87,7 +87,6 @@ spa venv upgrade --shared --yes                      # bump Ansible and other re
 spa venv rebuild --shared --yes                      # recreate the shared venv
 spa doctor
 spa validate
-spa provision --yes
 spa deploy --yes
 spa hosts list --status
 spa logs --last
@@ -95,7 +94,7 @@ spa logs --last
 
 ## Long runs
 
-When running `provision`, `deploy`, `destroy`, or `spa run`, follow [long-runs.md](references/long-runs.md). Do not load it until that command is running.
+When running `deploy`, `destroy`, or `spa run`, follow [long-runs.md](references/long-runs.md). Do not load it until that command is running.
 
 ## Handoff from spa-create-config
 
@@ -103,6 +102,6 @@ After Phase 14 option A, follow [long-runs.md](references/long-runs.md#handoff-f
 
 ## Anti-patterns
 
-Import `spa.api`; answer `Proceed?`; invent playbook names; dump full Ansible logs into the model context (use `spa logs` / `data.log` only when the user asked to debug); put installers inside `SPA_HOME`; `2>&1 | grep`, `head`, or `tail` on provision/deploy/destroy/run.
+Import `spa.api`; answer `Proceed?`; invent playbook names; dump full Ansible logs into the model context (use `spa logs` / `data.log` only when the user asked to debug); put installers inside `SPA_HOME`; `2>&1 | grep`, `head`, or `tail` on deploy/destroy/run.
 
 Human journey: [docs/user-guide.md](../../../docs/user-guide.md). Install: README curl `| sh`. Token budget: [token-budget.md](references/token-budget.md).

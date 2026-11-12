@@ -726,9 +726,8 @@ class TestSpaSkill:
     def test_create_config_phase9_asks_before_running_provision_and_deploy(self):
         text = _create_config_workflow()
         phase9 = text[text.index("## Phase 14 — Handoff"):]
-        assert "spa provision --yes" in phase9
         assert "spa deploy --yes" in phase9
-        assert "spa provision --yes && spa deploy --yes" not in phase9
+        assert phase9.count("spa deploy --yes") >= 1
         assert "Show me the command" in phase9 or "print" in phase9.lower()
         assert "explicit yes" in phase9
         assert "does **not** auto-provision" not in phase9
@@ -1278,6 +1277,23 @@ def test_roadmap_ccm_provider_is_done():
     line = lines[0]
     assert line.startswith("- [x]"), line
     assert "CCM" in line
+
+
+def test_user_guide_teaches_adding_a_host_then_deploy():
+    """Scale-out is config add (or hosts register), then spa deploy --yes."""
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    section = guide[
+        guide.index("## Run the lifecycle") : guide.index("## Complete commands")
+    ]
+    assert "spa config add" in section
+    assert "splunk_hosts[name=" in section
+    assert "spa deploy --yes" in section
+    assert "spa hosts register" in section
+    aws = (_docs_dir() / "aws.md").read_text(encoding="utf-8")
+    assert "spa config add" in aws
+    assert "spa deploy --yes" in aws
+    ccm = (_docs_dir() / "ccm.md").read_text(encoding="utf-8")
+    assert "Adding a host to a live CCM deployment does not add an instance" in ccm
 
 
 def test_user_guide_names_employee_only_ccm():

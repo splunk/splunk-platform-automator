@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+import time
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+
+SSH_WAIT_ATTEMPTS = 30
+SSH_WAIT_DELAY = 10
 
 
 def allowed_role_names() -> List[str]:
@@ -306,7 +310,7 @@ def ping_hosts(
         if name in external:
             raise HostsError(_register_sentence(name))
         raise HostsError(
-            "hosts not provisioned: %s\nRun: spa provision --yes" % ", ".join(missing)
+            "hosts not provisioned: %s\nRun: spa deploy --yes" % ", ".join(missing)
         )
     drop_discovered_interpreter_cache(selected, paths)
     rows, problem = ansible_ping(selected, paths=paths, become=True, run=run)
@@ -327,3 +331,33 @@ def ping_hosts(
     if any(not row.get("ok") for row in rows):
         raise HostsError(_architecture_failure_text(rows), rows)
     return {"hosts": rows}
+
+
+def _retryable_ssh_failure(exc: HostsError) -> bool:
+    """Connection refused while SSH is coming up. Architecture mismatch is not retryable."""
+    if any(row.get("expected_architecture") for row in exc.rows):
+        return False
+    return "connection refused" in str(exc).lower()
+
+
+def wait_for_ssh(
+    paths,
+    hosts: Optional[Sequence[str]] = None,
+    *,
+    run=None,
+    sleep: Optional[Callable[[float], None]] = None,
+    attempts: int = SSH_WAIT_ATTEMPTS,
+    delay: float = SSH_WAIT_DELAY,
+) -> Dict[str, Any]:
+    """Ping with become until SSH works. Connection refused retries; architecture mismatch fails."""
+    sleeper = time.sleep if sleep is None else sleep
+    last: Optional[HostsError] = None
+    for attempt in range(max(1, attempts)):
+        try:
+            return ping_hosts(paths, hosts, run=run)
+        except HostsError as exc:
+            last = exc
+            if not _retryable_ssh_failure(exc) or attempt >= attempts - 1:
+                raise
+            sleeper(delay)
+    raise last  # pragma: no cover

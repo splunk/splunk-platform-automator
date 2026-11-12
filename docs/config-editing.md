@@ -60,7 +60,7 @@ blank line or comment between `plugin` and the stamp. Operator
 `config_version` is never invented or bumped. `--dry-run`
 is faithful and does not write. `--show-diff` prints the redacted unified
 hunk after the status line. Human status is `Config migrate: would change` /
-`changed` / `unchanged`. `spa validate`, `spa deploy`, and `spa provision`
+`changed` / `unchanged`. `spa validate` and `spa deploy`
 require the authored key and do not write it.
 
 ### CFG-CLI-004 — bounded discovery
@@ -505,7 +505,7 @@ decrypted vault text.
 ### CFG-SEC-003 — required environment references
 
 An explicit `{{ lookup('env', 'NAME') }}` requires `NAME` to be set to a
-non-empty value before `spa validate`, `spa provision`, or `spa deploy`. Missing
+non-empty value before `spa validate` or `spa deploy`. Missing
 and empty variables fail together, before inventory, confirmation, or provider
 work. The error lists variable names and says to export each variable to a
 non-empty value and rerun the command. It never includes the variable values.

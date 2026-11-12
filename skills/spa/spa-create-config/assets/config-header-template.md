@@ -12,12 +12,12 @@ Do not paste a header into `config/splunk_config.yml`. Set it with `spa config h
 | Installer | `--installer` | `Splunk Enterprise Linux tgz from the Software directory` |
 | OS | `--os` | `RHEL 10; ssh_username=ec2-user` |
 | AWS | `--aws` | `eu-central-1; t3.xlarge; AWS API: not available` (when you skipped the API) |
-| Deploy | `--deploy` | `spa provision --yes && spa deploy --yes` |
+| Deploy | `--deploy` | `spa deploy --yes` |
 
 Example, with the operator's confirmation first:
 
 ```
-spa --agent config header set --intent config-test --sva S1 --placement "lab-minimal - one host" --os "RHEL 10; ssh_username=ec2-user" --deploy "spa provision --yes && spa deploy --yes" --yes
+spa --agent config header set --intent config-test --sva S1 --placement "lab-minimal - one host" --os "RHEL 10; ssh_username=ec2-user" --deploy "spa deploy --yes" --yes
 ```
 
 Agent mode needs `--yes`. Use `--dry-run` to preview. A line break, a certificate or license marker, or a secret-shaped value is refused. Leave out any field the operator did not supply.

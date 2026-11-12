@@ -14,7 +14,7 @@ spa --agent config header set \
   --placement "lab-minimal - single host runs indexer and search_head roles" \
   --os "RHEL 10; ssh_username=ec2-user" \
   --aws "eu-central-1; t3.xlarge (4 vCPUs); provider aws (chosen with --provider)" \
-  --deploy "spa provision --yes && spa deploy --yes" \
+  --deploy "spa deploy --yes" \
   --yes
 ```
 
@@ -32,7 +32,7 @@ Agent mode needs `--yes`. Use `--dry-run` to preview. Omitted fields are removed
 | `--installer` | Splunk installer source | `Linux tgz from the Software directory` |
 | `--os` | Operating system and SSH user | `RHEL 10; ssh_username=ec2-user` |
 | `--aws` | AWS placement and API status | `eu-central-1; t3.xlarge; AWS API not available` |
-| `--deploy` | Command that provisions and deploys | `spa provision --yes && spa deploy --yes` |
+| `--deploy` | Command that provisions and deploys | `spa deploy --yes` |
 
 ## Why it matters
 

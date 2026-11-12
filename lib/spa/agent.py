@@ -440,7 +440,7 @@ COMMAND_SCHEMA = {
                 {"long": "--show-diff", "help": "Print the redacted unified diff after the status line (no-op in agent mode)"},
                 {"long": "--yes", "short": "-y", "help": "Confirm the header write (required in agent mode)"},
             ],
-            "example": 'spa --agent config header set --intent config-test --deploy "spa provision --yes && spa deploy --yes" --yes',
+            "example": 'spa --agent config header set --intent config-test --deploy "spa deploy --yes" --yes',
         },
         {
             "name": "validate",
@@ -666,21 +666,8 @@ COMMAND_SCHEMA = {
             "example": "spa environment --export",
         },
         {
-            "name": "provision",
-            "summary": "Provision infrastructure using the provider selected by splunk_config.yml",
-            "requires_confirmation": True,
-            "flags": [
-                {"long": "--yes", "short": "-y", "help": "Confirm provision"},
-                _FLAG_ANSIBLE_OUTPUT,
-                _FLAG_TIMESTAMPS,
-                _FLAG_COLOR,
-                _FLAG_VERBOSE_NATIVE,
-            ],
-            "example": "spa provision --yes && spa deploy --yes",
-        },
-        {
             "name": "deploy",
-            "summary": "Deploy Splunk (deploy_site.yml). After you confirm, ping with become before the playbook. Requires Software/baseconfig and local app sources",
+            "summary": "Create missing hosts if needed, then deploy Splunk (deploy_site.yml). After you confirm, ping with become before the playbook. Requires Software/baseconfig and local app sources",
             "requires_confirmation": True,
             "flags": [
                 {"long": "--yes", "short": "-y", "help": "Confirm deploy (required in agent mode)"},
@@ -732,7 +719,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "hosts",
-            "summary": "Inventory actions. List hosts, SSH, or copy. Bare spa hosts exits 2.",
+            "summary": "Inventory actions. List hosts, SSH, provision, or copy. Bare spa hosts exits 2.",
             "example": "spa hosts list",
         },
         {
@@ -788,6 +775,19 @@ COMMAND_SCHEMA = {
                 {"long": "--yes", "short": "-y", "help": "Confirm unregister"},
             ],
             "example": "spa hosts unregister NAME --yes",
+        },
+        {
+            "name": "hosts provision",
+            "summary": "Create or update managed hosts. SSH is ready before this returns. Lab bring-up is spa deploy --yes.",
+            "requires_confirmation": True,
+            "flags": [
+                {"long": "--yes", "short": "-y", "help": "Confirm hosts provision"},
+                _FLAG_ANSIBLE_OUTPUT,
+                _FLAG_TIMESTAMPS,
+                _FLAG_COLOR,
+                _FLAG_VERBOSE_NATIVE,
+            ],
+            "example": "spa hosts provision --yes",
         },
         {
             "name": "hosts check",

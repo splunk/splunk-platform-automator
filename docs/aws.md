@@ -47,17 +47,16 @@ The `0.0.0.0/0` sources are a lab-style starting point. Tighten SSH and Splunk W
 
 ```bash
 spa validate
-spa provision --yes
 spa deploy --yes
 ```
 
-Provision generates vars, initializes Terraform, shows the plan, applies it, waits for AWS status checks, and writes inventory. For plan-only inspection:
+Deploy creates missing hosts if needed: it generates vars, initializes Terraform, shows the plan, applies it, waits for AWS status checks, writes inventory, and waits until SSH works, then always runs hosts check before installing Splunk. For host-only create or plan-only inspection:
 
 ```bash
-spa provision --yes -- --tags plan
+spa hosts provision --yes -- --tags plan
 ```
 
-Maintainer stages exposed by the wrapped playbook include `generate`, `init`, `plan`, and `outputs`; inspect current support with `spa provision --help`. Optional readiness checks:
+Maintainer stages exposed by the wrapped playbook include `generate`, `init`, `plan`, and `outputs`; inspect current support with `spa hosts provision --help`. Optional readiness checks:
 
 ```bash
 spa run aws_wait_hosts --help
@@ -70,6 +69,7 @@ spa run aws_wait_hosts --help
 | Job | Command |
 | --- | --- |
 | Inspect AWS-backed host status | `spa hosts list --status` |
+| Add a host, then create it and install Splunk | `spa config add 'splunk_hosts[name=NAME]' '{...}' --yes` then `spa deploy --yes` |
 | Stop instances, retain state/disks | `spa suspend --yes` |
 | Start and refresh inventory addresses | `spa resume --yes` |
 | Reconcile Splunk after resume/change | `spa deploy --yes` |
@@ -79,4 +79,4 @@ Do not remove a live host from `splunk_config.yml` and provision: Terraform may 
 
 ## Maintainers
 
-The module implementation is under [`terraform/aws/`](../terraform/aws/). Its README describes module files and outputs; operator behavior belongs here and in `spa provision --help`.
+The module implementation is under [`terraform/aws/`](../terraform/aws/). Its README describes module files and outputs; operator behavior belongs here and in `spa deploy --help`. Host-only Terraform work is `spa hosts provision --help`.

@@ -10,7 +10,7 @@ import json
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence, runtime_checkable
+from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence, Tuple, runtime_checkable
 
 from spa.agent import COMMAND_SCHEMA, SCHEMA_VERSION
 from spa.executil import apply_paths_env
@@ -537,32 +537,36 @@ class LocalSpaSession:
             data=state.payload(),
         )
 
-    def _scoped_provision_block(self, hosts: Optional[Sequence[str]]) -> Optional[CommandResult]:
-        """A full deploy checks every host. ``--hosts`` checks only those names."""
+    def _deploy_create_needed(
+        self, hosts: Optional[Sequence[str]]
+    ) -> Tuple[bool, Optional[CommandResult]]:
+        """Whether deploy should create missing managed hosts before the playbook."""
         state = self._provision_state()
         if state is None or state.provisioned:
-            return None
+            return False, None
         from spa.hosts import parse_host_tokens
 
         tokens = parse_host_tokens(hosts)
-        managed, external = self._classified_hosts()
-        if not tokens:
-            return self._require_provisioned()
-        from spa.providers import load_deployment_config
-        from spa.providers.classify import hostnames_for_tokens
+        _managed, external = self._classified_hosts()
+        if tokens:
+            from spa.providers import load_deployment_config
+            from spa.providers.classify import hostnames_for_tokens
 
-        try:
-            document = load_deployment_config(self.paths)
-        except Exception:
-            document = {}
-        selected = hostnames_for_tokens(document, tokens)
-        if not selected:
-            return None
-        missing = [name for name in state.missing if name in selected]
-        if not missing:
-            return None
+            try:
+                document = load_deployment_config(self.paths)
+            except Exception:
+                document = {}
+            selected = hostnames_for_tokens(document, tokens)
+            if not selected:
+                return False, None
+            missing = [name for name in state.missing if name in selected]
+            if not missing:
+                return False, None
+        else:
+            missing = list(state.missing)
         external_missing = [name for name in missing if name in external]
-        if external_missing and len(external_missing) == len(missing):
+        managed_missing = [name for name in missing if name not in set(external)]
+        if external_missing and not managed_missing:
             from spa.providers.external import _register_sentence
 
             hint = _register_sentence(external_missing[0]).split("Run: ", 1)[-1]
@@ -571,27 +575,13 @@ class LocalSpaSession:
                 "provider: %s" % state.provider,
                 "Run: %s" % hint,
             ]
-            return CommandResult(
+            return False, CommandResult(
                 ok=False,
                 code=1,
                 error="\n".join(lines),
                 data=state.payload(),
             )
-        from spa.providers import ProvisionState
-
-        narrowed = ProvisionState(
-            provider=state.provider,
-            provisioned=False,
-            reason=state.reason,
-            hint="spa provision --yes",
-            missing=tuple(missing),
-        )
-        return CommandResult(
-            ok=False,
-            code=1,
-            error=narrowed.message(),
-            data=narrowed.payload(),
-        )
+        return bool(managed_missing), None
 
     def _progress(self, event: Dict[str, Any]) -> None:
         if self.on_progress:
@@ -1578,6 +1568,7 @@ class LocalSpaSession:
             verbosity=verbosity,
             timestamps=timestamps,
             color=color,
+            label="hosts provision",
         )
 
     def destroy(
@@ -1625,6 +1616,8 @@ class LocalSpaSession:
         verbosity: int = 0,
         timestamps: bool = False,
         color: bool = False,
+        label: Optional[str] = None,
+        skip_confirm: bool = False,
     ) -> CommandResult:
         blocked, lifecycle_lock = self._begin_lifecycle(action)
         if blocked:
@@ -1640,6 +1633,8 @@ class LocalSpaSession:
                 verbosity=verbosity,
                 timestamps=timestamps,
                 color=color,
+                label=label,
+                skip_confirm=skip_confirm,
             )
         finally:
             lifecycle_lock.close()
@@ -1655,6 +1650,8 @@ class LocalSpaSession:
         verbosity: int = 0,
         timestamps: bool = False,
         color: bool = False,
+        label: Optional[str] = None,
+        skip_confirm: bool = False,
     ) -> CommandResult:
         from spa.confirm import LIFECYCLE_RISK
 
@@ -1668,15 +1665,12 @@ class LocalSpaSession:
         except ProviderError as exc:
             return CommandResult(ok=False, error=str(exc), code=getattr(exc, "code", 1) or 1)
         managed, external = self._classified_hosts()
-        if action == "provision" and provider.name == "external":
-            return CommandResult(
-                ok=True,
-                data={
-                    "provider": provider.name,
-                    "action": action,
-                    "note": "SPA does not provision external hosts.",
-                },
-            )
+        if action == "provision" and not getattr(provider, "creates_hosts", True):
+            outcome = provider.provision(list(extra or []), agent=agent)
+            data = {"provider": provider.name, "action": action}
+            if isinstance(outcome, dict):
+                data.update(outcome)
+            return CommandResult(ok=True, data=data)
         if action == "provision" and external and not agent:
             import sys
 
@@ -1692,14 +1686,16 @@ class LocalSpaSession:
             return CommandResult(
                 ok=False, error=str(exc), code=getattr(exc, "code", 1) or 1
             )
-        blocked = self._confirm_gate(
-            action,
-            confirm=confirm,
-            agent=agent,
-            risk=LIFECYCLE_RISK.get(action),
-        )
-        if blocked:
-            return blocked
+        confirm_label = label or action
+        if not skip_confirm:
+            blocked = self._confirm_gate(
+                confirm_label,
+                confirm=confirm,
+                agent=agent,
+                risk=LIFECYCLE_RISK.get(confirm_label) or LIFECYCLE_RISK.get(action),
+            )
+            if blocked:
+                return blocked
         args = ["-e", "auto_approve=true", *list(extra or [])]
         log = None
         rc = 1
@@ -1710,14 +1706,8 @@ class LocalSpaSession:
             snapshot = self._inventory_snapshot()
             if provider.name == "virtualbox" and external:
                 args = [*args, *managed]
-            if provider.name == "external":
-                playbook = "external_%s" % action
-            elif provider.name == "aws":
-                playbook = "aws_provision" if action == "provision" else "aws_destroy"
-            elif provider.name == "ccm":
-                playbook = "ccm_provision" if action == "provision" else "ccm_destroy"
-            else:
-                playbook = "vagrant_up" if action == "provision" else "vagrant_destroy"
+            playbook_fn = getattr(provider, "lifecycle_playbook", None)
+            playbook = playbook_fn(action) if callable(playbook_fn) else action
             log = self._run_log(
                 action,
                 playbook,
@@ -1966,7 +1956,7 @@ class LocalSpaSession:
                 },
             )
 
-        blocked = self._scoped_provision_block(hosts)
+        will_create, blocked = self._deploy_create_needed(hosts)
         if blocked:
             return blocked
 
@@ -1974,15 +1964,34 @@ class LocalSpaSession:
             resolved = self._resolve_hosts(hosts)
         except HostLookupError as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
+        details = list(self._confirm_details(resolved) or [])
+        if will_create:
+            details.insert(0, "will create missing hosts, then deploy Splunk")
+        confirm_label = "create hosts and deploy" if will_create else "deploy"
         blocked = self._confirm_gate(
-            "deploy",
+            confirm_label,
             confirm=confirm,
             agent=agent,
-            details=self._confirm_details(resolved),
+            details=details or None,
             risk="mutating",
         )
         if blocked:
             return blocked
+        if will_create:
+            created = self._run_lifecycle_playbook(
+                "provision",
+                extra=None,
+                confirm=True,
+                agent=agent,
+                ansible_output=ansible_output,
+                native_output=native_output,
+                verbosity=verbosity,
+                timestamps=timestamps,
+                color=color,
+                skip_confirm=True,
+            )
+            if not created.ok:
+                return created
         from spa.hosts import HostsError, ping_hosts
 
         log = self._run_log(

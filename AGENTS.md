@@ -7,8 +7,8 @@ SPA provisions and deploys Splunk Enterprise (AWS Linux + Terraform, or VirtualB
 - **`SPA_HOME`**: framework (prefix or clone). **`SPA_ENV_DIR`**: one environment. Operator `spa` needs `spa init` first. Path diagram: [user guide](docs/user-guide.md#understand-the-paths).
 - Call **`bin/spa`** only (`spa --agent schema`, `spa --agent config search QUERY`, `spa --agent apps`). Do not import `spa.api`. Do not start a daemon. Flag catalog: `spa --agent schema` / `spa --no-agent agent schema`.
 - Do not hand-edit `splunk_config.yml`. Change it with `spa config ...` (skill `/spa-create-config`) and add apps with `spa apps ...` (skill `/spa-apps`).
-- Mutating commands need **`--yes`**. Never auto-run provision, deploy, suspend, resume, or destroy. Exception: `/spa-create-config` Phase 14 option A hands off to `/spa`, which runs `provision`, then `deploy`, each only after its own explicit yes in chat. Never answer `Proceed?` interactively.
-- Never print secrets (Splunkbase, AWS keys, vault). Report env vars as **set / not set**. YAML: `lookup('env', ...)`. Do not pass `-v` on provision/deploy/run (unredacted Ansible stdout).
+- Mutating commands need **`--yes`**. Never auto-run deploy, suspend, resume, or destroy. Exception: `/spa-create-config` Phase 14 option A hands off to `/spa`, which runs `deploy` only after an explicit yes in chat. Never answer `Proceed?` interactively.
+- Never print secrets (Splunkbase, AWS keys, vault). Report env vars as **set / not set**. YAML: `lookup('env', ...)`. Do not pass `-v` on deploy/run (unredacted Ansible stdout).
 - Full command names (`spa hosts ssh`, `spa validate`), not `spa sh` / `spa val`.
 - Playbooks: `spa --agent run list` then `spa run NAME --help`. Confirmation: `--yes`. Extra Ansible args: `spa run NAME -- …`.
 
@@ -22,7 +22,6 @@ Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
 | --- | --- |
 | Init | `spa init --example TOPOLOGY --provider aws|virtualbox|external NAME` |
 | Validate | `spa validate` |
-| Provision | `spa provision --yes` |
 | Deploy | `spa deploy --yes` |
 | Logs | `spa logs list` / `spa logs --last` |
 | Hosts | `spa hosts list --status`, `spa hosts ssh NAME` |

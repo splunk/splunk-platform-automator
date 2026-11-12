@@ -544,7 +544,7 @@ splunk_systemd: {}
 
 | Path | Type | Qualifiers | Description |
 | --- | --- | --- | --- |
-| `splunk_hosts` | list[object] | required; min_length=1 | Hosts that spa provision and spa deploy act on. Holds no value itself. |
+| `splunk_hosts` | list[object] | required; min_length=1 | Hosts that spa deploy acts on. Holds no value itself. |
 | `splunk_hosts[].cname` | string | optional | DNS alias published for this host. No default. Omit the key to publish none. |
 | `splunk_hosts[].custom` | CustomConfig | optional | Extra Ansible variables for this host only, such as ansible_port. No default. Address, user, and key for an external host belong in inventory/hosts. |
 | `splunk_hosts[].external` | ExternalConfig | optional | Bring-your-own SSH block for this host only. Holds no value itself. No default. Set this on one host inside a terraform or virtualbox env. Omit the key when a root external: block covers every host. |
@@ -609,7 +609,7 @@ splunk_systemd: {}
 
 `splunk_hosts[].name`
 
-The host list spa provision and spa deploy use. Each entry is one host (name), an explicit list of names, or an iter range (prefix + 1..N + postfix). roles is required (cluster_manager, indexer, search_head, deployer, universal_forwarder, universal_forwarder_windows, heavy_forwarder, license_manager, and so on). Cluster managers must set idxcluster; deployers must set shcluster. site is only for indexer, search_head, or cluster_manager. Other catalog settings can override per host under the same entry.
+The host list spa deploy uses. Each entry is one host (name), an explicit list of names, or an iter range (prefix + 1..N + postfix). roles is required (cluster_manager, indexer, search_head, deployer, universal_forwarder, universal_forwarder_windows, heavy_forwarder, license_manager, and so on). Cluster managers must set idxcluster; deployers must set shcluster. site is only for indexer, search_head, or cluster_manager. Other catalog settings can override per host under the same entry.
 
 ```yaml
 splunk_hosts:

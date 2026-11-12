@@ -26,7 +26,6 @@ HELP_CONTRACTS = [
             "doctor",
             "venv",
             "environment",
-            "provision",
             "deploy",
             "destroy",
             "suspend",
@@ -275,7 +274,7 @@ HELP_CONTRACTS = [
         ["apps", "download", "--help"],
         ["usage: spa apps download", "--yes", "--version", "--extract", "--overwrite", "apps_dir"],
     ),
-    (["provision", "--help"], ["usage: spa provision", "-y", "--yes", "--ansible-output", "-v", "Confirm provision"]),
+    (["hosts", "provision", "--help"], ["usage: spa hosts provision", "-y", "--yes", "--ansible-output", "-v", "Confirm hosts provision"]),
     (
         ["deploy", "--help"],
         [
@@ -318,7 +317,7 @@ HELP_CONTRACTS = [
     ),
     (
         ["hosts", "--help"],
-        ["usage: spa hosts", "ACTION", "list", "ssh", "copy", "register", "unregister", "check", "spa hosts check"],
+        ["usage: spa hosts", "ACTION", "list", "ssh", "copy", "register", "unregister", "provision", "check", "spa hosts check"],
     ),
     (
         ["hosts", "list", "--help"],
@@ -577,8 +576,8 @@ def test_every_discovered_top_level_command_and_alias_use_canonical_help():
         (["validate", "--agent", "--help"], "validate"),
         (["--no-agent", "validate", "--help"], "usage: spa validate"),
         (["validate", "--no-agent", "--help"], "usage: spa validate"),
-        (["--yes", "provision", "--help"], "usage: spa provision"),
-        (["provision", "--yes", "--help"], "usage: spa provision"),
+        (["--yes", "hosts", "provision", "--help"], "usage: spa hosts provision"),
+        (["hosts", "provision", "--yes", "--help"], "usage: spa hosts provision"),
         (["--env", "lab", "validate", "--help"], "usage: spa validate"),
         (["validate", "--env", "lab", "--help"], "usage: spa validate"),
         (["--start-dir", "/tmp/lab", "validate", "--help"], "usage: spa validate"),
@@ -938,7 +937,7 @@ def test_parent_help_omits_hidden_aliases():
     [
         ["deploy", "--ansible-output", "-v"],
         ["dep", "-v", "--ansible-output"],
-        ["provision", "-v"],
+        ["hosts", "provision", "-v"],
         ["destroy", "-v"],
         ["suspend", "-v"],
         ["resume", "-v"],
@@ -1148,7 +1147,7 @@ def test_agent_schema_is_complete_and_documented():
             assert flag.get("help"), (row["name"], flag)
 
     by_name = {row["name"]: row for row in commands}
-    for name in ("provision", "deploy", "destroy", "suspend", "resume"):
+    for name in ("hosts provision", "deploy", "destroy", "suspend", "resume"):
         assert by_name[name]["requires_confirmation"] is True
         assert "--yes" in {flag["long"] for flag in by_name[name]["flags"]}
 

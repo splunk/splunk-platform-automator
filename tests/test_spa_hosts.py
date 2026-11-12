@@ -316,7 +316,7 @@ def test_hosts_list_status_skips_runtime_when_unprovisioned(tmp_path, monkeypatc
     assert result.ok
     assert pinged == []
     assert result.data["provisioned"] is False
-    assert "spa provision" in result.data["hint"]
+    assert "spa deploy" in result.data["hint"]
     rows = {row["name"]: row for row in result.data["hosts"]}
     assert rows["idx1"]["ansible"] == "unprovisioned"
     assert rows["idx1"]["provider_status"] == "unprovisioned"
@@ -435,7 +435,7 @@ def test_require_provisioned_is_the_shared_gate(tmp_path):
     assert blocked is not None
     assert blocked.ok is False
     assert blocked.data["provisioned"] is False
-    assert "spa provision" in blocked.error
+    assert "spa deploy" in blocked.error
     assert "idx1" in blocked.error
     assert "hosts not provisioned:" in blocked.error
     assert "provider: aws" in blocked.error
@@ -462,10 +462,10 @@ def test_suspend_and_run_use_the_provision_gate(tmp_path, monkeypatch):
     )
     suspend = session.suspend(confirm=True)
     assert suspend.ok is False
-    assert "spa provision" in suspend.error
+    assert "spa deploy" in suspend.error
     ping = session.run("verification/ping_hosts")
     assert ping.ok is False
-    assert "spa provision" in ping.error
+    assert "spa deploy" in ping.error
     assert not called
     provision = session.run("aws_provision", confirm=True)
     assert called == [True]
@@ -489,7 +489,7 @@ def test_cli_ssh_copy_and_sh_refuse_when_unprovisioned(tmp_path):
     ):
         result = run_spa(["--no-agent", *argv], extra_env=extra, cwd=str(paths.spa_env_dir))
         assert result.returncode != 0, argv
-        assert "spa provision" in result.stderr, argv
+        assert "spa deploy" in result.stderr, argv
         assert "hosts not provisioned:" in result.stderr, argv
         assert "provider: aws" in result.stderr, argv
         assert "spa run --list" not in result.stderr, argv

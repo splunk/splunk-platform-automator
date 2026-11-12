@@ -405,7 +405,7 @@ Requires confirmation: yes (`--yes`).
 Example:
 
 ```bash
-spa --agent config header set --intent config-test --deploy "spa provision --yes && spa deploy --yes" --yes
+spa --agent config header set --intent config-test --deploy "spa deploy --yes" --yes
 ```
 
 ## `validate`
@@ -693,29 +693,9 @@ Example:
 spa environment --export
 ```
 
-## `provision`
-
-Provision infrastructure using the provider selected by splunk_config.yml
-
-Requires confirmation: yes (`--yes`).
-
-| Flag | Description |
-| --- | --- |
-| `-y`, `--yes` | Confirm provision |
-| `--ansible-output` | Show captured Ansible output live or from stored logs (not in agent output) |
-| `--timestamps` | Prefix --ansible-output lines with their stored event time |
-| `--color` | Color --ansible-output. Live runs use Ansible color; stored logs are recolored |
-| `-v`, `--verbose` | Increase Ansible verbosity and show native output; repeat through -vvvv |
-
-Example:
-
-```bash
-spa provision --yes && spa deploy --yes
-```
-
 ## `deploy`
 
-Deploy Splunk (deploy_site.yml). After you confirm, ping with become before the playbook. Requires Software/baseconfig and local app sources
+Create missing hosts if needed, then deploy Splunk (deploy_site.yml). After you confirm, ping with become before the playbook. Requires Software/baseconfig and local app sources
 
 Requires confirmation: yes (`--yes`).
 
@@ -775,7 +755,7 @@ Requires confirmation: yes (`--yes`).
 
 ## `hosts`
 
-Inventory actions. List hosts, SSH, or copy. Bare spa hosts exits 2.
+Inventory actions. List hosts, SSH, provision, or copy. Bare spa hosts exits 2.
 
 Example:
 
@@ -866,6 +846,26 @@ Example:
 
 ```bash
 spa hosts unregister NAME --yes
+```
+
+## `hosts provision`
+
+Create or update managed hosts. SSH is ready before this returns. Lab bring-up is spa deploy --yes.
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `-y`, `--yes` | Confirm hosts provision |
+| `--ansible-output` | Show captured Ansible output live or from stored logs (not in agent output) |
+| `--timestamps` | Prefix --ansible-output lines with their stored event time |
+| `--color` | Color --ansible-output. Live runs use Ansible color; stored logs are recolored |
+| `-v`, `--verbose` | Increase Ansible verbosity and show native output; repeat through -vvvv |
+
+Example:
+
+```bash
+spa hosts provision --yes
 ```
 
 ## `hosts check`

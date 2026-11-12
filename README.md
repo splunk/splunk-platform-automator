@@ -74,7 +74,7 @@ spa doctor
 spa init --example cm_2idxc_sh --provider aws ~/envs/my-env
 cd ~/envs/my-env
 spa validate
-spa provision --yes && spa deploy --yes
+spa deploy --yes
 ```
 
 VirtualBox: `--provider virtualbox` (for example `single_node`). Full narrative: [user guide](docs/user-guide.md).

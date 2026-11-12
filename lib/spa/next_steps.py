@@ -162,12 +162,6 @@ def provision_next(env_name: Optional[str] = None) -> List[Dict[str, Any]]:
     follow = "spa --env %s logs --follow --wait --ansible-output --color" % env
     return [
         item(
-            "hosts.check",
-            "Check provisioned hosts before deploy?",
-            "spa --agent hosts check",
-            required=True,
-        ),
-        item(
             "logs.follow",
             "In another terminal, follow native Ansible while deploy runs (optional).",
             follow,

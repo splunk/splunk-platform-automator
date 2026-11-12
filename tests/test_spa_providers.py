@@ -16,6 +16,21 @@ from spa_testutil import PROJECT_ROOT
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
 
+@pytest.fixture(autouse=True)
+def _noop_ssh_wait(monkeypatch, request):
+    if request.node.name in {
+        "test_aws_provision_waits_for_ssh_after_playbook",
+        "test_aws_failed_provision_does_not_wait_for_ssh",
+    }:
+        return
+    monkeypatch.setattr(
+        "spa.providers.aws.wait_managed_ssh", lambda *a, **k: {"hosts": []}
+    )
+    monkeypatch.setattr(
+        "spa.providers.virtualbox.wait_managed_ssh", lambda *a, **k: {"hosts": []}
+    )
+
+
 def _paths(tmp_path, config):
     config_path = tmp_path / "config" / "splunk_config.yml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -327,6 +342,32 @@ def test_shell_host_report_runtime_false_skips_checks(monkeypatch):
     assert report["provider"] is None
 
 
+def test_aws_provision_waits_for_ssh_after_playbook(tmp_path, monkeypatch):
+    waited = []
+    monkeypatch.setattr("spa.providers.aws.run_playbook", lambda *a, **k: 0)
+    monkeypatch.setattr("spa.providers.aws.resolve", lambda *a, **k: "aws_provision")
+    monkeypatch.setattr(
+        "spa.hosts.wait_for_ssh",
+        lambda paths, **k: waited.append(paths) or {"hosts": []},
+    )
+    provider = _aws_provider(tmp_path)
+    assert provider.provision([]) == 0
+    assert waited
+
+
+def test_aws_failed_provision_does_not_wait_for_ssh(tmp_path, monkeypatch):
+    waited = []
+    monkeypatch.setattr("spa.providers.aws.run_playbook", lambda *a, **k: 1)
+    monkeypatch.setattr("spa.providers.aws.resolve", lambda *a, **k: "aws_provision")
+    monkeypatch.setattr(
+        "spa.hosts.wait_for_ssh",
+        lambda paths, **k: waited.append(True) or {"hosts": []},
+    )
+    provider = _aws_provider(tmp_path)
+    assert provider.provision([]) == 1
+    assert waited == []
+
+
 def test_resume_starts_waits_and_refreshes_inventory(tmp_path):
     provider = _aws_provider(tmp_path)
     ec2 = _Ec2("stopped")
@@ -421,7 +462,7 @@ def test_agent_lifecycle_requires_yes(tmp_path):
 
 def test_terraform_output_requires_state(tmp_path):
     provider = _aws_provider(tmp_path)
-    with pytest.raises(ProviderError, match="Run spa provision first"):
+    with pytest.raises(ProviderError, match="Run spa deploy --yes first"):
         provider._terraform_output("instance_states")
 
 

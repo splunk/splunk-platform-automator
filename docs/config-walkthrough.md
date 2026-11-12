@@ -312,7 +312,7 @@ directory.
 Confirm the AMI, key pair, security group, and region, then run:
 
 ```bash
-spa provision --yes && spa deploy --yes
+spa deploy --yes
 ```
 
 Those commands are not part of the checked transcript above.

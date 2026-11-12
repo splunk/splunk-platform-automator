@@ -88,12 +88,12 @@ def test_no_tfstate_is_not_provisioned(tmp_path):
     state = check_provisioned(paths)
     assert state.provisioned is False
     assert state.provider == "aws"
-    assert "spa provision" in state.hint
+    assert "spa deploy --yes" in state.hint
     assert set(state.missing) == {"idx1", "idx2"}
     text = state.message()
     assert text.startswith("hosts not provisioned: idx1, idx2")
     assert "provider: aws" in text
-    assert "Run: spa provision --yes" in text
+    assert "Run: spa deploy --yes" in text
     assert "Missing hosts:" not in text
     assert "terraform.tfstate" not in text
     assert "Terraform" not in text
@@ -186,35 +186,159 @@ def _cli_env(paths):
     }
 
 
-def test_deploy_does_not_run_playbook_when_partial(tmp_path, monkeypatch):
-    called = []
+def test_deploy_creates_missing_hosts_then_checks_then_deploys(tmp_path, monkeypatch):
+    from spa.providers import ProvisionState
+
+    order = []
+
+    class FakeProvider:
+        name = "aws"
+
+        def provision(self, extra, **_kwargs):
+            order.append("create")
+            return 0
+
+        def provision_state(self):
+            return ProvisionState(
+                provider="aws",
+                provisioned=False,
+                missing=("idx2",),
+                hint="spa deploy --yes",
+            )
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
     monkeypatch.setattr(
-        "spa.playbooks.run_playbook", lambda *a, **k: called.append(True) or 0
+        "spa.hosts.ping_hosts",
+        lambda *a, **k: order.append("check") or {"hosts": []},
+    )
+    monkeypatch.setattr("spa.playbooks.resolve", lambda *a, **k: "deploy_site.yml")
+    monkeypatch.setattr(
+        "spa.playbooks.run_playbook",
+        lambda *a, **k: order.append("deploy") or 0,
+    )
+    monkeypatch.setattr(
+        "spa.shell.get_inventory_data",
+        lambda: {
+            "_meta": {"hostvars": {"idx1": {}, "idx2": {}}},
+            "all": {"hosts": ["idx1", "idx2"]},
+        },
     )
     paths, session = _session_env(tmp_path)
     _write_state(paths)
     _write_inventory(paths, "idx1")
     result = session.deploy(confirm=True)
-    assert result.ok is False
-    assert not called
-    assert result.data["missing"] == ["idx2"]
-    assert "spa provision" in result.error
-    assert "--allow-unprovisioned" not in result.error
+    assert result.ok
+    assert order == ["create", "check", "deploy"]
+    assert "--allow-unprovisioned" not in (result.error or "")
 
 
-def test_deploy_hosts_role_checks_unprovisioned_members(tmp_path, monkeypatch):
-    called = []
+def test_deploy_failed_check_does_not_recreate_hosts(tmp_path, monkeypatch):
+    from spa.hosts import HostsError
+
+    created = []
+
+    class FakeProvider:
+        name = "aws"
+
+        def provision(self, extra, **_kwargs):
+            created.append(True)
+            return 0
+
+        def provision_state(self):
+            from spa.providers import ProvisionState
+
+            return ProvisionState(provider="aws", provisioned=True)
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
     monkeypatch.setattr(
-        "spa.playbooks.run_playbook", lambda *a, **k: called.append(True) or 0
+        "spa.hosts.ping_hosts",
+        lambda *a, **k: (_ for _ in ()).throw(HostsError("SSH failed for idx1.")),
+    )
+    monkeypatch.setattr(
+        "spa.playbooks.run_playbook",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("deploy must not run")),
+    )
+    paths, session = _session_env(tmp_path)
+    _write_state(paths)
+    _write_inventory(paths, "idx1", "idx2")
+    result = session.deploy(confirm=True)
+    assert result.ok is False
+    assert created == []
+    assert "SSH failed for idx1" in result.error
+
+
+def test_deploy_confirm_names_create_and_deploy_when_hosts_missing(
+    tmp_path, monkeypatch
+):
+    seen = []
+
+    class FakeProvider:
+        name = "aws"
+
+        def provision(self, extra, **_kwargs):
+            raise AssertionError("must not create before confirm")
+
+        def provision_state(self):
+            from spa.providers import ProvisionState
+
+            return ProvisionState(
+                provider="aws",
+                provisioned=False,
+                missing=("idx2",),
+                hint="spa deploy --yes",
+            )
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt="": seen.append(prompt) or "n")
+    paths, session = _session_env(tmp_path)
+    _write_state(paths)
+    _write_inventory(paths, "idx1")
+    result = session.deploy(confirm=False)
+    assert result.ok is False
+    assert seen
+    prompt = seen[0].lower()
+    assert "create" in prompt and "deploy" in prompt
+
+
+def test_deploy_hosts_role_creates_missing_members_then_deploys(
+    tmp_path, monkeypatch
+):
+    from spa.providers import ProvisionState
+
+    order = []
+
+    class FakeProvider:
+        name = "aws"
+
+        def provision(self, extra, **_kwargs):
+            order.append("create")
+            return 0
+
+        def provision_state(self):
+            return ProvisionState(
+                provider="aws",
+                provisioned=False,
+                missing=("idx2",),
+                hint="spa deploy --yes",
+            )
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    monkeypatch.setattr(
+        "spa.hosts.ping_hosts",
+        lambda *a, **k: order.append("check") or {"hosts": []},
     )
     monkeypatch.setattr("spa.playbooks.resolve", lambda *a, **k: "deploy_site.yml")
-    monkeypatch.setattr("spa.hosts.ping_hosts", lambda *a, **k: {"hosts": []})
+    monkeypatch.setattr(
+        "spa.playbooks.run_playbook",
+        lambda *a, **k: order.append("deploy") or 0,
+    )
     monkeypatch.setattr(
         "spa.shell.get_inventory_data",
         lambda: {
-            "_meta": {"hostvars": {"idx1": {}, "sh1": {}}},
-            "all": {"hosts": ["idx1", "sh1"]},
-            "role_indexer": {"hosts": ["idx1"]},
+            "_meta": {"hostvars": {"idx1": {}, "idx2": {}, "sh1": {}}},
+            "all": {"hosts": ["idx1", "idx2", "sh1"]},
+            "role_indexer": {"hosts": ["idx1", "idx2"]},
             "role_search_head": {"hosts": ["sh1"]},
         },
     )
@@ -236,10 +360,8 @@ splunk_hosts:
     _write_state(paths)
     _write_inventory(paths, "idx1", "sh1")
     result = session.deploy(confirm=True, hosts=["indexer"])
-    assert result.ok is False
-    assert not called
-    assert "idx2" in result.error
-    assert "sh1" not in result.error
+    assert result.ok
+    assert order == ["create", "check", "deploy"]
 
 
 def test_deploy_named_host_runs_when_that_host_is_provisioned(tmp_path, monkeypatch):
@@ -292,35 +414,47 @@ def test_deploy_fails_when_software_missing(tmp_path, monkeypatch):
     assert "spa init --software-dir" in result.error
 
 
-def test_cli_unprovisioned_aws_names_provision(tmp_path):
-    paths = _paths(tmp_path, AWS_TWO_HOSTS)
-    result = run_spa(
-        ["--no-agent", "deploy", "--yes"],
-        extra_env=_cli_env(paths),
-        cwd=tmp_path,
-    )
-    assert result.returncode != 0
-    assert "spa provision" in result.stderr
-    assert "idx1" in result.stderr
-    assert "hosts not provisioned:" in result.stderr
-    assert "provider: aws" in result.stderr
-    assert "terraform.tfstate" not in result.stderr
-    assert "Traceback" not in result.stderr
+def test_cli_unprovisioned_aws_creates_hosts(tmp_path, monkeypatch):
+    from spa.providers import ProvisionState
 
+    order = []
 
-def test_cli_agent_unprovisioned_json(tmp_path):
+    class FakeProvider:
+        name = "aws"
+
+        def provision(self, extra, **_kwargs):
+            order.append("create")
+            return 0
+
+        def provision_state(self):
+            return ProvisionState(
+                provider="aws",
+                provisioned=False,
+                missing=("idx1", "idx2"),
+                hint="spa deploy --yes",
+            )
+
     paths = _paths(tmp_path, AWS_TWO_HOSTS)
-    result = run_spa(
-        ["--agent", "deploy", "--yes"],
-        extra_env=_cli_env(paths),
-        cwd=tmp_path,
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(paths.spa_env_dir))
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(paths.config_file))
+    monkeypatch.setenv("SPA_SOFTWARE_DIR", str(paths.software_dir))
+    monkeypatch.setenv("SPA_BASECONFIG_DIR", str(paths.baseconfig_dir))
+    monkeypatch.setattr("spa.providers.get_provider", lambda _paths: FakeProvider())
+    monkeypatch.setattr(
+        "spa.hosts.ping_hosts",
+        lambda *a, **k: order.append("check") or {"hosts": []},
     )
-    assert result.returncode != 0
-    payload = json.loads(result.stdout)
-    assert payload["ok"] is False
-    assert payload["data"]["provisioned"] is False
-    assert "idx1" in payload["data"]["missing"]
-    assert "idx2" in payload["data"]["missing"]
+    monkeypatch.setattr("spa.playbooks.resolve", lambda *a, **k: "deploy_site.yml")
+    monkeypatch.setattr(
+        "spa.playbooks.run_playbook",
+        lambda *a, **k: order.append("deploy") or 0,
+    )
+    from spa.cli import main
+
+    rc = main(["--no-agent", "deploy", "--yes"])
+    assert rc == 0
+    assert order == ["create", "check", "deploy"]
 
 
 def test_cli_rejects_allow_unprovisioned_and_deploys_one_host(tmp_path, monkeypatch):

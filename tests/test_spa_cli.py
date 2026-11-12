@@ -1036,11 +1036,33 @@ def test_validate_config_version_without_schema_version_is_missing_stamp(tmp_pat
     assert path.read_bytes() == before
 
 
-def test_provision_help_includes_yes():
-    result = run_spa(["provision", "--help"])
+def test_spa_provision_is_unknown_command():
+    human = run_spa(["--no-agent", "provision"])
+    assert human.returncode == 2, human.stderr
+    assert "invalid choice: 'provision'" in human.stderr
+    assert "spa provision" not in human.stderr
+    assert human.stdout.strip() == ""
+    agent = run_spa(["--json", "provision"])
+    assert agent.returncode == 2, agent.stdout
+    payload = json.loads(agent.stdout)
+    assert payload["ok"] is False
+    assert "invalid choice: 'provision'" in payload["error"]
+    assert "spa provision" not in payload["error"]
+
+
+def test_hosts_provision_help_includes_yes():
+    result = run_spa(["hosts", "provision", "--help"])
     assert result.returncode == 0, result.stderr
+    assert "usage: spa hosts provision" in result.stdout
     assert "--yes" in result.stdout
     assert "-y" in result.stdout
+
+
+def test_spa_prov_is_provider_not_provision():
+    result = run_spa(["--no-agent", "prov", "--help"])
+    assert result.returncode == 0, result.stderr
+    assert "usage: spa provider" in result.stdout
+    assert "usage: spa provision" not in result.stdout
 
 
 def _stamped_lifecycle_env(tmp_path, monkeypatch):
@@ -1055,7 +1077,7 @@ def _stamped_lifecycle_env(tmp_path, monkeypatch):
 
 
 def test_provision_yes_after_subcommand_auto_approves(tmp_path, monkeypatch):
-    """spa provision --yes must be a subcommand flag, not only spa --yes provision."""
+    """spa hosts provision --yes must be a subcommand flag, not only spa --yes hosts provision."""
     _stamped_lifecycle_env(tmp_path, monkeypatch)
     captured = {}
 
@@ -1069,7 +1091,7 @@ def test_provision_yes_after_subcommand_auto_approves(tmp_path, monkeypatch):
     monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
     from spa.cli import main
 
-    rc = main(["--no-agent", "provision", "--yes"])
+    rc = main(["--no-agent", "hosts", "provision", "--yes"])
     assert rc == 0
     assert captured["extra"][:2] == ["-e", "auto_approve=true"]
 
@@ -1086,12 +1108,12 @@ def test_human_provision_prints_data_next(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
     from spa.cli import main
 
-    rc = main(["--no-agent", "provision", "--yes"])
+    rc = main(["--no-agent", "hosts", "provision", "--yes"])
     assert rc == 0
     err = capsys.readouterr().err
     assert "Next:" in err
-    assert "Check provisioned hosts before deploy?" in err
-    assert "spa hosts check" in err
+    assert "Check provisioned hosts before deploy?" not in err
+    assert "spa hosts check" not in err
     assert "spa deploy --yes" in err
     assert "--agent" not in err
     assert "Deploy Splunk software?" in err
@@ -1127,14 +1149,14 @@ def test_provision_preflight_error_skips_prompt_and_still_prints_with_yes(
     )
     from spa.cli import main
 
-    rc = main(["--no-agent", "provision"])
+    rc = main(["--no-agent", "hosts", "provision"])
     err = capsys.readouterr().err
     assert rc == 2
     assert prompted == []
     assert "already provisioned: dep-9" in err
     assert "Proceed?" not in err
 
-    rc = main(["--no-agent", "provision", "--yes"])
+    rc = main(["--no-agent", "hosts", "provision", "--yes"])
     yes_err = capsys.readouterr().err
     assert rc == 2
     assert prompted == []
@@ -1175,7 +1197,7 @@ def test_provision_warnings_print_after_success_and_with_yes(tmp_path, monkeypat
     )
     from spa.cli import main
 
-    rc = main(["--no-agent", "provision"])
+    rc = main(["--no-agent", "hosts", "provision"])
     assert rc == 0
     warn_at = next(i for i, event in enumerate(events) if event[0] == "stderr" and warning in event[1])
     prompt_at = next(i for i, event in enumerate(events) if event[0] == "prompt")
@@ -1185,13 +1207,13 @@ def test_provision_warnings_print_after_success_and_with_yes(tmp_path, monkeypat
     assert warn_at < next_at
 
     events.clear()
-    rc = main(["--no-agent", "provision", "--yes"])
+    rc = main(["--no-agent", "hosts", "provision", "--yes"])
     assert rc == 0
     assert any(event[0] == "stderr" and warning in event[1] for event in events)
     assert all(event[0] != "prompt" for event in events)
 
 
-@pytest.mark.parametrize("argv", [["-y", "provision"], ["provision", "-y"]])
+@pytest.mark.parametrize("argv", [["-y", "hosts", "provision"], ["hosts", "provision", "-y"]])
 def test_provision_yes_works_before_or_after_subcommand(tmp_path, monkeypatch, argv):
     _stamped_lifecycle_env(tmp_path, monkeypatch)
     captured = []
@@ -1507,7 +1529,7 @@ def test_agent_schema():
     assert "--yes" in flags
     assert "spa --agent run list" in run["summary"]
     by_name = {c["name"]: c for c in payload["data"]["commands"]}
-    for name in ("provision", "destroy", "deploy", "suspend", "resume"):
+    for name in ("hosts provision", "destroy", "deploy", "suspend", "resume"):
         assert by_name[name].get("requires_confirmation") is True
 
 
@@ -1647,10 +1669,16 @@ def test_human_run_prompt_names_playbook_and_risk(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("command", "risk"),
-    [("provision", "mutating"), ("destroy", "destructive"), ("deploy", "mutating")],
+    ("argv", "label", "risk"),
+    [
+        (["hosts", "provision"], "hosts provision", "mutating"),
+        (["destroy"], "destroy", "destructive"),
+        (["deploy"], "deploy", "mutating"),
+    ],
 )
-def test_human_lifecycle_prompt_names_command_and_risk(tmp_path, monkeypatch, command, risk):
+def test_human_lifecycle_prompt_names_command_and_risk(
+    tmp_path, monkeypatch, argv, label, risk
+):
     _stamped_lifecycle_env(tmp_path, monkeypatch)
     from spa.confirm import prompt_text
 
@@ -1683,18 +1711,19 @@ def test_human_lifecycle_prompt_names_command_and_risk(tmp_path, monkeypatch, co
     monkeypatch.setattr(
         "spa.playbooks.run_playbook", lambda *a, **k: called.append("deploy") or 0
     )
+    monkeypatch.setattr("spa.hosts.ping_hosts", lambda *a, **k: {"hosts": []})
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": seen.append(prompt) or "n")
     from spa.cli import main
 
-    rc = main(["--no-agent", command])
+    rc = main(["--no-agent", *argv])
     assert rc != 0
     assert not called
-    assert seen == [prompt_text(command, risk=risk)]
+    assert seen == [prompt_text(label, risk=risk)]
 
 
-@pytest.mark.parametrize("command", ["provision", "destroy", "deploy"])
-def test_agent_lifecycle_requires_yes(monkeypatch, command):
+@pytest.mark.parametrize("argv", [["hosts", "provision"], ["destroy"], ["deploy"]])
+def test_agent_lifecycle_requires_yes(monkeypatch, argv):
     called = []
 
     class FakeProvider:
@@ -1723,9 +1752,10 @@ def test_agent_lifecycle_requires_yes(monkeypatch, command):
     monkeypatch.setattr(
         "spa.playbooks.run_playbook", lambda *a, **k: called.append("deploy") or 0
     )
+    monkeypatch.setattr("spa.hosts.ping_hosts", lambda *a, **k: {"hosts": []})
     from spa.cli import main
 
-    rc = main(["--agent", command])
+    rc = main(["--agent", *argv])
     assert rc != 0
     assert not called
 
@@ -1882,7 +1912,7 @@ def test_agent_config_header_set_replaces_the_comment_and_drops_omitted_fields(t
             "--intent",
             "config-test",
             "--deploy",
-            "spa provision --yes && spa deploy --yes",
+            "spa deploy --yes",
             "--yes",
         ],
         env=env,
@@ -1895,7 +1925,7 @@ def test_agent_config_header_set_replaces_the_comment_and_drops_omitted_fields(t
     text = config.read_text(encoding="utf-8")
     assert text == (
         "# intent: config-test\n"
-        "# deploy: spa provision --yes && spa deploy --yes\n"
+        "# deploy: spa deploy --yes\n"
         "splunk_hosts: []\n"
     )
 

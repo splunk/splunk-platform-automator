@@ -2,12 +2,12 @@
 # spa-run:
 #   schema: 1
 #   summary: Provision AWS hosts with Terraform.
-#   description: Generates tfvars and applies terraform.aws. Prefer spa provision --yes.
+#   description: Generates tfvars and applies terraform.aws. Prefer spa deploy --yes.
 #   category: infrastructure
 #   risk: mutating
 #   requires_provisioned: false
 #   examples:
-#     - spa provision --yes
+#     - spa deploy --yes
 # Provision AWS infrastructure using Terraform
 # This playbook generates terraform.tfvars from splunk_config.yml and runs Terraform
 #

@@ -1127,6 +1127,57 @@ def test_ping_hosts_uses_become_and_does_not_write(tmp_path):
     assert hosts.read_bytes() == before
 
 
+def test_wait_for_ssh_retries_connection_refused_then_succeeds(tmp_path, monkeypatch):
+    from spa.hosts import HostsError, wait_for_ssh
+
+    paths = _paths(tmp_path, "external: {}\nsplunk_hosts:\n  - name: idx1\n")
+    calls = {"n": 0}
+    sleeps = []
+
+    def fake_ping(_paths, hosts=None, run=None):
+        del hosts, run
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise HostsError(
+                "SSH failed for idx1. Failed to connect to the host via ssh: "
+                "tcp connect to 10.0.0.8:22: Connection refused"
+            )
+        return {"hosts": [{"name": "idx1", "ok": True, "ssh": True, "become": True}]}
+
+    monkeypatch.setattr("spa.hosts.ping_hosts", fake_ping)
+    result = wait_for_ssh(paths, ["idx1"], sleep=sleeps.append, attempts=5, delay=1)
+    assert calls["n"] == 3
+    assert sleeps == [1, 1]
+    assert result["hosts"][0]["ok"] is True
+
+
+def test_wait_for_ssh_fails_immediately_on_architecture_mismatch(tmp_path, monkeypatch):
+    from spa.hosts import HostsError, wait_for_ssh
+
+    paths = _paths(tmp_path, "external: {}\nsplunk_hosts:\n  - name: idx1\n")
+    calls = {"n": 0}
+
+    def fake_ping(_paths, hosts=None, run=None):
+        del hosts, run
+        calls["n"] += 1
+        raise HostsError(
+            "idx1 architecture mismatch: config arm64, host x86_64",
+            rows=[
+                {
+                    "name": "idx1",
+                    "ok": False,
+                    "expected_architecture": "arm64",
+                    "architecture": "x86_64",
+                }
+            ],
+        )
+
+    monkeypatch.setattr("spa.hosts.ping_hosts", fake_ping)
+    with pytest.raises(HostsError, match="architecture mismatch"):
+        wait_for_ssh(paths, ["idx1"], sleep=lambda _delay: None, attempts=5)
+    assert calls["n"] == 1
+
+
 def test_hosts_check_fails_when_architecture_does_not_match(tmp_path):
     from spa.hosts import HostsError, ping_hosts
 
@@ -1579,7 +1630,7 @@ def test_mixed_provision_asks_and_names_the_external_hosts(tmp_path, monkeypatch
     paths = _mixed_paths(tmp_path)
     result = _ready_session(paths, monkeypatch).provision(confirm=False)
     assert result.ok, result.error
-    assert seen["label"] == "provision"
+    assert seen["label"] == "hosts provision"
     assert seen["confirm"] is False
     assert "byo1" not in " ".join(seen["extra"])
     captured = capsys.readouterr()

@@ -41,7 +41,7 @@ Some infrastructure playbooks load config with `include_vars` rather than the in
 Operators still call:
 
 ```bash
-spa provision --yes
+spa deploy --yes
 spa destroy --yes
 ```
 

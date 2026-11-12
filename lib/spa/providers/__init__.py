@@ -6,6 +6,8 @@ import importlib
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
 
+DEPLOY_HINT = "spa deploy --yes"
+
 from spa.paths import SpaPaths
 
 
@@ -269,3 +271,13 @@ def lifecycle_warnings(provider: Any, action: str) -> List[str]:
     if not callable(method):
         return []
     return [str(row) for row in (method(action) or []) if str(row).strip()]
+
+
+def wait_managed_ssh(paths: SpaPaths, **kwargs: Any) -> Dict[str, Any]:
+    """Wait until managed hosts accept SSH. Architecture mismatch fails immediately."""
+    from spa.hosts import HostsError, wait_for_ssh
+
+    try:
+        return wait_for_ssh(paths, **kwargs)
+    except HostsError as exc:
+        raise ProviderError(str(exc)) from exc
