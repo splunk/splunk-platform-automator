@@ -6,6 +6,8 @@ import importlib
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
 
+DEPLOY_HINT = "spa deploy --yes"
+
 from spa.paths import SpaPaths
 
 
@@ -250,6 +252,25 @@ def detect_provider(paths: SpaPaths) -> ProviderSelection:
     )
 
 
+def provider_is_remote(provider_id: str) -> bool:
+    """Whether init should merge remote-provider defaults for this provider.
+
+    Reads ``Provider.remote`` from the registered module so callers do not
+    hardcode aws / ccm. VirtualBox is local. AWS, CCM, and external are
+    remote. A later unregistered provider is remote unless it is VirtualBox.
+    """
+    name = (provider_id or "").strip().lower()
+    if name in {"terraform.aws", "terraform"}:
+        name = "aws"
+    if name in {"vbox", "vb"}:
+        name = "virtualbox"
+    module_name = PROVIDER_MODULES.get(name)
+    if module_name is None:
+        return name != "virtualbox"
+    module = importlib.import_module(module_name)
+    return bool(getattr(module.Provider, "remote", True))
+
+
 def get_provider(paths: SpaPaths):
     selection = detect_provider(paths)
     module = importlib.import_module(PROVIDER_MODULES[selection.name])
@@ -269,3 +290,25 @@ def lifecycle_warnings(provider: Any, action: str) -> List[str]:
     if not callable(method):
         return []
     return [str(row) for row in (method(action) or []) if str(row).strip()]
+
+
+def wait_managed_ssh(
+    paths: SpaPaths, hosts: Optional[Sequence[str]] = None, **kwargs: Any
+) -> Dict[str, Any]:
+    """Wait until managed hosts accept SSH. Architecture mismatch fails immediately.
+
+    External hosts are never waited on: their inventory lines are merged back
+    only after the provider returns.
+    """
+    from spa.hosts import HostsError, wait_for_ssh
+    from spa.providers.classify import classify_hostnames
+
+    if not hosts:
+        managed, _external = classify_hostnames(load_deployment_config(paths))
+        if not managed:
+            return {"hosts": []}
+        hosts = managed
+    try:
+        return wait_for_ssh(paths, hosts, **kwargs)
+    except HostsError as exc:
+        raise ProviderError(str(exc)) from exc

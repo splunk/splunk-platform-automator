@@ -436,7 +436,7 @@ def _run_bare(python: Path, args, env_dir: Path):
     )
 
 
-@pytest.mark.parametrize("command", ["provision", "validate", "deploy", "run"])
+@pytest.mark.parametrize("command", ["validate", "deploy", "run"])
 def test_commands_needing_the_venv_fail_with_a_named_error(tmp_path, command):
     """A missing requirement must be a named error with a fix, not a traceback."""
     python = _bare_interpreter(tmp_path)
@@ -469,7 +469,7 @@ def test_venv_gate_is_json_in_agent_mode(tmp_path):
     python = _bare_interpreter(tmp_path)
     dest = write_min_env(tmp_path / "env")
 
-    result = _run_bare(python, ["--agent", "provision", "--yes"], dest)
+    result = _run_bare(python, ["--agent", "hosts", "provision", "--yes"], dest)
 
     assert result.returncode == 2, result.stdout + result.stderr
     payload = json.loads(result.stdout)

@@ -23,10 +23,12 @@ from zoneinfo import ZoneInfo
 
 from spa.paths import SpaPaths
 from spa.providers import (
+    DEPLOY_HINT,
     ProviderError,
     ProvisionState,
     expected_hostnames,
     load_deployment_config,
+    wait_managed_ssh,
 )
 from spa.providers.external import inventory_line, upsert_inventory
 
@@ -363,6 +365,11 @@ def _deployment_ids(payload: Any) -> List[str]:
 
 class Provider:
     name = "ccm"
+    creates_hosts = True
+    remote = True
+
+    def lifecycle_playbook(self, action: str) -> str:
+        return "ccm_provision" if action == "provision" else "ccm_destroy"
 
     def __init__(
         self,
@@ -397,7 +404,7 @@ class Provider:
                 "CCM terminated this deployment (TTL expiry or CCM terminate): %s"
                 % deployment_id
             ),
-            hint="spa destroy --yes then spa provision --yes",
+            hint="spa destroy --yes then spa deploy --yes",
         )
 
     def _expired_error(self, deployment_id: str) -> NoReturn:
@@ -412,7 +419,7 @@ class Provider:
                 provider=self.name,
                 provisioned=False,
                 reason="No CCM state for this env: %s" % self.state_dir,
-                hint="spa provision --yes",
+                hint=DEPLOY_HINT,
             )
         if self._client is None and not token_present():
             return ProvisionState(provider=self.name, provisioned=True)
@@ -667,6 +674,7 @@ class Provider:
             operation_hours=hours,
         )
         inventory = self._write_inventory(mapped)
+        wait_managed_ssh(self.paths)
         return {
             "deployment_id": str(deployment_id),
             "ttl": known_ttl,
@@ -922,6 +930,7 @@ class Provider:
             )
             mapped = self._map_instances(selected, deployment)
             inventory = self._write_inventory(mapped, merge=bool(hosts))
+            wait_managed_ssh(self.paths, hosts=list(selected) if hosts else None)
             result["inventory"] = str(inventory)
         warnings = self._resume_hours_warnings(recorded, kwargs.get("agent"))
         if warnings:

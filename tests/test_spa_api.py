@@ -391,6 +391,9 @@ def test_session_ccm_lifecycle_does_not_use_vagrant(tmp_path, monkeypatch):
     class FakeCcm:
         name = "ccm"
 
+        def lifecycle_playbook(self, action: str) -> str:
+            return "ccm_provision" if action == "provision" else "ccm_destroy"
+
         def provision(self, extra, **kwargs):
             del extra
             seen.append(kwargs["run_log"].playbook)

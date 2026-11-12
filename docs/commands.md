@@ -15,7 +15,7 @@ Alias of spa environment init (spa init --example TOPOLOGY or --architecture FIL
 | Flag | Description |
 | --- | --- |
 | `--example` | Topology example id (exclusive with --architecture) |
-| `--architecture` | Confirmed 0.4.0 architecture JSON (exclusive with --example) |
+| `--architecture` | Confirmed schema 1 architecture JSON (exclusive with --example) |
 | `--provider` | aws, virtualbox, external, or ccm. Required unless a default is saved (spa environment set --provider NAME) |
 
 Example:
@@ -405,7 +405,7 @@ Requires confirmation: yes (`--yes`).
 Example:
 
 ```bash
-spa --agent config header set --intent config-test --deploy "spa provision --yes && spa deploy --yes" --yes
+spa --agent config header set --intent config-test --deploy "spa deploy --yes" --yes
 ```
 
 ## `validate`
@@ -606,7 +606,7 @@ Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Plat
 | Flag | Description |
 | --- | --- |
 | `--example` | Topology example id (exclusive with --architecture) |
-| `--architecture` | Confirmed 0.4.0 architecture JSON (exclusive with --example) |
+| `--architecture` | Confirmed schema 1 architecture JSON (exclusive with --example) |
 | `--provider` | aws, virtualbox, external, or ccm. Required unless a default is saved (spa environment set --provider NAME) |
 | `--env-dir` | One-off parent (requires --name); does not change the default parent |
 | `--name` | Registry name (default: folder basename) |
@@ -693,29 +693,9 @@ Example:
 spa environment --export
 ```
 
-## `provision`
-
-Provision infrastructure using the provider selected by splunk_config.yml
-
-Requires confirmation: yes (`--yes`).
-
-| Flag | Description |
-| --- | --- |
-| `-y`, `--yes` | Confirm provision |
-| `--ansible-output` | Show captured Ansible output live or from stored logs (not in agent output) |
-| `--timestamps` | Prefix --ansible-output lines with their stored event time |
-| `--color` | Color --ansible-output. Live runs use Ansible color; stored logs are recolored |
-| `-v`, `--verbose` | Increase Ansible verbosity and show native output; repeat through -vvvv |
-
-Example:
-
-```bash
-spa provision --yes && spa deploy --yes
-```
-
 ## `deploy`
 
-Deploy Splunk (deploy_site.yml). After you confirm, ping with become before the playbook. Requires Software/baseconfig and local app sources
+Create missing hosts if needed, then deploy Splunk (deploy_site.yml). After you confirm, ping with become before the playbook. Requires Software/baseconfig and local app sources
 
 Requires confirmation: yes (`--yes`).
 
@@ -775,7 +755,7 @@ Requires confirmation: yes (`--yes`).
 
 ## `hosts`
 
-Inventory actions. List hosts, SSH, or copy. Bare spa hosts exits 2.
+Inventory actions. List hosts, SSH, provision, or copy. Bare spa hosts exits 2.
 
 Example:
 
@@ -866,6 +846,26 @@ Example:
 
 ```bash
 spa hosts unregister NAME --yes
+```
+
+## `hosts provision`
+
+Create or update managed hosts. SSH is ready before this returns. Lab bring-up is spa deploy --yes.
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `-y`, `--yes` | Confirm hosts provision |
+| `--ansible-output` | Show captured Ansible output live or from stored logs (not in agent output) |
+| `--timestamps` | Prefix --ansible-output lines with their stored event time |
+| `--color` | Color --ansible-output. Live runs use Ansible color; stored logs are recolored |
+| `-v`, `--verbose` | Increase Ansible verbosity and show native output; repeat through -vvvv |
+
+Example:
+
+```bash
+spa hosts provision --yes
 ```
 
 ## `hosts check`
@@ -1199,7 +1199,7 @@ spa --agent architecture plan examples/architectures/c3.json
 
 ## `architecture plan`
 
-Validate a splunk.architecture 0.4.0 file and print the overlay plan (read-only). Needs no environment.
+Validate a splunk.architecture schema 1 file and print the overlay plan (read-only). Needs no environment.
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -1236,7 +1236,7 @@ spa --agent architecture apply examples/architectures/c3.json --yes
 
 ## `architecture check`
 
-Subset-match a splunk.architecture 0.4.0 file against the current environment config.
+Subset-match a splunk.architecture schema 1 file against the current environment config.
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -1417,7 +1417,7 @@ Idempotently add or update one apps[] entry; edits config and does not deploy
 | `--new` | Append another apps[] row for this app_id; without it, extra copies match by exact --roles |
 | `--source` | Use Splunkbase metadata, or a folder/archive already in apps_dir (default splunkbase). Mutually exclusive with --local |
 | `--local` | Shorthand for --source local. Mutually exclusive with --source |
-| `--customize` | Attach an exact matching curated SPA playbook to this top-level app entry |
+| `--customize` | Attach matching curated SPA playbook(s) to the app entry or named content pack |
 | `--set` | Set another schema-backed app FIELD from strict JSON; repeatable |
 | `--content-pack` | 5391 only: add exact bundled folder NAME; repeatable and mutually exclusive with --install-all-content-packs |
 | `--install-all-content-packs` | 5391 only: install every bundled pack; mutually exclusive with --content-pack |

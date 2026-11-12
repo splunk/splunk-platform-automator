@@ -65,7 +65,7 @@ spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
 spa environment set --default my-lab                   # fallback when cwd does not select an env
 spa environment set --provider virtualbox              # saves the default for init in providers.yml (aws, virtualbox, or external)
 spa environment init --example cm_2idxc_sh --provider aws my-lab   # name-only under default parent; --provider required unless a default is saved
-spa environment init --architecture examples/architectures/c3.json --provider aws my-lab  # overlay a confirmed 0.4.0 file; exclusive with --example
+spa environment init --architecture examples/architectures/c3.json --provider aws my-lab  # overlay a confirmed schema 1 file; exclusive with --example
 spa environment init --env-dir /custom --name my-lab   # one-off; does not change default parent
 spa init /custom/my-lab                                # same dest as the line above
 spa env init my-lab --force                            # adopt an existing env (cwd or default parent) into the list
@@ -85,9 +85,7 @@ spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
 spa venv reinstall --shared --yes                    # repair shared Python requirements
 spa venv upgrade --shared --yes                      # bump Ansible and other requirements
 spa venv rebuild --shared --yes                      # recreate the shared venv
-spa doctor
 spa validate
-spa provision --yes
 spa deploy --yes
 spa hosts list --status
 spa logs --last
@@ -95,7 +93,7 @@ spa logs --last
 
 ## Long runs
 
-When running `provision`, `deploy`, `destroy`, or `spa run`, follow [long-runs.md](references/long-runs.md). Do not load it until that command is running.
+When running `deploy`, `destroy`, or `spa run`, follow [long-runs.md](references/long-runs.md). Do not load it until that command is running.
 
 ## Handoff from spa-create-config
 
@@ -103,6 +101,6 @@ After Phase 14 option A, follow [long-runs.md](references/long-runs.md#handoff-f
 
 ## Anti-patterns
 
-Import `spa.api`; answer `Proceed?`; invent playbook names; dump full Ansible logs into the model context (use `spa logs` / `data.log` only when the user asked to debug); put installers inside `SPA_HOME`; `2>&1 | grep`, `head`, or `tail` on provision/deploy/destroy/run.
+Import `spa.api`; answer `Proceed?`; invent playbook names; dump full Ansible logs into the model context (use `spa logs` / `data.log` only when the user asked to debug); put installers inside `SPA_HOME`; `2>&1 | grep`, `head`, or `tail` on deploy/destroy/run.
 
 Human journey: [docs/user-guide.md](../../../docs/user-guide.md). Install: README curl `| sh`. Token budget: [token-budget.md](references/token-budget.md).

@@ -1,6 +1,6 @@
 # Basic apps questionnaire
 
-Load [spa-apps](../../spa-apps/SKILL.md) for this phase. Search Splunkbase with `spa --agent apps search QUERY` (technology keywords), then use one `spa --agent apps add APP_ID` transaction. If curated `playbooks` are available, ask before adding `--customize` (`--customize` on 5391 is a no-op when `spa_automation` is already on the pack). Do not guess `app_id`, patch YAML, or open splunkbase.com first. Finish with `spa --agent validate`.
+Load [spa-apps](../../spa-apps/SKILL.md) for this phase. Search Splunkbase with `spa --agent apps search QUERY` (technology keywords), then use one `spa --agent apps add APP_ID` transaction. If curated `playbooks` are available or `data.next` includes `apps.customize`, ask before adding `--customize`. Do not assume yes. `--customize` with `--content-pack NAME` attaches that pack's playbook. Do not guess `app_id`, patch YAML, or open splunkbase.com first. Finish with `spa --agent validate`.
 
 Deep customization: [docs/apps.md](../../../../docs/apps.md#customize-an-app) and `spa --agent config explain splunk_app_deployment.apps.customizations.remove`.
 

@@ -39,7 +39,7 @@ Record in config header comment when API was not used:
 | `spa --agent provider aws survey --region REGION`, `latest-ami`, or `validate` (`regions list` needs no region) | `ok: false` in JSON or non-zero exit |
 | `spa validate --splunk-config aws` | **Fails** if validate runs and AWS rejects the call — **do not use** without creds |
 
-Provision and deploy (`spa provision --yes`, then `spa deploy --yes`, each after its own chat yes in `/spa`) **require** working AWS credentials at run time — building config offline is fine, but user must configure creds before provision.
+Deploy (`spa deploy --yes` after chat yes in `/spa`) **requires** working AWS credentials at run time — building config offline is fine, but user must configure creds before deploy.
 
 ## Without-creds Phase 6 workflow
 

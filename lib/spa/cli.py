@@ -48,7 +48,7 @@ _HIDDEN_ALIASES = {
         "val": "validate",
         "sk": "skills",
         "doc": "doctor",
-        "prov": "provision",
+        "prov": "provider",
         "dep": "deploy",
         "des": "destroy",
         "sus": "suspend",
@@ -317,6 +317,7 @@ HOSTS_NEEDS_ACTION = (
     "Copy:       spa hosts copy SRC DST\n"
     "Register:   spa hosts register NAME --ssh-host HOST --user USER --key PATH --yes\n"
     "Unregister: spa hosts unregister NAME --yes\n"
+    "Provision:  spa hosts provision --yes\n"
     "Check:      spa hosts check"
 )
 LOGS_NEEDS_RUN = (
@@ -724,12 +725,12 @@ Header fields (each optional; an omitted field is removed):
   --installer TEXT     Installer used for Splunk, e.g. the Linux tgz in the Software directory
   --os TEXT            Operating system for the hosts, e.g. RHEL 10
   --aws TEXT           AWS placement notes: region, AMI, instance type, or AWS API not available
-  --deploy TEXT        Command that deploys this environment, e.g. spa provision --yes && spa deploy --yes
+  --deploy TEXT        Command that deploys this environment, e.g. spa deploy --yes
 
 Each value is one line of text. A line break, a certificate or license marker, or a secret-shaped value is refused.
 
 Example:
-  spa config header set --intent config-test --sva S1 --os "RHEL 10" --deploy "spa provision --yes && spa deploy --yes" --yes
+  spa config header set --intent config-test --sva S1 --os "RHEL 10" --deploy "spa deploy --yes" --yes
 """
 HEADER_NEEDS_ACTION = (
     "spa config header needs an action.\n"
@@ -922,7 +923,7 @@ def _add_init_arguments(parser) -> None:
     parser.add_argument(
         "--architecture",
         metavar="FILE",
-        help="Confirmed 0.4.0 architecture JSON (exclusive with --example). Example: examples/architectures/c3.json",
+        help="Confirmed schema 1 architecture JSON (exclusive with --example). Example: examples/architectures/c3.json",
     )
     parser.add_argument(
         "--provider",
@@ -2019,7 +2020,7 @@ def _run(argv: Sequence[str]) -> int:
     p_apps_add.add_argument(
         "--customize",
         action="store_true",
-        help="Attach an exact matching curated SPA playbook to this top-level app entry",
+        help="Attach matching curated SPA playbook(s) to the app entry or named content pack",
     )
     p_apps_add.add_argument(
         "--set",
@@ -2363,18 +2364,6 @@ def _run(argv: Sequence[str]) -> int:
         help="Allow deleting a dir that looks deployed (local tree only; does not destroy cloud/VMs)",
     )
 
-    p_prov = _add_command(
-        sub, "provision", aliases=["prov"], help="Provision infrastructure for the configured provider"
-    )
-    _add_env_selector(p_prov)
-    p_prov.add_argument(
-        "-y",
-        "--yes",
-        action="store_true",
-        default=argparse.SUPPRESS,
-        help="Confirm provision (same as spa -y provision)",
-    )
-    _add_ansible_output(p_prov)
     p_deploy = _add_command(sub, "deploy", aliases=["dep"], help="Deploy Splunk")
     p_deploy.add_argument(
         "-y",
@@ -2466,7 +2455,7 @@ def _run(argv: Sequence[str]) -> int:
         sub,
         "hosts",
         aliases=["h"],
-        help="List, SSH, or copy using inventory hosts",
+        help="List, SSH, provision, or copy using inventory hosts",
         epilog=HOSTS_NEEDS_ACTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -2559,6 +2548,22 @@ def _run(argv: Sequence[str]) -> int:
         help="Confirm unregister",
     )
     p_hosts_unregister.add_argument("name", help="Inventory hostname")
+    p_hosts_provision = _add_action(
+        hosts_sub,
+        "provision",
+        help="Create or update managed hosts for the configured provider",
+        description="Create or update managed hosts. SSH is ready before this command returns. "
+        "Lab bring-up is spa deploy --yes, which creates hosts if they are missing.",
+    )
+    _add_mode_flags(p_hosts_provision)
+    p_hosts_provision.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm hosts provision",
+    )
+    _add_ansible_output(p_hosts_provision)
     p_hosts_check = _add_action(
         hosts_sub,
         "check",
@@ -2819,7 +2824,7 @@ def _run(argv: Sequence[str]) -> int:
     p_architecture = _add_command(
         sub,
         "architecture",
-        help="Plan, apply, or check a splunk.architecture 0.4.0 file",
+        help="Plan, apply, or check a splunk.architecture schema 1 file",
         epilog=ARCHITECTURE_NEEDS_ACTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -2829,7 +2834,7 @@ def _run(argv: Sequence[str]) -> int:
         "plan",
         help="Validate the architecture file and print the overlay plan (writes nothing)",
         description=(
-            "Read a confirmed splunk.architecture 0.4.0 JSON file. "
+            "Read a confirmed splunk.architecture schema 1 JSON file. "
             "Print topology, proposed hosts, skipped fields, and remaining questions. "
             "Needs no environment. Example: spa architecture plan examples/architectures/c3.json"
         ),
@@ -3502,9 +3507,9 @@ def _run(argv: Sequence[str]) -> int:
             sys.stdout.write(data.get("transcript") or "")
         return 0
 
-    if args.command in {"provision", "destroy"}:
+    if args.command == "destroy":
         extra = list(extra)
-        result = getattr(session, args.command)(
+        result = session.destroy(
             extra,
             confirm=args.yes,
             agent=as_agent,
@@ -3746,6 +3751,29 @@ def _run(argv: Sequence[str]) -> int:
                 return result.code
             print("unregistered %s" % args.name)
             return 0
+        if hosts_cmd == "provision":
+            extra = list(extra)
+            result = session.provision(
+                extra,
+                confirm=bool(getattr(args, "yes", False)),
+                agent=as_agent,
+                ansible_output=_want_ansible_output(args),
+                native_output=_want_native_output(args),
+                verbosity=_verbosity(args),
+                timestamps=_transcript_timestamps(args),
+                color=_transcript_color(args),
+            )
+            if as_agent:
+                return _emit_result(result, True)
+            if result.error:
+                print(result.error, file=sys.stderr)
+            elif (result.data or {}).get("note"):
+                print(result.data["note"])
+            data = result.data if isinstance(result.data, dict) else {}
+            for warning in data.get("warnings") or []:
+                print(_warning_text(warning), file=sys.stderr)
+            _print_next(data)
+            return result.code
         if hosts_cmd == "check":
             result = session.hosts_check(hosts=getattr(args, "hosts", None))
             if as_agent:

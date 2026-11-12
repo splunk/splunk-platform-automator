@@ -319,6 +319,11 @@ def unregister_host(paths: SpaPaths, name: str) -> Dict[str, Any]:
 
 class Provider:
     name = "external"
+    creates_hosts = False
+    remote = True
+
+    def lifecycle_playbook(self, action: str) -> str:
+        return "external_%s" % action
 
     def __init__(self, paths: SpaPaths, config: Dict[str, Any], run: Optional[SshRunner] = None):
         self.paths = paths

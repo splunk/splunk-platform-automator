@@ -12,10 +12,12 @@ from spa.executil import tool_path
 from spa.paths import SpaPaths
 from spa.playbooks import resolve, run_playbook
 from spa.providers import (
+    DEPLOY_HINT,
     ProviderError,
     ProvisionState,
     inventory_hostnames_from_file,
     load_deployment_config,
+    wait_managed_ssh,
 )
 
 
@@ -44,11 +46,16 @@ def terraform_instance_names(state_path: Path) -> set:
 
 class Provider:
     name = "aws"
+    creates_hosts = True
+    remote = True
 
     def __init__(self, paths: SpaPaths, config: Dict[str, Any]):
         self.paths = paths
         self.config = config
         self.state_dir = paths.spa_env_dir / "terraform" / "aws"
+
+    def lifecycle_playbook(self, action: str) -> str:
+        return "aws_provision" if action == "provision" else "aws_destroy"
 
     def provision(self, extra: List[str], **kwargs: Any) -> int:
         run_log = kwargs.get("run_log")
@@ -67,6 +74,8 @@ class Provider:
         )
         if run_log is not None:
             run_log.attach_tf_plan()
+        if rc == 0:
+            wait_managed_ssh(self.paths)
         return rc
 
     def provision_state(self) -> ProvisionState:
@@ -77,8 +86,8 @@ class Provider:
         managed, external = classify_hostnames(document)
         inventory = set(inventory_hostnames_from_file(self.paths))
         missing_external = tuple(name for name in external if name not in inventory)
-        hint_provision = "spa provision --yes"
-        hint_resume = "spa provision --yes (spa resume --yes if instances are stopped)"
+        hint_provision = DEPLOY_HINT
+        hint_resume = DEPLOY_HINT
         state_path = self.state_dir / "terraform.tfstate"
 
         def blocked(reason: str, missing: tuple, hint: str) -> ProvisionState:
@@ -150,7 +159,7 @@ class Provider:
     def _terraform_output(self, name: str) -> Any:
         if not (self.state_dir / "terraform.tfstate").is_file():
             raise ProviderError(
-                "No Terraform state for this AWS env: %s. Run spa provision first."
+                "No Terraform state for this AWS env: %s. Run spa deploy --yes first."
                 % self.state_dir
             )
         terraform = tool_path(self.paths, "terraform")
@@ -353,7 +362,7 @@ class Provider:
         if terminal:
             raise ProviderError(
                 "Terraform-managed AWS instance(s) are terminating/terminated: %s. "
-                "Run spa provision to reconcile the environment." % ", ".join(terminal)
+                "Run spa deploy --yes to reconcile the environment." % ", ".join(terminal)
             )
         stoppable = [
             instance_id
@@ -474,7 +483,7 @@ class Provider:
         if terminal:
             raise ProviderError(
                 "Terraform-managed AWS instance(s) are terminating/terminated: %s. "
-                "Run spa provision to reconcile the environment." % ", ".join(terminal)
+                "Run spa deploy --yes to reconcile the environment." % ", ".join(terminal)
             )
         stopping = [
             instance_id
@@ -501,6 +510,8 @@ class Provider:
         except Exception as exc:
             raise ProviderError("AWS start-instances failed: %s" % exc)
         inventory = self._write_inventory(targets, after, merge=bool(hosts))
+        if wait:
+            wait_managed_ssh(self.paths, hosts=list(hosts) if hosts else None)
         return {
             "provider": self.name,
             "action": "resume",

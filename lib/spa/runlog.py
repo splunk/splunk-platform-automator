@@ -170,6 +170,7 @@ PLAY_NAME_PHASE = tuple(ROLE_PLAY_GROUP)
 
 CALLBACK_EVENT_PREFIX = "SPA_JSONL_EVENT="
 _REDACT = "***"
+_SECRET_STATUS = frozenset({"not", "set", "true", "false", "none", "null", "unset"})
 _SECRET_LINE = re.compile(
     r"(?i)((?:password|passwd|secret|token|api[_-]?key|access[_-]?key|"
     r"secret[_-]?access[_-]?key|vault[_-]?password|authorization|bearer)"
@@ -306,7 +307,13 @@ def redact(value: Any) -> Any:
     text = _AWS_SECRET.sub(r"\1" + _REDACT, text)
     text = _BEARER.sub(r"\1" + _REDACT, text)
     text = _SPLUNK_CLI_SECRET.sub(r"\1" + _REDACT, text)
-    text = _SECRET_LINE.sub(r"\1" + _REDACT, text)
+    def _keep_status_or_redact(match: re.Match[str]) -> str:
+        value = match.group(2)
+        if value.lower().strip(".,;:") in _SECRET_STATUS:
+            return match.group(0)
+        return match.group(1) + _REDACT
+
+    text = _SECRET_LINE.sub(_keep_status_or_redact, text)
     return text
 
 

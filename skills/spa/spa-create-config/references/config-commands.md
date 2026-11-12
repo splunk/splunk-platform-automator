@@ -26,7 +26,7 @@ Always use these commands, never hand-edit:
 1. Inspect `changed` and `ready`. `ok: false` with `ready: false` wrote nothing.
 2. Humans: `--show-diff` for the redacted hunk. Agents already get `data.diff`.
 3. `spa config get` the identity and confirm `found: true`.
-4. `spa validate` before provision or deploy.
+4. `spa validate` before deploy.
 
 ## Terminology
 

@@ -11,10 +11,12 @@ from typing import Any, Dict, List, Optional, Sequence
 from spa.executil import ToolNotFound, tool_path
 from spa.paths import SpaPaths
 from spa.providers import (
+    DEPLOY_HINT,
     ProviderError,
     ProvisionState,
     inventory_hostnames_from_file,
     load_deployment_config,
+    wait_managed_ssh,
 )
 from spa.runlog import PROVIDER_SOURCE, VAGRANT_GROUP
 
@@ -63,10 +65,15 @@ def drop_ansible_extra(extra: Optional[Sequence[str]]) -> List[str]:
 
 class Provider:
     name = "virtualbox"
+    creates_hosts = True
+    remote = False
 
     def __init__(self, paths: SpaPaths, config: Dict[str, Any]):
         self.paths = paths
         self.config = config
+
+    def lifecycle_playbook(self, action: str) -> str:
+        return "vagrant_up" if action == "provision" else "vagrant_destroy"
 
     def _vagrantfile(self):
         return self.paths.spa_home / "Vagrantfile"
@@ -243,6 +250,8 @@ class Provider:
             check=False,
             run_log=kwargs.get("run_log"),
         )
+        if result.returncode == 0:
+            wait_managed_ssh(self.paths)
         return result.returncode
 
     def destroy(self, extra: List[str], **kwargs: Any) -> int:
@@ -266,7 +275,7 @@ class Provider:
         missing_external = tuple(name for name in external if name not in inventory)
         missing_managed_inv = tuple(name for name in managed if name not in inventory)
         missing_inv = missing_managed_inv + missing_external
-        hint = "spa provision --yes"
+        hint = DEPLOY_HINT
         if not missing_managed_inv and missing_external:
             from spa.providers.external import _register_sentence
 
@@ -348,11 +357,12 @@ class Provider:
         hosts: Optional[Sequence[str]] = None,
         run_log: Any = None,
     ) -> Dict[str, Any]:
-        del wait
         if not yes and agent:
             raise ProviderError("resume requires -y/--yes in agent mode.")
         names = self._select_hosts(hosts)
         self._run(["up", *names], capture=False, check=True, run_log=run_log)
+        if wait:
+            wait_managed_ssh(self.paths, hosts=names or None)
         states = self._machine_states()
         selected = names or list(states)
         return {

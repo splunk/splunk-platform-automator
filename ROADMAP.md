@@ -75,8 +75,8 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [x] Docs include a verify-after-write practice — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
 - [x] `spa config audit --check-hand-edits` — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
 - [x] Unresolved `spa config` / `spa apps` writes return `ok: false` and exit 1 — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
-- [x] Architecture-file apply is explicit and reports what was ingested (`spa architecture plan` stays read-only; `spa init --architecture` and `spa architecture apply` overlay 0.4.0 and report ingested/skipped/remaining)
-- [x] Version `splunk_config.yml` with SPA-owned `schema_version` (current is 1). Optional operator `config_version` is stored and never used for schema dispatch. A missing stamp is read as version 1; `spa validate` reports it and does not write; `spa deploy` / `spa provision` refuse until `spa config migrate --yes`. A later incompatible change ships a migration. — [#117](https://github.com/splunk/splunk-platform-automator/issues/117)
+- [x] Architecture-file apply is explicit and reports what was ingested (`spa architecture plan` stays read-only; `spa init --architecture` and `spa architecture apply` overlay schema 1 and report ingested/skipped/remaining)
+- [x] Version `splunk_config.yml` with SPA-owned `schema_version` (current is 1). Optional operator `config_version` is stored and never used for schema dispatch. A missing stamp is read as version 1; `spa validate` reports it and does not write; `spa deploy` refuses until `spa config migrate --yes`. A later incompatible change ships a migration. — [#117](https://github.com/splunk/splunk-platform-automator/issues/117)
 - [ ] `spa validate` checks Splunk installers in Software for the provider and architecture in use — [#74](https://github.com/splunk/splunk-platform-automator/issues/74)
 - [x] Host ranges (`iter.numbers: "1..N"`)
 - [x] Index definitions including `datatype: metric` (`splunk_indexes`)
@@ -106,7 +106,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 
 - [x] Terraform AWS + `spa provider aws` ([docs/aws.md](docs/aws.md))
 - [x] `spa provider aws` uses `--region`, then `AWS_REGION`, `AWS_DEFAULT_REGION`, or `~/.aws/config`, names that source, and marks it in `spa provider aws regions list`
-- [x] VirtualBox spa provider (`spa provision` / `destroy` / suspend-resume via Vagrant) — [#56](https://github.com/splunk/splunk-platform-automator/issues/56)
+- [x] VirtualBox spa provider (`spa deploy` / `destroy` / suspend-resume via Vagrant) — [#56](https://github.com/splunk/splunk-platform-automator/issues/56)
 - [ ] Shared network access groups (provider-agnostic CLI; AWS first; SPA_HOME state; env destroy does not delete) — [#58](https://github.com/splunk/splunk-platform-automator/issues/58)
 - [x] External / BYO SSH hosts (register only; mixed with managed; never terminate the real machine) — [#57](https://github.com/splunk/splunk-platform-automator/issues/57).
 - [x] CCM provider (Corporate Cloud Manager EC2 via REST, not Terraform) — [#146](https://github.com/splunk/splunk-platform-automator/issues/146). Operator page: [docs/ccm.md](docs/ccm.md)
@@ -143,7 +143,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [ ] Include Windows UF in the upgrade host set
 - [ ] Config-driven version bump (`splunk_version` change → rolling upgrade) — same runbook-vs-playbook choice as the upgrade skill
 - [ ] Remove a host: `spa destroy --hosts NAME` runs decommission (IDXC peer / SHC member, DS serverclass), then tears down only those instances and drops them from config/state. `spa destroy --all` is whole-env teardown. Omitting both `--hosts` and `--all` is an error (do not treat “no hosts” as destroy-everything). No separate `decommission` command. Until this exists, `spa destroy --yes` remains whole-env.
-- [ ] `spa provision` must abort if the Terraform plan would **destroy or replace** an instance (host removed from `splunk_config.yml`, or AMI / instance-type replacement). Tell the operator to restore the host or use `spa destroy --hosts`. Creates and in-place updates still apply. Today, deleting a host from config and running provision **terminates that VM** with no Splunk decommission.
+- [ ] Creating hosts must abort if the Terraform plan would **destroy or replace** an instance (host removed from `splunk_config.yml`, or AMI / instance-type replacement). Tell the operator to restore the host or use `spa destroy --hosts`. Creates and in-place updates still apply. Today, deleting a host from config and running deploy **terminates that VM** with no Splunk decommission.
 - [ ] Cluster topology changes on a live site (RF/SF, add a site, move a host between clusters) — not just re-run bootstrap
 - [ ] Make `spa deploy` idempotent after a successful run (second pass green/`ok`, no restart/reload without a real change) — [#87](https://github.com/splunk/splunk-platform-automator/issues/87)
 - [ ] Git for env configs and local apps; pluggable SCM/CI (GitHub first); promote along user-named stages — [#63](https://github.com/splunk/splunk-platform-automator/issues/63)

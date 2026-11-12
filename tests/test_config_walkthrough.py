@@ -28,7 +28,7 @@ def _fences(text: str) -> list[str]:
     return [
         block.strip()
         for block in _BASH.findall(text)
-        if "spa provision" not in block and "spa deploy" not in block
+        if "spa deploy" not in block
     ]
 
 

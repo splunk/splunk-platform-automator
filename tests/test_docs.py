@@ -523,6 +523,28 @@ class TestSpaSkill:
         assert "spa --agent config templates`" not in text
         assert "spa --agent config templates\n" not in text
 
+    def test_skills_do_not_run_doctor_as_a_bring_up_step(self):
+        """Init already runs host checks. Skills do not tell operators to run spa doctor."""
+        skill = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        prerequisites = (
+            PROJECT_ROOT / "skills" / "spa" / "spa" / "references" / "prerequisites.md"
+        ).read_text(encoding="utf-8")
+        phases = (
+            PROJECT_ROOT
+            / "skills"
+            / "spa"
+            / "spa-create-config"
+            / "references"
+            / "phases.md"
+        ).read_text(encoding="utf-8")
+        software = skill.split("## Software", 1)[1].split("\n## ", 1)[0]
+        assert "spa doctor" not in software
+        assert "Run `spa doctor`" not in prerequisites
+        assert "spa doctor --provider ccm" not in phases
+        assert "spa validate" in prerequisites
+
     def test_spa_skill_confirms_before_destroy(self):
         skill_root = PROJECT_ROOT / "skills" / "spa" / "spa"
         skill = (skill_root / "SKILL.md").read_text(encoding="utf-8")
@@ -726,9 +748,8 @@ class TestSpaSkill:
     def test_create_config_phase9_asks_before_running_provision_and_deploy(self):
         text = _create_config_workflow()
         phase9 = text[text.index("## Phase 14 — Handoff"):]
-        assert "spa provision --yes" in phase9
         assert "spa deploy --yes" in phase9
-        assert "spa provision --yes && spa deploy --yes" not in phase9
+        assert phase9.count("spa deploy --yes") >= 1
         assert "Show me the command" in phase9 or "print" in phase9.lower()
         assert "explicit yes" in phase9
         assert "does **not** auto-provision" not in phase9
@@ -745,8 +766,10 @@ class TestSpaSkill:
         assert "--architecture-file" not in create
         assert "--architecture-stdin" not in create
         contract = ref.read_text(encoding="utf-8")
-        for key in ("0.4.0", "Path A", "Path B", "kind", "schema_version", "confirmed"):
+        for key in ("schema 1", "Path A", "Path B", "kind", "schema_version", "confirmed"):
             assert key in contract, key
+        assert "Supported version is JSON integer `1`" in contract
+        assert "schema `0.4.0`" not in contract
         assert "```json" not in contract
         assert "examples/architectures/c3.json" in contract
         assert "architecture check" in contract.lower()
@@ -789,7 +812,8 @@ class TestSpaSkill:
         phase12 = text[text.index("## Phase 12 — Write config") : text.index("## Phase 13")]
         assert "In plan mode, run steps 2–6 here first" in phase12
         tree = (skills / "references" / "workflow-decision-tree.md").read_text(encoding="utf-8")
-        path_b = tree[tree.index("Confirmed 0.4.0") : tree.index("No architecture file")]
+        path_b = tree[tree.index("Confirmed schema 1") : tree.index("No architecture file")]
+        assert "0.4.0" not in tree
         assert "Phase 12" in path_b
         arch = (skills / "references" / "architecture-input.md").read_text(encoding="utf-8")
         assert "do **not** init until Phase 12" in arch
@@ -825,6 +849,24 @@ class TestSpaSkill:
         assert "1841" in step8
         assert "content-packs list 5391" in step8
         assert step8.index("content-packs list 5391") < step8.index("Add another app?")
+
+    def test_apps_skill_follows_customize_next_for_content_packs(self):
+        apps = (PROJECT_ROOT / "skills" / "spa" / "spa-apps" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        workflow = apps[apps.index("## Workflow") : apps.index("ITSI / ITE Work")]
+        assert "no-op" not in workflow
+        assert "apps.customize" in workflow
+        assert "do not assume yes" in workflow.lower()
+        questionnaire = (
+            PROJECT_ROOT
+            / "skills"
+            / "spa"
+            / "spa-create-config"
+            / "references"
+            / "apps-questionnaire.md"
+        ).read_text(encoding="utf-8")
+        assert "no-op" not in questionnaire
 
     def test_apps_skill_asks_roles_for_every_normal_app(self):
         apps = (PROJECT_ROOT / "skills" / "spa" / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
@@ -1235,6 +1277,20 @@ class TestReviewFindings67:
                 assert spelling not in text, "%s: %s" % (path.relative_to(PROJECT_ROOT), spelling)
 
 
+def test_roadmap_architecture_overlay_names_schema_1():
+    text = (PROJECT_ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+    lines = [
+        line
+        for line in text.splitlines()
+        if "spa architecture apply" in line and "spa architecture plan" in line
+    ]
+    assert lines, "ROADMAP needs the architecture overlay line"
+    line = lines[0]
+    assert line.startswith("- [x]"), line
+    assert "schema 1" in line
+    assert "0.4.0" not in line
+
+
 def test_roadmap_schema_version_stamp_is_done():
     text = (PROJECT_ROOT / "ROADMAP.md").read_text(encoding="utf-8")
     lines = [line for line in text.splitlines() if "issues/117" in line]
@@ -1261,6 +1317,23 @@ def test_roadmap_ccm_provider_is_done():
     line = lines[0]
     assert line.startswith("- [x]"), line
     assert "CCM" in line
+
+
+def test_user_guide_teaches_adding_a_host_then_deploy():
+    """Scale-out is config add (or hosts register), then spa deploy --yes."""
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    section = guide[
+        guide.index("## Run the lifecycle") : guide.index("## Complete commands")
+    ]
+    assert "spa config add" in section
+    assert "splunk_hosts[name=" in section
+    assert "spa deploy --yes" in section
+    assert "spa hosts register" in section
+    aws = (_docs_dir() / "aws.md").read_text(encoding="utf-8")
+    assert "spa config add" in aws
+    assert "spa deploy --yes" in aws
+    ccm = (_docs_dir() / "ccm.md").read_text(encoding="utf-8")
+    assert "Adding a host to a live CCM deployment does not add an instance" in ccm
 
 
 def test_user_guide_names_employee_only_ccm():
@@ -1319,6 +1392,22 @@ def test_create_config_proposes_ccm_remote_provider_and_live_survey():
     assert "-----BEGIN" not in text
     for catalog_id in ("ubuntu_22.04", "rhel_9"):
         assert catalog_id not in text, catalog_id
+
+
+def test_create_config_does_not_merge_remote_provider_after_fresh_init():
+    """Fresh remote init already merges the template. Keep merge for existing envs."""
+    skill_dir = _create_config_dir()
+    phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
+    architecture = (skill_dir / "references" / "architecture-input.md").read_text(
+        encoding="utf-8"
+    )
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    ccm = (_docs_dir() / "ccm.md").read_text(encoding="utf-8")
+    assert "Propose `spa config merge remote-provider --yes`" not in phases
+    assert "config templates list" not in architecture or "existing env" in architecture.lower()
+    for page in (guide, ccm):
+        assert "after an explicit yes, `spa config merge remote-provider --yes`" not in page.lower()
+        assert "remote-provider" in page
 
 
 CCM_ASK_GATE = (
@@ -1386,3 +1475,17 @@ def test_changelog_unreleased_retires_doctor_aws_and_virtualbox_flags():
     assert "spa doctor --aws" in unreleased
     assert "--virtualbox" in unreleased
     assert "repeatable" in unreleased.lower() or "repeat" in unreleased.lower()
+
+
+def test_changelog_unreleased_init_doctor_quiet_unless_problems():
+    text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
+    assert "Init doctor" in unreleased
+    assert "quiet" in unreleased.lower() or "silent" in unreleased.lower()
+    assert "spa doctor" in unreleased
+    assert "PATH symlink" in unreleased
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    start = guide.split("## Start here", 1)[1].split("\n## ", 1)[0]
+    assert "fails the host prerequisite check" in start
+    assert "only" in start.lower()
+    assert "warning" in start.lower()

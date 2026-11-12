@@ -1747,7 +1747,7 @@ class SplunkConfig(BaseModel):
     splunk_hosts: List[SplunkHost] = Field(
         ...,
         min_length=1,
-        description="Hosts that spa provision and spa deploy act on. Holds no value itself.",
+        description="Hosts that spa deploy acts on. Holds no value itself.",
     )
     
     # Optional sections

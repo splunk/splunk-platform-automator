@@ -382,7 +382,7 @@ def collect_checks(
     if not spa_bin:
         rec("warn", "spa", "spa is not on PATH", "install the spa launcher, or run %s directly" % expected)
     else:
-        if Path(spa_bin).parent.resolve() != (spa_home_path / "bin").resolve():
+        if Path(spa_bin).resolve() != (spa_home_path / "bin" / "spa").resolve():
             rec(
                 "warn",
                 "spa",
@@ -580,6 +580,26 @@ def collect_checks(
     return CommandResult(ok=code == 0, data=payload, error=error, code=code)
 
 
+def _format_check_row(row: Dict[str, str]) -> List[str]:
+    level = row.get("level")
+    prefix = {"ok": "OK  ", "warn": "WARN", "error": "FAIL"}.get(level, "    ")
+    lines = ["%s %s" % (prefix, row.get("message", ""))]
+    if row.get("fix") and level in {"warn", "error"}:
+        lines.append("       → %s" % row["fix"])
+    return lines
+
+
+def format_doctor_problems(result: CommandResult) -> str:
+    """WARN/FAIL rows and their fix lines. Empty when every check is ok."""
+    lines: List[str] = []
+    for row in (result.data or {}).get("checks") or []:
+        if row.get("level") in {"warn", "error"}:
+            lines.extend(_format_check_row(row))
+    if not lines:
+        return ""
+    return "\n".join(lines) + "\n"
+
+
 def format_doctor_text(result: CommandResult) -> str:
     data = result.data or {}
     lines = ["SPA host prerequisites (SPA_HOME=%s)" % data.get("spa_home", "")]
@@ -587,11 +607,7 @@ def format_doctor_text(result: CommandResult) -> str:
         lines.append(note)
     lines.append("")
     for row in data.get("checks") or []:
-        level = row.get("level")
-        prefix = {"ok": "OK  ", "warn": "WARN", "error": "FAIL"}.get(level, "    ")
-        lines.append("%s %s" % (prefix, row.get("message", "")))
-        if row.get("fix") and level in {"warn", "error"}:
-            lines.append("       → %s" % row["fix"])
+        lines.extend(_format_check_row(row))
     lines.append("")
     errors = data.get("errors") or 0
     warns = data.get("warnings") or 0

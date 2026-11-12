@@ -1303,7 +1303,7 @@ features:
     title: Host identity and roles
     kind: setting
     when_to_use: >-
-      The host list spa provision and spa deploy use. Each entry is one host (name), an
+      The host list spa deploy uses. Each entry is one host (name), an
       explicit list of names, or an iter range (prefix + 1..N + postfix). roles is required
       (cluster_manager, indexer, search_head, deployer, universal_forwarder,
       universal_forwarder_windows, heavy_forwarder, license_manager, and so on). Cluster

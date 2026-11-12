@@ -385,6 +385,19 @@ def _isolated_user_spa_config(request, tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_live_cloud(request, monkeypatch):
+    """Only aws-marked (manual) tests may reach AWS or CCM and create hosts."""
+    if request.node.get_closest_marker("aws"):
+        return
+    from spa_testutil import LIVE_CLOUD_ENV_VARS, NO_LIVE_CLOUD_ENV
+
+    for name in LIVE_CLOUD_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+    for name, value in NO_LIVE_CLOUD_ENV.items():
+        monkeypatch.setenv(name, value)
+
+
+@pytest.fixture(autouse=True)
 def _default_spa_env_dir(request, tmp_path, monkeypatch):
     """Operator spa commands need an env dir; skip AWS workspaces and marked tests."""
     if request.node.get_closest_marker("aws"):

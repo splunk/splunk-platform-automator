@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import os
 import shutil
 import subprocess
@@ -468,16 +469,17 @@ def create_venv(
 def run_doctor(dest: Path, spa_home: Path, skip: bool) -> None:
     if skip:
         return
-    from spa.doctor import collect_checks, format_doctor_text
+    from spa.doctor import collect_checks, format_doctor_problems
 
     result = collect_checks(
         spa_home=str(spa_home),
         env_dir=str(dest),
     )
-    for line in format_doctor_text(result).rstrip().splitlines():
-        _say(line)
+    problems = format_doctor_problems(result).rstrip()
     if not result.ok:
-        raise InitError(DOCTOR_FAILED)
+        raise InitError("%s\n%s" % (problems, DOCTOR_FAILED) if problems else DOCTOR_FAILED)
+    for line in problems.splitlines():
+        _say(line)
 
 
 def list_catalog_topologies(spa_home: Path) -> List[Dict[str, str]]:
@@ -639,6 +641,17 @@ def _load_yaml_mapping(path: Path) -> Dict[str, Any]:
     return data
 
 
+def _deep_merge(base: Dict[str, Any], overlay: Mapping[str, Any]) -> Dict[str, Any]:
+    """Recursively merge overlay into base. Overlay wins on non-mapping leaves."""
+    for key, value in overlay.items():
+        existing = base.get(key)
+        if isinstance(existing, dict) and isinstance(value, Mapping):
+            _deep_merge(existing, value)
+        else:
+            base[key] = copy.deepcopy(value)
+    return base
+
+
 def compose_example_config(spa_home: Path, topology_id: str, provider_id: str) -> Dict[str, Any]:
     topo_path = spa_home / "examples" / "topologies" / ("%s.yml" % topology_id)
     prov_path = spa_home / "examples" / "providers" / ("%s.yml" % provider_id)
@@ -664,6 +677,14 @@ def compose_example_config(spa_home: Path, topology_id: str, provider_id: str) -
         if key in ("plugin", "schema_version", "config_version"):
             continue
         composed[key] = value
+    from spa.providers import provider_is_remote
+
+    if provider_is_remote(provider_id):
+        remote_path = spa_home / "examples" / "templates" / "remote-provider.yml"
+        remote = _load_yaml_mapping(remote_path)
+        for key in ("plugin", "schema_version", "config_version"):
+            remote.pop(key, None)
+        _deep_merge(composed, remote)
     return composed
 
 
@@ -719,6 +740,19 @@ def _with_ami_comment(text: str, comment: str) -> str:
         else:
             rewritten.append(line)
     return "".join(rewritten)
+
+
+def _say_composed(
+    dest: Path, topology_id: str, provider_id: str, config_dest: Path
+) -> None:
+    _say("Env scaffolded at %s" % dest)
+    _say("  example:   %s" % topology_id)
+    _say("  provider:  %s" % provider_id)
+    _say("  config:    %s" % config_dest)
+    from spa.providers import provider_is_remote
+
+    if provider_is_remote(provider_id):
+        _say("  merged:    remote-provider")
 
 
 def write_composed_config(
@@ -840,8 +874,11 @@ def init_env(
     except InitError as exc:
         if created and dest_resolved.exists():
             shutil.rmtree(dest_resolved)
-        if created and str(exc) == DOCTOR_FAILED:
-            raise InitError(DOCTOR_FAILED_NOT_CREATED, code=exc.code) from exc
+        if created and DOCTOR_FAILED in str(exc):
+            raise InitError(
+                str(exc).replace(DOCTOR_FAILED, DOCTOR_FAILED_NOT_CREATED),
+                code=exc.code,
+            ) from exc
         raise
     except Exception:
         if created and dest_resolved.exists():
@@ -1002,9 +1039,7 @@ def _init_env(
         _write()
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
         run_doctor(dest, spa_home, skip_doctor)
-        _say("Env scaffolded at %s" % dest)
-        _say("  example:   %s --provider %s" % (topology_id, provider_id))
-        _say("  config:    %s" % config_dest)
+        _say_composed(dest, topology_id, provider_id, config_dest)
         return 0
 
     # --force without --example on an existing env: refresh metadata, keep config.
@@ -1035,7 +1070,5 @@ def _init_env(
     _write()
     create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
     run_doctor(dest, spa_home, skip_doctor)
-    _say("Env scaffolded at %s" % dest)
-    _say("  example:   %s --provider %s" % (topology_id, provider_id))
-    _say("  config:    %s" % config_dest)
+    _say_composed(dest, topology_id, provider_id, config_dest)
     return 0

@@ -49,7 +49,7 @@ cd ~/envs/my-env
 spa validate
 ```
 
-`spa init` migrates `config/`, `inventory/`, Terraform state, and **`.vagrant/`** (VirtualBox machine IDs). If `.vagrant` is left in the clone, `spa provision` would create a second set of VMs.
+`spa init` migrates `config/`, `inventory/`, Terraform state, and **`.vagrant/`** (VirtualBox machine IDs). If `.vagrant` is left in the clone, `spa deploy` would create a second set of VMs.
 
 If you copied a whole old checkout as the env directory, `spa init DIR` exits 2 until `--force`. Then env state is kept and framework leftovers under that dir are stripped (including an `inventory/group_vars` symlink into the old clone; framework vars stay in `$SPA_HOME/ansible/group_vars`). After conversion (or for any older lab that already has config), `spa env init NAME --force` registers that directory so it appears in `spa environment list`.
 
@@ -74,7 +74,7 @@ to bump Ansible and other requirements in place (`pip install --upgrade` plus
 
 ## AWS and VirtualBox
 
-- `spa provision`, `spa destroy`, `spa suspend`, and `spa resume` follow `splunk_config.yml`: **`terraform.aws`** or **`virtualbox:`**. Same env-dir loop for both.
+- `spa deploy`, `spa destroy`, `spa suspend`, and `spa resume` follow `splunk_config.yml`: **`terraform.aws`** or **`virtualbox:`**. Same env-dir loop for both.
 - VirtualBox env dirs have no `Vagrantfile`; provision and deploy through `spa`.
 
 Playbooks are invoked with `spa run NAME` (discover: `spa run list`). Site deploy is `spa deploy --yes`.
@@ -83,11 +83,11 @@ Playbooks are invoked with `spa run NAME` (discover: `spa run list`). Site deplo
 
 `--hosts` on `deploy`, `run`, `suspend`, `resume`, and `hosts list` takes inventory names or roles (for example `indexer`). That is not Ansible `--limit` in user help; playbooks still receive `--limit` internally.
 
-Do not delete a live host from `splunk_config.yml` and run `spa provision`. Terraform will terminate that instance. Later work will refuse instance destroys on provision and add `spa destroy --hosts` / `--all` (see [ROADMAP.md](../ROADMAP.md)).
+Do not delete a live host from `splunk_config.yml` and run `spa deploy`. Terraform will terminate that instance. Later work will refuse instance destroys on provision and add `spa destroy --hosts` / `--all` (see [ROADMAP.md](../ROADMAP.md)).
 
 ## Playbook stems (3.0)
 
-`spa run list` shows current names. `spa run OLD` still resolves and prints `use spa run NEW`. Prefer `spa provision` / `spa destroy` / `spa deploy` over running the AWS or site pipeline playbooks directly.
+`spa run list` shows current names. `spa run OLD` still resolves and prints `use spa run NEW`. Prefer `spa deploy` / `spa destroy` / `spa deploy` over running the AWS or site pipeline playbooks directly.
 
 | 2.x | 3.0 |
 | --- | --- |

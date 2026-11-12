@@ -20,7 +20,7 @@ Load one section at a time from this file. Hard rules stay in [SKILL.md](../SKIL
    - **Unavailable** → follow [aws-without-credentials.md](aws-without-credentials.md); do not block the workflow. Do not run `spa provider ccm` unless CCM is in play.
 6. Read existing config if merging or revising an existing plan from prior config.
 7. Licenses are not scanned here. Phase 10 scans the Software directory once, after the apps decision.
-8. **Architecture input (optional).** Two entry points: [architecture-input.md](architecture-input.md). **Path A (no file):** keep this questionnaire and `spa init --example TOPOLOGY --provider` (write mode at the gate; plan mode at Phase 12). **Path B (confirmed 0.4.0 file):** skip the SVA questionnaire; run `spa architecture plan FILE`, then the same init timing, place/size with `spa config move`, then **`spa architecture check FILE` before validate**. Phases 9 and 10 are always asked, even when `confirmed` is true. SPA ignores `apps.by_role`; it installs PS baseconfigs internally. Do not import those folders as local apps.
+8. **Architecture input (optional).** Two entry points: [architecture-input.md](architecture-input.md). **Path A (no file):** keep this questionnaire and `spa init --example TOPOLOGY --provider` (write mode at the gate; plan mode at Phase 12). **Path B (confirmed schema 1 file):** skip the SVA questionnaire; run `spa architecture plan FILE`, then the same init timing, place/size with `spa config move`, then **`spa architecture check FILE` before validate**. Phases 9 and 10 are always asked, even when `confirmed` is true. SPA ignores `apps.by_role`; it installs PS baseconfigs internally. Do not import those folders as local apps.
 
 **Exit:** Intent noted (mode is confirmed at the gate); target path known; merge policy clear when applicable; **AWS API status recorded**; if a file was given, `spa architecture plan FILE` has been run (the skill does not parse the JSON).
 
@@ -150,7 +150,7 @@ Run this before the first `spa init` or `spa environment init` for a new environ
 
 Cap displayed API results (~10–15 AMIs, ~5 instance types).
 
-**CCM (only when CCM is in play):** skip the AWS AMI path. Write YAML with `spa config provider ccm`. Discover live values with `spa provider ccm survey` (and `operating-systems list` / `instance-types list` / `disk-storage list` / `ssh-keys list`). Never print PEM or `CCM_TOKEN`. `spa doctor --provider ccm` reports `CCM_TOKEN` as set / not set. Propose `spa config merge remote-provider --yes` after explicit yes.
+**CCM (only when CCM is in play):** skip the AWS AMI path. Write YAML with `spa config provider ccm`. Discover live values with `spa provider ccm survey` (and `operating-systems list` / `instance-types list` / `disk-storage list` / `ssh-keys list`). Never print PEM or `CCM_TOKEN`. Auth is `CCM_TOKEN` (set / not set). Fresh `spa init --provider ccm` already merges remote-provider defaults and reports the token as set / not set. For an existing env, `spa config merge remote-provider --yes` after explicit yes.
 
 **Exit:** All `terraform.aws` fields chosen (API-validated if creds available, else documented as unverified), or CCM knobs chosen from live survey.
 
@@ -189,7 +189,7 @@ Always ask, even when the user did not mention apps. Use AskQuestion if availabl
 **Loop (when the answer is yes):**
 
 1. Search and add one app with [spa-apps](../../spa-apps/SKILL.md). For a normal app, ask with AskQuestion which roles it goes to before `spa --agent apps add`. ITSI and content packs have no roles question.
-1b. **ITSI (1841) first.** Do not refuse the add for missing license files. Follow `data.next` after the add: licenses list is optional (skip = trial / IT Essentials Work), then AskQuestion `none` / `list` / `name` for content packs. On `list`, run `spa --agent apps content-packs list 5391` and present each pack `name` / `title` (and `spa_automation` when present). On `name`, wait for folder names. On `none`, skip. Add each chosen pack with `spa --agent apps add 5391 --content-pack NAME`. Then go to step 2.
+1b. **ITSI (1841) first.** Do not refuse the add for missing license files. Follow `data.next` after the add: licenses list is optional (skip = trial / IT Essentials Work), then AskQuestion `none` / `list` / `name` for content packs. On `list`, run `spa --agent apps content-packs list 5391` and present each pack `name` / `title` (and `spa_automation` when present). On `name`, wait for folder names. On `none`, skip. Add each chosen pack with `spa --agent apps add 5391 --content-pack NAME`. Follow `data.next` (`apps.customize` is optional; never assume yes). Then go to step 2.
 2. After each add, ask with AskQuestion: **"Add another app?"** Options: Yes, add another; No, done with apps.
 3. On yes, repeat from step 1 until the operator answers no. Do not skip the question after any add.
 4. On no, show the current list with `spa --agent config get splunk_app_deployment` and confirm it is right. Then move on to Phase 10.
@@ -332,16 +332,15 @@ Do not hand off until validation passes. See [validation.md](validation.md).
 
 Validation passed. **Always** ask which way to continue with an AskQuestion call, even when AskQuestion is not the usual choice. Never end with only a message such as "Ready for deployment, use /spa": the operator must be able to pick the handoff in the question. Put A first and mark it "(Recommended)":
 
-- **A) Hand off to `/spa` now (Recommended):** load [/spa](../../spa/SKILL.md) and run provision, then deploy, under its gates ("Handoff from spa-create-config" there). This skill runs no lifecycle command. Asking here does not approve provision or deploy; `/spa` asks for those yeses itself.
-- **B) Show me the command:** print the commands below; you run them.
-- **C) Wait:** stop here; you run them later.
+- **A) Hand off to `/spa` now (Recommended):** load [/spa](../../spa/SKILL.md) and run deploy under its gates ("Handoff from spa-create-config" there). This skill runs no lifecycle command. Asking here does not approve deploy; `/spa` asks for that yes itself.
+- **B) Show me the command:** print the command below; you run it.
+- **C) Wait:** stop here; you run it later.
 
 ```bash
-spa provision --yes
 spa deploy --yes
 ```
 
-Each run waits for its own explicit yes in chat. A request earlier in the chat is not that yes. Provision, deploy, `spa hosts check`, destroy, suspend, resume, and logs belong to `/spa`. Do not run them from this skill.
+The run waits for its own explicit yes in chat. A request earlier in the chat is not that yes. Deploy (creates hosts if needed), `spa hosts check`, destroy, suspend, resume, and logs belong to `/spa`. Do not run them from this skill.
 
 **B and C:** print the commands and the log command (`spa logs --last`), then stop.
 

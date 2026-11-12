@@ -83,6 +83,214 @@ def test_apps_add_itsi_includes_license_and_content_pack_next(tmp_path, monkeypa
     assert "content pack" in packs["ask"].lower()
 
 
+def _library_app(app_id, client=None):
+    if app_id == 5391:
+        return {
+            "uid": 5391,
+            "appid": "DA-ITSI-ContentLibrary",
+            "title": "Splunk IT Service Intelligence Content Library",
+            "type": "app",
+            "release": {
+                "title": "2.0.0",
+                "path": "https://splunkbase.splunk.com/app/5391/release/2.0.0/download",
+            },
+        }
+    return {
+        "uid": 1841,
+        "appid": "itsi",
+        "title": "Splunk IT Service Intelligence",
+        "type": "app",
+    }
+
+
+def test_apps_add_content_pack_offers_customize_next(tmp_path, monkeypatch, capsys):
+    """CFG-APP-011."""
+    env = write_min_env(tmp_path / "env")
+    config = env / "config" / "splunk_config.yml"
+    config.write_text(_hosts_config(), encoding="utf-8")
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(env))
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(config))
+    monkeypatch.setenv("SPLUNK_ADMIN_PASSWORD", "test")
+    monkeypatch.setattr("spa.apps.get_app", _library_app)
+    from spa.cli import _run
+
+    rc = _run(
+        [
+            "--agent",
+            "--start-dir",
+            str(env),
+            "apps",
+            "add",
+            "5391",
+            "--content-pack",
+            "DA-ITSI-CP-nix",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0, payload
+    assert payload["ok"] is True
+    assert _next_ids(payload["data"])[0] == "apps.customize"
+    customize = payload["data"]["next"][0]
+    assert customize["required"] is False
+    assert customize["command"] == (
+        "spa --agent apps add 5391 --content-pack DA-ITSI-CP-nix --customize --yes"
+    )
+    assert customize["argv"] == [
+        "spa",
+        "--agent",
+        "apps",
+        "add",
+        "5391",
+        "--content-pack",
+        "DA-ITSI-CP-nix",
+        "--customize",
+        "--yes",
+    ]
+    authored = YAML(typ="safe").load(config.read_text(encoding="utf-8"))
+    library = next(
+        app
+        for app in authored["splunk_app_deployment"]["apps"]
+        if app.get("app_id") == 5391
+    )
+    assert library["content_pack_apps"] == [{"name": "DA-ITSI-CP-nix"}]
+
+
+def test_apps_add_content_pack_customize_attaches_pack_playbook(
+    tmp_path, monkeypatch, capsys
+):
+    env = write_min_env(tmp_path / "env")
+    config = env / "config" / "splunk_config.yml"
+    config.write_text(_hosts_config(), encoding="utf-8")
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(env))
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(config))
+    monkeypatch.setenv("SPLUNK_ADMIN_PASSWORD", "test")
+    monkeypatch.setattr("spa.apps.get_app", _library_app)
+    from spa.cli import _run
+
+    rc = _run(
+        [
+            "--agent",
+            "--start-dir",
+            str(env),
+            "apps",
+            "add",
+            "5391",
+            "--content-pack",
+            "DA-ITSI-CP-nix",
+            "--customize",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0, payload
+    assert payload["ok"] is True
+    assert "apps.customize" not in _next_ids(payload["data"])
+    authored = YAML(typ="safe").load(config.read_text(encoding="utf-8"))
+    library = next(
+        app
+        for app in authored["splunk_app_deployment"]["apps"]
+        if app.get("app_id") == 5391
+    )
+    assert library["content_pack_apps"] == [
+        {
+            "name": "DA-ITSI-CP-nix",
+            "customizations": {
+                "run_playbook_after_restart": (
+                    "ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml"
+                ),
+            },
+        }
+    ]
+
+
+def test_apps_add_content_pack_customize_retry_updates_existing_pack(
+    tmp_path, monkeypatch, capsys
+):
+    env = write_min_env(tmp_path / "env")
+    config = env / "config" / "splunk_config.yml"
+    config.write_text(_hosts_config(), encoding="utf-8")
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(env))
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(config))
+    monkeypatch.setenv("SPLUNK_ADMIN_PASSWORD", "test")
+    monkeypatch.setattr("spa.apps.get_app", _library_app)
+    from spa.cli import _run
+
+    assert (
+        _run(
+            [
+                "--agent",
+                "--start-dir",
+                str(env),
+                "apps",
+                "add",
+                "5391",
+                "--content-pack",
+                "DA-ITSI-CP-nix",
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+    rc = _run(
+        [
+            "--agent",
+            "--start-dir",
+            str(env),
+            "apps",
+            "add",
+            "5391",
+            "--content-pack",
+            "DA-ITSI-CP-nix",
+            "--customize",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0, payload
+    authored = YAML(typ="safe").load(config.read_text(encoding="utf-8"))
+    library = next(
+        app
+        for app in authored["splunk_app_deployment"]["apps"]
+        if app.get("app_id") == 5391
+    )
+    assert library["content_pack_apps"][0]["customizations"][
+        "run_playbook_after_restart"
+    ].endswith("DA-ITSI-CP-nix_configure.yml")
+
+
+def test_apps_add_content_pack_without_playbook_skips_customize_next(
+    tmp_path, monkeypatch, capsys
+):
+    env = write_min_env(tmp_path / "env")
+    config = env / "config" / "splunk_config.yml"
+    config.write_text(_hosts_config(), encoding="utf-8")
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(env))
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(config))
+    monkeypatch.setenv("SPLUNK_ADMIN_PASSWORD", "test")
+    monkeypatch.setattr("spa.apps.get_app", _library_app)
+    from spa.cli import _run
+
+    rc = _run(
+        [
+            "--agent",
+            "--start-dir",
+            str(env),
+            "apps",
+            "add",
+            "5391",
+            "--content-pack",
+            "DA-ITSI-CP-unknown",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0, payload
+    assert payload["ok"] is True
+    assert "apps.customize" not in _next_ids(payload["data"])
+    assert _next_ids(payload["data"]) == ["apps.add.another"]
+
+
 def test_apps_add_nix_without_roles_is_a_choice(tmp_path, monkeypatch, capsys):
     env = write_min_env(tmp_path / "env")
     config = env / "config" / "splunk_config.yml"
@@ -434,7 +642,7 @@ def test_explain_os_children_show_schema_defaults():
     assert cron["default"] is False
 
 
-def test_provision_success_envelope_includes_hosts_check_then_deploy(
+def test_hosts_provision_envelope_next_is_deploy_not_hosts_check(
     tmp_path, monkeypatch, capsys
 ):
     from spa_testutil import satisfy_env_lookups, write_min_env
@@ -454,14 +662,12 @@ def test_provision_success_envelope_includes_hosts_check_then_deploy(
             return 0
 
     monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
-    rc = _run(["--agent", "--start-dir", str(env), "provision", "--yes"])
+    rc = _run(["--agent", "--start-dir", str(env), "hosts", "provision", "--yes"])
     payload = json.loads(capsys.readouterr().out)
     assert rc == 0
     assert payload["ok"] is True
-    assert _next_ids(payload["data"]) == ["hosts.check", "logs.follow", "deploy"]
-    check, follow, deploy = payload["data"]["next"]
-    assert check["required"] is True
-    assert check["command"] == "spa --agent hosts check"
+    assert _next_ids(payload["data"]) == ["logs.follow", "deploy"]
+    follow, deploy = payload["data"]["next"]
     assert follow["required"] is False
     assert follow["command"] == (
         "spa --env %s logs --follow --wait --ansible-output --color" % env.name
@@ -471,3 +677,6 @@ def test_provision_success_envelope_includes_hosts_check_then_deploy(
     assert deploy["required"] is False
     assert deploy["command"] == "spa --agent deploy --yes"
     assert "Deploy" in deploy["ask"]
+    encoded = json.dumps(payload["data"]["next"])
+    assert "hosts check" not in encoded
+    assert "hosts.check" not in encoded

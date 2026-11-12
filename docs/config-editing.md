@@ -60,7 +60,7 @@ blank line or comment between `plugin` and the stamp. Operator
 `config_version` is never invented or bumped. `--dry-run`
 is faithful and does not write. `--show-diff` prints the redacted unified
 hunk after the status line. Human status is `Config migrate: would change` /
-`changed` / `unchanged`. `spa validate`, `spa deploy`, and `spa provision`
+`changed` / `unchanged`. `spa validate` and `spa deploy`
 require the authored key and do not write it.
 
 ### CFG-CLI-004 — bounded discovery
@@ -451,6 +451,15 @@ app kinds. Named packs append idempotently. An existing library cannot be
 silently switched to the other policy. Removing one named pack leaves the
 library and ITSI entries.
 
+### CFG-APP-011 — content-pack customize next
+
+`spa apps add 5391 --content-pack NAME` matches curated playbooks by pack
+folder (`itsi_content_pack_single`). Without `--customize`, successful add
+puts `apps.customize` on `data.next` (not required) when a playbook matches.
+`--customize` attaches that pack's playbook on the `content_pack_apps` item.
+A later add of the same named pack with `--customize` updates that item.
+Skills follow `data.next` and never assume yes.
+
 ### CFG-APP-007 — deterministic ITSI dependency
 
 Adding a content pack may add missing ITSI app 1841 in the same candidate.
@@ -505,7 +514,7 @@ decrypted vault text.
 ### CFG-SEC-003 — required environment references
 
 An explicit `{{ lookup('env', 'NAME') }}` requires `NAME` to be set to a
-non-empty value before `spa validate`, `spa provision`, or `spa deploy`. Missing
+non-empty value before `spa validate` or `spa deploy`. Missing
 and empty variables fail together, before inventory, confirmation, or provider
 work. The error lists variable names and says to export each variable to a
 non-empty value and rerun the command. It never includes the variable values.
@@ -577,6 +586,7 @@ Each contract ID maps to executable behavioral evidence:
 - `CFG-APP-008`: `tests/test_config_contract.py::TestAppContract::test_app_add_and_remove_use_transaction_controls`
 - `CFG-APP-009`: `tests/test_config_contract.py::TestDependencyContract::test_ambiguous_itsi_search_tier_preserves_bytes_until_one_filter`
 - `CFG-APP-010`: `tests/test_config_contract.py::TestAppContract::test_content_pack_discovery_and_add_help_are_actionable`
+- `CFG-APP-011`: `tests/test_config_contract.py::TestAppContract::test_content_pack_customize_matches_pack_folder_playbooks`
 - `CFG-SEC-001`: `tests/test_config_contract.py::TestPathContract::test_from_env_authors_lookup_and_get_redacts_secret`
 - `CFG-SEC-002`: `tests/test_config_contract.py::TestSecurityContract::test_catalog_and_documentation_examples_are_credential_and_certificate_safe`
 - `CFG-SEC-003`: `tests/test_config_contract.py::TestSecurityContract::test_explicit_env_lookup_requires_a_non_empty_value`

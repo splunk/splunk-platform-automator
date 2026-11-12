@@ -11,12 +11,12 @@ spa doctor
 spa init --example cm_2idxc_sh --provider aws ~/envs/my-env
 cd ~/envs/my-env
 spa validate
-spa provision --yes && spa deploy --yes
+spa deploy --yes
 ```
 
-If `spa init` fails the host prerequisite check, a dest that did not exist before the command is removed and the command reports that the environment has not been created.
+If `spa init` fails the host prerequisite check, a dest that did not exist before the command is removed and the command reports that the environment has not been created. Init stays silent when those checks pass and prints only warnings and failures; `spa doctor` still prints the full report.
 
-`spa deploy` runs an Ansible ping with become for the selected hosts after you confirm and before the playbook, then compares `splunk_architecture` with the machine. The expected value is the host override, then that host's `splunk_environments` entry, then `splunk_defaults`, then `amd64`. `spa hosts check` is that check on its own. `spa deploy --hosts ROLE` includes every config host in that role, including one that is not provisioned yet. `spa provision` does not run the check. Before `spa run` of a playbook that needs root, run `spa hosts check`.
+`spa deploy` creates missing hosts if needed, then runs an Ansible ping with become for the selected hosts after you confirm and before the playbook, then compares `splunk_architecture` with the machine. The expected value is the host override, then that host's `splunk_environments` entry, then `splunk_defaults`, then `amd64`. A failed check fails deploy; it does not recreate hosts. `spa hosts check` is that check on its own. Before `spa run` of a playbook that needs root, run `spa hosts check`.
 
 Use `--provider virtualbox` with a topology such as `single_node` for local VMs. Before production, review the deployment-intent work tracked in [ROADMAP #80](../ROADMAP.md); default examples are intentionally permissive.
 
@@ -37,7 +37,7 @@ flowchart LR
 
 `spa` resolves an environment by `--env NAME`, `SPA_ENV_DIR`, walking up from cwd to `.spa.yml`, then the registered default, and applies that environment to the command. Many environments can share one framework install. `spa environment list` shows registered names; use `spa environment set --default NAME` for commands run outside an env, or pass `spa --env NAME`. An older lab that already has `config/splunk_config.yml` or `.spa.yml` is registered with `spa env init NAME --force` from that directory or its parent (config is kept unless you also pass `--example`).
 
-For an existing server, `spa init --example TOPOLOGY --provider external ENV`, then `spa hosts register NAME --ssh-host HOST --user USER --key PATH --yes`. Add `--ssh-port PORT` when SSH is not on port 22, and `--ip-addr ADDRESS` when Splunk hosts reach this machine on a different address than SSH. Registration checks SSH and writes the SSH host, user, key, and any `--ip-addr` only in `inventory/hosts`. The config only needs `external:`. `spa validate` checks the config only. `spa deploy --yes` pings with become and compares `splunk_architecture` with the machine before the playbook, using the host override, then `splunk_environments`, then `splunk_defaults`, then `amd64`. `spa hosts check` is that check without deploying. SPA does not create, shut down, or terminate an external machine. `spa provision` in an external-only environment says so and does not ask to proceed. In a mixed environment it still asks, because the managed hosts change, and it names the external hosts it leaves alone.
+For an existing server, `spa init --example TOPOLOGY --provider external ENV`, then `spa hosts register NAME --ssh-host HOST --user USER --key PATH --yes`. Add `--ssh-port PORT` when SSH is not on port 22, and `--ip-addr ADDRESS` when Splunk hosts reach this machine on a different address than SSH. Registration checks SSH and writes the SSH host, user, key, and any `--ip-addr` only in `inventory/hosts`. The config only needs `external:`. `spa validate` checks the config only. `spa deploy --yes` pings with become and compares `splunk_architecture` with the machine before the playbook, using the host override, then `splunk_environments`, then `splunk_defaults`, then `amd64`. `spa hosts check` is that check without deploying. SPA does not create, shut down, or terminate an external machine. In a mixed environment, deploy creates only the managed hosts and names the external hosts it leaves alone.
 
 ## Prepare Software
 
@@ -82,11 +82,11 @@ spa validate
 
 ### Start from a confirmed architecture file
 
-A confirmed `splunk.architecture` 0.4.0 file (from the SVA skill or `examples/architectures/c3.json`) selects the catalog topology and overlays counts, RF/SF, `org_prefix`, and extra roles. Provider is required at init. Hardware sizing, OS, AWS, apps, and licenses stay ordinary `spa config` / `spa apps` questions after the host list exists.
+A confirmed `splunk.architecture` schema 1 file (from the SVA skill or `examples/architectures/c3.json`) selects the catalog topology and overlays counts, RF/SF, `org_prefix`, and extra roles. Provider is required at init. Hardware sizing, OS, AWS, apps, and licenses stay ordinary `spa config` / `spa apps` questions after the host list exists.
 
 ```mermaid
 flowchart TD
-  file["Confirmed 0.4.0 file"] --> planCmd["spa architecture plan FILE"]
+  file["Confirmed schema 1 file"] --> planCmd["spa architecture plan FILE"]
   planCmd --> provider["Ask provider: aws / virtualbox / external"]
   provider --> gate["Env location + name"]
   gate --> initCmd["spa init --architecture FILE --provider"]
@@ -110,9 +110,9 @@ spa validate
 
 `spa architecture apply FILE --yes` overlays the same deltas onto an environment that already exists. `--architecture` and `--example` are exclusive. Without an architecture file, keep `spa init --example TOPOLOGY --provider`. Init and apply warn when `license_manager` is not written yet (schema pairing with a license file) and when `spa architecture check` would still mismatch; they do not fail for those gaps.
 
-When a setting uses `{{ lookup('env', 'NAME') }}`, export the variable to a non-empty value before `spa validate`, `spa provision`, or `spa deploy`. `spa init` lists each referenced name as `set` or `not set` and does not stop. A missing value fails with the variable name, for example `SPLUNK_ADMIN_PASSWORD`, and does not print the value. `spa config set PATH --from-env NAME` can record the reference before the variable exists.
+When a setting uses `{{ lookup('env', 'NAME') }}`, export the variable to a non-empty value before `spa validate` or `spa deploy`. `spa init` lists each referenced name as `set` or `not set` and does not stop. A missing value fails with the variable name, for example `SPLUNK_ADMIN_PASSWORD`, and does not print the value. `spa config set PATH --from-env NAME` can record the reference before the variable exists.
 
-The Pydantic schema enforced by `spa validate` owns types and allowed values. The feature catalog owns decision guidance and example snippets; editing commands never apply those snippets. Browse every key in [config.md](config.md) (`spa --no-agent config schema --markdown`). Discover a key with `spa --agent config explain PATH`. `spa --agent config explain PATH` prints the one mutation command for that feature and does not apply it. Author an existing scalar or map with `spa --agent config set PATH VALUE`. Append a new non-app identity, such as a host or cluster, with `spa --agent config add SELECTOR JSON_OBJECT`. Use one `spa --agent config merge --file FILE` transaction for a deliberate multi-setting fragment. Use `spa config topology` and `spa config provider` for layout replacement. App entries stay on `spa apps add`. After every `spa config` or `spa apps` write, inspect `changed` and `ready`: `ok: false` with `ready: false` wrote nothing. Pass `--show-diff` when you need the redacted hunk. Then `spa config get` the identity and confirm `found: true`. Finish with `spa --agent validate` before provision or deploy. Use `spa --agent provider aws regions list`, `latest-ami`, `instance-types list`, and `survey` for live regions, AMIs, instance types, and network values; use `spa licenses list` and `spa validate --check-licenses` for license selection. See the [configuration editing contract](config-editing.md). For a full clustered ITSI example, follow [Build a clustered ITSI config](config-walkthrough.md).
+The Pydantic schema enforced by `spa validate` owns types and allowed values. The feature catalog owns decision guidance and example snippets; editing commands never apply those snippets. Browse every key in [config.md](config.md) (`spa --no-agent config schema --markdown`). Discover a key with `spa --agent config explain PATH`. `spa --agent config explain PATH` prints the one mutation command for that feature and does not apply it. Author an existing scalar or map with `spa --agent config set PATH VALUE`. Append a new non-app identity, such as a host or cluster, with `spa --agent config add SELECTOR JSON_OBJECT`. Use one `spa --agent config merge --file FILE` transaction for a deliberate multi-setting fragment. Use `spa config topology` and `spa config provider` for layout replacement. App entries stay on `spa apps add`. After every `spa config` or `spa apps` write, inspect `changed` and `ready`: `ok: false` with `ready: false` wrote nothing. Pass `--show-diff` when you need the redacted hunk. Then `spa config get` the identity and confirm `found: true`. Finish with `spa --agent validate` before deploy. Use `spa --agent provider aws regions list`, `latest-ami`, `instance-types list`, and `survey` for live regions, AMIs, instance types, and network values; use `spa licenses list` and `spa validate --check-licenses` for license selection. See the [configuration editing contract](config-editing.md). For a full clustered ITSI example, follow [Build a clustered ITSI config](config-walkthrough.md).
 
 ### CCM (employee-only)
 
@@ -124,7 +124,7 @@ spa init --example TOPOLOGY --provider ccm ENV
 
 `spa config provider ccm` writes the `ccm:` YAML block. `spa provider ccm` is discovery, not that write: size OS, instance type, and disk from `spa provider ccm survey` (or `operating-systems list` / `instance-types list` / `disk-storage list`). Do not hardcode those catalogs.
 
-Auth is `CCM_TOKEN` in the process environment (`lookup('env', 'CCM_TOKEN')`). `spa doctor` reports it as **set / not set** and never prints the token. CCM is remote; after an explicit yes, `spa config merge remote-provider --yes`. Full operator page: [CCM](ccm.md).
+Auth is `CCM_TOKEN` in the process environment (`lookup('env', 'CCM_TOKEN')`). `spa doctor` reports it as **set / not set** and never prints the token. CCM is remote; `spa init --provider ccm` already merges remote-provider defaults. For an existing env, `spa config merge remote-provider --yes`. Full operator page: [CCM](ccm.md).
 
 Universal-forwarder outputs always go to all indexers today. UF → heavy forwarder (or a single indexer) is not a config knob; see `spa config explain splunk_hosts.splunk_outputs` and [ROADMAP](../ROADMAP.md).
 
@@ -134,20 +134,19 @@ Universal-forwarder outputs always go to all indexers today. UF → heavy forwar
 flowchart TD
   init["init"]
   validate["validate"]
-  provision["provision"]
   deploy["deploy"]
   suspend["suspend"]
   resume["resume"]
   destroy["destroy"]
-  init --> validate --> provision --> deploy
+  init --> validate --> deploy
   deploy --> suspend --> resume --> deploy
   deploy --> destroy
 ```
 
 | Job | Command |
 | --- | --- |
-| Create compute and inventory | `spa provision --yes` |
-| Install or reconcile Splunk | `spa deploy --yes` |
+| Create missing hosts and install Splunk | `spa deploy --yes` |
+| Add a host, then create it and install Splunk | `spa config add` then `spa deploy --yes` |
 | Limit a supported operation | `--hosts HOST_OR_ROLE` |
 | Stop compute and retain disks | `spa suspend --yes` |
 | Start compute | `spa resume --yes` |
@@ -161,7 +160,21 @@ flowchart TD
 | Show native Ansible output during a run | `spa deploy --yes --ansible-output` |
 | Increase Ansible verbosity and show native output | `spa deploy --yes -v` through `-vvvv` |
 
-Provider selection comes from `terraform.aws`, `virtualbox:`, or `ccm:` in config. Provision, deploy, destroy, suspend, resume, and environment remove wait for a yes in chat. `spa destroy --hosts` does not exist. Do not delete a live host from config and run `spa provision`; the current Terraform flow can terminate it. See [AWS](aws.md) for cloud decisions, [CCM](ccm.md) for Corporate Cloud Manager, and [Upgrade](upgrade.md) for the ordered distributed-upgrade workflow.
+### Add a host
+
+Append the host with `spa config add`. Do not hand-edit `splunk_config.yml`. Then validate and deploy. On AWS and VirtualBox, `spa deploy --yes` creates the missing instance, waits until it accepts SSH, hosts-checks, and installs Splunk. `--hosts NAME` still limits the Splunk playbook to that name; the provider create step applies the env plan (the new instance is a create). Include cluster keys (`idxcluster`, `shcluster`) in the JSON when the role needs them:
+
+```bash
+spa config add 'splunk_hosts[name=idx3]' '{"roles":["indexer"],"idxcluster":"idxc1"}' --yes
+spa validate
+spa deploy --yes
+```
+
+For an existing server, `spa hosts register NAME --ssh-host HOST --user USER --key PATH --yes`, then `spa deploy --yes`. SPA does not create that machine.
+
+CCM host count is fixed when the deployment is created. Adding a name to a live CCM lab does not add an instance; replace the lab with `spa destroy --yes` then `spa deploy --yes`. See [CCM](ccm.md).
+
+Provider selection comes from `terraform.aws`, `virtualbox:`, or `ccm:` in config. Deploy, destroy, suspend, resume, and environment remove wait for a yes in chat. `spa destroy --hosts` does not exist. Do not delete a live host from config and run `spa deploy`; the current Terraform flow can terminate it. See [AWS](aws.md) for cloud decisions, [CCM](ccm.md) for Corporate Cloud Manager, and [Upgrade](upgrade.md) for the ordered distributed-upgrade workflow.
 
 Mutating Ansible/Terraform work writes a timestamped JSONL transcript under `$SPA_ENV_DIR/logs/`. On a TTY, humans see **one live line per named group that actually runs** (for example `Deploy  App deployment · Search Head Cluster apps`), with the active host and task while work is running and compact counters when it settles. Rolling upgrade groups settle once per host and include installed and target Splunk versions when reported by the playbook. There is no `[3/10]` index; unused topology simply never appears. `spa run` of every first-party playbook uses the same compact grouping, with play-name fallback for work outside known roles and functions. Failures print immediately. `NO_COLOR` / piped stderr stay uncolored. Agents keep a small JSON envelope on stdout plus `data.log`; they must not ingest the transcript unless you asked to debug a failure. Terraform instance changes (`instance_type`, disk) fold into the provision plan/apply line. On VirtualBox, provisioning shows one line per VM (`Provision  VM idx1`) built from Vagrant's output, and a Vagrant error is printed before the group closes as `failed`.
 

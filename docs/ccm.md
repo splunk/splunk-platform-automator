@@ -24,18 +24,17 @@ Size OS, instance type, and disk from that live catalog. Do not hardcode those l
 
 `ccm.ssh_username` is always `splunker` for every CCM OS flavor. Operators create the SSH key in the CCM GUI, set `ccm.key_name`, and keep the private file locally. `spa provider ccm ssh-keys list` shows CCM names and whether the local file exists. SPA does not create keys or download PEM material.
 
-CCM is remote (like AWS). After an explicit yes, `spa config merge remote-provider --yes`.
+CCM is remote (like AWS). `spa init --provider ccm` already merges remote-provider defaults (hostname, host-side download, TLS). For an existing env, `spa config merge remote-provider --yes`.
 
 ## Provision and deploy
 
 ```bash
 spa init --example TOPOLOGY --provider ccm ENV
 spa validate
-spa provision --yes
 spa deploy --yes
 ```
 
-`spa validate` rejects `ttl_days` outside 1–30, host count over 50, a derived CCM deployment name that is not 5–100 letters/numbers/hyphens/underscores (set `ccm.name` when the env directory basename does not match), a missing local private key file, mixed `external:` hosts (CCM envs cannot mix external hosts in v1), and (when `CCM_TOKEN` is set) an unknown `key_name` or an account that would exceed 100 non-terminated instances. The cap counts this env's hosts once (it leaves the recorded `ccm/state.json` deployment out of the live total). `spa provision` refuses the same mix and does not create a deployment. Provision creates one CCM EC2 deployment and writes `$SPA_ENV_DIR/ccm/state.json` as soon as CCM returns a deployment id (never the PAT), then polls until ready and writes inventory. `spa provision` again while that id is live or pending is refused before confirmation (`already provisioned: ID`); run `spa destroy --yes` to replace the lab. The TTL warning uses controller-local time (same spelling as `spa hosts list --status`) and prints after a successful provision, including with `--yes`. An expired id uses the TTL hint: `spa destroy --yes` then `spa provision --yes`. CCM terminates the **whole deployment** when TTL expires.
+`spa validate` rejects `ttl_days` outside 1–30, host count over 50, a derived CCM deployment name that is not 5–100 letters/numbers/hyphens/underscores (set `ccm.name` when the env directory basename does not match), a missing local private key file, mixed `external:` hosts (CCM envs cannot mix external hosts in v1), and (when `CCM_TOKEN` is set) an unknown `key_name` or an account that would exceed 100 non-terminated instances. The cap counts this env's hosts once (it leaves the recorded `ccm/state.json` deployment out of the live total). `spa deploy` refuses the same mix and does not create a deployment. Provision creates one CCM EC2 deployment and writes `$SPA_ENV_DIR/ccm/state.json` as soon as CCM returns a deployment id (never the PAT), then polls until ready and writes inventory. `spa deploy` again while that id is live or pending is refused before confirmation (`already provisioned: ID`); run `spa destroy --yes` to replace the lab. The TTL warning uses controller-local time (same spelling as `spa hosts list --status`) and prints after a successful provision, including with `--yes`. An expired id uses the TTL hint: `spa destroy --yes` then `spa deploy --yes`. CCM terminates the **whole deployment** when TTL expires.
 
 ## Operate the environment
 
@@ -49,6 +48,8 @@ spa deploy --yes
 | Reconcile Splunk after resume/change | `spa deploy --yes` |
 | Tear down the CCM deployment and local state | `spa destroy --yes` |
 
+Adding a host to a live CCM deployment does not add an instance. Host count is fixed at create. To grow the lab, `spa destroy --yes` then add the host in config and `spa deploy --yes`.
+
 `spa resume --yes` is the wake-up after either `spa suspend` or a CCM business-hours stop. It polls until selected instances are `running` with an `ip_address`, then refreshes inventory. `wait=False` skips that poll and the inventory refresh. `spa suspend --yes` waits for `stopped` the same way. Resume does not change `operation_hours`. If live hours are still `business_hours` (from `ccm/state.json` after `spa provider ccm operation-hours set`, otherwise YAML) and the current time in the deployment timezone is outside Monday–Friday 08:00–18:00, SPA warns that CCM may stop the instances again.
 
-When TTL has expired, the deployment is gone. `spa resume` / `suspend` / `deploy` cannot bring it back. `spa destroy --yes` clears local state (a missing CCM deployment is success). A new lab is `spa provision --yes`.
+When TTL has expired, the deployment is gone. `spa resume` / `suspend` / `deploy` cannot bring it back. `spa destroy --yes` clears local state (a missing CCM deployment is success). A new lab is `spa deploy --yes`.

@@ -2294,14 +2294,18 @@ def config_app_add(
             if (current_all and incoming_named) or (current_named and incoming_all):
                 raise ConfigEditError("Content Library 5391 already uses the other install policy")
             if current_named and incoming_named:
-                current_names = {
-                    str(item.get("name"))
+                current_by_name = {
+                    str(item.get("name")): item
                     for item in match.get("content_pack_apps") or []
-                    if isinstance(item, Mapping)
+                    if isinstance(item, MutableMapping)
                 }
                 for item in entry.get("content_pack_apps") or []:
-                    if str(item.get("name")) not in current_names:
+                    name = str(item.get("name"))
+                    existing = current_by_name.get(name)
+                    if existing is None:
                         match["content_pack_apps"].append(copy.deepcopy(item))
+                    else:
+                        _replace_supplied_fields(existing, item)
                 supplied = {key: value for key, value in entry.items() if key != "content_pack_apps"}
                 _replace_supplied_fields(match, supplied)
                 return

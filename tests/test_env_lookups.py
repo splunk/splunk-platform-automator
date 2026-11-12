@@ -96,6 +96,7 @@ def test_human_validate_prints_the_missing_lookup_message_once(tmp_path, monkeyp
     """CFG-SEC-003. The formatted report already contains the error."""
     _clear(monkeypatch)
     _paths(tmp_path, LOOKUP_CONFIG)
+    monkeypatch.delenv("SPLUNK_CONFIG_FILE", raising=False)
     monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
     monkeypatch.setenv("SPA_ENV_DIR", str(tmp_path))
     from spa.cli import _run

@@ -67,6 +67,7 @@ def apps_add_next(
     app_id: Optional[int],
     playbooks: Optional[Sequence[Any]] = None,
     customize: bool = False,
+    content_packs: Optional[Sequence[str]] = None,
 ) -> List[Dict[str, Any]]:
     if kind == "premium_itsi" or app_id == ITSI_ID:
         return [
@@ -94,7 +95,18 @@ def apps_add_next(
         ]
     rows: List[Dict[str, Any]] = []
     if playbooks and not customize:
-        retry = "spa --agent apps add %s --roles ROLE --customize --yes" % (app_id or "APP_ID")
+        if content_packs:
+            flags = " ".join("--content-pack %s" % pack for pack in content_packs)
+            retry = "spa --agent apps add %s %s --customize --yes" % (
+                app_id or "APP_ID",
+                flags,
+            )
+        elif kind in {"itsi_content_library", "itsi_content_pack_single"}:
+            retry = "spa --agent apps add %s --customize --yes" % (app_id or "APP_ID")
+        else:
+            retry = "spa --agent apps add %s --roles ROLE --customize --yes" % (
+                app_id or "APP_ID"
+            )
         rows.append(
             item(
                 "apps.customize",
@@ -161,12 +173,6 @@ def provision_next(env_name: Optional[str] = None) -> List[Dict[str, Any]]:
     env = env_name or "NAME"
     follow = "spa --env %s logs --follow --wait --ansible-output --color" % env
     return [
-        item(
-            "hosts.check",
-            "Check provisioned hosts before deploy?",
-            "spa --agent hosts check",
-            required=True,
-        ),
         item(
             "logs.follow",
             "In another terminal, follow native Ansible while deploy runs (optional).",

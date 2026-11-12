@@ -1,6 +1,6 @@
 # Prerequisites
 
-Run `spa doctor` and `spa validate` before mutating infrastructure.
+`spa init` already runs host prerequisite checks and stays quiet when they pass. Run `spa validate` before mutating infrastructure. `spa doctor` is the full host-tool catalog if you need it.
 
 A missing local Splunk archive message names the glob, the resolved Software directory, and one download page. Repeat that message. Do not download the file.
 
