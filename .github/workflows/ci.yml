@@ -46,4 +46,4 @@ jobs:
         run: python -m compileall -q lib ansible/plugins
 
       - name: Run local tests
-        run: ./tests/run_local_tests.sh --durations=25
+        run: ./tests/run_local_tests.sh -n auto --durations=25

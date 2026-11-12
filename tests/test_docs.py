@@ -288,7 +288,7 @@ def test_ci_cancels_stale_pull_request_runs():
 
 
 def test_ci_and_release_report_slowest_local_tests():
-    invocation = "./tests/run_local_tests.sh --durations=25"
+    invocation = "./tests/run_local_tests.sh -n auto --durations=25"
     ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     release = (PROJECT_ROOT / ".github/workflows/release.yml").read_text(
         encoding="utf-8"
@@ -296,6 +296,37 @@ def test_ci_and_release_report_slowest_local_tests():
 
     assert invocation in ci
     assert invocation in release
+
+
+def test_local_and_cli_runners_do_not_share_one_ansible_tmp():
+    shared_assign = 'ANSIBLE_LOCAL_TMP="${SCRIPT_DIR}/.ansible_tmp"'
+    runners = (
+        "run_local_tests.sh",
+        "run_cli_tests.sh",
+        "run_app_deployment_tests.sh",
+    )
+    conftest = (PROJECT_ROOT / "tests" / "conftest.py").read_text(encoding="utf-8")
+
+    for name in runners:
+        text = (PROJECT_ROOT / "tests" / name).read_text(encoding="utf-8")
+        assert shared_assign not in text, name
+    assert "worker_local_dir" in conftest
+
+
+def test_worker_local_dir_isolates_xdist_workers(tmp_path, monkeypatch):
+    from spa_testutil import worker_local_dir
+
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
+    path_a = worker_local_dir(tmp_path)
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw1")
+    path_b = worker_local_dir(tmp_path)
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    serial = worker_local_dir(tmp_path)
+
+    assert path_a != path_b
+    assert path_a.name == "gw0"
+    assert path_b.name == "gw1"
+    assert serial.name == "master"
 
 
 def test_config_editing_contract_is_linked_from_development_docs():

@@ -40,6 +40,7 @@ def _ansible_playbook_executable() -> str:
 _tests_dir = Path(__file__).resolve().parent
 if str(_tests_dir) not in sys.path:
     sys.path.insert(0, str(_tests_dir))
+from spa_testutil import worker_local_dir
 from scope_assertions import (
     assert_cluster_manager_apps,
     assert_cluster_manager_target_hosts,
@@ -64,6 +65,11 @@ def _project_root() -> Path:
 
 def _scenarios_dir() -> Path:
     return _project_root() / "tests" / "configs" / "app_scope"
+
+
+def _scope_output_path(scenario_name: str) -> Path:
+    """Worker-local JSON path so overlapping xdist workers do not share output."""
+    return worker_local_dir(_scenarios_dir() / "output") / f"{scenario_name}_scope.json"
 
 
 def _collect_scenario_names():
@@ -200,13 +206,26 @@ def _scenarios_with_expected_snapshot():
     return sorted(names)
 
 
+def test_overlapping_app_scope_scenarios_use_distinct_output_paths(monkeypatch):
+    """Two xdist workers must not write the same app-scope JSON path."""
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
+    path_a = _scope_output_path("ds_only")
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw1")
+    path_b = _scope_output_path("ds_only")
+    shared = _scenarios_dir() / "output" / "ds_only_scope.json"
+
+    assert path_a != path_b
+    assert path_a != shared
+    assert path_b != shared
+    assert "gw0" in path_a.parts
+    assert "gw1" in path_b.parts
+
+
 @pytest.mark.parametrize("scenario_name", _collect_scenario_names())
 def test_scenario_scope_playbook_succeeds(scenario_name: str):
     """Run debug_app_scope for the scenario and assert playbook succeeds."""
-    root = _project_root()
-    out_dir = _scenarios_dir() / "output"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    scope_path = out_dir / f"{scenario_name}_scope.json"
+    scope_path = _scope_output_path(scenario_name)
+    scope_path.parent.mkdir(parents=True, exist_ok=True)
     result = _run_scope_playbook(scenario_name, scope_path)
     assert result.returncode == 0, (
         f"debug_app_scope.yml failed for scenario {scenario_name!r}"
@@ -224,11 +243,9 @@ def test_inventory_names_unset_admin_password_lookup(tmp_path):
 @pytest.mark.parametrize("scenario_name", _collect_scenario_names())
 def test_scenario_scope_assertions(scenario_name: str):
     """Run scope playbook (if needed), load JSON, run scenario-specific assertions."""
-    root = _project_root()
-    out_dir = _scenarios_dir() / "output"
-    scope_path = out_dir / f"{scenario_name}_scope.json"
+    scope_path = _scope_output_path(scenario_name)
     if not scope_path.is_file():
-        out_dir.mkdir(parents=True, exist_ok=True)
+        scope_path.parent.mkdir(parents=True, exist_ok=True)
         result = _run_scope_playbook(scenario_name, scope_path)
         assert result.returncode == 0, (
             f"debug_app_scope.yml failed for scenario {scenario_name!r}; run test_scenario_scope_playbook_succeeds first"
@@ -387,10 +404,9 @@ def test_scenario_scope_matches_snapshot(scenario_name: str):
     To update snapshots after intentional changes:
       UPDATE_SCOPE_SNAPSHOTS=1 pytest tests/test_app_scope_scenarios.py -k snapshot
     """
-    out_dir = _scenarios_dir() / "output"
-    scope_path = out_dir / f"{scenario_name}_scope.json"
+    scope_path = _scope_output_path(scenario_name)
     if not scope_path.is_file():
-        out_dir.mkdir(parents=True, exist_ok=True)
+        scope_path.parent.mkdir(parents=True, exist_ok=True)
         result = _run_scope_playbook(scenario_name, scope_path)
         assert result.returncode == 0, (
             f"debug_app_scope.yml failed for scenario {scenario_name!r}"

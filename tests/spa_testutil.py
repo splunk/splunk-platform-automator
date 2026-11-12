@@ -42,6 +42,12 @@ INHERITED_PATH_VARS = (
 )
 
 
+def worker_local_dir(base: Path) -> Path:
+    """Per-xdist-worker subdirectory so parallel tests do not share temp files."""
+    worker = os.environ.get("PYTEST_XDIST_WORKER") or "master"
+    return Path(base) / worker
+
+
 _MARK_KEYWORDS = frozenset({"and", "or", "not"})
 _MARKER_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 

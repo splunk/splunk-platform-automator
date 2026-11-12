@@ -358,22 +358,27 @@ def pytest_addoption(parser):
 
 
 def _ensure_local_test_env() -> None:
-    """Writable ansible tmp for @pytest.mark.local runs."""
-    tests_dir = os.path.dirname(os.path.abspath(__file__))
-    ansible_tmp = os.path.join(tests_dir, ".ansible_tmp")
-    os.makedirs(ansible_tmp, exist_ok=True)
-    os.environ.setdefault("ANSIBLE_LOCAL_TMP", ansible_tmp)
+    """Writable per-worker ansible tmp so xdist workers do not share files."""
+    from pathlib import Path
+
+    from spa_testutil import worker_local_dir
+
+    tests_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+    ansible_tmp = worker_local_dir(tests_dir / ".ansible_tmp")
+    ansible_tmp.mkdir(parents=True, exist_ok=True)
+    os.environ["ANSIBLE_LOCAL_TMP"] = str(ansible_tmp)
+    os.environ["ANSIBLE_LOCAL_TEMP"] = str(ansible_tmp)
 
 
 def pytest_configure(config):
-    """Prepare environment when -m selects tests marked local."""
+    """Strip inherited path vars for local runs; always set worker-local ansible tmp."""
     from spa_testutil import INHERITED_PATH_VARS, selects_local_tests
 
     markexpr = (config.option.markexpr or "").strip()
     if markexpr and selects_local_tests(markexpr):
         for name in INHERITED_PATH_VARS:
             os.environ.pop(name, None)
-        _ensure_local_test_env()
+    _ensure_local_test_env()
 
 
 @pytest.fixture(autouse=True)

@@ -46,8 +46,8 @@ ansible/verification/output/
 tests/.venv
 tests/.ansible_tmp
 tests/.collections
-tests/configs/app_scope/output/*.json
-tests/configs/app_scope/output/.ansible_tmp
+tests/configs/app_scope/output/**
+!tests/configs/app_scope/output/.gitkeep
 .pytest_cache/
 # Shared venv (bin/spa_venv.sh) and its collections
 /.venv
