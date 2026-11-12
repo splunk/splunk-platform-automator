@@ -8,7 +8,8 @@ import pytest
 
 from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init, spa_env
 
-pytestmark = [pytest.mark.local, pytest.mark.ansible]
+# spa init may create the shared repo .venv; two workers creating it at once collide in ensurepip.
+pytestmark = [pytest.mark.local, pytest.mark.ansible, pytest.mark.xdist_group("shared_venv")]
 
 
 def _ensure_software_stubs(stub_dir: Path) -> None:
