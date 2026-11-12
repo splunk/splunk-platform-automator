@@ -18,7 +18,8 @@ def test_doctor_passes_on_dev_machine():
     assert result.returncode == 0, result.stderr + result.stdout
     assert "python3" in (result.stdout + result.stderr).lower()
     assert "SPA host prerequisites" in result.stdout
-    assert "All checks passed." in result.stdout
+    # CI has no Software/ dir or shared venv, so doctor may warn and still exit 0.
+    assert "All checks passed." in result.stdout or "warning(s). Env may still work" in result.stdout
 
 
 def test_doctor_warns_when_spa_comes_from_another_clone(tmp_path):
