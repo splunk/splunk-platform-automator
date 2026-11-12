@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import ast
+import io
 import itertools
 import os
 import re
 import subprocess
 import sys
 import tempfile
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
@@ -42,8 +45,35 @@ INHERITED_PATH_VARS = (
 )
 
 
+def worker_local_dir(base: Path) -> Path:
+    """Per-xdist-worker subdirectory so parallel tests do not share temp files."""
+    worker = os.environ.get("PYTEST_XDIST_WORKER") or "master"
+    return Path(base) / worker
+
+
+def xdist_group_name(params: Mapping) -> Optional[str]:
+    """xdist loadgroup name so related parametrized tests share a worker."""
+    if "config_file" in params:
+        return os.path.splitext(str(params["config_file"]))[0]
+    scenario = params.get("scenario_scope_result")
+    if scenario:
+        return f"app_scope_{scenario}"
+    return None
+
+
 _MARK_KEYWORDS = frozenset({"and", "or", "not"})
 _MARKER_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+LOCAL_JOB_MARKEXPRS = (
+    "local and cli",
+    "local and ansible",
+    "local and not cli and not ansible",
+)
+PLAYBOOK_SPAWNING_MODULES = (
+    "test_app_scope_scenarios.py",
+    "test_app_deployment.py",
+    "test_spa_jsonl_callback.py",
+    "test_env_scaffold.py",
+)
 
 
 def satisfy_env_lookups(monkeypatch, start_dir: Optional[Path] = None) -> None:
@@ -81,6 +111,69 @@ def selects_local_tests(markexpr: str) -> bool:
         if expression.evaluate(matches):
             return True
     return False
+
+
+def matching_local_job_markexprs(markers: Sequence[str]) -> tuple[str, ...]:
+    """CI local-job expressions that would select a node with these markers."""
+    from _pytest.mark.expression import Expression
+
+    enabled = set(markers)
+    if "local" not in enabled:
+        return ()
+    hits = []
+    for expr in LOCAL_JOB_MARKEXPRS:
+        compiled = Expression.compile(expr)
+
+        def matches(name: str, /, enabled: set[str] = enabled, **kwargs: object) -> bool:
+            return not kwargs and name in enabled
+
+        if compiled.evaluate(matches):
+            hits.append(expr)
+    return tuple(hits)
+
+
+def local_job_partition_errors(nodes) -> list[str]:
+    """One message per local node that would run in more than one CI job.
+
+    nodes: iterable of (nodeid, marker names).
+    """
+    errors = []
+    for nodeid, markers in nodes:
+        jobs = matching_local_job_markexprs(tuple(markers))
+        if len(jobs) > 1:
+            errors.append("%s runs in %s" % (nodeid, " and ".join(repr(job) for job in jobs)))
+    return errors
+
+
+def module_pytestmark_names(path: Path) -> set[str]:
+    """Marker names assigned to module-level pytestmark in a test file."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    names: set[str] = set()
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(target, ast.Name) and target.id == "pytestmark" for target in node.targets):
+            continue
+        names.update(_pytest_mark_names(node.value))
+    return names
+
+
+def _pytest_mark_names(node: ast.AST) -> set[str]:
+    if isinstance(node, ast.List):
+        names: set[str] = set()
+        for elt in node.elts:
+            names.update(_pytest_mark_names(elt))
+        return names
+    if isinstance(node, ast.Call):
+        return _pytest_mark_names(node.func)
+    if (
+        isinstance(node, ast.Attribute)
+        and node.attr
+        and isinstance(node.value, ast.Attribute)
+        and node.value.attr == "mark"
+    ):
+        return {node.attr}
+    return set()
 
 
 # Only pytest.mark.aws tests (manual) may reach AWS or CCM. Everything else
@@ -176,6 +269,56 @@ def run_spa(args: Sequence[str], env=None, cwd=None, extra_env=None, stdin=None)
         text=True,
         env=full,
         input=stdin,
+    )
+
+
+def run_spa_inprocess(args: Sequence[str], env=None, cwd=None, extra_env=None, stdin=None):
+    """Call spa.cli.main with redirected streams. Not a process-boundary check."""
+    from spa.cli import main
+
+    full = spa_env(DEFAULT_SUBPROCESS_ENV)
+    if extra_env:
+        full.update(extra_env)
+    if env:
+        full.update(env)
+    # argparse wrapping follows COLUMNS, then the real TTY on sys.__stdout__.
+    # Subprocess capture is a pipe (80 columns when COLUMNS is unset); pin it.
+    full.setdefault("COLUMNS", "80")
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    stdin_buf = io.StringIO("" if stdin is None else stdin)
+    old_env = os.environ.copy()
+    old_cwd = os.getcwd()
+    old_stdin = sys.stdin
+    rc: object = 1
+    try:
+        os.environ.clear()
+        os.environ.update(full)
+        os.chdir(cwd or PROJECT_ROOT)
+        sys.stdin = stdin_buf
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            try:
+                rc = main(list(args))
+            except SystemExit as exc:
+                rc = 0 if exc.code is None else exc.code
+    finally:
+        os.environ.clear()
+        os.environ.update(old_env)
+        os.chdir(old_cwd)
+        sys.stdin = old_stdin
+    if rc is None:
+        returncode = 0
+    elif isinstance(rc, bool):
+        returncode = 0 if rc else 1
+    elif isinstance(rc, int):
+        returncode = rc
+    else:
+        returncode = 1
+    return subprocess.CompletedProcess(
+        args=[str(SPA), *args],
+        returncode=returncode,
+        stdout=stdout.getvalue(),
+        stderr=stderr.getvalue(),
     )
 
 

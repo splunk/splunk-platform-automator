@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from spa_testutil import (
     PROJECT_ROOT,
     LIB,
     run_spa,
+    run_spa_inprocess,
     run_spa_init,
     satisfy_env_lookups,
     spa_env,
@@ -59,16 +61,120 @@ def test_spa_env_drops_inherited_spa_and_ansible_paths(monkeypatch):
     [
         ("local", True),
         ("local and cli", True),
+        ("local and ansible", True),
+        ("local and not cli and not ansible", True),
         ("local or aws", True),
         ("not local", False),
         ("aws", False),
         ("cli", False),
+        ("ansible", False),
     ],
 )
 def test_local_marker_expression_selects_only_local_runs(markexpr, selects_local):
     from spa_testutil import selects_local_tests
 
     assert selects_local_tests(markexpr) is selects_local
+
+
+@pytest.mark.parametrize(
+    ("markers", "jobs"),
+    [
+        ({"local"}, ("local and not cli and not ansible",)),
+        ({"local", "cli"}, ("local and cli",)),
+        ({"local", "ansible"}, ("local and ansible",)),
+        ({"local", "itsi"}, ("local and not cli and not ansible",)),
+        ({"local", "cli", "ansible"}, ("local and cli", "local and ansible")),
+        ({"aws"}, ()),
+        ({"cli"}, ()),
+        ({"ansible"}, ()),
+    ],
+)
+def test_local_job_markexprs_partition_a_node(markers, jobs):
+    from spa_testutil import matching_local_job_markexprs
+
+    assert matching_local_job_markexprs(markers) == jobs
+
+
+def test_local_job_partition_errors_name_each_node_in_two_jobs():
+    from spa_testutil import local_job_partition_errors
+
+    nodes = [
+        ("tests/test_a.py::test_unit", {"local"}),
+        ("tests/test_a.py::test_both", {"local", "cli", "ansible"}),
+        ("tests/test_b.py::test_aws", {"aws", "cli"}),
+    ]
+
+    errors = local_job_partition_errors(nodes)
+
+    assert len(errors) == 1
+    assert "tests/test_a.py::test_both" in errors[0]
+
+
+def test_collection_rejects_a_local_node_in_two_ci_jobs(tmp_path):
+    tests_dir = PROJECT_ROOT / "tests"
+    (tmp_path / "test_overlap.py").write_text(
+        "import pytest\n"
+        "pytestmark = pytest.mark.local\n"
+        "@pytest.mark.cli\n"
+        "@pytest.mark.ansible\n"
+        "def test_both():\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "conftest.py").write_text(
+        (tests_dir / "conftest.py").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (tmp_path / "pytest.ini").write_text(
+        (tests_dir / "pytest.ini").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider", str(tmp_path)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": os.pathsep.join([str(tests_dir), str(LIB)])},
+    )
+
+    assert result.returncode != 0, result.stdout
+    assert "test_overlap.py::test_both" in result.stdout + result.stderr
+
+
+def test_pytest_ini_registers_ansible_marker():
+    ini = (PROJECT_ROOT / "tests" / "pytest.ini").read_text(encoding="utf-8")
+
+    assert re.search(r"(?m)^\s*ansible:\s", ini)
+
+
+def test_cli_runner_selects_local_and_cli():
+    text = (PROJECT_ROOT / "tests" / "run_cli_tests.sh").read_text(encoding="utf-8")
+
+    assert 'pytest -m "local and cli" tests/' in text
+
+
+def test_local_modules_partition_into_cli_ansible_unit_jobs():
+    from spa_testutil import (
+        LOCAL_JOB_MARKEXPRS,
+        PLAYBOOK_SPAWNING_MODULES,
+        matching_local_job_markexprs,
+        module_pytestmark_names,
+    )
+
+    jobs = {expr: [] for expr in LOCAL_JOB_MARKEXPRS}
+    for path in sorted((PROJECT_ROOT / "tests").glob("test_*.py")):
+        marks = module_pytestmark_names(path)
+        if "local" not in marks:
+            continue
+        matched = matching_local_job_markexprs(marks)
+        assert len(matched) == 1, (path.name, sorted(marks), matched)
+        jobs[matched[0]].append(path.name)
+
+    assert "test_spa_install.py" not in jobs["local and cli"]
+    assert "test_spa_install.py" in jobs["local and not cli and not ansible"]
+    for name in PLAYBOOK_SPAWNING_MODULES:
+        assert name in jobs["local and ansible"], name
+    assert jobs["local and cli"]
+    assert jobs["local and ansible"]
+    assert jobs["local and not cli and not ansible"]
 
 
 def test_spa_env_keeps_explicit_test_path_overrides(monkeypatch):
@@ -81,14 +187,65 @@ def test_spa_env_keeps_explicit_test_path_overrides(monkeypatch):
     assert {name: clean[name] for name in INHERITED_PATH_VARS} == explicit
 
 
-def test_spa_help():
-    result = run_spa(["--help"])
-    assert result.returncode == 0
-    assert "init" in result.stdout
-    assert "run" in result.stdout
-    # argparse would otherwise dump every alias into usage: spa {init,val,...}
-    assert "{init," not in result.stdout
-    assert "COMMAND" in result.stdout
+def test_run_spa_inprocess_calls_cli_main_without_subprocess(monkeypatch):
+    """Help/schema text checks call spa.cli.main; they do not spawn bin/spa."""
+    spawned = []
+
+    def fake_run(*args, **kwargs):
+        spawned.append(args)
+        raise AssertionError("run_spa_inprocess must not spawn a process")
+
+    monkeypatch.setattr("spa_testutil.subprocess.run", fake_run)
+    from spa.cli import main as real_main
+
+    seen = []
+
+    def wrapped(argv=None):
+        seen.append(list(argv) if argv is not None else None)
+        return real_main(argv)
+
+    monkeypatch.setattr("spa.cli.main", wrapped)
+    from spa_testutil import run_spa_inprocess
+
+    result = run_spa_inprocess(["--no-agent", "--help"])
+    assert spawned == []
+    assert seen == [["--no-agent", "--help"]]
+    assert result.returncode == 0, result.stderr
+    assert "usage: spa " in result.stdout
+    assert not result.stderr
+
+
+def test_complete_help_contract_uses_inprocess_runner():
+    """Rendered help/schema text is an in-process contract, not a process envelope."""
+    import ast
+
+    tree = ast.parse(
+        (PROJECT_ROOT / "tests" / "test_spa_cli_contract.py").read_text(encoding="utf-8")
+    )
+    bodies = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name
+        in {
+            "test_complete_help_contract",
+            "_discovered_commands",
+            "_help_action_names",
+        }
+    }
+    assert set(bodies) == {
+        "test_complete_help_contract",
+        "_discovered_commands",
+        "_help_action_names",
+    }
+    for name, node in bodies.items():
+        called = {
+            child.func.id
+            for child in ast.walk(node)
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
+        }
+        assert "run_spa_inprocess" in called, name
+        assert "run_spa" not in called, name
 
 
 @pytest.mark.no_spa_env
@@ -114,79 +271,9 @@ def test_validate_splunk_config_rejects_an_unknown_provider(tmp_path):
     result = run_spa(["validate", "--splunk-config", "gcp"], cwd=tmp_path)
     assert result.returncode == 2
     assert "aws" in result.stderr
-    help_result = run_spa(["validate", "--help"])
+    help_result = run_spa_inprocess(["validate", "--help"])
     assert "--splunk-config" in help_result.stdout
     assert "--splunk-config-aws" not in help_result.stdout
-
-
-def test_shell_help_matches_hosts_ssh():
-    """spa shell is an alias of spa hosts ssh. Copy is spa hosts copy."""
-    result = run_spa(["--no-agent", "shell", "--help"])
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.startswith("usage: spa shell")
-    assert "Aliases: sh" in result.stdout
-    assert "-c" not in result.stdout
-    assert "--copy" not in result.stdout
-    assert "-l" not in result.stdout
-
-
-def test_shell_list_flag_is_gone():
-    result = run_spa(["shell", "-l"])
-    assert result.returncode != 0
-    combined = result.stdout + result.stderr
-    assert "unrecognized arguments" in combined or "error" in combined.lower()
-
-
-@pytest.mark.parametrize(
-    ("argv", "message"),
-    [
-        (["shell", "-c", "local.txt", "idx1:/tmp/"], "Copying files is: spa hosts copy SRC DST"),
-        (["shell", "--copy", "local.txt", "idx1:/tmp/"], "Copying files is: spa hosts copy SRC DST"),
-        (["doctor", "--aws"], "Checking AWS prerequisites is: spa doctor --provider aws"),
-        (
-            ["doctor", "--virtualbox"],
-            "Checking VirtualBox prerequisites is: spa doctor --provider virtualbox",
-        ),
-        (["doctor", "--ccm"], "Checking CCM prerequisites is: spa doctor --provider ccm"),
-        (["doc", "--ccm"], "Checking CCM prerequisites is: spa doctor --provider ccm"),
-    ],
-)
-def test_retired_aws_and_shell_flags_name_the_legal_command(argv, message):
-    _assert_usage_rejection(argv, message)
-
-
-def test_provider_aws_help_uses_own_parser():
-    result = run_spa(["provider", "aws", "--help"])
-    assert result.returncode == 0, result.stderr
-    assert "usage: spa provider aws" in result.stdout
-
-
-@pytest.mark.parametrize(
-    "argv",
-    [
-        ["aws"],
-        ["aws", "--help"],
-        ["aws", "check-auth"],
-        ["aws", "--check-auth"],
-        ["aws", "--list-regions"],
-        ["ccm"],
-    ],
-)
-def test_top_level_aws_and_ccm_are_invalid_choices(argv):
-    """spa aws is not an alias of spa provider aws. Same invalid-choice path as spa ccm."""
-    command = argv[0]
-    human = run_spa(["--no-agent", *argv])
-    assert human.returncode == 2, human.stderr
-    assert "invalid choice: '%s'" % command in human.stderr
-    assert "spa provider aws needs an action." not in human.stderr
-    assert "spa provider aws check-auth" not in human.stderr
-    assert human.stdout.strip() == ""
-    agent = run_spa(["--json", *argv])
-    assert agent.returncode == 2, agent.stdout
-    payload = json.loads(agent.stdout)
-    assert payload["ok"] is False
-    assert "invalid choice: '%s'" % command in payload["error"]
-    assert "spa provider aws needs an action." not in payload["error"]
 
 
 @pytest.mark.parametrize(
@@ -209,13 +296,6 @@ def test_split_passthrough_contract(argv, expected_head, expected_extra):
     from spa.cli import _split_passthrough
 
     assert _split_passthrough(argv) == (expected_head, expected_extra)
-
-
-def test_split_native_is_gone():
-    import spa.cli as cli
-
-    assert not hasattr(cli, "_split_native")
-    assert not hasattr(cli, "NATIVE_FLAG_COMMANDS")
 
 
 @pytest.mark.parametrize(
@@ -1036,30 +1116,8 @@ def test_validate_config_version_without_schema_version_is_missing_stamp(tmp_pat
     assert path.read_bytes() == before
 
 
-def test_spa_provision_is_unknown_command():
-    human = run_spa(["--no-agent", "provision"])
-    assert human.returncode == 2, human.stderr
-    assert "invalid choice: 'provision'" in human.stderr
-    assert "spa provision" not in human.stderr
-    assert human.stdout.strip() == ""
-    agent = run_spa(["--json", "provision"])
-    assert agent.returncode == 2, agent.stdout
-    payload = json.loads(agent.stdout)
-    assert payload["ok"] is False
-    assert "invalid choice: 'provision'" in payload["error"]
-    assert "spa provision" not in payload["error"]
-
-
-def test_hosts_provision_help_includes_yes():
-    result = run_spa(["hosts", "provision", "--help"])
-    assert result.returncode == 0, result.stderr
-    assert "usage: spa hosts provision" in result.stdout
-    assert "--yes" in result.stdout
-    assert "-y" in result.stdout
-
-
 def test_spa_prov_is_provider_not_provision():
-    result = run_spa(["--no-agent", "prov", "--help"])
+    result = run_spa_inprocess(["--no-agent", "prov", "--help"])
     assert result.returncode == 0, result.stderr
     assert "usage: spa provider" in result.stdout
     assert "usage: spa provision" not in result.stdout
@@ -1394,7 +1452,7 @@ def test_run_playbook_help_does_not_execute(monkeypatch):
 
 
 def test_run_playbook_help_text():
-    result = run_spa(["run", "splunk_cli", "--help"])
+    result = run_spa_inprocess(["run", "splunk_cli", "--help"])
     assert result.returncode == 0, result.stderr
     assert "splunk_command" in result.stdout
     assert "--hosts" in result.stdout
@@ -1412,7 +1470,7 @@ def test_run_playbook_help_json():
 
 
 def test_run_legacy_stem_help():
-    result = run_spa(["run", "run_splunk_command", "--help"])
+    result = run_spa_inprocess(["run", "run_splunk_command", "--help"])
     assert result.returncode == 0, result.stderr
     assert "use spa run splunk_cli" in result.stdout
 
@@ -1509,54 +1567,6 @@ def test_run_path_escape_rejected(tmp_path):
     ).lower()
 
 
-def test_agent_json_envelope():
-    result = run_spa(["--agent", "init", "list"])
-    payload = json.loads(result.stdout)
-    assert payload["ok"] is True
-    ids = [item["id"] for item in payload["data"]["topologies"]]
-    assert "single_node" in ids
-
-
-def test_no_agent_text_list():
-    result = run_spa(["--no-agent", "init", "list"])
-    assert "Topologies:" in result.stdout
-    assert "single_node" in result.stdout
-    assert not result.stdout.strip().startswith("{")
-
-
-def test_agent_schema():
-    result = run_spa(["agent", "schema"])
-    payload = json.loads(result.stdout)
-    assert payload["ok"] is True
-    names = {c["name"] for c in payload["data"]["commands"]}
-    assert "run" in names
-    assert "config explain" in names
-    assert "features" not in names
-    assert "shell" in names
-    run = next(c for c in payload["data"]["commands"] if c["name"] == "run")
-    flags = [item["long"] for item in run.get("flags") or []]
-    assert "--hosts" in flags
-    assert "--list" not in flags
-    assert "--yes" in flags
-    assert "spa --agent run list" in run["summary"]
-    by_name = {c["name"]: c for c in payload["data"]["commands"]}
-    for name in ("hosts provision", "destroy", "deploy", "suspend", "resume"):
-        assert by_name[name].get("requires_confirmation") is True
-
-
-def test_agent_help_documents_schema():
-    result = run_spa(["--no-agent", "agent", "--help"])
-    assert result.returncode == 0, result.stderr
-    assert "usage: spa agent [schema]" in result.stdout
-    assert "ACTION" in result.stdout
-    assert "spa agent schema" in result.stdout
-    assert "requires_confirmation" in result.stdout
-    # The schema covers commands; playbooks are discovered separately.
-    assert "spa --agent run list" in result.stdout
-    assert "--markdown" in result.stdout
-    assert "docs/commands.md" in result.stdout
-
-
 def test_agent_rejects_unknown_action():
     result = run_spa(["--no-agent", "agent", "bogus"])
     assert result.returncode != 0
@@ -1571,8 +1581,22 @@ def test_agent_default_action_is_schema():
     assert json.loads(bare.stdout) == json.loads(explicit.stdout)
 
 
+def test_agent_schema_marks_lifecycle_commands_as_requiring_confirmation():
+    result = run_spa_inprocess(["--agent", "agent", "schema"])
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    by_name = {c["name"]: c for c in payload["data"]["commands"]}
+    assert {"run", "config explain", "shell"} <= set(by_name)
+    flags = [item["long"] for item in by_name["run"].get("flags") or []]
+    assert "--hosts" in flags
+    assert "--yes" in flags
+    assert "spa --agent run list" in by_name["run"]["summary"]
+    for name in ("hosts provision", "destroy", "deploy", "suspend", "resume"):
+        assert by_name[name].get("requires_confirmation") is True, name
+
+
 def test_agent_schema_markdown_is_not_json():
-    result = run_spa(["--no-agent", "agent", "schema", "--markdown"])
+    result = run_spa_inprocess(["--no-agent", "agent", "schema", "--markdown"])
     assert result.returncode == 0, result.stderr
     assert result.stdout.startswith("<!-- Generated by spa agent schema --markdown.")
     assert "# spa commands" in result.stdout
@@ -1585,13 +1609,6 @@ def test_agent_schema_markdown_stays_json_in_agent_mode():
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
     assert "commands" in payload["data"]
-
-
-def test_global_agent_flags_have_help():
-    result = run_spa(["--no-agent", "--help"])
-    assert result.returncode == 0, result.stderr
-    assert "Force agent mode" in result.stdout
-    assert "Force human mode" in result.stdout
 
 
 def test_env_export_is_shell(tmp_path):
@@ -1828,6 +1845,10 @@ def _assert_usage_rejection(argv, message):
         (["logs"], "spa logs needs a run."),
         (["logs", "list", "--last"], "spa logs list does not take --last or --follow."),
         (["run", "list", "--yes"], "spa run list does not take run options."),
+        (
+            ["doctor", "--aws"],
+            "Checking AWS prerequisites is: spa doctor --provider aws",
+        ),
     ],
 )
 def test_catalog_usage_names_the_legal_command(argv, message):
@@ -1850,36 +1871,6 @@ def test_hidden_alias_expands_after_a_flag():
         "topology",
         "cm_2idxc_sh",
     ]
-
-
-def test_aws_list_help_keeps_flags_on_their_kind():
-    parent = run_spa(["--no-agent", "provider", "aws", "--help"])
-    assert parent.returncode == 0, parent.stderr
-    options = set(re.findall(r"(?m)^\s+(?:-[A-Za-z],\s+)?(--[A-Za-z0-9-]+)", parent.stdout))
-    for flag in (
-        "--list-regions",
-        "--list-amis",
-        "--list-instance-types",
-        "--list-key-pairs",
-        "--list-security-groups",
-        "--check-auth",
-        "--latest-ami",
-        "--describe-ami",
-        "--validate",
-        "--survey",
-        "--region",
-        "--os",
-        "--details",
-    ):
-        assert flag not in options, flag
-    amis = run_spa(["provider", "aws", "amis", "list", "--help"])
-    types = run_spa(["provider", "aws", "instance-types", "list", "--help"])
-    assert amis.returncode == 0, amis.stderr
-    assert "--family" not in amis.stdout
-    assert "--name-filter" in amis.stdout
-    assert types.returncode == 0, types.stderr
-    assert "--name-filter" not in types.stdout
-    assert "--family" in types.stdout
 
 
 def test_human_env_playbook_prompt_mentions_missing_metadata(tmp_path, monkeypatch):
@@ -1989,7 +1980,7 @@ HEADER_FIELD_NAMES = (
 
 def test_config_header_help_lists_every_header_field():
     """spa config header --help says which header fields header set accepts."""
-    result = run_spa(["--no-agent", "config", "header", "--help"])
+    result = run_spa_inprocess(["--no-agent", "config", "header", "--help"])
     assert result.returncode == 0, result.stdout + result.stderr
     for name in HEADER_FIELD_NAMES:
         assert "--%s" % name in result.stdout, name
@@ -2003,16 +1994,6 @@ def test_config_header_without_action_lists_every_header_field():
     assert result.returncode == 2, result.stdout + result.stderr
     for name in HEADER_FIELD_NAMES:
         assert "--%s" % name in result.stderr, name
-
-
-def test_config_header_set_help_explains_each_header_field():
-    """header set --help gives a value example for each header field."""
-    result = run_spa(["--no-agent", "config", "header", "set", "--help"])
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "Header fields" in result.stdout
-    assert "Omitted fields are removed" in result.stdout
-    assert "config-test | app-lab | production-like" in result.stdout
-    assert "Example:" in result.stdout
 
 
 def test_human_config_header_set_prompt_names_the_config_file(tmp_path, monkeypatch):

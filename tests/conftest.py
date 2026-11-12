@@ -358,22 +358,27 @@ def pytest_addoption(parser):
 
 
 def _ensure_local_test_env() -> None:
-    """Writable ansible tmp for @pytest.mark.local runs."""
-    tests_dir = os.path.dirname(os.path.abspath(__file__))
-    ansible_tmp = os.path.join(tests_dir, ".ansible_tmp")
-    os.makedirs(ansible_tmp, exist_ok=True)
-    os.environ.setdefault("ANSIBLE_LOCAL_TMP", ansible_tmp)
+    """Writable per-worker ansible tmp so xdist workers do not share files."""
+    from pathlib import Path
+
+    from spa_testutil import worker_local_dir
+
+    tests_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+    ansible_tmp = worker_local_dir(tests_dir / ".ansible_tmp")
+    ansible_tmp.mkdir(parents=True, exist_ok=True)
+    os.environ["ANSIBLE_LOCAL_TMP"] = str(ansible_tmp)
+    os.environ["ANSIBLE_LOCAL_TEMP"] = str(ansible_tmp)
 
 
 def pytest_configure(config):
-    """Prepare environment when -m selects tests marked local."""
+    """Strip inherited path vars for local runs; always set worker-local ansible tmp."""
     from spa_testutil import INHERITED_PATH_VARS, selects_local_tests
 
     markexpr = (config.option.markexpr or "").strip()
     if markexpr and selects_local_tests(markexpr):
         for name in INHERITED_PATH_VARS:
             os.environ.pop(name, None)
-        _ensure_local_test_env()
+    _ensure_local_test_env()
 
 
 @pytest.fixture(autouse=True)
@@ -528,21 +533,32 @@ def pytest_runtest_setup(item):
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items):
     """
-    Assign xdist_group markers based on config_file parameter.
-    
-    This ensures that all tests for the same config_file run on the same worker,
-    while different config_files can run in parallel on different workers.
-    
-    Note: tryfirst=True ensures this runs BEFORE xdist's hook processes markers.
+    Assign xdist_group markers from parametrized fixtures.
+
+    config_file groups keep a deployment config on one worker. scenario_scope_result
+    keeps succeeds/assertions/snapshot for one app-scope scenario on one worker.
+    Requires --dist=loadgroup (run_local_tests.sh and run_ansible_tests.sh add it with -n).
+
+    Also rejects a local node that the cli, ansible, and unit CI jobs would each
+    select more than once, so no node runs in two jobs.
+
+    Note: tryfirst=True ensures this runs BEFORE xdist's hook processes markers
+    and before -m deselects anything.
     """
+    from spa_testutil import local_job_partition_errors, xdist_group_name
+
+    errors = local_job_partition_errors(
+        (item.nodeid, {mark.name for mark in item.iter_markers()}) for item in items
+    )
+    if errors:
+        raise pytest.UsageError("Local CI job overlap:\n  " + "\n  ".join(errors))
+
     for item in items:
-        # Get the config_file from the test's parametrization
-        if hasattr(item, 'callspec') and 'config_file' in item.callspec.params:
-            config_file = item.callspec.params['config_file']
-            # Use config file name (without extension) as the group name
-            group_name = os.path.splitext(config_file)[0]
-            # Add xdist_group marker for parallel distribution
-            # Note: pytest-xdist requires positional argument, not name=
+        if not hasattr(item, "callspec"):
+            continue
+        group_name = xdist_group_name(item.callspec.params)
+        if group_name is not None:
+            # pytest-xdist requires a positional argument, not name=
             item.add_marker(pytest.mark.xdist_group(group_name))
 
 

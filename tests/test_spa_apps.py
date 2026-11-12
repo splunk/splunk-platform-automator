@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Tuple
 import pytest
 from ruamel.yaml import YAML
 
-from spa_testutil import LIB, PROJECT_ROOT, run_spa, write_min_env
+from spa_testutil import LIB, PROJECT_ROOT, run_spa, run_spa_inprocess, write_min_env
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -1173,7 +1173,7 @@ def test_session_search_and_agent_download_requires_yes(tmp_path, monkeypatch):
 
 
 def test_cli_help_and_schema():
-    help_result = run_spa(["--no-agent", "apps", "--help"])
+    help_result = run_spa_inprocess(["--no-agent", "apps", "--help"])
     assert help_result.returncode == 0, help_result.stderr
     assert "search" in help_result.stdout
     assert "content-packs" in help_result.stdout
@@ -1190,18 +1190,18 @@ def test_cli_help_and_schema():
     assert "--roles" not in {flag["long"] for flag in download_row.get("flags", [])}
     assert "--extract" in {flag["long"] for flag in download_row.get("flags", [])}
     assert "--overwrite" in {flag["long"] for flag in download_row.get("flags", [])}
-    download_help = run_spa(["--no-agent", "apps", "download", "--help"])
+    download_help = run_spa_inprocess(["--no-agent", "apps", "download", "--help"])
     assert download_help.returncode == 0, download_help.stderr
     assert "--roles" not in download_help.stdout
     assert "--extract" in download_help.stdout
     assert "--overwrite" in download_help.stdout
     assert "apps_dir" in download_help.stdout
-    snippet_help = run_spa(["--no-agent", "apps", "snippet", "--help"])
+    snippet_help = run_spa_inprocess(["--no-agent", "apps", "snippet", "--help"])
     assert snippet_help.returncode == 0, snippet_help.stderr
     assert "--source {splunkbase,local}" in snippet_help.stdout
     assert "--local" in snippet_help.stdout
     assert "--customize" in snippet_help.stdout
-    add_help = run_spa(["--no-agent", "apps", "add", "--help"])
+    add_help = run_spa_inprocess(["--no-agent", "apps", "add", "--help"])
     assert add_help.returncode == 0, add_help.stderr
     for phrase in (
         "App kinds:",
@@ -1236,7 +1236,7 @@ def test_agent_schema_content_packs_list_says_itsi_content_packs():
 
 
 def test_apps_search_help_explains_itsi_packs_and_kinds():
-    help_result = run_spa(["--no-agent", "apps", "search", "--help"])
+    help_result = run_spa_inprocess(["--no-agent", "apps", "search", "--help"])
     assert help_result.returncode == 0, help_result.stderr
     text = " ".join(help_result.stdout.split())
     assert "spa apps content-packs list 5391" in text
@@ -1246,7 +1246,7 @@ def test_apps_search_help_explains_itsi_packs_and_kinds():
 
 
 def test_apps_help_names_content_packs_as_itsi_content_packs():
-    help_result = run_spa(["--no-agent", "apps", "--help"])
+    help_result = run_spa_inprocess(["--no-agent", "apps", "--help"])
     assert help_result.returncode == 0, help_result.stderr
     text = " ".join(help_result.stdout.split())
     assert "content-packs Discover ITSI content packs in Content Library 5391" in text

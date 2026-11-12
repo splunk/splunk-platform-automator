@@ -5,7 +5,14 @@ import sys
 
 import pytest
 
-from spa_testutil import LIB, PROJECT_ROOT, run_spa, satisfy_env_lookups, write_min_env
+from spa_testutil import (
+    LIB,
+    PROJECT_ROOT,
+    run_spa,
+    run_spa_inprocess,
+    satisfy_env_lookups,
+    write_min_env,
+)
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -69,34 +76,6 @@ def test_format_names_trims_long_lists():
     assert rendered.endswith("more")
     assert len(rendered) < 90
     assert format_names(["idx1", "sh1"]) == "idx1, sh1"
-
-
-def test_spa_help_lists_hosts_and_aliases():
-    result = run_spa(["--help"])
-    assert result.returncode == 0
-    assert "hosts" in result.stdout
-    assert "validate" in result.stdout
-
-
-def test_hosts_list_help_has_hosts_flag_not_limit():
-    result = run_spa(["hosts", "list", "--help"])
-    assert result.returncode == 0, result.stderr
-    assert "--hosts" in result.stdout
-    assert "--status" in result.stdout
-    assert "-s" in result.stdout
-    assert "--limit" not in result.stdout
-
-
-def test_deploy_help_has_hosts_not_limit():
-    result = run_spa(["deploy", "--help"])
-    assert "--hosts" in result.stdout
-    assert "--limit" not in result.stdout
-
-
-def test_alias_val_is_validate():
-    result = run_spa(["val", "--help"])
-    assert result.returncode == 0, result.stderr
-    assert "Validate" in result.stdout or "validate" in result.stdout.lower()
 
 
 def test_cli_agent_schema_includes_hosts_commands():
@@ -163,7 +142,7 @@ def test_session_deploy_injects_limit(tmp_path, monkeypatch):
 
 
 def test_copy_help_shows_syntax_and_examples():
-    result = run_spa(["hosts", "copy", "--help"])
+    result = run_spa_inprocess(["hosts", "copy", "--help"])
     assert result.returncode == 0, result.stderr
     assert "spa hosts copy [-r] SRC [SRC ...] DST" in result.stdout
     assert "HOST:PATH" in result.stdout

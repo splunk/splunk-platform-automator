@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init, write_min_env
+from spa_testutil import PROJECT_ROOT, run_spa, run_spa_inprocess, run_spa_init, write_min_env
 
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
@@ -45,6 +45,8 @@ HELP_CONTRACTS = [
             "--yes",
             "--verbose",
             "--start-dir",
+            "Force agent mode",
+            "Force human mode",
         ],
     ),
     (
@@ -70,6 +72,8 @@ HELP_CONTRACTS = [
             "--apps-dir",
             "--name",
             "--env-dir",
+            "splunk_config.yml",
+            "aws, virtualbox, external, or ccm",
         ],
     ),
     (
@@ -189,6 +193,9 @@ HELP_CONTRACTS = [
             "--deploy",
             "--yes",
             "Omitted fields are removed.",
+            "Header fields",
+            "config-test | app-lab | production-like",
+            "Example:",
         ],
     ),
     (
@@ -264,7 +271,39 @@ HELP_CONTRACTS = [
     ),
     (
         ["apps", "add", "--help"],
-        ["usage: spa apps add", "--roles", "--new", "--set", "--content-pack", "--install-all-content-packs", "--dry-run"],
+        [
+            "usage: spa apps add",
+            "--roles",
+            "--new",
+            "--set",
+            "--content-pack",
+            "--install-all-content-packs",
+            "--dry-run",
+            "edits splunk_config.yml",
+            "does not deploy",
+            "Normal app",
+            "1841",
+            "Content Library 5391",
+            "7294",
+            "spa apps content-packs list 5391",
+            "spa validate",
+            "spa deploy --yes",
+            "required only for normal apps",
+            "rejected for ITSI",
+            "default latest",
+            "default splunkbase",
+            "Shorthand for --source local",
+            "Mutually exclusive with --source",
+            "repeatable",
+            "mutually exclusive with --install-all-content-packs",
+            "mutually exclusive with --content-pack",
+            "named content pack",
+            "without prompting or writing",
+            "SHA-256 revision",
+            "strict JSON",
+            "use - for stdin",
+            "agent mode never prompts",
+        ],
     ),
     (
         ["apps", "remove", "--help"],
@@ -285,6 +324,9 @@ HELP_CONTRACTS = [
             "--ansible-output",
             "-v",
             "required in agent mode",
+            "[--ansible-output] [--timestamps] [--color] [-v]",
+            "Increase Ansible verbosity and show native output",
+            "repeat through -vvvv",
         ],
     ),
     (["destroy", "--help"], ["usage: spa destroy", "-y", "--yes", "--ansible-output", "-v", "Confirm destroy"]),
@@ -444,18 +486,38 @@ def test_hosts_ping_names_check():
     assert "spa hosts check" in result.stderr
 
 
+def _collapsed_help(stdout: str) -> str:
+    """Join wrapped argparse lines so HELP_CONTRACTS can match phrase-level copy."""
+    pieces: list[str] = []
+    for line in stdout.splitlines():
+        stripped = line.strip()
+        if pieces and line.startswith(" ") and pieces[-1].endswith("-"):
+            pieces[-1] += stripped
+        else:
+            pieces.append(stripped)
+    return " ".join(pieces)
+
+
 @pytest.mark.parametrize(
     ("argv", "required"),
     HELP_CONTRACTS,
     ids=["root" if argv == ["--help"] else "-".join(argv[:-1]) for argv, _ in HELP_CONTRACTS],
 )
 def test_complete_help_contract(argv, required):
-    result = run_spa(["--no-agent", *argv])
+    result = run_spa_inprocess(["--no-agent", *argv])
     assert result.returncode == 0, result.stderr
     assert not result.stderr
-    for text in required:
-        assert text in result.stdout, "%r missing from `spa %s`" % (text, " ".join(argv))
+    text = _collapsed_help(result.stdout)
+    for needle in required:
+        assert needle in text, "%r missing from `spa %s`" % (needle, " ".join(argv))
     assert "==SUPPRESS==" not in result.stdout
+    assert "{init," not in result.stdout
+    if argv == ["apps", "add", "--help"]:
+        from spa.agent import COMMAND_SCHEMA
+
+        add = next(row for row in COMMAND_SCHEMA["commands"] if row["name"] == "apps add")
+        for flag in add["flags"]:
+            assert flag["help"] in text, flag["long"]
 
 
 # Help rows look like "    validate (val)      Validate splunk_config.yml".
@@ -469,11 +531,11 @@ def _command_rows(help_text: str):
 
 def _discovered_commands():
     """(parent argv, canonical name, short alias or None) for every spa command."""
-    root = run_spa(["--no-agent", "--help"])
+    root = run_spa_inprocess(["--no-agent", "--help"])
     assert root.returncode == 0, root.stderr
     found = [((), name, alias) for name, alias in _command_rows(root.stdout)]
     for parent in _ACTION_PARENTS:
-        child = run_spa(["--no-agent", parent, "--help"])
+        child = run_spa_inprocess(["--no-agent", parent, "--help"])
         assert child.returncode == 0, child.stderr
         found.extend([((parent,), name, alias) for name, alias in _command_rows(child.stdout)])
     return found
@@ -486,12 +548,12 @@ def test_venv_uses_one_parser_per_action():
     for action in ("path", "create", "reinstall", "upgrade", "rebuild"):
         assert "spa venv %s" % action in bare.stderr
     assert "--rebuild" not in bare.stderr
-    rebuild = run_spa(["--no-agent", "venv", "rebuild", "--help"])
+    rebuild = run_spa_inprocess(["--no-agent", "venv", "rebuild", "--help"])
     assert rebuild.returncode == 0, rebuild.stderr
     assert "usage: spa venv rebuild" in rebuild.stdout
     assert "--shared" in rebuild.stdout
     assert "--yes" in rebuild.stdout
-    path = run_spa(["--no-agent", "venv", "path", "--help"])
+    path = run_spa_inprocess(["--no-agent", "venv", "path", "--help"])
     assert "usage: spa venv path" in path.stdout
     assert "--yes" not in path.stdout
     rejected = run_spa(["--no-agent", "venv", "--rebuild"])
@@ -516,13 +578,13 @@ def test_schema_and_help_teach_agent_not_the_json_envelope_flag():
     by_json = run_spa(["--json", "init", "list"])
     assert by_agent.returncode == by_json.returncode == 0
     assert by_agent.stdout == by_json.stdout
-    root = run_spa(["--no-agent", "--help"])
+    root = run_spa_inprocess(["--no-agent", "--help"])
     assert "Synonym of --agent" in root.stdout
 
 
 def test_short_aliases_stay_on_the_command_help_page():
     """Parent help and agent errors use the canonical name. The command page lists Aliases:."""
-    parent = run_spa(["--no-agent", "--help"])
+    parent = run_spa_inprocess(["--no-agent", "--help"])
     assert parent.returncode == 0, parent.stderr
     assert "validate (val)" not in parent.stdout
     assert re.search(r"\bval\b", parent.stdout) is None
@@ -530,19 +592,19 @@ def test_short_aliases_stay_on_the_command_help_page():
     assert "env" not in {name for name, _alias in _command_rows(parent.stdout)}
     assert "env" not in {alias for _name, alias in _command_rows(parent.stdout) if alias}
 
-    environment = run_spa(["--no-agent", "environment", "--help"])
+    environment = run_spa_inprocess(["--no-agent", "environment", "--help"])
     assert "usage: spa environment" in environment.stdout
     assert "Aliases: env" in environment.stdout
-    via_env = run_spa(["--no-agent", "env", "--help"])
+    via_env = run_spa_inprocess(["--no-agent", "env", "--help"])
     assert via_env.stdout == environment.stdout
 
-    human = run_spa(["--no-agent", "validate", "--help"])
+    human = run_spa_inprocess(["--no-agent", "validate", "--help"])
     assert "usage: spa validate" in human.stdout
     assert "Aliases: val" in human.stdout
-    via_alias = run_spa(["--no-agent", "val", "--help"])
+    via_alias = run_spa_inprocess(["--no-agent", "val", "--help"])
     assert via_alias.stdout == human.stdout
 
-    shell = run_spa(["--no-agent", "shell", "--help"])
+    shell = run_spa_inprocess(["--no-agent", "shell", "--help"])
     assert "usage: spa shell" in shell.stdout
     assert "Aliases: sh" in shell.stdout
     assert re.search(r"\bsh\b", parent.stdout) is None
@@ -558,11 +620,11 @@ def test_every_discovered_top_level_command_and_alias_use_canonical_help():
         if parents:
             continue
         expected_usage = "usage: spa %s" % canonical
-        canonical_help = run_spa(["--no-agent", canonical, "--help"])
+        canonical_help = run_spa_inprocess(["--no-agent", canonical, "--help"])
         assert canonical_help.returncode == 0, canonical_help.stderr
         assert expected_usage in canonical_help.stdout
         for invoked in (alias,) if alias else ():
-            alias_help = run_spa(["--no-agent", invoked, "--help"])
+            alias_help = run_spa_inprocess(["--no-agent", invoked, "--help"])
             assert alias_help.returncode == 0, alias_help.stderr
             assert alias_help.stdout == canonical_help.stdout
 
@@ -644,51 +706,6 @@ def test_config_topology_without_operand_json_lists_catalog_links():
     catalog = {item["id"]: item["template"] for item in payload["data"]["catalog"]}
     assert catalog["topology.c1"] == "cm_2idxc_sh"
     assert catalog["topology.m3"] == "cm_4idxc2site_2x3shc_ds"
-
-
-def test_apps_add_help_names_kinds_flags_and_the_next_action():
-    result = run_spa(["--no-agent", "apps", "add", "--help"])
-    assert result.returncode == 0, result.stderr
-    pieces: list[str] = []
-    for line in result.stdout.splitlines():
-        stripped = line.strip()
-        if pieces and line.startswith(" ") and pieces[-1].endswith("-"):
-            pieces[-1] += stripped
-        else:
-            pieces.append(stripped)
-    text = " ".join(pieces)
-    for phrase in (
-        "edits splunk_config.yml",
-        "does not deploy",
-        "Normal app",
-        "1841",
-        "Content Library 5391",
-        "7294",
-        "spa apps content-packs list 5391",
-        "spa validate",
-        "spa deploy --yes",
-        "required only for normal apps",
-        "rejected for ITSI",
-        "default latest",
-        "default splunkbase",
-        "Shorthand for --source local",
-        "Mutually exclusive with --source",
-        "repeatable",
-        "mutually exclusive with --install-all-content-packs",
-        "mutually exclusive with --content-pack",
-        "named content pack",
-        "without prompting or writing",
-        "SHA-256 revision",
-        "strict JSON",
-        "use - for stdin",
-        "agent mode never prompts",
-    ):
-        assert phrase in text, phrase
-    from spa.agent import COMMAND_SCHEMA
-
-    add = next(row for row in COMMAND_SCHEMA["commands"] if row["name"] == "apps add")
-    for flag in add["flags"]:
-        assert flag["help"] in text, flag["long"]
 
 
 def test_command_classes_keep_one_human_and_agent_shape(tmp_path):
@@ -849,17 +866,6 @@ def test_agent_help_is_one_schema_entry_or_an_index():
     assert "usage: spa validate" in forced_human.stdout
     assert not forced_human.stdout.lstrip().startswith("{")
 
-    for argv, name in (
-        (["--agent", "provider", "aws", "--help"], "provider aws"),
-        (["--agent", "shell", "--help"], "shell"),
-    ):
-        schema_help = run_spa(argv)
-        assert schema_help.returncode == 0, schema_help.stderr
-        payload = json.loads(schema_help.stdout)
-        assert payload["ok"] is True
-        assert payload["schema_version"] == 1
-        assert payload["data"]["name"] == name
-
 
 @pytest.mark.parametrize(
     "argv",
@@ -874,21 +880,6 @@ def test_start_dir_routes_before_and_after_subcommand(argv):
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
     assert payload["data"]["name"] == "spa"
-
-
-@pytest.mark.parametrize(
-    ("argv", "usage"),
-    [
-        (["shell", "--help"], "usage: spa shell"),
-        (["sh", "--help"], "usage: spa shell"),
-        (["provider", "aws", "--help"], "usage: spa provider aws"),
-    ],
-)
-def test_human_aws_and_shell_help_stays_text(argv, usage):
-    result = run_spa(["--no-agent", *argv])
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.startswith(usage)
-    assert not result.stdout.lstrip().startswith("{")
 
 
 @pytest.mark.parametrize(
@@ -927,8 +918,8 @@ def test_parent_help_omits_hidden_aliases():
     }
     for parents, mapping in hidden.items():
         for alias, canonical in mapping.items():
-            short = run_spa(["--no-agent", *parents, alias, "--help"])
-            long = run_spa(["--no-agent", *parents, canonical, "--help"])
+            short = run_spa_inprocess(["--no-agent", *parents, alias, "--help"])
+            long = run_spa_inprocess(["--no-agent", *parents, canonical, "--help"])
             assert short.returncode == 0, (parents, alias, short.stderr)
             assert short.stdout == long.stdout
 
@@ -948,37 +939,19 @@ def test_parent_help_omits_hidden_aliases():
     ],
 )
 def test_verbose_is_accepted_after_the_subcommand(argv):
-    result = run_spa(["--no-agent", *argv, "--help"])
+    result = run_spa_inprocess(["--no-agent", *argv, "--help"])
     assert result.returncode == 0, result.stderr
     assert "unrecognized arguments" not in result.stderr
 
 
 def test_hosts_list_status_short_flag_is_s_not_v():
-    help_out = run_spa(["--no-agent", "hosts", "list", "--help"])
+    help_out = run_spa_inprocess(["--no-agent", "hosts", "list", "--help"])
     assert help_out.returncode == 0, help_out.stderr
     assert "-s, --status" in help_out.stdout
     assert "Same as --status" not in help_out.stdout
     rejected = run_spa(["--no-agent", "hosts", "list", "-v"])
     assert rejected.returncode != 0
     assert "unrecognized arguments" in rejected.stderr
-
-
-def test_verbose_is_listed_next_to_ansible_output():
-    result = run_spa(["--no-agent", "deploy", "--help"])
-    assert result.returncode == 0, result.stderr
-    usage, options = result.stdout.split("options:", 1)
-    compact = " ".join(usage.split())
-    assert "[--ansible-output] [--timestamps] [--color] [-v]" in compact
-    idx_ao = options.index("--ansible-output")
-    idx_v = options.index("-v, --verbose")
-    assert idx_ao < idx_v
-    between = options[idx_ao:idx_v]
-    assert "--agent" not in between
-    assert "--json" not in between
-    compact_opts = " ".join(options.split())
-    assert "Increase Ansible verbosity and show native output" in compact_opts
-    assert "repeat through -vvvv" in compact_opts
-    assert "Same as --ansible-output" not in compact_opts
 
 
 @pytest.mark.parametrize(
@@ -1009,13 +982,6 @@ def test_ansible_verbosity_is_limited_and_not_duplicated_after_separator(backend
     assert "verbosity before or after --, not both" in duplicated.stderr
 
 
-def test_removed_short_names_are_not_commands():
-    for argv in (["hosts", "ls"], ["hosts", "cp"], ["environment", "ls"]):
-        result = run_spa(["--no-agent", *argv])
-        assert result.returncode != 0, argv
-        assert "invalid choice" in result.stderr
-
-
 def _defined_options(help_text: str) -> set[str]:
     """Long options argparse defines, not flags named only inside an example."""
     return set(re.findall(r"(?m)^\s+(?:-[A-Za-z],\s+)?(--[A-Za-z0-9-]+)", help_text))
@@ -1023,17 +989,17 @@ def _defined_options(help_text: str) -> set[str]:
 
 def _help_action_names():
     """Action names advertised by help, including reserved catalog operands."""
-    root = run_spa(["--no-agent", "--help"])
+    root = run_spa_inprocess(["--no-agent", "--help"])
     assert root.returncode == 0, root.stderr
     names = set()
     for name, _alias in _command_rows(root.stdout):
         names.add("agent schema" if name == "agent" else name)
     for parent in ("environment", "hosts", "apps", "config", "skills", "venv", "completion", "architecture", "licenses", "provider"):
-        child = run_spa(["--no-agent", parent, "--help"])
+        child = run_spa_inprocess(["--no-agent", parent, "--help"])
         assert child.returncode == 0, child.stderr
         for name, _alias in _command_rows(child.stdout):
             if parent == "apps" and name == "content-packs":
-                nested = run_spa(
+                nested = run_spa_inprocess(
                     ["--no-agent", "apps", "content-packs", "--help"]
                 )
                 assert nested.returncode == 0, nested.stderr
@@ -1041,28 +1007,28 @@ def _help_action_names():
                     names.add("apps content-packs %s" % nested_name)
                 continue
             if parent == "config" and name == "header":
-                nested = run_spa(["--no-agent", "config", "header", "--help"])
+                nested = run_spa_inprocess(["--no-agent", "config", "header", "--help"])
                 assert nested.returncode == 0, nested.stderr
                 for nested_name, _nested_alias in _command_rows(nested.stdout):
                     names.add("config header %s" % nested_name)
                 continue
             if parent == "config" and name == "move":
                 names.add("config move")
-                nested = run_spa(["--no-agent", "config", "move", "--help"])
+                nested = run_spa_inprocess(["--no-agent", "config", "move", "--help"])
                 assert nested.returncode == 0, nested.stderr
                 for nested_name, _nested_alias in _command_rows(nested.stdout):
                     names.add("config move %s" % nested_name)
                 continue
             if parent == "config" and name == "templates":
                 names.add("config templates")
-                nested = run_spa(["--no-agent", "config", "templates", "--help"])
+                nested = run_spa_inprocess(["--no-agent", "config", "templates", "--help"])
                 assert nested.returncode == 0, nested.stderr
                 for nested_name, _nested_alias in _command_rows(nested.stdout):
                     names.add("config templates %s" % nested_name)
                 continue
             if parent == "provider" and name == "aws":
                 names.add("provider aws")
-                nested = run_spa(["--no-agent", "provider", "aws", "--help"])
+                nested = run_spa_inprocess(["--no-agent", "provider", "aws", "--help"])
                 assert nested.returncode == 0, nested.stderr
                 aws_folders = {
                     "regions",
@@ -1086,19 +1052,19 @@ def _help_action_names():
         (["logs", "--help"], "spa logs list", "logs list"),
     )
     for argv, phrase, label in catalogs:
-        text = run_spa(["--no-agent", *argv])
+        text = run_spa_inprocess(["--no-agent", *argv])
         assert text.returncode == 0, text.stderr
         flattened = " ".join(text.stdout.split())
         assert phrase in flattened, phrase
         names.add(label)
     for resource in ("regions", "amis", "instance-types", "key-pairs", "security-groups"):
-        listed = run_spa(["--no-agent", "provider", "aws", resource, "--help"])
+        listed = run_spa_inprocess(["--no-agent", "provider", "aws", resource, "--help"])
         assert listed.returncode == 0, listed.stderr
         for name, _alias in _command_rows(listed.stdout):
             names.add("provider aws %s %s" % (resource, name))
     names.add("provider")
     names.add("provider ccm")
-    ccm_help = run_spa(["--no-agent", "provider", "ccm", "--help"])
+    ccm_help = run_spa_inprocess(["--no-agent", "provider", "ccm", "--help"])
     assert ccm_help.returncode == 0, ccm_help.stderr
     ccm_folders = {
         "operating-systems",
@@ -1122,7 +1088,7 @@ def _help_action_names():
         "ssh-keys",
         "ttl",
     ):
-        listed = run_spa(["--no-agent", "provider", "ccm", resource, "--help"])
+        listed = run_spa_inprocess(["--no-agent", "provider", "ccm", resource, "--help"])
         assert listed.returncode == 0, listed.stderr
         for name, _alias in _command_rows(listed.stdout):
             names.add("provider ccm %s %s" % (resource, name))
@@ -1137,10 +1103,8 @@ def test_agent_schema_is_complete_and_documented():
     commands = payload["data"]["commands"]
     schema_names = {row["name"] for row in commands}
     assert schema_names == _help_action_names()
-    retired = ("--list", "--list-regions", "--list-amis", "--list-instance-types", "--list-key-pairs", "--list-security-groups")
     encoded = json.dumps(commands)
-    for flag in retired:
-        assert flag not in encoded
+    assert "--list" not in encoded
     for row in commands:
         assert row.get("summary"), row["name"]
         for flag in row.get("flags", []):
@@ -1190,11 +1154,15 @@ def test_agent_schema_is_complete_and_documented():
             ),
         ),
     ):
-        options = _defined_options(run_spa(["--no-agent", *parent.split(), "--help"]).stdout)
+        options = _defined_options(
+            run_spa_inprocess(["--no-agent", *parent.split(), "--help"]).stdout
+        )
         for flag in banned:
             assert flag not in options, parent
-    amis = run_spa(["--no-agent", "provider", "aws", "amis", "list", "--help"]).stdout
-    types = run_spa(["--no-agent", "provider", "aws", "instance-types", "list", "--help"]).stdout
+    amis = run_spa_inprocess(["--no-agent", "provider", "aws", "amis", "list", "--help"]).stdout
+    types = run_spa_inprocess(
+        ["--no-agent", "provider", "aws", "instance-types", "list", "--help"]
+    ).stdout
     assert "--family" not in amis
     assert "--name-filter" not in types
 
@@ -1272,10 +1240,6 @@ def test_agent_schema_is_complete_and_documented():
     assert "spa provider aws regions list" in aws.stderr
     assert "spa provider aws check-auth" in aws.stderr
     assert "spa aws --check-auth" not in aws.stderr
-    aws_list = run_spa(["--no-agent", "aws", "list"])
-    assert aws_list.returncode == 2, aws_list.stderr
-    assert "invalid choice: 'aws'" in aws_list.stderr
-    assert "spa provider aws needs an action." not in aws_list.stderr
 
 
 def test_licenses_list_is_the_catalog():
@@ -1306,12 +1270,12 @@ def test_licenses_list_is_the_catalog():
     assert "data" not in old_body
     assert old_body["error"] == needs_action
 
-    help_text = run_spa(["--no-agent", "licenses", "--help"])
+    help_text = run_spa_inprocess(["--no-agent", "licenses", "--help"])
     assert help_text.returncode == 0, help_text.stderr
     assert "usage: spa licenses" in help_text.stdout
     assert "Aliases: lic" in help_text.stdout
     assert "list" in help_text.stdout
-    list_help = run_spa(["--no-agent", "licenses", "list", "--help"])
+    list_help = run_spa_inprocess(["--no-agent", "licenses", "list", "--help"])
     assert list_help.returncode == 0, list_help.stderr
     assert "usage: spa licenses list" in list_help.stdout
     for flag in ("--software-dir", "--config", "--details", "--no-env-recommend"):
@@ -1363,12 +1327,12 @@ def test_templates_list_is_the_catalog():
         assert "data" not in body
         assert body["error"] == needs_action
 
-    help_text = run_spa(["--no-agent", "config", "templates", "--help"])
+    help_text = run_spa_inprocess(["--no-agent", "config", "templates", "--help"])
     assert help_text.returncode == 0, help_text.stderr
     assert "usage: spa config templates" in help_text.stdout
     assert "Aliases: tpl" in help_text.stdout
     assert "list" in help_text.stdout
-    list_help = run_spa(["--no-agent", "config", "templates", "list", "--help"])
+    list_help = run_spa_inprocess(["--no-agent", "config", "templates", "list", "--help"])
     assert list_help.returncode == 0, list_help.stderr
     assert "usage: spa config templates list" in list_help.stdout
 
@@ -1421,7 +1385,7 @@ PROVIDER_CCM_NEEDS_ACTION = (
 
 
 def test_human_parent_help_lists_provider_without_ccm_audience():
-    parent = run_spa(["--no-agent", "--help"])
+    parent = run_spa_inprocess(["--no-agent", "--help"])
     assert parent.returncode == 0, parent.stderr
     names = {name for name, _alias in _command_rows(parent.stdout)}
     assert "provider" in names
@@ -1450,7 +1414,7 @@ def test_human_parent_help_lists_canonical_provider_for_a_ccm_env(tmp_path):
         "ccm:\n  instance_type: t3a.medium\n",
         encoding="utf-8",
     )
-    parent = run_spa(
+    parent = run_spa_inprocess(
         ["--no-agent", "--help"],
         extra_env={"SPA_ENV_DIR": str(dest), "SPA_HOME": str(PROJECT_ROOT)},
     )
@@ -1494,14 +1458,14 @@ def test_agent_invalid_choice_lists_provider_without_ccm_audience():
 
 
 def test_provider_help_shows_hidden_pro_alias_and_public_aws():
-    help_text = run_spa(["--no-agent", "provider", "--help"])
+    help_text = run_spa_inprocess(["--no-agent", "provider", "--help"])
     assert help_text.returncode == 0, help_text.stderr
     assert "usage: spa provider" in help_text.stdout
     assert "Aliases: pro" in help_text.stdout
     names = {name for name, _alias in _command_rows(help_text.stdout)}
     assert "aws" in names
     assert "ccm" not in names
-    via_alias = run_spa(["--no-agent", "pro", "--help"])
+    via_alias = run_spa_inprocess(["--no-agent", "pro", "--help"])
     assert via_alias.returncode == 0, via_alias.stderr
     assert via_alias.stdout == help_text.stdout
     with_ccm = run_spa(

@@ -34,6 +34,15 @@ echo -e "${GREEN}=== Splunk Platform Automator - App Scope Scenario Tests ===${N
 # ansible-core + jmespath/lxml required for inventory plugin when running debug_app_scope.yml
 source "$SCRIPT_DIR/run_venv.sh" 'pydantic>=2.0' 'ansible-core' 'jmespath' 'lxml'
 
-pytest tests/test_app_scope_scenarios.py "$@"
+DIST_ARGS=()
+for arg in "$@"; do
+    if [[ "$arg" == "-n" ]] || [[ "$arg" =~ ^-n[0-9]+ ]]; then
+        # loadgroup honors xdist_group so one app-scope scenario stays on one worker
+        DIST_ARGS=(--dist=loadgroup)
+        break
+    fi
+done
+
+pytest tests/test_app_scope_scenarios.py "$@" "${DIST_ARGS[@]}"
 
 echo -e "${GREEN}=== App scope scenario tests complete ===${NC}"

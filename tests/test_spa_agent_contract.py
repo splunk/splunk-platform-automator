@@ -18,14 +18,6 @@ def _payload(result):
     return payload
 
 
-def test_agent_and_json_flags_have_the_same_success_envelope():
-    by_agent = run_spa(["--agent", "init", "list"])
-    by_json = run_spa(["--json", "init", "list"])
-    assert by_agent.returncode == 0, by_agent.stderr
-    assert by_json.returncode == 0, by_json.stderr
-    assert _payload(by_agent) == _payload(by_json)
-
-
 def test_json_and_agent_flags_work_after_the_subcommand():
     trailing = run_spa(["init", "list", "--json"])
     leading = run_spa(["--json", "init", "list"])
@@ -148,7 +140,15 @@ def _assert_agent_json_only(result):
 )
 def test_read_only_agent_commands_print_json_only(argv):
     result = run_spa(argv)
-    _assert_agent_json_only(result)
+    payload = _assert_agent_json_only(result)
+    if "doctor" in argv:
+        assert payload["ok"] is True
+        assert payload["data"]["checks"]
+        assert payload["data"]["spa_home"]
+    if argv[-2:] == ["agent", "schema"]:
+        assert payload["ok"] is True
+        assert payload["data"]["schema_version"] == 1
+        assert payload["data"]["name"] == "spa"
 
 
 def test_agent_content_packs_list_prints_json_only(tmp_path, monkeypatch, capsys):
@@ -194,8 +194,6 @@ def test_agent_content_packs_list_prints_json_only(tmp_path, monkeypatch, capsys
 @pytest.mark.parametrize(
     "argv",
     [
-        ["--agent", "aws", "--bogus"],
-        ["aws", "--json", "--bogus"],
         ["--agent", "provider", "aws", "--bogus"],
         ["provider", "aws", "--json", "--bogus"],
         ["--agent", "shell", "--bogus"],

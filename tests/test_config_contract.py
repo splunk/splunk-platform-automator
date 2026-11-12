@@ -28,7 +28,7 @@ from spa.config_edit import (
     config_unset,
 )
 from spa.apps import AppsError, build_entry, inspect_content_pack_archive, snippet
-from spa_testutil import PROJECT_ROOT, min_env_vars, run_spa, write_min_env
+from spa_testutil import PROJECT_ROOT, min_env_vars, run_spa, run_spa_inprocess, write_min_env
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -1852,7 +1852,7 @@ splunk_hosts:
         for name in ("apps add", "apps remove"):
             flags = {flag["long"] for flag in actions[name]["flags"]}
             assert {"--resolve", "--resolve-file"} <= flags
-        help_result = run_spa(["--no-agent", "apps", "snippet", "--help"])
+        help_result = run_spa_inprocess(["--no-agent", "apps", "snippet", "--help"])
         assert help_result.returncode == 0
         normalized_help = " ".join(help_result.stdout.split())
         assert "ignored for ITSI" not in normalized_help
@@ -3118,7 +3118,7 @@ splunk_app_deployment:
         assert rows[0]["command"].endswith(
             "--content-pack DA-ITSI-CP-nix --yes"
         )
-        help_result = run_spa(["--no-agent", "apps", "add", "--help"])
+        help_result = run_spa_inprocess(["--no-agent", "apps", "add", "--help"])
         assert help_result.returncode == 0
         assert "spa apps content-packs list 5391" in help_result.stdout
         assert "does not deploy" in help_result.stdout

@@ -550,7 +550,7 @@ def _cli_env(dest, path):
 
 
 def test_register_ssh_port_writes_ansible_port(tmp_path):
-    from spa_testutil import run_spa
+    from spa_testutil import run_spa, run_spa_inprocess
 
     key = tmp_path / "id_ed25519"
     key.write_text("not-read")
@@ -571,7 +571,7 @@ def test_register_ssh_port_writes_ansible_port(tmp_path):
     assert payload["data"]["ansible_port"] == 2222
     listed = (dest / "inventory" / "hosts").read_text(encoding="utf-8")
     assert "ansible_port=2222" in listed
-    help_result = run_spa(["hosts", "register", "--help"])
+    help_result = run_spa_inprocess(["hosts", "register", "--help"])
     assert "--ssh-port" in help_result.stdout
     assert "--port" not in help_result.stdout
     text = help_result.stdout
@@ -1777,7 +1777,7 @@ def test_register_role_choices_match_allowed_role():
     import sys
 
     from spa.hosts import allowed_role_names
-    from spa_testutil import PROJECT_ROOT, run_spa
+    from spa_testutil import PROJECT_ROOT, run_spa, run_spa_inprocess
 
     plugin = str(PROJECT_ROOT / "ansible" / "plugins" / "inventory")
     if plugin not in sys.path:
@@ -1786,7 +1786,7 @@ def test_register_role_choices_match_allowed_role():
 
     names = allowed_role_names()
     assert names == [role.value for role in AllowedRole]
-    help_result = run_spa(["hosts", "register", "--help"])
+    help_result = run_spa_inprocess(["hosts", "register", "--help"])
     assert help_result.returncode == 0, help_result.stderr
     for name in names:
         assert name in help_result.stdout

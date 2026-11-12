@@ -331,20 +331,6 @@ def test_cli_validate_json_envelope():
     assert "config_file" in (payload.get("data") or {})
 
 
-def test_cli_doctor_json_has_checks():
-    result = run_spa(["--json", "doctor", "--spa-home", str(PROJECT_ROOT)])
-    payload = json.loads(result.stdout)
-    assert payload["ok"] is True
-    assert payload["data"]["checks"]
-    assert payload["data"]["spa_home"]
-
-
-def test_cli_agent_schema_version():
-    result = run_spa(["agent", "schema"])
-    payload = json.loads(result.stdout)
-    assert payload["data"]["schema_version"] == SCHEMA_VERSION
-
-
 def test_session_init_messages(tmp_path, capsys, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     dest = tmp_path / "env"

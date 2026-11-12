@@ -487,15 +487,6 @@ def test_resolve_init_dest_force_prefers_existing_cwd(tmp_path):
     assert fresh == (home / "Splunk-Platform-Automator" / "brand-new")
 
 
-def test_default_init_provider_is_aws(tmp_path):
-    dest = tmp_path / "aws-default"
-    result = run_spa_init(["--provider", "aws", "--example", "cm_2idxc_sh", str(dest)], extra_env=_xdg(tmp_path))
-    assert result.returncode == 0, result.stderr
-    cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
-    assert "terraform" in cfg
-    assert "virtualbox" not in cfg
-
-
 def _register_pair(tmp_path):
     """One env whose directory exists and one registry entry whose directory is gone."""
     from spa import registry

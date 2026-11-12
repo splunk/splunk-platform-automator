@@ -15,7 +15,7 @@ import pytest
 
 from spa.origin import origin_file
 
-pytestmark = [pytest.mark.local]
+pytestmark = [pytest.mark.local, pytest.mark.ansible]
 
 PROJECT = Path(__file__).resolve().parents[1]
 

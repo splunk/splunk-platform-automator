@@ -65,6 +65,8 @@ tests/
 ├── run_app_scope_scenarios_tests.sh # App scope scenario tests (debug_app_scope per scenario)
 ├── run_itsi_content_pack_tests.sh # ITSI content pack tests (role wiring, schema, scope)
 ├── run_cli_tests.sh           # Fast CLI help, routing, schema, and session suite
+├── run_ansible_tests.sh       # Local tests that shell out to ansible-playbook
+├── run_unit_tests.sh          # Local tests that are neither cli nor ansible
 ├── run_local_tests.sh         # Run all local suites above (no AWS)
 ├── run_schema_tests.sh        # Helper script for schema validation tests
 ├── run_verification_tests.sh  # Helper script for verification tests
@@ -200,9 +202,13 @@ App-scope scenarios live under `tests/configs/app_scope/<name>/`. Each has a dis
 ### When to run which runner
 
 - While coding: the new test, then existing tests for every touched module.
-- CLI surface (parser, help, routing, schema, session, or provider contracts): `./tests/run_cli_tests.sh`.
-- Optional before a PR: `./tests/run_local_tests.sh` (the same suite PR CI runs).
-- Merge gate: PR CI job `Local tests`. Push CI on `master` / `distribution` is background insurance.
+- CLI surface (parser, help, routing, schema, session, or provider contracts): `./tests/run_cli_tests.sh` (`pytest -m "local and cli"`). Serial by default.
+- Playbook-spawning tests: `./tests/run_ansible_tests.sh` (`pytest -m "local and ansible"`).
+- Other local tests (schema, docs, runlog, venv, paths, licenses, secrets, pack/install): `./tests/run_unit_tests.sh` (`pytest -m "local and not cli and not ansible"`).
+- Optional before a PR: `./tests/run_local_tests.sh` (`pytest -m local`). Pass `-n auto --durations=25` to match CI; those flags are the CI default for local jobs, not the inner-loop default.
+- Merge gate: PR CI jobs `Syntax`, `CLI tests`, `Ansible tests`, and `Unit tests`. Each pytest job uses `-n auto --durations=25`. Push CI on `master` / `distribution` is background insurance.
+
+Live AWS (`@pytest.mark.aws`) and live CCM are not in PR CI. The CLI suite includes mocked CCM.
 
 ### Run SPA CLI Release Tests
 
@@ -210,7 +216,7 @@ App-scope scenarios live under `tests/configs/app_scope/<name>/`. Each has a dis
 ./tests/run_cli_tests.sh
 ./tests/run_cli_tests.sh -v
 # Equivalent after activating the test venv:
-pytest -m cli tests/
+pytest -m "local and cli" tests/
 ```
 
 This fast suite checks every public command and subcommand help surface, every
@@ -225,9 +231,10 @@ AWS, SSH to hosts, or execute deployment playbooks.
 ./tests/run_local_tests.sh -v          # verbose test names
 ./tests/run_local_tests.sh -s          # show print/log output (no capture)
 ./tests/run_local_tests.sh -sv -k "deployer_shc_whitelist"
+./tests/run_local_tests.sh -n auto --durations=25   # CI-shaped local run
 ```
 
-Runs all tests marked `@pytest.mark.local` in a single pytest invocation (schema, secret resolver, app deployment, app scope scenarios, ITSI content pack). Does **not** run `@pytest.mark.aws` tests (deployment, verification).
+Runs all tests marked `@pytest.mark.local` in a single pytest invocation (schema, secret resolver, app deployment, app scope scenarios, ITSI content pack). Does **not** run `@pytest.mark.aws` tests (deployment, verification). `-n auto --durations=25` is the CI default for local jobs; pass those flags here when you want that shape. Do not add `-n auto` to `run_cli_tests.sh` by default.
 
 Or run directly (from project root):
 

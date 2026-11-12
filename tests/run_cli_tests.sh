@@ -11,6 +11,5 @@ source "$SCRIPT_DIR/run_venv.sh" \
   'pydantic>=2.0' 'ansible-core' 'jmespath' 'lxml' 'boto3'
 
 export PYTHONPATH="$(cd "$SCRIPT_DIR/.." && pwd)/lib${PYTHONPATH:+:$PYTHONPATH}"
-export ANSIBLE_LOCAL_TMP="${SCRIPT_DIR}/.ansible_tmp"
 
-pytest -m cli tests/ "$@"
+pytest -m "local and cli" tests/ "$@"

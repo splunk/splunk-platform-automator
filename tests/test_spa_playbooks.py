@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from spa_testutil import LIB, PROJECT_ROOT, run_spa
+from spa_testutil import LIB, PROJECT_ROOT, run_spa, run_spa_inprocess
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -359,7 +359,7 @@ def test_upgrade_distributed_uses_manager_group_and_version_check():
 
 
 def test_cli_run_help_lists_curated_apps_playbooks():
-    result = run_spa(["--no-agent", "run", "splunk_apps_playbook_run", "--help"])
+    result = run_spa_inprocess(["--no-agent", "run", "splunk_apps_playbook_run", "--help"])
     assert result.returncode == 0, result.stderr
     assert "Curated apps playbooks" in result.stdout
     for stem in (

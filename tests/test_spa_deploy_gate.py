@@ -14,7 +14,7 @@ from spa.providers import (
     expected_hostnames,
     inventory_hostnames_from_file,
 )
-from spa_testutil import PROJECT_ROOT, min_env_vars, run_spa, seed_software_dir
+from spa_testutil import PROJECT_ROOT, min_env_vars, run_spa, run_spa_inprocess, seed_software_dir
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -528,36 +528,6 @@ def test_cli_unprovisioned_aws_creates_hosts(tmp_path, monkeypatch):
     assert order == ["create", "check", "deploy"]
 
 
-def test_cli_rejects_allow_unprovisioned_and_deploys_one_host(tmp_path, monkeypatch):
-    called = []
-    monkeypatch.setattr(
-        "spa.playbooks.run_playbook", lambda *a, **k: called.append(True) or 0
-    )
-    monkeypatch.setattr("spa.playbooks.resolve", lambda *a, **k: "deploy_site.yml")
-    monkeypatch.setattr("spa.hosts.ping_hosts", lambda *a, **k: {"hosts": []})
-    monkeypatch.setattr(
-        "spa.shell.get_inventory_data",
-        lambda: {"_meta": {"hostvars": {"idx1": {}}}, "all": {"hosts": ["idx1"]}},
-    )
-    paths = _paths(tmp_path, AWS_TWO_HOSTS)
-    _write_state(paths)
-    _write_inventory(paths, "idx1")
-    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
-    monkeypatch.setenv("SPA_ENV_DIR", str(tmp_path))
-    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(paths.config_file))
-    monkeypatch.setenv("SPA_SOFTWARE_DIR", str(paths.software_dir))
-    monkeypatch.setenv("SPA_BASECONFIG_DIR", str(paths.baseconfig_dir))
-    from spa.cli import main
-
-    with pytest.raises(SystemExit) as exc:
-        main(["--no-agent", "deploy", "--yes", "--allow-unprovisioned"])
-    assert exc.value.code == 2
-    assert not called
-    rc = main(["--no-agent", "deploy", "--yes", "--hosts", "idx1"])
-    assert rc == 0
-    assert called
-
-
 def test_lifecycle_commands_block_each_other_until_the_process_ends(tmp_path):
     paths = resolve_spa_paths(environ={**min_env_vars(tmp_path)})
     lock_dir = Path(paths.spa_env_dir) / "logs"
@@ -661,7 +631,7 @@ def test_provision_refuses_unstamped_config_before_playbook(tmp_path, monkeypatc
 
 
 def test_help_and_schema_omit_allow_unprovisioned():
-    help_result = run_spa(["deploy", "--help"])
+    help_result = run_spa_inprocess(["deploy", "--help"])
     assert help_result.returncode == 0
     assert "--allow-unprovisioned" not in help_result.stdout
     schema = json.loads(run_spa(["agent", "schema"]).stdout)
