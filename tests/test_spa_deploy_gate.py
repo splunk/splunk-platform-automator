@@ -477,6 +477,7 @@ splunk_hosts:
     roles: [search_head]
 """
     paths, session = _session_env(tmp_path, config)
+    (paths.software_dir / "splunk-9.3.2-000000000000-linux-amd64.tgz").write_bytes(b"dummy")
     _write_state(paths)
     _write_inventory(paths, "idx1", "sh1")
     result = session.deploy(confirm=True, hosts=["indexer"])

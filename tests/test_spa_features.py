@@ -45,6 +45,8 @@ def test_splunk_download_explain_says_host_downloads_or_controller_uploads():
     assert "controller uploads" in text
     assert "from software" in text
     assert "false" in text
+    assert "already in software" in text
+    assert "cannot be guessed" in text
     assert "into software" not in text
 
 
@@ -52,15 +54,19 @@ def test_splunk_download_schema_says_host_or_controller():
     from spa.catalog import schema_key_details
 
     schema = schema_key_details()
+    container = str(schema["splunk_defaults.splunk_download"]["description"]).lower()
+    assert "host downloads" in container
+    assert "controller uploads" in container
+    assert "into software" not in container
     for path in (
-        "splunk_defaults.splunk_download",
         "splunk_defaults.splunk_download.splunk",
         "splunk_defaults.splunk_download.splunkforwarder",
     ):
         text = str(schema[path]["description"]).lower()
         assert "host downloads" in text
         assert "controller uploads" in text
-        assert "already in software" not in text
+        assert "already in software" in text
+        assert "cannot be guessed" in text
         assert "into software" not in text
 
 

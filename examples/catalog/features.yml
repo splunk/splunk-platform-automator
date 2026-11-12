@@ -483,9 +483,10 @@ features:
     title: Download Splunk archives from splunk.com
     kind: setting
     when_to_use: >-
-      The host downloads the Enterprise or Universal Forwarder tarball when splunk or
-      splunkforwarder is true. The controller uploads the archive from Software when
-      that flag is false.
+      The host downloads the Enterprise or Universal Forwarder tarball whose basename
+      is already in Software when splunk or splunkforwarder is true. The build number
+      cannot be guessed. The controller uploads the archive from Software when that
+      flag is false.
     keys: [splunk_defaults.splunk_download, splunk_defaults.splunk_download.splunk, splunk_defaults.splunk_download.splunkforwarder]
     related: ["#65", "setting.dirs"]
     snippet: |

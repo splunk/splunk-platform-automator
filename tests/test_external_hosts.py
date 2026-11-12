@@ -25,6 +25,11 @@ from spa.providers.classify import classify_hostnames  # noqa: E402
 _PASSWORD = "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
 
 
+def _touch_linux_archive(software, architecture="amd64", version="9.3.2"):
+    name = "splunk-%s-000000000000-linux-%s.tgz" % (version, architecture)
+    (software / name).write_bytes(b"dummy")
+
+
 def _with_password(config):
     """SplunkConfig requires an admin password before other checks run."""
     merged = dict(config)
@@ -1146,6 +1151,8 @@ def test_deploy_architecture_mismatch_does_not_blame_ssh(tmp_path, monkeypatch, 
     inventory.mkdir()
     (inventory / "hosts").write_text('shidx ansible_host="10.0.0.8"\n')
     software = seed_software_dir(tmp_path)
+    _touch_linux_archive(software, "arm64")
+    _touch_linux_archive(software, "amd64")
     base = resolve_spa_paths(start_dir=PROJECT_ROOT)
     paths = replace(
         base,
@@ -1203,6 +1210,8 @@ def test_deploy_prints_the_architecture_mismatch_once(tmp_path, monkeypatch, cap
     inventory.mkdir()
     (inventory / "hosts").write_text('shidx ansible_host="10.0.0.8"\n')
     software = seed_software_dir(tmp_path)
+    _touch_linux_archive(software, "arm64")
+    _touch_linux_archive(software, "amd64")
     monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
     monkeypatch.setenv("SPA_ENV_DIR", str(tmp_path))
     monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(config))

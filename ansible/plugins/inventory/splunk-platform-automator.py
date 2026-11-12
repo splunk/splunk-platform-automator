@@ -65,6 +65,12 @@ except ImportError:
     resolve_spa_paths = None
     resolve_shared_data_dir = None
 
+try:
+    from spa.preflight import missing_archive_reason, splunk_archive_glob
+except ImportError:
+    missing_archive_reason = None
+    splunk_archive_glob = None
+
 _OS_MASK_KEYS = (
     "set_hostname",
     "update_hosts_file",
@@ -208,20 +214,14 @@ class InventoryModule(BaseInventoryPlugin):
 
     def _check_splunk_archive(self,arch_type,splunk_architecture,splunk_version,directory):
         '''Check if splunk version archive is available'''
-        if splunk_version == 'latest':
-            search_version = "*"
-        else:
-            search_version = splunk_version
-        platform = '?inux'
-        suffix = platform+'-'+splunk_architecture+'.tgz'
-        if arch_type == 'windowsforwarder':
-            arch_type = 'splunkforwarder'
-            suffix = 'x64-release.msi'
-            platform = 'Windows'
-        archive_pattern = arch_type+"-"+search_version+"-*-"+suffix
+        if splunk_archive_glob is None:
+            raise AnsibleParserError("Cannot import spa.preflight to check Splunk archives")
+        archive_pattern = splunk_archive_glob(arch_type, splunk_version, splunk_architecture)
         check_arch = glob.glob(directory+"/"+archive_pattern)
         if len(check_arch) < 1:
-            raise AnsibleParserError("Error: No archive found matching pattern '%s' in directory %s" % (archive_pattern,directory))
+            raise AnsibleParserError(
+                missing_archive_reason(arch_type, splunk_version, splunk_architecture, directory)
+            )
 
     def _check_requirements(self):
         '''Check if required python libraries are installed'''
