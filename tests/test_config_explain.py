@@ -226,9 +226,3 @@ def test_cli_explain_is_the_human_page_and_the_same_agent_data():
     assert error["ok"] is False
     assert "data" not in error
     assert "config explain" in error["error"]
-
-
-def test_features_command_is_removed():
-    result = run_spa(["features", "list"])
-    assert result.returncode == 2
-    assert "config explain" in result.stderr

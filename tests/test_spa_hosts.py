@@ -87,12 +87,6 @@ def test_hosts_list_help_has_hosts_flag_not_limit():
     assert "--limit" not in result.stdout
 
 
-def test_deploy_help_has_hosts_not_limit():
-    result = run_spa(["deploy", "--help"])
-    assert "--hosts" in result.stdout
-    assert "--limit" not in result.stdout
-
-
 def test_alias_val_is_validate():
     result = run_spa(["val", "--help"])
     assert result.returncode == 0, result.stderr

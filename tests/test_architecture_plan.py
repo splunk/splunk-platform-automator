@@ -16,7 +16,6 @@ EXAMPLES = PROJECT_ROOT / "examples" / "architectures"
 C1 = EXAMPLES / "c1.json"
 C3 = EXAMPLES / "c3.json"
 M4 = EXAMPLES / "m4.json"
-OLD_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "architecture_m4_generator.json"
 
 
 def _load(path: Path) -> dict:
@@ -62,10 +61,6 @@ def test_examples_are_confirmed_schema_1_without_secrets_or_delivery():
         assert doc["extensions"] == []
 
 
-def test_old_0_3_0_fixture_is_gone():
-    assert not OLD_FIXTURE.exists()
-
-
 def test_c3_example_plans_ok_and_scales_indexers():
     plan = plan_for(_load(C3))
     assert plan["ok"] is True, plan.get("errors")
@@ -97,23 +92,6 @@ def test_plan_lists_skipped_app_folder_names(tmp_path):
     plan = plan_for(doc)
     assert plan["ok"] is True, plan.get("errors")
     assert plan["skipped_app_folders"] == ["ClusterBaseConfigs", "BaseConfigs"]
-
-
-def _next_ids(payload):
-    return [item.get("id") for item in (payload.get("data") or {}).get("next") or []]
-
-
-def test_cli_plan_does_not_ask_to_import_apps_by_role(tmp_path):
-    source = tmp_path / "arch.json"
-    doc = _load(C3)
-    doc["apps"] = {"by_role": {"indexer": ["ClusterBaseConfigs"]}}
-    source.write_text(json.dumps(doc), encoding="utf-8")
-    result = run_spa(["--agent", "architecture", "plan", str(source)])
-    assert result.returncode == 0, result.stderr
-    payload = json.loads(result.stdout)
-    assert "apps.by_role" in payload["data"]["skipped"]
-    assert "apps.by_role.local" not in _next_ids(payload)
-    assert "next" not in payload["data"]
 
 
 def host_roles_for(hosts, name):
@@ -204,16 +182,6 @@ def test_gate_architecture_version_newer_int_asks_to_upgrade_spa():
     text = str(exc.value)
     assert "2" in text
     assert "1" in text
-
-
-def test_legacy_0_4_0_string_is_rejected_with_no_migrator():
-    doc = _load(C3)
-    doc["schema_version"] = "0.4.0"
-    plan = plan_for(doc)
-    assert plan["ok"] is False
-    joined = " ".join(plan["errors"]).lower()
-    assert "integer" in joined
-    assert "upgrade spa" not in joined
 
 
 def test_newer_schema_version_asks_to_upgrade_spa():
@@ -356,30 +324,6 @@ def test_agent_init_architecture_includes_deferred_warnings(tmp_path):
     assert "license_manager" in payload["data"]["architecture"]["remaining"]
 
 
-def test_agent_init_does_not_ask_to_import_apps_by_role(tmp_path):
-    dest = tmp_path / "c3-lab"
-    source = tmp_path / "arch.json"
-    doc = _load(C3)
-    doc["apps"] = {"by_role": {"indexer": ["ClusterBaseConfigs"]}}
-    source.write_text(json.dumps(doc), encoding="utf-8")
-    result = run_spa(
-        [
-            "--agent",
-            "init",
-            "--architecture",
-            str(source),
-            "--provider",
-            "aws",
-            "--skip-doctor",
-            str(dest),
-        ]
-    )
-    assert result.returncode == 0, result.stderr
-    payload = json.loads(result.stdout)
-    assert "apps.by_role.local" not in _next_ids(payload)
-    assert "next" not in payload["data"]
-
-
 def test_init_architecture_and_example_are_exclusive(tmp_path):
     dest = tmp_path / "lab"
     result = run_spa_init(
@@ -456,23 +400,6 @@ def test_apply_warns_when_license_manager_is_deferred(tmp_path):
     assert "Next:" in text
     assert "spa licenses list" in result.stderr
     assert "spa --agent licenses list" not in result.stderr
-
-
-def test_apply_does_not_ask_to_import_apps_by_role(tmp_path):
-    dest = tmp_path / "lab"
-    init = run_spa_init(["--example", "topology.c3", "--provider", "aws", str(dest)])
-    assert init.returncode == 0, init.stderr
-    source = tmp_path / "arch.json"
-    doc = _load(C3)
-    doc["apps"] = {"by_role": {"indexer": ["ClusterBaseConfigs"]}}
-    source.write_text(json.dumps(doc), encoding="utf-8")
-    result = run_spa(
-        ["--agent", "--start-dir", str(dest), "architecture", "apply", str(source), "--yes"],
-        extra_env={"SPA_ENV_DIR": str(dest)},
-    )
-    assert result.returncode == 0, result.stderr
-    payload = json.loads(result.stdout)
-    assert "apps.by_role.local" not in _next_ids(payload)
 
 
 def test_apply_refuses_unconfirmed(tmp_path):

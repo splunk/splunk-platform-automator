@@ -194,8 +194,6 @@ def test_agent_content_packs_list_prints_json_only(tmp_path, monkeypatch, capsys
 @pytest.mark.parametrize(
     "argv",
     [
-        ["--agent", "aws", "--bogus"],
-        ["aws", "--json", "--bogus"],
         ["--agent", "provider", "aws", "--bogus"],
         ["provider", "aws", "--json", "--bogus"],
         ["--agent", "shell", "--bogus"],

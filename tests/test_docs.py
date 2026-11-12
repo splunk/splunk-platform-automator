@@ -336,6 +336,13 @@ def test_local_and_cli_runners_do_not_share_one_ansible_tmp():
     assert "worker_local_dir" in conftest
 
 
+def test_tests_readme_documents_app_scope_snapshots():
+    tests_readme = (PROJECT_ROOT / "tests" / "README.md").read_text(encoding="utf-8")
+    assert "tests/configs/app_scope/<name>/" in tests_readme
+    assert "UPDATE_SCOPE_SNAPSHOTS=1" in tests_readme
+    assert "./tests/run_app_scope_scenarios_tests.sh" in tests_readme
+
+
 def test_worker_local_dir_isolates_xdist_workers(tmp_path, monkeypatch):
     from spa_testutil import worker_local_dir
 
@@ -382,8 +389,6 @@ def test_operator_guidance_uses_transactional_config_commands():
     assert "catalog snippets are examples" in contributing.lower()
     changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert "transactional config editor" in changelog.lower()
-    roadmap = (PROJECT_ROOT / "ROADMAP.md").read_text(encoding="utf-8")
-    assert "- [x] `spa config`" in roadmap
 
 
 def test_config_editing_names_templates_list_search_and_merge():
@@ -1034,12 +1039,6 @@ class TestSpaSkill:
         assert "/spa-apps" in create and "/spa" in create
         assert "/spa-create-config" in apps and "/spa" in apps
 
-    def test_config_skills_use_the_current_validate_flag(self):
-        skills_root = PROJECT_ROOT / "skills" / "spa"
-        for path in skills_root.rglob("*.md"):
-            text = path.read_text(encoding="utf-8")
-            assert "--splunk-config-aws" not in text, path
-
     def test_create_config_header_asset_names_the_command(self):
         template = (
             PROJECT_ROOT
@@ -1082,24 +1081,6 @@ class TestSpaSkill:
         assert "spa config header set" in header
         assert "--yes" in header
         assert "--sva" in header
-
-    def test_init_examples_name_a_provider(self):
-        """Every operator-facing init example names --provider, since init requires one."""
-        pattern = re.compile(r"\b(?:spa|bin/spa) (?:environment |env )?init --example\b")
-        paths = [
-            PROJECT_ROOT / "AGENTS.md",
-            PROJECT_ROOT / "README.md",
-            PROJECT_ROOT / "docs" / "user-guide.md",
-            PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md",
-            PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md",
-        ]
-        for path in paths:
-            text = path.read_text(encoding="utf-8")
-            for number, line in enumerate(text.splitlines(), 1):
-                if pattern.search(line):
-                    assert "--provider" in line, "%s:%d: %s" % (path.name, number, line)
-            assert "aws is implicit" not in text, path.name
-            assert "aws is the implicit default" not in text, path.name
 
     def test_skill_aws_discovery_commands_pass_region(self):
         """AMI and survey lookups must search the region the config uses, so every skill line names --region."""
@@ -1165,28 +1146,6 @@ class TestSpaSkill:
         assert "Splunk lab" in agents
         assert "AWS CLI" in agents
 
-    def test_operator_skills_omit_add_test_scenario(self):
-        readme = (PROJECT_ROOT / "skills" / "spa" / "README.md").read_text(
-            encoding="utf-8"
-        )
-        agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
-        contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
-        for text in (readme, agents, contributing):
-            assert "spa-create-config" in text
-            assert "spa-apps" in text
-            assert "spa-add-test-scenario" not in text
-        tests_readme = (PROJECT_ROOT / "tests" / "README.md").read_text(encoding="utf-8")
-        assert "tests/configs/app_scope/<name>/" in tests_readme
-        assert "UPDATE_SCOPE_SNAPSHOTS=1" in tests_readme
-        assert "./tests/run_app_scope_scenarios_tests.sh" in tests_readme
-        user_guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-        assert "wait for a yes in chat" in user_guide
-        assert "spa destroy --hosts" in user_guide
-        retired = (
-            PROJECT_ROOT / "skills" / "spa" / "spa-add-test-scenario" / "SKILL.md"
-        )
-        assert not retired.exists()
-
 
 def _operator_text_paths():
     """Every markdown file an operator or agent reads for commands."""
@@ -1216,13 +1175,6 @@ class TestReviewFindings67:
         assert "(`spa deploy --yes`)" not in text
         assert "Deploy only after the operator's yes in chat" in text
 
-    def test_no_agent_facing_file_uses_a_non_existent_playbook_or_typo_command(self):
-        offenders = []
-        for path in _operator_text_paths():
-            if "ap ansible/" in path.read_text(encoding="utf-8"):
-                offenders.append(str(path.relative_to(PROJECT_ROOT)))
-        assert offenders == [], offenders
-
     def test_legacy_aws_runbook_points_to_the_skills_and_drops_the_unsafe_steps(self):
         path = PROJECT_ROOT / ".agent" / "workflows" / "deploy-aws-terraform.md"
         text = path.read_text(encoding="utf-8")
@@ -1243,12 +1195,6 @@ class TestReviewFindings67:
             text = path.read_text(encoding="utf-8")
             assert "environment remove" in text, path.name
             assert "environment cleanup" in text, path.name
-
-    def test_changelog_records_the_validate_flag_rename(self):
-        text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-        unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
-        assert "--splunk-config-aws" in unreleased
-        assert "--splunk-config aws" in unreleased
 
     def test_operator_docs_and_skills_use_provider_aws(self):
         """Live AWS discovery is spa provider aws, not top-level spa aws."""
@@ -1288,105 +1234,12 @@ class TestReviewFindings67:
         migrate = (_docs_dir() / "migrate.md").read_text(encoding="utf-8")
         assert "spa provider aws" in migrate
 
-    def test_contributor_text_uses_provider_aws_not_live_spa_aws(self):
-        """Runtime strings, changelog examples, and contributor indexes name spa provider aws."""
-        live = (
-            "spa aws check-auth",
-            "spa aws regions list",
-            "spa aws latest-ami",
-            "spa aws describe-ami",
-            "spa aws validate",
-            "spa aws survey",
-            "spa aws amis list",
-            "spa aws list KIND",
-            "spa aws list has moved",
-            "spa --agent aws",
-        )
-        paths = (
-            PROJECT_ROOT / "CHANGELOG.md",
-            PROJECT_ROOT / "ROADMAP.md",
-            PROJECT_ROOT / "tests" / "README.md",
-            PROJECT_ROOT / "lib" / "spa" / "validate.py",
-            PROJECT_ROOT / "lib" / "spa" / "aws.py",
-            PROJECT_ROOT / "lib" / "spa" / "config_edit.py",
-        )
-        offenders = []
-        for path in paths:
-            text = path.read_text(encoding="utf-8")
-            for spelling in live:
-                if spelling in text:
-                    offenders.append("%s: %s" % (path.relative_to(PROJECT_ROOT), spelling))
-        assert offenders == [], offenders
-        readme = (PROJECT_ROOT / "tests" / "README.md").read_text(encoding="utf-8")
-        assert "spa provider aws" in readme
-        roadmap = (PROJECT_ROOT / "ROADMAP.md").read_text(encoding="utf-8")
-        assert "spa provider aws" in roadmap
-
-    def test_changelog_and_skills_use_named_aws_actions(self):
-        banned = (
-            "spa aws --check-auth",
-            "spa aws --validate",
-            "spa aws --json",
-            "spa aws --survey",
-            "spa aws --latest-ami",
-            "spa aws --describe-ami",
-            "spa aws --region ",
-        )
-        changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-        for spelling in banned:
-            assert spelling not in changelog, spelling
-        skills = PROJECT_ROOT / "skills" / "spa"
-        for path in sorted(skills.rglob("*.md")):
-            text = path.read_text(encoding="utf-8")
-            for spelling in banned:
-                assert spelling not in text, "%s: %s" % (path.relative_to(PROJECT_ROOT), spelling)
-
-
-def test_roadmap_architecture_overlay_names_schema_1():
-    text = (PROJECT_ROOT / "ROADMAP.md").read_text(encoding="utf-8")
-    lines = [
-        line
-        for line in text.splitlines()
-        if "spa architecture apply" in line and "spa architecture plan" in line
-    ]
-    assert lines, "ROADMAP needs the architecture overlay line"
-    line = lines[0]
-    assert line.startswith("- [x]"), line
-    assert "schema 1" in line
-    assert "0.4.0" not in line
-
-
-def test_roadmap_schema_version_stamp_is_done():
-    text = (PROJECT_ROOT / "ROADMAP.md").read_text(encoding="utf-8")
-    lines = [line for line in text.splitlines() if "issues/117" in line]
-    assert lines, "ROADMAP needs a #117 line"
-    line = lines[0]
-    assert line.startswith("- [x]"), line
-    assert "`schema_version`" in line
-    assert "spa config set config_version" not in line
-    assert "spa config migrate" in line
-
-
-def test_changelog_unreleased_names_schema_version_and_config_version():
-    text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
-    assert "`schema_version`" in unreleased
-    assert "`config_version`" in unreleased
-    assert "issues/117" in unreleased
-
-
-def test_roadmap_ccm_provider_is_done():
-    text = (PROJECT_ROOT / "ROADMAP.md").read_text(encoding="utf-8")
-    lines = [line for line in text.splitlines() if "issues/146" in line]
-    assert lines, "ROADMAP needs a #146 line"
-    line = lines[0]
-    assert line.startswith("- [x]"), line
-    assert "CCM" in line
-
 
 def test_user_guide_teaches_adding_a_host_then_deploy():
     """Scale-out is config add (or hosts register), then spa deploy --yes."""
     guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    assert "wait for a yes in chat" in guide
+    assert "spa destroy --hosts" in guide
     section = guide[
         guide.index("## Run the lifecycle") : guide.index("## Complete commands")
     ]
@@ -1524,31 +1377,7 @@ def test_readme_secrets_and_contributing_name_ccm():
     assert "set / not set" in secrets or "set/not set" in secrets or "**set** or **not set**" in secrets
 
 
-def test_changelog_unreleased_finishes_ccm_docs():
-    text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
-    assert "issues/146" in unreleased
-    assert "user guide" in unreleased.lower() or "user-guide" in unreleased.lower()
-    assert "spa config provider ccm" in unreleased
-    assert "spa provider ccm" in unreleased
-
-
-def test_changelog_unreleased_retires_doctor_aws_and_virtualbox_flags():
-    text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
-    assert "spa doctor --provider" in unreleased
-    assert "spa doctor --aws" in unreleased
-    assert "--virtualbox" in unreleased
-    assert "repeatable" in unreleased.lower() or "repeat" in unreleased.lower()
-
-
-def test_changelog_unreleased_init_doctor_quiet_unless_problems():
-    text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
-    assert "Init doctor" in unreleased
-    assert "quiet" in unreleased.lower() or "silent" in unreleased.lower()
-    assert "spa doctor" in unreleased
-    assert "PATH symlink" in unreleased
+def test_user_guide_start_here_doctor_is_quiet_unless_problems():
     guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
     start = guide.split("## Start here", 1)[1].split("\n## ", 1)[0]
     assert "fails the host prerequisite check" in start

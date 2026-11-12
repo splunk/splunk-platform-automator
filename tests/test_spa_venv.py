@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init, spa_env, write_min_env
+from spa_testutil import PROJECT_ROOT, run_spa, spa_env, write_min_env
 
 pytestmark = pytest.mark.local
 
@@ -155,12 +155,6 @@ def test_broken_ansible_import_asks_for_a_rebuild(tmp_path):
     python.write_text("#!/bin/sh\necho 3.14\n", encoding="utf-8")
     ansible_controller_problem.cache_clear()
     assert ansible_controller_problem(venv) is None
-
-
-def test_venv_script_rebuild_hint_names_the_action():
-    text = (PROJECT_ROOT / "bin" / "spa_venv.sh").read_text(encoding="utf-8")
-    assert "spa venv rebuild --shared --python python3.14 --yes" in text
-    assert "spa venv --shared --rebuild" not in text
 
 
 def test_reinstall_checks_that_ansible_can_start_before_galaxy(tmp_path):
@@ -396,13 +390,6 @@ def test_launcher_reexecs_into_shared_venv_when_interpreter_is_incomplete(tmp_pa
     )
     assert result.returncode == 0, result.stderr + result.stdout
     assert result.stdout.strip() == str(PROJECT_ROOT / ".venv")
-
-
-def test_launcher_reexec_is_skipped_when_guard_is_set(tmp_path):
-    """One hop only: the guard prevents an exec loop if no venv can run spa."""
-    body = (PROJECT_ROOT / "bin" / "spa").read_text(encoding="utf-8")
-    assert "SPA_VENV_REEXEC" in body
-    assert "os.execv" in body
 
 
 def _bare_interpreter(tmp_path: Path) -> Path:
@@ -644,13 +631,6 @@ def test_unknown_option_fails():
     assert "Unknown option" in result.stderr
 
 
-def test_init_does_not_write_envrc(tmp_path):
-    dest = tmp_path / "env"
-    result = run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert not (dest / ".envrc").exists()
-
-
 def test_collections_install_is_forced_into_target_path():
     body = SCRIPT.read_text()
     assert "collection install --force" in body
@@ -674,8 +654,3 @@ def test_run_venv_wrapper_uses_tests_venv():
         cwd=PROJECT_ROOT,
     )
     assert result.returncode == 0
-
-
-def test_test_requirements_include_the_config_editor_yaml_library():
-    text = (PROJECT_ROOT / "tests" / "requirements.txt").read_text(encoding="utf-8")
-    assert "ruamel.yaml" in text

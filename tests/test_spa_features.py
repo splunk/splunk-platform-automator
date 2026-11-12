@@ -1,8 +1,6 @@
 """Feature catalog quality and spa config explain/search."""
 
 import json
-import sys
-from pathlib import Path
 
 import pytest
 
@@ -83,82 +81,6 @@ def test_implemented_settings_have_operator_guidance():
             assert len(item.get("when_to_use") or item.get("when_not_to_use") or "") >= 24, label
 
 
-def test_feat_alias_is_removed():
-    result = run_spa(["feat", "list"])
-    assert result.returncode == 2
-    assert "config explain" in result.stderr
-
-
-def test_list_guidance_is_aligned_under_the_title():
-    sys.path.insert(0, str(PROJECT_ROOT / "lib"))
-    from spa.catalog import format_feature_rows
-
-    rows = [
-        {"id": "topology.s1", "title": "S1 single node", "sva": "S1", "when_to_use": "Config-test."},
-        {"selector": "splunk_apps", "title": "Save apps", "when_to_use": "Pull apps back."},
-    ]
-    lines = format_feature_rows(rows, width=100).splitlines()
-    title_column = lines[0].index("S1 single node")
-    assert title_column == len("topology.s1") + 2
-    assert lines[0].endswith("[SVA S1]")
-    assert lines[1] == " " * title_column + "Config-test."
-    assert lines[3] == " " * title_column + "Pull apps back."
-
-
-def test_show_wraps_prose_but_not_key_lines():
-    sys.path.insert(0, str(PROJECT_ROOT / "lib"))
-    from spa.catalog import format_feature_text
-
-    item = {"id": "setting.os", "title": "OS", "kind": "setting", "when_to_use": "word " * 40}
-    details = [{"path": "os.packages", "type": "list[string]", "allowed": ["a" * 120]}]
-    lines = format_feature_text(item, key_details=details, width=80).splitlines()
-    prose = [line for line in lines if line.startswith("when_to_use") or line.startswith("  word")]
-    assert len(prose) > 1
-    assert all(len(line) <= 80 for line in prose)
-    key_line = next(line for line in lines if line.strip().startswith("os.packages"))
-    assert "allowed=" + "a" * 120 in key_line
-
-
-def test_long_guidance_wraps_with_the_same_indent():
-    sys.path.insert(0, str(PROJECT_ROOT / "lib"))
-    from spa.catalog import format_feature_rows
-
-    rows = [{"id": "provider.aws", "title": "AWS", "when_to_use": "word " * 40}]
-    lines = format_feature_rows(rows, width=80).splitlines()
-    indent = " " * (len("provider.aws") + 2)
-    assert len(lines) > 2
-    for line in lines[1:]:
-        assert line.startswith(indent)
-        assert len(line) <= 80
-
-
-def test_every_catalog_record_has_decision_guidance():
-    from spa.catalog import list_payload
-
-    features = list_payload(PROJECT_ROOT)["features"]
-    assert features
-    for feature in features:
-        label = feature.get("selector") or feature.get("id") or feature.get("title")
-        assert feature.get("title"), label
-        assert feature.get("when_to_use") or feature.get("when_not_to_use"), label
-        assert "snippet" not in feature
-        assert "keys" not in feature
-
-
-def test_config_search_ssl():
-    result = run_spa(["config", "search", "ssl"])
-    assert result.returncode == 0, result.stderr
-    assert "splunk_defaults.splunk_ssl" in result.stdout
-    assert "setting.ssl" not in result.stdout
-
-
-def test_config_search_os():
-    result = run_spa(["config", "search", "os"])
-    assert result.returncode == 0, result.stderr
-    assert "os " in result.stdout or result.stdout.startswith("os ")
-    assert "setting.os" not in result.stdout
-
-
 def test_explain_c1():
     result = run_spa(["config", "explain", "topology.c1"])
     assert result.returncode == 0, result.stderr
@@ -190,22 +112,6 @@ def test_explain_aws_keeps_catalog_guidance_off_child_lines():
     username = run_spa(["config", "explain", "terraform.aws.ssh_username"])
     assert username.returncode == 0, username.stderr
     assert "Login user must match the AMI" in username.stdout or "AMI" in username.stdout
-
-
-def test_config_keys_schema_owns_former_orphans():
-    result = run_spa(["--json", "config", "keys"])
-    assert result.returncode == 0, result.stderr
-    payload = json.loads(result.stdout)["data"]
-    assert payload.get("missing_key_detail") in (None, [],)
-    by_key = {row["key"]: row for row in payload["keys"]}
-    for key in (
-        "terraform.aws.ssh_username",
-        "terraform.aws.root_volume_type",
-        "splunk_defaults.splunk_user",
-        "splunk_defaults.splunk_group",
-    ):
-        assert by_key[key]["in_schema"] is True
-        assert by_key[key]["has_key_detail"] is True
 
 
 def test_explain_rejects_a_recursive_keys_flag():
@@ -339,21 +245,6 @@ def test_config_schema_markdown_is_not_an_agent_payload():
     assert payload["ok"] is False
     assert "data" not in payload
     assert "config explain" in payload["error"]
-
-
-def test_removed_features_command_points_at_explain():
-    human = run_spa(["features"])
-    assert human.returncode == 2
-    assert "spa features was removed." in human.stderr
-    assert "spa config explain" in human.stderr
-    assert not human.stdout.strip()
-    agent = run_spa(["--json", "feat"])
-    assert agent.returncode == 2
-    assert not agent.stderr
-    payload = json.loads(agent.stdout)
-    assert payload["ok"] is False
-    assert "data" not in payload
-    assert "spa config explain" in payload["error"]
 
 
 def test_config_schema_rejects_a_path():

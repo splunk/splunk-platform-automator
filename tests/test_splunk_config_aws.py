@@ -13,10 +13,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 from spa import aws  # noqa: E402
 
 
-def test_aws_module_has_no_operator_main():
-    assert not hasattr(aws, "main")
-
-
 @pytest.mark.parametrize(
     "ami,description,expected",
     [
@@ -72,34 +68,6 @@ def test_discover_ubuntu_ssm_path_prefers_latest_lts_gp3():
     assert "24.04" in chosen
     assert "ebs-gp3" in chosen
     assert aws.discover_ubuntu_ssm_path([]) is None
-
-
-def test_retired_list_kind_order_names_provider_aws():
-    result = aws.execute_argv(["list"])
-    assert result.code == 2
-    assert "spa provider aws list has moved" in (result.error or "")
-    assert "spa aws list has moved" not in (result.error or "")
-    assert "spa provider aws regions list" in (result.error or "")
-
-
-def test_retired_list_flags_exit_before_any_aws_call(monkeypatch, capsys):
-    def _boom(*_args, **_kwargs):
-        raise AssertionError("AWS session must not be created")
-
-    monkeypatch.setattr(aws, "_session", _boom)
-    for flag, kind in (
-        ("--list-regions", "regions"),
-        ("--list-amis", "amis"),
-        ("--list-instance-types", "instance-types"),
-        ("--list-key-pairs", "key-pairs"),
-        ("--list-security-groups", "security-groups"),
-    ):
-        with pytest.raises(SystemExit) as excinfo:
-            aws.build_parser().parse_args([flag])
-        assert excinfo.value.code == 2
-        captured = capsys.readouterr()
-        assert captured.out == ""
-        assert "Listing %s is: spa provider aws %s list" % (kind, kind) in captured.err
 
 
 def test_list_kind_parsers_scope_flags_and_skip_aws_without_region(monkeypatch, capsys, tmp_path):

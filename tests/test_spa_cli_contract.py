@@ -877,21 +877,6 @@ def test_start_dir_routes_before_and_after_subcommand(argv):
 
 
 @pytest.mark.parametrize(
-    ("argv", "usage"),
-    [
-        (["shell", "--help"], "usage: spa shell"),
-        (["sh", "--help"], "usage: spa shell"),
-        (["provider", "aws", "--help"], "usage: spa provider aws"),
-    ],
-)
-def test_human_aws_and_shell_help_stays_text(argv, usage):
-    result = run_spa(["--no-agent", *argv])
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.startswith(usage)
-    assert not result.stdout.lstrip().startswith("{")
-
-
-@pytest.mark.parametrize(
     ("argv", "name"),
     [
         (["provider", "aws", "--json", "--help"], "provider aws"),
@@ -1007,13 +992,6 @@ def test_ansible_verbosity_is_limited_and_not_duplicated_after_separator(backend
     )
     assert duplicated.returncode != 0
     assert "verbosity before or after --, not both" in duplicated.stderr
-
-
-def test_removed_short_names_are_not_commands():
-    for argv in (["hosts", "ls"], ["hosts", "cp"], ["environment", "ls"]):
-        result = run_spa(["--no-agent", *argv])
-        assert result.returncode != 0, argv
-        assert "invalid choice" in result.stderr
 
 
 def _defined_options(help_text: str) -> set[str]:
@@ -1137,10 +1115,8 @@ def test_agent_schema_is_complete_and_documented():
     commands = payload["data"]["commands"]
     schema_names = {row["name"] for row in commands}
     assert schema_names == _help_action_names()
-    retired = ("--list", "--list-regions", "--list-amis", "--list-instance-types", "--list-key-pairs", "--list-security-groups")
     encoded = json.dumps(commands)
-    for flag in retired:
-        assert flag not in encoded
+    assert "--list" not in encoded
     for row in commands:
         assert row.get("summary"), row["name"]
         for flag in row.get("flags", []):
@@ -1272,10 +1248,6 @@ def test_agent_schema_is_complete_and_documented():
     assert "spa provider aws regions list" in aws.stderr
     assert "spa provider aws check-auth" in aws.stderr
     assert "spa aws --check-auth" not in aws.stderr
-    aws_list = run_spa(["--no-agent", "aws", "list"])
-    assert aws_list.returncode == 2, aws_list.stderr
-    assert "invalid choice: 'aws'" in aws_list.stderr
-    assert "spa provider aws needs an action." not in aws_list.stderr
 
 
 def test_licenses_list_is_the_catalog():

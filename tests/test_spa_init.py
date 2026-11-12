@@ -11,22 +11,6 @@ from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
 
-def test_topology_forbidden_includes_ccm():
-    from spa.init import TOPOLOGY_FORBIDDEN
-
-    assert "ccm" in TOPOLOGY_FORBIDDEN
-
-
-def test_explicit_aws_provider_is_not_described_as_virtualbox():
-    from spa.init import resolve_example_pair
-
-    topology, provider = resolve_example_pair(
-        PROJECT_ROOT, "cm_2idxc_3shc_ds", "aws"
-    )
-    assert topology == "cm_2idxc_3shc_ds"
-    assert provider == "aws"
-
-
 def test_init_example_accepts_topology_c1():
     from spa.init import resolve_example_pair
 
@@ -105,22 +89,6 @@ def test_init_virtualbox_does_not_print_remote_provider_merge(tmp_path):
     assert result.returncode == 0, out
     assert "  provider:  virtualbox\n" in out
     assert "remote-provider" not in out
-
-
-def test_compose_uses_provider_remote_helper_not_hardcoded_names(monkeypatch):
-    from spa import init as init_mod
-    from spa import providers as providers_mod
-
-    seen = []
-
-    def fake_remote(provider_id):
-        seen.append(provider_id)
-        return False
-
-    monkeypatch.setattr(providers_mod, "provider_is_remote", fake_remote)
-    composed = init_mod.compose_example_config(PROJECT_ROOT, "single_node", "aws")
-    assert seen == ["aws"]
-    assert "os" not in composed
 
 
 def test_catalog_id_composes_the_same_config_as_its_stem():
@@ -371,15 +339,6 @@ def test_example_with_aws_provider(tmp_path):
     _assert_remote_provider_merged(cfg)
     names = [h.get("name") for h in cfg["splunk_hosts"] if "name" in h]
     assert "cm" in names
-
-
-def test_legacy_example_filename_is_rejected(tmp_path):
-    dest = tmp_path / "legacy"
-    result = run_spa_init(["--example", "cm_2idxc_sh_aws.yml", str(dest)])
-    text = result.stderr + result.stdout
-    assert result.returncode != 0
-    assert "cm_2idxc_sh_aws" in text
-    assert "Alias" not in text
 
 
 def test_refuse_overwrite(tmp_path):

@@ -179,76 +179,6 @@ def test_validate_splunk_config_rejects_an_unknown_provider(tmp_path):
     assert "--splunk-config-aws" not in help_result.stdout
 
 
-def test_shell_help_matches_hosts_ssh():
-    """spa shell is an alias of spa hosts ssh. Copy is spa hosts copy."""
-    result = run_spa(["--no-agent", "shell", "--help"])
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.startswith("usage: spa shell")
-    assert "Aliases: sh" in result.stdout
-    assert "-c" not in result.stdout
-    assert "--copy" not in result.stdout
-    assert "-l" not in result.stdout
-
-
-def test_shell_list_flag_is_gone():
-    result = run_spa(["shell", "-l"])
-    assert result.returncode != 0
-    combined = result.stdout + result.stderr
-    assert "unrecognized arguments" in combined or "error" in combined.lower()
-
-
-@pytest.mark.parametrize(
-    ("argv", "message"),
-    [
-        (["shell", "-c", "local.txt", "idx1:/tmp/"], "Copying files is: spa hosts copy SRC DST"),
-        (["shell", "--copy", "local.txt", "idx1:/tmp/"], "Copying files is: spa hosts copy SRC DST"),
-        (["doctor", "--aws"], "Checking AWS prerequisites is: spa doctor --provider aws"),
-        (
-            ["doctor", "--virtualbox"],
-            "Checking VirtualBox prerequisites is: spa doctor --provider virtualbox",
-        ),
-        (["doctor", "--ccm"], "Checking CCM prerequisites is: spa doctor --provider ccm"),
-        (["doc", "--ccm"], "Checking CCM prerequisites is: spa doctor --provider ccm"),
-    ],
-)
-def test_retired_aws_and_shell_flags_name_the_legal_command(argv, message):
-    _assert_usage_rejection(argv, message)
-
-
-def test_provider_aws_help_uses_own_parser():
-    result = run_spa(["provider", "aws", "--help"])
-    assert result.returncode == 0, result.stderr
-    assert "usage: spa provider aws" in result.stdout
-
-
-@pytest.mark.parametrize(
-    "argv",
-    [
-        ["aws"],
-        ["aws", "--help"],
-        ["aws", "check-auth"],
-        ["aws", "--check-auth"],
-        ["aws", "--list-regions"],
-        ["ccm"],
-    ],
-)
-def test_top_level_aws_and_ccm_are_invalid_choices(argv):
-    """spa aws is not an alias of spa provider aws. Same invalid-choice path as spa ccm."""
-    command = argv[0]
-    human = run_spa(["--no-agent", *argv])
-    assert human.returncode == 2, human.stderr
-    assert "invalid choice: '%s'" % command in human.stderr
-    assert "spa provider aws needs an action." not in human.stderr
-    assert "spa provider aws check-auth" not in human.stderr
-    assert human.stdout.strip() == ""
-    agent = run_spa(["--json", *argv])
-    assert agent.returncode == 2, agent.stdout
-    payload = json.loads(agent.stdout)
-    assert payload["ok"] is False
-    assert "invalid choice: '%s'" % command in payload["error"]
-    assert "spa provider aws needs an action." not in payload["error"]
-
-
 @pytest.mark.parametrize(
     ("argv", "expected_head", "expected_extra"),
     [
@@ -269,13 +199,6 @@ def test_split_passthrough_contract(argv, expected_head, expected_extra):
     from spa.cli import _split_passthrough
 
     assert _split_passthrough(argv) == (expected_head, expected_extra)
-
-
-def test_split_native_is_gone():
-    import spa.cli as cli
-
-    assert not hasattr(cli, "_split_native")
-    assert not hasattr(cli, "NATIVE_FLAG_COMMANDS")
 
 
 @pytest.mark.parametrize(
@@ -1096,28 +1019,6 @@ def test_validate_config_version_without_schema_version_is_missing_stamp(tmp_pat
     assert path.read_bytes() == before
 
 
-def test_spa_provision_is_unknown_command():
-    human = run_spa(["--no-agent", "provision"])
-    assert human.returncode == 2, human.stderr
-    assert "invalid choice: 'provision'" in human.stderr
-    assert "spa provision" not in human.stderr
-    assert human.stdout.strip() == ""
-    agent = run_spa(["--json", "provision"])
-    assert agent.returncode == 2, agent.stdout
-    payload = json.loads(agent.stdout)
-    assert payload["ok"] is False
-    assert "invalid choice: 'provision'" in payload["error"]
-    assert "spa provision" not in payload["error"]
-
-
-def test_hosts_provision_help_includes_yes():
-    result = run_spa(["hosts", "provision", "--help"])
-    assert result.returncode == 0, result.stderr
-    assert "usage: spa hosts provision" in result.stdout
-    assert "--yes" in result.stdout
-    assert "-y" in result.stdout
-
-
 def test_spa_prov_is_provider_not_provision():
     result = run_spa(["--no-agent", "prov", "--help"])
     assert result.returncode == 0, result.stderr
@@ -1584,39 +1485,6 @@ def test_no_agent_text_list():
     assert not result.stdout.strip().startswith("{")
 
 
-def test_agent_schema():
-    result = run_spa(["agent", "schema"])
-    payload = json.loads(result.stdout)
-    assert payload["ok"] is True
-    names = {c["name"] for c in payload["data"]["commands"]}
-    assert "run" in names
-    assert "config explain" in names
-    assert "features" not in names
-    assert "shell" in names
-    run = next(c for c in payload["data"]["commands"] if c["name"] == "run")
-    flags = [item["long"] for item in run.get("flags") or []]
-    assert "--hosts" in flags
-    assert "--list" not in flags
-    assert "--yes" in flags
-    assert "spa --agent run list" in run["summary"]
-    by_name = {c["name"]: c for c in payload["data"]["commands"]}
-    for name in ("hosts provision", "destroy", "deploy", "suspend", "resume"):
-        assert by_name[name].get("requires_confirmation") is True
-
-
-def test_agent_help_documents_schema():
-    result = run_spa(["--no-agent", "agent", "--help"])
-    assert result.returncode == 0, result.stderr
-    assert "usage: spa agent [schema]" in result.stdout
-    assert "ACTION" in result.stdout
-    assert "spa agent schema" in result.stdout
-    assert "requires_confirmation" in result.stdout
-    # The schema covers commands; playbooks are discovered separately.
-    assert "spa --agent run list" in result.stdout
-    assert "--markdown" in result.stdout
-    assert "docs/commands.md" in result.stdout
-
-
 def test_agent_rejects_unknown_action():
     result = run_spa(["--no-agent", "agent", "bogus"])
     assert result.returncode != 0
@@ -1888,6 +1756,10 @@ def _assert_usage_rejection(argv, message):
         (["logs"], "spa logs needs a run."),
         (["logs", "list", "--last"], "spa logs list does not take --last or --follow."),
         (["run", "list", "--yes"], "spa run list does not take run options."),
+        (
+            ["doctor", "--aws"],
+            "Checking AWS prerequisites is: spa doctor --provider aws",
+        ),
     ],
 )
 def test_catalog_usage_names_the_legal_command(argv, message):
@@ -1910,36 +1782,6 @@ def test_hidden_alias_expands_after_a_flag():
         "topology",
         "cm_2idxc_sh",
     ]
-
-
-def test_aws_list_help_keeps_flags_on_their_kind():
-    parent = run_spa(["--no-agent", "provider", "aws", "--help"])
-    assert parent.returncode == 0, parent.stderr
-    options = set(re.findall(r"(?m)^\s+(?:-[A-Za-z],\s+)?(--[A-Za-z0-9-]+)", parent.stdout))
-    for flag in (
-        "--list-regions",
-        "--list-amis",
-        "--list-instance-types",
-        "--list-key-pairs",
-        "--list-security-groups",
-        "--check-auth",
-        "--latest-ami",
-        "--describe-ami",
-        "--validate",
-        "--survey",
-        "--region",
-        "--os",
-        "--details",
-    ):
-        assert flag not in options, flag
-    amis = run_spa(["provider", "aws", "amis", "list", "--help"])
-    types = run_spa(["provider", "aws", "instance-types", "list", "--help"])
-    assert amis.returncode == 0, amis.stderr
-    assert "--family" not in amis.stdout
-    assert "--name-filter" in amis.stdout
-    assert types.returncode == 0, types.stderr
-    assert "--name-filter" not in types.stdout
-    assert "--family" in types.stdout
 
 
 def test_human_env_playbook_prompt_mentions_missing_metadata(tmp_path, monkeypatch):

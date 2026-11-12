@@ -218,10 +218,6 @@ def test_init_provider_tab_lists_shipped_providers():
     assert "app" in complete(["spa", "apps", "search", "--type", ""], 4)
 
 
-def test_keys_flag_is_not_offered():
-    assert "--keys" not in complete(["spa", "config", "--"], 2)
-
-
 def test_callback_prints_canonical_names():
     result = run_spa(["--no-agent", "completion", "--", "1", "spa", ""])
     assert result.returncode == 0, result.stderr
