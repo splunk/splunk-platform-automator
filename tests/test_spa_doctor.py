@@ -605,3 +605,173 @@ def test_doctor_unknown_provider_names_legal_values():
     assert "Unknown provider: gcp" in result.stderr
     assert "spa doctor --provider ccm" in result.stderr
     assert result.stdout.strip() == ""
+
+
+SOFTWARE_IDS = ("software_binaries", "software_baseconfigs", "software_licenses")
+LICENSE_XML = "<license><payload>SECRET_LICENSE_XML_PAYLOAD</payload></license>\n"
+ENTERPRISE_TGZ = "splunk-9.4.0-linux-x86_64.tgz"
+FORWARDER_TGZ = "splunkforwarder-9.4.0-linux-x86_64.tgz"
+ENTERPRISE_URL = "https://www.splunk.com/en_us/download/splunk-enterprise.html"
+FORWARDER_URL = "https://www.splunk.com/en_us/download/universal-forwarder.html"
+
+
+def _isolate_software(tmp_path, monkeypatch, *, software=None):
+    """tmp spa_home plus isolated HOME / XDG / SPA_SOFTWARE_DIR so ../Software cannot leak."""
+    spa_home = tmp_path / "spa_home"
+    spa_home.mkdir()
+    home = tmp_path / "home"
+    home.mkdir()
+    xdg = tmp_path / "xdg"
+    xdg.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    if software is None:
+        software = tmp_path / "Software"
+    monkeypatch.setenv("SPA_SOFTWARE_DIR", str(software))
+    return spa_home, software
+
+
+def _collect_software(spa_home, **kwargs):
+    from spa import doctor as doctor_mod
+
+    return doctor_mod.collect_checks(spa_home=str(spa_home), **kwargs)
+
+
+def _software_rows(result):
+    by_id = {row["id"]: row for row in result.data["checks"]}
+    return {ident: by_id[ident] for ident in SOFTWARE_IDS}
+
+
+def _seed_baseconfig_markers(software):
+    (software / "Configurations - Base" / "org_s2_indexer_indexes").mkdir(parents=True)
+    (software / "Configurations - Index Replication" / "org_cluster_manager_base").mkdir(
+        parents=True
+    )
+
+
+def test_doctor_software_empty_dir_warns_all_three_buckets(tmp_path, monkeypatch):
+    spa_home, software = _isolate_software(tmp_path, monkeypatch)
+    software.mkdir()
+    result = _collect_software(spa_home)
+    rows = _software_rows(result)
+    for ident, row in rows.items():
+        assert row["level"] == "warn", ident
+        assert str(software) in row["message"]
+    assert result.ok is True
+    assert result.code == 0
+    binaries = rows["software_binaries"]
+    assert ENTERPRISE_URL in binaries["fix"]
+    assert FORWARDER_URL in binaries["fix"]
+    assert "SPA_HOME" in binaries["fix"]
+    baseconfigs = rows["software_baseconfigs"]
+    assert "go/baseconfigs" in baseconfigs["fix"]
+    assert "Configurations - Base" in baseconfigs["fix"]
+    licenses = rows["software_licenses"]
+    assert "spa licenses list" in licenses["fix"]
+    assert "trial" in licenses["message"].lower() or "trial" in licenses["fix"].lower()
+
+
+def test_doctor_software_missing_dir_warns_all_three_and_names_path(tmp_path, monkeypatch):
+    spa_home, software = _isolate_software(tmp_path, monkeypatch)
+    assert not software.exists()
+    result = _collect_software(spa_home)
+    rows = _software_rows(result)
+    for ident, row in rows.items():
+        assert row["level"] == "warn", ident
+        assert str(software) in row["message"]
+        assert "spa environment set --software-dir" in row["fix"]
+    assert result.ok is True
+    assert result.code == 0
+
+
+@pytest.mark.parametrize("filename", [ENTERPRISE_TGZ, FORWARDER_TGZ])
+def test_doctor_software_binaries_need_enterprise_and_forwarder(
+    tmp_path, monkeypatch, filename
+):
+    spa_home, software = _isolate_software(tmp_path, monkeypatch)
+    software.mkdir()
+    (software / filename).write_bytes(b"")
+    result = _collect_software(spa_home)
+    binaries = _software_rows(result)["software_binaries"]
+    assert binaries["level"] == "warn"
+    assert str(software) in binaries["message"]
+    assert ENTERPRISE_URL in binaries["fix"]
+    assert FORWARDER_URL in binaries["fix"]
+
+
+def test_doctor_software_inventory_ok_when_all_three_buckets_present(tmp_path, monkeypatch):
+    spa_home, software = _isolate_software(tmp_path, monkeypatch)
+    software.mkdir()
+    (software / ENTERPRISE_TGZ).write_bytes(b"")
+    (software / FORWARDER_TGZ).write_bytes(b"")
+    _seed_baseconfig_markers(software)
+    (software / "Splunk_Enterprise.lic").write_text(LICENSE_XML, encoding="utf-8")
+    result = _collect_software(spa_home)
+    rows = _software_rows(result)
+    for ident, row in rows.items():
+        assert row["level"] == "ok", ident
+        assert str(software) in row["message"]
+    blob = json.dumps(result.data)
+    assert "SECRET_LICENSE_XML_PAYLOAD" not in blob
+    assert "<license>" not in blob
+    assert LICENSE_XML.strip() not in blob
+    assert result.ok is True
+
+
+def test_doctor_software_warnings_do_not_fail_cli(tmp_path):
+    software = tmp_path / "Software"
+    software.mkdir()
+    env = spa_env(
+        {
+            "HOME": str(tmp_path / "home"),
+            "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
+            "SPA_SOFTWARE_DIR": str(software),
+        }
+    )
+    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out
+    assert str(software) in out
+    assert "WARN" in out
+    assert ENTERPRISE_URL in out
+    assert "go/baseconfigs" in out
+    assert "spa licenses list" in out
+
+
+def test_doctor_cli_json_never_prints_license_xml(tmp_path):
+    software = tmp_path / "Software"
+    software.mkdir()
+    (software / ENTERPRISE_TGZ).write_bytes(b"")
+    (software / FORWARDER_TGZ).write_bytes(b"")
+    _seed_baseconfig_markers(software)
+    (software / "Splunk_Enterprise.lic").write_text(LICENSE_XML, encoding="utf-8")
+    env = spa_env(
+        {
+            "HOME": str(tmp_path / "home"),
+            "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
+            "SPA_SOFTWARE_DIR": str(software),
+        }
+    )
+    human = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
+    agent = run_spa(["--json", "doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
+    blob = human.stdout + human.stderr + agent.stdout + agent.stderr
+    assert human.returncode == 0, human.stderr + human.stdout
+    assert agent.returncode == 0, agent.stderr + agent.stdout
+    payload = json.loads(agent.stdout)
+    rows = {row["id"]: row for row in payload["data"]["checks"]}
+    for ident in SOFTWARE_IDS:
+        assert rows[ident]["level"] == "ok"
+        assert str(software) in rows[ident]["message"]
+    assert "SECRET_LICENSE_XML_PAYLOAD" not in blob
+    assert "<license>" not in blob
+
+
+def test_doctor_software_strict_promotes_warnings(tmp_path, monkeypatch):
+    spa_home, software = _isolate_software(tmp_path, monkeypatch)
+    software.mkdir()
+    result = _collect_software(spa_home, strict=True)
+    rows = _software_rows(result)
+    assert all(row["level"] == "warn" for row in rows.values())
+    assert result.ok is False
+    assert result.code == 1
+    assert "warning" in (result.error or "").lower()

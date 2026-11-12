@@ -13,10 +13,14 @@ from typing import Dict, List, Optional, Sequence
 from spa.api import CommandResult
 from spa.executil import SPA_VENV_MODULES, resolve_venv_dir, venv_has_requirements
 from spa.paths import resolve_spa_paths
+from spa.preflight import _has_baseconfig_apps
 
 
 VAGRANT_REQUIRED_PLUGINS = ("vagrant-vbguest",)
 VAGRANT_WSL_PLUGINS = ("virtualbox_WSL2",)
+ENTERPRISE_DOWNLOAD = "https://www.splunk.com/en_us/download/splunk-enterprise.html"
+FORWARDER_DOWNLOAD = "https://www.splunk.com/en_us/download/universal-forwarder.html"
+_MISSING_SOFTWARE_DIR_FIX = "spa environment set --software-dir DIR"
 
 
 def _brew_hint(pkg: str) -> str:
@@ -209,6 +213,90 @@ def _config_providers(text: str) -> set:
         if top == "terraform" and line.strip().split(":", 1)[0].strip() == "aws":
             providers.add("aws")
     return providers
+
+
+def _has_enterprise_and_forwarder_tarballs(software: Path) -> bool:
+    if not software.is_dir():
+        return False
+    enterprise = False
+    forwarder = False
+    try:
+        entries = list(software.iterdir())
+    except OSError:
+        return False
+    for entry in entries:
+        if not entry.is_file():
+            continue
+        name = entry.name
+        if name.startswith("splunkforwarder-") and name.endswith(".tgz"):
+            forwarder = True
+        elif name.startswith("splunk-") and name.endswith(".tgz"):
+            enterprise = True
+        if enterprise and forwarder:
+            return True
+    return False
+
+
+def _has_top_level_license(software: Path) -> bool:
+    """True when a top-level ``*.lic`` exists. Do not open or parse the file."""
+    if not software.is_dir():
+        return False
+    try:
+        entries = software.iterdir()
+    except OSError:
+        return False
+    return any(entry.is_file() and entry.suffix.lower() == ".lic" for entry in entries)
+
+
+def _record_software_inventory(rec, software: Path) -> None:
+    path = str(software)
+    exists = software.is_dir()
+    if exists and _has_enterprise_and_forwarder_tarballs(software):
+        rec(
+            "ok",
+            "software_binaries",
+            "Enterprise and universal-forwarder tarballs in %s" % path,
+        )
+    else:
+        rec(
+            "warn",
+            "software_binaries",
+            "no Splunk Enterprise and universal-forwarder tarballs in %s" % path,
+            _MISSING_SOFTWARE_DIR_FIX
+            if not exists
+            else (
+                "Download Enterprise from %s and UF from %s; put tarballs in %s, not SPA_HOME"
+                % (ENTERPRISE_DOWNLOAD, FORWARDER_DOWNLOAD, path)
+            ),
+        )
+
+    if exists and _has_baseconfig_apps(software):
+        rec("ok", "software_baseconfigs", "PS baseconfig apps in %s" % path)
+    else:
+        rec(
+            "warn",
+            "software_baseconfigs",
+            "no PS baseconfig apps in %s" % path,
+            _MISSING_SOFTWARE_DIR_FIX
+            if not exists
+            else (
+                "Splunk / Cisco: http://go/baseconfigs; others: Splunk PS. "
+                "Extract into the same tree (Configurations - Base, "
+                "Configurations - Index Replication) at %s" % path
+            ),
+        )
+
+    if _has_top_level_license(software):
+        rec("ok", "software_licenses", "license file in %s" % path)
+    else:
+        rec(
+            "warn",
+            "software_licenses",
+            "no license file in %s (trial labs may omit)" % path,
+            _MISSING_SOFTWARE_DIR_FIX
+            if not exists
+            else "place or symlink a .lic in %s; spa licenses list" % path,
+        )
 
 
 def collect_checks(
@@ -467,7 +555,7 @@ def collect_checks(
                 "install the OpenSSH client",
             )
 
-    software = None
+    software = spa_home_path / "Software"
     env_overlay = {**os.environ, "SPA_HOME": str(spa_home_path)}
     if env_path:
         env_overlay["SPA_ENV_DIR"] = str(env_path)
@@ -477,19 +565,10 @@ def collect_checks(
             environ=env_overlay,
             clone_root=spa_home_path,
         )
-        if resolved.software_dir.is_dir():
-            software = resolved.software_dir
+        software = resolved.software_dir
     except Exception:
-        software = None
-    if software:
-        rec("ok", "software", "Software at %s" % software)
-    else:
-        rec(
-            "warn",
-            "software",
-            "no Software/ directory (installers and baseconfig apps)",
-            "spa init --software-dir DIR ENV (saves ~/.config/spa/paths.yml); or sibling of env",
-        )
+        pass
+    _record_software_inventory(rec, software)
 
     if require_vbox:
         has_vagrant = bool(shutil.which("vagrant"))

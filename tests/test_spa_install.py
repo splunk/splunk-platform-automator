@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from spa_testutil import PROJECT_ROOT, spa_env
+from spa_testutil import AGENT_ENV_VARS, INHERITED_PATH_VARS, PROJECT_ROOT, spa_env
 
 pytestmark = pytest.mark.local
 
@@ -349,6 +349,46 @@ def test_uninstall_leaves_unrelated_wrapper(tmp_path, framework_tarball):
     assert wrapper.is_file()
     assert "other-spa" in wrapper.read_text()
     assert "Leaving" in result.stderr
+
+
+def test_install_without_software_completes_and_next_step_names_software(
+    tmp_path, framework_tarball
+):
+    """install.sh still exits 0 when Software is absent; next-step names Software."""
+    home = tmp_path / "home"
+    home.mkdir()
+    xdg = tmp_path / "xdg"
+    xdg.mkdir()
+    pybin = tmp_path / "pybin"
+    pybin.mkdir()
+    (pybin / "python3").symlink_to(sys.executable)
+    env = _install_env(
+        home,
+        {
+            "XDG_CONFIG_HOME": str(xdg),
+            "PATH": "%s%s%s" % (pybin, os.pathsep, os.environ.get("PATH", "")),
+        },
+    )
+    for name in (*AGENT_ENV_VARS, *INHERITED_PATH_VARS):
+        env.pop(name, None)
+    result = subprocess.run(
+        [
+            "sh",
+            str(INSTALL),
+            "--from",
+            str(framework_tarball),
+            "--skip-venv",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out
+    assert "Installed wrapper:" in result.stdout
+    _, _, next_step = result.stdout.partition("Installed wrapper:")
+    assert "Software" in next_step
+    assert "spa environment set --software-dir" in next_step
 
 
 def test_uninstall_agent_without_yes_does_not_delete(tmp_path, framework_tarball):

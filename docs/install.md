@@ -17,6 +17,7 @@ script always follows the newest GitHub Release
 
 ```sh
 curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh
+spa skills install cursor
 ```
 
 The script then downloads matching `spa-framework-*.tar.gz` from the same latest release (or `--version` / `SPA_VERSION`).
