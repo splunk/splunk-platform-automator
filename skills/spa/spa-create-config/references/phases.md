@@ -130,7 +130,7 @@ Run this before the first `spa init` or `spa environment init` for a new environ
 
 ## Phase 6 — AWS settings
 
-**With creds:** After `spa init --example`, the write path already has `terraform.aws` from the provider example. Shorten to `spa config header set` (Phase 12), `spa --agent provider aws latest-ami --region REGION`, `spa config set`, `spa validate --splunk-config aws`, then one `spa config explain` per authored path (Phase 12). See [aws-baseline.md](aws-baseline.md). Read `data.*` from the envelope.
+**With creds:** After `spa init --example TOPOLOGY --provider aws`, the write path already has `terraform.aws` from the provider example. Shorten to `spa config header set` (Phase 12), `spa --agent provider aws latest-ami --region REGION`, `spa config set`, `spa validate --splunk-config aws`, then one `spa config explain` per authored path (Phase 12). See [aws-baseline.md](aws-baseline.md). Read `data.*` from the envelope.
 
 1. AMI — `spa --agent provider aws latest-ami --region REGION --os <rhel|ubuntu|amazon_linux|debian>` or `spa --agent provider aws survey --region REGION` → user picks from `data.recommended_amis` (preference: RHEL first). REGION is the example's `terraform.aws.region`; every AMI lookup names it. Then `spa config set` for `terraform.aws.ami_id`.
 2. `ssh_username` (`spa --agent provider aws describe-ami --region REGION --ami-id AMI_ID`) then `spa config set`.
