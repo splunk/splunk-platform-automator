@@ -66,6 +66,7 @@ def drop_ansible_extra(extra: Optional[Sequence[str]]) -> List[str]:
 class Provider:
     name = "virtualbox"
     creates_hosts = True
+    remote = False
 
     def __init__(self, paths: SpaPaths, config: Dict[str, Any]):
         self.paths = paths

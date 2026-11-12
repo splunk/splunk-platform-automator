@@ -47,6 +47,7 @@ def terraform_instance_names(state_path: Path) -> set:
 class Provider:
     name = "aws"
     creates_hosts = True
+    remote = True
 
     def __init__(self, paths: SpaPaths, config: Dict[str, Any]):
         self.paths = paths

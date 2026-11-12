@@ -43,6 +43,86 @@ def test_init_example_unknown_topology_id():
     assert exc.value.code == 2
 
 
+def _remote_provider_template():
+    return yaml.safe_load(
+        (PROJECT_ROOT / "examples" / "templates" / "remote-provider.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+
+
+def _assert_remote_provider_merged(composed):
+    expected = _remote_provider_template()
+    assert composed["os"]["set_hostname"] is expected["os"]["set_hostname"]
+    defaults = composed["splunk_defaults"]
+    assert defaults["splunk_download"] == expected["splunk_defaults"]["splunk_download"]
+    assert defaults["splunk_set_servername"] is True
+    assert defaults["splunk_set_default_hostname"] is True
+    assert defaults["splunk_loginpage_print_userpw"] is False
+    assert defaults["splunk_ssl"] == expected["splunk_defaults"]["splunk_ssl"]
+    apps = composed["splunk_app_deployment"]
+    assert apps["target_download"] is True
+    assert apps["cache_downloads"] is False
+
+
+def test_compose_merges_remote_provider_for_remote_providers():
+    from spa.init import compose_example_config
+
+    for provider in ("aws", "ccm", "external"):
+        composed = compose_example_config(PROJECT_ROOT, "single_node", provider)
+        _assert_remote_provider_merged(composed)
+        assert composed["splunk_defaults"]["splunk_admin_password"]
+        assert composed["splunk_hosts"]
+
+
+def test_compose_skips_remote_provider_for_virtualbox():
+    from spa.init import compose_example_config
+
+    composed = compose_example_config(PROJECT_ROOT, "single_node", "virtualbox")
+    assert "os" not in composed
+    assert "splunk_ssl" not in composed["splunk_defaults"]
+    assert "splunk_download" not in composed["splunk_defaults"]
+    assert "splunk_app_deployment" not in composed
+
+
+def test_init_prints_remote_provider_merge_when_applied(tmp_path):
+    dest = tmp_path / "aws"
+    result = run_spa_init(["--example", "single_node", "--provider", "aws", str(dest)])
+    out = result.stderr + result.stdout
+    assert result.returncode == 0, out
+    assert "  example:   single_node\n" in out
+    assert "  provider:  aws\n" in out
+    assert "merged:    remote-provider" in out
+    assert "example:   single_node --provider" not in out
+
+
+def test_init_virtualbox_does_not_print_remote_provider_merge(tmp_path):
+    dest = tmp_path / "vbox"
+    result = run_spa_init(
+        ["--example", "single_node", "--provider", "virtualbox", str(dest)]
+    )
+    out = result.stderr + result.stdout
+    assert result.returncode == 0, out
+    assert "  provider:  virtualbox\n" in out
+    assert "remote-provider" not in out
+
+
+def test_compose_uses_provider_remote_helper_not_hardcoded_names(monkeypatch):
+    from spa import init as init_mod
+    from spa import providers as providers_mod
+
+    seen = []
+
+    def fake_remote(provider_id):
+        seen.append(provider_id)
+        return False
+
+    monkeypatch.setattr(providers_mod, "provider_is_remote", fake_remote)
+    composed = init_mod.compose_example_config(PROJECT_ROOT, "single_node", "aws")
+    assert seen == ["aws"]
+    assert "os" not in composed
+
+
 def test_catalog_id_composes_the_same_config_as_its_stem():
     from spa.init import compose_example_config, resolve_example_pair
 
@@ -275,7 +355,7 @@ def test_example_flag(tmp_path):
     assert "cm" in names
     assert "terraform" in cfg
     assert "virtualbox" not in cfg
-    assert "os" not in cfg
+    _assert_remote_provider_merged(cfg)
 
 
 def test_example_with_aws_provider(tmp_path):
@@ -286,7 +366,7 @@ def test_example_with_aws_provider(tmp_path):
     assert "terraform" in cfg
     assert cfg["terraform"]["aws"]["region"]
     assert "virtualbox" not in cfg
-    assert "os" not in cfg
+    _assert_remote_provider_merged(cfg)
     names = [h.get("name") for h in cfg["splunk_hosts"] if "name" in h]
     assert "cm" in names
 

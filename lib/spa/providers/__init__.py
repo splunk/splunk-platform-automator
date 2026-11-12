@@ -252,6 +252,25 @@ def detect_provider(paths: SpaPaths) -> ProviderSelection:
     )
 
 
+def provider_is_remote(provider_id: str) -> bool:
+    """Whether init should merge remote-provider defaults for this provider.
+
+    Reads ``Provider.remote`` from the registered module so callers do not
+    hardcode aws / ccm. VirtualBox is local. AWS, CCM, and external are
+    remote. A later unregistered provider is remote unless it is VirtualBox.
+    """
+    name = (provider_id or "").strip().lower()
+    if name in {"terraform.aws", "terraform"}:
+        name = "aws"
+    if name in {"vbox", "vb"}:
+        name = "virtualbox"
+    module_name = PROVIDER_MODULES.get(name)
+    if module_name is None:
+        return name != "virtualbox"
+    module = importlib.import_module(module_name)
+    return bool(getattr(module.Provider, "remote", True))
+
+
 def get_provider(paths: SpaPaths):
     selection = detect_provider(paths)
     module = importlib.import_module(PROVIDER_MODULES[selection.name])

@@ -82,6 +82,27 @@ def test_detects_ccm_from_config(tmp_path):
     assert selected.config["instance_type"] == "t3a.medium"
 
 
+def test_registered_providers_declare_remote():
+    """VirtualBox is local; AWS, CCM, and external are remote. A later provider defaults remote."""
+    import importlib
+
+    from spa.providers import PROVIDER_MODULES, provider_is_remote
+
+    expected = {
+        "aws": True,
+        "virtualbox": False,
+        "ccm": True,
+        "external": True,
+    }
+    assert set(PROVIDER_MODULES) == set(expected)
+    for name, remote in expected.items():
+        module = importlib.import_module(PROVIDER_MODULES[name])
+        assert module.Provider.remote is remote, name
+        assert provider_is_remote(name) is remote, name
+    assert provider_is_remote("gcp") is True
+    assert provider_is_remote("virtualbox") is False
+
+
 def test_ccm_with_virtualbox_is_rejected(tmp_path):
     paths = _paths(tmp_path, "ccm: {}\nvirtualbox: {}\n")
     with pytest.raises(ProviderError, match="Multiple"):

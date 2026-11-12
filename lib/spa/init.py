@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import os
 import shutil
 import subprocess
@@ -639,6 +640,17 @@ def _load_yaml_mapping(path: Path) -> Dict[str, Any]:
     return data
 
 
+def _deep_merge(base: Dict[str, Any], overlay: Mapping[str, Any]) -> Dict[str, Any]:
+    """Recursively merge overlay into base. Overlay wins on non-mapping leaves."""
+    for key, value in overlay.items():
+        existing = base.get(key)
+        if isinstance(existing, dict) and isinstance(value, Mapping):
+            _deep_merge(existing, value)
+        else:
+            base[key] = copy.deepcopy(value)
+    return base
+
+
 def compose_example_config(spa_home: Path, topology_id: str, provider_id: str) -> Dict[str, Any]:
     topo_path = spa_home / "examples" / "topologies" / ("%s.yml" % topology_id)
     prov_path = spa_home / "examples" / "providers" / ("%s.yml" % provider_id)
@@ -664,6 +676,14 @@ def compose_example_config(spa_home: Path, topology_id: str, provider_id: str) -
         if key in ("plugin", "schema_version", "config_version"):
             continue
         composed[key] = value
+    from spa.providers import provider_is_remote
+
+    if provider_is_remote(provider_id):
+        remote_path = spa_home / "examples" / "templates" / "remote-provider.yml"
+        remote = _load_yaml_mapping(remote_path)
+        for key in ("plugin", "schema_version", "config_version"):
+            remote.pop(key, None)
+        _deep_merge(composed, remote)
     return composed
 
 
@@ -719,6 +739,19 @@ def _with_ami_comment(text: str, comment: str) -> str:
         else:
             rewritten.append(line)
     return "".join(rewritten)
+
+
+def _say_composed(
+    dest: Path, topology_id: str, provider_id: str, config_dest: Path
+) -> None:
+    _say("Env scaffolded at %s" % dest)
+    _say("  example:   %s" % topology_id)
+    _say("  provider:  %s" % provider_id)
+    _say("  config:    %s" % config_dest)
+    from spa.providers import provider_is_remote
+
+    if provider_is_remote(provider_id):
+        _say("  merged:    remote-provider")
 
 
 def write_composed_config(
@@ -1002,9 +1035,7 @@ def _init_env(
         _write()
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
         run_doctor(dest, spa_home, skip_doctor)
-        _say("Env scaffolded at %s" % dest)
-        _say("  example:   %s --provider %s" % (topology_id, provider_id))
-        _say("  config:    %s" % config_dest)
+        _say_composed(dest, topology_id, provider_id, config_dest)
         return 0
 
     # --force without --example on an existing env: refresh metadata, keep config.
@@ -1035,7 +1066,5 @@ def _init_env(
     _write()
     create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
     run_doctor(dest, spa_home, skip_doctor)
-    _say("Env scaffolded at %s" % dest)
-    _say("  example:   %s --provider %s" % (topology_id, provider_id))
-    _say("  config:    %s" % config_dest)
+    _say_composed(dest, topology_id, provider_id, config_dest)
     return 0

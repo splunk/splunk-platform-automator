@@ -1354,6 +1354,22 @@ def test_create_config_proposes_ccm_remote_provider_and_live_survey():
         assert catalog_id not in text, catalog_id
 
 
+def test_create_config_does_not_merge_remote_provider_after_fresh_init():
+    """Fresh remote init already merges the template. Keep merge for existing envs."""
+    skill_dir = _create_config_dir()
+    phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
+    architecture = (skill_dir / "references" / "architecture-input.md").read_text(
+        encoding="utf-8"
+    )
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    ccm = (_docs_dir() / "ccm.md").read_text(encoding="utf-8")
+    assert "Propose `spa config merge remote-provider --yes`" not in phases
+    assert "config templates list" not in architecture or "existing env" in architecture.lower()
+    for page in (guide, ccm):
+        assert "after an explicit yes, `spa config merge remote-provider --yes`" not in page.lower()
+        assert "remote-provider" in page
+
+
 CCM_ASK_GATE = (
     "Do not AskQuestion CCM unless `CCM_TOKEN` is set, the env has a root `ccm:` "
     "block, or the operator already named CCM."

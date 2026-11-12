@@ -24,7 +24,7 @@ Size OS, instance type, and disk from that live catalog. Do not hardcode those l
 
 `ccm.ssh_username` is always `splunker` for every CCM OS flavor. Operators create the SSH key in the CCM GUI, set `ccm.key_name`, and keep the private file locally. `spa provider ccm ssh-keys list` shows CCM names and whether the local file exists. SPA does not create keys or download PEM material.
 
-CCM is remote (like AWS). After an explicit yes, `spa config merge remote-provider --yes`.
+CCM is remote (like AWS). `spa init --provider ccm` already merges remote-provider defaults (hostname, host-side download, TLS). For an existing env, `spa config merge remote-provider --yes`.
 
 ## Provision and deploy
 

@@ -366,6 +366,7 @@ def _deployment_ids(payload: Any) -> List[str]:
 class Provider:
     name = "ccm"
     creates_hosts = True
+    remote = True
 
     def lifecycle_playbook(self, action: str) -> str:
         return "ccm_provision" if action == "provision" else "ccm_destroy"
