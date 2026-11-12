@@ -331,15 +331,54 @@ if [ "$SKIP_VENV" != true ]; then
     "$PREFIX/bin/spa_venv.sh" --create
 fi
 
+need_software=false
 if [ "$SKIP_DOCTOR" != true ]; then
-    "$BINDIR/spa" doctor --spa-home "$PREFIX" || \
+    doctor_json="$tmp/doctor.json"
+    set +e
+    "$BINDIR/spa" doctor --spa-home "$PREFIX"
+    doctor_rc=$?
+    "$BINDIR/spa" --json doctor --spa-home "$PREFIX" >"$doctor_json" 2>/dev/null
+    json_rc=$?
+    set -e
+    if [ "$doctor_rc" -ne 0 ]; then
         echo "spa doctor reported issues (install still completed)." >&2
+    fi
+    if [ "$json_rc" -eq 0 ] && [ -s "$doctor_json" ]; then
+        if python3 - "$doctor_json" <<'PY'
+import json, sys
+
+try:
+    data = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception:
+    sys.exit(1)
+inner = data.get("data") if isinstance(data.get("data"), dict) else data
+checks = inner.get("checks") or [] if isinstance(inner, dict) else []
+want = {"software_binaries", "software_baseconfigs", "software_licenses"}
+sys.exit(
+    0
+    if any(
+        isinstance(row, dict)
+        and row.get("id") in want
+        and row.get("level") == "warn"
+        for row in checks
+    )
+    else 1
+)
+PY
+        then
+            need_software=true
+        fi
+    fi
 fi
 
 echo "SPA_HOME=${PREFIX}"
 echo "Installed wrapper: ${BINDIR}/spa"
+next_step="spa init --example cm_2idxc_sh --provider aws ~/envs/my-env"
+if [ "$need_software" = true ]; then
+    next_step="place Splunk Enterprise and universal-forwarder tarballs and PS baseconfigs in Software (not SPA_HOME). If Software is not a sibling of the env or of SPA_HOME: spa environment set --software-dir DIR"
+fi
 if ! echo ":${PATH}:" | grep -q ":${BINDIR}:"; then
-    echo "Add ${BINDIR} to PATH, then: spa init --example cm_2idxc_sh --provider aws ~/envs/my-env"
+    echo "Add ${BINDIR} to PATH, then: ${next_step}"
 else
-    echo "Next: spa init --example cm_2idxc_sh --provider aws ~/envs/my-env"
+    echo "Next: ${next_step}"
 fi
