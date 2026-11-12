@@ -349,6 +349,37 @@ class _WorldOpenSession(_FakeValidateSession):
         return _WorldOpenEc2()
 
 
+def test_splunk_config_aws_validate_is_existence_only(monkeypatch):
+    """spa validate --splunk-config aws checks named SGs exist; it does not read port rules."""
+    from spa.validate import validate_terraform_aws
+
+    monkeypatch.setattr(aws, "_session", lambda region=None: _WorldOpenSession())
+    monkeypatch.setattr(
+        aws,
+        "_exposure_warnings",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("must not read port rules")
+        ),
+    )
+
+    result = validate_terraform_aws(
+        {"region": "eu-central-1", "security_group_names": ["lab"]}
+    )
+    assert result.ok
+    payload = aws._compact_validate_payload(result.data)
+    assert payload["checks"]["security_groups"] == {"ok": True}
+    assert "warnings" not in payload
+    assert "IpPermissions" not in json.dumps(payload)
+
+    missing = validate_terraform_aws(
+        {"region": "eu-central-1", "security_group_names": ["missing"]}
+    )
+    assert missing.ok is False
+    assert aws._compact_validate_payload(missing.data)["checks"]["security_groups"] == {
+        "ok": False
+    }
+
+
 def test_aws_validate_warns_when_a_group_is_open_to_the_world(monkeypatch):
     monkeypatch.setattr(aws, "_session", lambda region=None: _WorldOpenSession())
 

@@ -1024,6 +1024,38 @@ class TestSpaSkill:
         assert "us-east-1" in phase4
         assert "exactly" in phase4
 
+    def test_create_config_aws_validate_success_skips_listings(self):
+        text = _create_config_workflow()
+        phase6 = text[
+            text.index("## Phase 6 — AWS settings") : text.index("## Phase 7 — Topology counts")
+        ]
+        assert "spa --agent provider aws latest-ami" in phase6
+        assert "spa aws --latest-ami" not in phase6
+        assert "spa validate --splunk-config aws" in phase6
+        assert "When that validate succeeds, skip region, key, security-group, and instance-type listings" in phase6
+        assert "On failure" in phase6
+        assert "spa --agent provider aws regions list" in phase6
+        assert "spa --agent provider aws key-pairs list" in phase6
+        assert "spa --agent provider aws security-groups list" in phase6
+        assert "spa --agent provider aws instance-types list" in phase6
+        assert "spa config header set" in text
+        assert "spa --agent config explain" in text
+        validation = (_create_config_dir() / "references" / "validation.md").read_text(
+            encoding="utf-8"
+        )
+        assert "spa validate --splunk-config aws" in validation
+        assert "security group" in validation.lower()
+        assert "port rules" in validation.lower()
+        for path in (
+            _create_config_dir() / "references" / "phases.md",
+            _create_config_dir() / "references" / "validation.md",
+            _create_config_dir() / "references" / "aws-without-credentials.md",
+            _create_config_dir() / "references" / "secrets-handling.md",
+        ):
+            body = path.read_text(encoding="utf-8")
+            assert "spa validate --splunk-config aws" in body, path.name
+            assert "--splunk-config-aws" not in body, path.name
+
     def test_create_config_plan_mode_delays_init_until_phase_12(self):
         skills = PROJECT_ROOT / "skills" / "spa" / "spa-create-config"
         text = _create_config_workflow()

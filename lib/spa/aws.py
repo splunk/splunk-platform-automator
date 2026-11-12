@@ -896,6 +896,7 @@ def validate_selections(
     key_name: Optional[str] = None,
     security_groups: Optional[List[str]] = None,
     instance_type: Optional[str] = None,
+    check_exposure: bool = True,
 ) -> Dict[str, Any]:
     checks: Dict[str, Any] = {}
     all_ok = True
@@ -941,7 +942,8 @@ def validate_selections(
                 }
             )
             if found:
-                warnings.extend(_exposure_warnings(name, group.get("IpPermissions") or []))
+                if check_exposure:
+                    warnings.extend(_exposure_warnings(name, group.get("IpPermissions") or []))
             else:
                 all_ok = False
         checks["security_groups"] = {"ok": all(s["ok"] for s in sg_checks), "items": sg_checks}
@@ -1220,7 +1222,11 @@ def _list_amis_result(session: Any, args: Any):
     )
 
 
-def execute(args: Any, environment_region: Optional[str] = None):
+def execute(
+    args: Any,
+    environment_region: Optional[str] = None,
+    check_exposure: bool = True,
+):
     from spa.api import CommandResult
 
     action = getattr(args, "aws_cmd", None) or getattr(args, "canonical_action", None)
@@ -1345,6 +1351,7 @@ def execute(args: Any, environment_region: Optional[str] = None):
                     key_name=getattr(args, "key_name", None),
                     security_groups=sg,
                     instance_type=getattr(args, "instance_type", None),
+                    check_exposure=check_exposure,
                 )
             ),
             resolved,
@@ -1377,11 +1384,19 @@ def _compact_validate_payload(data: Dict[str, Any]) -> Dict[str, Any]:
     return projected
 
 
-def execute_argv(argv: Optional[List[str]] = None, environment_region: Optional[str] = None):
+def execute_argv(
+    argv: Optional[List[str]] = None,
+    environment_region: Optional[str] = None,
+    check_exposure: bool = True,
+):
     raw = list(sys.argv[1:] if argv is None else argv)
     retired = _retired_list_message(raw)
     if retired:
         from spa.api import CommandResult
 
         return CommandResult(ok=False, error=retired, code=2)
-    return execute(build_parser().parse_args(raw), environment_region=environment_region)
+    return execute(
+        build_parser().parse_args(raw),
+        environment_region=environment_region,
+        check_exposure=check_exposure,
+    )

@@ -188,6 +188,13 @@ def aws_validate_argv(aws: Dict[str, Any]) -> List[str]:
     return argv
 
 
+def validate_terraform_aws(aws: Dict[str, Any]) -> CommandResult:
+    """Named-SG existence for spa validate --splunk-config aws. No port-rule warnings."""
+    from spa import aws as aws_mod
+
+    return aws_mod.execute_argv(aws_validate_argv(aws), check_exposure=False)
+
+
 def resolve_config_path(config: str, paths: Optional[SpaPaths] = None) -> Path:
     """Resolve a --config argument like validate_env will consume it."""
     cfg = Path(config).expanduser()
@@ -455,9 +462,7 @@ except ConfigValidationError as e:
                 }
             )
         else:
-            from spa import aws as aws_mod
-
-            aws_result = aws_mod.execute_argv(aws_validate_argv(aws))
+            aws_result = validate_terraform_aws(aws)
             data["aws"] = aws_result.data
             if not aws_result.ok:
                 steps.append(
