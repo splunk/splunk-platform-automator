@@ -1343,6 +1343,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         except ToolNotFound as exc:
             emit(False, error=str(exc), as_agent=_error_agent_mode(raw))
             return 1
+        except KeyboardInterrupt:
+            return 130
         except ModuleNotFoundError as exc:
             # A requirement spa imports lazily (boto3, lxml, jmespath, ...). Report
             # the venv to build instead of a traceback from deep in a subcommand.

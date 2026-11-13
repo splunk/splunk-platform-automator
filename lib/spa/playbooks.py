@@ -505,23 +505,46 @@ def run_playbook(
         env=env,
     )
     assert proc.stdout is not None
-    for line in proc.stdout:
-        if line.startswith(CALLBACK_EVENT_PREFIX):
-            callback_line = line[len(CALLBACK_EVENT_PREFIX) :]
-            log.consume_callback_line(callback_line)
-            if on_progress:
-                on_progress(
-                    {
-                        "type": "line",
-                        "stream": "stderr",
-                        "line": callback_line.rstrip("\n"),
-                    }
-                )
-            continue
-        stored = log.consume_ansible_output(line)
-        if native:
-            log.emit_native_output(line, event_time=str(stored.get("time") or ""))
-    rc = proc.wait()
+    try:
+        for line in proc.stdout:
+            if line.startswith(CALLBACK_EVENT_PREFIX):
+                callback_line = line[len(CALLBACK_EVENT_PREFIX) :]
+                log.consume_callback_line(callback_line)
+                if on_progress:
+                    on_progress(
+                        {
+                            "type": "line",
+                            "stream": "stderr",
+                            "line": callback_line.rstrip("\n"),
+                        }
+                    )
+                continue
+            stored = log.consume_ansible_output(line)
+            if native:
+                log.emit_native_output(line, event_time=str(stored.get("time") or ""))
+        rc = proc.wait()
+    except KeyboardInterrupt:
+        _reap_playbook_process(proc)
+        if run_log is None:
+            log.finish(130)
+        return 130
     if run_log is None:
         log.finish(rc)
     return rc
+
+
+def _reap_playbook_process(proc: subprocess.Popen) -> None:
+    """Close the pipe and wait/terminate/kill ansible-playbook after Ctrl-C."""
+    if proc.stdout is not None:
+        proc.stdout.close()
+    try:
+        proc.wait(timeout=2)
+        return
+    except subprocess.TimeoutExpired:
+        proc.terminate()
+    try:
+        proc.wait(timeout=2)
+        return
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    proc.wait()

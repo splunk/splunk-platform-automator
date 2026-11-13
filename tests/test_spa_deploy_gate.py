@@ -718,6 +718,33 @@ def test_deploy_playbook_failure_omits_index_html_next(tmp_path, monkeypatch):
     assert not (result.data or {}).get("next")
 
 
+def test_deploy_ctrl_c_is_not_playbook_failed(tmp_path, monkeypatch):
+    _stub_deploy_playbook(monkeypatch, rc=130)
+    paths, session = _session_env(tmp_path)
+    _write_state(paths)
+    _write_inventory(paths, "idx1", "idx2")
+    result = session.deploy(confirm=True)
+    assert result.code == 130
+    assert result.ok is False
+    assert result.error is None
+
+
+def test_lifecycle_ctrl_c_is_not_action_failed(tmp_path, monkeypatch):
+    class FakeProvider:
+        name = "test"
+
+        def provision(self, extra, **kwargs):
+            del extra, kwargs
+            return 130
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda _paths: FakeProvider())
+    paths, session = _session_env(tmp_path)
+    result = session.provision(confirm=True)
+    assert result.code == 130
+    assert result.ok is False
+    assert result.error is None
+
+
 def test_human_deploy_prints_index_html_path(tmp_path, monkeypatch, capsys):
     _stub_deploy_playbook(monkeypatch)
     paths = _paths(tmp_path, AWS_TWO_HOSTS)

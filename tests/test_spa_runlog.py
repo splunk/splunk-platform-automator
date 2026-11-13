@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import time
 from datetime import datetime, timedelta, timezone
 from io import StringIO
@@ -820,6 +821,73 @@ def test_run_playbook_fake_ansible(tmp_path, monkeypatch):
     assert str(log.jsonl_path) == meta["log"]
     envelope_err = stderr.getvalue()
     assert "PLAY [" not in envelope_err
+
+
+def test_run_playbook_ctrl_c_returns_130(tmp_path, monkeypatch):
+    extra = min_env_vars(tmp_path)
+    paths = resolve_spa_paths(environ={**extra})
+    monkeypatch.setattr("spa.playbooks.tool_path", lambda _paths, name: "/fake/ansible-playbook")
+
+    class FakeStdout:
+        def __init__(self):
+            self.closed = False
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            raise KeyboardInterrupt
+
+        def close(self):
+            self.closed = True
+
+    class FakeProc:
+        def __init__(self):
+            self.stdout = FakeStdout()
+            self.wait_timeouts = []
+            self.terminate_calls = 0
+            self.kill_calls = 0
+            self._alive = True
+
+        def wait(self, timeout=None):
+            self.wait_timeouts.append(timeout)
+            if self._alive and timeout is not None:
+                raise subprocess.TimeoutExpired(cmd="ansible-playbook", timeout=timeout)
+            return 0
+
+        def terminate(self):
+            self.terminate_calls += 1
+
+        def kill(self):
+            self.kill_calls += 1
+            self._alive = False
+
+    proc = FakeProc()
+    monkeypatch.setattr("spa.playbooks.subprocess.Popen", lambda *a, **k: proc)
+    playbook = PROJECT / "ansible" / "splunk_install.yml"
+    log = RunLog(
+        paths,
+        "run",
+        str(playbook),
+        agent=True,
+        heartbeat_seconds=0,
+        stream=StringIO(),
+    )
+    finished = []
+    monkeypatch.setattr(log, "finish", lambda rc: finished.append(rc))
+
+    try:
+        rc = run_playbook(playbook, paths, command="run", agent=True, run_log=log)
+    except KeyboardInterrupt:
+        rc = "leaked"
+
+    assert rc == 130
+    assert proc.stdout.closed is True
+    assert any(timeout is not None for timeout in proc.wait_timeouts)
+    assert proc.terminate_calls == 1
+    assert proc.kill_calls == 1
+    assert proc.wait_timeouts[-1] is None
+    assert finished == []
 
 
 def test_run_playbook_passes_and_records_ansible_verbosity(tmp_path, monkeypatch):

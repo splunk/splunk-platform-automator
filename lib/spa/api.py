@@ -1800,7 +1800,7 @@ class LocalSpaSession:
             ok=rc == 0,
             code=rc,
             data=data,
-            error=None if rc == 0 else "%s failed" % action,
+            error=None if rc in (0, 130) else "%s failed" % action,
         )
 
     def _provider_creates_hosts(self) -> bool:
@@ -2127,7 +2127,7 @@ class LocalSpaSession:
             ok=rc == 0,
             code=rc,
             data=data,
-            error=None if rc == 0 else "playbook failed",
+            error=None if rc in (0, 130) else "playbook failed",
         )
 
     def suspend(
@@ -2336,7 +2336,7 @@ class LocalSpaSession:
             ok=rc == 0,
             code=rc,
             data=data,
-            error=None if rc == 0 else "playbook failed",
+            error=None if rc in (0, 130) else "playbook failed",
         )
 
     def aws(self, argv: Optional[List[str]] = None) -> CommandResult:

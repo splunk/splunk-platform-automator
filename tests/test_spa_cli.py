@@ -1339,6 +1339,20 @@ def test_lifecycle_commands_dispatch_to_provider(monkeypatch, command):
     assert called == {"yes": True, "agent": False, "wait": True, "hosts": None}
 
 
+def test_main_keyboard_interrupt_exits_130(monkeypatch):
+    def interrupt(_argv):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("spa.cli._run", interrupt)
+    from spa.cli import main
+
+    try:
+        rc = main(["--no-agent", "hosts", "list"])
+    except KeyboardInterrupt:
+        rc = "leaked"
+    assert rc == 130
+
+
 def test_broken_spa_venv_dir_falls_back(tmp_path):
     """An empty .venv (interrupted create) must not break every spa command."""
     from spa.executil import resolve_venv_dir
