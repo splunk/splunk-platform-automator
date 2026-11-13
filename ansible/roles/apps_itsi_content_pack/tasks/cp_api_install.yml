@@ -56,6 +56,7 @@
       backfill: "{{ _cp_backfill }}"
       resolution: "{{ _cp_resolution }}"
       prefix: "{{ _cp_prefix }}"
+    timeout: "{{ customization_extra_vars.timeout | default(300) | int }}"
   vars:
     # Fallback only if key missing (values are set in main.yml when building extra_vars).
     _cp_version: "{{ customization_extra_vars.version | default('1.0') }}"
