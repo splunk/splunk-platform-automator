@@ -53,11 +53,11 @@ Then follow the [quick start](quick-start.md). Keep each environment outside the
 Splunk installers and PS baseconfig apps stay **out of** `SPA_HOME` (`install.sh --force` deletes the prefix). Point at them once:
 
 ```bash
-spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
+spa environment set --software-dir ~/Software --baseconfig-dir ~/baseconfigs --apps-dir ~/labs/apps
 spa init --example cm_2idxc_sh --provider aws ~/envs/my-env
 ```
 
-What belongs in that directory, and how shared path defaults work: [Prepare Software](user-guide.md#prepare-software).
+What belongs in those directories, and how shared path defaults work: [Prepare Software](user-guide.md#prepare-software).
 
 ## Shell completion
 
@@ -112,7 +112,7 @@ packages and Ansible collections with `spa venv upgrade --shared --yes`, or
 delete and recreate it with `spa venv rebuild --shared --yes`. These commands
 target this `SPA_HOME` explicitly, even if the shell has a stale `SPA_VENV_DIR`.
 
-Put Splunk installers and Professional Services baseconfig apps in a `Software/` directory as a sibling of the env (preferred) or of `SPA_HOME`. Checklist: [Prepare Software](user-guide.md#prepare-software). The full path contract is in the [user guide](user-guide.md#understand-the-paths).
+Put Splunk installers in a `Software/` directory and extract PS apps into a separate `baseconfigs/` tree, each as a sibling of the env (preferred) or of `SPA_HOME`. Use `spa environment set --software-dir DIR` and `spa environment set --baseconfig-dir DIR` when they are not siblings. Checklist: [Prepare Software](user-guide.md#prepare-software). The full path contract is in the [user guide](user-guide.md#understand-the-paths).
 
 ## VirtualBox
 

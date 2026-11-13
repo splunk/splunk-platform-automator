@@ -155,7 +155,7 @@ def test_set_software_paths(tmp_path):
     assert result.returncode == 0, result.stderr
     data = yaml.safe_load((tmp_path / "xdg" / "spa" / "paths.yml").read_text())
     assert Path(data["software_dir"]).resolve() == software.resolve()
-    assert Path(data["baseconfig_dir"]).resolve() == software.resolve()
+    assert "baseconfig_dir" not in data
     assert Path(data["apps_dir"]).resolve() == apps.resolve()
     other = tmp_path / "baseconfig"
     other.mkdir()
@@ -175,12 +175,16 @@ def test_init_seeds_only_missing_global_paths(tmp_path):
     apps = tmp_path / "apps"
     software.mkdir()
     apps.mkdir()
+    baseconfig = tmp_path / "baseconfigs"
+    baseconfig.mkdir()
     first = run_spa_init(
         [
             "--provider", "aws", "--example",
             "single_node.yml",
             "--software-dir",
             str(software),
+            "--baseconfig-dir",
+            str(baseconfig),
             "--apps-dir",
             str(apps),
             str(tmp_path / "first"),
@@ -191,7 +195,7 @@ def test_init_seeds_only_missing_global_paths(tmp_path):
     paths = tmp_path / "xdg" / "spa" / "paths.yml"
     data = yaml.safe_load(paths.read_text())
     assert Path(data["software_dir"]).resolve() == software.resolve()
-    assert Path(data["baseconfig_dir"]).resolve() == software.resolve()
+    assert Path(data["baseconfig_dir"]).resolve() == baseconfig.resolve()
     assert Path(data["apps_dir"]).resolve() == apps.resolve()
 
     other = tmp_path / "OtherSoftware"
@@ -226,7 +230,7 @@ def test_init_persists_discovered_global_paths(tmp_path):
     assert result.returncode == 0, result.stderr + result.stdout
     data = yaml.safe_load((tmp_path / "xdg" / "spa" / "paths.yml").read_text())
     assert Path(data["software_dir"]).resolve() == software.resolve()
-    assert Path(data["baseconfig_dir"]).resolve() == software.resolve()
+    assert "baseconfig_dir" not in data
     assert Path(data["apps_dir"]).resolve() == apps.resolve()
 
 

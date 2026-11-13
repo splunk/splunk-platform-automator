@@ -11,7 +11,7 @@ spa_terraform_modules_dir: "{{ spa_home }}/terraform/aws"
 spa_terraform_state_dir: "{{ spa_env_dir }}/terraform/aws"
 spa_roots_differ: "{{ (spa_home | realpath) != (spa_env_dir | realpath) }}"
 spa_software_dir: "{{ lookup('env', 'SPA_SOFTWARE_DIR') | default(spa_env_dir + '/../Software', true) }}"
-spa_baseconfig_dir: "{{ lookup('env', 'SPA_BASECONFIG_DIR') | default(lookup('env', 'SPA_SOFTWARE_DIR') | default(spa_env_dir + '/../Software', true), true) }}"
+spa_baseconfig_dir: "{{ lookup('env', 'SPA_BASECONFIG_DIR') | default(spa_env_dir + '/../baseconfigs', true) }}"
 spa_apps_dir: "{{ lookup('env', 'SPA_APPS_DIR') | default(spa_home + '/apps', true) }}"
 # Optional pull-back of rendered PS baseconfig apps (splunk_save_baseconfig_apps).
 # Relative names are under the env dir; an absolute splunk_save_baseconfig_apps_dir wins.

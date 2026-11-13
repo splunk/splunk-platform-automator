@@ -606,6 +606,7 @@ COMMAND_SCHEMA = {
                 {"long": "--name", "help": "Registry name (default: folder basename)"},
                 {"long": "--force", "help": "Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example)"},
                 {"long": "--software-dir", "help": "Shared installers directory (saved in paths.yml)"},
+                {"long": "--baseconfig-dir", "help": "PS baseconfig apps directory"},
             ],
             "example": "spa environment init --architecture examples/architectures/c3.json --provider aws my-lab",
         },
@@ -619,8 +620,8 @@ COMMAND_SCHEMA = {
             "summary": "User-level defaults in paths.yml (env parent, Software, baseconfig, apps) and the default provider for init in providers.yml",
             "flags": [
                 {"long": "--env-dir", "help": "Default parent for name-only init"},
-                {"long": "--software-dir", "help": "Shared installers directory (also sets baseconfig_dir if unset)"},
-                {"long": "--baseconfig-dir", "help": "PS baseconfig apps directory"},
+                {"long": "--software-dir", "help": "Shared installers directory (saved in paths.yml)"},
+                {"long": "--baseconfig-dir", "help": "PS baseconfig apps directory (saved in paths.yml)"},
                 {"long": "--apps-dir", "help": "Local apps directory"},
                 {
                     "long": "--default",

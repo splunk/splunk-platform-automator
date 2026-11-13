@@ -263,6 +263,20 @@ def test_spa_yml_software_dir(tmp_path):
     assert paths.baseconfig_dir == software.resolve()
 
 
+def test_spa_yml_software_dir_is_not_a_baseconfig_fallback(tmp_path):
+    dest = tmp_path / "itsi"
+    dest.mkdir()
+    software = tmp_path / "shared-sw"
+    software.mkdir()
+    (dest / ".spa.yml").write_text(
+        "spa_home: %s\nsoftware_dir: %s\n" % (PROJECT_ROOT, software)
+    )
+    paths = resolve_spa_paths(start_dir=dest, environ={}, clone_root=PROJECT_ROOT)
+    assert paths.software_dir == software.resolve()
+    assert paths.baseconfig_dir != software.resolve()
+    assert paths.baseconfig_dir == (dest / "../baseconfigs").resolve()
+
+
 def test_spa_yml_apps_dir(tmp_path):
     dest = tmp_path / "itsi"
     dest.mkdir()
@@ -346,6 +360,16 @@ def test_xdg_config_home_ignores_relative(tmp_path):
     assert xdg_config_home(isolated) == tmp_path / "home" / ".config"
 
 
+def test_save_user_paths_software_dir_does_not_fill_baseconfig_dir(tmp_path):
+    software = tmp_path / "controller-sw"
+    software.mkdir()
+    xdg = tmp_path / "xdg-config"
+    save_user_paths(software_dir=str(software), environ={"XDG_CONFIG_HOME": str(xdg)})
+    text = (xdg / "spa" / "paths.yml").read_text(encoding="utf-8")
+    assert "software_dir:" in text
+    assert "baseconfig_dir" not in text
+
+
 def test_user_paths_yml_after_env_spa_yml(tmp_path):
     dest = tmp_path / "itsi"
     dest.mkdir()
@@ -357,7 +381,8 @@ def test_user_paths_yml_after_env_spa_yml(tmp_path):
     env = {"XDG_CONFIG_HOME": str(xdg)}
     paths = resolve_spa_paths(start_dir=dest, environ=env, clone_root=PROJECT_ROOT)
     assert paths.software_dir == software.resolve()
-    assert paths.baseconfig_dir == software.resolve()
+    assert paths.baseconfig_dir != software.resolve()
+    assert paths.baseconfig_dir == (dest / "../baseconfigs").resolve()
     assert user_paths_yml(env) == xdg / "spa" / "paths.yml"
 
 

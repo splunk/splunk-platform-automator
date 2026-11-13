@@ -612,6 +612,7 @@ Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Plat
 | `--name` | Registry name (default: folder basename) |
 | `--force` | Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example) |
 | `--software-dir` | Shared installers directory (saved in paths.yml) |
+| `--baseconfig-dir` | PS baseconfig apps directory |
 
 Example:
 
@@ -636,8 +637,8 @@ User-level defaults in paths.yml (env parent, Software, baseconfig, apps) and th
 | Flag | Description |
 | --- | --- |
 | `--env-dir` | Default parent for name-only init |
-| `--software-dir` | Shared installers directory (also sets baseconfig_dir if unset) |
-| `--baseconfig-dir` | PS baseconfig apps directory |
+| `--software-dir` | Shared installers directory (saved in paths.yml) |
+| `--baseconfig-dir` | PS baseconfig apps directory (saved in paths.yml) |
 | `--apps-dir` | Local apps directory |
 | `--default` | Registered environment used when cwd does not select one |
 | `--provider` | Save the default provider for init: ccm, aws, external, or virtualbox. Saved even for aws, so init then accepts no --provider |

@@ -41,6 +41,7 @@ from typing import Any, Dict, Optional
 
 SPA_YML_NAME = ".spa.yml"
 DEFAULT_SOFTWARE_REL = "../Software"
+DEFAULT_BASECONFIG_REL = "../baseconfigs"
 DEFAULT_APPS_REL = "../apps"
 
 
@@ -234,8 +235,6 @@ def save_user_paths(
     data = dict(load_user_paths(env))
     if software_dir:
         data["software_dir"] = str(_expand(software_dir, start))
-        if not baseconfig_dir:
-            data["baseconfig_dir"] = data["software_dir"]
     if baseconfig_dir:
         data["baseconfig_dir"] = str(_expand(baseconfig_dir, start))
     if apps_dir:
@@ -260,12 +259,8 @@ def _user_path_for_leaf(user: Dict[str, Any], env_var: str, home_leaf: str) -> O
     if home_leaf == "apps" or env_var == "SPA_APPS_DIR":
         value = user.get("apps_dir") or user.get("spa_apps_dir")
         return str(value) if value else None
-    if env_var == "SPA_BASECONFIG_DIR":
-        value = (
-            user.get("baseconfig_dir")
-            or user.get("software_dir")
-            or user.get("spa_software_dir")
-        )
+    if home_leaf == "baseconfigs" or env_var == "SPA_BASECONFIG_DIR":
+        value = user.get("baseconfig_dir")
         return str(value) if value else None
     value = user.get("software_dir") or user.get("spa_software_dir")
     return str(value) if value else None
@@ -295,7 +290,12 @@ def resolve_shared_data_dir(
     if override:
         return _expand(override, start)
 
-    default_rel = DEFAULT_APPS_REL if home_leaf == "apps" else DEFAULT_SOFTWARE_REL
+    if home_leaf == "apps":
+        default_rel = DEFAULT_APPS_REL
+    elif home_leaf == "baseconfigs":
+        default_rel = DEFAULT_BASECONFIG_REL
+    else:
+        default_rel = DEFAULT_SOFTWARE_REL
     configured = (configured or default_rel).strip()
     if configured and os.path.isabs(os.path.expanduser(configured)):
         return _expand(configured, start)
@@ -465,12 +465,12 @@ def resolve_spa_paths(
     baseconfig_dir = resolve_shared_data_dir(
         spa_home,
         spa_env_dir,
-        configured=DEFAULT_SOFTWARE_REL,
+        configured=DEFAULT_BASECONFIG_REL,
         env_var="SPA_BASECONFIG_DIR",
-        yml_value=spa_yml_data.get("baseconfig_dir") or spa_yml_data.get("software_dir") or spa_yml_data.get("spa_software_dir"),
+        yml_value=spa_yml_data.get("baseconfig_dir"),
         environ=env,
         start_dir=start,
-        home_leaf="Software",
+        home_leaf="baseconfigs",
     )
     apps_dir = resolve_shared_data_dir(
         spa_home,

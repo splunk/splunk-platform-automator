@@ -20,12 +20,12 @@ Splunk staff with CCM access (employee-only) can compose with `--provider ccm`. 
 flowchart LR
   home["SPA_HOME: framework"]
   env["SPA_ENV_DIR: one environment"]
-  assets["Software and local apps"]
+  assets["Software, baseconfigs, and local apps"]
   home --> env
   assets --> env
 ```
 
-`SPA_HOME` is the installed framework or clone: `bin/spa`, playbooks, Terraform modules, and skills. `SPA_ENV_DIR` is one environment created by `spa init`: config, inventory, provider state, and optional `.spa.yml`. Keep Splunk installers and PS baseconfig apps in `Software/`; point local app storage at `apps_dir`.
+`SPA_HOME` is the installed framework or clone: `bin/spa`, playbooks, Terraform modules, and skills. `SPA_ENV_DIR` is one environment created by `spa init`: config, inventory, provider state, and optional `.spa.yml`. Keep Splunk installers in `Software/` and extracted PS apps in a separate `baseconfigs/` tree; point local app storage at `apps_dir`.
 
 `spa` resolves an environment by `--env NAME`, `SPA_ENV_DIR`, walking up from cwd to `.spa.yml`, then the registered default, and applies that environment to the command. Many environments can share one framework install. `spa environment list` shows registered names; use `spa environment set --default NAME` for commands run outside an env, or pass `spa --env NAME`. An older lab that already has `config/splunk_config.yml` or `.spa.yml` is registered with `spa env init NAME --force` from that directory or its parent (config is kept unless you also pass `--example`).
 
@@ -33,31 +33,31 @@ For an existing server, `spa init --example TOPOLOGY --provider external ENV`, t
 
 ## Prepare Software
 
-Keep Splunk installers, Professional Services baseconfig apps, and license files **out of** `SPA_HOME`. Point every env at one shared directory:
+Keep Splunk installers, Professional Services baseconfig apps, and license files **out of** `SPA_HOME`. Point every env at the shared trees:
 
 ```bash
-spa init --software-dir ~/Software --example cm_2idxc_sh --provider aws my-lab
+spa init --software-dir ~/Software --baseconfig-dir ~/baseconfigs --example cm_2idxc_sh --provider aws my-lab
 ```
 
-`spa validate` and `spa deploy` fail if that directory is missing or incomplete.
+`spa validate` and `spa deploy` fail if those directories are missing or incomplete.
 
-1. Create a directory, typically `~/Software` (not inside `SPA_HOME`).
+1. Create a directory for installers, typically `~/Software` (not inside `SPA_HOME`).
 2. Download Linux **tgz** installers and put them in that directory:
    - [Splunk Enterprise](https://www.splunk.com/en_us/download/splunk-enterprise.html)
    - [Splunk Universal Forwarder](https://www.splunk.com/en_us/download/universal-forwarder.html)
    - Filenames look like `splunk-<version>-<build>-linux-amd64.tgz` and `splunkforwarder-<version>-<build>-linux-amd64.tgz`. The version must match `splunk_version` in config.
-3. Copy Splunk **Professional Services Best Practices baseconfig apps** into the same tree and extract them. They are not a public Splunk.com download. Splunk / Cisco employees can download them from [http://go/baseconfigs](http://go/baseconfigs). Everyone else: contact Splunk Professional Services. Typical layout: `Configurations - Base` and `Configurations - Index Replication`.
-4. If you have a Splunk license, place or symlink it as **`Splunk_Enterprise.lic`** in that directory (`spa licenses list` lists basenames for config). Trial-only labs can omit licenses.
+3. Create a separate `baseconfigs/` tree (typically `~/baseconfigs`). Copy Splunk **Professional Services Best Practices baseconfig apps** into it and extract them (`Configurations - Base`, `Configurations - Index Replication`). They are not a public Splunk.com download. Splunk / Cisco employees can download them from [http://go/baseconfigs](http://go/baseconfigs). Everyone else: contact Splunk Professional Services.
+4. If you have a Splunk license, place or symlink it as **`Splunk_Enterprise.lic`** in the Software directory (`spa licenses list` lists basenames for config). Trial-only labs can omit licenses.
 
 ```text
-~/Software/Configurations - Base/...
-~/Software/Configurations - Index Replication/...
 ~/Software/splunk-<version>-<build>-linux-amd64.tgz
 ~/Software/splunkforwarder-<version>-<build>-linux-amd64.tgz
 ~/Software/Splunk_Enterprise.lic
+~/baseconfigs/Configurations - Base/...
+~/baseconfigs/Configurations - Index Replication/...
 ```
 
-User-level defaults live in `~/.config/spa/paths.yml` (not secrets). `spa environment set --env-dir DIR` changes the parent for name-only init (omit when it is `~/Splunk-Platform-Automator`). `spa environment set --software-dir DIR` / `--baseconfig-dir DIR` / `--apps-dir DIR` set the shared installer, PS baseconfig, and local-apps trees for every env. `--software-dir` also sets `baseconfig_dir` when you do not pass `--baseconfig-dir`. If a path key has never been set, `spa init` stores the first directory it is given or discovers; later one-off init options remain specific to that env and do not replace an established global. `spa environment set --default NAME` selects a registered environment. `spa environment set --provider NAME` writes `~/.config/spa/providers.yml` with the default provider for init (aws, virtualbox, or external). Once it is saved, `spa init` uses it when `--provider` is omitted. With no saved default, `spa init` stops and asks for `--provider`. One-off dest (`spa init /my/custom/folder/my-lab` or `--env-dir` + `--name`) does not change the default parent.
+User-level defaults live in `~/.config/spa/paths.yml` (not secrets). `spa environment set --env-dir DIR` changes the parent for name-only init (omit when it is `~/Splunk-Platform-Automator`). `spa environment set --software-dir DIR` / `--baseconfig-dir DIR` / `--apps-dir DIR` set the shared installer, PS baseconfig, and local-apps trees for every env. If a path key has never been set, `spa init` stores the first directory it is given or discovers; later one-off init options remain specific to that env and do not replace an established global. `spa environment set --default NAME` selects a registered environment. `spa environment set --provider NAME` writes `~/.config/spa/providers.yml` with the default provider for init (aws, virtualbox, or external). Once it is saved, `spa init` uses it when `--provider` is omitted. With no saved default, `spa init` stops and asks for `--provider`. One-off dest (`spa init /my/custom/folder/my-lab` or `--env-dir` + `--name`) does not change the default parent. Use `spa environment set --baseconfig-dir DIR` when the PS tree is not a sibling of the env or of `SPA_HOME`.
 
 Later per-env knobs on `spa environment set --env NAME` will write that env’s `.spa.yml`, not `paths.yml`.
 

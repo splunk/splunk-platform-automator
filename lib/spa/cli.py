@@ -933,7 +933,7 @@ def _add_init_arguments(parser) -> None:
     parser.add_argument(
         "--baseconfig-dir",
         metavar="DIR",
-        help="PS baseconfig apps directory (default: same as --software-dir)",
+        help="PS baseconfig apps directory",
     )
     parser.add_argument(
         "--apps-dir",
@@ -2277,13 +2277,13 @@ def _run(argv: Sequence[str]) -> int:
         "--software-dir",
         dest="set_software_dir",
         metavar="DIR",
-        help="Shared Splunk installers directory (saved in paths.yml; also sets baseconfig_dir if unset)",
+        help="Shared Splunk installers directory (saved in paths.yml)",
     )
     p_env_set.add_argument(
         "--baseconfig-dir",
         dest="set_baseconfig_dir",
         metavar="DIR",
-        help="PS baseconfig apps directory (saved in paths.yml; default: same as --software-dir)",
+        help="PS baseconfig apps directory (saved in paths.yml)",
     )
     p_env_set.add_argument(
         "--apps-dir",
