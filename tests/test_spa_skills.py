@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -72,18 +71,33 @@ def _install(tmp_path: Path, **kwargs):
     )
 
 
-def test_install_symlinks_every_package_and_is_idempotent(tmp_path):
+def _assert_copied(dest: Path, source: Path) -> None:
+    assert dest.is_dir()
+    assert not dest.is_symlink()
+    assert dest.resolve() != source.resolve()
+    assert (dest / "SKILL.md").read_text(encoding="utf-8") == (source / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_install_copies_every_package_and_records_paths(tmp_path):
     source = _source(tmp_path)
-    first = _install(tmp_path, source=source, platform="cursor")
-    link = tmp_path / "home" / ".cursor" / "skills" / "spa"
-    assert link.is_symlink()
-    assert link.resolve() == (source / "spa").resolve()
-    assert (tmp_path / "home" / ".cursor" / "skills" / "spa-apps").resolve() == (source / "spa-apps").resolve()
+    config = tmp_path / "config" / "spa"
+    first = _install(tmp_path, source=source, platform="cursor", config_dir=config)
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    apps = tmp_path / "home" / ".cursor" / "skills" / "spa-apps"
+    _assert_copied(dest, source / "spa")
+    _assert_copied(apps, source / "spa-apps")
     assert first["detectedVia"] == "explicit"
     assert first["platforms"] == ["cursor"]
-    second = _install(tmp_path, source=source, platform="cursor")
+    recorded = (config / "skills.yml").read_text(encoding="utf-8")
+    assert str(dest) in recorded
+    assert str(apps) in recorded
+    assert "password" not in recorded.lower()
+    assert "BEGIN CERTIFICATE" not in recorded
+    second = _install(tmp_path, source=source, platform="cursor", config_dir=config)
     assert second["installed"] == ["spa", "spa-apps"]
-    assert link.is_symlink()
+    _assert_copied(dest, source / "spa")
 
 
 def test_install_replaces_spa_named_directory_and_keeps_neighbor(tmp_path):
@@ -100,11 +114,45 @@ def test_install_replaces_spa_named_directory_and_keeps_neighbor(tmp_path):
 
     _install(tmp_path, source=source, platform="cursor", name="spa")
 
-    assert (skills / "spa").is_symlink()
-    assert (skills / "spa").resolve() == (source / "spa").resolve()
+    _assert_copied(skills / "spa", source / "spa")
     assert (neighbor / "SKILL.md").read_text(encoding="utf-8") == "keep\n"
     assert other_link.is_symlink()
     assert not (skills / "spa-apps").exists()
+
+
+def test_install_replaces_leftover_symlink_with_copy(tmp_path):
+    source = _source(tmp_path)
+    skills = tmp_path / "home" / ".cursor" / "skills"
+    leftover = tmp_path / "elsewhere" / "spa"
+    leftover.mkdir(parents=True)
+    (leftover / "SKILL.md").write_text("stale\n", encoding="utf-8")
+    dest = skills / "spa"
+    dest.parent.mkdir(parents=True)
+    dest.symlink_to(leftover)
+    neighbor = skills / "my-notes"
+    neighbor.mkdir()
+    (neighbor / "SKILL.md").write_text("keep\n", encoding="utf-8")
+
+    _install(tmp_path, source=source, platform="cursor", name="spa")
+
+    _assert_copied(dest, source / "spa")
+    assert leftover.is_dir()
+    assert (leftover / "SKILL.md").read_text(encoding="utf-8") == "stale\n"
+    assert (neighbor / "SKILL.md").read_text(encoding="utf-8") == "keep\n"
+
+
+def test_second_install_refreshes_file_contents(tmp_path):
+    source = _source(tmp_path)
+    _install(tmp_path, source=source, platform="cursor", name="spa")
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    (dest / "SKILL.md").write_text("stale dest\n", encoding="utf-8")
+    (source / "spa" / "SKILL.md").write_text("---\nname: spa\n---\nrefreshed\n", encoding="utf-8")
+    (source / "spa" / "nested.md").write_text("new file\n", encoding="utf-8")
+
+    _install(tmp_path, source=source, platform="cursor", name="spa")
+
+    _assert_copied(dest, source / "spa")
+    assert (dest / "nested.md").read_text(encoding="utf-8") == "new file\n"
 
 
 def test_platforms_env_installs_both_and_ignores_path(tmp_path):
@@ -119,8 +167,8 @@ def test_platforms_env_installs_both_and_ignores_path(tmp_path):
     home = tmp_path / "home"
     assert result["detectedVia"] == "env_platforms"
     assert result["platforms"] == ["claude-code", "cursor"]
-    assert (home / ".cursor" / "skills" / "spa").is_symlink()
-    assert (home / ".claude" / "skills" / "spa").is_symlink()
+    _assert_copied(home / ".cursor" / "skills" / "spa", tmp_path / "skills" / "spa" / "spa")
+    _assert_copied(home / ".claude" / "skills" / "spa", tmp_path / "skills" / "spa" / "spa")
     assert not (home / ".windsurf" / "skills").exists()
 
 
@@ -147,8 +195,8 @@ def test_comma_separated_platforms_install_each(tmp_path):
     assert result["detectedVia"] == "explicit"
     assert result["platforms"] == ["cursor", "claude-code"]
     home = tmp_path / "home"
-    assert (home / ".cursor" / "skills" / "spa").is_symlink()
-    assert (home / ".claude" / "skills" / "spa").is_symlink()
+    _assert_copied(home / ".cursor" / "skills" / "spa", source / "spa")
+    _assert_copied(home / ".claude" / "skills" / "spa", source / "spa")
     assert not (home / ".windsurf").exists()
 
 
@@ -176,9 +224,8 @@ def test_ambiguous_path_names_platforms(tmp_path):
 def test_antigravity_alias_uses_gemini_config_skills(tmp_path):
     source = _source(tmp_path)
     _install(tmp_path, source=source, platform="agy", name="spa")
-    link = tmp_path / "home" / ".gemini" / "config" / "skills" / "spa"
-    assert link.is_symlink()
-    assert link.resolve() == (source / "spa").resolve()
+    dest = tmp_path / "home" / ".gemini" / "config" / "skills" / "spa"
+    _assert_copied(dest, source / "spa")
 
 
 def test_remove_deletes_registry_name_only(tmp_path):
@@ -215,19 +262,14 @@ def test_name_and_all_together_is_usage_error(tmp_path):
     assert caught.value.code == 2
 
 
-def test_symlink_failure_copies_package_and_records_path(tmp_path, monkeypatch):
+def test_install_copies_when_dest_already_exists(tmp_path):
     source = _source(tmp_path)
-
-    def refuse_symlink(*_args, **_kwargs):
-        raise OSError("symlinks are not available")
-
-    monkeypatch.setattr(os, "symlink", refuse_symlink)
+    dest = tmp_path / "home" / ".gemini" / "config" / "skills" / "spa"
+    dest.mkdir(parents=True)
+    (dest / "SKILL.md").write_text("old\n", encoding="utf-8")
     config = tmp_path / "config" / "spa"
     _install(tmp_path, source=source, platform="antigravity", name="spa", config_dir=config)
-    dest = tmp_path / "home" / ".gemini" / "config" / "skills" / "spa"
-    assert dest.is_dir()
-    assert not dest.is_symlink()
-    assert (dest / "SKILL.md").is_file()
+    _assert_copied(dest, source / "spa")
     recorded = (config / "skills.yml").read_text(encoding="utf-8")
     assert str(dest) in recorded
     assert "password" not in recorded.lower()
@@ -282,8 +324,12 @@ def test_cli_install_comma_separated_platforms(tmp_path):
     payload = json.loads(result.stdout)
     assert payload["data"]["platforms"] == ["cursor", "claude-code"]
     assert payload["data"]["detectedVia"] == "explicit"
-    assert (tmp_path / "home" / ".cursor" / "skills" / "spa").is_symlink()
-    assert (tmp_path / "home" / ".claude" / "skills" / "spa").is_symlink()
+    cursor = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    claude = tmp_path / "home" / ".claude" / "skills" / "spa"
+    assert cursor.is_dir() and not cursor.is_symlink()
+    assert claude.is_dir() and not claude.is_symlink()
+    assert (cursor / "SKILL.md").is_file()
+    assert (claude / "SKILL.md").is_file()
 
 
 def test_install_places_cursor_rule_adapters_without_always_apply(tmp_path):
@@ -353,10 +399,10 @@ def test_cli_install_and_remove_round_trip(tmp_path):
     assert installed.returncode == 0, installed.stdout + installed.stderr
     payload = json.loads(installed.stdout)
     assert payload["data"]["detectedVia"] == "env_platforms"
-    link = tmp_path / "home" / ".cursor" / "skills" / "spa"
-    assert link.is_symlink()
-    assert link.resolve().name == "spa"
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    assert dest.is_dir() and not dest.is_symlink()
+    assert dest.name == "spa"
     removed = run_spa(["--agent", "skills", "remove", "--yes"], env=env)
     assert removed.returncode == 0, removed.stdout + removed.stderr
-    assert not link.is_symlink()
-    assert not link.exists()
+    assert not dest.is_symlink()
+    assert not dest.exists()

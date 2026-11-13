@@ -12,11 +12,6 @@ compatibility: Requires SPA_HOME (install prefix `${XDG_DATA_HOME:-~/.local/shar
 metadata:
   product: splunk-platform-automator
   version: "1.0.0"
-paths:
-  - "config/splunk_config.yml"
-  - "examples/topologies/*.yml"
-  - "examples/providers/*.yml"
-  - "examples/catalog/features.yml"
 ---
 
 # spa-create-config — splunk_config.yml

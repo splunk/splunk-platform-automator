@@ -692,6 +692,27 @@ class TestSpaSkill:
         )
         assert tracked.strip() == ""
 
+    def test_skill_frontmatter_omits_paths_discovery_scope(self):
+        import yaml
+
+        skills = PROJECT_ROOT / "skills" / "spa"
+        for path in sorted(skills.glob("*/SKILL.md")):
+            front = path.read_text(encoding="utf-8").split("---", 2)[1]
+            meta = yaml.safe_load(front) or {}
+            assert "paths" not in meta, path.relative_to(PROJECT_ROOT)
+
+    def test_skills_install_copies_packages_not_symlinks(self):
+        readme = (PROJECT_ROOT / "skills" / "spa" / "README.md").read_text(encoding="utf-8")
+        entry = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
+        contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
+        assert "copies these packages" in readme
+        assert "prefers a symlink" not in readme
+        assert "not a live symlink" in readme
+        assert "copies this package" in entry
+        assert "links this package" not in entry
+        assert "spa skills install" in contributing
+        assert "Cursor skill symlinks" not in contributing
+
     def test_verify_after_write_is_documented(self):
         guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
         configure = guide[

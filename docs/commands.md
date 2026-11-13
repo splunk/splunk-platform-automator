@@ -445,7 +445,7 @@ spa skills install
 
 ## `skills install`
 
-Link SPA skill packages into the user IDE skill directory. Platform defaults to SPA_SKILLS_PLATFORMS, then auto-detect.
+Copy SPA skill packages into the user IDE skill directory. Platform defaults to SPA_SKILLS_PLATFORMS, then auto-detect.
 
 | Flag | Description |
 | --- | --- |

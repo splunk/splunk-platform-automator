@@ -14,7 +14,7 @@ Human guide: [docs/user-guide.md](../../docs/user-guide.md). Repo index: [AGENTS
 
 ## Install
 
-`spa skills install` links these packages into the user IDE skill directory. It does not write skills into this repo or into an environment directory.
+`spa skills install` copies these packages into the user IDE skill directory. It does not write skills into this repo or into an environment directory.
 
 ```bash
 spa skills install                          # SPA_SKILLS_PLATFORMS, or one detected IDE
@@ -26,7 +26,7 @@ spa skills remove --yes
 
 Platforms: `claude-code` (`claude`), `cursor`, `codex`, `opencode`, `windsurf`, `gemini-code` (`gemini`), `pi` (`pi-dev`), `antigravity` (`agy`), or `all`. Pass several as one comma-separated argument (`cursor,claude`). An explicit platform ignores `SPA_SKILLS_PLATFORMS`. When several IDEs are present and the variable is unset, name the platform.
 
-Install prefers a symlink to `$SPA_HOME/skills/spa/<name>`. An existing directory or link with that package name is replaced. Other names in the IDE skill directory stay. If the OS cannot create a symlink, the package is copied and recorded in `~/.config/spa/skills.yml`. Cursor also gets thin `alwaysApply: false` adapters in `~/.cursor/rules/spa-*.mdc`; Claude Code gets `~/.claude/rules/spa.md` when that platform is used. Other IDEs use the skill directory plus repo `AGENTS.md`. `spa skills remove` deletes only registered package names and `spa-*` adapters, and requires `--yes`.
+Install copies `$SPA_HOME/skills/spa/<name>` into the IDE skill directory. An existing directory or leftover symlink with that package name is replaced. Other names in the IDE skill directory stay. Every install is a refresh. Destinations are recorded in `~/.config/spa/skills.yml`. Contributor skill edits live under `skills/spa/`; pick-up is `spa skills install` again, not a live symlink. Cursor also gets thin `alwaysApply: false` adapters in `~/.cursor/rules/spa-*.mdc`; Claude Code gets `~/.claude/rules/spa.md` when that platform is used. Other IDEs use the skill directory plus repo `AGENTS.md`. `spa skills remove` deletes only registered package names and `spa-*` adapters, and requires `--yes`.
 
 ## Other agents
 

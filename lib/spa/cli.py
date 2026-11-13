@@ -2144,7 +2144,7 @@ def _run(argv: Sequence[str]) -> int:
     p_skills_install = _add_action(
         skills_sub,
         "install",
-        help="Link SPA skills into a user IDE skill directory",
+        help="Copy SPA skills into a user IDE skill directory",
         usage="spa skills install [PLATFORM]",
     )
     _add_mode_flags(p_skills_install)

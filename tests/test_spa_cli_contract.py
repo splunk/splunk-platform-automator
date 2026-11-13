@@ -457,6 +457,19 @@ HELP_CONTRACTS = [
         ["usage: spa licenses", "ACTION", "list", "Aliases: lic", "spa licenses needs an action"],
     ),
     (
+        ["skills", "--help"],
+        [
+            "usage: spa skills",
+            "Copy SPA skills into a user IDE skill directory",
+            "install",
+            "remove",
+        ],
+    ),
+    (
+        ["skills", "install", "--help"],
+        ["usage: spa skills install", "--name", "--all"],
+    ),
+    (
         ["licenses", "list", "--help"],
         [
             "usage: spa licenses list",

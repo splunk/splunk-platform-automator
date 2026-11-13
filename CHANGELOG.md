@@ -35,6 +35,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **`spa skills install` copies packages**: always copy `$SPA_HOME/skills/spa/<name>` into the IDE skill directory (Claude and some IDEs miss symlink installs). An existing directory or leftover symlink of that package name is replaced; neighbors stay. Every install refreshes file contents. Destinations are recorded in `~/.config/spa/skills.yml`. `/spa-create-config` no longer uses Agent Skills `paths:` (that hid the skill in an env dir with no `examples/` files). Contributor skill edits live under `skills/spa/`; pick-up is `spa skills install` again.
+
 - **ITSI Java and customize next**: `spa apps add 1841` attaches `os.java.search_heads` before licenses and content packs. The command sets Java 21 on a real search-head selector (`splunk_hosts[name=…]` or `splunk_hosts[iter.prefix=…]`), never global `os.packages`. Package is `java-21-openjdk` (RHEL/Amazon Linux) or `openjdk-21-jdk` (Ubuntu/Debian). Skills follow that envelope; there is no `spa config merge itsi-minimal` yet. `apps.customize` ask names configure / set up / customize and says `--customize` does not change `target_roles`.
 
 - **License proposal stacks dedicated files and prefers symlink names**: when Enterprise and ITSI files both exist, propose both even if a combo file is also present. A combo-only file still satisfies every required capability. Same resolved path is one license; propose the symlink basename (`Splunk_Enterprise.lic` → NFR). Human list shows `link -> target`. `data.next` `config.set.license_file` uses those names.

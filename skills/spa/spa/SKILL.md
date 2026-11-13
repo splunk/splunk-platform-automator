@@ -13,7 +13,7 @@ description: >-
 
 # spa skill
 
-Product entry for SPA (same role as cup’s main skill). **Load `/spa` first.** `spa skills install` links this package into the user IDE skill directory.
+Product entry for SPA (same role as cup’s main skill). **Load `/spa` first.** `spa skills install` copies this package into the user IDE skill directory.
 
 ## When to use
 

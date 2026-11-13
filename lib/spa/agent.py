@@ -480,7 +480,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "skills install",
-            "summary": "Link SPA skill packages into the user IDE skill directory. Platform defaults to SPA_SKILLS_PLATFORMS, then auto-detect.",
+            "summary": "Copy SPA skill packages into the user IDE skill directory. Platform defaults to SPA_SKILLS_PLATFORMS, then auto-detect.",
             "positionals": [
                 {
                     "name": "PLATFORM",
