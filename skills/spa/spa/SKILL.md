@@ -80,7 +80,7 @@ spa environment cleanup                                # lists registry entries 
 
 ## Software
 
-One shared directory per machine, not inside `SPA_HOME` and not copied per env. Linux tgz installers, extracted PS baseconfig apps, optional `Splunk_Enterprise.lic`. Splunk / Cisco employees: [http://go/baseconfigs](http://go/baseconfigs). Others: Splunk PS. Checklist: [Prepare Software](../../../docs/user-guide.md#prepare-software).
+One shared directory per machine, not inside `SPA_HOME` and not copied per env. Linux tgz installers, extracted PS baseconfig apps, optional `Splunk_Enterprise.lic`. Splunk / Cisco employees: [http://go/baseconfigs](http://go/baseconfigs). Others: Splunk PS. Checklist: [Prepare Software](../../../docs/user-guide.md#prepare-software). First lab order: [docs/quick-start.md](../../../docs/quick-start.md).
 
 ```bash
 spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
@@ -105,4 +105,4 @@ After Phase 14 option A, follow [long-runs.md](references/long-runs.md#handoff-f
 
 Import `spa.api`; answer `Proceed?`; invent playbook names; dump full Ansible logs into the model context (use `spa logs` / `data.log` only when the user asked to debug); put installers inside `SPA_HOME`; `2>&1 | grep`, `head`, or `tail` on deploy/destroy/run.
 
-Human journey: [docs/user-guide.md](../../../docs/user-guide.md). Install: README curl `| sh`. Token budget: [token-budget.md](references/token-budget.md).
+Human journey: [docs/quick-start.md](../../../docs/quick-start.md). Install: README curl `| sh`. Token budget: [token-budget.md](references/token-budget.md).

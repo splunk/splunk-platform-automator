@@ -14,7 +14,7 @@ SPA provisions and deploys Splunk Enterprise (AWS Linux + Terraform, or VirtualB
 
 Load **`/spa`** only for a Splunk lab, Splunk environment, or env lifecycle (including deploy to existing hosts). Do not load it for contributor work on spa itself.
 
-Human loop (same as README): [docs/user-guide.md](docs/user-guide.md).
+Human loop (same as README): [docs/quick-start.md](docs/quick-start.md).
 
 ## Install from this checkout
 

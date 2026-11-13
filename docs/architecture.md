@@ -1,6 +1,6 @@
 # SPA architecture and contributor standards
 
-This page is for contributors changing the Splunk Platform Automator framework. Operators should use the [user guide](user-guide.md). Command and setting reference material is generated in [commands.md](commands.md) and [config.md](config.md); do not duplicate or hand-edit it.
+This page is for contributors changing the Splunk Platform Automator framework. Operators start at the [quick start](quick-start.md), then the [user guide](user-guide.md). Command and setting reference material is generated in [commands.md](commands.md) and [config.md](config.md); do not duplicate or hand-edit it.
 
 The user guide explains how to use spa after it is installed. Install, uninstall, shell completion setup, controller Python, VirtualBox, and WSL belong in [install.md](install.md); do not copy those commands.
 

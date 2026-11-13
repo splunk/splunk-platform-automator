@@ -69,15 +69,7 @@ That installs the latest GitHub Release into `~/.local/share/spa` and puts `spa`
 
 ## Start here
 
-```bash
-spa doctor
-spa init --example cm_2idxc_sh --provider aws ~/envs/my-env
-cd ~/envs/my-env
-spa validate
-spa deploy --yes
-```
-
-VirtualBox: `--provider virtualbox` (for example `single_node`). Full narrative: [user guide](docs/user-guide.md).
+First lab: [quick start](docs/quick-start.md) (install, Software, one provider, then `spa init --example single_node --provider PROVIDER`).
 
 Employee-only CCM: `--provider ccm`. See [CCM](docs/ccm.md).
 
@@ -87,6 +79,7 @@ Existing servers: `spa init --example TOPOLOGY --provider external ENV`, then `s
 
 | Audience | Link |
 | --- | --- |
+| First lab | [docs/quick-start.md](docs/quick-start.md) |
 | Humans (and agents following examples) | [docs/user-guide.md](docs/user-guide.md) |
 | CCM (employee-only) | [docs/ccm.md](docs/ccm.md) |
 | Command catalog (generated) | [docs/commands.md](docs/commands.md) · `spa agent schema --markdown` |

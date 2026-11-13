@@ -4,15 +4,7 @@ SPA installs and configures Splunk Enterprise on AWS, VirtualBox, or existing ho
 
 ## Start here
 
-Install the framework first ([install guide](install.md)), then:
-
-```bash
-spa doctor
-spa init --example cm_2idxc_sh --provider aws ~/envs/my-env
-cd ~/envs/my-env
-spa validate
-spa deploy --yes
-```
+Install the framework first ([install guide](install.md)). For a first lab (Software, one provider, `single_node`), follow the [quick start](quick-start.md).
 
 If `spa init` fails the host prerequisite check, a dest that did not exist before the command is removed and the command reports that the environment has not been created. Init stays silent when those checks pass and prints only warnings and failures; `spa doctor` still prints the full report.
 
