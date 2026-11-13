@@ -36,7 +36,7 @@ Do **not** set `target_roles` on `premium_app: itsi` or `itsi_content_pack: true
 
 ## 5. Premium ITSI?
 
-ITSI / ITE Work → Splunkbase **1841** only. Not 5403. Minimal ITSI is `spa config merge itsi-minimal`. After the operator accepts that merge, ask once about Java on the search host via `spa config set` on that host's `os.packages` (`java-21-openjdk` on Amazon Linux/RHEL, `openjdk-21-jdk` on Ubuntu) — see [aws-os-matrix.md](aws-os-matrix.md).
+ITSI / ITE Work → Splunkbase **1841** only. Not 5403. After `apps add 1841`, follow `data.next` `os.java.search_heads`: Java 21 on search-head hosts only via `spa config set` on that host's `os.packages` (`java-21-openjdk` on Amazon Linux/RHEL, `openjdk-21-jdk` on Ubuntu) — see [aws-os-matrix.md](aws-os-matrix.md). Do not set global `os.packages`.
 
 Discover license paths with `spa --agent config explain PATH`, then set chosen values with `spa --agent config set PATH VALUE`.
 

@@ -41,11 +41,11 @@ Interactive workflow for `config/splunk_config.yml` on AWS, VirtualBox, external
 - Splunkbase search / TA lookup → load [spa-apps](../spa-apps/SKILL.md) (`spa --agent apps search` then one `spa --agent apps add`)
 - Flat deployment test configs under `tests/configs/*.yml` only
 - Production sizing / PS engagement (guidance only; no auto-sizing)
-- Running provision/deploy without an explicit yes in chat for that run (Phase 14 asks first)
+- Running spa deploy without an explicit yes in chat for that run (Phase 14 asks first)
 
 ## Entry points
 
-Use this skill for a new environment or a change to an existing config. Load [/spa](../spa/SKILL.md) for lifecycle (init, validate, provision, deploy, destroy). Route tree: [workflow-decision-tree.md](references/workflow-decision-tree.md).
+Use this skill for a new environment or a change to an existing config. Load [/spa](../spa/SKILL.md) for lifecycle (init, validate, spa deploy, destroy). Route tree: [workflow-decision-tree.md](references/workflow-decision-tree.md).
 
 - **Brand new environment** ("I need a Splunk lab or environment..."): start here at Phase 1, even when registered environments already exist. A new-environment request never selects an existing environment. Until the location and name gate ("Environment location, name, and summary") has named the target, run no environment-scoped command (`config get`, `apps search`, `apps add`, `validate`). Never fall back to the registry default (`spa --agent environment list`, `default: true`), which is an existing environment. The plan-or-write mode is asked at the gate, after the minimum requirements. Nothing writes until the gate passes (see the write barrier in the gate). Write mode then inits. Plan mode inits at Phase 12. Then the config writes, validate, and hand off to `/spa`.
 - **Modify existing config** ("add ITSI", "change the OS"): skip the greenfield phases and use "Add / change a setting" below. Name the target environment before any write. If the operator did not name one, ask which registered environment to change (AskQuestion), and show its path.
@@ -63,7 +63,7 @@ Never edit `config/splunk_config.yml` yourself: no editor, no shell write, no YA
 - Read: `spa --agent config search QUERY`, `spa --agent config explain PATH`, `spa --agent config templates list`, `spa --agent config get [PATH]`
 - Write: `spa --agent config set PATH VALUE`, `add`, `unset`, `spa --agent config merge NAME`, `merge --file FILE`, `move role`, `move host`, `topology`, `provider`, and `header set`
 
-App entries go to [spa-apps](../spa-apps/SKILL.md) (`spa --agent apps add`). Validation, provision, deploy, and destroy stay in [/spa](../spa/SKILL.md), which waits for your yes.
+App entries go to [spa-apps](../spa-apps/SKILL.md) (`spa --agent apps add`). Validation, spa deploy, and destroy stay in [/spa](../spa/SKILL.md), which waits for your yes.
 
 ## Phase Sequencing & Guardrails (mandatory)
 
@@ -75,7 +75,7 @@ Write mode: **1 → 2 → 3 → 4 → 5 → gate → init → 6–10 → reconfi
 - **Phase 9 (apps) is mandatory:** Always run Phase 9, even when the user did not mention apps. Always ask "Do you want to add apps?" with two clear options: "Yes, add apps" or "No, trial-only". Record the choice and proceed accordingly.
 - **Follow `data.next`:** After `architecture plan`, `apps add`, `licenses list`, and CCM `survey` / `instance-types list`, AskQuestion each `ask` then run `command` in order. Prefer `argv` when present; if a shell is used, copy `command` verbatim. Do not invent follow-ups the envelope omitted. Path B: when next includes `mode.write`, do not AskQuestion plan vs write. For a normal app, if add returns `ready: false` with a roles choice, ask over `allowed` (pre-check `suggested`) and retry with `--roles`. Do not guess. SPA places TAs by role, not by host.
 - **Values:** pass string scalars unquoted (`eu-central-1`, not `"eu-central-1"`). Use JSON only for lists and maps.
-- **Content packs follow the envelope:** After ITSI (1841), `data.next` offers `none` / `list` / `name`. AskQuestion those three. On `list`, run `spa --agent apps content-packs list 5391` and present each pack `name` / `title` (and `spa_automation` when present), then pick packs. On `name`, wait for folder names. On `none`, skip. Do not hide the names behind "there are 26 packs." Do not guess pack names or IDs.
+- **ITSI follow-ups follow the envelope:** After ITSI (1841), follow `data.next` in order: Java 21 on search-head hosts (`os.java.search_heads`; not global `os.packages`), then licenses, then content packs (`none` / `list` / `name`). AskQuestion those three pack choices. On `list`, run `spa --agent apps content-packs list 5391` and present each pack `name` / `title` (and `spa_automation` when present), then pick packs. On `name`, wait for folder names. On `none`, skip. Do not hide the names behind "there are 26 packs." Do not guess pack names or IDs.
 - **Do not combine Phases 4–10.** One phase, then the next.
 - **New host:** `spa --env NAME config add 'splunk_hosts[name=NAME]' '{"roles":[...]}' --yes`. Never `config add splunk_hosts`. Never a file edit.
 - **OS keys:** set leaf paths only. Never `config set os '{whole map}'`. Author only non-default keys (`os.packages`, `os.set_hostname` if chosen).
@@ -112,7 +112,7 @@ Follow [secrets-handling.md](references/secrets-handling.md) for the full list.
 2. `spa --agent config explain PATH` for the matching path. It returns one level, the decision, and one mutation command. It does not apply the command. A deeper level is a longer path. When `scope` is present, `applies_to` plus `per_host_path` or `global_path` is the other place that setting can go. `behavior` `merge` adds a per-host list to the global list. `replace` uses the host value instead of the global one. Omit `scope` means that path has no counterpart.
 3. Update one existing schema path with `spa --agent config set PATH VALUE`. Append a new host, indexer cluster, or search-head cluster with `spa --agent config add SELECTOR JSON_OBJECT`. For a shipped bundle, `spa --agent config templates list` then `spa --agent config merge NAME --yes`. Use `spa --agent config merge --file FILE` only for an operator-authored fragment.
 4. Do not invent YAML from leftover mixed example files or apply a catalog snippet. For Splunkbase TAs and packs, follow [spa-apps](../spa-apps/SKILL.md): search, choose the ID and roles, then use one `spa --agent apps add` transaction.
-5. After every write, inspect `changed` and `ready` (`ok: false` means nothing was written). Humans pass `--show-diff` for the hunk. `spa --agent config get` the identity (`found`), then `spa --agent validate` (Phase 13). Do not auto-run provision/deploy.
+5. After every write, inspect `changed` and `ready` (`ok: false` means nothing was written). Humans pass `--show-diff` for the hunk. `spa --agent config get` the identity (`found`), then `spa --agent validate` (Phase 13). Do not auto-run spa deploy.
 
 ## Reference files (load on demand)
 

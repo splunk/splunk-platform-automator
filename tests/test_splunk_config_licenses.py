@@ -177,7 +177,7 @@ def test_propose_license_files_itsi_missing(tmp_path):
 
 def test_proposal_prefers_latest_usable_license_by_content(tmp_path):
     old = licenses.parse_license_file(
-        _write_license(tmp_path / "Splunk_Enterprise.lic", expiration="1893456000")
+        _write_license(tmp_path / "lab-old.license", expiration="1893456000")
     )
     newer = licenses.parse_license_file(
         _write_license(tmp_path / "renamed-commercial.license", expiration="4102444800")
@@ -187,6 +187,107 @@ def test_proposal_prefers_latest_usable_license_by_content(tmp_path):
     )
     proposal = licenses.propose_license_files([old, newer, expired], itsi_in_config=False)
     assert proposal["proposed_splunk_license_file"] == ["renamed-commercial.license"]
+
+
+def test_proposal_stacks_dedicated_enterprise_and_itsi_when_combo_also_exists(tmp_path):
+    enterprise = licenses.parse_license_file(_write_license(tmp_path / "Splunk_Enterprise.lic"))
+    itsi = licenses.parse_license_file(
+        _write_license(
+            tmp_path / "Splunk_ITSI.lic",
+            license_type="addon",
+            group_id="ITSI",
+            addons=("itsi",),
+        )
+    )
+    combo = licenses.parse_license_file(
+        _write_license(
+            tmp_path / "combined.lic",
+            addons=("ITSI", "Splunk Enterprise Security"),
+        )
+    )
+    proposal = licenses.propose_license_files(
+        [combo, enterprise, itsi], itsi_in_config=True, es_in_config=False
+    )
+    assert proposal["proposed_splunk_license_file"] == [
+        "Splunk_Enterprise.lic",
+        "Splunk_ITSI.lic",
+    ]
+
+
+def test_discover_symlink_licenses_record_link_target(tmp_path):
+    nfr = _write_license(tmp_path / "Splunk_Enterprise_NFR_lab.License")
+    link = tmp_path / "Splunk_Enterprise.lic"
+    link.symlink_to(nfr.name)
+    discovered = licenses.discover_license_files(tmp_path)
+    by_name = {item["basename"]: item for item in discovered}
+    assert by_name["Splunk_Enterprise.lic"]["symlink"] is True
+    assert by_name["Splunk_Enterprise.lic"]["link_target"] == "Splunk_Enterprise_NFR_lab.License"
+    assert by_name["Splunk_Enterprise.lic"]["path"] == str(nfr.resolve())
+
+
+def test_proposal_prefers_symlink_basenames_for_same_resolved_path(tmp_path):
+    enterprise_nfr = _write_license(tmp_path / "Splunk_Enterprise_NFR_lab.License")
+    itsi_nfr = _write_license(
+        tmp_path / "Splunk_ITSI_NFR_lab.License",
+        license_type="addon",
+        group_id="ITSI",
+        addons=("itsi",),
+    )
+    (tmp_path / "Splunk_Enterprise.lic").symlink_to(enterprise_nfr.name)
+    (tmp_path / "Splunk_ITSI.lic").symlink_to(itsi_nfr.name)
+    discovered = licenses.discover_license_files(tmp_path)
+    proposal = licenses.propose_license_files(discovered, itsi_in_config=True)
+    assert proposal["proposed_splunk_license_file"] == [
+        "Splunk_Enterprise.lic",
+        "Splunk_ITSI.lic",
+    ]
+    rendered = licenses.format_licenses_text(
+        {
+            "discovered_files": discovered,
+            "proposed_splunk_license_file": proposal["proposed_splunk_license_file"],
+        }
+    )
+    assert "Splunk_Enterprise.lic -> Splunk_Enterprise_NFR_lab.License" in rendered
+    assert "Splunk_ITSI.lic -> Splunk_ITSI_NFR_lab.License" in rendered
+
+
+def test_licenses_list_next_sets_symlink_basenames(tmp_path):
+    from spa.next_steps import licenses_list_next
+
+    enterprise_nfr = _write_license(tmp_path / "Splunk_Enterprise_NFR_lab.License")
+    itsi_nfr = _write_license(
+        tmp_path / "Splunk_ITSI_NFR_lab.License",
+        license_type="addon",
+        group_id="ITSI",
+        addons=("itsi",),
+    )
+    (tmp_path / "Splunk_Enterprise.lic").symlink_to(enterprise_nfr.name)
+    (tmp_path / "Splunk_ITSI.lic").symlink_to(itsi_nfr.name)
+    config = tmp_path / "splunk_config.yml"
+    config.write_text(
+        "splunk_app_deployment:\n"
+        "  apps:\n"
+        "    - app_id: 1841\n"
+        "      premium_app: itsi\n"
+        "splunk_hosts:\n"
+        "  - name: lm\n"
+        "    roles: [license_manager]\n"
+    )
+    scan = licenses.scan_licenses(
+        tmp_path,
+        software_dir=str(tmp_path),
+        config_path=config,
+    )
+    assert scan["proposed_splunk_license_file"] == [
+        "Splunk_Enterprise.lic",
+        "Splunk_ITSI.lic",
+    ]
+    nxt = licenses_list_next(scan)
+    write = next(row for row in nxt if row["id"] == "config.set.license_file")
+    assert "Splunk_Enterprise.lic" in write["ask"]
+    assert "Splunk_ITSI.lic" in write["ask"]
+    assert "Splunk_Enterprise_NFR_lab.License" not in write["ask"]
+    assert write["argv"][-2] == '["Splunk_Enterprise.lic","Splunk_ITSI.lic"]'
 
 
 def test_proposal_can_satisfy_enterprise_itsi_and_es_with_one_license(tmp_path):

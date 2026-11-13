@@ -31,8 +31,8 @@ Returns:
   configured files; warnings for expiry within 30 days or unknown expiration
 
 The scanner does not trust filenames. It parses the license XML but never emits
-the raw payload, signature, or GUID. A canonical filename is only a final
-tie-breaker between otherwise equivalent licenses.
+the raw payload, signature, or GUID. A canonical filename is a tie-breaker after
+status, symlink, and dedicated-vs-combo, and before later expiry.
 
 ## When to ask the user
 
@@ -51,10 +51,11 @@ tie-breaker between otherwise equivalent licenses.
 Select by parsed capability, not by filename:
 
 1. Exclude invalid and expired files.
-2. Prefer a file that satisfies more required capabilities.
-3. Prefer perpetual, then valid, then expiring, then unknown-expiration.
-4. Among equivalent dated licenses, prefer the latest expiration.
-5. Keep multiple files when they provide complementary capabilities.
+2. Prefer perpetual, then valid, then expiring, then unknown-expiration.
+3. Prefer a symlink basename over the file it points at (same resolved path is one license).
+4. Prefer a dedicated file (fewer extra premium capabilities) over a combo. Stack Enterprise + ITSI when both exist. A combo-only file still satisfies every required capability if it is the only file.
+5. Prefer a canonical basename (`Splunk_Enterprise.lic`, `Splunk_ITSI.lic`, `Splunk_ES.lic`).
+6. Among otherwise equivalent licenses, prefer the latest expiration.
 
 Do not assume that the newest date makes multiple stackable licenses
 interchangeable. The proposal chooses one best candidate per required

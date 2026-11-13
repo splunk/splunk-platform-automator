@@ -1108,6 +1108,7 @@ class LocalSpaSession:
                     playbooks=built.get("playbooks") or [],
                     customize=bool(customize),
                     content_packs=content_packs,
+                    config=self._app_deployment_config(),
                 )
                 if follow:
                     data["next"] = follow
@@ -2511,6 +2512,12 @@ class LocalSpaSession:
                     row["provider"] = provision.provider
                     row["provider_status"] = "unprovisioned"
                     row["ansible"] = "unprovisioned"
+            if status:
+                from spa.next_steps import hosts_status_next
+
+                follow = hosts_status_next(report)
+                if follow:
+                    report["next"] = follow
         except HostLookupError as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
         except shell_mod.ShellError as exc:

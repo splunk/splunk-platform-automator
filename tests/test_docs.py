@@ -834,6 +834,24 @@ class TestSpaSkill:
             assert "terraform apply" not in text
             assert "Apply complete" not in text
 
+    def test_spa_skill_handoff_is_deploy_not_provision_then_deploy(self):
+        skills = PROJECT_ROOT / "skills" / "spa"
+        skill = (skills / "spa" / "SKILL.md").read_text(encoding="utf-8")
+        create = (skills / "spa-create-config" / "SKILL.md").read_text(encoding="utf-8")
+        tree = (skills / "spa-create-config" / "references" / "workflow-decision-tree.md").read_text(
+            encoding="utf-8"
+        )
+        assert "runs `provision`, then `deploy`" not in skill
+        assert "provision`, then `deploy`" not in skill
+        assert "references/long-runs.md" in skill
+        assert "creates hosts" in skill.lower() or "long-runs.md" in skill
+        assert "handoff for provision and deploy" not in tree
+        assert "spa deploy" in tree
+        assert "validate, provision, deploy" not in create
+        assert "Validation, provision, deploy" not in create
+        assert "provision/deploy" not in create
+        assert "spa deploy" in create
+
     def test_entry_skill_points_at_upgrade_and_health_references(self):
         skill_root = PROJECT_ROOT / "skills" / "spa" / "spa"
         skill = (skill_root / "SKILL.md").read_text(encoding="utf-8")
@@ -1397,7 +1415,7 @@ class TestSpaSkill:
 
 
 class TestIssue125AppsSkill:
-    """Slice 4 of #125: spa-apps placement, Unix TA URL, itsi-minimal, auth check."""
+    """Slice 4 of #125: spa-apps placement, Unix TA URL, ITSI Java next, auth check."""
 
     def _texts(self):
         skills = PROJECT_ROOT / "skills" / "spa"
@@ -1421,17 +1439,17 @@ class TestIssue125AppsSkill:
         for text in self._texts():
             assert url in text
 
-    def test_apps_skill_merges_itsi_minimal_then_asks_once_about_java(self):
+    def test_apps_skill_follows_1841_java_next_not_itsi_minimal(self):
         for text in self._texts():
-            assert "spa config merge itsi-minimal" in text
-            merge_at = text.index("spa config merge itsi-minimal")
-            after = text[merge_at:]
-            assert "ask once" in after.lower()
-            assert "os.packages" in after
-            assert "spa config set" in after
-            assert "java-21-openjdk" in after
-            assert "openjdk-21-jdk" in after
-            assert "aws-os-matrix.md" in after
+            assert "itsi-minimal" not in text
+            assert "os.java.search_heads" in text or "data.next" in text
+            assert "os.packages" in text
+            assert "java-21-openjdk" in text
+            assert "openjdk-21-jdk" in text
+            assert "aws-os-matrix.md" in text
+            lower = text.lower()
+            assert "search-head" in lower or "search head" in lower
+            assert "global" in lower
 
     def test_apps_skill_auth_points_at_apps_auth_check(self):
         for text in self._texts():

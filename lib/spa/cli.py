@@ -3641,6 +3641,7 @@ def _run(argv: Sequence[str]) -> int:
                     roles_str = " (%s)" % ", ".join(row["roles"])
                 extra_info = format_host_status(row) if show_status else ""
                 print("%s%s%s" % (row["name"], roles_str, extra_info))
+            _print_next(data)
             return 0
         from spa import shell as shell_mod
 

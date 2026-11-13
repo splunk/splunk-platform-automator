@@ -302,6 +302,16 @@ def test_hosts_list_status_skips_runtime_when_unprovisioned(tmp_path, monkeypatc
     assert rows["idx1"]["ansible"] == "unprovisioned"
     assert rows["idx1"]["provider_status"] == "unprovisioned"
     assert format_host_status(rows["idx1"]) == " - unprovisioned"
+    nxt = result.data.get("next") or []
+    assert nxt, result.data
+    deploy = nxt[0]
+    assert deploy["id"] == "deploy"
+    ask = deploy["ask"].lower()
+    assert "not created" in ask
+    assert "spa deploy" in ask
+    assert "provision" in ask
+    assert deploy["command"] == "spa --agent deploy --yes"
+    assert deploy["argv"] == ["spa", "--agent", "deploy", "--yes"]
 
 
 def test_format_host_status_renders_ccm_ttl_in_local_time():

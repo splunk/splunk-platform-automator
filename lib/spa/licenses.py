@@ -66,7 +66,10 @@ def format_licenses_text(data: Any) -> str:
     for record in data.get("discovered_files") or []:
         if not isinstance(record, dict):
             continue
-        parts = [record.get("basename"), record.get("license_type"), record.get("status")]
+        label = record.get("basename")
+        if record.get("symlink") and record.get("link_target"):
+            label = "%s -> %s" % (label, record["link_target"])
+        parts = [label, record.get("license_type"), record.get("status")]
         if record.get("expires_at"):
             parts.append("expires %s" % record["expires_at"])
         lines.append("  ".join(str(part) for part in parts if part))
@@ -241,6 +244,9 @@ def parse_license_file(path: Path, now: Optional[datetime] = None) -> Dict[str, 
         "path": str(path.resolve()),
         "size_bytes": stat.st_size,
     }
+    if path.is_symlink():
+        result["symlink"] = True
+        result["link_target"] = path.resolve().name
     try:
         if stat.st_size > MAX_LICENSE_BYTES:
             raise ValueError("license file exceeds %s bytes" % MAX_LICENSE_BYTES)
@@ -453,25 +459,60 @@ def current_license_files(config: Dict[str, Any]) -> Optional[List[str]]:
     return None
 
 
-def _candidate_rank(record: Dict[str, Any], required: Set[str], canonical: str) -> tuple:
+_PREMIUM_CAPS = frozenset({"itsi", "es"})
+_CANONICAL_NAMES = frozenset({ENTERPRISE_CANONICAL, ITSI_CANONICAL, ES_CANONICAL})
+
+
+def _extra_premium_caps(record: Dict[str, Any], capability: str) -> int:
+    extra = set(record.get("capabilities") or []) & _PREMIUM_CAPS
+    extra.discard(capability)
+    return len(extra)
+
+
+def _candidate_rank(record: Dict[str, Any], capability: str, canonical: str) -> tuple:
     status_rank = {
         "perpetual": 4,
         "valid": 3,
         "expiring": 2,
         "unknown-expiration": 1,
     }.get(record.get("status"), 0)
-    capabilities = set(record.get("capabilities") or [])
     return (
         status_rank,
-        record.get("_expires_epoch") or 0,
-        len(capabilities & required),
+        1 if record.get("symlink") else 0,
+        -_extra_premium_caps(record, capability),
         record.get("basename") == canonical,
+        record.get("_expires_epoch") or 0,
         record.get("basename", ""),
     )
 
 
+def _unique_by_resolved_path(discovered: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Same resolved path is one license; keep the symlink / canonical basename."""
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    order: List[str] = []
+    for record in discovered:
+        key = str(record.get("path") or record.get("basename") or "")
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(record)
+    unique: List[Dict[str, Any]] = []
+    for key in order:
+        unique.append(
+            max(
+                groups[key],
+                key=lambda record: (
+                    1 if record.get("symlink") else 0,
+                    1 if record.get("basename") in _CANONICAL_NAMES else 0,
+                    -len(str(record.get("basename") or "")),
+                ),
+            )
+        )
+    return unique
+
+
 def _select_for_capability(
-    discovered: List[Dict[str, Any]], capability: str, required: Set[str]
+    discovered: List[Dict[str, Any]], capability: str
 ) -> Optional[Dict[str, Any]]:
     canonical = {
         "enterprise": ENTERPRISE_CANONICAL,
@@ -484,7 +525,7 @@ def _select_for_capability(
         if capability in (record.get("capabilities") or [])
         and record.get("status") not in {"expired", "invalid"}
     ]
-    return max(candidates, key=lambda record: _candidate_rank(record, required, canonical)) if candidates else None
+    return max(candidates, key=lambda record: _candidate_rank(record, capability, canonical)) if candidates else None
 
 
 def propose_license_files(
@@ -497,6 +538,7 @@ def propose_license_files(
     proposed: List[str] = []
     required = set(required_capabilities(itsi_in_config, es_in_config))
     selected: List[Dict[str, Any]] = []
+    pool = _unique_by_resolved_path(discovered)
 
     for capability in ("enterprise", "itsi", "es"):
         if capability not in required:
@@ -511,7 +553,7 @@ def propose_license_files(
                 % (capability.upper(), existing["basename"])
             )
             continue
-        candidate = _select_for_capability(discovered, capability, required)
+        candidate = _select_for_capability(pool, capability)
         if candidate is None:
             reasons.append("No usable license satisfies required capability: %s" % capability)
             continue
