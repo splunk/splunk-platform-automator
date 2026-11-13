@@ -56,6 +56,50 @@ def test_doctor_ok_when_path_spa_is_symlink_to_spa_home(tmp_path):
     assert f"spa resolves to {PROJECT_ROOT}/bin/spa" in result.stdout
 
 
+def _write_install_wrapper(path, prefix):
+    """Match install.sh write_wrapper: PATH launcher, not a symlink to bin/spa."""
+    quoted = str(prefix).replace("'", "'\\''")
+    path.write_text(
+        (
+            "#!/bin/sh\n"
+            "export SPA_HOME='__PREFIX__'\n"
+            'venv="$SPA_HOME/.venv/bin/python"\n'
+            'if [ -x "$venv" ]; then\n'
+            '    exec "$venv" "$SPA_HOME/bin/spa" "$@"\n'
+            "fi\n"
+            'exec "$SPA_HOME/bin/spa" "$@"\n'
+        ).replace("__PREFIX__", quoted)
+    )
+    path.chmod(0o755)
+
+
+def test_doctor_ok_when_path_spa_is_installer_wrapper(tmp_path):
+    other_bin = tmp_path / "local" / "bin"
+    other_bin.mkdir(parents=True)
+    wrapper = other_bin / "spa"
+    _write_install_wrapper(wrapper, PROJECT_ROOT)
+    env = spa_env()
+    env["PATH"] = str(other_bin) + os.pathsep + env["PATH"]
+    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "another checkout wins" not in output
+    assert "put %s first on PATH" % (PROJECT_ROOT / "bin") not in output
+    assert "wrapper for %s" % (PROJECT_ROOT / "bin" / "spa") in result.stdout
+
+
+def test_doctor_warns_when_installer_wrapper_points_at_another_prefix(tmp_path):
+    other_bin = tmp_path / "local" / "bin"
+    other_bin.mkdir(parents=True)
+    _write_install_wrapper(other_bin / "spa", tmp_path / "other-prefix")
+    env = spa_env()
+    env["PATH"] = str(other_bin) + os.pathsep + env["PATH"]
+    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
+    output = result.stdout + result.stderr
+    assert str(other_bin / "spa") in output
+    assert "another checkout wins" in output
+
+
 def test_doctor_aws_strict_fails_without_terraform():
     env = spa_env()
     env["PATH"] = "/usr/bin:/bin"

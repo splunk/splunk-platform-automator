@@ -301,6 +301,40 @@ def _record_software_inventory(rec, software: Path, baseconfig: Path) -> None:
         )
 
 
+def _installer_wrapper_home(text: str) -> Optional[Path]:
+    """SPA_HOME from an install.sh PATH wrapper, or None."""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("export SPA_HOME="):
+            continue
+        raw = stripped[len("export SPA_HOME=") :]
+        if len(raw) >= 2 and raw[0] == "'" and raw.endswith("'"):
+            return Path(raw[1:-1].replace("'\\''", "'")).expanduser()
+        if len(raw) >= 2 and raw[0] == '"' and raw.endswith('"'):
+            return Path(raw[1:-1]).expanduser()
+        if raw:
+            return Path(raw).expanduser()
+    return None
+
+
+def _installer_wrapper_targets(spa_bin: str, spa_home: Path) -> bool:
+    """True when PATH spa is the install.sh wrapper for this SPA_HOME."""
+    path = Path(spa_bin)
+    try:
+        if not path.is_file() or path.stat().st_size > 8192:
+            return False
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    home = _installer_wrapper_home(text)
+    if home is None or "$SPA_HOME/bin/spa" not in text:
+        return False
+    try:
+        return home.resolve() == spa_home.resolve()
+    except OSError:
+        return False
+
+
 def collect_checks(
     *,
     spa_home: Optional[str] = None,
@@ -471,16 +505,17 @@ def collect_checks(
     expected = str(spa_home_path / "bin" / "spa")
     if not spa_bin:
         rec("warn", "spa", "spa is not on PATH", "install the spa launcher, or run %s directly" % expected)
+    elif Path(spa_bin).resolve() == (spa_home_path / "bin" / "spa").resolve():
+        rec("ok", "spa", "spa resolves to %s" % expected)
+    elif _installer_wrapper_targets(spa_bin, spa_home_path):
+        rec("ok", "spa", "spa on PATH is %s (wrapper for %s)" % (spa_bin, expected))
     else:
-        if Path(spa_bin).resolve() != (spa_home_path / "bin" / "spa").resolve():
-            rec(
-                "warn",
-                "spa",
-                "spa on PATH is %s, not %s (another checkout wins)" % (spa_bin, expected),
-                "put %s first on PATH" % (spa_home_path / "bin"),
-            )
-        else:
-            rec("ok", "spa", "spa resolves to %s" % expected)
+        rec(
+            "warn",
+            "spa",
+            "spa on PATH is %s, not %s (another checkout wins)" % (spa_bin, expected),
+            "put %s first on PATH" % (spa_home_path / "bin"),
+        )
 
     selected = [
         name
