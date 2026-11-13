@@ -35,8 +35,6 @@ Work on this branch is **3.0**. Linux packages and Homebrew are later, not part 
 
 ### Changed
 
-- **Shared path fallback**: when no `paths.yml`, env `.spa.yml`, or existing env/SPA_HOME sibling is present, Software / Baseconfigs / Apps resolve to `~/Splunk-Platform-Automator/{Software,Baseconfigs,Apps}` (`recommended_workspace()`), not `SPA_HOME/../Software`. Existing siblings still win. Ansible relative config keys (`../Software`) are unchanged.
-
 - **Python and Ansible**: Python **3.9–3.14** and Ansible **2.21**. `spa venv` picks the newest usable 3.9–3.14 when `python3` is newer.
 
 - **Admin password required**: shipped examples set `splunk_defaults.splunk_admin_password` to `{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}`. Schema rejects an omitted or blank value. Ansible defaults no longer supply admin, indexer-cluster, or search-head-cluster passwords.
