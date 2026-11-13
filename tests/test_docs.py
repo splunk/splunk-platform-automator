@@ -195,6 +195,7 @@ def test_architecture_notes_provider_order():
     """A new provider sets Provider.order; public lists come from provider_ids()."""
     architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
     assert "Provider.order" in architecture
+    assert "PROVIDER_ORDER" in architecture
     assert "provider_ids()" in architecture
 
 

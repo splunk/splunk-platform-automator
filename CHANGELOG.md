@@ -47,7 +47,7 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 - **CCM one-size hardware**: `ccm.instance_type` is one type for every host (CCM has no per-host instance type). `spa provider ccm survey` and `instance-types list` attach `data.next` to set `ccm.operating_system`, `ccm.instance_type`, and `ccm.disk_storage` once; do not ask per role.
 
-- **Provider list order**: help, schema, completion, and skills list providers as CCM, AWS, external, then VirtualBox (`Provider.order` / `provider_ids()`), not module insertion order. CCM is not hidden when `CCM_TOKEN` is unset; `spa validate` and `spa doctor` name a missing token as **set / not set**.
+- **Provider list order**: help, schema, completion, and skills list providers as CCM, AWS, external, then VirtualBox (`PROVIDER_ORDER` / `provider_ids()`), not module insertion order. Listing does not import provider modules, so `spa doctor` and `spa venv` still run before a venv (and PyYAML) exists. CCM is not hidden when `CCM_TOKEN` is unset; `spa validate` and `spa doctor` name a missing token as **set / not set**.
 
 - **Deploy host link page**: after a successful `spa deploy`, humans see `Next:` with the path to `$SPA_ENV_DIR/config/index.html` to paste into a browser for Splunk Web on each host. Agent envelopes attach the same `data.next` item (`hosts.linkpage`, no `command`). Failed deploy omits it.
 

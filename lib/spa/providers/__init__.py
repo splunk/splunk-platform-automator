@@ -235,6 +235,17 @@ PROVIDER_MODULES = {
     "external": "spa.providers.external",
 }
 
+# Stdlib-only copy of Provider.order. provider_ids() must not import provider
+# modules: spa doctor / spa venv still run before a venv (and PyYAML) exists.
+# Keep these integers in lockstep with Provider.order (CCM 10, AWS 20,
+# external 30, VirtualBox 40).
+PROVIDER_ORDER = {
+    "ccm": 10,
+    "aws": 20,
+    "external": 30,
+    "virtualbox": 40,
+}
+
 
 def load_deployment_config(paths: SpaPaths) -> Dict[str, Any]:
     # Parser construction imports this package for spa provider ccm help.
@@ -333,12 +344,9 @@ def provider_ids() -> List[str]:
 
     Not ``PROVIDER_MODULES`` insertion order. Callers (help, schema, completion,
     skills) use this list instead of hardcoding aws / virtualbox / ccm.
+    Reads ``PROVIDER_ORDER`` so listing help does not import implementations.
     """
-    rows: List[Tuple[int, str]] = []
-    for name, module_name in PROVIDER_MODULES.items():
-        module = importlib.import_module(module_name)
-        order = int(getattr(module.Provider, "order", 100))
-        rows.append((order, name))
+    rows = [(int(PROVIDER_ORDER.get(name, 100)), name) for name in PROVIDER_MODULES]
     rows.sort()
     return [name for _order, name in rows]
 

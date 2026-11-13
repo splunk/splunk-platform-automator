@@ -107,7 +107,12 @@ def test_registered_providers_declare_order():
     """CCM, AWS, external, VirtualBox. Public lists sort by order, then name, not module insertion."""
     import importlib
 
-    from spa.providers import PROVIDER_MODULES, format_provider_choice, provider_ids
+    from spa.providers import (
+        PROVIDER_MODULES,
+        PROVIDER_ORDER,
+        format_provider_choice,
+        provider_ids,
+    )
 
     expected = {
         "ccm": 10,
@@ -116,6 +121,7 @@ def test_registered_providers_declare_order():
         "virtualbox": 40,
     }
     assert set(PROVIDER_MODULES) == set(expected)
+    assert PROVIDER_ORDER == expected
     for name, order in expected.items():
         module = importlib.import_module(PROVIDER_MODULES[name])
         assert module.Provider.order == order, name
