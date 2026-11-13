@@ -1837,7 +1837,7 @@ def test_deploy_ping_failure_does_not_start_the_playbook(tmp_path, monkeypatch):
 
     from spa.api import LocalSpaSession
     from spa.paths import resolve_spa_paths
-    from spa_testutil import PROJECT_ROOT, seed_software_dir
+    from spa_testutil import PROJECT_ROOT, seed_baseconfig_dir, seed_software_dir
 
     config = tmp_path / "config" / "splunk_config.yml"
     config.parent.mkdir()
@@ -1855,6 +1855,7 @@ def test_deploy_ping_failure_does_not_start_the_playbook(tmp_path, monkeypatch):
     inventory.mkdir()
     (inventory / "hosts").write_text('byo1 ansible_host="10.0.0.8"\n')
     software = seed_software_dir(tmp_path)
+    baseconfig = seed_baseconfig_dir(tmp_path)
     base = resolve_spa_paths(start_dir=PROJECT_ROOT)
     paths = replace(
         base,
@@ -1863,7 +1864,7 @@ def test_deploy_ping_failure_does_not_start_the_playbook(tmp_path, monkeypatch):
         inventory_dir=inventory,
         roots_differ=True,
         software_dir=software,
-        baseconfig_dir=software,
+        baseconfig_dir=baseconfig,
     )
     called = []
     monkeypatch.setattr("spa.playbooks.run_playbook", lambda *a, **k: called.append(True) or 0)
@@ -1890,7 +1891,7 @@ def test_deploy_logs_the_host_check(tmp_path, monkeypatch, capsys):
 
     from spa.api import LocalSpaSession
     from spa.paths import resolve_spa_paths
-    from spa_testutil import PROJECT_ROOT, seed_software_dir
+    from spa_testutil import PROJECT_ROOT, seed_baseconfig_dir, seed_software_dir
 
     config = tmp_path / "config" / "splunk_config.yml"
     config.parent.mkdir()
@@ -1908,6 +1909,7 @@ def test_deploy_logs_the_host_check(tmp_path, monkeypatch, capsys):
     inventory.mkdir()
     (inventory / "hosts").write_text('byo1 ansible_host="10.0.0.8"\n')
     software = seed_software_dir(tmp_path)
+    baseconfig = seed_baseconfig_dir(tmp_path)
     base = resolve_spa_paths(start_dir=PROJECT_ROOT)
     paths = replace(
         base,
@@ -1916,7 +1918,7 @@ def test_deploy_logs_the_host_check(tmp_path, monkeypatch, capsys):
         inventory_dir=inventory,
         roots_differ=True,
         software_dir=software,
-        baseconfig_dir=software,
+        baseconfig_dir=baseconfig,
     )
     monkeypatch.setattr("spa.playbooks.run_playbook", lambda *a, **k: 0)
     monkeypatch.setattr("spa.playbooks.resolve", lambda *a, **k: "deploy_site.yml")
@@ -1943,7 +1945,7 @@ def test_deploy_architecture_mismatch_does_not_blame_ssh(tmp_path, monkeypatch, 
 
     from spa.api import LocalSpaSession
     from spa.paths import resolve_spa_paths
-    from spa_testutil import PROJECT_ROOT, seed_software_dir
+    from spa_testutil import PROJECT_ROOT, seed_baseconfig_dir, seed_software_dir
 
     config = tmp_path / "config" / "splunk_config.yml"
     config.parent.mkdir()
@@ -1960,6 +1962,7 @@ def test_deploy_architecture_mismatch_does_not_blame_ssh(tmp_path, monkeypatch, 
     inventory.mkdir()
     (inventory / "hosts").write_text('shidx ansible_host="10.0.0.8"\n')
     software = seed_software_dir(tmp_path)
+    baseconfig = seed_baseconfig_dir(tmp_path)
     _touch_linux_archive(software, "arm64")
     _touch_linux_archive(software, "amd64")
     base = resolve_spa_paths(start_dir=PROJECT_ROOT)
@@ -1970,7 +1973,7 @@ def test_deploy_architecture_mismatch_does_not_blame_ssh(tmp_path, monkeypatch, 
         inventory_dir=inventory,
         roots_differ=True,
         software_dir=software,
-        baseconfig_dir=software,
+        baseconfig_dir=baseconfig,
     )
     called = []
     monkeypatch.setattr("spa.playbooks.run_playbook", lambda *a, **k: called.append(True) or 0)
@@ -2002,7 +2005,7 @@ def test_deploy_architecture_mismatch_does_not_blame_ssh(tmp_path, monkeypatch, 
 
 def test_deploy_prints_the_architecture_mismatch_once(tmp_path, monkeypatch, capsys):
     from spa.cli import main
-    from spa_testutil import PROJECT_ROOT, seed_software_dir
+    from spa_testutil import PROJECT_ROOT, seed_baseconfig_dir, seed_software_dir
 
     config = tmp_path / "config" / "splunk_config.yml"
     config.parent.mkdir()
@@ -2019,13 +2022,14 @@ def test_deploy_prints_the_architecture_mismatch_once(tmp_path, monkeypatch, cap
     inventory.mkdir()
     (inventory / "hosts").write_text('shidx ansible_host="10.0.0.8"\n')
     software = seed_software_dir(tmp_path)
+    baseconfig = seed_baseconfig_dir(tmp_path)
     _touch_linux_archive(software, "arm64")
     _touch_linux_archive(software, "amd64")
     monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
     monkeypatch.setenv("SPA_ENV_DIR", str(tmp_path))
     monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(config))
     monkeypatch.setenv("SPA_SOFTWARE_DIR", str(software))
-    monkeypatch.setenv("SPA_BASECONFIG_DIR", str(software))
+    monkeypatch.setenv("SPA_BASECONFIG_DIR", str(baseconfig))
     monkeypatch.setattr("spa.playbooks.run_playbook", lambda *a, **k: 0)
     monkeypatch.setattr("spa.playbooks.resolve", lambda *a, **k: "deploy_site.yml")
     monkeypatch.setattr(

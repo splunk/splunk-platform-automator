@@ -46,6 +46,7 @@ CONSEQUENCE = {
     "skills_remove": "will remove SPA skills from the IDE skill directory",
     "config_edit": "will change splunk_config.yml",
     "registry_cleanup": "will remove registry entries for missing environments (no directories are deleted)",
+    "local_paths": "will create directories and write ~/.config/spa/paths.yml",
 }
 
 

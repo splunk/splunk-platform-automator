@@ -123,6 +123,15 @@ def _first_existing(*candidates: Path) -> str:
     return ""
 
 
+def _first_existing_baseconfig(*candidates: Path) -> str:
+    from spa.preflight import _has_baseconfig_apps
+
+    for candidate in candidates:
+        if candidate.is_dir() and _has_baseconfig_apps(candidate):
+            return str(candidate.resolve())
+    return ""
+
+
 def write_spa_yml(
     dest: Path,
     spa_home: Path,
@@ -161,10 +170,10 @@ def write_spa_yml(
         bc = str(_expand(str(existing["baseconfig_dir"]), start))
     elif user.get("baseconfig_dir"):
         bc = str(_expand(str(user["baseconfig_dir"]), start))
-    elif sw:
-        bc = sw
     else:
-        bc = sw
+        bc = _first_existing_baseconfig(
+            dest / "../baseconfigs", spa_home / "../baseconfigs", spa_home / "baseconfigs"
+        )
 
     apps = ""
     if apps_dir:
@@ -200,13 +209,19 @@ def write_spa_yml(
     ]
     if sw:
         lines.append("software_dir: %s" % sw)
-        lines.append("baseconfig_dir: %s" % (bc or sw))
+    if bc:
+        lines.append("baseconfig_dir: %s" % bc)
     if apps:
         lines.append("apps_dir: %s" % apps)
     (dest / ".spa.yml").write_text("\n".join(lines) + "\n", encoding="utf-8")
     if not sw:
         _say(
             "No Software directory found. Point once with: spa init --software-dir DIR %s"
+            % dest
+        )
+    if not bc:
+        _say(
+            "No baseconfig directory found. Point once with: spa init --baseconfig-dir DIR %s"
             % dest
         )
     return sw, apps

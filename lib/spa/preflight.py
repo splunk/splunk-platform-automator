@@ -10,7 +10,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from spa.paths import DEFAULT_APPS_REL, DEFAULT_SOFTWARE_REL, SpaPaths, parse_flat_yaml, resolve_shared_data_dir
+from spa.paths import (
+    DEFAULT_APPS_REL,
+    DEFAULT_BASECONFIG_REL,
+    DEFAULT_SOFTWARE_REL,
+    SpaPaths,
+    parse_flat_yaml,
+    resolve_shared_data_dir,
+)
 
 ENTERPRISE_DOWNLOAD = "https://www.splunk.com/en_us/download/splunk-enterprise.html"
 FORWARDER_DOWNLOAD = "https://www.splunk.com/en_us/download/universal-forwarder.html"
@@ -24,10 +31,11 @@ _GUEST_TARBALL_ARCH = {
 
 BASECONFIG_MARKERS = ("org_s2_indexer_indexes", "org_cluster_manager_base")
 _HINT_SOFTWARE = "Point once with: spa init --software-dir DIR ENV"
+_HINT_BASECONFIG = "Point once with: spa init --baseconfig-dir DIR ENV"
 _HINT_APPS = "Point once with: spa init --apps-dir DIR ENV"
 _DEFAULTS = {
     "SPA_SOFTWARE_DIR": ("../Software", "Software"),
-    "SPA_BASECONFIG_DIR": ("../Software", "Software"),
+    "SPA_BASECONFIG_DIR": ("../baseconfigs", "baseconfigs"),
     "SPA_APPS_DIR": ("../apps", "apps"),
 }
 
@@ -106,7 +114,12 @@ def _effective_dir(
 ) -> Path:
     if _defaultish(configured, env_var):
         return fallback
-    default_rel = DEFAULT_APPS_REL if home_leaf == "apps" else DEFAULT_SOFTWARE_REL
+    if home_leaf == "apps":
+        default_rel = DEFAULT_APPS_REL
+    elif home_leaf == "baseconfigs":
+        default_rel = DEFAULT_BASECONFIG_REL
+    else:
+        default_rel = DEFAULT_SOFTWARE_REL
     return resolve_shared_data_dir(
         paths.spa_home,
         paths.spa_env_dir,
@@ -339,7 +352,7 @@ def check_controller_data(
         paths, dirs.get("splunk_software_dir"), "SPA_SOFTWARE_DIR", "Software", paths.software_dir
     )
     baseconfig_dir = _effective_dir(
-        paths, dirs.get("splunk_baseconfig_dir"), "SPA_BASECONFIG_DIR", "Software", paths.baseconfig_dir
+        paths, dirs.get("splunk_baseconfig_dir"), "SPA_BASECONFIG_DIR", "baseconfigs", paths.baseconfig_dir
     )
     apps_dir = _effective_dir(
         paths, dep.get("local_app_repo_path"), "SPA_APPS_DIR", "apps", paths.apps_dir
@@ -359,7 +372,7 @@ def check_controller_data(
         return ControllerDataState(
             ok=False,
             reason="Baseconfig directory not found: %s" % baseconfig_dir,
-            hint=_HINT_SOFTWARE,
+            hint=_HINT_BASECONFIG,
             missing=(str(baseconfig_dir),),
             software_dir=str(software_dir),
             baseconfig_dir=str(baseconfig_dir),
@@ -373,7 +386,7 @@ def check_controller_data(
                 "(need */org_s2_indexer_indexes and */org_cluster_manager_base)."
                 % baseconfig_dir
             ),
-            hint=_HINT_SOFTWARE,
+            hint=_HINT_BASECONFIG,
             missing=tuple(str(baseconfig_dir / "*" / marker) for marker in BASECONFIG_MARKERS),
             software_dir=str(software_dir),
             baseconfig_dir=str(baseconfig_dir),

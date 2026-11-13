@@ -120,7 +120,7 @@ def test_agents_md_points_at_command_authoring():
 
 
 def test_agents_md_install_from_this_checkout():
-    """In-clone first-run is venv, skills, doctor, software-dir — not curl|sh or pip."""
+    """In-clone first-run is venv, skills, create-defaults, doctor — not curl|sh or pip."""
     text = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
     heading = "## Install from this checkout"
     assert heading in text
@@ -131,6 +131,7 @@ def test_agents_md_install_from_this_checkout():
     assert "bin/spa venv create --shared --yes" in section
     assert "spa skills install" in section
     assert "spa doctor" in section
+    assert "spa environment set --create-defaults --yes" in section
     assert "spa environment set --software-dir" in section
     assert "./install.sh" in section
     assert "WARN" in section and "FAIL" in section
@@ -181,7 +182,9 @@ def test_non_clone_install_uses_the_release_prefix_one_liner():
     assert "./install.sh --from tarball" in section
     assert "spa skills install" in section
     assert "spa doctor" in section
+    assert "spa environment set --create-defaults --yes" in section
     assert "spa environment set --software-dir" in section
+    assert "spa environment set --baseconfig-dir" in section
     assert "do not download" in section.lower()
     assert "spa init" in section and "spa deploy" in section
     assert "do not" in section.lower() and "clone" in section.lower()
@@ -190,6 +193,8 @@ def test_non_clone_install_uses_the_release_prefix_one_liner():
     checkout_section = agents.split(checkout, 1)[1].split("\n## ", 1)[0]
     assert "curl | sh" not in checkout_section
     assert "pip install" not in checkout_section
+    assert "spa environment set --create-defaults --yes" in checkout_section
+    assert "spa environment set --baseconfig-dir" in checkout_section
 
 
 def test_architecture_notes_provider_order():
@@ -264,7 +269,9 @@ def test_user_guide_does_not_repeat_install_steps():
     install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
     assert "go/baseconfigs" not in install
     assert "user-guide.md#prepare-software" in install
+    assert "spa environment set --create-defaults --yes" in install
     assert "spa environment set --software-dir" in install
+    assert "spa environment set --baseconfig-dir" in install
 
     setup = contributing.split("## Development setup", 1)[1].split("\n## ", 1)[0]
     assert "install.md#develop-spa-git-clone" in setup
@@ -272,6 +279,17 @@ def test_user_guide_does_not_repeat_install_steps():
     assert "bin/spa venv create" not in setup
     assert "source bin/spa_venv.sh" in setup
     assert "Homebrew" in setup
+
+
+def test_docs_treat_software_and_baseconfig_as_separate_trees():
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    prepare = guide.split("## Prepare Software", 1)[1].split("\n## ", 1)[0]
+    assert "into the same tree" not in prepare
+    assert "also sets `baseconfig_dir`" not in prepare
+    assert "Baseconfigs/" in prepare
+    assert "--baseconfig-dir" in prepare
+    install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
+    assert "Professional Services baseconfig apps in a `Software/`" not in install
 
 
 def test_baseconfig_link_is_the_short_go_link_and_the_changelog_names_no_link():
@@ -1911,7 +1929,10 @@ def test_quick_start_is_the_linear_first_run():
     text = _quick_start()
     assert "splunk-enterprise.html" in text
     assert "universal-forwarder.html" in text
-    assert "spa environment set --software-dir" in text
+    assert "spa environment set --create-defaults --yes" in text
+    assert "--baseconfig-dir" in text
+    assert "also sets `baseconfig_dir`" not in text
+    assert "into the same tree" not in text
     assert "http://go/baseconfigs" in text
     assert "spa licenses list" in text
     assert "single_node" in text

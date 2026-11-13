@@ -373,9 +373,9 @@ fi
 
 echo "SPA_HOME=${PREFIX}"
 echo "Installed wrapper: ${BINDIR}/spa"
-next_step="spa init --example cm_2idxc_sh --provider aws ~/envs/my-env"
+next_step="spa init --example cm_2idxc_sh --provider aws my-env"
 if [ "$need_software" = true ]; then
-    next_step="place Splunk Enterprise and universal-forwarder tarballs and PS baseconfigs in Software (not SPA_HOME). If Software is not a sibling of the env or of SPA_HOME: spa environment set --software-dir DIR"
+    next_step="spa environment set --create-defaults --yes; put Enterprise and UF tarballs in Software and extract PS apps into Baseconfigs (not SPA_HOME)"
 fi
 if ! echo ":${PATH}:" | grep -q ":${BINDIR}:"; then
     echo "Add ${BINDIR} to PATH, then: ${next_step}"

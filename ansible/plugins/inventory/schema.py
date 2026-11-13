@@ -498,7 +498,7 @@ class SplunkDirsConfig(BaseModel):
     
     splunk_baseconfig_dir: Optional[str] = Field(
         None,
-        description="Directory of baseconfig apps, resolved next to the lab. Default ../Software. Omit the key to keep that.",
+        description="Directory of baseconfig apps, resolved next to the lab. Default ../baseconfigs. Omit the key to keep that.",
     )
     splunk_software_dir: Optional[str] = Field(
         None,

@@ -64,7 +64,7 @@ Canonical: `spa environment` (alias `env`). `spa init` aliases `spa environment 
 ```bash
 spa environment list
 spa environment set --env-dir ~/work/spa-envs          # persist default parent (not ~/Splunk-Platform-Automator)
-spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
+spa environment set --create-defaults --yes
 spa environment set --default my-lab                   # fallback when cwd does not select an env
 spa environment set --provider virtualbox              # saves the default for init in providers.yml
 spa environment init --example cm_2idxc_sh --provider aws my-lab   # name-only under default parent; --provider required unless a default is saved
@@ -84,7 +84,7 @@ spa environment cleanup                                # lists registry entries 
 One shared directory per machine, not inside `SPA_HOME` and not copied per env. Linux tgz installers, extracted PS baseconfig apps, optional `Splunk_Enterprise.lic`. Splunk / Cisco employees: [http://go/baseconfigs](http://go/baseconfigs). Others: Splunk PS. Checklist: [Prepare Software](../../../docs/user-guide.md#prepare-software). First lab order: [docs/quick-start.md](../../../docs/quick-start.md).
 
 ```bash
-spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
+spa environment set --create-defaults --yes
 spa venv reinstall --shared --yes                    # repair shared Python requirements
 spa venv upgrade --shared --yes                      # bump Ansible and other requirements
 spa venv rebuild --shared --yes                      # recreate the shared venv

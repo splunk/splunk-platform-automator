@@ -204,12 +204,16 @@ class WorkspaceManager:
         
         # Inject Software Directory Path
         software_dir = os.path.abspath(os.path.join(self.project_root, "..", "Software"))
-        if os.path.isdir(software_dir):
-            print(f"[CONFIG] Found Software directory at: {software_dir}")
+        baseconfig_dir = os.path.abspath(os.path.join(self.project_root, "..", "baseconfigs"))
+        if os.path.isdir(software_dir) or os.path.isdir(baseconfig_dir):
             if 'splunk_dirs' not in self.config_data:
                 self.config_data['splunk_dirs'] = {}
-            self.config_data['splunk_dirs']['splunk_software_dir'] = software_dir
-            self.config_data['splunk_dirs']['splunk_baseconfig_dir'] = software_dir
+            if os.path.isdir(software_dir):
+                print(f"[CONFIG] Found Software directory at: {software_dir}")
+                self.config_data['splunk_dirs']['splunk_software_dir'] = software_dir
+            if os.path.isdir(baseconfig_dir):
+                print(f"[CONFIG] Found baseconfigs directory at: {baseconfig_dir}")
+                self.config_data['splunk_dirs']['splunk_baseconfig_dir'] = baseconfig_dir
         
         with open(dest_config_path, 'w') as f:
             yaml.dump(self.config_data, f)

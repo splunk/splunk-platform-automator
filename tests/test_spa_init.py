@@ -252,7 +252,8 @@ def test_scaffold_creates_env_without_ansible(tmp_path):
     clone_software = (PROJECT_ROOT / ".." / "Software").resolve()
     if clone_software.is_dir():
         assert Path(spa_yml["software_dir"]).resolve() == clone_software
-        assert Path(spa_yml["baseconfig_dir"]).resolve() == clone_software
+    if spa_yml.get("baseconfig_dir"):
+        assert Path(spa_yml["baseconfig_dir"]).resolve() != clone_software
     clone_apps = (PROJECT_ROOT / "apps").resolve()
     sibling_apps = (PROJECT_ROOT / ".." / "apps").resolve()
     if sibling_apps.is_dir():
@@ -1042,12 +1043,62 @@ def test_init_software_dir_writes_user_and_env_yml(tmp_path):
     user = yaml.safe_load((xdg / "spa" / "paths.yml").read_text())
     spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
     assert Path(user["software_dir"]).resolve() == software.resolve()
-    assert Path(user["baseconfig_dir"]).resolve() == software.resolve()
+    assert "baseconfig_dir" not in user
     assert Path(spa_yml["software_dir"]).resolve() == software.resolve()
+    assert "baseconfig_dir" not in spa_yml
     second = run_spa_init(["--example", "single_node.yml", str(dest2)], env=isolated)
     assert second.returncode == 0, second.stderr + second.stdout
     spa2 = yaml.safe_load((dest2 / ".spa.yml").read_text())
     assert Path(spa2["software_dir"]).resolve() == software.resolve()
+    assert "baseconfig_dir" not in spa2
+
+
+def test_init_discovers_marker_bearing_baseconfigs_sibling(tmp_path, capsys):
+    from spa.init import write_spa_yml
+
+    dest = tmp_path / "lab"
+    dest.mkdir()
+    spa_home = tmp_path / "framework"
+    spa_home.mkdir()
+    software = tmp_path / "Software"
+    software.mkdir()
+    baseconfigs = tmp_path / "baseconfigs"
+    for name in ("org_s2_indexer_indexes", "org_cluster_manager_base"):
+        (baseconfigs / "ps" / name).mkdir(parents=True)
+    xdg = tmp_path / "xdg-config"
+    home = tmp_path / "home"
+    home.mkdir()
+    isolated = {"HOME": str(home), "XDG_CONFIG_HOME": str(xdg)}
+    write_spa_yml(dest, spa_home, environ=isolated)
+    user = yaml.safe_load((xdg / "spa" / "paths.yml").read_text())
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
+    assert Path(user["software_dir"]).resolve() == software.resolve()
+    assert Path(user["baseconfig_dir"]).resolve() == baseconfigs.resolve()
+    assert Path(spa_yml["software_dir"]).resolve() == software.resolve()
+    assert Path(spa_yml["baseconfig_dir"]).resolve() == baseconfigs.resolve()
+
+
+def test_init_omits_baseconfigs_dir_without_markers(tmp_path, capsys):
+    from spa.init import write_spa_yml
+
+    dest = tmp_path / "lab"
+    dest.mkdir()
+    spa_home = tmp_path / "framework"
+    spa_home.mkdir()
+    software = tmp_path / "Software"
+    software.mkdir()
+    (tmp_path / "baseconfigs").mkdir()
+    xdg = tmp_path / "xdg-config"
+    home = tmp_path / "home"
+    home.mkdir()
+    isolated = {"HOME": str(home), "XDG_CONFIG_HOME": str(xdg)}
+    write_spa_yml(dest, spa_home, environ=isolated)
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
+    assert "baseconfig_dir" not in spa_yml
+    user = yaml.safe_load((xdg / "spa" / "paths.yml").read_text())
+    assert "baseconfig_dir" not in user
+    captured = capsys.readouterr()
+    assert "--baseconfig-dir" in captured.out + captured.err
 
 
 def _role_count(hosts, role):

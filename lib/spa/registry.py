@@ -25,7 +25,15 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None  # type: ignore
 
-DEFAULT_ENV_PARENT_NAME = "Splunk-Platform-Automator"
+DEFAULT_WORKSPACE_NAME = "Splunk-Platform-Automator"
+DEFAULT_ENV_PARENT_NAME = DEFAULT_WORKSPACE_NAME
+DEFAULT_ENV_LEAF = "Envs"
+WORKSPACE_LEAVES = (
+    ("software_dir", "Software"),
+    ("baseconfig_dir", "Baseconfigs"),
+    ("apps_dir", "Apps"),
+    ("env_dir", DEFAULT_ENV_LEAF),
+)
 DEFAULT_PROVIDER = "aws"
 PROVIDER_ALIASES = {
     "aws": "aws",
@@ -45,10 +53,19 @@ class RegistryError(Exception):
         self.code = code
 
 
-def builtin_env_parent(environ: Optional[Dict[str, str]] = None) -> Path:
+def builtin_workspace_root(environ: Optional[Dict[str, str]] = None) -> Path:
     env = environ if environ is not None else os.environ
     home = (env.get("HOME") or "").strip() or str(Path.home())
-    return (Path(home) / DEFAULT_ENV_PARENT_NAME).resolve()
+    return (Path(home) / DEFAULT_WORKSPACE_NAME).resolve()
+
+
+def recommended_workspace(environ: Optional[Dict[str, str]] = None) -> Dict[str, Path]:
+    root = builtin_workspace_root(environ)
+    return {key: root / leaf for key, leaf in WORKSPACE_LEAVES}
+
+
+def builtin_env_parent(environ: Optional[Dict[str, str]] = None) -> Path:
+    return recommended_workspace(environ)["env_dir"]
 
 
 def default_env_parent(
@@ -59,7 +76,7 @@ def default_env_parent(
     """Parent for name-only ``spa environment init NAME``.
 
     Order: ``SPA_ENV_PARENT``, ``paths.yml`` ``env_dir``, then
-    ``~/Splunk-Platform-Automator``.
+    ``~/Splunk-Platform-Automator/Envs``.
     """
     env = environ if environ is not None else os.environ
     start = (relative_to or Path.cwd()).resolve()
@@ -544,6 +561,10 @@ def _protected_paths(environ: Optional[Dict[str, str]] = None) -> List[Path]:
     out = [home, Path("/")]
     try:
         out.append(default_env_parent(env))
+    except OSError:
+        pass
+    try:
+        out.append(builtin_workspace_root(env))
     except OSError:
         pass
     try:

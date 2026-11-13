@@ -14,7 +14,7 @@ from spa.providers import (
     expected_hostnames,
     inventory_hostnames_from_file,
 )
-from spa_testutil import PROJECT_ROOT, min_env_vars, run_spa, run_spa_inprocess, seed_software_dir
+from spa_testutil import PROJECT_ROOT, min_env_vars, run_spa, run_spa_inprocess, seed_baseconfig_dir, seed_software_dir
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -72,6 +72,7 @@ def _paths(tmp_path, config):
     config_path.write_text(config)
     base = resolve_spa_paths(start_dir=PROJECT_ROOT)
     software = seed_software_dir(tmp_path)
+    baseconfig = seed_baseconfig_dir(tmp_path)
     return replace(
         base,
         spa_env_dir=tmp_path,
@@ -80,7 +81,7 @@ def _paths(tmp_path, config):
         terraform_state_dir=tmp_path / "terraform" / "aws",
         roots_differ=True,
         software_dir=software,
-        baseconfig_dir=software,
+        baseconfig_dir=baseconfig,
     )
 
 

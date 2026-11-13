@@ -181,7 +181,7 @@ class InventoryModule(BaseInventoryPlugin):
             return True
         defaults = {
             'SPA_SOFTWARE_DIR': ('../Software', 'Software'),
-            'SPA_BASECONFIG_DIR': ('../Software', 'Software'),
+            'SPA_BASECONFIG_DIR': ('../baseconfigs', 'baseconfigs'),
             'SPA_APPS_DIR': ('../apps', 'apps'),
         }
         return value in defaults.get(env_var, ())
@@ -197,8 +197,15 @@ class InventoryModule(BaseInventoryPlugin):
                 return str(paths.baseconfig_dir)
             if defaultish and env_var == 'SPA_APPS_DIR':
                 return str(paths.apps_dir)
-            home_leaf = 'apps' if env_var == 'SPA_APPS_DIR' else 'Software'
-            default_rel = '../apps' if env_var == 'SPA_APPS_DIR' else '../Software'
+            if env_var == 'SPA_APPS_DIR':
+                home_leaf = 'apps'
+                default_rel = '../apps'
+            elif env_var == 'SPA_BASECONFIG_DIR':
+                home_leaf = 'baseconfigs'
+                default_rel = '../baseconfigs'
+            else:
+                home_leaf = 'Software'
+                default_rel = '../Software'
             return str(resolve_shared_data_dir(
                 paths.spa_home,
                 paths.spa_env_dir,
@@ -337,21 +344,21 @@ class InventoryModule(BaseInventoryPlugin):
                 )
 
         # Check Base Config App availability
-        # SPA_BASECONFIG_DIR / SPA_SOFTWARE_DIR override configured paths (local/CI tests).
-        # Relative ../Software is a sibling of the lab (SPA_ENV_DIR), not the prefix.
+        # SPA_BASECONFIG_DIR overrides configured paths (local/CI tests).
+        # Relative ../baseconfigs is a sibling of the lab (SPA_ENV_DIR), not the prefix.
         splunk_baseconfig_dir = self._resolve_override_dir(
             lab_dir, self.groups['all']['splunk_baseconfig_dir'], 'SPA_BASECONFIG_DIR'
         )
         check_base = glob.glob(os.path.join(splunk_baseconfig_dir, "*/org_s2_indexer_indexes"))
         check_cluster = glob.glob(os.path.join(splunk_baseconfig_dir, "*/org_cluster_manager_base"))
         if len(check_base) < 1 or len(check_cluster) < 1:
-            lab_sw = os.path.normpath(os.path.join(lab_dir, '..', 'Software'))
-            home_sw = os.path.normpath(os.path.join(str(self.spa_paths.spa_home), '..', 'Software'))
+            lab_bc = os.path.normpath(os.path.join(lab_dir, '..', 'baseconfigs'))
+            home_bc = os.path.normpath(os.path.join(str(self.spa_paths.spa_home), '..', 'baseconfigs'))
             raise AnsibleParserError(
                 "Error: Cannot find the latest Splunk baseconfig apps mentioned in the README.md. "
                 "Looked in %s. Place them next to the lab (%s) or next to SPA_HOME (%s), "
-                "or set SPA_BASECONFIG_DIR / SPA_SOFTWARE_DIR."
-                % (splunk_baseconfig_dir, lab_sw, home_sw)
+                "or set SPA_BASECONFIG_DIR / --baseconfig-dir (default ../baseconfigs)."
+                % (splunk_baseconfig_dir, lab_bc, home_bc)
             )
 
         # Create auth dir if not existing (lab/auth when ../auth; clone-equal unchanged)

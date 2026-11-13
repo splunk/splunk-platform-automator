@@ -262,7 +262,7 @@ splunk_shclusters:
 | `splunk_defaults.splunk_volume_defaults.homePath` | string | optional | Volume name used as the index home path. No default. Omit the key when you are not using named volumes. Must equal coldPath when SmartStore is enabled. |
 | `splunk_defaults.splunk_volume_defaults.remotePath` | string | optional | Volume name used as the SmartStore remote path. No default. Omit the key when indexes stay on local disk. Volume name of the remote S3 volume (must match the storageType remote entry). |
 | `splunk_dirs` | object | optional | Paths to Software and baseconfig apps. Holds no value itself. |
-| `splunk_dirs.splunk_baseconfig_dir` | string | optional; default='../Software' | Directory of baseconfig apps, resolved next to the lab. |
+| `splunk_dirs.splunk_baseconfig_dir` | string | optional; default='../baseconfigs' | Directory of baseconfig apps, resolved next to the lab. |
 | `splunk_dirs.splunk_software_dir` | string | optional; default='../Software' | Directory of Splunk tarballs and license files. |
 | `splunk_systemd` | SplunkSystemdConfig | optional | systemd unit limits: service name, then section, then directive. Default limits ship with SPA. Omit the block to keep those. |
 | `splunk_environments` | list[object] | optional | Named Splunk environments inside one config. Holds no value itself. |
@@ -522,12 +522,12 @@ splunk_defaults:
 
 `splunk_dirs`
 
-Paths to Splunk installer tarballs and Premium Solutions baseconfig apps. Prefer spa init --software-dir (stored in ~/.config/spa/paths.yml and copied into env .spa.yml). These config keys override that only when they are not the built-in relative defaults such as ../Software.
+Paths to Splunk installer tarballs and Premium Solutions baseconfig apps. Prefer spa init --software-dir and spa init --baseconfig-dir (stored in ~/.config/spa/paths.yml and copied into env .spa.yml). These config keys override that only when they are not the built-in relative defaults such as ../Software and ../baseconfigs.
 
 ```yaml
 splunk_dirs:
   splunk_software_dir: ../Software
-  splunk_baseconfig_dir: ../Software
+  splunk_baseconfig_dir: ../baseconfigs
 ```
 
 #### systemd unit extras

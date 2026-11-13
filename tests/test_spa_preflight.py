@@ -11,12 +11,16 @@ from spa.preflight import (
     required_splunk_archives,
     splunk_archive_glob,
 )
-from spa_testutil import PROJECT_ROOT, seed_software_dir
+from spa_testutil import PROJECT_ROOT, seed_baseconfig_dir, seed_software_dir
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
 
-def _paths(tmp_path, config, software=None, apps_dir=None):
+def _controller_dirs(tmp_path):
+    return seed_software_dir(tmp_path), seed_baseconfig_dir(tmp_path)
+
+
+def _paths(tmp_path, config, software=None, baseconfig=None, apps_dir=None):
     config_path = tmp_path / "config" / "splunk_config.yml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(config)
@@ -30,7 +34,8 @@ def _paths(tmp_path, config, software=None, apps_dir=None):
     )
     if software is not None:
         kwargs["software_dir"] = software
-        kwargs["baseconfig_dir"] = software
+    if baseconfig is not None:
+        kwargs["baseconfig_dir"] = baseconfig
     if apps_dir is not None:
         kwargs["apps_dir"] = apps_dir
     return replace(base, **kwargs)
@@ -38,7 +43,7 @@ def _paths(tmp_path, config, software=None, apps_dir=None):
 
 def test_missing_software_dir_fails(tmp_path):
     missing = tmp_path / "no-software"
-    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=missing)
+    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=missing, baseconfig=missing)
     state = check_controller_data(paths)
     assert state.ok is False
     assert "Software directory not found" in state.reason
@@ -48,10 +53,12 @@ def test_missing_software_dir_fails(tmp_path):
 def test_software_without_baseconfig_apps_fails(tmp_path):
     software = tmp_path / "Software"
     software.mkdir()
-    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software)
+    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software, baseconfig=software)
     state = check_controller_data(paths)
     assert state.ok is False
     assert "baseconfig apps" in state.reason
+    assert "spa init --baseconfig-dir" in state.hint
+    assert "spa init --software-dir" not in state.hint
 
 
 def _baseconfig_software(tmp_path, names):
@@ -63,14 +70,14 @@ def _baseconfig_software(tmp_path, names):
 
 def test_baseconfig_check_accepts_the_s2_indexer_indexes_app(tmp_path):
     software = _baseconfig_software(tmp_path, ("org_s2_indexer_indexes", "org_cluster_manager_base"))
-    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software)
+    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software, baseconfig=software)
     state = check_controller_data(paths)
     assert state.ok is True
 
 
 def test_baseconfig_check_no_longer_accepts_only_the_ds_secure_server_app(tmp_path):
     software = _baseconfig_software(tmp_path, ("org_ds_secure_server", "org_cluster_manager_base"))
-    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software)
+    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software, baseconfig=software)
     state = check_controller_data(paths)
     assert state.ok is False
     assert "org_s2_indexer_indexes" in state.reason
@@ -78,8 +85,8 @@ def test_baseconfig_check_no_longer_accepts_only_the_ds_secure_server_app(tmp_pa
 
 
 def test_seeded_software_without_local_apps_ok(tmp_path):
-    software = seed_software_dir(tmp_path)
-    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software)
+    software, baseconfig = _controller_dirs(tmp_path)
+    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software, baseconfig=baseconfig)
     state = check_controller_data(paths)
     assert state.ok is True
     # No source: local apps, so apps_dir was never inspected.
@@ -89,7 +96,7 @@ def test_seeded_software_without_local_apps_ok(tmp_path):
 def test_validate_reports_one_ok_line_per_directory(tmp_path):
     from spa.validate import controller_data_message
 
-    software = seed_software_dir(tmp_path)
+    software, baseconfig = _controller_dirs(tmp_path)
     apps = tmp_path / "apps"
     (apps / "org_some_local_app").mkdir(parents=True)
     config = """
@@ -99,17 +106,17 @@ splunk_app_deployment:
       source: local
       target_roles: [search_head]
 """
-    paths = _paths(tmp_path, config, software=software, apps_dir=apps)
+    paths = _paths(tmp_path, config, software=software, baseconfig=baseconfig, apps_dir=apps)
     state = check_controller_data(paths)
     assert state.apps_checked is True
     assert controller_data_message(state).splitlines() == [
         "Software OK: %s" % software,
-        "Baseconfig OK: %s" % software,
+        "Baseconfig OK: %s" % baseconfig,
         "Local apps OK: %s" % apps,
         "Custom playbooks OK: none configured",
     ]
 
-    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software)
+    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software, baseconfig=baseconfig)
     without_apps = controller_data_message(check_controller_data(paths)).splitlines()
     assert without_apps[2] == "Local apps OK: none configured"
 
@@ -118,10 +125,10 @@ def test_validate_reports_the_default_custom_playbook_dir(tmp_path):
     from spa.playbooks import DEFAULT_ENV_PLAYBOOK_DIR, custom_playbook_dir_state
     from spa.validate import controller_data_message
 
-    software = seed_software_dir(tmp_path)
+    software, baseconfig = _controller_dirs(tmp_path)
     playbooks = tmp_path / DEFAULT_ENV_PLAYBOOK_DIR
     playbooks.mkdir()
-    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software)
+    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software, baseconfig=baseconfig)
 
     # No .spa.yml entry needed, and an empty folder is not an error.
     rows = custom_playbook_dir_state(tmp_path)
@@ -165,7 +172,7 @@ def test_validate_flags_a_missing_custom_playbook_dir(tmp_path):
 
 
 def test_local_apps_need_apps_dir(tmp_path):
-    software = seed_software_dir(tmp_path)
+    software, baseconfig = _controller_dirs(tmp_path)
     missing_apps = tmp_path / "no-apps"
     config = """
 splunk_app_deployment:
@@ -174,7 +181,7 @@ splunk_app_deployment:
       source: local
       target_roles: [search_head]
 """
-    paths = _paths(tmp_path, config, software=software, apps_dir=missing_apps)
+    paths = _paths(tmp_path, config, software=software, baseconfig=baseconfig, apps_dir=missing_apps)
     state = check_controller_data(paths)
     assert state.ok is False
     assert "org_some_local_app" in state.reason
@@ -182,7 +189,7 @@ splunk_app_deployment:
 
 
 def test_local_app_file_must_exist(tmp_path):
-    software = seed_software_dir(tmp_path)
+    software, baseconfig = _controller_dirs(tmp_path)
     apps = tmp_path / "apps"
     apps.mkdir()
     config = """
@@ -192,7 +199,7 @@ splunk_app_deployment:
       source: local
       target_roles: [search_head]
 """
-    paths = _paths(tmp_path, config, software=software, apps_dir=apps)
+    paths = _paths(tmp_path, config, software=software, baseconfig=baseconfig, apps_dir=apps)
     state = check_controller_data(paths)
     assert state.ok is False
     assert "Local app source not found" in state.reason
@@ -200,7 +207,7 @@ splunk_app_deployment:
 
 
 def test_local_app_present_ok(tmp_path):
-    software = seed_software_dir(tmp_path)
+    software, baseconfig = _controller_dirs(tmp_path)
     apps = tmp_path / "apps"
     (apps / "org_some_local_app").mkdir(parents=True)
     config = """
@@ -210,12 +217,12 @@ splunk_app_deployment:
       source: local
       target_roles: [search_head]
 """
-    paths = _paths(tmp_path, config, software=software, apps_dir=apps)
+    paths = _paths(tmp_path, config, software=software, baseconfig=baseconfig, apps_dir=apps)
     assert check_controller_data(paths).ok is True
 
 
 def test_splunkbase_apps_do_not_require_apps_dir(tmp_path):
-    software = seed_software_dir(tmp_path)
+    software, baseconfig = _controller_dirs(tmp_path)
     missing_apps = tmp_path / "no-apps"
     config = """
 splunk_app_deployment:
@@ -225,13 +232,13 @@ splunk_app_deployment:
       app_id: 3205
       target_roles: [search_head]
 """
-    paths = _paths(tmp_path, config, software=software, apps_dir=missing_apps)
+    paths = _paths(tmp_path, config, software=software, baseconfig=baseconfig, apps_dir=missing_apps)
     assert check_controller_data(paths).ok is True
 
 
 def test_default_source_is_splunkbase(tmp_path):
     """CFG-APP-002: omitted source does not require a local app folder."""
-    software = seed_software_dir(tmp_path)
+    software, baseconfig = _controller_dirs(tmp_path)
     apps = tmp_path / "apps"
     apps.mkdir()
     config = """
@@ -240,13 +247,13 @@ splunk_app_deployment:
     - name: org_implicit
       target_roles: [search_head]
 """
-    paths = _paths(tmp_path, config, software=software, apps_dir=apps)
+    paths = _paths(tmp_path, config, software=software, baseconfig=baseconfig, apps_dir=apps)
     state = check_controller_data(paths)
     assert state.ok is True
 
 
 def test_local_path_override(tmp_path):
-    software = seed_software_dir(tmp_path)
+    software, baseconfig = _controller_dirs(tmp_path)
     apps = tmp_path / "apps"
     apps.mkdir()
     other = tmp_path / "elsewhere" / "custom_app"
@@ -259,7 +266,7 @@ splunk_app_deployment:
       local_path: %s
       target_roles: [search_head]
 """ % other
-    paths = _paths(tmp_path, config, software=software, apps_dir=apps)
+    paths = _paths(tmp_path, config, software=software, baseconfig=baseconfig, apps_dir=apps)
     assert check_controller_data(paths).ok is True
     assert local_app_source_path({"local_path": str(other)}, apps) == other
 
@@ -267,7 +274,7 @@ splunk_app_deployment:
 def test_config_software_dir_override(tmp_path, monkeypatch):
     monkeypatch.delenv("SPA_SOFTWARE_DIR", raising=False)
     monkeypatch.delenv("SPA_BASECONFIG_DIR", raising=False)
-    real = seed_software_dir(tmp_path / "real")
+    real_sw, real_bc = _controller_dirs(tmp_path / "real")
     empty = tmp_path / "empty-sw"
     empty.mkdir()
     config = """
@@ -276,8 +283,8 @@ splunk_dirs:
   splunk_baseconfig_dir: %s
 splunk_hosts:
   - name: idx1
-""" % (real, real)
-    paths = _paths(tmp_path, config, software=empty)
+""" % (real_sw, real_bc)
+    paths = _paths(tmp_path, config, software=empty, baseconfig=empty)
     assert check_controller_data(paths).ok is True
 
 
@@ -306,6 +313,7 @@ def test_role_host_without_archive_fails_after_baseconfig(tmp_path):
         tmp_path,
         "splunk_hosts:\n  - name: idx1\n    roles: [search_head]\n",
         software=software,
+        baseconfig=software,
     )
     state = check_controller_data(paths)
     assert state.ok is False
@@ -340,7 +348,7 @@ splunk_hosts:
   - name: idx1
     roles: [search_head]
 """
-    state = check_controller_data(_paths(tmp_path, config, software=software))
+    state = check_controller_data(_paths(tmp_path, config, software=software, baseconfig=software))
     assert state.ok is False
     assert "splunk-*-*-?inux-amd64.tgz" in state.reason
 
@@ -349,7 +357,7 @@ def test_host_with_no_roles_does_not_require_an_archive(tmp_path):
     software = _baseconfig_software(
         tmp_path, ("org_s2_indexer_indexes", "org_cluster_manager_base")
     )
-    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software)
+    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software, baseconfig=software)
     assert check_controller_data(paths).ok is True
 
 
@@ -382,7 +390,7 @@ splunk_hosts:
   - name: uf1
     roles: [universal_forwarder]
 """
-    assert check_controller_data(_paths(tmp_path, config, software=software)).ok is True
+    assert check_controller_data(_paths(tmp_path, config, software=software, baseconfig=software)).ok is True
 
 
 def test_enterprise_only_config_does_not_require_uf(tmp_path):
@@ -395,7 +403,7 @@ splunk_hosts:
   - name: idx1
     roles: [indexer]
 """
-    assert check_controller_data(_paths(tmp_path, config, software=software)).ok is True
+    assert check_controller_data(_paths(tmp_path, config, software=software, baseconfig=software)).ok is True
 
 
 def test_dummy_linux_tarball_makes_a_role_host_ok(tmp_path):
@@ -408,7 +416,7 @@ splunk_hosts:
   - name: idx1
     roles: [search_head]
 """
-    assert check_controller_data(_paths(tmp_path, config, software=software)).ok is True
+    assert check_controller_data(_paths(tmp_path, config, software=software, baseconfig=software)).ok is True
 
 
 @pytest.mark.parametrize(
@@ -420,7 +428,7 @@ def test_omitted_architecture_globs_amd64(tmp_path, provider_yaml):
         tmp_path, ("org_s2_indexer_indexes", "org_cluster_manager_base")
     )
     config = provider_yaml + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n"
-    state = check_controller_data(_paths(tmp_path, config, software=software))
+    state = check_controller_data(_paths(tmp_path, config, software=software, baseconfig=software))
     assert state.ok is False
     assert "splunk-*-*-?inux-amd64.tgz" in state.reason
 
@@ -436,7 +444,7 @@ splunk_hosts:
   - name: idx1
     roles: [indexer]
 """
-    state = check_controller_data(_paths(tmp_path, config, software=software))
+    state = check_controller_data(_paths(tmp_path, config, software=software, baseconfig=software))
     assert state.ok is False
     assert "splunk-*-*-?inux-arm64.tgz" in state.reason
     assert "amd64" not in state.reason
@@ -454,7 +462,7 @@ splunk_hosts:
   - name: idx1
     roles: [indexer]
 """
-    state = check_controller_data(_paths(tmp_path, config, software=software))
+    state = check_controller_data(_paths(tmp_path, config, software=software, baseconfig=software))
     assert state.ok is False
     assert "splunk-10.1.0-*-?inux-amd64.tgz" in state.reason
 
@@ -474,7 +482,7 @@ splunk_hosts:
   - name: uf1
     roles: [universal_forwarder]
 """
-    state = check_controller_data(_paths(tmp_path, config, software=software))
+    state = check_controller_data(_paths(tmp_path, config, software=software, baseconfig=software))
     assert state.ok is False
     assert "9.3.2" in state.reason
     assert "9.2.0" in state.reason
@@ -495,7 +503,7 @@ splunk_hosts:
   - name: uf1
     roles: [universal_forwarder]
 """
-    assert check_controller_data(_paths(tmp_path, config, software=software)).ok is True
+    assert check_controller_data(_paths(tmp_path, config, software=software, baseconfig=software)).ok is True
 
 
 def test_inventory_archive_check_uses_shared_missing_reason(tmp_path):

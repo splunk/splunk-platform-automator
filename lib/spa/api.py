@@ -183,6 +183,9 @@ class SpaSession(Protocol):
         baseconfig_dir: Optional[str] = None,
         apps_dir: Optional[str] = None,
         default: Optional[str] = None,
+        create_defaults: bool = False,
+        confirm: bool = False,
+        agent: bool = False,
     ) -> CommandResult: ...
 
     def environment_remove(
@@ -1397,26 +1400,85 @@ class LocalSpaSession:
         baseconfig_dir: Optional[str] = None,
         apps_dir: Optional[str] = None,
         default: Optional[str] = None,
+        create_defaults: bool = False,
+        confirm: bool = False,
+        agent: bool = False,
     ) -> CommandResult:
-        from spa.paths import save_user_paths, user_paths_yml
+        from spa.paths import _expand, load_user_paths, save_user_paths, user_paths_yml
         from spa.registry import (
             RegistryError,
+            recommended_workspace,
             set_default_env_dir,
             set_default_environment,
             set_default_provider,
         )
 
-        if not any((env_dir, provider, software_dir, baseconfig_dir, apps_dir, default)):
+        if not any(
+            (env_dir, provider, software_dir, baseconfig_dir, apps_dir, default, create_defaults)
+        ):
             return CommandResult(
                 ok=False,
                 error=(
-                    "spa environment set: pass --env-dir, --software-dir, "
+                    "spa environment set: pass --create-defaults, --env-dir, --software-dir, "
                     "--baseconfig-dir, --apps-dir, --default, and/or --provider"
                 ),
                 code=2,
             )
         data: Dict[str, Any] = {}
         try:
+            if create_defaults:
+                recommended = recommended_workspace()
+                existing = load_user_paths()
+                explicit = {
+                    "software_dir": software_dir,
+                    "baseconfig_dir": baseconfig_dir,
+                    "apps_dir": apps_dir,
+                    "env_dir": env_dir,
+                }
+                merged: Dict[str, str] = {}
+                start = Path.cwd()
+                for key, default_path in recommended.items():
+                    flagged = (explicit.get(key) or "").strip()
+                    stored = str(existing.get(key) or "").strip()
+                    if flagged:
+                        merged[key] = str(_expand(flagged, start))
+                    elif stored:
+                        merged[key] = stored
+                    else:
+                        merged[key] = str(default_path)
+                details = [
+                    "%s/" % recommended["env_dir"].parent,
+                    "  Software/      # tarballs + optional .lic",
+                    "  Apps/          # local Splunk apps",
+                    "  Baseconfigs/   # extracted PS apps",
+                    "  Envs/          # name-only spa init parent",
+                ]
+                gate = self._confirm_gate(
+                    "spa environment set --create-defaults",
+                    confirm=confirm,
+                    agent=agent,
+                    details=details,
+                    risk="local_paths",
+                )
+                if gate is not None:
+                    return gate
+                for path in recommended.values():
+                    path.mkdir(parents=True, exist_ok=True)
+                for raw in merged.values():
+                    Path(raw).mkdir(parents=True, exist_ok=True)
+                save_user_paths(
+                    software_dir=merged["software_dir"],
+                    baseconfig_dir=merged["baseconfig_dir"],
+                    apps_dir=merged["apps_dir"],
+                    env_dir=merged["env_dir"],
+                )
+                data.update(merged)
+                data["paths_yml"] = str(user_paths_yml())
+                data["created_defaults"] = True
+                data["hint"] = (
+                    "Put tarballs in Software, extract PS apps into Baseconfigs."
+                )
+                software_dir = baseconfig_dir = apps_dir = env_dir = None
             if software_dir or baseconfig_dir or apps_dir:
                 save_user_paths(
                     software_dir=software_dir,

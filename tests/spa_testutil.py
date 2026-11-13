@@ -236,10 +236,9 @@ def min_env_vars(root: Path) -> dict:
 
 
 def seed_software_dir(root: Path) -> Path:
-    """Minimal PS baseconfig layout so controller-data checks pass in tests."""
+    """Enterprise/UF tarballs so controller software checks pass in tests."""
     software = Path(root) / "Software"
-    for name in ("org_s2_indexer_indexes", "org_cluster_manager_base"):
-        (software / "ps" / name).mkdir(parents=True, exist_ok=True)
+    software.mkdir(parents=True, exist_ok=True)
     for arch_type, architecture in (
         ("splunk", "amd64"),
         ("splunk", "arm64"),
@@ -249,6 +248,14 @@ def seed_software_dir(root: Path) -> Path:
         name = "%s-9.3.2-000000000000-linux-%s.tgz" % (arch_type, architecture)
         (software / name).write_bytes(b"dummy")
     return software
+
+
+def seed_baseconfig_dir(root: Path) -> Path:
+    """Minimal PS marker layout so controller baseconfig checks pass in tests."""
+    baseconfig = Path(root) / "baseconfigs"
+    for name in ("org_s2_indexer_indexes", "org_cluster_manager_base"):
+        (baseconfig / "ps" / name).mkdir(parents=True, exist_ok=True)
+    return baseconfig
 
 
 def spa_env(extra: Optional[Mapping[str, str]] = None) -> dict:

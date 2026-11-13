@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from spa_testutil import LIB, PROJECT_ROOT, seed_software_dir, spa_env
+from spa_testutil import LIB, PROJECT_ROOT, seed_baseconfig_dir, seed_software_dir, spa_env
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -89,6 +89,7 @@ def test_walkthrough_replay_builds_the_clustered_config(tmp_path):
     )
     script = re.sub(r"(?m)^spa ", "%s " % _SPA, script)
     software = seed_software_dir(tmp_path / "data")
+    baseconfig = seed_baseconfig_dir(tmp_path / "data")
     (software / "Splunk_Enterprise.lic").write_text(
         """<license>
   <payload>
@@ -121,7 +122,7 @@ def test_walkthrough_replay_builds_the_clustered_config(tmp_path):
         {
             "SPA_VENV_DIR": str(PROJECT_ROOT / "tests" / ".venv"),
             "SPA_SOFTWARE_DIR": str(software),
-            "SPA_BASECONFIG_DIR": str(software),
+            "SPA_BASECONFIG_DIR": str(baseconfig),
             "SPA_TEST_SPLUNKBASE_STUB": "1",
             "PYTHONPATH": os.pathsep.join([str(stub), str(LIB)]),
             "SNAPSHOT": str(tmp_path / "before-shs.yml"),

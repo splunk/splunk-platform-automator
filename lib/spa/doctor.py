@@ -18,7 +18,8 @@ from spa.preflight import ENTERPRISE_DOWNLOAD, FORWARDER_DOWNLOAD, _has_baseconf
 
 VAGRANT_REQUIRED_PLUGINS = ("vagrant-vbguest",)
 VAGRANT_WSL_PLUGINS = ("virtualbox_WSL2",)
-_MISSING_SOFTWARE_DIR_FIX = "spa environment set --software-dir DIR"
+_MISSING_SOFTWARE_DIR_FIX = "spa environment set --create-defaults --yes"
+_MISSING_BASECONFIG_DIR_FIX = "spa environment set --create-defaults --yes"
 
 
 def _brew_hint(pkg: str) -> str:
@@ -246,7 +247,7 @@ def _has_top_level_license(software: Path) -> bool:
     return any(entry.is_file() and entry.suffix.lower() == ".lic" for entry in entries)
 
 
-def _record_software_inventory(rec, software: Path) -> None:
+def _record_software_inventory(rec, software: Path, baseconfig: Path) -> None:
     path = str(software)
     exists = software.is_dir()
     if exists and _has_enterprise_and_forwarder_tarballs(software):
@@ -268,19 +269,22 @@ def _record_software_inventory(rec, software: Path) -> None:
             ),
         )
 
-    if exists and _has_baseconfig_apps(software):
-        rec("ok", "software_baseconfigs", "PS baseconfig apps in %s" % path)
+    bc_path = str(baseconfig)
+    bc_exists = baseconfig.is_dir()
+    if bc_exists and _has_baseconfig_apps(baseconfig):
+        rec("ok", "software_baseconfigs", "PS baseconfig apps in %s" % bc_path)
     else:
         rec(
             "warn",
             "software_baseconfigs",
-            "no PS baseconfig apps in %s" % path,
-            _MISSING_SOFTWARE_DIR_FIX
-            if not exists
+            "no PS baseconfig apps in %s" % bc_path,
+            _MISSING_BASECONFIG_DIR_FIX
+            if not bc_exists
             else (
                 "Splunk / Cisco: http://go/baseconfigs; others: Splunk PS. "
-                "Extract into the same tree (Configurations - Base, "
-                "Configurations - Index Replication) at %s" % path
+                "Extract Configurations - Base and Configurations - Index Replication "
+                "into %s. Point once with: spa environment set --baseconfig-dir DIR"
+                % bc_path
             ),
         )
 
@@ -554,6 +558,7 @@ def collect_checks(
             )
 
     software = spa_home_path / "Software"
+    baseconfig = spa_home_path / "baseconfigs"
     env_overlay = {**os.environ, "SPA_HOME": str(spa_home_path)}
     if env_path:
         env_overlay["SPA_ENV_DIR"] = str(env_path)
@@ -564,9 +569,10 @@ def collect_checks(
             clone_root=spa_home_path,
         )
         software = resolved.software_dir
+        baseconfig = resolved.baseconfig_dir
     except Exception:
         pass
-    _record_software_inventory(rec, software)
+    _record_software_inventory(rec, software, baseconfig)
 
     if require_vbox:
         has_vagrant = bool(shutil.which("vagrant"))
