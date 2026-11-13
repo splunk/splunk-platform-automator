@@ -12,12 +12,12 @@ Keep the existing questionnaire (Phases 1–5), location/name gate, then `spa in
 
 Do not run the SVA questionnaire. Check is mandatory on this path, before validate:
 
-1. `spa architecture plan FILE`. Acknowledge it.
-2. Provider, then location/name gate (recommend `environment.name`).
-3. Write mode, after the gate yes: `spa environment init PARENT/NAME --architecture FILE --provider PROVIDER`. Plan mode: record location/name; do **not** init until Phase 12.
+1. `spa architecture plan FILE`. Follow `data.next`. `mode.write` means the architecture file is the plan; do not AskQuestion plan vs write.
+2. AskQuestion `provider` over `choice.allowed`, then the location/name gate (recommend `environment.name`).
+3. After the gate yes: `spa environment init PARENT/NAME --architecture FILE --provider PROVIDER` (copy `argv` / `command` from `mode.write`).
 4. Host ↔ role map; `spa config move role` / `config add` as answered.
 5. Optional `spa config move host --prefix` / `--postfix` / `move host OLD --to NEW`.
-6. Sizing, OS, AWS if `aws`. CCM only when CCM is in play: size from `spa provider ccm survey` / `operating-systems list` / `instance-types list` / `disk-storage list`, not a hardcoded catalog. Write YAML with `spa config provider ccm` (that is not `spa provider ccm`). Auth is `CCM_TOKEN` (set / not set). Remote-provider defaults (hostname, host-side download, TLS) are already in `spa init` for AWS, CCM, and external (not VirtualBox). For an existing env that lacks them, `spa --agent config templates list` then `spa --agent config merge remote-provider --yes`. Keep `merge --file` for an operator-authored fragment.
+6. Sizing, OS, AWS if `aws`. CCM only when CCM is in play: size from `spa provider ccm survey` / `operating-systems list` / `instance-types list` / `disk-storage list`, not a hardcoded catalog. Follow survey `data.next`: set `ccm.operating_system`, `ccm.instance_type`, and `ccm.disk_storage` once for all hosts; do not ask per role. Write YAML with `spa config provider ccm` (that is not `spa provider ccm`). Auth is `CCM_TOKEN` (set / not set). Remote-provider defaults (hostname, host-side download, TLS) are already in `spa init` for AWS, CCM, and external (not VirtualBox). For an existing env that lacks them, `spa --agent config templates list` then `spa --agent config merge remote-provider --yes`. Keep `merge --file` for an operator-authored fragment.
 7. Apps (always ask Phase 9). SPA ignores `apps.by_role` (ClusterBaseConfigs / BaseConfigs); it installs PS baseconfigs internally from `splunk_baseconfig_dir`. Do not AskQuestion about importing those folders as local apps. ES search heads may already exist; app 263 still goes through `/spa-apps` if they want ES.
 8. Licenses. If a file is chosen and `license_manager` is missing, say so and add it.
 9. **`spa architecture check FILE` (required).** Then `spa validate`. Phase 14 handoff.

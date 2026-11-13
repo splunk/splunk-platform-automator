@@ -3839,6 +3839,7 @@ def _run(argv: Sequence[str]) -> int:
             print(result.error, file=sys.stderr)
         if result.data is not None:
             sys.stdout.write(ccm_mod.format_ccm_text(result.data))
+        _print_next(result.data if isinstance(result.data, dict) else {})
         return result.code
 
     if args.command == "licenses":

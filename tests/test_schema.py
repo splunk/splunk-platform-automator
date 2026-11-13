@@ -847,6 +847,11 @@ class TestCcmConfig:
         assert "Every CCM OS flavor uses splunker" in text
         assert "not the AWS AMI user" in text
 
+    def test_instance_type_is_one_type_for_every_host(self):
+        text = CcmConfig.model_fields["instance_type"].description
+        assert "every host" in text.lower()
+        assert "no per-host instance type" in text.lower()
+
 
 class TestClusterConfigurations:
     """Test indexer and search head cluster configurations."""

@@ -1330,14 +1330,19 @@ def execute(
                 data[attribute] = _meta_catalog(http, attribute)
             data["business_purposes"] = _named_catalog(BUSINESS_PURPOSES)
             data["operation_hours"] = _named_catalog(OPERATION_HOURS)
+            from spa.next_steps import ccm_hardware_next
+
+            data["next"] = ccm_hardware_next()
             return CommandResult(ok=True, data=data)
 
         if action in _META_ACTIONS and subaction in (None, "list"):
             http = _require_client(client)
-            return CommandResult(
-                ok=True,
-                data=_meta_catalog(http, _META_ACTIONS[action]),
-            )
+            data = _meta_catalog(http, _META_ACTIONS[action])
+            if action == "instance-types":
+                from spa.next_steps import ccm_hardware_next
+
+                data["next"] = ccm_hardware_next()
+            return CommandResult(ok=True, data=data)
 
         if action == "ssh-keys" and subaction in (None, "list"):
             http = _require_client(client)

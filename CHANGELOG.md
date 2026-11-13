@@ -35,6 +35,10 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **Architecture plan Path B next**: `spa architecture plan FILE` attaches `data.next` with `mode.write` (the file is the plan; location/name gate then `spa environment init PARENT/NAME --architecture FILE --provider`) and `provider` (`choice.allowed` from `provider_ids()`, CCM omitted until `CCM_TOKEN` is set). Skills follow that envelope and do not AskQuestion plan vs write on Path B. Path A can still ask plan vs write.
+
+- **CCM one-size hardware**: `ccm.instance_type` is one type for every host (CCM has no per-host instance type). `spa provider ccm survey` and `instance-types list` attach `data.next` to set `ccm.operating_system`, `ccm.instance_type`, and `ccm.disk_storage` once; do not ask per role.
+
 - **Provider list order**: help, schema, completion, and skills list providers as CCM, AWS, external, then VirtualBox (`Provider.order` / `provider_ids()`), not module insertion order. CCM is not hidden when `CCM_TOKEN` is unset; `spa validate` and `spa doctor` name a missing token as **set / not set**.
 
 - **Deploy host link page**: after a successful `spa deploy`, humans see `Next:` with the path to `$SPA_ENV_DIR/config/index.html` to paste into a browser for Splunk Web on each host. Agent envelopes attach the same `data.next` item (`hosts.linkpage`, no `command`). Failed deploy omits it.

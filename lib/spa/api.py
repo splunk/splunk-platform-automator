@@ -2380,6 +2380,11 @@ class LocalSpaSession:
                 error="architecture file is not valid: " + "; ".join(plan["errors"]),
                 code=1,
             )
+        from spa.next_steps import architecture_plan_next
+
+        follow = architecture_plan_next(plan, architecture_file=path)
+        if follow:
+            plan["next"] = follow
         return CommandResult(ok=True, data=plan)
 
     def architecture_apply(

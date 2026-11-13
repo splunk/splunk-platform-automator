@@ -1042,6 +1042,37 @@ class TestSpaSkill:
         assert "ignores `apps.by_role`" in phases
         assert "Follow `data.next` for skipped `apps.by_role`" not in phases
 
+    def test_create_config_path_b_follows_architecture_plan_write_next(self):
+        skill_dir = _create_config_dir()
+        create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+        phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
+        arch = (skill_dir / "references" / "architecture-input.md").read_text(
+            encoding="utf-8"
+        )
+        tree = (skill_dir / "references" / "workflow-decision-tree.md").read_text(
+            encoding="utf-8"
+        )
+        path_b = arch[arch.index("## Path B") : arch.index("## Version gate")]
+        assert "`data.next`" in path_b
+        assert "mode.write" in path_b
+        assert "plan vs write" in path_b.lower()
+        assert "do not" in path_b.lower()
+        assert "do **not** init until Phase 12" not in path_b
+        tree_b = tree[tree.index("Confirmed schema 1") : tree.index("No architecture file")]
+        assert "data.next" in tree_b
+        assert "plan:" not in tree_b.lower()
+        combined = create + "\n" + phases
+        assert "architecture plan" in combined.lower()
+        assert "follow `data.next`" in combined.lower()
+        phase4 = phases[
+            phases.index("## Phase 4 — Sizing tier") : phases.index("## Phase 5")
+        ]
+        assert "all hosts" in phase4.lower() or "every host" in phase4.lower()
+        assert "per role" in phase4.lower() or "per-host" in phase4.lower()
+        assert "ccm.instance_type" in phases
+        assert "ccm.operating_system" in phases
+        assert "ccm.disk_storage" in phases
+
     def test_create_config_region_question_puts_aws_config_region_first(self):
         text = _create_config_workflow()
         phase4 = text[text.index("## Phase 6 — AWS settings"):text.index("## Phase 7 — Topology counts")]
@@ -1102,11 +1133,9 @@ class TestSpaSkill:
         phase12 = text[text.index("## Phase 12 — Write config") : text.index("## Phase 13")]
         assert "In plan mode, run steps 2–6 here first" in phase12
         tree = (skills / "references" / "workflow-decision-tree.md").read_text(encoding="utf-8")
-        path_b = tree[tree.index("Confirmed schema 1") : tree.index("No architecture file")]
+        path_a = tree[tree.index("No architecture file") :]
         assert "0.4.0" not in tree
-        assert "Phase 12" in path_b
-        arch = (skills / "references" / "architecture-input.md").read_text(encoding="utf-8")
-        assert "do **not** init until Phase 12" in arch
+        assert "Phase 12" in path_a
 
     def test_create_config_apps_loop_asks_for_more_after_each_add(self):
         skills = PROJECT_ROOT / "skills" / "spa"

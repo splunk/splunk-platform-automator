@@ -199,6 +199,65 @@ def provision_next(env_name: Optional[str] = None) -> List[Dict[str, Any]]:
     ]
 
 
+def architecture_plan_next(
+    plan: Mapping[str, Any],
+    *,
+    architecture_file: str,
+    environ: Optional[Mapping[str, str]] = None,
+) -> List[Dict[str, Any]]:
+    """Path B: the architecture file is the plan (write mode), then provider."""
+    from spa.providers import provider_ids
+    from spa.providers.ccm import token_present
+
+    allowed = list(provider_ids())
+    if not token_present(environ):
+        allowed = [name for name in allowed if name != "ccm"]
+    init = (
+        "spa --agent environment init PARENT/NAME --architecture %s --provider"
+        % architecture_file
+    )
+    rows = [
+        item(
+            "mode.write",
+            "Architecture file is the plan. After the location/name gate, "
+            "run spa environment init PARENT/NAME --architecture FILE --provider. "
+            "Do not ask plan vs write.",
+            init,
+            required=True,
+        ),
+        item(
+            "provider",
+            "Which provider?",
+            choice={"allowed": allowed},
+            required=True,
+        ),
+    ]
+    remaining = [name for name in (plan.get("remaining") or []) if name != "provider"]
+    rows.extend(remaining_next(remaining))
+    return rows
+
+
+def ccm_hardware_next() -> List[Dict[str, Any]]:
+    """One OS, instance type, and disk for every CCM host. Not per role."""
+    return [
+        item(
+            "ccm.operating_system",
+            "Set one OS for all hosts? CCM has no per-host operating system.",
+            "spa --agent config set ccm.operating_system OS --yes",
+        ),
+        item(
+            "ccm.instance_type",
+            "Set one instance type for all hosts? CCM has no per-host instance type.",
+            "spa --agent config set ccm.instance_type TYPE --yes",
+        ),
+        item(
+            "ccm.disk_storage",
+            "Set one disk size for all hosts? CCM has no per-host disk.",
+            "spa --agent config set ccm.disk_storage SIZE --yes",
+        ),
+    ]
+
+
 def remaining_next(remaining: Iterable[str]) -> List[Dict[str, Any]]:
     mapping = {
         "apps": item("apps.search", "Add apps?", "spa --agent apps search QUERY"),

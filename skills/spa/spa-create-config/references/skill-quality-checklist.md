@@ -4,7 +4,7 @@
 - [ ] Description third person with trigger terms
 - [ ] SKILL.md under 500 lines; details in `references/`
 - [ ] When to Use / When NOT to Use present
-- [ ] Mode (`plan` vs `write`) asked at the gate after the minimum requirements; plan mode skips YAML until approval
+- [ ] Mode (`plan` vs `write`) asked at the gate after the minimum requirements (Path A); Path B follows `data.next` `mode.write` and does not ask plan vs write; plan mode skips YAML until approval
 - [ ] Step 0 and phase exit criteria followed
 - [ ] `bin/*` invoked from project root
 - [ ] Secrets: Splunkbase and AWS credential env values never shown in chat or terminal output
