@@ -1,8 +1,8 @@
 ---
 # spa-run:
 #   schema: 1
-#   summary: Write the env host link page.
-#   description: Generates index.html with links to Splunk Web and SSH targets.
+#   summary: Write the env architecture host page.
+#   description: Generates index.html as an architecture snapshot with Splunk Web, ITSI when installed, and copy spa hosts ssh HOST.
 #   category: operations
 #   risk: mutating
 #   requires_provisioned: false

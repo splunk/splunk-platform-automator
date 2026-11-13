@@ -17,10 +17,27 @@
     state: directory
     mode: "0755"
 
+- name: Load env config for the architecture page
+  tags:
+    - splunk
+    - splunk_control
+  ansible.builtin.include_vars:
+    file: "{{ spa_config_file }}"
+
+- name: Snapshot license and CCM facts for the architecture page
+  tags:
+    - splunk
+    - splunk_control
+  ansible.builtin.set_fact:
+    linkpage_licenses: "{{ query('spa_linkpage', 'licenses') }}"
+    linkpage_ccm_ttl: "{{ lookup('spa_linkpage', 'ccm_ttl') }}"
+
 - name: Create Splunk Hosts index.html
   tags:
     - splunk
     - splunk_control
+  vars:
+    linkpage_generated_at: "{{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}"
   ansible.builtin.template:
     src: "config/index.html.j2"
     dest: "{{ spa_env_dir }}/config/index.html"

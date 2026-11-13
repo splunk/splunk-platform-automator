@@ -42,7 +42,7 @@ plugin: splunk-platform-automator
 
 `general`
 
-After deploy, SPA writes $SPA_ENV_DIR/config/index.html with buttons into Splunk Web on each host. url_locale is the language path in those URLs (en-US, en-GB). Pattern is two lowercase letters, hyphen or underscore, two uppercase letters. Default in the template is en-GB if unset.
+After deploy, SPA writes $SPA_ENV_DIR/config/index.html with role badges that open Splunk Web on each host. url_locale is the language path in those URLs (en-US, en-GB). Pattern is two lowercase letters, hyphen or underscore, two uppercase letters. Default in the template is en-GB if unset.
 
 ```yaml
 general:
