@@ -295,6 +295,11 @@ def test_readme_and_user_guide_name_the_external_provider_for_existing_hosts():
     assert "Existing hosts" in features
     assert "--provider external" in features
     assert "spa hosts register" in features
+    assert "spa init --architecture" in features
+    assert "spa architecture" in features
+    assert "spa licenses list" in features
+    assert "unset|move|merge|migrate" in features
+    assert "Software directory" in features
     start = readme.split("## Start here", 1)[1].split("\n## ", 1)[0]
     assert "--provider external" in start
     assert "spa hosts register" in start
@@ -312,6 +317,31 @@ def test_readme_opens_with_the_spa_pitch_before_support():
     assert "**One file, the whole environment.**" in pitch
     assert "**Agent-ready.**" in pitch
     assert "spa skills install cursor" in pitch
+
+
+def test_readme_version_badges_match_supported_windows():
+    """README shields and Install match install.md: Ansible 2.21, Python 3.9 through 3.14."""
+    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
+    assert "Ansible-2.21" in readme
+    assert "Python-3.9--3.14" in readme
+    assert "Terraform-1.3.0%2B" in readme
+    assert "License-Apache%202.0" in readme
+    readme_install = readme.split("## Install", 1)[1].split("\n## ", 1)[0]
+    assert "Python 3.9 through 3.14" in readme_install
+    assert "Python 3.9+" not in readme_install
+    assert "Ansible 2.21" in install
+    assert "Python 3.9 through 3.14" in install
+
+
+def test_readme_license_keeps_apache_grant_with_all_rights_reserved():
+    """Ownership notice stays next to the Apache 2.0 grant so All rights reserved is not proprietary-only."""
+    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    license_section = readme.split("## License", 1)[1]
+    assert "All rights reserved" in license_section
+    assert "Apache License, Version 2.0" in license_section
+    assert "[LICENSE](LICENSE)" in license_section
+    assert "Copyright 2022" not in license_section
 
 
 def test_architecture_documents_playbook_resolution_contract():

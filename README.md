@@ -3,8 +3,8 @@
 ![Splunk Platform Automator Overview](https://github.com/splunk/splunk-platform-automator/blob/master/pic/splunk-platform-automator_overview.png)
 
 ![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
-![Ansible](https://img.shields.io/badge/Ansible-2.10%2B-red.svg?logo=ansible&logoColor=white)
-![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg?logo=python&logoColor=white)
+![Ansible](https://img.shields.io/badge/Ansible-2.21-red.svg?logo=ansible&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.9--3.14-blue.svg?logo=python&logoColor=white)
 ![Terraform](https://img.shields.io/badge/Terraform-1.3.0%2B-purple.svg?logo=terraform&logoColor=white)
 
 > **From architecture diagram to running Splunk cluster in less than an hour.**
@@ -43,8 +43,10 @@ each step.
 ## Features
 
 - **Multiple environments:** `spa environment list`, `init`, `set`, and `remove` keep each lab or deployment in its own directory, with a default you can change.
-- **Guided config editing:** `spa config set|add|merge|topology|provider` and `spa apps add|remove` make schema-checked edits with dry-run support, so you don't hand-edit `splunk_config.yml`. `spa config search` and `spa config explain` look up any setting.
-- **Preflight checks:** `spa validate` checks the config, inventory, and license pairings. `spa doctor` checks host tools. A missing environment variable stops the run before anything changes.
+- **Guided config editing:** `spa config set|add|unset|move|merge|migrate|topology|provider` and `spa apps add|remove` make schema-checked edits with dry-run support, so you don't hand-edit `splunk_config.yml`. `spa config search` and `spa config explain` look up any setting.
+- **Architecture files:** `spa init --architecture FILE` scaffolds from a confirmed Splunk Validated Architecture plan. `spa architecture plan`, `apply`, and `check` overlay counts, replication and search factors, and extra roles.
+- **Preflight checks:** `spa validate` checks the config, inventory, and license pairings. `spa doctor` checks host tools and the Software directory (Enterprise and UF tarballs, PS baseconfigs, licenses). A missing environment variable stops the run before anything changes.
+- **License catalog:** `spa licenses list` shows Software license files, expiration, and ITSI/ES entitlements for config.
 - **Lifecycle control:** `spa suspend` and `spa resume` stop and start instances to save cost, and `spa destroy` removes the environment. Changing commands require an explicit `--yes`.
 - **Run logs:** provision, deploy, and run write a log under the environment's `logs/` folder. `spa logs` replays any run, and live progress shows each step as it happens.
 - **Playbook catalog:** `spa run list` shows the shipped playbooks, including rolling upgrades for indexer and search head clusters, plus your own. `spa run NAME --help` describes each one.
@@ -58,7 +60,7 @@ each step.
 
 ## Install
 
-Requires **Python 3.9+** with the `venv` module (`python3` on PATH). The installer creates a virtualenv and fails if that interpreter is missing or too old.
+Requires **Python 3.9 through 3.14** with the `venv` module (`python3` on PATH). The installer creates a virtualenv and fails if that interpreter is missing or too old.
 
 ```sh
 curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh
@@ -94,6 +96,7 @@ Existing servers: `spa init --example TOPOLOGY --provider external ENV`, then `s
 
 ## License
 
-Copyright 2022 Splunk Inc.
+© 2026 Splunk Inc. All rights reserved.
 
-Licensed under the Apache License, Version 2.0. See [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0).
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and
+[http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0).

@@ -37,6 +37,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Changed
 
+- **README Features, badges, and copyright**: Features name architecture ingest (`spa init --architecture`, `spa architecture plan|apply|check`), `spa licenses list`, config `unset`/`move`/`migrate`, and that `spa doctor` inventories Software. Version badges are Ansible 2.21 and Python 3.9–3.14 (not 2.10+ / 3.9+). License footer is `© 2026 Splunk Inc. All rights reserved` plus the Apache 2.0 grant.
+
 - **`spa skills install` copies packages**: always copy `$SPA_HOME/skills/spa/<name>` into the IDE skill directory (Claude and some IDEs miss symlink installs). An existing directory or leftover symlink of that package name is replaced; neighbors stay. Every install refreshes file contents. Destinations are recorded in `~/.config/spa/skills.yml`. `/spa-create-config` no longer uses Agent Skills `paths:` (that hid the skill in an env dir with no `examples/` files). Contributor skill edits live under `skills/spa/`; pick-up is `spa skills install` again.
 
 - **ITSI Java and customize next**: `spa apps add 1841` attaches `os.java.search_heads` before licenses and content packs. The command sets Java 21 on a real search-head selector (`splunk_hosts[name=…]` or `splunk_hosts[iter.prefix=…]`), never global `os.packages`. Package is `java-21-openjdk` (RHEL/Amazon Linux) or `openjdk-21-jdk` (Ubuntu/Debian). Skills follow that envelope; there is no `spa config merge itsi-minimal` yet. `apps.customize` ask names configure / set up / customize and says `--customize` does not change `target_roles`.
