@@ -648,7 +648,9 @@ Examples:
   spa apps add 5391 --install-all-content-packs --yes
   spa apps add 7294 --yes
 
-Then run spa validate. Deploy only when intended: spa deploy --yes
+Then run spa validate.
+First-time install: spa deploy --yes
+Already-running lab: spa hosts check, then spa run splunk_apps_deploy --yes
 """
 ARCHITECTURE_NEEDS_ACTION = (
     "spa architecture needs an action.\n"

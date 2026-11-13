@@ -1,6 +1,6 @@
 # Apps
 
-Apps are part of `splunk_config.yml` and are reconciled by `spa deploy`. Use the live catalog for the schema and examples:
+Apps are part of `splunk_config.yml`. First-time install is `spa deploy`. After the lab is up, apply apps with `spa run splunk_apps_deploy --yes`. Use the live catalog for the schema and examples:
 
 ```bash
 spa config explain splunk_app_deployment
@@ -44,14 +44,24 @@ With no `sc_whitelist`, SPA calculates server-class clients from roles and filte
 
 By default the controller downloads each Splunkbase archive once. `target_download: true` makes each target download it and therefore requires outbound Splunkbase access from those hosts.
 
-After editing app config:
+After editing app config on an already-running lab:
 
 ```bash
+spa apps add APP_ID --roles ROLE --yes
 spa validate
-spa deploy --yes
+spa hosts check
+spa run splunk_apps_deploy --yes
 ```
 
-Limit a rollout with `--hosts`, but remember that cluster-managed apps are staged on their manager or deployer.
+First-time install is still `spa deploy --yes` (it creates hosts, installs Splunk, then imports the same apps playbook). Adding a host still uses `spa deploy`.
+
+Limit a rollout with `--hosts`, but remember that cluster-managed apps are staged on their manager or deployer. The playbook needs root, so `spa hosts check` comes first. Confirm in chat, then `--yes`. Do not pass `-v`.
+
+If `apps add 1841` returns Java 21 (`os.java.search_heads`), set that with `spa config set`, then `spa run setup_common --yes` before `splunk_apps_deploy`. OS follow-ups are not apps; do not fall back to full deploy just because ITSI was added.
+
+`spa apps remove` does not uninstall files already on hosts. Uninstall is `state: absent` plus `spa run splunk_apps_remove` (or the same apps playbook).
+
+On CCM, adding apps on a live lab is this `spa run` path. Adding hosts still does not work on a live CCM deployment.
 
 `spa apps add --help` separates the four legal forms: a normal app requires
 `--roles`; ITSI 1841 rejects roles; Content Library 5391 requires named packs

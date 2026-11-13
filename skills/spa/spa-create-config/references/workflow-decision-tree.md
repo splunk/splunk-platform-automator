@@ -18,10 +18,12 @@ User message
 │           → /spa handoff for spa deploy (creates hosts if needed; only after your explicit yes)
 ├─ Change an existing config ("add ITSI", "change the OS")
 │     → /spa-create-config, "Add / change a setting" (skip greenfield phases)
-│     → spa validate → /spa only if you ask to deploy
+│     → spa validate
+│     → apps-only on an already-up lab: /spa for spa run splunk_apps_deploy (not spa deploy)
+│     → other settings: /spa only if you ask to deploy
 ├─ Apps ("add a TA", "Splunkbase", "content pack")
 │     → /spa-apps
-│     → spa validate → /spa only if you ask to deploy
+│     → spa validate → /spa for spa hosts check then spa run splunk_apps_deploy when the lab is already up
 └─ Lifecycle ("provision", "deploy", "destroy", "status", "logs", "suspend", "resume")
       → /spa
 ```

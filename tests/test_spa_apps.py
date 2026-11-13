@@ -1216,6 +1216,10 @@ def test_cli_help_and_schema():
         "strict JSON",
         "spa validate",
         "spa deploy --yes",
+        "spa hosts check",
+        "spa run splunk_apps_deploy --yes",
+        "Already-running lab",
+        "First-time install",
     ):
         assert phrase in add_help.stdout
     assert "Splunkbase app ID or local app folder name" in add_help.stdout

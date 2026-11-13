@@ -55,6 +55,7 @@ Discovery: `spa agent schema` / [docs/commands.md](../../../docs/commands.md). A
 | Health (hosts status and check) | **this skill** (`/spa`) — [health.md](references/health.md) |
 | Config design or any setting change (SVA, AWS, licenses, header, `spa config ...`) | `spa-create-config` — `spa config` only; not init, not deploy |
 | Apps: Splunkbase search, add, remove, local archives, content packs | `spa-apps` — `spa apps` only |
+| Apps-only apply on an already-up lab | **this skill** (`/spa`) — `spa hosts check` then `spa run splunk_apps_deploy --yes` (not `spa deploy`) |
 
 ## Environments
 
@@ -100,6 +101,10 @@ When running `deploy`, `destroy`, or `spa run`, follow [long-runs.md](references
 ## Handoff from spa-create-config
 
 After Phase 14 option A, follow [long-runs.md](references/long-runs.md#handoff-from-spa-create-config). Each step waits for its own yes in chat.
+
+## Handoff from spa-apps
+
+When the lab is already up and the operator only added apps, do not run `spa deploy`. After the operator's yes in chat, run `spa hosts check`, then `spa run splunk_apps_deploy --yes` under Long runs. First-time install still uses Handoff from spa-create-config (`spa deploy`).
 
 ## Anti-patterns
 

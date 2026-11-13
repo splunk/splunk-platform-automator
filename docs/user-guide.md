@@ -139,6 +139,7 @@ flowchart TD
 | --- | --- |
 | Create missing hosts and install Splunk | `spa deploy --yes` |
 | Add a host, then create it and install Splunk | `spa config add` then `spa deploy --yes` |
+| Add an app on an already-running lab | `spa apps add` then `spa run splunk_apps_deploy --yes` |
 | Limit a supported operation | `--hosts HOST_OR_ROLE` |
 | Stop compute and retain disks | `spa suspend --yes` |
 | Start compute | `spa resume --yes` |
@@ -166,7 +167,26 @@ For an existing server, `spa hosts register NAME --ssh-host HOST --user USER --k
 
 CCM host count is fixed when the deployment is created. Adding a name to a live CCM lab does not add an instance; replace the lab with `spa destroy --yes` then `spa deploy --yes`. See [CCM](ccm.md).
 
-Provider selection comes from `terraform.aws`, `virtualbox:`, or `ccm:` in config. Deploy, destroy, suspend, resume, and environment remove wait for a yes in chat. `spa destroy --hosts` does not exist. Do not delete a live host from config and run `spa deploy`; the current Terraform flow can terminate it. See [AWS](aws.md) for cloud decisions, [CCM](ccm.md) for Corporate Cloud Manager, and [Upgrade](upgrade.md) for the ordered distributed-upgrade workflow.
+### Add an app
+
+`spa apps add` only writes config. On an already-running lab, apply apps with `spa run splunk_apps_deploy --yes`. Do not run `spa deploy` for an apps-only change; full deploy re-walks OS, Splunk software, roles, and conf first. First-time install is still `spa deploy --yes` (it imports the same apps playbook after it builds the lab). Adding a host still uses `spa deploy`.
+
+```bash
+spa apps add APP_ID --roles ROLE --yes
+spa validate
+spa hosts check
+spa run splunk_apps_deploy --yes
+```
+
+`--hosts` is allowed, but cluster-managed apps still stage on the manager or deployer. The playbook needs root, so `spa hosts check` comes first. Confirm in chat, then `--yes`. Do not pass `-v`.
+
+If `apps add 1841` returns Java 21 (`os.java.search_heads`), set that with `spa config set`, then `spa run setup_common --yes` before `splunk_apps_deploy`. OS follow-ups are not apps; do not fall back to full deploy just because ITSI was added.
+
+`spa apps remove` does not uninstall files already on hosts. Uninstall is `state: absent` plus `spa run splunk_apps_remove` (or the same apps playbook).
+
+On CCM, adding apps on a live lab is this `spa run` path. Adding hosts still does not work on a live CCM deployment. See [Apps](apps.md).
+
+Provider selection comes from `terraform.aws`, `virtualbox:`, or `ccm:` in config. Deploy, destroy, suspend, resume, `spa run`, and environment remove wait for a yes in chat. `spa destroy --hosts` does not exist. Do not delete a live host from config and run `spa deploy`; the current Terraform flow can terminate it. See [AWS](aws.md) for cloud decisions, [CCM](ccm.md) for Corporate Cloud Manager, and [Upgrade](upgrade.md) for the ordered distributed-upgrade workflow.
 
 Mutating Ansible/Terraform work writes a timestamped JSONL transcript under `$SPA_ENV_DIR/logs/`. On a TTY, humans see **one live line per named group that actually runs** (for example `Deploy  App deployment · Search Head Cluster apps`), with the active host and task while work is running and compact counters when it settles. Rolling upgrade groups settle once per host and include installed and target Splunk versions when reported by the playbook. There is no `[3/10]` index; unused topology simply never appears. `spa run` of every first-party playbook uses the same compact grouping, with play-name fallback for work outside known roles and functions. Failures print immediately. `NO_COLOR` / piped stderr stay uncolored. Agents keep a small JSON envelope on stdout plus `data.log`; they must not ingest the transcript unless you asked to debug a failure. Terraform instance changes (`instance_type`, disk) fold into the provision plan/apply line. On VirtualBox, provisioning shows one line per VM (`Provision  VM idx1`) built from Vagrant's output, and a Vagrant error is printed before the group closes as `failed`.
 
@@ -204,8 +224,9 @@ Find application metadata and update config without maintaining an app-ID table 
 spa --agent apps search QUERY
 spa --agent apps add APP_ID --roles ROLE
 spa --agent validate
+spa hosts check
 spa apps download APP_ID --yes
-spa deploy --yes
+spa run splunk_apps_deploy --yes
 ```
 
 See [Apps](apps.md) for SPA routing, customizations, ITSI, removal, and verification.

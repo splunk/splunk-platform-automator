@@ -1628,6 +1628,105 @@ def test_user_guide_teaches_adding_a_host_then_deploy():
     assert "Adding a host to a live CCM deployment does not add an instance" in ccm
 
 
+def test_user_guide_and_apps_teach_day2_apps_deploy():
+    """An already-running lab applies apps with spa run splunk_apps_deploy, not spa deploy."""
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    apps = (_docs_dir() / "apps.md").read_text(encoding="utf-8")
+
+    lifecycle = guide[
+        guide.index("## Run the lifecycle") : guide.index("## Complete commands")
+    ]
+    assert "| Add an app" in lifecycle
+    assert "### Add an app" in lifecycle
+    add_app = lifecycle[lifecycle.index("### Add an app") :]
+    recipe = add_app.split("```bash", 1)[1].split("```", 1)[0]
+    assert "spa apps add" in recipe
+    assert "spa validate" in recipe
+    assert "spa hosts check" in recipe
+    assert "spa run splunk_apps_deploy --yes" in recipe
+    assert "spa deploy --yes" not in recipe
+    assert "os.java.search_heads" in add_app
+    assert "spa run setup_common --yes" in add_app
+    assert "spa apps remove" in add_app
+    assert "does not uninstall" in add_app.lower() or "does not remove files" in add_app.lower()
+    assert "CCM" in add_app
+
+    work = guide[
+        guide.index("## Work with hosts and apps") : guide.index("## Protect secrets")
+    ]
+    apps_snippet = work.rsplit("```bash", 1)[1].split("```", 1)[0]
+    assert apps_snippet.strip().endswith("spa run splunk_apps_deploy --yes")
+    assert "spa deploy --yes" not in apps_snippet
+
+    install = apps[
+        apps.index("## Install, update, and remove") : apps.index("## Customize")
+    ]
+    day2 = install.split("```bash", 1)[1].split("```", 1)[0]
+    assert "spa validate" in day2
+    assert "spa hosts check" in day2
+    assert "spa run splunk_apps_deploy --yes" in day2
+    assert "spa deploy --yes" not in day2
+    assert "spa validate\nspa deploy --yes" not in install
+    assert "first" in install.lower()
+    assert "spa deploy" in install
+    assert "os.java.search_heads" in install
+    assert "spa run setup_common --yes" in install
+    assert "spa apps remove" in install
+    assert "does not uninstall" in install.lower()
+    assert "spa run splunk_apps_remove" in install
+    assert "CCM" in install
+    assert "state: absent" in install
+
+
+def test_skills_teach_day2_apps_deploy():
+    """Already-up lab: skills hand off to spa run splunk_apps_deploy, not spa deploy."""
+    skills = PROJECT_ROOT / "skills" / "spa"
+    apps = (skills / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
+    create = (skills / "spa-create-config" / "SKILL.md").read_text(encoding="utf-8")
+    tree = (skills / "spa-create-config" / "references" / "workflow-decision-tree.md").read_text(
+        encoding="utf-8"
+    )
+    spa = (skills / "spa" / "SKILL.md").read_text(encoding="utf-8")
+    phases = (skills / "spa-create-config" / "references" / "phases.md").read_text(
+        encoding="utf-8"
+    )
+
+    when = apps[apps.index("## When to use") : apps.index("## When not to use")]
+    assert "already-deployed" in when.lower() or "already deployed" in when.lower()
+
+    workflow = apps[apps.index("## Workflow") : apps.index("ITSI / ITE Work")]
+    step9 = workflow[workflow.index("9. `spa --agent validate`") :]
+    assert "spa hosts check" in step9
+    assert "spa run splunk_apps_deploy --yes" in step9
+    assert "which runs `spa deploy --yes`" not in step9
+    assert "splunk_apps_playbook_run" in step9
+    assert "cp_api_install.yml" not in apps
+    assert "Handoff from spa-apps" in step9
+
+    add_change = create[
+        create.index("## Add / change a setting") : create.index("## Reference files")
+    ]
+    assert "spa run splunk_apps_deploy" in add_change
+    assert "not `spa deploy`" in add_change or "not spa deploy" in add_change.lower()
+
+    apps_branch = tree[tree.index('Apps ("add a TA"') : tree.index("Lifecycle")]
+    assert "spa run splunk_apps_deploy" in apps_branch
+    assert "already up" in apps_branch.lower() or "already-up" in apps_branch.lower()
+
+    greenfield = tree[: tree.index("Change an existing config")]
+    assert "/spa handoff for spa deploy" in greenfield
+    phase14 = phases[phases.index("## Phase 14 — Handoff") :]
+    assert "spa deploy --yes" in phase14
+
+    dispatch = spa.split("## Dispatch", 1)[1].split("\n## ", 1)[0]
+    assert "splunk_apps_deploy" in dispatch
+    assert "## Handoff from spa-apps" in spa
+    handoff_apps = spa.split("## Handoff from spa-apps", 1)[1].split("\n## ", 1)[0]
+    assert "spa hosts check" in handoff_apps
+    assert "spa run splunk_apps_deploy --yes" in handoff_apps
+    assert "spa deploy" in handoff_apps.lower()
+
+
 def test_user_guide_says_deploy_prints_index_html_path():
     """Operators paste the printed index.html path into a browser after deploy."""
     guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
