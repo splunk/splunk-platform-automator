@@ -1527,6 +1527,9 @@ def test_user_guide_says_deploy_prints_index_html_path():
     assert "$SPA_ENV_DIR/config/index.html" in guide
     assert "browser" in guide.lower()
     assert "prints" in guide.lower()
+    assert "architecture" in guide.lower()
+    assert "spa --env NAME hosts ssh HOST" in guide
+    assert "copy" in guide.lower()
 
 
 def test_user_guide_names_employee_only_ccm():

@@ -389,6 +389,148 @@ def _link_page_anchor_tags(rendered):
     return re.findall(r"<a\b[^>]*>", rendered, flags=re.IGNORECASE)
 
 
+def _link_page_tags(rendered, name="article"):
+    import re
+
+    return re.findall(r"<%s\b[^>]*>" % name, rendered, flags=re.IGNORECASE)
+
+
+def _link_page_attr(tag, name):
+    import re
+
+    match = re.search(r'\b%s="([^"]*)"' % re.escape(name), tag)
+    return match.group(1) if match else None
+
+
+def _link_page_host_tags(rendered):
+    import re
+
+    rows = []
+    for match in re.finditer(r"<[^>]+data-host=\"([^\"]+)\"[^>]*>", rendered):
+        tag = match.group(0)
+        rows.append({
+            "host": match.group(1),
+            "cluster": _link_page_attr(tag, "data-cluster"),
+            "tag": tag,
+        })
+    return rows
+
+
+def _link_page_edges(rendered):
+    import re
+
+    blobs = re.findall(
+        r'<script type="application/json" class="architecture-edges">\s*(.*?)\s*</script>',
+        rendered,
+        flags=re.S,
+    )
+    edges = []
+    for raw in blobs:
+        payload = json.loads(raw)
+        assert isinstance(payload, list)
+        edges.extend(payload)
+    return edges
+
+
+def _link_page_visible_chip(rendered, hostname):
+    import re
+
+    match = re.search(
+        r'<article\b[^>]*data-host="%s"[^>]*>.*?</article>' % re.escape(hostname),
+        rendered,
+        flags=re.S,
+    )
+    assert match, "missing article for %s" % hostname
+    html = match.group(0)
+    return html.split("<details", 1)[0] if "<details" in html else html
+
+
+def _expand_iter_hostnames(spec):
+    numbers = spec["numbers"]
+    start, end = numbers.split("..", 1)
+    width = len(end)
+    prefix = spec.get("prefix") or ""
+    postfix = spec.get("postfix") or ""
+    names = []
+    for number in range(int(start), int(end) + 1):
+        names.append("%s%s%s" % (prefix, str(number).zfill(width), postfix))
+    return names
+
+
+def _topology_hostnames(entry):
+    if entry.get("name"):
+        return [entry["name"]]
+    if entry.get("list"):
+        return list(entry["list"])
+    if entry.get("iter"):
+        return _expand_iter_hostnames(entry["iter"])
+    return []
+
+
+def _inventory_from_topology(config):
+    """Expand a topology YAML the way the inventory plugin groups hosts."""
+    defaults = config.get("splunk_defaults") or {}
+    default_env = defaults.get("splunk_env_name") or "splk"
+    groups = {}
+    hostvars = {}
+
+    def add(group, hostname):
+        members = groups.setdefault(group, [])
+        if hostname not in members:
+            members.append(hostname)
+
+    for entry in config.get("splunk_hosts") or []:
+        roles = list(entry.get("roles") or [])
+        env_name = entry.get("splunk_env") or default_env
+        idxcluster = entry.get("idxcluster")
+        shcluster = entry.get("shcluster")
+        site = entry.get("site")
+        for hostname in _topology_hostnames(entry):
+            add("splunk_env_%s" % env_name, hostname)
+            values = {
+                "splunk_env_name": env_name,
+                "ansible_host": "%s.example.test" % hostname,
+                "splunk_ssl": {"web": {"enable": True}},
+            }
+            if site:
+                values["site"] = site
+            if entry.get("splunk_version"):
+                values["splunk_version"] = entry["splunk_version"]
+            hostvars[hostname] = values
+            for role in roles:
+                add("role_%s" % role, hostname)
+                if role in ("indexer", "cluster_manager") and idxcluster:
+                    add("idxcluster_%s" % idxcluster, hostname)
+                    if role == "indexer" and site:
+                        add("idxcluster_%s_%s" % (idxcluster, site), hostname)
+                if role in ("search_head", "deployer") and shcluster:
+                    add("shcluster_%s" % shcluster, hostname)
+                    if role == "search_head" and site:
+                        add("shcluster_%s_%s" % (shcluster, site), hostname)
+    extra = {}
+    if defaults:
+        extra["splunk_defaults"] = defaults
+    if config.get("splunk_app_deployment"):
+        extra["splunk_app_deployment"] = config["splunk_app_deployment"]
+    if config.get("terraform"):
+        extra["terraform"] = config["terraform"]
+    if config.get("virtualbox"):
+        extra["virtualbox"] = config["virtualbox"]
+    if config.get("ccm"):
+        extra["ccm"] = config["ccm"]
+    if config.get("external") is not None:
+        extra["external"] = config["external"]
+    return groups, hostvars, extra
+
+
+def _topology_files():
+    from spa_testutil import PROJECT_ROOT
+
+    files = sorted((PROJECT_ROOT / "examples" / "topologies").glob("*.yml"))
+    files.append(PROJECT_ROOT / "examples" / "single_node_itsi.yml")
+    return files
+
+
 def test_link_page_uses_ansible_host_when_dns_and_ip_addr_are_absent():
     rendered = _render_link_page()
     assert "https://10.1.2.3:8000/" in rendered
@@ -683,12 +825,11 @@ def test_link_page_styles_offline_without_bootstrap():
     assert "cdn.jsdelivr.net" not in lower
     assert "<style>" in lower
     assert "prefers-color-scheme" in lower
-    assert "auto-fill" in lower
     assert ":focus" in lower
     assert "--" in rendered
 
 
-def test_link_page_header_names_the_env_and_ssh_commands():
+def test_link_page_header_names_the_env_and_omits_secrets():
     sentinel_password = "sentinel-admin-password-do-not-emit"
     sentinel_key = "/tmp/sentinel-key-path-do-not-emit"
     rendered = _render_link_page(
@@ -697,12 +838,15 @@ def test_link_page_header_names_the_env_and_ssh_commands():
             ansible_ssh_private_key_file=sentinel_key,
         ),
     )
-    assert "<header>" in rendered
-    header = rendered[rendered.index("<header>") : rendered.index("</header>")]
+    assert "<header" in rendered
+    header = rendered[rendered.index("<header") : rendered.index("</header>")]
     assert "lab" in header
-    assert "spa hosts ssh HOST" in header
-    assert "spa hosts list --status" in header
-    assert "admin" in header
+    assert "banner" in header
+    assert 'class="meta"' in header
+    assert "spa hosts ssh HOST" not in header
+    assert "spa hosts list --status" not in header
+    assert "Splunk Web user" not in header
+    assert "does not include the password" not in header
     assert "Env: lab" not in rendered
     assert sentinel_password not in rendered
     assert sentinel_key not in rendered
@@ -710,19 +854,35 @@ def test_link_page_header_names_the_env_and_ssh_commands():
     assert 'class="container-fluid" class=' not in rendered
 
 
-def test_link_page_omits_generated_time_without_facts():
+def test_link_page_prints_generated_time_from_extra():
     rendered = _render_link_page()
-    assert "Generated" not in rendered
-    stamped = _render_link_page(extra={"ansible_date_time": {"iso8601": "2026-11-12T22:00:00Z"}})
-    header = stamped[stamped.index("<header>") : stamped.index("</header>")]
-    assert "2026-11-12T22:00:00Z" in header
+    assert "Generated 2026" not in rendered
+    stamped = _render_link_page(extra={"linkpage_generated_at": "2026-11-12T22:00:00Z"})
+    header = stamped[stamped.index("<header") : stamped.index("</header>")]
+    title = header[header.index("<h1") : header.index('class="meta"')]
+    assert "<strong>Generated</strong>" in title
+    assert 'data-utc="2026-11-12T22:00:00Z"' in title
+    assert "function parseUtc" in stamped
+    assert "function formatLocal" in stamped
+    assert "Expires" not in title
+
+
+def test_link_page_details_uses_a_disclosure_chevron():
+    rendered = _render_link_page()
+    article = rendered[rendered.index("<article") : rendered.index("</article>")]
+    assert "<summary>Details</summary>" not in article
+    assert 'aria-label="Details"' in article
+    assert "article.host summary::after" in rendered
+    assert "article.host details[open] summary::after" in rendered
 
 
 def test_link_page_uses_semantic_host_articles():
     rendered = _render_link_page()
     assert "<main" in rendered
-    assert "<article>" in rendered
-    article = rendered[rendered.index("<article>") : rendered.index("</article>")]
+    assert "<article" in rendered
+    tags = _link_page_tags(rendered, "article")
+    assert tags
+    article = rendered[rendered.index("<article") : rendered.index("</article>")]
     assert "shidx" in article
     assert "Search Head" in article
 
@@ -734,7 +894,33 @@ def test_link_page_web_links_open_with_noopener():
     for tag in anchors:
         if 'target="_blank"' in tag or "target='_blank'" in tag:
             assert 'rel="noopener noreferrer"' in tag
-    assert any('href="https://10.1.2.3:8000/en-GB/app/launcher/home"' in tag for tag in anchors)
+    chip = _link_page_visible_chip(rendered, "shidx")
+    roles = chip[chip.index('<ul class="roles"'):]
+    assert 'href="https://10.1.2.3:8000/en-GB/app/launcher/home"' in roles
+    assert ">Search Head</a>" in roles
+    assert ">Splunk Web<" not in rendered
+
+
+def test_link_page_clickable_role_badges_have_a_thicker_border():
+    rendered = _render_link_page(
+        groups={
+            "splunk_env_lab": ["shidx"],
+            "role_search_head": ["shidx"],
+            "role_indexer": ["shidx"],
+        },
+        hostvars=_link_page_host(),
+    )
+    chip = _link_page_visible_chip(rendered, "shidx")
+    roles = chip[chip.index('<ul class="roles"'):]
+    assert '<li class="is-link">' in roles
+    assert ">Search Head</a>" in roles
+    assert "<li>Indexer</li>" in roles
+    assert roles.count('class="is-link"') == 1
+    assert "header .chip-provider" in rendered
+    assert ".roles li.is-link" in rendered
+    assert "border: 1px solid var(--border)" in rendered
+    assert "border: 1px solid transparent" in rendered
+    assert "border-color: var(--accent)" in rendered
 
 
 def test_link_page_http_when_ssl_web_is_disabled():
@@ -757,13 +943,11 @@ def test_link_page_no_web_roles_are_plain_text():
             **_link_page_host("uf1", ansible_host="10.1.2.12"),
         },
     )
-    assert "<button" not in rendered.lower()
     assert "data-toggle" not in rendered
-    assert "disabled" not in rendered.lower()
     assert "Indexer" in rendered
     assert "Universal Forwarder" in rendered
-    assert "No Splunk Web" in rendered
     assert ":8000/" not in rendered
+    assert "/app/itsi/" not in rendered
 
 
 def test_link_page_combined_roles_keep_web_and_show_cluster_fields():
@@ -797,14 +981,639 @@ def test_link_page_manager_roles_keep_deep_links():
         },
         hostvars=_link_page_host("mgr"),
     )
-    assert "https://10.1.2.3:8000/en-GB/app/launcher/home" in rendered
-    assert "https://10.1.2.3:8000/en-GB/manager/system/licensing" in rendered
-    assert "https://10.1.2.3:8000/en-GB/manager/system/clustering" in rendered
-    assert "https://10.1.2.3:8000/en-GB/manager/system/deploymentserver" in rendered
-    assert "https://10.1.2.3:8000/en-GB/app/splunk_monitoring_console" in rendered
+    chip = _link_page_visible_chip(rendered, "mgr")
+    roles = chip[chip.index('<ul class="roles"'):]
+    assert "https://10.1.2.3:8000/en-GB/manager/system/licensing" in roles
+    assert "https://10.1.2.3:8000/en-GB/manager/system/clustering" in roles
+    assert "https://10.1.2.3:8000/en-GB/manager/system/deploymentserver" in roles
+    assert "https://10.1.2.3:8000/en-GB/app/splunk_monitoring_console" in roles
+    assert ">License Manager</a>" in roles
+    assert ">Cluster Manager</a>" in roles
+    assert ">Deployment Server</a>" in roles
+    assert ">Monitoring Console</a>" in roles
+    article = rendered[rendered.index("<article") : rendered.index("</article>")]
+    details = article.split("<details", 1)[1]
+    assert "manager/system/licensing" not in details
+    assert "manager/system/clustering" not in details
+    assert "manager/system/deploymentserver" not in details
+    assert "splunk_monitoring_console" not in details
+    assert 'class="action' not in rendered
     for tag in _link_page_anchor_tags(rendered):
         if 'target="_blank"' in tag or "target='_blank'" in tag:
             assert 'rel="noopener noreferrer"' in tag
+
+
+def test_link_page_copy_ssh_control_uses_execcommand():
+    rendered = _render_link_page(extra={"spa_registered_name": "pro-lab"})
+    assert "spa --env pro-lab hosts ssh shidx" in rendered
+    assert 'type="button"' in rendered
+    assert ">Copy<" in rendered
+    assert "execCommand('copy')" in rendered
+    assert "ssh://" not in rendered.lower()
+    assert "spa:" not in rendered
+
+
+def test_link_page_header_shows_registry_name_and_env_directory():
+    rendered = _render_link_page(
+        extra={
+            "spa_registered_name": "pro-lab",
+            "spa_env_dir": "/Users/me/itsi500",
+            "linkpage_generated_at": "2026-11-13T08:00:00Z",
+        },
+    )
+    header = rendered[rendered.index("<header") : rendered.index("</header>")]
+    assert "pro-lab" in header
+    assert "/Users/me/itsi500" in header
+    assert "itsi500" in header
+    assert "Generated" in header
+    assert 'data-utc="2026-11-13T08:00:00Z"' in header
+
+
+def test_link_page_header_shows_version_licenses_provider_and_ccm_ttl():
+    guid = "AAAA-BBBB-CCCC-DDDD-EEEE"
+    rendered = _render_link_page(
+        extra={
+            "splunk_defaults": {"splunk_version": "latest"},
+            "linkpage_resolved_version": "9.3.2",
+            "linkpage_licenses": [
+                {
+                    "basename": "Splunk_Enterprise.lic",
+                    "expires_at": "2027-01-15",
+                    "status": "valid",
+                    "guid": guid,
+                },
+                {
+                    "basename": "Splunk_ITSI.lic",
+                    "expires_at": "2026-11-20",
+                    "status": "expiring",
+                },
+            ],
+            "terraform": {"aws": {"region": "eu-central-1"}},
+            "linkpage_ccm_ttl": "2026-12-01T00:00:00Z",
+            "linkpage_power_state": "running",
+            "linkpage_generated_at": "2026-11-13T08:00:00Z",
+        },
+    )
+    header = rendered[rendered.index("<header") : rendered.index("</header>")]
+    title = header[header.index("<h1") : header.index('class="meta"')]
+    assert "<strong>Generated</strong>" in title
+    assert 'data-utc="2026-11-13T08:00:00Z"' in title
+    assert "<strong>Expires</strong>" not in title
+    assert "data-remaining" not in title
+    assert "function remainingDays" in rendered
+    assert "function remainingLabel" in rendered
+    assert "function licenseStatus" in rendered
+    assert "banner" in header
+    assert "chip" in header
+    assert "9.3.2" in header
+    assert "latest" in header
+    assert "Provider" in header
+    assert "AWS" in header
+    assert "eu-central-1" in header
+    assert 'class="meta"' in header
+    assert "<strong>Splunk_Enterprise.lic</strong>" in header
+    assert 'data-utc="2027-01-15"' in header
+    assert "<strong>Splunk_ITSI.lic</strong>" in header
+    assert 'data-utc="2026-11-20"' in header
+    licenses = header[header.index('class="licenses"'):]
+    assert licenses.count("data-remaining") == 2
+    assert 'data-license-status' not in licenses
+    assert "CCM TTL" not in header
+    assert 'data-utc="2026-12-01T00:00:00Z"' not in header
+    assert guid not in rendered
+    assert "Lab suspended" not in header
+
+
+def test_link_page_ccm_header_expires_is_lab_ttl():
+    rendered = _render_link_page(
+        extra={
+            "ccm": {"ttl_days": 7},
+            "linkpage_ccm_ttl": "2026-12-01T00:00:00Z",
+            "linkpage_licenses": [
+                {
+                    "basename": "Splunk_Enterprise.lic",
+                    "expires_at": "2026-11-20",
+                    "status": "expiring",
+                },
+            ],
+            "linkpage_generated_at": "2026-11-13T08:00:00Z",
+        },
+    )
+    header = rendered[rendered.index("<header") : rendered.index("</header>")]
+    title = header[header.index("<h1") : header.index('class="meta"')]
+    assert "<strong>Expires</strong>" in title
+    assert 'data-utc="2026-12-01T00:00:00Z"' in title
+    assert "data-remaining" in title
+    assert 'data-utc="2026-11-20"' not in title
+    assert 'data-utc="2026-11-20"' in header
+
+
+def test_link_page_ccm_provider_chip_links_to_the_gui():
+    rendered = _render_link_page(extra={"ccm": {"ttl_days": 7}})
+    header = rendered[rendered.index("<header") : rendered.index("</header>")]
+    assert "CCM" in header
+    assert 'href="https://ccm.splunkits.io/cloud-compute"' in header
+    assert "AWS" not in header
+    for tag in _link_page_anchor_tags(header):
+        if "ccm.splunkits.io" in tag:
+            assert 'target="_blank"' in tag
+            assert 'rel="noopener noreferrer"' in tag
+            break
+    else:
+        raise AssertionError("CCM GUI link missing from header")
+
+
+def test_link_page_aws_provider_chip_links_to_the_console():
+    rendered = _render_link_page(extra={"terraform": {"aws": {"region": "eu-central-1"}}})
+    header = rendered[rendered.index("<header") : rendered.index("</header>")]
+    assert "AWS" in header
+    assert 'href="https://eu-central-1.console.aws.amazon.com/ec2/home?region=eu-central-1"' in header
+    assert "ccm.splunkits.io" not in header
+    for tag in _link_page_anchor_tags(header):
+        if "console.aws.amazon.com" in tag:
+            assert 'target="_blank"' in tag
+            assert 'rel="noopener noreferrer"' in tag
+            break
+    else:
+        raise AssertionError("AWS console link missing from header")
+
+
+def test_link_page_omits_license_list_when_extra_absent():
+    rendered = _render_link_page()
+    header = rendered[rendered.index("<header") : rendered.index("</header>")]
+    assert ".lic" not in header
+
+
+def test_link_page_suspended_grays_hosts_and_keeps_copy_ssh():
+    rendered = _render_link_page(
+        extra={
+            "linkpage_power_state": "suspended",
+            "linkpage_suspended_hosts": ["shidx"],
+            "spa_registered_name": "pro-lab",
+        },
+    )
+    header = rendered[rendered.index("<header") : rendered.index("</header>")]
+    assert "Lab suspended" in header
+    tags = [tag for tag in _link_page_tags(rendered, "article") if 'data-host="shidx"' in tag]
+    assert tags
+    assert "is-suspended" in tags[0]
+    assert "Suspended" in rendered
+    assert "spa --env pro-lab hosts ssh shidx" in rendered
+    for tag in _link_page_anchor_tags(rendered):
+        if "app/launcher/home" in tag:
+            assert "aria-disabled" in tag
+
+
+def test_link_page_itsi_button_on_search_heads_only():
+    apps = {
+        "apps": [
+            {"name": "Splunk IT Service Intelligence", "premium_app": "itsi", "state": "present"},
+        ],
+    }
+    rendered = _render_link_page(
+        groups={
+            "splunk_env_lab": ["itsi", "uf1", "cm"],
+            "role_search_head": ["itsi"],
+            "role_indexer": ["itsi"],
+            "role_license_manager": ["itsi"],
+            "role_universal_forwarder": ["uf1"],
+            "role_cluster_manager": ["cm"],
+        },
+        hostvars={
+            **_link_page_host("itsi", ansible_host="10.1.2.3"),
+            **_link_page_host("uf1", ansible_host="10.1.2.12"),
+            **_link_page_host("cm", ansible_host="10.1.2.13"),
+        },
+        extra={"splunk_app_deployment": apps},
+    )
+    visible = _link_page_visible_chip(rendered, "itsi")
+    roles = visible[visible.index('<ul class="roles"'):]
+    assert "/app/itsi/" in roles
+    assert ">ITSI</a>" in roles
+    assert "https://10.1.2.3:8000/en-GB/app/itsi/" in rendered
+    assert "https://10.1.2.3:8000/en-GB/app/launcher/home" in roles
+    assert "https://10.1.2.3:8000/en-GB/manager/system/licensing" in roles
+    uf_visible = _link_page_visible_chip(rendered, "uf1")
+    assert "/app/itsi/" not in uf_visible
+    assert "/app/launcher/home" not in uf_visible
+    cm_html = rendered[rendered.find('data-host="cm"'): rendered.find('data-host="cm"') + 4000]
+    assert cm_html
+    assert "https://10.1.2.13:8000/en-GB/app/itsi/" not in rendered
+
+
+def test_link_page_hides_itsi_when_app_absent():
+    rendered = _render_link_page(
+        extra={
+            "splunk_app_deployment": {
+                "apps": [{"name": "Splunk IT Service Intelligence", "premium_app": "itsi", "state": "absent"}],
+            },
+        },
+    )
+    assert "/app/itsi/" not in rendered
+
+
+def test_link_page_site_badge_is_on_the_chip():
+    rendered = _render_link_page(
+        groups={
+            "splunk_env_lab": ["cm", "idx1"],
+            "role_cluster_manager": ["cm"],
+            "role_indexer": ["idx1"],
+            "idxcluster_idxc1": ["cm", "idx1"],
+        },
+        hostvars={
+            **_link_page_host("cm", site="site0", ansible_host="10.1.2.20"),
+            **_link_page_host("idx1", site="site1", ansible_host="10.1.2.21"),
+        },
+    )
+    idx_chip = _link_page_visible_chip(rendered, "idx1")
+    assert "site0" in _link_page_visible_chip(rendered, "cm")
+    assert "site1" in idx_chip
+    heading = idx_chip[idx_chip.index("<h2") : idx_chip.index("<ul")]
+    assert "<h2>idx1</h2>" in heading
+    assert 'class="site-badge"' in heading
+    assert "site1" in heading
+    roles = idx_chip[idx_chip.index('<ul class="roles"'):]
+    assert "site1" not in roles
+
+
+def test_link_page_boxes_idxc_and_shc_members_by_site():
+    rendered = _render_link_page(
+        groups={
+            "splunk_env_lab": ["cm", "idx1", "idx2", "sh1", "sh2"],
+            "role_cluster_manager": ["cm"],
+            "role_indexer": ["idx1", "idx2"],
+            "role_search_head": ["sh1", "sh2"],
+            "idxcluster_idxc1": ["cm", "idx1", "idx2"],
+            "shcluster_shc1": ["sh1", "sh2"],
+        },
+        hostvars={
+            **_link_page_host("cm", site="site0", ansible_host="10.1.2.20"),
+            **_link_page_host("idx1", site="site1", ansible_host="10.1.2.21"),
+            **_link_page_host("idx2", site="site2", ansible_host="10.1.2.22"),
+            **_link_page_host("sh1", site="site1", ansible_host="10.1.2.23"),
+            **_link_page_host("sh2", site="site1", ansible_host="10.1.2.24"),
+        },
+    )
+    shc_at = rendered.index('id="shc-shc1"')
+    idxc_at = rendered.index('id="idxc-idxc1"')
+    assert shc_at < idxc_at
+    shc = rendered[shc_at:idxc_at]
+    idxc = rendered[idxc_at:]
+    assert idxc.count('class="site-group"') == 2
+    assert "<h4>site1</h4>" in idxc
+    assert "<h4>site2</h4>" in idxc
+    assert 'class="site-group"' in shc
+    assert "<h4>site1</h4>" in shc
+    assert 'data-host="sh1"' in shc
+    assert 'data-host="sh2"' in shc
+
+
+def test_link_page_cluster_manager_and_deployer_are_badges():
+    rendered = _render_link_page(
+        groups={
+            "splunk_env_lab": ["cm", "idx1", "ds", "sh1"],
+            "role_cluster_manager": ["cm"],
+            "role_indexer": ["idx1"],
+            "role_deployer": ["ds"],
+            "role_search_head": ["sh1"],
+            "idxcluster_idxc1": ["cm", "idx1"],
+            "shcluster_shc1": ["ds", "sh1"],
+        },
+        hostvars={
+            **_link_page_host("cm", ansible_host="10.1.2.20"),
+            **_link_page_host("idx1", ansible_host="10.1.2.21"),
+            **_link_page_host("ds", ansible_host="10.1.2.22"),
+            **_link_page_host("sh1", ansible_host="10.1.2.23"),
+        },
+    )
+    shc_at = rendered.index('id="shc-shc1"')
+    idxc_at = rendered.index('id="idxc-idxc1"')
+    shc = rendered[shc_at:idxc_at]
+    idxc = rendered[idxc_at:]
+    assert "<h3>shc1</h3>" in shc
+    assert 'class="cluster-badge"' in shc
+    assert "Deployer: ds" in shc
+    assert "· Deployer:" not in shc
+    assert "<h3>idxc1</h3>" in idxc
+    assert 'class="cluster-badge"' in idxc
+    assert "Cluster Manager: cm" in idxc
+    assert "· Cluster Manager:" not in idxc
+
+
+def test_link_page_stacks_management_in_a_left_column():
+    rendered = _render_link_page(
+        groups={
+            "splunk_env_lab": ["cm", "sh", "idx1", "uf1"],
+            "role_cluster_manager": ["cm"],
+            "role_search_head": ["sh"],
+            "role_indexer": ["idx1"],
+            "role_universal_forwarder": ["uf1"],
+            "idxcluster_idxc1": ["cm", "idx1"],
+        },
+        hostvars={
+            **_link_page_host("cm", ansible_host="10.1.2.20"),
+            **_link_page_host("sh", ansible_host="10.1.2.21"),
+            **_link_page_host("idx1", ansible_host="10.1.2.22"),
+            **_link_page_host("uf1", ansible_host="10.1.2.23"),
+        },
+    )
+    mgmt = rendered.find('class="mgmt-column"')
+    work = rendered.find('class="workload-column"')
+    assert 0 <= mgmt < work
+    left = rendered[mgmt:work]
+    right = rendered[work:]
+    assert 'data-tier="management"' in left
+    assert 'data-host="cm"' in left
+    assert 'data-tier="search"' not in left
+    assert 'data-tier="search"' in right
+    assert 'data-tier="index"' in right
+    assert 'data-tier="forwarders"' in right
+    assert 'data-host="sh"' in right
+    assert 'data-host="idx1"' in right
+    assert 'data-host="uf1"' in right
+    assert "ar.right" in rendered
+    assert ".mgmt-column .tier-hosts" in rendered
+    assert "align-items: stretch" in rendered
+    assert ".mgmt-column article.host" in rendered
+    assert "width: 100%" in rendered
+    assert ".mgmt-column article.host:has(details[open])" in rendered
+    assert "min-width: 22rem" in rendered
+    assert 'addEventListener("toggle"' in rendered
+
+
+def test_link_page_omits_mgmt_column_without_management_hosts():
+    rendered = _render_link_page()
+    assert 'class="mgmt-column"' not in rendered
+    assert 'class="workload-column"' in rendered
+    assert 'data-tier="search"' in rendered
+
+
+def test_link_page_combined_search_indexer_sits_in_search_tier():
+    rendered = _render_link_page(
+        groups={
+            "splunk_env_lab": ["itsi"],
+            "role_search_head": ["itsi"],
+            "role_indexer": ["itsi"],
+            "role_license_manager": ["itsi"],
+        },
+        hostvars=_link_page_host("itsi"),
+    )
+    search_start = rendered.find('data-tier="search"')
+    assert search_start != -1
+    next_tier = rendered.find('data-tier="', search_start + 1)
+    chunk = rendered[search_start: next_tier if next_tier != -1 else None]
+    assert 'data-host="itsi"' in chunk
+    assert 'data-tier="index"' not in rendered
+    assert 'data-host="itsi"' in rendered
+    hosts = _link_page_host_tags(rendered)
+    assert [row["host"] for row in hosts] == ["itsi"]
+
+
+def test_link_page_forwarder_layer_puts_hf_and_uf_boxes_side_by_side():
+    rendered = _render_link_page(
+        groups={
+            "splunk_env_lab": ["cm", "sh", "idx1", "hf", "uf1", "uf2"],
+            "role_cluster_manager": ["cm"],
+            "role_search_head": ["sh"],
+            "role_indexer": ["idx1"],
+            "role_heavy_forwarder": ["hf"],
+            "role_universal_forwarder": ["uf1", "uf2"],
+            "idxcluster_idxc1": ["cm", "idx1"],
+        },
+        hostvars={
+            **_link_page_host("cm", ansible_host="10.1.2.20"),
+            **_link_page_host("sh", ansible_host="10.1.2.21"),
+            **_link_page_host("idx1", ansible_host="10.1.2.22"),
+            **_link_page_host("hf", ansible_host="10.1.2.30"),
+            **_link_page_host("uf1", ansible_host="10.1.2.31"),
+            **_link_page_host("uf2", ansible_host="10.1.2.32"),
+        },
+    )
+    work = rendered.find('class="workload-column"')
+    fwd = rendered.find('data-tier="forwarders"')
+    idx = rendered.find('data-tier="index"')
+    assert 0 <= work < idx < fwd
+    workload = rendered[work:fwd]
+    layer = rendered[fwd:]
+    assert 'data-tier="search"' in workload
+    assert 'data-tier="index"' in workload
+    assert 'data-host="hf"' not in workload
+    assert 'data-host="uf1"' not in workload
+    assert 'data-tier="heavy"' not in rendered
+    assert 'data-tier="universal"' not in rendered
+    assert 'class="tier forwarder-layer"' in rendered
+    hf_box = layer.find('class="cluster hf-box"')
+    uf_box = layer.find('class="cluster uf-box"')
+    assert 0 <= hf_box < uf_box
+    assert "Heavy Forwarder" in layer[hf_box:uf_box]
+    assert "Universal Forwarders" in layer[uf_box:]
+    assert 'data-host="hf"' in layer[hf_box:uf_box]
+    assert 'data-host="uf1"' in layer[uf_box:]
+    assert 'data-cluster="hf-lab"' in "".join(
+        row["tag"] for row in _link_page_host_tags(rendered) if row["host"] == "hf"
+    )
+    assert 'data-cluster="uf-lab"' in "".join(
+        row["tag"] for row in _link_page_host_tags(rendered) if row["host"].startswith("uf")
+    )
+    assert ".forwarder-layer .cluster" in rendered
+
+
+def test_link_page_groups_two_ufs_and_keeps_hf_separate():
+    rendered = _render_link_page(
+        groups={
+            "splunk_env_lab": ["hf", "uf1", "uf2"],
+            "role_heavy_forwarder": ["hf"],
+            "role_universal_forwarder": ["uf1", "uf2"],
+        },
+        hostvars={
+            **_link_page_host("hf", ansible_host="10.1.2.30"),
+            **_link_page_host("uf1", ansible_host="10.1.2.31"),
+            **_link_page_host("uf2", ansible_host="10.1.2.32"),
+        },
+    )
+    assert "Universal Forwarders" in rendered
+    assert 'data-tier="forwarders"' in rendered
+    assert 'data-host="hf"' in rendered
+    assert 'data-node="uf-lab"' in rendered
+    assert 'class="cluster hf-box"' in rendered
+    assert 'data-cluster="uf-lab"' in "".join(row["tag"] for row in _link_page_host_tags(rendered) if row["host"].startswith("uf"))
+    assert not any(row["host"] == "hf" and row.get("cluster") == "uf-lab" for row in _link_page_host_tags(rendered))
+
+
+def test_link_page_ds_draws_edges_to_forwarder_boxes():
+    rendered = _render_link_page(
+        groups={
+            "splunk_env_lab": ["ds", "hf", "uf1", "uf2"],
+            "role_deployment_server": ["ds"],
+            "role_heavy_forwarder": ["hf"],
+            "role_universal_forwarder": ["uf1", "uf2"],
+        },
+        hostvars={
+            **_link_page_host("ds", ansible_host="10.1.2.10"),
+            **_link_page_host("hf", ansible_host="10.1.2.30"),
+            **_link_page_host("uf1", ansible_host="10.1.2.31"),
+            **_link_page_host("uf2", ansible_host="10.1.2.32"),
+        },
+    )
+    edges = {(edge["from"], edge["to"], edge["label"]) for edge in _link_page_edges(rendered)}
+    assert ("host-ds", "hf-lab", "phone-home") in edges
+    assert ("host-ds", "uf-lab", "phone-home") in edges
+    assert ("host-uf1", "host-ds", "phone-home") not in edges
+    assert ("uf-lab", "host-ds", "phone-home") not in edges
+
+
+def test_link_page_collapses_many_universal_forwarders():
+    ufs = ["uf%s" % index for index in range(1, 9)]
+    rendered = _render_link_page(
+        groups={
+            "splunk_env_lab": ufs,
+            "role_universal_forwarder": ufs,
+        },
+        hostvars={
+            hostname: _link_page_host(hostname, ansible_host="10.1.2.%s" % (40 + index))[hostname]
+            for index, hostname in enumerate(ufs, start=1)
+        },
+    )
+    assert "8 universal forwarders" in rendered.lower() or "8 Universal Forwarders" in rendered
+    assert "Universal Forwarders" in rendered
+    hosts = [row["host"] for row in _link_page_host_tags(rendered)]
+    assert hosts == ufs
+    assert rendered.lower().count("<article") < 8
+
+
+def test_link_page_windows_uf_shares_the_box():
+    rendered = _render_link_page(
+        groups={
+            "splunk_env_lab": ["uf1", "wuf1"],
+            "role_universal_forwarder": ["uf1"],
+            "role_universal_forwarder_windows": ["wuf1"],
+        },
+        hostvars={
+            **_link_page_host("uf1", ansible_host="10.1.2.41"),
+            **_link_page_host("wuf1", ansible_host="10.1.2.42"),
+        },
+    )
+    assert "Universal Forwarders" in rendered
+    assert "Windows" in rendered
+    hosts = [row["host"] for row in _link_page_host_tags(rendered)]
+    assert hosts == ["uf1", "wuf1"]
+
+
+@pytest.mark.parametrize("topology", _topology_files(), ids=lambda path: path.name)
+def test_link_page_renders_each_topology(topology):
+    config = yaml.safe_load(topology.read_text(encoding="utf-8"))
+    groups, hostvars, extra = _inventory_from_topology(config)
+    extra.update({
+        "spa_registered_name": "lab-%s" % topology.stem,
+        "spa_env_dir": "/tmp/spa-envs/%s" % topology.stem,
+        "linkpage_generated_at": "2026-11-13T09:00:00Z",
+    })
+    rendered = _render_link_page(groups=groups, hostvars=hostvars, extra=extra)
+    lower = rendered.lower()
+    assert "jsdelivr" not in lower
+    assert "cdn.jsdelivr.net" not in lower
+    assert "{{ lookup('env'" not in rendered
+    assert "SPLUNK_ADMIN_PASSWORD" not in rendered
+    assert "privkey" not in lower
+    assert "/.ssh/" not in rendered
+
+    env_names = []
+    hostnames = []
+    for group_name, members in groups.items():
+        if group_name.startswith("splunk_env_"):
+            env_names.append(group_name[len("splunk_env_"):])
+            hostnames.extend(members)
+    tagged = _link_page_host_tags(rendered)
+    found = [row["host"] for row in tagged]
+    assert sorted(found) == sorted(hostnames)
+    assert len(found) == len(set(hostnames))
+
+    header = rendered[rendered.index("<header") : rendered.index("</header>")]
+    assert "lab-%s" % topology.stem in header
+    assert "/tmp/spa-envs/%s" % topology.stem in header
+    assert "Generated" in header
+    assert 'data-utc="2026-11-13T09:00:00Z"' in header
+    assert "function formatLocal" in rendered
+
+    edges = {(edge["from"], edge["to"], edge["label"]) for edge in _link_page_edges(rendered)}
+    indexer_roles = set(groups.get("role_indexer") or [])
+    search_roles = set(groups.get("role_search_head") or [])
+    cms = groups.get("role_cluster_manager") or []
+    deployers = groups.get("role_deployer") or []
+    for cluster_name, members in groups.items():
+        if cluster_name.startswith("idxcluster_") and "_site" not in cluster_name.split("idxcluster_", 1)[1]:
+            short = cluster_name[len("idxcluster_"):]
+            box_hosts = [row["host"] for row in tagged if row.get("cluster") == "idxc-%s" % short]
+            assert set(box_hosts) == (set(members) & indexer_roles)
+            for manager in cms:
+                if manager in members:
+                    assert ("host-%s" % manager, "idxc-%s" % short, "manages") in edges
+        if cluster_name.startswith("shcluster_") and "_site" not in cluster_name.split("shcluster_", 1)[1]:
+            short = cluster_name[len("shcluster_"):]
+            box_hosts = [row["host"] for row in tagged if row.get("cluster") == "shc-%s" % short]
+            assert set(box_hosts) == (set(members) & search_roles)
+            for deployer in deployers:
+                if deployer in members:
+                    assert ("host-%s" % deployer, "shc-%s" % short, "bundle") in edges
+
+    for env_name in env_names:
+        env_hosts = set(groups.get("splunk_env_%s" % env_name) or [])
+        ufs = [
+            host for host in (groups.get("role_universal_forwarder") or [])
+            + (groups.get("role_universal_forwarder_windows") or [])
+            if host in env_hosts
+        ]
+        dses = [host for host in (groups.get("role_deployment_server") or []) if host in env_hosts]
+        hfs = [host for host in (groups.get("role_heavy_forwarder") or []) if host in env_hosts]
+        if ufs and dses:
+            assert ("host-%s" % dses[0], "uf-%s" % env_name, "phone-home") in edges
+        elif ufs:
+            assert not any(edge[2] == "phone-home" and edge[1] == "uf-%s" % env_name for edge in edges)
+        if hfs and dses:
+            assert ("host-%s" % dses[0], "hf-%s" % env_name, "phone-home") in edges
+
+    name = topology.name
+    if len(env_names) >= 2:
+        assert 'class="stack-tabs"' in rendered
+        for env_name in env_names:
+            assert env_name in rendered
+        assert ("host-uf1", "host-ds2", "phone-home") not in edges
+        assert ("host-cm1", "idxc-idxc2", "manages") not in edges
+    else:
+        assert 'class="stack-tabs"' not in rendered
+
+    if name == "ds_cm_2idxc1site_sh_hf_uf.yml":
+        assert 'data-tier="forwarders"' in rendered
+        assert 'data-host="hf"' in rendered
+        assert any(row["host"] == "hf" and row.get("cluster") == "hf-splk" for row in tagged)
+        assert ("host-ds", "uf-splk", "phone-home") in edges
+        assert ("host-ds", "hf-splk", "phone-home") in edges
+    if name == "cm1_2idxc1site_cm2_2idxc1site_ds_3shc_smc_uf.yml":
+        assert 'data-node="idxc-idxc1"' in rendered
+        assert 'data-node="idxc-idxc2"' in rendered
+        assert 'data-host="smc"' in rendered
+    if name in ("cm_2idxc_2x3shc_ds.yml", "cm_4idxc2site_4x3shc_ds.yml"):
+        for cluster in ("shc1", "shc_es") if "2x3" in name and "4x3" not in name and "stretched" not in name else ():
+            assert 'data-node="shc-%s"' % cluster in rendered
+        if name == "cm_2idxc_2x3shc_ds.yml":
+            assert 'data-node="shc-shc1"' in rendered
+            assert 'data-node="shc-shc_es"' in rendered
+        if name == "cm_4idxc2site_4x3shc_ds.yml":
+            for cluster in ("shc1", "shc2", "shc_es1", "shc_es2"):
+                assert 'data-node="shc-%s"' % cluster in rendered
+    if "2site" in name or name.startswith("4idxc"):
+        for hostname, values in hostvars.items():
+            site = values.get("site")
+            if site:
+                assert site in _link_page_visible_chip(rendered, hostname)
+    if "stretched" in name:
+        assert rendered.count('data-node="shc-shc1"') == 1
+    if topology.name == "single_node_itsi.yml":
+        assert "/app/itsi/" in _link_page_visible_chip(rendered, "itsi")
+        assert "/app/SplunkEnterpriseSecuritySuite/" not in rendered
+    if name.endswith("_es.yml") or "es" in name and "itsi" not in name:
+        assert "/app/SplunkEnterpriseSecuritySuite/" not in rendered
+        assert ">ES<" not in rendered
 
 
 def test_register_writes_inventory_and_agent_json_hides_the_key_body(tmp_path):

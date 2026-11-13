@@ -18,6 +18,7 @@
         --badge-text: #c6e39a;
         --focus: #8fce63;
         --shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+        --warn: #c4a35a;
         font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
       }
       @media (prefers-color-scheme: light) {
@@ -33,6 +34,7 @@
           --badge-text: #2c4a16;
           --focus: #3f6b1a;
           --shadow: 0 10px 24px rgba(20, 32, 23, 0.08);
+          --warn: #8a6a1f;
         }
       }
       * { box-sizing: border-box; }
@@ -46,47 +48,304 @@
         width: min(1120px, calc(100% - 2rem));
         margin-inline: auto;
       }
-      header {
-        padding: 2rem 0 1.25rem;
+      header.banner {
+        margin: 1rem auto 0.85rem;
+        padding: 0.8rem 1rem 0.85rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-left: 4px solid var(--accent);
+        border-radius: 0.75rem;
+        box-shadow: var(--shadow);
       }
-      .kicker {
-        margin: 0 0 0.35rem;
-        color: var(--muted);
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        font-size: 0.75rem;
+      .title-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.45rem 0.75rem;
       }
       h1 {
-        margin: 0 0 0.75rem;
-        font-size: 1.8rem;
+        margin: 0;
+        font-size: 1.15rem;
+        line-height: 1.25;
       }
-      header p {
-        margin: 0.35rem 0;
+      header .generated {
+        margin: 0;
         color: var(--muted);
+        font-size: 0.78rem;
+      }
+      header .generated strong {
+        color: var(--text);
+        font-weight: 700;
+      }
+      header .badge-suspended {
+        margin: 0;
+        background: var(--badge-bg);
+        color: var(--warn);
+        border-radius: 999px;
+        padding: 0.12rem 0.55rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      header .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        margin: 0.6rem 0 0;
+      }
+      header .chip {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.35rem;
+        min-width: 0;
+        max-width: 100%;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 0.18rem 0.7rem;
+        font-size: 0.78rem;
+      }
+      header .chip dt {
+        color: var(--text);
+        font-weight: 700;
+      }
+      header .chip dd {
+        margin: 0;
+        color: var(--muted);
+        font-weight: 400;
+        overflow-wrap: anywhere;
+      }
+      header .chip-provider,
+      .roles li.is-link {
+        background: var(--badge-bg);
+        border-color: var(--accent);
+      }
+      header a.chip {
+        text-decoration: none;
+        color: inherit;
+      }
+      header a.chip:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 2px;
+      }
+      header .licenses {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin: 0.55rem 0 0;
+        padding: 0;
+        list-style: none;
+        font-size: 0.75rem;
+        color: var(--muted);
+      }
+      header .licenses li {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 0.15rem 0.65rem;
+      }
+      header .licenses strong {
+        color: var(--text);
+        font-weight: 700;
+      }
+      .license-expiring, .license-expired {
+        color: var(--warn);
       }
       code {
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-size: 0.92em;
       }
-      .hosts {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
-        gap: 1rem;
+      .stack-radio {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+      }
+      .stack-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        margin: 0 0 1rem;
+      }
+      .stack-tabs label {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 0.25rem 0.8rem;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .boards .architecture { display: none; }
+      .architecture {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 2rem;
+        position: relative;
         padding: 0 0 2.5rem;
       }
-      article {
+      .mgmt-column {
+        display: flex;
+        flex-direction: column;
+        flex: 0 0 16rem;
+        max-width: 22rem;
+        gap: 0.75rem;
+        position: relative;
+        z-index: 1;
+        overflow: visible;
+      }
+      .mgmt-column:has(details[open]) {
+        z-index: 2;
+      }
+      .mgmt-column .tier-hosts {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .mgmt-column article.host {
+        width: 100%;
+        max-width: none;
+        min-width: 0;
+      }
+      .mgmt-column article.host:has(details[open]) {
+        width: 22rem;
+        min-width: 22rem;
+        max-width: 22rem;
+      }
+      .workload-column {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+        position: relative;
+        z-index: 1;
+      }
+      .forwarder-layer {
+        flex: 1 1 100%;
+        width: 100%;
+      }
+      .forwarder-layer .tier-hosts {
+        flex-wrap: wrap;
+        align-items: stretch;
+      }
+      .forwarder-layer .cluster {
+        flex: 1 1 18rem;
+        min-width: 14rem;
+      }
+      @media (max-width: 800px) {
+        .architecture { flex-direction: column; }
+        .mgmt-column { flex: 1 1 auto; max-width: none; }
+      }
+      .connectors {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        overflow: visible;
+      }
+      .tier {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        position: relative;
+        z-index: 1;
+      }
+      .tier h2 {
+        margin: 0;
+        font-size: 0.85rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .tier-hosts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: flex-start;
+      }
+      .cluster {
+        background: transparent;
+        border: 1px dashed var(--border);
+        border-radius: 0.9rem;
+        padding: 0.75rem;
+        min-width: 12rem;
+      }
+      .cluster-heading {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.4rem;
+        margin: 0 0 0.6rem;
+      }
+      .cluster h3 {
+        margin: 0;
+        font-size: 0.95rem;
+      }
+      .cluster-badge {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 0.1rem 0.5rem;
+        font-size: 0.72rem;
+        font-weight: 600;
+      }
+      .cluster .note {
+        margin: 0 0 0.5rem;
+      }
+      .site-group {
+        margin: 0 0 0.6rem;
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        padding: 0.55rem 0.65rem 0.65rem;
+        background: var(--bg);
+      }
+      .site-group h4 {
+        margin: 0 0 0.45rem;
+        font-size: 0.78rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      article.host {
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: 0.9rem;
         box-shadow: var(--shadow);
-        padding: 1rem 1.1rem 1.15rem;
+        padding: 0.85rem 1rem 1rem;
         display: flex;
         flex-direction: column;
-        gap: 0.75rem;
+        gap: 0.55rem;
+        min-width: 14rem;
+        max-width: 22rem;
       }
-      article h2 {
+      article.host.is-suspended {
+        opacity: 0.45;
+      }
+      article.host h2 {
         margin: 0;
-        font-size: 1.15rem;
+        font-size: 1.05rem;
+        text-transform: none;
+        letter-spacing: 0;
+        color: var(--text);
+      }
+      .host-heading {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.4rem;
+      }
+      .site-badge {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 0.1rem 0.5rem;
+        font-size: 0.72rem;
+        font-weight: 600;
       }
       .roles {
         display: flex;
@@ -99,13 +358,83 @@
       .roles li {
         background: var(--badge-bg);
         color: var(--badge-text);
+        border: 1px solid transparent;
         border-radius: 999px;
         padding: 0.15rem 0.6rem;
         font-size: 0.78rem;
         font-weight: 600;
       }
-      dl {
+      .roles li.is-link {
+        cursor: pointer;
+      }
+      .roles a {
+        color: inherit;
+        text-decoration: none;
+      }
+      .roles a:hover {
+        text-decoration: underline;
+      }
+      .roles a:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 2px;
+      }
+      .roles a[aria-disabled="true"] {
+        opacity: 0.65;
+        pointer-events: none;
+      }
+      .roles li.site {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+      .badge-suspended {
+        color: var(--warn);
+        font-weight: 700;
+        font-size: 0.78rem;
+      }
+      details {
         margin: 0;
+      }
+      summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      article.host summary {
+        list-style: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.35rem;
+        height: 1.35rem;
+        padding: 0;
+        font-size: 0;
+      }
+      article.host summary::-webkit-details-marker {
+        display: none;
+      }
+      article.host summary::marker {
+        content: "";
+      }
+      article.host summary::after {
+        content: "";
+        width: 0.42rem;
+        height: 0.42rem;
+        border-right: 1.5px solid currentColor;
+        border-bottom: 1.5px solid currentColor;
+        transform: rotate(45deg);
+        translate: 0 -0.12rem;
+      }
+      article.host details[open] summary::after {
+        transform: rotate(225deg);
+        translate: 0 0.12rem;
+      }
+      summary:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 2px;
+      }
+      dl {
+        margin: 0.5rem 0 0;
         display: grid;
         grid-template-columns: auto 1fr;
         gap: 0.25rem 0.75rem;
@@ -119,48 +448,41 @@
         margin: 0;
         overflow-wrap: anywhere;
       }
-      .actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.45rem;
-        margin: 0;
-      }
-      a.action {
-        display: inline-block;
-        background: var(--accent);
-        color: var(--accent-text);
-        text-decoration: none;
-        border-radius: 0.45rem;
-        padding: 0.4rem 0.7rem;
-        font-weight: 600;
-        font-size: 0.9rem;
-      }
-      a.action.secondary {
-        background: transparent;
-        color: var(--text);
-        border: 1px solid var(--border);
-      }
-      a.action:focus-visible {
-        outline: 2px solid var(--focus);
-        outline-offset: 2px;
-      }
       .note {
         margin: 0;
         color: var(--muted);
         font-size: 0.9rem;
       }
+      .ssh-copy {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        align-items: center;
+        margin: 0.5rem 0 0;
+      }
+      button.copy-ssh {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 0.45rem;
+        padding: 0.25rem 0.6rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.copy-ssh:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 2px;
+      }
+      .uf-list {
+        margin: 0;
+        padding-left: 1.1rem;
+      }
+      .uf-list li {
+        margin: 0.35rem 0;
+      }
     </style>
   </head>
   <body>
-{%- set web_roles = [
-  'role_search_head',
-  'role_license_manager',
-  'role_cluster_manager',
-  'role_deployment_server',
-  'role_deployer',
-  'role_monitoring_console',
-  'role_heavy_forwarder',
-] -%}
 {%- set role_labels = {
   'role_search_head': 'Search Head',
   'role_indexer': 'Indexer',
@@ -185,8 +507,18 @@
   'role_universal_forwarder',
   'role_universal_forwarder_windows',
 ] -%}
-{%- set env_ns = namespace(names=[]) -%}
+{%- set role_hrefs = {
+  'role_search_head': '/app/launcher/home',
+  'role_license_manager': '/manager/system/licensing',
+  'role_cluster_manager': '/manager/system/clustering',
+  'role_deployment_server': '/manager/system/deploymentserver',
+  'role_deployer': '/app/launcher/home',
+  'role_monitoring_console': '/app/splunk_monitoring_console',
+  'role_heavy_forwarder': '/app/launcher/home',
+} -%}
+{%- set env_ns = namespace(names=[], host_count=0) -%}
 {%- for splunk_env in groups|map('regex_search','splunk_env_.*')|select('string')|list -%}
+  {%- set env_ns.host_count = env_ns.host_count + (groups[splunk_env] | length) -%}
   {%- for hostname in groups[splunk_env] -%}
     {%- set env_name = hostvars[hostname]['splunk_env_name'] | default('', true) -%}
     {%- if env_name and env_name not in env_ns.names -%}
@@ -194,96 +526,658 @@
     {%- endif -%}
   {%- endfor -%}
 {%- endfor -%}
-    <header>
-      <p class="kicker">Splunk Platform Automator Host List</p>
-      <h1>{{ env_ns.names | join(', ') | default('Splunk lab', true) }}</h1>
-{%- if ansible_date_time is defined and ansible_date_time.iso8601 is defined %}
-      <p>Generated {{ ansible_date_time.iso8601 }}</p>
-{%- endif %}
-      <p>Splunk Web user is <code>admin</code>. This page does not include the password.</p>
-      <p>SSH with <code>spa hosts ssh HOST</code>. Inventory: <code>spa hosts list --status</code>.</p>
-    </header>
-    <main class="hosts">
-{%- for splunk_env in groups|map('regex_search','splunk_env_.*')|select('string')|list -%}
-  {%- for hostname in groups[splunk_env] -%}
-    {%- set web_port = '8000' -%}
-    {%- set link_host = hostvars[hostname]['public_dns_name'] | default(hostvars[hostname]['ansible_host'] | default(hostvars[hostname]['ip_addr'] | default('unknown', true), true), true) -%}
-    {%- set ip_addr = hostvars[hostname]['ip_addr'] | default('', true) -%}
-    {%- set site = hostvars[hostname]['site'] | default('', true) -%}
-    {%- if hostvars[hostname]['splunk_ssl']['web']['enable'] -%}
-      {%- set url = 'https://' -%}
-    {%- else -%}
-      {%- set url = 'http://' -%}
+{%- set itsi_ns = namespace(on=false) -%}
+{%- if splunk_app_deployment is defined and splunk_app_deployment.apps is defined -%}
+  {%- for app in splunk_app_deployment.apps -%}
+    {%- if app.premium_app | default('') == 'itsi' and app.state | default('present') != 'absent' -%}
+      {%- set itsi_ns.on = true -%}
     {%- endif -%}
-    {%- set host_ns = namespace(roles=[], has_web=false, idxcluster='', shcluster='') -%}
-    {%- for role_name in role_order -%}
-      {%- if role_name in groups and hostname in groups[role_name] -%}
-        {%- set host_ns.roles = host_ns.roles + [role_name] -%}
-        {%- if role_name in web_roles -%}
-          {%- set host_ns.has_web = true -%}
-        {%- endif -%}
-      {%- endif -%}
-    {%- endfor -%}
-    {%- for group_name in groups -%}
-      {%- if hostname in groups[group_name] -%}
-        {%- if group_name is match('^idxcluster_.+_site[0-9]+$') -%}
-        {%- elif group_name is match('^idxcluster_.+$') -%}
-          {%- set host_ns.idxcluster = group_name[11:] -%}
-        {%- elif group_name is match('^shcluster_.+_site[0-9]+$') -%}
-        {%- elif group_name is match('^shcluster_.+$') -%}
-          {%- set host_ns.shcluster = group_name[10:] -%}
-        {%- endif -%}
-      {%- endif -%}
-    {%- endfor -%}
-      <article>
-        <h2>{{ hostname }}</h2>
-        <ul class="roles">
-    {%- for role_name in host_ns.roles %}
-          <li>{{ role_labels[role_name] }}</li>
-    {%- endfor %}
-        </ul>
-        <dl>
-          <dt>Reachable address</dt>
-          <dd><code>{{ link_host }}</code></dd>
-    {%- if ip_addr and ip_addr != link_host %}
-          <dt>Private IP</dt>
-          <dd><code>{{ ip_addr }}</code></dd>
-    {%- endif %}
-    {%- if site %}
-          <dt>Site</dt>
-          <dd>{{ site }}</dd>
-    {%- endif %}
-    {%- if host_ns.idxcluster %}
-          <dt>idxcluster</dt>
-          <dd>{{ host_ns.idxcluster }}</dd>
-    {%- endif %}
-    {%- if host_ns.shcluster %}
-          <dt>shcluster</dt>
-          <dd>{{ host_ns.shcluster }}</dd>
-    {%- endif %}
-        </dl>
-    {%- if host_ns.has_web %}
-        <p class="actions">
-          <a class="action" target="_blank" rel="noopener noreferrer" href="{{ url }}{{ link_host }}:{{ web_port }}/{{ url_locale|default('en-GB') }}/app/launcher/home">Splunk Web</a>
-      {%- if 'role_license_manager' in host_ns.roles %}
-          <a class="action secondary" target="_blank" rel="noopener noreferrer" href="{{ url }}{{ link_host }}:{{ web_port }}/{{ url_locale|default('en-GB') }}/manager/system/licensing">Licensing</a>
-      {%- endif %}
-      {%- if 'role_cluster_manager' in host_ns.roles %}
-          <a class="action secondary" target="_blank" rel="noopener noreferrer" href="{{ url }}{{ link_host }}:{{ web_port }}/{{ url_locale|default('en-GB') }}/manager/system/clustering">Clustering</a>
-      {%- endif %}
-      {%- if 'role_deployment_server' in host_ns.roles %}
-          <a class="action secondary" target="_blank" rel="noopener noreferrer" href="{{ url }}{{ link_host }}:{{ web_port }}/{{ url_locale|default('en-GB') }}/manager/system/deploymentserver">Deployment Server</a>
-      {%- endif %}
-      {%- if 'role_monitoring_console' in host_ns.roles %}
-          <a class="action secondary" target="_blank" rel="noopener noreferrer" href="{{ url }}{{ link_host }}:{{ web_port }}/{{ url_locale|default('en-GB') }}/app/splunk_monitoring_console">Monitoring Console</a>
-      {%- endif %}
-        </p>
-    {%- else %}
-        <p class="note">No Splunk Web</p>
-    {%- endif %}
-      </article>
   {%- endfor -%}
+{%- endif -%}
+{%- set spa_ns = namespace(name='', provider='', version='', aws_region='') -%}
+{%- if spa_registered_name is defined and spa_registered_name -%}
+  {%- set spa_ns.name = spa_registered_name -%}
+{%- elif spa_env_dir is defined and spa_env_dir -%}
+  {%- set spa_ns.name = spa_env_dir | basename -%}
+{%- endif -%}
+{%- if terraform is defined and terraform.aws is defined -%}
+  {%- set spa_ns.provider = 'AWS' -%}
+  {%- if terraform.aws.region is defined and terraform.aws.region -%}
+    {%- set spa_ns.aws_region = terraform.aws.region | string -%}
+    {%- set spa_ns.provider = 'AWS · ' ~ spa_ns.aws_region -%}
+  {%- endif -%}
+{%- elif ccm is defined -%}
+  {%- set spa_ns.provider = 'CCM' -%}
+{%- elif virtualbox is defined -%}
+  {%- set spa_ns.provider = 'VirtualBox' -%}
+{%- elif external is defined -%}
+  {%- set spa_ns.provider = 'Existing hosts' -%}
+{%- endif -%}
+{%- if splunk_defaults is defined and splunk_defaults.splunk_version is defined and splunk_defaults.splunk_version -%}
+  {%- set spa_ns.version = splunk_defaults.splunk_version | string -%}
+{%- endif -%}
+{%- set exp_ns = namespace(at='') -%}
+{%- if spa_ns.provider == 'CCM' and linkpage_ccm_ttl is defined and linkpage_ccm_ttl -%}
+  {%- set exp_ns.at = linkpage_ccm_ttl | string -%}
+{%- endif -%}
+{%- set power_state = linkpage_power_state | default('') -%}
+{%- set suspend_ns = namespace(all=false, names=[]) -%}
+{%- if power_state == 'suspended' -%}
+  {%- if linkpage_suspended_hosts is defined -%}
+    {%- set suspend_ns.names = linkpage_suspended_hosts -%}
+  {%- else -%}
+    {%- set suspend_ns.all = true -%}
+  {%- endif -%}
+{%- endif -%}
+{% macro copy_ssh(hostname) %}
+        <p class="ssh-copy">
+          <code class="ssh-cmd">{% if spa_ns.name %}spa --env {{ spa_ns.name }} hosts ssh {{ hostname }}{% else %}spa hosts ssh {{ hostname }}{% endif %}</code>
+          <button type="button" class="copy-ssh">Copy</button>
+        </p>
+{% endmacro %}
+{% macro host_chip(hostname, cluster='') %}
+{%- set web_port = '8000' -%}
+{%- set link_host = hostvars[hostname]['public_dns_name'] | default(hostvars[hostname]['ansible_host'] | default(hostvars[hostname]['ip_addr'] | default('unknown', true), true), true) -%}
+{%- set ip_addr = hostvars[hostname]['ip_addr'] | default('', true) -%}
+{%- set site = hostvars[hostname]['site'] | default('', true) -%}
+{%- set host_version = hostvars[hostname]['splunk_version'] | default('', true) -%}
+{%- if hostvars[hostname]['splunk_ssl']['web']['enable'] -%}
+  {%- set url = 'https://' -%}
+{%- else -%}
+  {%- set url = 'http://' -%}
+{%- endif -%}
+{%- set host_ns = namespace(roles=[], idxcluster='', shcluster='') -%}
+{%- for role_name in role_order -%}
+  {%- if role_name in groups and hostname in groups[role_name] -%}
+    {%- set host_ns.roles = host_ns.roles + [role_name] -%}
+  {%- endif -%}
+{%- endfor -%}
+{%- for group_name in groups -%}
+  {%- if hostname in groups[group_name] -%}
+    {%- if group_name is match('^idxcluster_.+_site[0-9]+$') -%}
+    {%- elif group_name is match('^idxcluster_.+$') -%}
+      {%- set host_ns.idxcluster = group_name[11:] -%}
+    {%- elif group_name is match('^shcluster_.+_site[0-9]+$') -%}
+    {%- elif group_name is match('^shcluster_.+$') -%}
+      {%- set host_ns.shcluster = group_name[10:] -%}
+    {%- endif -%}
+  {%- endif -%}
+{%- endfor -%}
+{%- set suspended = suspend_ns.all or hostname in suspend_ns.names -%}
+      <article class="host{% if suspended %} is-suspended{% endif %}" id="host-{{ hostname }}" data-host="{{ hostname }}" data-node="host-{{ hostname }}"{% if cluster %} data-cluster="{{ cluster }}"{% endif %}>
+        <div class="host-heading">
+        <h2>{{ hostname }}</h2>
+{%- if site %}
+        <span class="site-badge">{{ site }}</span>
+{%- endif %}
+        </div>
+{%- if suspended %}
+        <p class="badge-suspended">Suspended</p>
+{%- endif %}
+        <ul class="roles">
+{%- for role_name in host_ns.roles %}
+{%- if role_name in role_hrefs %}
+          <li class="is-link"><a target="_blank" rel="noopener noreferrer"{% if suspended %} aria-disabled="true"{% endif %} href="{{ url }}{{ link_host }}:{{ web_port }}/{{ url_locale|default('en-GB') }}{{ role_hrefs[role_name] }}">{{ role_labels[role_name] }}</a></li>
+{%- else %}
+          <li>{{ role_labels[role_name] }}</li>
+{%- endif %}
 {%- endfor %}
+{%- if itsi_ns.on and 'role_search_head' in host_ns.roles %}
+          <li class="is-link"><a target="_blank" rel="noopener noreferrer"{% if suspended %} aria-disabled="true"{% endif %} href="{{ url }}{{ link_host }}:{{ web_port }}/{{ url_locale|default('en-GB') }}/app/itsi/">ITSI</a></li>
+{%- endif %}
+        </ul>
+        <details>
+          <summary aria-label="Details"></summary>
+          <dl>
+            <dt>Reachable address</dt>
+            <dd><code>{{ link_host }}</code></dd>
+{%- if ip_addr and ip_addr != link_host %}
+            <dt>Private IP</dt>
+            <dd><code>{{ ip_addr }}</code></dd>
+{%- endif %}
+{%- if host_ns.idxcluster %}
+            <dt>idxcluster</dt>
+            <dd>{{ host_ns.idxcluster }}</dd>
+{%- endif %}
+{%- if host_ns.shcluster %}
+            <dt>shcluster</dt>
+            <dd>{{ host_ns.shcluster }}</dd>
+{%- endif %}
+{%- if host_version %}
+            <dt>Splunk version</dt>
+            <dd>{{ host_version }}</dd>
+{%- endif %}
+          </dl>
+{{ copy_ssh(hostname) }}
+        </details>
+      </article>
+{% endmacro %}
+{% macro uf_row(hostname, cluster='') %}
+{%- set site = hostvars[hostname]['site'] | default('', true) -%}
+{%- set ufwin = 'role_universal_forwarder_windows' in groups and hostname in groups['role_universal_forwarder_windows'] -%}
+        <li data-host="{{ hostname }}" data-node="host-{{ hostname }}"{% if cluster %} data-cluster="{{ cluster }}"{% endif %}>
+          <strong>{{ hostname }}</strong>
+{%- if ufwin %}
+          <span class="roles"><span class="site">Windows</span></span>
+{%- endif %}
+{%- if site %}
+          <span class="site-badge">{{ site }}</span>
+{%- endif %}
+{{ copy_ssh(hostname) }}
+        </li>
+{% endmacro %}
+{% macro cluster_members(members, cluster_id) %}
+{%- set sites_ns = namespace(names=[]) -%}
+{%- for hostname in members -%}
+  {%- set site = hostvars[hostname]['site'] | default('', true) -%}
+  {%- if site and site not in sites_ns.names -%}
+    {%- set sites_ns.names = sites_ns.names + [site] -%}
+  {%- endif -%}
+{%- endfor -%}
+{%- if sites_ns.names | length >= 1 -%}
+  {%- for site in sites_ns.names -%}
+          <div class="site-group">
+            <h4>{{ site }}</h4>
+            <div class="tier-hosts">
+    {%- for hostname in members -%}
+      {%- if hostvars[hostname]['site'] | default('', true) == site -%}
+{{ host_chip(hostname, cluster_id) }}
+      {%- endif -%}
+    {%- endfor -%}
+            </div>
+          </div>
+  {%- endfor -%}
+  {%- for hostname in members -%}
+    {%- if not hostvars[hostname]['site'] | default('', true) -%}
+{{ host_chip(hostname, cluster_id) }}
+    {%- endif -%}
+  {%- endfor -%}
+{%- else -%}
+            <div class="tier-hosts">
+  {%- for hostname in members -%}
+{{ host_chip(hostname, cluster_id) }}
+  {%- endfor -%}
+            </div>
+{%- endif -%}
+{% endmacro %}
+{%- if env_ns.names | length > 1 %}
+    <style>
+{%- for env_name in env_ns.names %}
+      #tab-{{ env_name }}:checked ~ .boards #board-{{ env_name }} { display: flex; }
+      #tab-{{ env_name }}:checked ~ .stack-tabs label[for="tab-{{ env_name }}"] {
+        background: var(--accent);
+        color: var(--accent-text);
+        border-color: var(--accent);
+      }
+{%- endfor %}
+    </style>
+{%- endif %}
+    <header class="banner">
+      <div class="title-row">
+        <h1>{{ spa_ns.name or (env_ns.names | join(', ')) | default('Splunk lab', true) }}</h1>
+{%- if linkpage_generated_at is defined and linkpage_generated_at %}
+        <p class="generated"><strong>Generated</strong> <time data-utc="{{ linkpage_generated_at }}">{{ linkpage_generated_at }}</time>{% if exp_ns.at %} · <strong>Expires</strong> <time data-utc="{{ exp_ns.at }}" data-remaining>{{ exp_ns.at }}</time>{% endif %}</p>
+{%- endif %}
+{%- if power_state == 'suspended' %}
+        <p class="badge-suspended">Lab suspended</p>
+{%- endif %}
+      </div>
+      <dl class="meta">
+{%- if spa_ns.provider %}
+{%- if spa_ns.provider == 'CCM' %}
+        <a class="chip chip-provider" href="https://ccm.splunkits.io/cloud-compute" target="_blank" rel="noopener noreferrer"><dt>Provider</dt><dd>{{ spa_ns.provider }}</dd></a>
+{%- elif spa_ns.provider.startswith('AWS') %}
+        <a class="chip chip-provider" href="{% if spa_ns.aws_region %}https://{{ spa_ns.aws_region }}.console.aws.amazon.com/ec2/home?region={{ spa_ns.aws_region }}{% else %}https://console.aws.amazon.com/ec2/{% endif %}" target="_blank" rel="noopener noreferrer"><dt>Provider</dt><dd>{{ spa_ns.provider }}</dd></a>
+{%- else %}
+        <div class="chip chip-provider"><dt>Provider</dt><dd>{{ spa_ns.provider }}</dd></div>
+{%- endif %}
+{%- endif %}
+{%- if env_ns.names %}
+        <div class="chip"><dt>Stack</dt><dd>{{ env_ns.names | join(', ') }}</dd></div>
+{%- endif %}
+        <div class="chip"><dt>Hosts</dt><dd>{{ env_ns.host_count }}</dd></div>
+{%- if spa_ns.version %}
+        <div class="chip"><dt>Version</dt><dd>{{ spa_ns.version }}{% if spa_ns.version == 'latest' and linkpage_resolved_version is defined and linkpage_resolved_version %} ({{ linkpage_resolved_version }}){% endif %}</dd></div>
+{%- endif %}
+{%- if spa_env_dir is defined and spa_env_dir %}
+        <div class="chip"><dt>Directory</dt><dd><code>{{ spa_env_dir }}</code></dd></div>
+{%- endif %}
+      </dl>
+{%- if linkpage_licenses is defined and linkpage_licenses %}
+      <ul class="licenses">
+{%- for lic in linkpage_licenses %}
+        <li class="license" data-expires-at="{{ lic.expires_at | default('') }}"{% if (lic.status | default('')) == 'perpetual' %} data-perpetual="true"{% endif %}{% if lic.status is defined and lic.status %} data-status-fallback="{{ lic.status }}"{% endif %}><strong>{{ lic.basename }}</strong>{% if (lic.status | default('')) == 'perpetual' %} · perpetual{% elif lic.expires_at is defined and lic.expires_at %} · <time data-utc="{{ lic.expires_at }}" data-remaining>{{ lic.expires_at }}</time>{% endif %}</li>
+{%- endfor %}
+      </ul>
+{%- endif %}
+    </header>
+    <main>
+{%- if env_ns.names | length > 1 %}
+{%- for env_name in env_ns.names %}
+      <input class="stack-radio" type="radio" name="spa-stack" id="tab-{{ env_name }}"{% if loop.first %} checked{% endif %}>
+{%- endfor %}
+      <div class="stack-tabs">
+{%- for env_name in env_ns.names %}
+        <label for="tab-{{ env_name }}">{{ env_name }}</label>
+{%- endfor %}
+      </div>
+      <div class="boards">
+{%- endif %}
+{%- for env_name in env_ns.names -%}
+  {%- set env_group = 'splunk_env_' ~ env_name -%}
+  {%- set env_hosts = groups[env_group] -%}
+  {%- set b = namespace(mgmt=[], search=[], index=[], heavy=[], ufs=[], edges=[], idxc=[], shc=[], shown_idx=[], shown_sh=[]) -%}
+  {%- for hostname in env_hosts -%}
+    {%- set flags = namespace(search=false, indexer=false, hf=false, uf=false, mgmt=false) -%}
+    {%- if 'role_search_head' in groups and hostname in groups['role_search_head'] -%}
+      {%- set flags.search = true -%}
+    {%- endif -%}
+    {%- if 'role_indexer' in groups and hostname in groups['role_indexer'] -%}
+      {%- set flags.indexer = true -%}
+    {%- endif -%}
+    {%- if 'role_heavy_forwarder' in groups and hostname in groups['role_heavy_forwarder'] -%}
+      {%- set flags.hf = true -%}
+    {%- endif -%}
+    {%- if ('role_universal_forwarder' in groups and hostname in groups['role_universal_forwarder']) or ('role_universal_forwarder_windows' in groups and hostname in groups['role_universal_forwarder_windows']) -%}
+      {%- set flags.uf = true -%}
+    {%- endif -%}
+    {%- if ('role_cluster_manager' in groups and hostname in groups['role_cluster_manager']) or ('role_license_manager' in groups and hostname in groups['role_license_manager']) or ('role_deployer' in groups and hostname in groups['role_deployer']) or ('role_deployment_server' in groups and hostname in groups['role_deployment_server']) or ('role_monitoring_console' in groups and hostname in groups['role_monitoring_console']) -%}
+      {%- set flags.mgmt = true -%}
+    {%- endif -%}
+    {%- if flags.search -%}
+      {%- set b.search = b.search + [hostname] -%}
+    {%- elif flags.indexer -%}
+      {%- set b.index = b.index + [hostname] -%}
+    {%- elif flags.hf -%}
+      {%- set b.heavy = b.heavy + [hostname] -%}
+    {%- elif flags.uf -%}
+      {%- set b.ufs = b.ufs + [hostname] -%}
+    {%- elif flags.mgmt -%}
+      {%- set b.mgmt = b.mgmt + [hostname] -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {%- for hostname in b.index -%}
+    {%- for group_name in groups -%}
+      {%- if hostname in groups[group_name] and group_name is match('^idxcluster_.+$') and group_name is not match('^idxcluster_.+_site[0-9]+$') -%}
+        {%- set short = group_name[11:] -%}
+        {%- if short not in b.idxc -%}
+          {%- set b.idxc = b.idxc + [short] -%}
+        {%- endif -%}
+      {%- endif -%}
+    {%- endfor -%}
+  {%- endfor -%}
+  {%- for hostname in b.search -%}
+    {%- for group_name in groups -%}
+      {%- if hostname in groups[group_name] and group_name is match('^shcluster_.+$') and group_name is not match('^shcluster_.+_site[0-9]+$') -%}
+        {%- set short = group_name[10:] -%}
+        {%- if short not in b.shc -%}
+          {%- set b.shc = b.shc + [short] -%}
+        {%- endif -%}
+      {%- endif -%}
+    {%- endfor -%}
+  {%- endfor -%}
+  {%- for idxc_name in b.idxc -%}
+    {%- if 'role_cluster_manager' in groups -%}
+      {%- for hostname in groups['role_cluster_manager'] -%}
+        {%- if hostname in env_hosts and ('idxcluster_' ~ idxc_name) in groups and hostname in groups['idxcluster_' ~ idxc_name] -%}
+          {%- set b.edges = b.edges + [{'from': 'host-' ~ hostname, 'to': 'idxc-' ~ idxc_name, 'label': 'manages'}] -%}
+        {%- endif -%}
+      {%- endfor -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {%- for shc_name in b.shc -%}
+    {%- if 'role_deployer' in groups -%}
+      {%- for hostname in groups['role_deployer'] -%}
+        {%- if hostname in env_hosts and ('shcluster_' ~ shc_name) in groups and hostname in groups['shcluster_' ~ shc_name] -%}
+          {%- set b.edges = b.edges + [{'from': 'host-' ~ hostname, 'to': 'shc-' ~ shc_name, 'label': 'bundle'}] -%}
+        {%- endif -%}
+      {%- endfor -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {%- if (b.ufs or b.heavy) and 'role_deployment_server' in groups -%}
+    {%- set ds_ns = namespace(name='') -%}
+    {%- for hostname in groups['role_deployment_server'] -%}
+      {%- if hostname in env_hosts and not ds_ns.name -%}
+        {%- set ds_ns.name = hostname -%}
+      {%- endif -%}
+    {%- endfor -%}
+    {%- if ds_ns.name -%}
+      {%- if b.heavy -%}
+        {%- set b.edges = b.edges + [{'from': 'host-' ~ ds_ns.name, 'to': 'hf-' ~ env_name, 'label': 'phone-home'}] -%}
+      {%- endif -%}
+      {%- if b.ufs -%}
+        {%- set b.edges = b.edges + [{'from': 'host-' ~ ds_ns.name, 'to': 'uf-' ~ env_name, 'label': 'phone-home'}] -%}
+      {%- endif -%}
+    {%- endif -%}
+  {%- endif %}
+      <section class="architecture" id="board-{{ env_name }}" data-env="{{ env_name }}">
+        <svg class="connectors" aria-hidden="true"></svg>
+        <script type="application/json" class="architecture-edges">{{ b.edges | to_json }}</script>
+{%- if b.mgmt %}
+        <div class="mgmt-column">
+        <section class="tier" data-tier="management">
+          <h2>Management</h2>
+          <div class="tier-hosts">
+{%- for hostname in b.mgmt %}
+{{ host_chip(hostname) }}
+{%- endfor %}
+          </div>
+        </section>
+        </div>
+{%- endif %}
+        <div class="workload-column">
+{%- if b.search %}
+        <section class="tier" data-tier="search">
+          <h2>Search</h2>
+          <div class="tier-hosts">
+{%- for shc_name in b.shc -%}
+  {%- set members = namespace(hosts=[], deployer='') -%}
+  {%- for hostname in b.search -%}
+    {%- if ('shcluster_' ~ shc_name) in groups and hostname in groups['shcluster_' ~ shc_name] -%}
+      {%- set members.hosts = members.hosts + [hostname] -%}
+      {%- set b.shown_sh = b.shown_sh + [hostname] -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {%- if 'role_deployer' in groups -%}
+    {%- for hostname in groups['role_deployer'] -%}
+      {%- if hostname in env_hosts and ('shcluster_' ~ shc_name) in groups and hostname in groups['shcluster_' ~ shc_name] and not members.deployer -%}
+        {%- set members.deployer = hostname -%}
+      {%- endif -%}
+    {%- endfor -%}
+  {%- endif %}
+            <div class="cluster" id="shc-{{ shc_name }}" data-node="shc-{{ shc_name }}">
+              <div class="cluster-heading">
+              <h3>{{ shc_name }}</h3>
+{%- if members.deployer %}
+              <span class="cluster-badge">Deployer: {{ members.deployer }}</span>
+{%- endif %}
+              </div>
+{{ cluster_members(members.hosts, 'shc-' ~ shc_name) }}
+            </div>
+{%- endfor -%}
+{%- for hostname in b.search -%}
+  {%- if hostname not in b.shown_sh %}
+{{ host_chip(hostname) }}
+  {%- endif -%}
+{%- endfor %}
+          </div>
+        </section>
+{%- endif %}
+{%- if b.index %}
+        <section class="tier" data-tier="index">
+          <h2>Index</h2>
+          <div class="tier-hosts">
+{%- for idxc_name in b.idxc -%}
+  {%- set members = namespace(hosts=[], manager='') -%}
+  {%- for hostname in b.index -%}
+    {%- if ('idxcluster_' ~ idxc_name) in groups and hostname in groups['idxcluster_' ~ idxc_name] -%}
+      {%- set members.hosts = members.hosts + [hostname] -%}
+      {%- set b.shown_idx = b.shown_idx + [hostname] -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {%- if 'role_cluster_manager' in groups -%}
+    {%- for hostname in groups['role_cluster_manager'] -%}
+      {%- if hostname in env_hosts and ('idxcluster_' ~ idxc_name) in groups and hostname in groups['idxcluster_' ~ idxc_name] and not members.manager -%}
+        {%- set members.manager = hostname -%}
+      {%- endif -%}
+    {%- endfor -%}
+  {%- endif %}
+            <div class="cluster" id="idxc-{{ idxc_name }}" data-node="idxc-{{ idxc_name }}">
+              <div class="cluster-heading">
+              <h3>{{ idxc_name }}</h3>
+{%- if members.manager %}
+              <span class="cluster-badge">Cluster Manager: {{ members.manager }}</span>
+{%- endif %}
+              </div>
+{{ cluster_members(members.hosts, 'idxc-' ~ idxc_name) }}
+            </div>
+{%- endfor -%}
+{%- for hostname in b.index -%}
+  {%- if hostname not in b.shown_idx %}
+{{ host_chip(hostname) }}
+  {%- endif -%}
+{%- endfor %}
+          </div>
+        </section>
+{%- endif %}
+        </div>
+{%- if b.heavy or b.ufs %}
+        <section class="tier forwarder-layer" data-tier="forwarders">
+          <h2>Forwarders</h2>
+          <div class="tier-hosts">
+{%- if b.heavy %}
+            <div class="cluster hf-box" id="hf-{{ env_name }}" data-node="hf-{{ env_name }}">
+              <h3>{% if b.heavy | length == 1 %}Heavy Forwarder{% else %}Heavy Forwarders{% endif %}</h3>
+              <div class="tier-hosts">
+{%- for hostname in b.heavy %}
+{{ host_chip(hostname, 'hf-' ~ env_name) }}
+{%- endfor %}
+              </div>
+            </div>
+{%- endif %}
+{%- if b.ufs %}
+            <div class="cluster uf-box" id="uf-{{ env_name }}" data-node="uf-{{ env_name }}">
+              <h3>{% if b.ufs | length == 1 %}Universal Forwarder{% else %}Universal Forwarders{% endif %}</h3>
+{%- if b.ufs | length >= 6 %}
+              <p class="note">{{ b.ufs | length }} universal forwarders</p>
+              <details>
+                <summary>Hostnames</summary>
+                <ul class="uf-list">
+{%- for hostname in b.ufs %}
+{{ uf_row(hostname, 'uf-' ~ env_name) }}
+{%- endfor %}
+                </ul>
+              </details>
+{%- else %}
+              <div class="tier-hosts">
+{%- for hostname in b.ufs %}
+{{ host_chip(hostname, 'uf-' ~ env_name) }}
+{%- endfor %}
+              </div>
+{%- endif %}
+            </div>
+{%- endif %}
+          </div>
+        </section>
+{%- endif %}
+      </section>
+{%- endfor %}
+{%- if env_ns.names | length > 1 %}
+      </div>
+{%- endif %}
     </main>
+    <script>
+      (function () {
+        function parseUtc(raw) {
+          if (!raw) return null;
+          var stamp = String(raw);
+          if (/^\d{4}-\d{2}-\d{2}$/.test(stamp)) stamp += "T00:00:00Z";
+          var parsed = new Date(stamp);
+          return isNaN(parsed.getTime()) ? null : parsed;
+        }
+        function formatLocal(raw) {
+          var parsed = parseUtc(raw);
+          if (!parsed) return String(raw || "");
+          var weekday = parsed.toLocaleDateString(undefined, { weekday: "long" });
+          var day = parsed.toLocaleDateString(undefined, { day: "2-digit" });
+          var month = parsed.toLocaleDateString(undefined, { month: "short" });
+          var year = parsed.getFullYear();
+          var hour = String(parsed.getHours()).padStart(2, "0");
+          var minute = String(parsed.getMinutes()).padStart(2, "0");
+          var zone = "";
+          try {
+            var parts = new Intl.DateTimeFormat(undefined, {
+              hour: "numeric",
+              timeZoneName: "short"
+            }).formatToParts(parsed);
+            for (var i = 0; i < parts.length; i++) {
+              if (parts[i].type === "timeZoneName") zone = parts[i].value;
+            }
+          } catch (err) {}
+          return weekday + ", " + day + " " + month + " " + year + " at " + hour + ":" + minute + (zone ? " " + zone : "");
+        }
+        function remainingDays(raw) {
+          var end = parseUtc(raw);
+          if (!end) return null;
+          var now = new Date();
+          var startDay = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+          var endDay = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate());
+          return Math.round((endDay - startDay) / 86400000);
+        }
+        function remainingLabel(days) {
+          if (days == null) return "";
+          if (days < 0) return "(expired)";
+          if (days === 1) return "(1 day)";
+          return "(" + days + " days)";
+        }
+        function licenseStatus(expiresAt, perpetual, fallback) {
+          if (perpetual) return "perpetual";
+          var end = parseUtc(expiresAt);
+          if (!end) return fallback || "";
+          var now = Date.now();
+          if (end.getTime() <= now) return "expired";
+          if (end.getTime() <= now + 30 * 86400000) return "expiring";
+          return "valid";
+        }
+        function paintTimes() {
+          document.querySelectorAll("time[data-utc]").forEach(function (el) {
+            var raw = el.getAttribute("data-utc") || "";
+            var text = formatLocal(raw);
+            if (el.hasAttribute("data-remaining")) {
+              var days = remainingDays(raw);
+              if (days != null) text += " " + remainingLabel(days);
+            }
+            el.textContent = text;
+          });
+          document.querySelectorAll("li.license").forEach(function (item) {
+            var status = licenseStatus(
+              item.getAttribute("data-expires-at") || "",
+              item.getAttribute("data-perpetual") === "true",
+              item.getAttribute("data-status-fallback") || ""
+            );
+            item.className = "license" + (status ? " license-" + status : "");
+          });
+        }
+        paintTimes();
+        function copySpaSsh(btn) {
+          var wrap = btn.closest(".ssh-copy") || btn.parentNode;
+          var code = wrap.querySelector("code");
+          if (!code) return;
+          var text = code.textContent || "";
+          var ta = document.createElement("textarea");
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          try {
+            document.execCommand('copy');
+            btn.textContent = "Copied";
+            setTimeout(function () { btn.textContent = "Copy"; }, 1500);
+          } catch (err) {
+            if (code.select) code.select();
+          }
+          document.body.removeChild(ta);
+        }
+        document.addEventListener("click", function (ev) {
+          var btn = ev.target.closest(".copy-ssh");
+          if (btn) copySpaSsh(btn);
+        });
+        function nodeEl(root, id) {
+          return root.querySelector('[data-node="' + id + '"]');
+        }
+        function draw(section) {
+          var blob = section.querySelector("script.architecture-edges");
+          var svg = section.querySelector("svg.connectors");
+          if (!blob || !svg) return;
+          var edges;
+          try { edges = JSON.parse(blob.textContent); } catch (err) { return; }
+          var rect = section.getBoundingClientRect();
+          svg.setAttribute("width", String(rect.width));
+          svg.setAttribute("height", String(rect.height));
+          svg.innerHTML = "";
+          (edges || []).forEach(function (edge) {
+            var a = nodeEl(section, edge.from);
+            var b = nodeEl(section, edge.to);
+            if (!a || !b) return;
+            var ar = a.getBoundingClientRect();
+            var br = b.getBoundingClientRect();
+            var ax = ar.left - rect.left;
+            var ay = ar.top - rect.top;
+            var bx = br.left - rect.left;
+            var by = br.top - rect.top;
+            var acx = ax + ar.width / 2;
+            var acy = ay + ar.height / 2;
+            var bcx = bx + br.width / 2;
+            var bcy = by + br.height / 2;
+            var dx = bcx - acx;
+            var dy = bcy - acy;
+            var x1, y1, x2, y2, c1x, c1y, c2x, c2y, lx, ly;
+            if (Math.abs(dx) >= Math.abs(dy) * 0.4) {
+              if (dx >= 0) {
+                x1 = ar.right - rect.left;
+                y1 = acy;
+                x2 = bx;
+                y2 = bcy;
+              } else {
+                x1 = ax;
+                y1 = acy;
+                x2 = br.right - rect.left;
+                y2 = bcy;
+              }
+              var pad = Math.max(48, Math.abs(x2 - x1) / 2);
+              c1x = x1 + (dx >= 0 ? pad : -pad);
+              c1y = y1;
+              c2x = x2 + (dx >= 0 ? -pad : pad);
+              c2y = y2;
+              lx = (x1 + x2) / 2;
+              ly = (y1 + y2) / 2 - 6;
+            } else {
+              if (dy >= 0) {
+                x1 = acx;
+                y1 = ar.bottom - rect.top;
+                x2 = bcx;
+                y2 = by;
+              } else {
+                x1 = acx;
+                y1 = ay;
+                x2 = bcx;
+                y2 = br.bottom - rect.top;
+              }
+              var mid = (y1 + y2) / 2;
+              c1x = x1;
+              c1y = mid;
+              c2x = x2;
+              c2y = mid;
+              lx = (x1 + x2) / 2;
+              ly = mid - 4;
+            }
+            var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("d", "M" + x1 + " " + y1 + " C" + c1x + " " + c1y + " " + c2x + " " + c2y + " " + x2 + " " + y2);
+            path.setAttribute("fill", "none");
+            path.setAttribute("stroke", "var(--accent)");
+            path.setAttribute("stroke-width", "1.5");
+            svg.appendChild(path);
+            var label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            label.setAttribute("x", String(lx));
+            label.setAttribute("y", String(ly));
+            label.setAttribute("text-anchor", "middle");
+            label.setAttribute("fill", "var(--muted)");
+            label.setAttribute("font-size", "10");
+            label.textContent = edge.label || "";
+            svg.appendChild(label);
+          });
+        }
+        function drawAll() {
+          document.querySelectorAll("section.architecture").forEach(draw);
+        }
+        window.addEventListener("load", drawAll);
+        window.addEventListener("resize", drawAll);
+        document.querySelectorAll("input[name='spa-stack']").forEach(function (el) {
+          el.addEventListener("change", function () { setTimeout(drawAll, 0); });
+        });
+        document.querySelectorAll("details").forEach(function (el) {
+          el.addEventListener("toggle", drawAll);
+        });
+      })();
+    </script>
   </body>
 </html>

@@ -196,12 +196,12 @@ flowchart LR
   config --> apps
 ```
 
-`spa deploy` prints the path to `$SPA_ENV_DIR/config/index.html` after a successful run. Paste that path into a browser for Splunk Web links on each host. Use:
+`spa deploy` prints the path to `$SPA_ENV_DIR/config/index.html` after a successful run. Paste that path into a browser for an architecture snapshot of the lab: role badges open Splunk Web (and ITSI when installed), copy `spa --env NAME hosts ssh HOST` from a host, and `spa hosts list --status`. Generated time converts in the browser to local time. CCM labs also show Expires from the lab TTL; AWS, VirtualBox, and existing-host labs do not expire. License dates show remaining days when you open the page. Refresh the snapshot with `spa run create_linkpage --yes` after you change hosts. Use:
 
 ```bash
-spa hosts list --status
-spa hosts ssh HOST
-spa hosts copy SOURCE HOST:DESTINATION
+spa --env NAME hosts list --status
+spa --env NAME hosts ssh HOST
+spa --env NAME hosts copy SOURCE HOST:DESTINATION
 ```
 
 VirtualBox images normally log in as OS user `vagrant`; Splunk runs as OS user `splunk`. The former is an account name, not an instruction to call the Vagrant CLI.

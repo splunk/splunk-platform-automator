@@ -1,5 +1,6 @@
 """Scaffold a temp env, parse inventory, and assert the clone is not written."""
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -246,11 +247,19 @@ def test_create_linkpage_writes_env_not_clone(tmp_path):
     env["SPA_BASECONFIG_DIR"] = str(stub)
     env["ANSIBLE_CONFIG"] = str(PROJECT_ROOT / "ansible.cfg")
     env["ANSIBLE_INVENTORY"] = str(dest / "config" / "splunk_config.yml")
+    env["ANSIBLE_LOOKUP_PLUGINS"] = str(PROJECT_ROOT / "ansible" / "plugins" / "lookup")
     env["ANSIBLE_LOCAL_TEMP"] = str(tmp_path / "ansible_tmp")
     os.makedirs(env["ANSIBLE_LOCAL_TEMP"], exist_ok=True)
     collections = PROJECT_ROOT / "tests" / ".collections"
     if collections.is_dir():
         env["ANSIBLE_COLLECTIONS_PATH"] = str(collections)
+
+    ttl = "2026-11-20T09:18:01.000000Z"
+    (dest / "ccm").mkdir(exist_ok=True)
+    (dest / "ccm" / "state.json").write_text(
+        json.dumps({"ttl": ttl, "deployment_id": "dep-scaffold"}),
+        encoding="utf-8",
+    )
 
     played = subprocess.run(
         ["ansible-playbook", str(PROJECT_ROOT / "ansible" / "create_linkpage.yml")],
@@ -263,6 +272,18 @@ def test_create_linkpage_writes_env_not_clone(tmp_path):
     assert (dest / "config" / "index.html").is_file()
     html = (dest / "config" / "index.html").read_text(encoding="utf-8")
     assert "Splunk Platform Automator Host List" in html
+    assert "Generated" in html
+    assert "Expires" not in html
+    assert 'data-utc="%s"' % ttl not in html
+    assert "function formatLocal" in html
+    assert "CCM TTL" not in html
+    assert "dep-scaffold" not in html
+    assert "spa --env env hosts ssh shidx" in html
+    assert "banner" in html
+    assert "Provider" in html
+    assert "AWS" in html
+    assert "aws_key.pem" not in html
+    assert "scaffold-admin" not in html
 
     if clone_index_before is None:
         assert not clone_index.exists(), "link page was written under the clone"
