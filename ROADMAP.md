@@ -21,12 +21,12 @@ Ship M1–M3 on one integration branch, then **3.0** when that branch is ready t
 ### Outcomes
 
 - [x] Semver GitHub Releases from [CHANGELOG.md](CHANGELOG.md) ([RELEASE.md](RELEASE.md))
-- [x] `SPA_HOME` / `SPA_ENV_DIR` path contract; clone defaults keep today's layout (**M1**)
+- [x] `SPA_HOME` / `SPA_ENV_DIR` path contract; operator `spa` does not treat clone-equal `SPA_HOME`/`SPA_ENV_DIR` as an env (see [docs/migrate.md](docs/migrate.md)). Clone remains the contributor path (**M1**)
 - [x] `spa init` scaffolds an env dir (example config, `.spa.yml`; no copy of `ansible/`) and migrates an existing clone env (config, inventory, Terraform state) (**M1** / **M2**)
 - [x] Separate env dirs against one clone `SPA_HOME` (**M1**)
 - [x] `bin/spa_venv.sh` shared venv (framework, envs, tests); `spa` resolves cwd / `--env` / the registered default; no Homebrew Ansible/Pydantic requirement (**M1**)
-- [x] `spa` commands use the shared prefix (`init`, `validate`, `provision`, `deploy`, `suspend`, `resume`, `destroy`, `hosts`, `shell`, `run`, `aws`, `licenses`) (**M2**)
-- [x] `spa run --list` / `NAME --help` from `# spa-run:` metadata; 3.0 operator stems (2.x names still resolve with a hint) (**M2**)
+- [x] `spa` commands use the shared prefix (`init`, `validate`, `deploy`, `suspend`, `resume`, `destroy`, `hosts`, `run`; host create is `spa hosts provision`; AWS discovery is `spa provider aws`; licenses is `spa licenses list`) (**M2**)
+- [x] `spa run list` / `NAME --help` from `# spa-run:` metadata; 3.0 operator stems (2.x names still resolve with a hint) (**M2**)
 - [x] `--hosts` on `deploy`, `run`, `suspend`, `resume`, and `hosts list` (inventory names or roles) (**M2**)
 - [x] Mutating ops confirm in `LocalSpaSession` (named human prompt; agents/GUI pass `--yes` and never `input()`) (**M2**)
 - [x] `spa suspend` / `spa resume` for AWS compute (keep Terraform state and EBS; resume refreshes inventory addresses) (**M2**)
@@ -52,7 +52,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [x] Fold SSH/SCP into `spa hosts` (`list` / `ssh` / `copy`); `spa shell` / `spa sh` remain SSH aliases (no `spa shell -l`)
 - [x] Shell completion for every `spa` command (`spa completion bash|zsh` prints the script; `spa shell` stays SSH) — [#107](https://github.com/splunk/splunk-platform-automator/issues/107)
 - [x] Stable CLI UX and output contract: one command language, usage errors that name how to find a value, agent `--help` from `COMMAND_SCHEMA`, canonical names in the schema, `spa venv` actions, and non-TTY confirmation — [#108](https://github.com/splunk/splunk-platform-automator/issues/108), [#105](https://github.com/splunk/splunk-platform-automator/issues/105)
-- [x] Map top-level [ansible/](ansible/) playbooks to `spa run` (and named `provision` / `deploy` / `destroy`) — every playbook is a main entry point; do not require raw `ansible-playbook` for day-to-day use. Discover with `spa run --list`; inspect with `spa run NAME --help`.
+- [x] Map top-level [ansible/](ansible/) playbooks to `spa run` (and named `spa hosts provision` / `deploy` / `destroy`) — every playbook is a main entry point; do not require raw `ansible-playbook` for day-to-day use. Discover with `spa run list`; inspect with `spa run NAME --help`.
 - [x] Env-dir playbook/Terraform logs + compact progress (full transcript in `$SPA_ENV_DIR/logs/`; agents get a small envelope + `log` path, not the dump) — [#71](https://github.com/splunk/splunk-platform-automator/issues/71)
 - [x] Richer Ansible transcripts and upgrade progress (native lines in the run log, repeatable `-v`, timestamps and color, one compact line per upgrade include) — [#93](https://github.com/splunk/splunk-platform-automator/issues/93)
 - [ ] Hide credentials in Ansible output (`no_log`, stop putting secrets on `command:` argv) so `-v` can stay native debug without leaking admin/Splunkbase/SHC/API secrets; keep agents off the transcript — [#88](https://github.com/splunk/splunk-platform-automator/issues/88)
@@ -89,7 +89,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [ ] Disable remaining UI tours and info wizards after login
 - [x] Feature catalog + provider-independent topology examples; separate provider examples; spa init composes on select — [#53](https://github.com/splunk/splunk-platform-automator/issues/53)
 - [x] `spa config` transactionally edits explicit schema paths and fragments; `spa config explain` and `spa config search` are the schema walk; `spa apps add/remove` owns structured app entries. Catalog snippets remain examples — [#76](https://github.com/splunk/splunk-platform-automator/issues/76)
-- [ ] Remote-provider defaults template (hostname, host-side Splunk download, TLS, no login-page password) for any non-VirtualBox provider; propose then `spa config merge` after yes — [#143](https://github.com/splunk/splunk-platform-automator/issues/143)
+- [x] Remote-provider defaults (hostname, host-side Splunk download, TLS): `spa init` for a remote provider already merges `examples/templates/remote-provider.yml`; existing envs use `spa config merge remote-provider --yes` — [#143](https://github.com/splunk/splunk-platform-automator/issues/143)
 - [ ] User config templates: `spa config template list|save|show|remove` writes `~/.config/spa/examples/{topologies,providers,templates}` and init, `config topology`, `config provider`, and `config merge` apply them. Retire `spa config templates` so the catalog is `list` — [#113](https://github.com/splunk/splunk-platform-automator/issues/113)
 - [ ] Certificate add/rotate + SPA vault for certs/keys (closes [#30](https://github.com/splunk/splunk-platform-automator/issues/30)) — [#69](https://github.com/splunk/splunk-platform-automator/issues/69). Blocked by [#52](https://github.com/splunk/splunk-platform-automator/issues/52)
 - [ ] Credentials / `spa auth` (profiles, Splunkbase, vault password; macOS Keychain; backwards compatible) — [#52](https://github.com/splunk/splunk-platform-automator/issues/52)
@@ -107,7 +107,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 ## Provisioning
 
 - [x] Terraform AWS + `spa provider aws` ([docs/aws.md](docs/aws.md))
-- [x] `spa provider aws` uses `--region`, then `AWS_REGION`, `AWS_DEFAULT_REGION`, or `~/.aws/config`, names that source, and marks it in `spa provider aws regions list`
+- [x] `spa provider aws` uses `--region`, then `terraform.aws.region`, then `AWS_REGION` / `AWS_DEFAULT_REGION` / `~/.aws/config`, names that source, and marks it in `spa provider aws regions list`
 - [x] VirtualBox spa provider (`spa deploy` / `destroy` / suspend-resume via Vagrant) — [#56](https://github.com/splunk/splunk-platform-automator/issues/56)
 - [ ] Shared network access groups (provider-agnostic CLI; AWS first; SPA_HOME state; env destroy does not delete) — [#58](https://github.com/splunk/splunk-platform-automator/issues/58)
 - [x] External / BYO SSH hosts (register only; mixed with managed; never terminate the real machine) — [#57](https://github.com/splunk/splunk-platform-automator/issues/57).
