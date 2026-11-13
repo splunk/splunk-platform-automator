@@ -1,6 +1,6 @@
 """Install and remove SPA agent skills in user IDE directories.
 
-Canonical packages live under ``$SPA_HOME/skills/spa/``. Install links each
+Canonical packages live under ``$SPA_HOME/skills/spa/``. Install copies each
 package into the user skill directory for the chosen IDE. Detection follows
 cup: an explicit platform, then ``SPA_SKILLS_PLATFORMS``, then one agent
 environment variable, one IDE binary on ``PATH``, or one existing skill
@@ -366,31 +366,16 @@ def _join(home: Path, relative: str) -> Path:
 
 
 def _place_package(source: Path, dest: Path, copies: set) -> bool:
-    """Link ``source`` at ``dest``. Return True when an existing path was replaced."""
+    """Copy ``source`` onto ``dest``. Return True when an existing path was replaced."""
     replaced = False
-    if dest.is_symlink():
-        try:
-            same = dest.resolve() == source.resolve()
-        except OSError:
-            same = False
-        if same:
-            copies.discard(str(dest))
-            return False
-        dest.unlink()
-        replaced = True
-    elif dest.exists():
-        if dest.is_dir():
-            shutil.rmtree(dest)
-        else:
+    if dest.is_symlink() or dest.exists():
+        if dest.is_symlink() or dest.is_file():
             dest.unlink()
+        else:
+            shutil.rmtree(dest)
         replaced = True
-    try:
-        os.symlink(str(source.resolve()), str(dest), target_is_directory=True)
-    except OSError:
-        shutil.copytree(source, dest)
-        copies.add(str(dest))
-        return replaced
-    copies.discard(str(dest))
+    shutil.copytree(source, dest)
+    copies.add(str(dest))
     return replaced
 
 

@@ -191,6 +191,14 @@ def test_non_clone_install_uses_the_release_prefix_one_liner():
     assert "pip install" not in checkout_section
 
 
+def test_architecture_notes_provider_order():
+    """A new provider sets Provider.order; public lists come from provider_ids()."""
+    architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
+    assert "Provider.order" in architecture
+    assert "PROVIDER_ORDER" in architecture
+    assert "provider_ids()" in architecture
+
+
 def test_architecture_defines_cli_ux_and_output_conventions():
     architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
     contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
@@ -685,6 +693,27 @@ class TestSpaSkill:
         )
         assert tracked.strip() == ""
 
+    def test_skill_frontmatter_omits_paths_discovery_scope(self):
+        import yaml
+
+        skills = PROJECT_ROOT / "skills" / "spa"
+        for path in sorted(skills.glob("*/SKILL.md")):
+            front = path.read_text(encoding="utf-8").split("---", 2)[1]
+            meta = yaml.safe_load(front) or {}
+            assert "paths" not in meta, path.relative_to(PROJECT_ROOT)
+
+    def test_skills_install_copies_packages_not_symlinks(self):
+        readme = (PROJECT_ROOT / "skills" / "spa" / "README.md").read_text(encoding="utf-8")
+        entry = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
+        contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
+        assert "copies these packages" in readme
+        assert "prefers a symlink" not in readme
+        assert "not a live symlink" in readme
+        assert "copies this package" in entry
+        assert "links this package" not in entry
+        assert "spa skills install" in contributing
+        assert "Cursor skill symlinks" not in contributing
+
     def test_verify_after_write_is_documented(self):
         guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
         configure = guide[
@@ -826,6 +855,24 @@ class TestSpaSkill:
         for text in (skill, body):
             assert "terraform apply" not in text
             assert "Apply complete" not in text
+
+    def test_spa_skill_handoff_is_deploy_not_provision_then_deploy(self):
+        skills = PROJECT_ROOT / "skills" / "spa"
+        skill = (skills / "spa" / "SKILL.md").read_text(encoding="utf-8")
+        create = (skills / "spa-create-config" / "SKILL.md").read_text(encoding="utf-8")
+        tree = (skills / "spa-create-config" / "references" / "workflow-decision-tree.md").read_text(
+            encoding="utf-8"
+        )
+        assert "runs `provision`, then `deploy`" not in skill
+        assert "provision`, then `deploy`" not in skill
+        assert "references/long-runs.md" in skill
+        assert "creates hosts" in skill.lower() or "long-runs.md" in skill
+        assert "handoff for provision and deploy" not in tree
+        assert "spa deploy" in tree
+        assert "validate, provision, deploy" not in create
+        assert "Validation, provision, deploy" not in create
+        assert "provision/deploy" not in create
+        assert "spa deploy" in create
 
     def test_entry_skill_points_at_upgrade_and_health_references(self):
         skill_root = PROJECT_ROOT / "skills" / "spa" / "spa"
@@ -1035,6 +1082,37 @@ class TestSpaSkill:
         assert "ignores `apps.by_role`" in phases
         assert "Follow `data.next` for skipped `apps.by_role`" not in phases
 
+    def test_create_config_path_b_follows_architecture_plan_write_next(self):
+        skill_dir = _create_config_dir()
+        create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+        phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
+        arch = (skill_dir / "references" / "architecture-input.md").read_text(
+            encoding="utf-8"
+        )
+        tree = (skill_dir / "references" / "workflow-decision-tree.md").read_text(
+            encoding="utf-8"
+        )
+        path_b = arch[arch.index("## Path B") : arch.index("## Version gate")]
+        assert "`data.next`" in path_b
+        assert "mode.write" in path_b
+        assert "plan vs write" in path_b.lower()
+        assert "do not" in path_b.lower()
+        assert "do **not** init until Phase 12" not in path_b
+        tree_b = tree[tree.index("Confirmed schema 1") : tree.index("No architecture file")]
+        assert "data.next" in tree_b
+        assert "plan:" not in tree_b.lower()
+        combined = create + "\n" + phases
+        assert "architecture plan" in combined.lower()
+        assert "follow `data.next`" in combined.lower()
+        phase4 = phases[
+            phases.index("## Phase 4 — Sizing tier") : phases.index("## Phase 5")
+        ]
+        assert "all hosts" in phase4.lower() or "every host" in phase4.lower()
+        assert "per role" in phase4.lower() or "per-host" in phase4.lower()
+        assert "ccm.instance_type" in phases
+        assert "ccm.operating_system" in phases
+        assert "ccm.disk_storage" in phases
+
     def test_create_config_region_question_puts_aws_config_region_first(self):
         text = _create_config_workflow()
         phase4 = text[text.index("## Phase 6 — AWS settings"):text.index("## Phase 7 — Topology counts")]
@@ -1095,11 +1173,9 @@ class TestSpaSkill:
         phase12 = text[text.index("## Phase 12 — Write config") : text.index("## Phase 13")]
         assert "In plan mode, run steps 2–6 here first" in phase12
         tree = (skills / "references" / "workflow-decision-tree.md").read_text(encoding="utf-8")
-        path_b = tree[tree.index("Confirmed schema 1") : tree.index("No architecture file")]
+        path_a = tree[tree.index("No architecture file") :]
         assert "0.4.0" not in tree
-        assert "Phase 12" in path_b
-        arch = (skills / "references" / "architecture-input.md").read_text(encoding="utf-8")
-        assert "do **not** init until Phase 12" in arch
+        assert "Phase 12" in path_a
 
     def test_create_config_apps_loop_asks_for_more_after_each_add(self):
         skills = PROJECT_ROOT / "skills" / "spa"
@@ -1361,7 +1437,7 @@ class TestSpaSkill:
 
 
 class TestIssue125AppsSkill:
-    """Slice 4 of #125: spa-apps placement, Unix TA URL, itsi-minimal, auth check."""
+    """Slice 4 of #125: spa-apps placement, Unix TA URL, ITSI Java next, auth check."""
 
     def _texts(self):
         skills = PROJECT_ROOT / "skills" / "spa"
@@ -1385,17 +1461,17 @@ class TestIssue125AppsSkill:
         for text in self._texts():
             assert url in text
 
-    def test_apps_skill_merges_itsi_minimal_then_asks_once_about_java(self):
+    def test_apps_skill_follows_1841_java_next_not_itsi_minimal(self):
         for text in self._texts():
-            assert "spa config merge itsi-minimal" in text
-            merge_at = text.index("spa config merge itsi-minimal")
-            after = text[merge_at:]
-            assert "ask once" in after.lower()
-            assert "os.packages" in after
-            assert "spa config set" in after
-            assert "java-21-openjdk" in after
-            assert "openjdk-21-jdk" in after
-            assert "aws-os-matrix.md" in after
+            assert "itsi-minimal" not in text
+            assert "os.java.search_heads" in text or "data.next" in text
+            assert "os.packages" in text
+            assert "java-21-openjdk" in text
+            assert "openjdk-21-jdk" in text
+            assert "aws-os-matrix.md" in text
+            lower = text.lower()
+            assert "search-head" in lower or "search head" in lower
+            assert "global" in lower
 
     def test_apps_skill_auth_points_at_apps_auth_check(self):
         for text in self._texts():
@@ -1641,14 +1717,8 @@ def test_create_config_does_not_merge_remote_provider_after_fresh_init():
         assert "remote-provider" in page
 
 
-CCM_ASK_GATE = (
-    "Do not AskQuestion CCM unless `CCM_TOKEN` is set, the env has a root `ccm:` "
-    "block, or the operator already named CCM."
-)
-
-
-def test_skills_do_not_ask_ccm_unless_available():
-    """Public provider AskQuestion stays aws/virtualbox/external. CCM is gated."""
+def test_skills_ask_ccm_with_other_providers():
+    """AskQuestion follows spa's printed order, including CCM. Missing token is validate."""
     skill_dir = _create_config_dir()
     create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
     phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
@@ -1661,9 +1731,11 @@ def test_skills_do_not_ask_ccm_unless_available():
     spa = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(
         encoding="utf-8"
     )
-    assert CCM_ASK_GATE in create
-    assert CCM_ASK_GATE in spa
-    assert "aws, virtualbox, and external" in create
+    assert "in the order spa prints" in create
+    assert "in the order spa prints" in spa
+    assert "Include CCM" in create
+    assert "spa validate" in create
+    assert "Do not hide CCM" in create
     assert "splunker" in phases
     assert "operating_system" in phases
     assert "splunker" in design

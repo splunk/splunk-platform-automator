@@ -209,6 +209,18 @@ def test_secret_example_uses_an_environment_lookup():
     assert "password" not in data.get("example", "").lower() or "--from-env" in data.get("example", "")
 
 
+def test_explain_ccm_instance_type_is_global_only():
+    data = explain_config("ccm.instance_type")
+    assert data["path"] == "ccm.instance_type"
+    assert "scope" not in data
+    text = (data.get("description") or "").lower()
+    assert "every host" in text
+    assert "no per-host instance type" in text
+    human = format_explain(data)
+    assert "every host" in human.lower()
+    assert "Per-host" not in human
+
+
 def test_cli_explain_is_the_human_page_and_the_same_agent_data():
     human = run_spa(["config", "explain", "splunk_hosts"])
     assert human.returncode == 0, human.stderr

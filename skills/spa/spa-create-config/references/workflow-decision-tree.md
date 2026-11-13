@@ -7,16 +7,15 @@ User message
 ├─ New environment or lab ("I need a Splunk environment...")
 │     ├─ Confirmed schema 1 architecture file given
 │     │     → /spa-create-config path B (skip SVA questionnaire)
-│     │     → spa architecture plan FILE → provider → location/name gate
-│     │     → write: spa environment init --architecture FILE --provider
-│     │     → plan: record Phases 6–11; init at Phase 12
+│     │     → spa architecture plan FILE → follow data.next (write mode, provider)
+│     │     → location/name gate → spa environment init --architecture FILE --provider
 │     │     → move role / move host / sizing / OS / AWS / apps / licenses
 │     │     → spa architecture check FILE → spa validate (Phase 13)
-│     │     → /spa handoff for provision and deploy (only after your explicit yes for each)
+│     │     → /spa handoff for spa deploy (creates hosts if needed; only after your explicit yes)
 │     └─ No architecture file
 │           → /spa-create-config path A, Phases 1–14, plan mode
 │           → plan approved → environment gate (if not passed) → spa init --example --provider → write config (Phase 12) → spa validate (Phase 13)
-│           → /spa handoff for provision and deploy (only after your explicit yes for each)
+│           → /spa handoff for spa deploy (creates hosts if needed; only after your explicit yes)
 ├─ Change an existing config ("add ITSI", "change the OS")
 │     → /spa-create-config, "Add / change a setting" (skip greenfield phases)
 │     → spa validate → /spa only if you ask to deploy

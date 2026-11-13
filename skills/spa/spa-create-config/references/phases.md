@@ -9,18 +9,19 @@ Load one section at a time from this file. Hard rules stay in [SKILL.md](../SKIL
 **Actions:**
 
 1. Confirm **project root** (contains `ansible.cfg`, `bin/`).
-2. **Mode** — not asked here. The plan-or-write question is asked in the gate, after the minimum requirements (topology, provider, OS) are defined and before init. If the user already stated intent, note it now and confirm it at the gate:
+2. **Mode** — not asked here on Path A. The plan-or-write question is asked in the gate, after the minimum requirements (topology, provider, OS) are defined and before init. If the user already stated intent, note it now and confirm it at the gate:
    - **plan** — Phases 1–10 + design summary; **no** `splunk_config.yml` write until user approves.
    - **write** — Full flow through Phase 12–14 (or continue after approved plan).
    Infer **plan** from phrases like “design”, “discuss”, “plan architecture”; infer **write** from “create config”, “write yaml”, “approve and write”.
+   **Path B:** follow `data.next` from `spa architecture plan FILE`. `mode.write` already chose write; do not AskQuestion plan vs write.
 3. Target: the environment chosen at the gate, or the named existing environment under "Add / change a setting". Its config is `<env path>/config/splunk_config.yml`. Never assume the current directory or the registry default is the target.
 4. If the target config already exists and **mode=write** (or approving plan): **merge vs overwrite** — AskQuestion if available, otherwise ask in chat, before any write. Skip in **plan** mode until Phase 12.
-5. **CCM availability, then AWS.** Report `CCM_TOKEN` as set / not set (never the value). Do not AskQuestion CCM unless `CCM_TOKEN` is set, the env has a root `ccm:` block, or the operator already named CCM. When CCM is in play, skip the AWS API probe. Otherwise run `spa --agent provider aws check-auth` (needs `boto3`; no region required). Read `ok` and `data.account`. Record result:
+5. **Provider, then AWS if aws.** Report `CCM_TOKEN` as set / not set (never the value). AskQuestion ids in the order spa prints, including CCM; do not hide CCM when the token is unset. When CCM is in play, skip the AWS API probe. Otherwise run `spa --agent provider aws check-auth` (needs `boto3`; no region required). Read `ok` and `data.account`. Record result:
    - **Available** → Phase 6 uses latest-ami then `spa validate --splunk-config aws`; listings only if that fails.
    - **Unavailable** → create IAM access keys at https://console.aws.amazon.com/iam/ or use `AWS_PROFILE`; follow [aws-without-credentials.md](aws-without-credentials.md); do not block the workflow. Do not run `spa provider ccm` unless CCM is in play.
 6. Read existing config if merging or revising an existing plan from prior config.
 7. Licenses are not scanned here. Phase 10 scans the Software directory once, after the apps decision.
-8. **Architecture input (optional).** Two entry points: [architecture-input.md](architecture-input.md). **Path A (no file):** keep this questionnaire and `spa init --example TOPOLOGY --provider` (write mode at the gate; plan mode at Phase 12). **Path B (confirmed schema 1 file):** skip the SVA questionnaire; run `spa architecture plan FILE`, then the same init timing, place/size with `spa config move`, then **`spa architecture check FILE` before validate**. Phases 9 and 10 are always asked, even when `confirmed` is true. SPA ignores `apps.by_role`; it installs PS baseconfigs internally. Do not import those folders as local apps.
+8. **Architecture input (optional).** Two entry points: [architecture-input.md](architecture-input.md). **Path A (no file):** keep this questionnaire and `spa init --example TOPOLOGY --provider` (write mode at the gate; plan mode at Phase 12). **Path B (confirmed schema 1 file):** skip the SVA questionnaire; run `spa architecture plan FILE` and follow `data.next` (write mode; do not ask plan vs write), then the location/name gate and init, place/size with `spa config move`, then **`spa architecture check FILE` before validate**. Phases 9 and 10 are always asked, even when `confirmed` is true. SPA ignores `apps.by_role`; it installs PS baseconfigs internally. Do not import those folders as local apps.
 
 **Exit:** Intent noted (mode is confirmed at the gate); target path known; merge policy clear when applicable; **AWS API status recorded**; if a file was given, `spa architecture plan FILE` has been run (the skill does not parse the JSON).
 
@@ -79,7 +80,7 @@ Ask scale-out vs scale-up; default **scale out** for Splunk.
 | App lab | Larger SH if needed; ITSI Java 21 |
 | Production-like | Document overrides |
 
-If the provider is `ccm` (only when CCM is in play), size from `spa provider ccm survey` and the list commands, not this AWS `t3.medium` catalog.
+If the provider is `ccm` (only when CCM is in play), size from `spa provider ccm survey` and the list commands, not this AWS `t3.medium` catalog. Follow `data.next`: set `ccm.instance_type` and `ccm.disk_storage` once for all hosts; do not ask per role. CCM has no per-host instance type.
 
 **Exit:** Default instance type and volume size for global block.
 
@@ -91,7 +92,7 @@ Pick OS via `spa --agent config search os`, then `spa --agent config explain os`
 
 Set `os.packages` (acl plus **polkit** on AL/RHEL or `policykit-1` on Ubuntu), `os.set_hostname` if chosen, and `terraform.aws.ssh_username`.
 
-If the provider is `ccm` (only when CCM is in play): pick `ccm.operating_system` from `spa provider ccm survey` / `operating-systems list`. `ccm.ssh_username` is always `splunker`. Do not use AMI ids or `terraform.aws.ssh_username`.
+If the provider is `ccm` (only when CCM is in play): pick `ccm.operating_system` from `spa provider ccm survey` / `operating-systems list`. One OS for all hosts; do not ask per role. `ccm.ssh_username` is always `splunker`. Do not use AMI ids or `terraform.aws.ssh_username`.
 
 **Exit:** OS family chosen; `os:` template ready.
 
@@ -101,7 +102,7 @@ Run this before the first `spa init` or `spa environment init` for a new environ
 
 **Minimum requirements first:** Path A: the topology (Phase 3), the provider, and the OS (Phase 5) must be chosen before this gate. Path B: `spa architecture plan FILE` acknowledged and the provider chosen; OS and sizing come after init. AWS settings (Phase 6) are set after init with `spa config set`, so they do not block the name.
 
-1. **Mode** — ask plan or write (see Step 0, item 2). Use AskQuestion if available, otherwise ask in chat, unless the user already chose one. Do not ask this before the minimum requirements above are defined. **Plan:** collect location and name (steps 2–5). Do **not** run step 6 (`spa init`). Phases 6–10 become recorded values. Init and every `spa config` / `spa apps add` run at Phase 12 after the plan is approved. **Write:** continue with steps 2–6 now, including init after the step-5 yes.
+1. **Mode** — Path A: ask plan or write (see Step 0, item 2). Use AskQuestion if available, otherwise ask in chat, unless the user already chose one. Do not ask this before the minimum requirements above are defined. **Plan:** collect location and name (steps 2–5). Do **not** run step 6 (`spa init`). Phases 6–10 become recorded values. Init and every `spa config` / `spa apps add` run at Phase 12 after the plan is approved. **Write:** continue with steps 2–6 now, including init after the step-5 yes. Path B: `data.next` already chose `mode.write`; skip this question.
 
 2. **Gather facts (read-only).**
    - Current directory: `pwd`.
@@ -153,7 +154,7 @@ Run this before the first `spa init` or `spa environment init` for a new environ
 
 Cap displayed API results (~10–15 AMIs, ~5 instance types).
 
-**CCM (only when CCM is in play):** skip the AWS AMI path. Write YAML with `spa config provider ccm`. Discover live values with `spa provider ccm survey` (and `operating-systems list` / `instance-types list` / `disk-storage list` / `ssh-keys list`). Never print PEM or `CCM_TOKEN`. Auth is `CCM_TOKEN` (set / not set). Fresh `spa init --provider ccm` already merges remote-provider defaults and reports the token as set / not set. For an existing env, `spa config merge remote-provider --yes` after explicit yes.
+**CCM (only when CCM is in play):** skip the AWS AMI path. Write YAML with `spa config provider ccm`. Discover live values with `spa provider ccm survey` (and `operating-systems list` / `instance-types list` / `disk-storage list` / `ssh-keys list`). Follow `data.next`: set `ccm.operating_system`, `ccm.instance_type`, and `ccm.disk_storage` once for all hosts; do not ask per role. Never print PEM or `CCM_TOKEN`. Auth is `CCM_TOKEN` (set / not set). Fresh `spa init --provider ccm` already merges remote-provider defaults and reports the token as set / not set. For an existing env, `spa config merge remote-provider --yes` after explicit yes.
 
 **Exit:** All `terraform.aws` fields chosen (API-validated if creds available, else documented as unverified), or CCM knobs chosen from live survey.
 
@@ -192,7 +193,7 @@ Always ask, even when the user did not mention apps. Use AskQuestion if availabl
 **Loop (when the answer is yes):**
 
 1. Search and add one app with [spa-apps](../../spa-apps/SKILL.md). For a normal app, ask with AskQuestion which roles it goes to before `spa --agent apps add`. ITSI and content packs have no roles question.
-1b. **ITSI (1841) first.** Do not refuse the add for missing license files. Follow `data.next` after the add: licenses list is optional (skip = trial / IT Essentials Work), then AskQuestion `none` / `list` / `name` for content packs. On `list`, run `spa --agent apps content-packs list 5391` and present each pack `name` / `title` (and `spa_automation` when present). On `name`, wait for folder names. On `none`, skip. Add each chosen pack with `spa --agent apps add 5391 --content-pack NAME`. Follow `data.next` (`apps.customize` is optional; never assume yes). Then go to step 2.
+1b. **ITSI (1841) first.** Do not refuse the add for missing license files. Follow `data.next` after the add in order: Java 21 on search-head hosts (`os.java.search_heads`; not global `os.packages`), then licenses list is optional (skip = trial / IT Essentials Work), then AskQuestion `none` / `list` / `name` for content packs. On `list`, run `spa --agent apps content-packs list 5391` and present each pack `name` / `title` (and `spa_automation` when present). On `name`, wait for folder names. On `none`, skip. Add each chosen pack with `spa --agent apps add 5391 --content-pack NAME`. Follow `data.next` (`apps.customize` is optional; never assume yes). Then go to step 2.
 2. After each add, ask with AskQuestion: **"Add another app?"** Options: Yes, add another; No, done with apps.
 3. On yes, repeat from step 1 until the operator answers no. Do not skip the question after any add.
 4. On no, show the current list with `spa --agent config get splunk_app_deployment` and confirm it is right. Then move on to Phase 10.

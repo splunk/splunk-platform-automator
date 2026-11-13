@@ -527,6 +527,18 @@ def test_venv_message_points_at_the_launcher_when_the_venv_is_fine(tmp_path, mon
     assert "--reinstall" not in message
 
 
+def test_provider_ids_does_not_import_provider_modules(monkeypatch):
+    """Help and schema list providers before a venv (and PyYAML) exists."""
+    import spa.providers as providers
+
+    def boom(name):
+        raise AssertionError("imported %s" % name)
+
+    monkeypatch.setattr(providers.importlib, "import_module", boom)
+    assert providers.provider_ids() == ["ccm", "aws", "external", "virtualbox"]
+    assert providers.format_provider_choice() == "ccm, aws, external, or virtualbox"
+
+
 @pytest.mark.parametrize(
     ("args", "needle"),
     [

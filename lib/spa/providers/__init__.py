@@ -235,6 +235,17 @@ PROVIDER_MODULES = {
     "external": "spa.providers.external",
 }
 
+# Stdlib-only copy of Provider.order. provider_ids() must not import provider
+# modules: spa doctor / spa venv still run before a venv (and PyYAML) exists.
+# Keep these integers in lockstep with Provider.order (CCM 10, AWS 20,
+# external 30, VirtualBox 40).
+PROVIDER_ORDER = {
+    "ccm": 10,
+    "aws": 20,
+    "external": 30,
+    "virtualbox": 40,
+}
+
 
 def load_deployment_config(paths: SpaPaths) -> Dict[str, Any]:
     # Parser construction imports this package for spa provider ccm help.
@@ -326,6 +337,30 @@ def provider_is_remote(provider_id: str) -> bool:
         return name != "virtualbox"
     module = importlib.import_module(module_name)
     return bool(getattr(module.Provider, "remote", True))
+
+
+def provider_ids() -> List[str]:
+    """Registered provider names sorted by ``Provider.order``, then name.
+
+    Not ``PROVIDER_MODULES`` insertion order. Callers (help, schema, completion,
+    skills) use this list instead of hardcoding aws / virtualbox / ccm.
+    Reads ``PROVIDER_ORDER`` so listing help does not import implementations.
+    """
+    rows = [(int(PROVIDER_ORDER.get(name, 100)), name) for name in PROVIDER_MODULES]
+    rows.sort()
+    return [name for _order, name in rows]
+
+
+def format_provider_choice() -> str:
+    """Human list in ``provider_ids()`` order: ``ccm, aws, external, or virtualbox``."""
+    names = provider_ids()
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    if len(names) == 2:
+        return "%s or %s" % (names[0], names[1])
+    return "%s, or %s" % (", ".join(names[:-1]), names[-1])
 
 
 def get_provider(paths: SpaPaths):

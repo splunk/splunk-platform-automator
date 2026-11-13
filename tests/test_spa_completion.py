@@ -163,7 +163,7 @@ def test_typed_alias_still_completes_the_canonical_subcommand():
 def test_aws_named_actions_are_offered_under_provider():
     children = complete(["spa", "provider", ""], 2)
     assert "aws" in children
-    assert "ccm" not in children
+    assert "ccm" in children
     actions = complete(["spa", "provider", "aws", ""], 3)
     for name in ("check-auth", "latest-ami", "describe-ami", "validate", "survey", "regions"):
         assert name in actions

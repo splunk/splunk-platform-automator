@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import shlex
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from spa.apps import CONTENT_LIBRARY_ID, ES_ID, ITSI_ID
+
+JAVA_21_RHEL = "java-21-openjdk"
+JAVA_21_DEBIAN = "openjdk-21-jdk"
+_DEBIAN_OS_MARKERS = ("ubuntu", "debian", "policykit-1")
 
 LICENSE_MANAGER_FILE_WARNING = {
     "id": "license_manager.license_file",
@@ -62,6 +67,75 @@ def roles_on_hosts(config: Any) -> List[str]:
     return seen
 
 
+def _os_blob(config: Mapping[str, Any]) -> str:
+    parts: List[str] = []
+    ccm = config.get("ccm")
+    if isinstance(ccm, Mapping) and ccm.get("operating_system"):
+        parts.append(str(ccm["operating_system"]))
+    terraform = config.get("terraform")
+    aws = terraform.get("aws") if isinstance(terraform, Mapping) else None
+    if isinstance(aws, Mapping):
+        for key in ("ssh_username", "ami_name", "ami_id"):
+            if aws.get(key):
+                parts.append(str(aws[key]))
+    os_cfg = config.get("os")
+    if isinstance(os_cfg, Mapping):
+        for package in os_cfg.get("packages") or []:
+            parts.append(str(package))
+    virtualbox = config.get("virtualbox")
+    if isinstance(virtualbox, Mapping):
+        for key in ("box", "image"):
+            if virtualbox.get(key):
+                parts.append(str(virtualbox[key]))
+    return " ".join(parts).lower()
+
+
+def java_package_for_config(config: Optional[Mapping[str, Any]]) -> str:
+    """Java 21 package for the guest family. RHEL/AL default; Ubuntu/Debian otherwise."""
+    if isinstance(config, Mapping) and any(
+        marker in _os_blob(config) for marker in _DEBIAN_OS_MARKERS
+    ):
+        return JAVA_21_DEBIAN
+    return JAVA_21_RHEL
+
+
+def search_head_packages_selector(config: Optional[Mapping[str, Any]]) -> Optional[str]:
+    """First search-head host selector for os.packages. Never the global os block."""
+    if not isinstance(config, Mapping):
+        return None
+    for index, host in enumerate(config.get("splunk_hosts") or []):
+        if not isinstance(host, Mapping):
+            continue
+        roles = [str(role) for role in (host.get("roles") or [])]
+        if "search_head" not in roles:
+            continue
+        if host.get("name"):
+            return "splunk_hosts[name=%s].os.packages" % host["name"]
+        iteration = host.get("iter")
+        if isinstance(iteration, Mapping) and iteration.get("prefix"):
+            return "splunk_hosts[iter.prefix=%s].os.packages" % iteration["prefix"]
+        return "splunk_hosts[%s].os.packages" % index
+    return None
+
+
+def _java_search_heads_next(config: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
+    selector = search_head_packages_selector(config)
+    if not selector:
+        return None
+    package = java_package_for_config(config)
+    listed = json.dumps([package], separators=(",", ":"))
+    command = "spa --agent config set %s %s --yes" % (
+        shlex.quote(selector),
+        shlex.quote(listed),
+    )
+    return item(
+        "os.java.search_heads",
+        "Install Java 21 on search-head hosts only (%s)? Do not set global os.packages."
+        % package,
+        command,
+    )
+
+
 def apps_add_next(
     *,
     kind: str,
@@ -69,22 +143,30 @@ def apps_add_next(
     playbooks: Optional[Sequence[Any]] = None,
     customize: bool = False,
     content_packs: Optional[Sequence[str]] = None,
+    config: Optional[Mapping[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     if kind == "premium_itsi" or app_id == ITSI_ID:
-        return [
-            item(
-                "licenses.list",
-                "Add license files? Without them Splunk is trial-only, and ITSI runs as IT Essentials Work.",
-                "spa --agent licenses list",
-                required=False,
-            ),
-            item(
-                "apps.content-packs.list",
-                "Add ITSI content packs? None, list the 5391 packs, or the operator names folders.",
-                "spa --agent apps content-packs list %s" % CONTENT_LIBRARY_ID,
-                choice={"allowed": ["none", "list", "name"]},
-            ),
-        ]
+        rows: List[Dict[str, Any]] = []
+        java = _java_search_heads_next(config)
+        if java:
+            rows.append(java)
+        rows.extend(
+            [
+                item(
+                    "licenses.list",
+                    "Add license files? Without them Splunk is trial-only, and ITSI runs as IT Essentials Work.",
+                    "spa --agent licenses list",
+                    required=False,
+                ),
+                item(
+                    "apps.content-packs.list",
+                    "Add ITSI content packs? None, list the 5391 packs, or the operator names folders.",
+                    "spa --agent apps content-packs list %s" % CONTENT_LIBRARY_ID,
+                    choice={"allowed": ["none", "list", "name"]},
+                ),
+            ]
+        )
+        return rows
     if kind == "es_not_premium" or app_id == ES_ID:
         return [
             item(
@@ -111,7 +193,8 @@ def apps_add_next(
         rows.append(
             item(
                 "apps.customize",
-                "Add curated customizations with --customize?",
+                "Configure / set up / customize this app with --customize? "
+                "That flag does not change target_roles.",
                 retry,
             )
         )
@@ -149,7 +232,6 @@ def licenses_list_next(scan: Dict[str, Any]) -> List[Dict[str, Any]]:
     proposed = [str(name) for name in (scan.get("proposed_splunk_license_file") or []) if name]
     if not proposed:
         return []
-    import json
 
     unsatisfied = bool(scan.get("unsatisfied_requirements"))
     listed = json.dumps(proposed, separators=(",", ":"))
@@ -167,6 +249,29 @@ def licenses_list_next(scan: Dict[str, Any]) -> List[Dict[str, Any]]:
             '\'{"roles":["monitoring_console","license_manager"]}\' --yes',
             required=unsatisfied,
         ),
+    ]
+
+
+def hosts_status_next(report: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    """When any host is unprovisioned, deploy creates them. Do not provision separately."""
+    rows = [
+        row
+        for row in (report.get("hosts") or [])
+        if isinstance(row, Mapping)
+        and (
+            row.get("ansible") == "unprovisioned"
+            or row.get("provider_status") == "unprovisioned"
+        )
+    ]
+    if not rows:
+        return []
+    return [
+        item(
+            "deploy",
+            "Hosts are not created yet. spa deploy creates them and installs Splunk. "
+            "Do not run a separate provision step.",
+            "spa --agent deploy --yes",
+        )
     ]
 
 
@@ -195,6 +300,65 @@ def provision_next(env_name: Optional[str] = None) -> List[Dict[str, Any]]:
             "deploy",
             "Deploy Splunk software?",
             "spa --agent deploy --yes",
+        ),
+    ]
+
+
+def architecture_plan_next(
+    plan: Mapping[str, Any],
+    *,
+    architecture_file: str,
+    environ: Optional[Mapping[str, str]] = None,
+) -> List[Dict[str, Any]]:
+    """Path B: the architecture file is the plan (write mode), then provider."""
+    from spa.providers import provider_ids
+    from spa.providers.ccm import token_present
+
+    allowed = list(provider_ids())
+    if not token_present(environ):
+        allowed = [name for name in allowed if name != "ccm"]
+    init = (
+        "spa --agent environment init PARENT/NAME --architecture %s --provider"
+        % architecture_file
+    )
+    rows = [
+        item(
+            "mode.write",
+            "Architecture file is the plan. After the location/name gate, "
+            "run spa environment init PARENT/NAME --architecture FILE --provider. "
+            "Do not ask plan vs write.",
+            init,
+            required=True,
+        ),
+        item(
+            "provider",
+            "Which provider?",
+            choice={"allowed": allowed},
+            required=True,
+        ),
+    ]
+    remaining = [name for name in (plan.get("remaining") or []) if name != "provider"]
+    rows.extend(remaining_next(remaining))
+    return rows
+
+
+def ccm_hardware_next() -> List[Dict[str, Any]]:
+    """One OS, instance type, and disk for every CCM host. Not per role."""
+    return [
+        item(
+            "ccm.operating_system",
+            "Set one OS for all hosts? CCM has no per-host operating system.",
+            "spa --agent config set ccm.operating_system OS --yes",
+        ),
+        item(
+            "ccm.instance_type",
+            "Set one instance type for all hosts? CCM has no per-host instance type.",
+            "spa --agent config set ccm.instance_type TYPE --yes",
+        ),
+        item(
+            "ccm.disk_storage",
+            "Set one disk size for all hosts? CCM has no per-host disk.",
+            "spa --agent config set ccm.disk_storage SIZE --yes",
         ),
     ]
 

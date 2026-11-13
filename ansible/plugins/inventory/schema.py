@@ -188,7 +188,10 @@ class CcmConfig(BaseModel):
     )
     instance_type: Optional[str] = Field(
         None,
-        description="CCM instance type. A live CCM catalog value, not an AWS AMI id. No default. Omit the key to set none.",
+        description=(
+            "CCM instance type for every host. A live CCM catalog value, not an AWS AMI id. "
+            "CCM has no per-host instance type. No default. Omit the key to set none."
+        ),
     )
     disk_storage: Optional[Literal[50, 100, 200, 250, 500, 1024, 2048]] = Field(
         None,

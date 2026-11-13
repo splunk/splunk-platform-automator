@@ -226,6 +226,69 @@ def test_cli_plan_returns_one_json_object_for_c3():
     assert "data" in payload
 
 
+def _plan_next(extra_env=None):
+    result = run_spa(
+        ["--agent", "architecture", "plan", str(C3)],
+        extra_env=extra_env,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    return payload["data"]["next"]
+
+
+def test_architecture_plan_next_is_write_mode_then_provider():
+    from spa.providers import provider_ids
+
+    nxt = _plan_next()
+    ids = [row["id"] for row in nxt]
+    assert ids[:2] == ["mode.write", "provider"]
+    write = nxt[0]
+    ask = write["ask"].lower()
+    assert "architecture file is the plan" in ask
+    assert "plan vs write" in ask
+    assert "location" in ask and "name" in ask
+    assert write["command"] == (
+        "spa --agent environment init PARENT/NAME --architecture %s --provider"
+        % C3
+    )
+    assert write["argv"] == [
+        "spa",
+        "--agent",
+        "environment",
+        "init",
+        "PARENT/NAME",
+        "--architecture",
+        str(C3),
+        "--provider",
+    ]
+    provider = nxt[1]
+    allowed = [name for name in provider_ids() if name != "ccm"]
+    assert provider["choice"]["allowed"] == allowed
+    assert "ccm" not in allowed
+    assert "apps.search" in ids
+    assert "licenses.list" in ids
+
+
+def test_architecture_plan_provider_choice_includes_ccm_when_token_is_set():
+    from spa.providers import provider_ids
+
+    nxt = _plan_next(extra_env={"CCM_TOKEN": "test-ccm-pat-value"})
+    provider = next(row for row in nxt if row["id"] == "provider")
+    assert provider["choice"]["allowed"] == list(provider_ids())
+    assert provider["choice"]["allowed"][0] == "ccm"
+
+
+def test_human_architecture_plan_prints_next():
+    result = run_spa(["--no-agent", "architecture", "plan", str(C3)])
+    assert result.returncode == 0, result.stderr
+    err = result.stderr
+    assert "Next:" in err
+    assert "Architecture file is the plan" in err
+    assert "plan vs write" in err.lower()
+    assert "spa environment init PARENT/NAME --architecture" in err
+    assert "--agent" not in err
+
+
 def test_agent_schema_and_human_help_name_architecture_schema_1():
     markdown = run_spa_inprocess(["--no-agent", "agent", "schema", "--markdown"])
     assert markdown.returncode == 0, markdown.stderr

@@ -1622,6 +1622,38 @@ def test_ccm_survey_includes_meta_and_gui_sets():
         for req in opener.requests
     ]
     assert queried == ["operating_systems", "instance_types", "disk_storage"]
+    _assert_ccm_global_hardware_next(result.data)
+
+
+def _assert_ccm_global_hardware_next(data):
+    nxt = data["next"]
+    ids = [row["id"] for row in nxt]
+    assert ids == ["ccm.operating_system", "ccm.instance_type", "ccm.disk_storage"]
+    for row, path in zip(
+        nxt,
+        ("ccm.operating_system", "ccm.instance_type", "ccm.disk_storage"),
+    ):
+        ask = row["ask"].lower()
+        assert "all hosts" in ask or "every host" in ask
+        assert "per role" in ask or "per-host" in ask
+        assert path in row["command"]
+        assert "config set" in row["command"]
+
+
+def test_ccm_instance_types_list_attaches_global_hardware_next():
+    from spa.providers.ccm import UrllibCcmClient, execute
+
+    opener = FakeOpener(
+        status=200,
+        body=json.dumps(["t3a.medium"]).encode("utf-8"),
+    )
+    result = execute(
+        action="instance-types",
+        subaction="list",
+        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
+    )
+    assert result.ok is True
+    _assert_ccm_global_hardware_next(result.data)
 
 
 def test_ccm_ssh_keys_list_marks_local_file_and_omits_public_key(tmp_path):
@@ -1783,6 +1815,25 @@ def test_ccm_validate_fails_when_host_count_exceeds_50(tmp_path):
     assert result.ok is False
     assert "51" in (result.error or "")
     assert "50" in (result.error or "")
+
+
+def test_ccm_validate_fails_when_token_is_not_set(tmp_path, monkeypatch):
+    from spa.providers.ccm import validate_ccm
+
+    monkeypatch.delenv("CCM_TOKEN", raising=False)
+    key = tmp_path / "CCM-Key.pem"
+    key.write_text("not-a-real-key\n", encoding="utf-8")
+    paths = _ccm_paths(
+        tmp_path,
+        _CCM_MIN + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    result = validate_ccm(
+        paths,
+        {**_CCM_CONFIG, "ssh_private_key_file": str(key)},
+    )
+    assert result.ok is False
+    assert result.code == 1
+    assert "CCM_TOKEN is not set" in (result.error or "")
 
 
 def test_ccm_validate_fails_when_private_key_file_is_missing(tmp_path):

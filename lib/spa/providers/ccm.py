@@ -108,37 +108,6 @@ def token_state(environ: Optional[Mapping[str, str]] = None) -> str:
     return "set" if token_present(environ) else "not set"
 
 
-def _top_level_has_ccm(text: str) -> bool:
-    for raw in text.splitlines():
-        line = raw.split("#", 1)[0]
-        if not line.strip() or line[:1].isspace():
-            continue
-        if line.split(":", 1)[0].strip() == "ccm":
-            return True
-    return False
-
-
-def audience_visible(
-    environ: Optional[Mapping[str, str]] = None,
-    config: Optional[Mapping[str, Any]] = None,
-    paths: Optional[SpaPaths] = None,
-) -> bool:
-    """True when human help/completion should name spa provider (CCM)."""
-    if token_present(environ):
-        return True
-    if isinstance(config, dict) and isinstance(config.get("ccm"), dict):
-        return True
-    if paths is None:
-        return False
-    cfg = Path(paths.config_file)
-    if not cfg.is_file():
-        return False
-    try:
-        return _top_level_has_ccm(cfg.read_text(encoding="utf-8", errors="replace"))
-    except OSError:
-        return False
-
-
 class UrllibCcmClient:
     """HTTPS client for api.ccm.splunkits.io. Token is Bearer CCM_TOKEN."""
 
@@ -368,6 +337,7 @@ class Provider:
     name = "ccm"
     creates_hosts = True
     remote = True
+    order = 10
 
     def lifecycle_playbook(self, action: str) -> str:
         return "ccm_provision" if action == "provision" else "ccm_destroy"
@@ -1233,7 +1203,7 @@ def validate_ccm(
     config: Mapping[str, Any],
     client: Optional[UrllibCcmClient] = None,
 ) -> Any:
-    """Local CCM checks, plus live account/key checks when a token or client is present."""
+    """Local CCM checks, a missing CCM_TOKEN, plus live account/key checks when a client is present."""
     from spa.api import CommandResult
 
     document = load_deployment_config(paths)
@@ -1288,7 +1258,7 @@ def validate_ccm(
         return _fail("ccm.ssh_private_key_file is missing: %s" % key_file, 1)
 
     if client is None and not token_present():
-        return CommandResult(ok=True, data={"ok": True})
+        return _fail("%s is not set" % TOKEN_ENV, 1)
 
     problems: List[str] = []
     try:
@@ -1360,14 +1330,19 @@ def execute(
                 data[attribute] = _meta_catalog(http, attribute)
             data["business_purposes"] = _named_catalog(BUSINESS_PURPOSES)
             data["operation_hours"] = _named_catalog(OPERATION_HOURS)
+            from spa.next_steps import ccm_hardware_next
+
+            data["next"] = ccm_hardware_next()
             return CommandResult(ok=True, data=data)
 
         if action in _META_ACTIONS and subaction in (None, "list"):
             http = _require_client(client)
-            return CommandResult(
-                ok=True,
-                data=_meta_catalog(http, _META_ACTIONS[action]),
-            )
+            data = _meta_catalog(http, _META_ACTIONS[action])
+            if action == "instance-types":
+                from spa.next_steps import ccm_hardware_next
+
+                data["next"] = ccm_hardware_next()
+            return CommandResult(ok=True, data=data)
 
         if action == "ssh-keys" and subaction in (None, "list"):
             http = _require_client(client)

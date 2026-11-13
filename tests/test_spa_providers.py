@@ -103,6 +103,53 @@ def test_registered_providers_declare_remote():
     assert provider_is_remote("virtualbox") is False
 
 
+def test_registered_providers_declare_order():
+    """CCM, AWS, external, VirtualBox. Public lists sort by order, then name, not module insertion."""
+    import importlib
+
+    from spa.providers import (
+        PROVIDER_MODULES,
+        PROVIDER_ORDER,
+        format_provider_choice,
+        provider_ids,
+    )
+
+    expected = {
+        "ccm": 10,
+        "aws": 20,
+        "external": 30,
+        "virtualbox": 40,
+    }
+    assert set(PROVIDER_MODULES) == set(expected)
+    assert PROVIDER_ORDER == expected
+    for name, order in expected.items():
+        module = importlib.import_module(PROVIDER_MODULES[name])
+        assert module.Provider.order == order, name
+    assert provider_ids() == ["ccm", "aws", "external", "virtualbox"]
+    assert provider_ids() != list(PROVIDER_MODULES)
+    assert format_provider_choice() == "ccm, aws, external, or virtualbox"
+
+
+def test_provider_help_uses_format_provider_choice():
+    """CLI, schema, and doctor help share the helper string, not a second list."""
+    from spa.providers import format_provider_choice
+    from spa.usage import DOCTOR_PROVIDER_HELP, INIT_PROVIDER_HELP, PROVIDER_HELP
+
+    choice = format_provider_choice()
+    assert PROVIDER_HELP.startswith(choice)
+    assert INIT_PROVIDER_HELP.startswith(choice)
+    assert DOCTOR_PROVIDER_HELP.startswith(choice)
+
+
+def test_canonicalize_provider_unknown_uses_format_provider_choice():
+    from spa.providers import format_provider_choice
+    from spa.registry import RegistryError, canonicalize_provider
+
+    with pytest.raises(RegistryError) as caught:
+        canonicalize_provider("gcp")
+    assert format_provider_choice() in str(caught.value)
+
+
 def test_ccm_with_virtualbox_is_rejected(tmp_path):
     paths = _paths(tmp_path, "ccm: {}\nvirtualbox: {}\n")
     with pytest.raises(ProviderError, match="Multiple"):

@@ -2,7 +2,7 @@
 
 Corporate Cloud Manager is a REST portal over AWS for Splunk staff with CCM access. SPA provisions CCM **EC2** deployments and then installs Splunk with the usual Ansible path. This is **not** Terraform (`terraform.aws`) and **not** a CCM Splunk install (`?type=splunk`). Public labs stay `--provider aws`, `virtualbox`, or `external`.
 
-Human `spa --help`, invalid-choice text, and skills omit CCM unless `CCM_TOKEN` is set, the env already has a root `ccm:` block, or the operator already named CCM. Typing `spa provider ccm …` still works; a missing token fails at runtime as **set / not set**.
+CCM is listed with the other providers (`spa init --help`, `spa provider --help`, AskQuestion). A missing `CCM_TOKEN` fails `spa validate` and `spa doctor` as **set / not set**, the same way missing AWS credentials fail those checks.
 
 ## Discover and configure
 
@@ -34,7 +34,7 @@ spa validate
 spa deploy --yes
 ```
 
-`spa validate` rejects `ttl_days` outside 1–30, host count over 50, a derived CCM deployment name that is not 5–100 letters/numbers/hyphens/underscores (set `ccm.name` when the env directory basename does not match), a missing local private key file, mixed `external:` hosts (CCM envs cannot mix external hosts in v1), and (when `CCM_TOKEN` is set) an unknown `key_name` or an account that would exceed 100 non-terminated instances. The cap counts this env's hosts once (it leaves the recorded `ccm/state.json` deployment out of the live total). `spa deploy` refuses the same mix and does not create a deployment. Provision creates one CCM EC2 deployment and writes `$SPA_ENV_DIR/ccm/state.json` as soon as CCM returns a deployment id (never the PAT), then polls until ready and writes inventory. `spa deploy` again while that id is live or pending is refused before confirmation (`already provisioned: ID`); run `spa destroy --yes` to replace the lab. The TTL warning uses controller-local time (same spelling as `spa hosts list --status`) and prints after a successful provision, including with `--yes`. An expired id uses the TTL hint: `spa destroy --yes` then `spa deploy --yes`. CCM terminates the **whole deployment** when TTL expires.
+`spa validate` rejects a missing `CCM_TOKEN`, `ttl_days` outside 1–30, host count over 50, a derived CCM deployment name that is not 5–100 letters/numbers/hyphens/underscores (set `ccm.name` when the env directory basename does not match), a missing local private key file, mixed `external:` hosts (CCM envs cannot mix external hosts in v1), and (when `CCM_TOKEN` is set) an unknown `key_name` or an account that would exceed 100 non-terminated instances. The cap counts this env's hosts once (it leaves the recorded `ccm/state.json` deployment out of the live total). `spa deploy` refuses the same mix and does not create a deployment. Provision creates one CCM EC2 deployment and writes `$SPA_ENV_DIR/ccm/state.json` as soon as CCM returns a deployment id (never the PAT), then polls until ready and writes inventory. `spa deploy` again while that id is live or pending is refused before confirmation (`already provisioned: ID`); run `spa destroy --yes` to replace the lab. The TTL warning uses controller-local time (same spelling as `spa hosts list --status`) and prints after a successful provision, including with `--yes`. An expired id uses the TTL hint: `spa destroy --yes` then `spa deploy --yes`. CCM terminates the **whole deployment** when TTL expires.
 
 ## Operate the environment
 

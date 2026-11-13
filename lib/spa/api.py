@@ -1108,6 +1108,7 @@ class LocalSpaSession:
                     playbooks=built.get("playbooks") or [],
                     customize=bool(customize),
                     content_packs=content_packs,
+                    config=self._app_deployment_config(),
                 )
                 if follow:
                     data["next"] = follow
@@ -2300,12 +2301,10 @@ class LocalSpaSession:
     ) -> CommandResult:
         from spa import aws as aws_mod
         from spa.providers import ccm as ccm_mod
-        from spa.providers.ccm import audience_visible
         from spa.usage import provider_needs_action
 
-        ccm = agent or audience_visible(paths=self.paths)
         if child not in {"aws", "ccm"}:
-            return CommandResult(ok=False, error=provider_needs_action(ccm=ccm), code=2)
+            return CommandResult(ok=False, error=provider_needs_action(), code=2)
         if child == "aws":
             tokens = [part for part in (action, resource, subaction) if part]
             if action and resource == action:
@@ -2382,6 +2381,11 @@ class LocalSpaSession:
                 error="architecture file is not valid: " + "; ".join(plan["errors"]),
                 code=1,
             )
+        from spa.next_steps import architecture_plan_next
+
+        follow = architecture_plan_next(plan, architecture_file=path)
+        if follow:
+            plan["next"] = follow
         return CommandResult(ok=True, data=plan)
 
     def architecture_apply(
@@ -2508,6 +2512,12 @@ class LocalSpaSession:
                     row["provider"] = provision.provider
                     row["provider_status"] = "unprovisioned"
                     row["ansible"] = "unprovisioned"
+            if status:
+                from spa.next_steps import hosts_status_next
+
+                follow = hosts_status_next(report)
+                if follow:
+                    report["next"] = follow
         except HostLookupError as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
         except shell_mod.ShellError as exc:

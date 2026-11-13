@@ -4,7 +4,7 @@ description: >-
   Load first for any request for a Splunk lab, Splunk environment, or Splunk Enterprise
   deployment: a Splunk lab, pro lab, single-node, clustered, ITSI, or ES environment on AWS
   or VirtualBox, including a Redhat, Rocky, Ubuntu, or Amazon Linux host with a given CPU
-  count, a CCM lab when CCM_TOKEN is set, or Splunk deployed to existing hosts (register
+  count, a CCM lab, or Splunk deployed to existing hosts (register
   them with spa hosts register). Use it to create, provision, deploy, validate, suspend,
   resume, destroy, or list environments and hosts. Use spa, not the AWS CLI, Terraform, or
   Ansible directly. Dispatch YAML to spa-create-config and apps to spa-apps. Lifecycle and
@@ -13,7 +13,7 @@ description: >-
 
 # spa skill
 
-Product entry for SPA (same role as cup’s main skill). **Load `/spa` first.** `spa skills install` links this package into the user IDE skill directory.
+Product entry for SPA (same role as cup’s main skill). **Load `/spa` first.** `spa skills install` copies this package into the user IDE skill directory.
 
 ## When to use
 
@@ -36,9 +36,9 @@ Classify the request first, then load the one skill that owns the next step. Loa
 - **Config is command-only:** never edit `splunk_config.yml` by hand (no editor, no shell write, no YAML patch). Read and change it only with `spa config ...` (`search`, `explain`, `get`, `set`, `add`, `unset`, `merge`, `move`, `topology`, `provider`, `header set`). Config design and setting changes go to `/spa-create-config`. A confirmed architecture file still loads `/spa-create-config` (path B); this skill does not provision from that file. App entries go to `/spa-apps`. Both end with `spa --agent validate`; deploy stays here and waits for your yes.
 - **Routing:** a request for a Splunk lab, production, staging, or any other Splunk environment (create, deploy, change, check, or tear down), including a deploy to existing hosts (`spa hosts register`, then `spa deploy`), starts here. Do not use the AWS CLI, Terraform, Ansible, or Vagrant to create or change hosts for a Splunk environment. Use `spa`.
 - **`SPA_HOME`**: framework. **`SPA_ENV_DIR`**: one environment. Call **`bin/spa` only**. Do not import `spa.api`. Do not start a daemon.
-- Mutating commands need **`--yes`**. Never auto-run provision, deploy, suspend, resume, or destroy. Exception: `/spa-create-config` Phase 14 option A hands off here, and this skill then runs `provision`, then `deploy`, each only after its own explicit yes in chat. Never answer `Proceed?`.
+- Mutating commands need **`--yes`**. Never auto-run provision, deploy, suspend, resume, or destroy. Exception: `/spa-create-config` Phase 14 option A hands off here, and this skill then runs `spa deploy` (creates hosts if needed; see [long-runs.md](references/long-runs.md)) after an explicit yes in chat. Never answer `Proceed?`.
 - Never print secrets. Report env vars as set / not set. YAML: `lookup('env', ...)`. Do not pass `spa -v` (unredacted Ansible stdout).
-- **CCM:** employee-only. Report `CCM_TOKEN` as set / not set. Do not AskQuestion CCM unless `CCM_TOKEN` is set, the env has a root `ccm:` block, or the operator already named CCM. If they named CCM and the token is not set, tell them to mint a PAT and SSH key at https://ccm.splunkits.io/ and export `CCM_TOKEN`. Public init stays `--provider aws|virtualbox|external`. Lifecycle already works when the env has `ccm:`.
+- **CCM:** employee-only. Report `CCM_TOKEN` as set / not set. AskQuestion ids in the order spa prints (`spa init --help`), including CCM. Do not hide CCM when the token is unset; `spa validate` and `spa doctor` name a missing token. If they chose CCM and the token is not set, tell them to mint a PAT and SSH key at https://ccm.splunkits.io/ and export `CCM_TOKEN`. Lifecycle already works when the env has `ccm:`.
 - Full command names (`spa environment list`, `spa hosts ssh`, `spa validate`). Humans may type `spa env`.
 - **`data.next`:** AskQuestion each `ask`, then prefer `argv`. If a shell is used, copy `command` verbatim. String scalars are unquoted; JSON is only for lists and maps.
 - No raw Ansible or Vagrant for operators. Ask in chat and wait before provision, deploy, destroy, suspend, resume, environment remove, or environment cleanup. See [lifecycle.md](references/lifecycle.md) and [prerequisites.md](references/prerequisites.md).
@@ -65,7 +65,7 @@ spa environment list
 spa environment set --env-dir ~/work/spa-envs          # persist default parent (not ~/Splunk-Platform-Automator)
 spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
 spa environment set --default my-lab                   # fallback when cwd does not select an env
-spa environment set --provider virtualbox              # saves the default for init in providers.yml (aws, virtualbox, or external)
+spa environment set --provider virtualbox              # saves the default for init in providers.yml
 spa environment init --example cm_2idxc_sh --provider aws my-lab   # name-only under default parent; --provider required unless a default is saved
 spa environment init --architecture examples/architectures/c3.json --provider aws my-lab  # overlay a confirmed schema 1 file; exclusive with --example
 spa environment init --env-dir /custom --name my-lab   # one-off; does not change default parent

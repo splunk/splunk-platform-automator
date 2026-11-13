@@ -216,8 +216,10 @@ def canonicalize_provider(value: Optional[str]) -> str:
     if not raw:
         return DEFAULT_PROVIDER
     if raw not in PROVIDER_ALIASES:
+        from spa.providers import format_provider_choice
+
         raise RegistryError(
-            "Unknown provider %r (use aws, virtualbox, external, or ccm)" % value
+            "Unknown provider %r (use %s)" % (value, format_provider_choice())
         )
     return PROVIDER_ALIASES[raw]
 

@@ -26,6 +26,7 @@ from spa.executil import (
     venv_setup_message,
 )
 from spa.paths import env_dir_required_error, resolve_spa_paths
+from spa.providers import format_provider_choice
 from spa.usage import (
     APP_ID_HELP,
     DOCTOR_PROVIDER_HELP,
@@ -659,28 +660,6 @@ LICENSES_NEEDS_ACTION = (
     "spa licenses needs an action.\n"
     "List: spa licenses list"
 )
-
-
-def _ccm_audience_visible(head: Sequence[str]) -> bool:
-    from spa.providers.ccm import audience_visible
-
-    values = _env_values_from_head(head)
-    if len(set(values)) > 1:
-        return audience_visible(paths=None)
-    try:
-        paths = _paths(_start_dir_from_head(head), _env_selector_from_head(head))
-    except Exception:
-        paths = None
-    return audience_visible(paths=paths)
-
-
-def _omit_parser_choice(message: str, name: str) -> str:
-    """Drop one quoted argparse choice from an invalid-choice error."""
-    quoted = "'%s'" % name
-    for token in (", %s" % quoted, "%s, " % quoted):
-        if token in message:
-            return message.replace(token, "", 1)
-    return message
 
 
 SHELL_NEEDS_NAME = "spa shell needs NAME.\nExample: spa shell NAME"
@@ -1480,9 +1459,7 @@ def _run(argv: Sequence[str]) -> int:
                 if len(command_words) == 1 and (
                     "required" in message or "invalid choice" in message
                 ):
-                    message = provider_needs_action(
-                        ccm=parse_as_agent or _ccm_audience_visible(head)
-                    )
+                    message = provider_needs_action()
                 elif len(command_words) >= 2 and command_words[1] == "ccm":
                     resource = command_words[2] if len(command_words) > 2 else ""
                     if not resource and (
@@ -1523,12 +1500,6 @@ def _run(argv: Sequence[str]) -> int:
             if parse_as_agent:
                 emit(False, error=message, as_agent=True)
                 raise SystemExit(2)
-            if (
-                "invalid choice" in message
-                and command_words[:1] == ["provider"]
-                and not _ccm_audience_visible(head)
-            ):
-                message = _omit_parser_choice(message, "ccm")
             self.print_usage(sys.stderr)
             print("%s: error: %s" % (self.prog, message), file=sys.stderr)
             raise SystemExit(2)
@@ -2173,7 +2144,7 @@ def _run(argv: Sequence[str]) -> int:
     p_skills_install = _add_action(
         skills_sub,
         "install",
-        help="Link SPA skills into a user IDE skill directory",
+        help="Copy SPA skills into a user IDE skill directory",
         usage="spa skills install [PLATFORM]",
     )
     _add_mode_flags(p_skills_install)
@@ -2328,7 +2299,7 @@ def _run(argv: Sequence[str]) -> int:
         "--provider",
         dest="set_provider",
         metavar="NAME",
-        help="Save the default provider for init (aws, virtualbox, external, or ccm) in providers.yml, so init does not need --provider",
+        help="Save the default provider for init (%s) in providers.yml, so init does not need --provider" % format_provider_choice(),
     )
     p_env_cleanup = _add_action(
         env_sub,
@@ -2597,7 +2568,7 @@ def _run(argv: Sequence[str]) -> int:
         "provider",
         aliases=["pro"],
         help="Provider discovery",
-        epilog=provider_needs_action(ccm=_ccm_audience_visible(head)),
+        epilog=provider_needs_action(),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     _add_env_selector(p_provider)
@@ -2684,16 +2655,12 @@ def _run(argv: Sequence[str]) -> int:
     _add_aws_catalog("key-pairs", "List EC2 key pairs")
     _add_aws_catalog("security-groups", "List security groups")
 
-    ccm_kwargs = {
-        "epilog": ccm_mod.PROVIDER_CCM_NEEDS_ACTION,
-        "formatter_class": argparse.RawDescriptionHelpFormatter,
-    }
-    if _ccm_audience_visible(head):
-        ccm_kwargs["help"] = "CCM discovery for a ccm: environment"
     p_provider_ccm = _add_action(
         provider_sub,
         "ccm",
-        **ccm_kwargs,
+        help="CCM discovery for a ccm: environment",
+        epilog=ccm_mod.PROVIDER_CCM_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     _add_mode_flags(p_provider_ccm)
     ccm_sub = p_provider_ccm.add_subparsers(
@@ -3674,6 +3641,7 @@ def _run(argv: Sequence[str]) -> int:
                     roles_str = " (%s)" % ", ".join(row["roles"])
                 extra_info = format_host_status(row) if show_status else ""
                 print("%s%s%s" % (row["name"], roles_str, extra_info))
+            _print_next(data)
             return 0
         from spa import shell as shell_mod
 
@@ -3850,7 +3818,7 @@ def _run(argv: Sequence[str]) -> int:
             return result.code
         if child != "ccm":
             return _reject(
-                provider_needs_action(ccm=as_agent or _ccm_audience_visible(head)),
+                provider_needs_action(),
                 as_agent,
             )
         ccm_cmd = getattr(args, "ccm_cmd", None)
@@ -3872,6 +3840,7 @@ def _run(argv: Sequence[str]) -> int:
             print(result.error, file=sys.stderr)
         if result.data is not None:
             sys.stdout.write(ccm_mod.format_ccm_text(result.data))
+        _print_next(result.data if isinstance(result.data, dict) else {})
         return result.code
 
     if args.command == "licenses":

@@ -5,6 +5,9 @@ Human stderr, the agent error string, and positional help use these words.
 
 from __future__ import annotations
 
+from spa.providers import format_provider_choice
+
+_PROVIDER_CHOICE = format_provider_choice()
 
 TOPOLOGY_HELP = (
     "A topology feature id or an example stem. "
@@ -12,18 +15,18 @@ TOPOLOGY_HELP = (
     "Example: spa config topology topology.c1"
 )
 PROVIDER_HELP = (
-    "aws, virtualbox, external, or ccm, or a provider feature id. "
+    "%s, or a provider feature id. "
     "List them: spa init list. "
     "Example: spa config provider aws"
-)
+) % _PROVIDER_CHOICE
 INIT_PROVIDER_HELP = (
-    "aws, virtualbox, external, or ccm. Required unless a default is saved "
+    "%s. Required unless a default is saved "
     "(spa environment set --provider NAME)"
-)
+) % _PROVIDER_CHOICE
 DOCTOR_PROVIDER_HELP = (
-    "aws, virtualbox, external, or ccm. Repeatable. "
+    "%s. Repeatable. "
     "Example: spa doctor --provider ccm"
-)
+) % _PROVIDER_CHOICE
 SET_PATH_HELP = (
     "A config path. Find one: spa config search QUERY. "
     "Then read it: spa config explain PATH. "
@@ -72,12 +75,12 @@ def unknown_doctor_provider(name: str) -> str:
     return "Unknown provider: %s\n%s" % (name, DOCTOR_PROVIDER_HELP)
 
 
-def provider_needs_action(*, ccm: bool = False) -> str:
-    """Bare spa provider menu. AWS is always named; CCM follows when in play."""
-    lines = [
-        "spa provider needs an action.",
-        "AWS: spa provider aws check-auth.",
-    ]
-    if ccm:
-        lines.append("CCM: spa provider ccm check-auth")
-    return "\n".join(lines)
+def provider_needs_action() -> str:
+    """Bare spa provider menu. AWS and CCM are always named."""
+    return "\n".join(
+        [
+            "spa provider needs an action.",
+            "AWS: spa provider aws check-auth.",
+            "CCM: spa provider ccm check-auth",
+        ]
+    )

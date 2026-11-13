@@ -67,9 +67,32 @@ def test_apps_add_itsi_includes_license_and_content_pack_next(tmp_path, monkeypa
     payload = json.loads(capsys.readouterr().out)
     assert rc in {0, 1}, payload
     assert "data" in payload
-    assert _next_ids(payload["data"])[:2] == ["licenses.list", "apps.content-packs.list"]
-    licenses = payload["data"]["next"][0]
-    packs = payload["data"]["next"][1]
+    assert _next_ids(payload["data"])[:3] == [
+        "os.java.search_heads",
+        "licenses.list",
+        "apps.content-packs.list",
+    ]
+    java = payload["data"]["next"][0]
+    licenses = payload["data"]["next"][1]
+    packs = payload["data"]["next"][2]
+    assert java["command"] == (
+        "spa --agent config set 'splunk_hosts[name=sh].os.packages' "
+        '\'["java-21-openjdk"]\' --yes'
+    )
+    assert java["argv"] == [
+        "spa",
+        "--agent",
+        "config",
+        "set",
+        "splunk_hosts[name=sh].os.packages",
+        '["java-21-openjdk"]',
+        "--yes",
+    ]
+    ask = java["ask"].lower()
+    assert "java 21" in ask
+    assert "search-head" in ask or "search head" in ask
+    assert "os.packages" in ask
+    assert "global" in ask
     assert licenses["command"] == "spa --agent licenses list"
     assert licenses["required"] is False
     assert "essentials work" in licenses["ask"].lower() or "ite work" in licenses["ask"].lower()
@@ -81,6 +104,33 @@ def test_apps_add_itsi_includes_license_and_content_pack_next(tmp_path, monkeypa
     assert "name" in packs["ask"].lower()
     assert "license" in licenses["ask"].lower()
     assert "content pack" in packs["ask"].lower()
+
+
+def test_apps_add_1841_java_next_uses_iter_prefix_and_ubuntu_package():
+    from spa.next_steps import apps_add_next
+
+    nxt = apps_add_next(
+        kind="premium_itsi",
+        app_id=1841,
+        config={
+            "ccm": {"operating_system": "ubuntu_22"},
+            "splunk_hosts": [
+                {
+                    "iter": {"prefix": "sh", "numbers": "1..3"},
+                    "roles": ["search_head"],
+                },
+                {"name": "idx", "roles": ["indexer"]},
+            ],
+        },
+    )
+    java = nxt[0]
+    assert java["id"] == "os.java.search_heads"
+    assert java["command"] == (
+        "spa --agent config set 'splunk_hosts[iter.prefix=sh].os.packages' "
+        '\'["openjdk-21-jdk"]\' --yes'
+    )
+    assert java["argv"][4] == "splunk_hosts[iter.prefix=sh].os.packages"
+    assert java["argv"][5] == '["openjdk-21-jdk"]'
 
 
 def _library_app(app_id, client=None):
@@ -133,6 +183,11 @@ def test_apps_add_content_pack_offers_customize_next(tmp_path, monkeypatch, caps
     assert _next_ids(payload["data"])[0] == "apps.customize"
     customize = payload["data"]["next"][0]
     assert customize["required"] is False
+    ask = customize["ask"].lower()
+    assert "configure" in ask
+    assert "set up" in ask
+    assert "customize" in ask
+    assert "target_roles" in customize["ask"]
     assert customize["command"] == (
         "spa --agent apps add 5391 --content-pack DA-ITSI-CP-nix --customize --yes"
     )

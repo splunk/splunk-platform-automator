@@ -9,6 +9,7 @@ import sys
 from typing import Any, Dict, Mapping, Optional
 
 from spa.hosts import allowed_role_names
+from spa.providers import format_provider_choice, provider_ids
 from spa.usage import (
     APP_ID_HELP,
     DOCTOR_PROVIDER_HELP,
@@ -19,6 +20,9 @@ from spa.usage import (
     TOPOLOGY_HELP,
     UNSET_PATH_HELP,
 )
+
+_PROVIDER_PIPE = "|".join(provider_ids())
+_PROVIDER_CHOICE = format_provider_choice()
 
 
 SCHEMA_VERSION = 1
@@ -144,7 +148,7 @@ COMMAND_SCHEMA = {
     "commands": [
         {
             "name": "init",
-            "summary": "Alias of spa environment init (spa init --example TOPOLOGY or --architecture FILE [--provider aws|virtualbox|external|ccm] NAME)",
+            "summary": "Alias of spa environment init (spa init --example TOPOLOGY or --architecture FILE [--provider %s] NAME)" % _PROVIDER_PIPE,
             "flags": [
                 {"long": "--example", "help": "Topology example id (exclusive with --architecture)", "takes_value": True, "completes_from": "init list"},
                 {
@@ -476,7 +480,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "skills install",
-            "summary": "Link SPA skill packages into the user IDE skill directory. Platform defaults to SPA_SKILLS_PLATFORMS, then auto-detect.",
+            "summary": "Copy SPA skill packages into the user IDE skill directory. Platform defaults to SPA_SKILLS_PLATFORMS, then auto-detect.",
             "positionals": [
                 {
                     "name": "PLATFORM",
@@ -626,7 +630,7 @@ COMMAND_SCHEMA = {
                 },
                 {
                     "long": "--provider",
-                    "help": "Save the default provider for init: aws, virtualbox, external, or ccm. Saved even for aws, so init then accepts no --provider",
+                    "help": "Save the default provider for init: %s. Saved even for aws, so init then accepts no --provider" % _PROVIDER_CHOICE,
                     "takes_value": True,
                     "completes_from": "providers",
                 },
@@ -931,55 +935,46 @@ COMMAND_SCHEMA = {
         {
             "name": "provider ccm",
             "summary": "CCM discovery. Bare spa provider ccm exits 2.",
-            "audience": "ccm",
             "example": "spa --agent provider ccm check-auth",
         },
         {
             "name": "provider ccm check-auth",
             "summary": "Verify CCM_TOKEN is set and CCM accepts Bearer via GET /api/v1/deployments. Reports the env var as set / not set.",
-            "audience": "ccm",
             "example": "spa --agent provider ccm check-auth",
         },
         {
             "name": "provider ccm survey",
             "summary": "Combined CCM meta dump plus GUI closed sets (operating systems, instance types, disk storage, business purposes, operation hours).",
-            "audience": "ccm",
             "example": "spa --agent provider ccm survey",
         },
         {
             "name": "provider ccm operating-systems list",
             "summary": "List CCM operating systems from GET /api/v1/meta.",
-            "audience": "ccm",
             "example": "spa --agent provider ccm operating-systems list",
         },
         {
             "name": "provider ccm instance-types list",
             "summary": "List CCM instance types from GET /api/v1/meta.",
-            "audience": "ccm",
             "example": "spa --agent provider ccm instance-types list",
         },
         {
             "name": "provider ccm disk-storage list",
             "summary": "List CCM disk storage sizes from GET /api/v1/meta.",
-            "audience": "ccm",
             "example": "spa --agent provider ccm disk-storage list",
         },
         {
             "name": "provider ccm business-purposes list",
             "summary": "List GUI business purposes. Not a CCM meta attribute.",
-            "audience": "ccm",
             "example": "spa --agent provider ccm business-purposes list",
         },
         {
             "name": "provider ccm operation-hours list",
             "summary": "List GUI/API operation hours. Not a CCM meta attribute.",
-            "audience": "ccm",
             "example": "spa --agent provider ccm operation-hours list",
         },
         {
             "name": "provider ccm operation-hours set",
             "summary": "PATCH the CCM deployment operation_hours. Mutating. Does not change hours on spa resume.",
-            "audience": "ccm",
             "requires_confirmation": True,
             "positionals": [
                 {
@@ -997,13 +992,11 @@ COMMAND_SCHEMA = {
         {
             "name": "provider ccm ssh-keys list",
             "summary": "List CCM SSH key names and fingerprints, and whether ccm.ssh_private_key_file exists locally. Never prints public_key bodies.",
-            "audience": "ccm",
             "example": "spa --agent provider ccm ssh-keys list",
         },
         {
             "name": "provider ccm ttl extend",
             "summary": "PATCH the CCM deployment ttl to now plus --days (1-30). Mutating. Fail if not provisioned or already terminated.",
-            "audience": "ccm",
             "requires_confirmation": True,
             "flags": [
                 {

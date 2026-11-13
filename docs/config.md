@@ -136,7 +136,7 @@ os:
 | `ccm.ebs_storage` | object | optional | Extra attached volumes. Holds no value itself. Omit the key for no extra volumes. |
 | `ccm.ebs_storage.ebs_count` | integer | optional; ge=1; le=3 | Number of extra attached volumes. Minimum 1, maximum 3. No default. Omit ebs_storage for no extra volumes. |
 | `ccm.ebs_storage.ebs_size` | enum | optional; allowed=50\|100\|300 | Size in GB of each extra volume. One of 50, 100, or 300. No default. Omit ebs_storage for no extra volumes. |
-| `ccm.instance_type` | string | optional | CCM instance type. A live CCM catalog value, not an AWS AMI id. No default. Omit the key to set none. |
+| `ccm.instance_type` | string | optional | CCM instance type for every host. A live CCM catalog value, not an AWS AMI id. CCM has no per-host instance type. No default. Omit the key to set none. |
 | `ccm.key_name` | string | optional | CCM SSH key name (ssh_key_name on create). No default. Omit the key to set none. |
 | `ccm.name` | string | optional; min_length=5; max_length=100; pattern=^[a-zA-Z0-9][\w-]*[a-zA-Z0-9]$ | CCM deployment name. Default is the env directory basename when it matches CCM's 5-100 character pattern. Omit the key to keep that. |
 | `ccm.operating_system` | string | optional | CCM operating system id. A live CCM catalog value, not an AMI id. No default. Omit the key to set none. |

@@ -149,14 +149,18 @@ def test_init_unknown_topology_does_not_create_an_env(tmp_path):
 
 
 def test_init_provider_help_names_external():
+    from spa.providers import format_provider_choice
+
     result = run_spa_inprocess(["init", "--help"])
     assert result.returncode == 0
     assert "ccm" in result.stdout
-    assert "aws, virtualbox, external, or ccm" in result.stdout
+    assert format_provider_choice() in result.stdout
     assert "aws or virtualbox" not in result.stdout
 
 
 def test_init_list_examples():
+    from spa.providers import provider_ids
+
     result = run_spa(["init", "list"])
     assert result.returncode == 0
     out = result.stdout
@@ -169,6 +173,7 @@ def test_init_list_examples():
     assert "ccm" in out
     assert "cm_2idxc_sh_aws.yml" not in out
     assert "--provider" in out
+    assert "[--provider %s]" % "|".join(provider_ids()) in out
 
 
 def test_init_provider_ccm_writes_root_ccm_block(tmp_path):
@@ -1163,13 +1168,14 @@ def _init_no_provider(dest, **extra_env):
 
 
 def test_init_requires_provider_when_no_default_is_saved(tmp_path):
-    """init without --provider and no saved default names the three providers and writes nothing."""
+    """init without --provider and no saved default names providers via format_provider_choice."""
+    from spa.providers import format_provider_choice
+
     dest = tmp_path / "lab"
     result = _init_no_provider(dest, XDG_CONFIG_HOME=str(tmp_path / "xdg"))
     assert result.returncode == 2, result.stdout + result.stderr
     assert "--provider" in result.stderr
-    for name in ("aws", "virtualbox", "external", "ccm"):
-        assert name in result.stderr, name
+    assert format_provider_choice() in result.stderr
     assert "spa environment set --provider NAME" in result.stderr
     assert not dest.exists()
 

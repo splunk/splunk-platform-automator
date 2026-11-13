@@ -10,13 +10,13 @@ and `spa run NAME --help`.
 
 ## `init`
 
-Alias of spa environment init (spa init --example TOPOLOGY or --architecture FILE [--provider aws|virtualbox|external|ccm] NAME)
+Alias of spa environment init (spa init --example TOPOLOGY or --architecture FILE [--provider ccm|aws|external|virtualbox] NAME)
 
 | Flag | Description |
 | --- | --- |
 | `--example` | Topology example id (exclusive with --architecture) |
 | `--architecture` | Confirmed schema 1 architecture JSON (exclusive with --example) |
-| `--provider` | aws, virtualbox, external, or ccm. Required unless a default is saved (spa environment set --provider NAME) |
+| `--provider` | ccm, aws, external, or virtualbox. Required unless a default is saved (spa environment set --provider NAME) |
 
 Example:
 
@@ -353,7 +353,7 @@ Replace provider-owned config sections from an example template
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `PROVIDER` | yes | aws, virtualbox, external, or ccm, or a provider feature id. List them: spa init list. Example: spa config provider aws |
+| `PROVIDER` | yes | ccm, aws, external, or virtualbox, or a provider feature id. List them: spa init list. Example: spa config provider aws |
 
 Example:
 
@@ -430,7 +430,7 @@ Host prerequisite checks
 
 | Flag | Description |
 | --- | --- |
-| `--provider` | aws, virtualbox, external, or ccm. Repeatable. Example: spa doctor --provider ccm |
+| `--provider` | ccm, aws, external, or virtualbox. Repeatable. Example: spa doctor --provider ccm |
 | `--strict` | Treat optional-tool warnings as failures |
 
 ## `skills`
@@ -445,7 +445,7 @@ spa skills install
 
 ## `skills install`
 
-Link SPA skill packages into the user IDE skill directory. Platform defaults to SPA_SKILLS_PLATFORMS, then auto-detect.
+Copy SPA skill packages into the user IDE skill directory. Platform defaults to SPA_SKILLS_PLATFORMS, then auto-detect.
 
 | Flag | Description |
 | --- | --- |
@@ -607,7 +607,7 @@ Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Plat
 | --- | --- |
 | `--example` | Topology example id (exclusive with --architecture) |
 | `--architecture` | Confirmed schema 1 architecture JSON (exclusive with --example) |
-| `--provider` | aws, virtualbox, external, or ccm. Required unless a default is saved (spa environment set --provider NAME) |
+| `--provider` | ccm, aws, external, or virtualbox. Required unless a default is saved (spa environment set --provider NAME) |
 | `--env-dir` | One-off parent (requires --name); does not change the default parent |
 | `--name` | Registry name (default: folder basename) |
 | `--force` | Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example) |
@@ -640,7 +640,7 @@ User-level defaults in paths.yml (env parent, Software, baseconfig, apps) and th
 | `--baseconfig-dir` | PS baseconfig apps directory |
 | `--apps-dir` | Local apps directory |
 | `--default` | Registered environment used when cwd does not select one |
-| `--provider` | Save the default provider for init: aws, virtualbox, external, or ccm. Saved even for aws, so init then accepts no --provider |
+| `--provider` | Save the default provider for init: ccm, aws, external, or virtualbox. Saved even for aws, so init then accepts no --provider |
 
 Example:
 

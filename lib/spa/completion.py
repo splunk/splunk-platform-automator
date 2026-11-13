@@ -196,32 +196,13 @@ def complete(
     return _filter(found, current)
 
 
-def _audience_visible(audience: str, config: Optional[Mapping[str, Any]], paths: Any) -> bool:
-    if audience != "ccm":
-        return True
-    from spa.providers.ccm import audience_visible
-
-    return audience_visible(config=config, paths=paths)
-
-
 def _schema(
     config: Optional[Mapping[str, Any]] = None,
     paths: Any = None,
-    *,
-    include_hidden: bool = False,
 ) -> List[Dict[str, Any]]:
     from spa.agent import COMMAND_SCHEMA
 
-    rows = list(COMMAND_SCHEMA.get("commands") or [])
-    if include_hidden:
-        return rows
-    visible = []
-    for row in rows:
-        audience = str(row.get("audience") or "")
-        if audience and not _audience_visible(audience, config, paths):
-            continue
-        visible.append(row)
-    return visible
+    return list(COMMAND_SCHEMA.get("commands") or [])
 
 
 def _by_name(
@@ -530,7 +511,9 @@ def _catalog_values(kind: str, config: Optional[Mapping[str, Any]], paths: Any) 
                 str(item.get("id")) for item in data.get("catalog") or [] if item.get("id")
             )
         if kind == "providers":
-            values.extend(["aws", "external", "virtualbox"])
+            from spa.providers import provider_ids
+
+            values.extend(provider_ids())
         return values
     if kind == "run list":
         from spa.paths import resolve_spa_paths

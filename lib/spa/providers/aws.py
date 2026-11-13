@@ -48,6 +48,7 @@ class Provider:
     name = "aws"
     creates_hosts = True
     remote = True
+    order = 20
 
     def __init__(self, paths: SpaPaths, config: Dict[str, Any]):
         self.paths = paths

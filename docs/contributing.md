@@ -29,7 +29,7 @@ Canonical skills live only under `skills/spa/`:
 | Design `splunk_config.yml` | `spa-create-config` |
 | Find and configure Splunkbase apps | `spa-apps` |
 
-Cursor User Rules stay personal (for example, commit or open a PR only when asked). SPA workflow belongs in repo `AGENTS.md` and in the thin `alwaysApply: false` adapters `spa skills install` writes for Cursor (`~/.cursor/rules/spa-*.mdc`) and Claude (`~/.claude/rules/spa.md` when that platform is used). Do not put SPA lifecycle in global User Rules. Cursor skill symlinks are not part of this repo. Install the packages into the user IDE directory with `spa skills install` (see [`skills/spa/README.md`](../skills/spa/README.md)). Do not duplicate skill content.
+Cursor User Rules stay personal (for example, commit or open a PR only when asked). SPA workflow belongs in repo `AGENTS.md` and in the thin `alwaysApply: false` adapters `spa skills install` writes for Cursor (`~/.cursor/rules/spa-*.mdc`) and Claude (`~/.claude/rules/spa.md` when that platform is used). Do not put SPA lifecycle in global User Rules. Installed skill copies are not part of this repo. Contributor edits live under `skills/spa/`; pick-up is `spa skills install` again, not a live symlink (see [`skills/spa/README.md`](../skills/spa/README.md)). Do not duplicate skill content.
 
 Agents invoke `bin/spa`, never import `spa.api`, and follow [AGENTS.md](../AGENTS.md).
 
