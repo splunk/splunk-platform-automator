@@ -125,11 +125,14 @@ def resolve_software_dir(project_root: Path, explicit: Optional[str] = None) -> 
         return resolve_spa_paths().software_dir
     except ImportError:
         pass
-    for candidate in (project_root / "../Software", project_root / "Software"):
+    from spa.registry import recommended_workspace
+
+    wanted = recommended_workspace()["software_dir"]
+    for candidate in (project_root / "../Software", project_root / "Software", wanted):
         resolved = candidate.resolve()
         if resolved.is_dir():
             return resolved
-    return (project_root / "../Software").resolve()
+    return wanted
 
 
 def is_license_file(path: Path) -> bool:

@@ -62,7 +62,7 @@ Usage: $0 [--prefix DIR] [--bindir DIR] [--from FILE] [--version X.Y.Z] [--force
   --force          Replace an existing prefix
   --skip-venv      Do not run spa_venv.sh --create
   --skip-doctor    Do not run spa doctor after install
-  --uninstall      Remove the prefix and matching PATH wrapper (not env dirs or AWS)
+  --uninstall      Remove the prefix and matching PATH wrapper (not env dirs, AWS, or ~/.config/spa)
   -y, --yes        Confirm uninstall (required in agent mode)
 EOF
 }
@@ -95,6 +95,14 @@ xdg_data_home() {
     esac
 }
 
+xdg_config_home() {
+    # XDG Base Directory Spec: ignore a relative XDG_CONFIG_HOME.
+    case "${XDG_CONFIG_HOME:-}" in
+        /*) printf '%s' "$XDG_CONFIG_HOME" ;;
+        *) printf '%s' "${HOME}/.config" ;;
+    esac
+}
+
 if [ -z "$PREFIX" ]; then
     PREFIX="$(xdg_data_home)/spa"
 else
@@ -113,6 +121,7 @@ case "$BINDIR" in
     /*) ;;
     *) BINDIR="$(pwd)/$BINDIR" ;;
 esac
+USER_CONFIG="$(xdg_config_home)/spa"
 if [ "$PREFIX" = "$HOME" ] || [ "$PREFIX" = / ]; then
     echo "ERROR: --prefix cannot be your home directory or /" >&2
     exit 1
@@ -153,6 +162,8 @@ confirm_uninstall() {
     echo "uninstall will remove:" >&2
     echo "$PREFIX" >&2
     echo "$BINDIR/spa" >&2
+    echo "configs will not be removed:" >&2
+    echo "$USER_CONFIG" >&2
     printf 'Proceed? [y/N] ' >&2
     ans=""
     read -r ans || true
@@ -184,6 +195,10 @@ do_uninstall() {
         echo "Removed prefix: ${PREFIX}"
     else
         echo "Prefix already absent: ${PREFIX}"
+    fi
+    if [ "$YES" = true ]; then
+        echo "configs will not be removed:"
+        echo "$USER_CONFIG"
     fi
 }
 

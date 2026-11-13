@@ -280,9 +280,9 @@ def resolve_shared_data_dir(
 
     Order: env override, absolute configured path, env ``.spa.yml`` value,
     ``~/.config/spa/paths.yml``, then the first existing directory among
-    env-relative, SPA_HOME-relative, and ``$SPA_HOME/<home_leaf>``. If none
-    exist, return the env-relative path (the documented default) so errors stay
-    specific.
+    env-relative, SPA_HOME-relative, ``$SPA_HOME/<home_leaf>``, and
+    ``recommended_workspace()``. If none exist, return the recommended
+    workspace path (``~/Splunk-Platform-Automator/{Software,Baseconfigs,Apps}``).
     """
     env = environ if environ is not None else os.environ
     start = (start_dir or Path.cwd()).resolve()
@@ -307,11 +307,15 @@ def resolve_shared_data_dir(
     if user_value:
         return _expand(user_value, start)
 
+    from spa.registry import recommended_dir_for_leaf
+
+    wanted = recommended_dir_for_leaf(home_leaf, env)
     rel = configured or default_rel
     candidates = [
         (spa_env_dir / rel).resolve(),
         (spa_home / rel).resolve(),
         (spa_home / home_leaf).resolve(),
+        wanted,
     ]
     seen = []
     for candidate in candidates:
@@ -320,7 +324,7 @@ def resolve_shared_data_dir(
         seen.append(candidate)
         if candidate.is_dir():
             return candidate
-    return candidates[0]
+    return wanted
 
 
 @dataclass(frozen=True)

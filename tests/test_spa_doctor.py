@@ -724,6 +724,29 @@ def test_doctor_software_empty_dir_warns_all_three_buckets(tmp_path, monkeypatch
     assert "trial" in licenses["message"].lower() or "trial" in licenses["fix"].lower()
 
 
+def test_doctor_missing_dirs_name_recommended_workspace(tmp_path, monkeypatch):
+    from spa.registry import recommended_workspace
+
+    spa_home = tmp_path / "spa_home"
+    spa_home.mkdir()
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    monkeypatch.delenv("SPA_SOFTWARE_DIR", raising=False)
+    monkeypatch.delenv("SPA_BASECONFIG_DIR", raising=False)
+    monkeypatch.delenv("SPA_ENV_DIR", raising=False)
+    wanted = recommended_workspace()
+    result = _collect_software(spa_home)
+    rows = _software_rows(result)
+    assert str(wanted["software_dir"]) in rows["software_binaries"]["message"]
+    assert str(wanted["software_dir"]) in rows["software_licenses"]["message"]
+    assert str(wanted["baseconfig_dir"]) in rows["software_baseconfigs"]["message"]
+    assert str(spa_home.parent / "Software") not in rows["software_binaries"]["message"]
+    assert "spa environment set --create-defaults --yes" in rows["software_binaries"]["fix"]
+    assert result.ok is True
+
+
 def test_doctor_software_missing_dir_warns_all_three_and_names_path(tmp_path, monkeypatch):
     spa_home, software, baseconfig = _isolate_dirs(tmp_path, monkeypatch)
     assert not software.exists()

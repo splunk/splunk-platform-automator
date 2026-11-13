@@ -17,6 +17,7 @@ from spa.framework_paths import (
     removal_plan,
 )
 from spa.paths import _expand, is_spa_home, load_spa_yml, load_user_paths, save_user_paths
+from spa.registry import recommended_workspace
 from spa.providers import format_provider_choice
 
 try:
@@ -161,7 +162,13 @@ def write_spa_yml(
     elif user.get("software_dir"):
         sw = str(_expand(str(user["software_dir"]), start))
     else:
-        sw = _first_existing(dest / "../Software", spa_home / "../Software", spa_home / "Software")
+        wanted = recommended_workspace(env)
+        sw = _first_existing(
+            dest / "../Software",
+            spa_home / "../Software",
+            spa_home / "Software",
+            wanted["software_dir"],
+        )
 
     bc = ""
     if baseconfig_dir:
@@ -171,8 +178,12 @@ def write_spa_yml(
     elif user.get("baseconfig_dir"):
         bc = str(_expand(str(user["baseconfig_dir"]), start))
     else:
+        wanted = recommended_workspace(env)
         bc = _first_existing_baseconfig(
-            dest / "../baseconfigs", spa_home / "../baseconfigs", spa_home / "baseconfigs"
+            dest / "../baseconfigs",
+            spa_home / "../baseconfigs",
+            spa_home / "baseconfigs",
+            wanted["baseconfig_dir"],
         )
 
     apps = ""
@@ -183,7 +194,13 @@ def write_spa_yml(
     elif user.get("apps_dir"):
         apps = str(_expand(str(user["apps_dir"]), start))
     else:
-        apps = _first_existing(dest / "../apps", spa_home / "../apps", spa_home / "apps")
+        wanted = recommended_workspace(env)
+        apps = _first_existing(
+            dest / "../apps",
+            spa_home / "../apps",
+            spa_home / "apps",
+            wanted["apps_dir"],
+        )
 
     # Seed controller-wide paths from the first env that can supply or discover
     # them. Never let a later one-off init option replace an established global.

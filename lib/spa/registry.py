@@ -64,6 +64,18 @@ def recommended_workspace(environ: Optional[Dict[str, str]] = None) -> Dict[str,
     return {key: root / leaf for key, leaf in WORKSPACE_LEAVES}
 
 
+def recommended_dir_for_leaf(
+    home_leaf: str, environ: Optional[Dict[str, str]] = None
+) -> Path:
+    """Map a shared-dir leaf (Software, baseconfigs, apps) onto the workspace."""
+    workspace = recommended_workspace(environ)
+    wanted = home_leaf.lower()
+    for key, leaf in WORKSPACE_LEAVES:
+        if leaf.lower() == wanted:
+            return workspace[key]
+    return workspace["software_dir"]
+
+
 def builtin_env_parent(environ: Optional[Dict[str, str]] = None) -> Path:
     return recommended_workspace(environ)["env_dir"]
 

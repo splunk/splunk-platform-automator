@@ -592,11 +592,14 @@ def collect_checks(
                 "install the OpenSSH client",
             )
 
-    software = spa_home_path / "Software"
-    baseconfig = spa_home_path / "baseconfigs"
     env_overlay = {**os.environ, "SPA_HOME": str(spa_home_path)}
     if env_path:
         env_overlay["SPA_ENV_DIR"] = str(env_path)
+    from spa.registry import recommended_workspace
+
+    wanted = recommended_workspace(env_overlay)
+    software = wanted["software_dir"]
+    baseconfig = wanted["baseconfig_dir"]
     try:
         resolved = resolve_spa_paths(
             start_dir=env_path or spa_home_path,

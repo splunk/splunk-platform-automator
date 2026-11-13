@@ -309,6 +309,52 @@ def test_uninstall_refuses_non_spa_directory(tmp_path):
     assert "not an SPA install prefix" in result.stderr
 
 
+def test_uninstall_prompt_says_user_config_is_kept(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    xdg = tmp_path / "xdg"
+    config_dir = xdg / "spa"
+    config_dir.mkdir(parents=True)
+    (config_dir / "paths.yml").write_text("software_dir: /tmp/Software\n")
+    env = _install_env(home, {"XDG_CONFIG_HOME": str(xdg)})
+    for name in AGENT_ENV_VARS:
+        env.pop(name, None)
+    result = subprocess.run(
+        ["sh", str(INSTALL), "--uninstall"],
+        input="n\n",
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    combined = result.stdout + result.stderr
+    assert result.returncode != 0
+    prefix = home / ".local" / "share" / "spa"
+    wrapper = home / ".local" / "bin" / "spa"
+    assert (
+        "uninstall will remove:\n%s\n%s\nconfigs will not be removed:\n%s\n"
+        % (prefix, wrapper, config_dir)
+    ) in combined
+    assert (config_dir / "paths.yml").read_text() == "software_dir: /tmp/Software\n"
+
+
+def test_uninstall_leaves_user_config_dir(tmp_path, framework_tarball):
+    archive = framework_tarball
+    home = tmp_path / "home"
+    home.mkdir()
+    xdg = tmp_path / "xdg"
+    config_dir = xdg / "spa"
+    config_dir.mkdir(parents=True)
+    (config_dir / "paths.yml").write_text("software_dir: /tmp/Software\n")
+    env = _install_env(home, {"XDG_CONFIG_HOME": str(xdg)})
+    assert _run_install(archive, env).returncode == 0
+    result = _run_uninstall(env, extra_args=["--yes"])
+    combined = result.stdout + result.stderr
+    assert result.returncode == 0, combined
+    assert not (home / ".local" / "share" / "spa").exists()
+    assert (config_dir / "paths.yml").read_text() == "software_dir: /tmp/Software\n"
+    assert "configs will not be removed:\n%s\n" % config_dir in combined
+
+
 def test_uninstall_leaves_sibling_env_dir(tmp_path, framework_tarball):
     archive = framework_tarball
     home = tmp_path / "home"
