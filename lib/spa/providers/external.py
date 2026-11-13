@@ -321,6 +321,7 @@ class Provider:
     name = "external"
     creates_hosts = False
     remote = True
+    order = 30
 
     def lifecycle_playbook(self, action: str) -> str:
         return "external_%s" % action

@@ -17,6 +17,7 @@ from spa.framework_paths import (
     removal_plan,
 )
 from spa.paths import _expand, is_spa_home, load_spa_yml, load_user_paths, save_user_paths
+from spa.providers import format_provider_choice
 
 try:
     import yaml
@@ -524,8 +525,12 @@ def format_catalog_list(rows: List[Dict[str, str]]) -> str:
     lines = ["Catalog:"]
     for item in rows:
         lines.append("  %s  %s" % (item["id"], item["template"]))
+    from spa.providers import provider_ids
+
     lines.append("Apply: spa config topology ID")
-    lines.append("Create: spa init --example ID --provider aws|virtualbox NAME")
+    lines.append(
+        "Create: spa init --example ID --provider %s NAME" % "|".join(provider_ids())
+    )
     return "\n".join(lines)
 
 
@@ -542,7 +547,12 @@ def format_example_list(data: Dict[str, Any]) -> str:
     lines.append("Providers:")
     for item in data.get("providers") or []:
         lines.append("  %s" % item["id"])
-    lines.append("Compose: spa init --example TOPOLOGY [--provider aws|virtualbox|external|ccm] NAME")
+    from spa.providers import provider_ids
+
+    lines.append(
+        "Compose: spa init --example TOPOLOGY [--provider %s] NAME"
+        % "|".join(provider_ids())
+    )
     return "\n".join(lines)
 
 
@@ -556,9 +566,9 @@ def _normalize_example_name(name: str) -> str:
 
 
 INIT_PROVIDER_REQUIRED = (
-    "spa init needs --provider: choose aws, virtualbox, external, or ccm.\n"
+    "spa init needs --provider: choose %s.\n"
     "Or save a default once: spa environment set --provider NAME"
-)
+) % format_provider_choice()
 
 
 def required_init_provider(provider: Optional[str]) -> str:

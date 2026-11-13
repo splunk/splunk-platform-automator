@@ -1785,6 +1785,25 @@ def test_ccm_validate_fails_when_host_count_exceeds_50(tmp_path):
     assert "50" in (result.error or "")
 
 
+def test_ccm_validate_fails_when_token_is_not_set(tmp_path, monkeypatch):
+    from spa.providers.ccm import validate_ccm
+
+    monkeypatch.delenv("CCM_TOKEN", raising=False)
+    key = tmp_path / "CCM-Key.pem"
+    key.write_text("not-a-real-key\n", encoding="utf-8")
+    paths = _ccm_paths(
+        tmp_path,
+        _CCM_MIN + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
+    )
+    result = validate_ccm(
+        paths,
+        {**_CCM_CONFIG, "ssh_private_key_file": str(key)},
+    )
+    assert result.ok is False
+    assert result.code == 1
+    assert "CCM_TOKEN is not set" in (result.error or "")
+
+
 def test_ccm_validate_fails_when_private_key_file_is_missing(tmp_path):
     from spa.providers.ccm import validate_ccm
 

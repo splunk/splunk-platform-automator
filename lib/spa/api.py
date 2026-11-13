@@ -2300,12 +2300,10 @@ class LocalSpaSession:
     ) -> CommandResult:
         from spa import aws as aws_mod
         from spa.providers import ccm as ccm_mod
-        from spa.providers.ccm import audience_visible
         from spa.usage import provider_needs_action
 
-        ccm = agent or audience_visible(paths=self.paths)
         if child not in {"aws", "ccm"}:
-            return CommandResult(ok=False, error=provider_needs_action(ccm=ccm), code=2)
+            return CommandResult(ok=False, error=provider_needs_action(), code=2)
         if child == "aws":
             tokens = [part for part in (action, resource, subaction) if part]
             if action and resource == action:

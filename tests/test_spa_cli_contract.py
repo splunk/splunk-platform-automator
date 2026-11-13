@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from spa.providers import format_provider_choice
 from spa_testutil import PROJECT_ROOT, run_spa, run_spa_inprocess, run_spa_init, write_min_env
 
 
@@ -73,7 +74,7 @@ HELP_CONTRACTS = [
             "--name",
             "--env-dir",
             "splunk_config.yml",
-            "aws, virtualbox, external, or ccm",
+            format_provider_choice(),
         ],
     ),
     (
@@ -1464,7 +1465,7 @@ def test_provider_help_shows_hidden_pro_alias_and_public_aws():
     assert "Aliases: pro" in help_text.stdout
     names = {name for name, _alias in _command_rows(help_text.stdout)}
     assert "aws" in names
-    assert "ccm" not in names
+    assert "ccm" in names
     via_alias = run_spa_inprocess(["--no-agent", "pro", "--help"])
     assert via_alias.returncode == 0, via_alias.stderr
     assert via_alias.stdout == help_text.stdout
@@ -1492,9 +1493,7 @@ def test_agent_schema_includes_provider_aws_and_gates_ccm():
     assert "provider ccm ttl extend" in names
     assert "provider ccm operation-hours set" in names
     for row in schema["data"]["commands"]:
-        if row["name"].startswith("provider ccm"):
-            assert row.get("audience") == "ccm", row["name"]
-        elif row["name"] == "provider" or row["name"].startswith("provider aws"):
+        if row["name"] == "provider" or row["name"].startswith("provider "):
             assert "audience" not in row, row["name"]
     assert "spa pro " not in encoded
     assert not any(
@@ -1509,8 +1508,8 @@ def test_agent_schema_includes_provider_aws_and_gates_ccm():
 
 def test_provider_and_provider_ccm_bare_parents_exit_2():
     for argv, human_message, agent_message in (
-        (["provider"], PROVIDER_NEEDS_ACTION, PROVIDER_NEEDS_ACTION_WITH_CCM),
-        (["pro"], PROVIDER_NEEDS_ACTION, PROVIDER_NEEDS_ACTION_WITH_CCM),
+        (["provider"], PROVIDER_NEEDS_ACTION_WITH_CCM, PROVIDER_NEEDS_ACTION_WITH_CCM),
+        (["pro"], PROVIDER_NEEDS_ACTION_WITH_CCM, PROVIDER_NEEDS_ACTION_WITH_CCM),
         (["provider", "ccm"], PROVIDER_CCM_NEEDS_ACTION, PROVIDER_CCM_NEEDS_ACTION),
         (["pro", "ccm"], PROVIDER_CCM_NEEDS_ACTION, PROVIDER_CCM_NEEDS_ACTION),
     ):
@@ -1519,8 +1518,6 @@ def test_provider_and_provider_ccm_bare_parents_exit_2():
         assert human.stdout.strip() == "", argv
         for line in human_message.splitlines():
             assert line.rstrip(".") in human.stderr, (argv, line)
-        if argv[0] in {"provider", "pro"} and len(argv) == 1:
-            assert "CCM:" not in human.stderr, argv
         agent = run_spa(["--json", *argv])
         assert agent.returncode == 2, argv
         assert agent.stderr == "", argv

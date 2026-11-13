@@ -328,6 +328,33 @@ def provider_is_remote(provider_id: str) -> bool:
     return bool(getattr(module.Provider, "remote", True))
 
 
+def provider_ids() -> List[str]:
+    """Registered provider names sorted by ``Provider.order``, then name.
+
+    Not ``PROVIDER_MODULES`` insertion order. Callers (help, schema, completion,
+    skills) use this list instead of hardcoding aws / virtualbox / ccm.
+    """
+    rows: List[Tuple[int, str]] = []
+    for name, module_name in PROVIDER_MODULES.items():
+        module = importlib.import_module(module_name)
+        order = int(getattr(module.Provider, "order", 100))
+        rows.append((order, name))
+    rows.sort()
+    return [name for _order, name in rows]
+
+
+def format_provider_choice() -> str:
+    """Human list in ``provider_ids()`` order: ``ccm, aws, external, or virtualbox``."""
+    names = provider_ids()
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    if len(names) == 2:
+        return "%s or %s" % (names[0], names[1])
+    return "%s, or %s" % (", ".join(names[:-1]), names[-1])
+
+
 def get_provider(paths: SpaPaths):
     selection = detect_provider(paths)
     module = importlib.import_module(PROVIDER_MODULES[selection.name])

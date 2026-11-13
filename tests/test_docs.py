@@ -191,6 +191,13 @@ def test_non_clone_install_uses_the_release_prefix_one_liner():
     assert "pip install" not in checkout_section
 
 
+def test_architecture_notes_provider_order():
+    """A new provider sets Provider.order; public lists come from provider_ids()."""
+    architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
+    assert "Provider.order" in architecture
+    assert "provider_ids()" in architecture
+
+
 def test_architecture_defines_cli_ux_and_output_conventions():
     architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
     contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
@@ -1641,14 +1648,8 @@ def test_create_config_does_not_merge_remote_provider_after_fresh_init():
         assert "remote-provider" in page
 
 
-CCM_ASK_GATE = (
-    "Do not AskQuestion CCM unless `CCM_TOKEN` is set, the env has a root `ccm:` "
-    "block, or the operator already named CCM."
-)
-
-
-def test_skills_do_not_ask_ccm_unless_available():
-    """Public provider AskQuestion stays aws/virtualbox/external. CCM is gated."""
+def test_skills_ask_ccm_with_other_providers():
+    """AskQuestion follows spa's printed order, including CCM. Missing token is validate."""
     skill_dir = _create_config_dir()
     create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
     phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
@@ -1661,9 +1662,11 @@ def test_skills_do_not_ask_ccm_unless_available():
     spa = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(
         encoding="utf-8"
     )
-    assert CCM_ASK_GATE in create
-    assert CCM_ASK_GATE in spa
-    assert "aws, virtualbox, and external" in create
+    assert "in the order spa prints" in create
+    assert "in the order spa prints" in spa
+    assert "Include CCM" in create
+    assert "spa validate" in create
+    assert "Do not hide CCM" in create
     assert "splunker" in phases
     assert "operating_system" in phases
     assert "splunker" in design

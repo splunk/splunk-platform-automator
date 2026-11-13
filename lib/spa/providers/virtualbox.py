@@ -67,6 +67,7 @@ class Provider:
     name = "virtualbox"
     creates_hosts = True
     remote = False
+    order = 40
 
     def __init__(self, paths: SpaPaths, config: Dict[str, Any]):
         self.paths = paths
