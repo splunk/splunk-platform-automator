@@ -1,5 +1,7 @@
 # AWS
 
+First lab: [quick start](quick-start.md).
+
 SPA provisions EC2 infrastructure with Terraform while keeping `config/splunk_config.yml` as the source of truth. Operators use `spa`; do not edit generated tfvars, apply Terraform directly, or maintain a second inventory.
 
 ## Discover and configure

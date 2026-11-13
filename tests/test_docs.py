@@ -33,6 +33,7 @@ CANONICAL_DOCS = {
     "contributing.md",
     "install.md",
     "migrate.md",
+    "quick-start.md",
     "secrets.md",
     "upgrade.md",
     "user-guide.md",
@@ -1768,3 +1769,106 @@ def test_user_guide_start_here_doctor_is_quiet_unless_problems():
     assert "fails the host prerequisite check" in start
     assert "only" in start.lower()
     assert "warning" in start.lower()
+
+
+def _quick_start() -> str:
+    return (_docs_dir() / "quick-start.md").read_text(encoding="utf-8")
+
+
+def test_quick_start_is_the_linear_first_run():
+    """First-run order: install, Software, doctor, one provider, secrets, single_node init."""
+    from spa.providers import provider_ids
+
+    text = _quick_start()
+    assert "splunk-enterprise.html" in text
+    assert "universal-forwarder.html" in text
+    assert "spa environment set --software-dir" in text
+    assert "http://go/baseconfigs" in text
+    assert "spa licenses list" in text
+    assert "single_node" in text
+    assert "SPLUNK_ADMIN_PASSWORD" in text
+    assert "https://console.aws.amazon.com/iam/" in text
+    assert "https://console.aws.amazon.com/ec2/" in text
+    assert "https://ccm.splunkits.io/" in text
+    assert RELEASE_INSTALL_ONE_LINER in text
+    assert "bin/spa venv create --shared --yes" in text
+
+    software = text.index("## 2.")
+    secrets = text.index("## 4.")
+    first_doctor = text.index("spa doctor")
+    init = text.index("spa init --example single_node")
+    assert software < first_doctor
+    assert "SPLUNK_ADMIN_PASSWORD" in text[secrets:init]
+    assert secrets < init
+    assert "--provider PROVIDER" in text
+    assert "ccm|" not in text
+
+    ids = provider_ids()
+    assert ids == ["ccm", "aws", "external", "virtualbox"]
+    needles = {
+        "ccm": "### CCM",
+        "aws": "### AWS",
+        "external": "### Existing hosts",
+        "virtualbox": "### VirtualBox",
+    }
+    positions = [text.index(needles[name]) for name in ids]
+    assert positions == sorted(positions)
+
+    unreleased = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split(
+        "## [Unreleased]", 1
+    )[1].split("\n## ", 1)[0]
+    assert "docs/quick-start.md" in unreleased
+
+
+def test_quick_start_links_depth_instead_of_copying():
+    """AWS inbound table and VirtualBox brew/WSL stay on their own pages."""
+    text = _quick_start()
+    assert "aws.md#example-basic-aws-security-group-splunk_basic" in text
+    assert "0–65535" not in text
+    assert "172.31.0.0/16" not in text
+    assert "brew tap" not in text
+    assert "wsl.conf" not in text
+    assert "VAGRANT_WSL" not in text
+    assert "install.md#virtualbox" in text
+    assert re.search(r"must match.{0,40}splunk_version", text, re.I | re.S) is None
+
+
+def test_operator_entry_pages_link_to_quick_start():
+    """README, install, user-guide Start here, aws, ccm, /spa, and AGENTS human loop point at quick-start."""
+    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    readme_start = readme.split("## Start here", 1)[1].split("\n## ", 1)[0]
+    assert "docs/quick-start.md" in readme_start
+    readme_docs = readme.split("## Docs", 1)[1].split("\n## ", 1)[0]
+    assert "docs/quick-start.md" in readme_docs
+
+    install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
+    assert "quick-start.md" in install
+
+    guide_start = (
+        (_docs_dir() / "user-guide.md")
+        .read_text(encoding="utf-8")
+        .split("## Start here", 1)[1]
+        .split("\n## ", 1)[0]
+    )
+    assert "quick-start.md" in guide_start
+
+    aws_intro = (_docs_dir() / "aws.md").read_text(encoding="utf-8").split("\n## ", 1)[0]
+    assert "quick-start.md" in aws_intro
+    ccm_intro = (_docs_dir() / "ccm.md").read_text(encoding="utf-8").split("\n## ", 1)[0]
+    assert "quick-start.md" in ccm_intro
+
+    skill = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert "docs/quick-start.md" in skill.split("Human journey:", 1)[1]
+    software = skill.split("## Software", 1)[1].split("\n## ", 1)[0]
+    assert "docs/quick-start.md" in software
+
+    agents_contract = (
+        (PROJECT_ROOT / "AGENTS.md")
+        .read_text(encoding="utf-8")
+        .split("## Contract", 1)[1]
+        .split("\n## ", 1)[0]
+    )
+    assert "Human loop" in agents_contract
+    assert "docs/quick-start.md" in agents_contract

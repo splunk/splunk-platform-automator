@@ -48,7 +48,7 @@ From a checkout or an already extracted tarball:
 
 `--force` replaces an existing prefix. `--skip-venv` / `--skip-doctor` skip those steps.
 
-Then follow the [user-guide start](user-guide.md#start-here). Keep each environment outside the replaceable install prefix.
+Then follow the [quick start](quick-start.md). Keep each environment outside the replaceable install prefix.
 
 Splunk installers and PS baseconfig apps stay **out of** `SPA_HOME` (`install.sh --force` deletes the prefix). Point at them once:
 

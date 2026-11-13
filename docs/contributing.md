@@ -139,7 +139,7 @@ Examples, help, errors, and schema descriptions never contain passwords, tokens,
 - Other documentation uses lowercase kebab-case.
 - Commands are `spa`-first; raw backend commands belong only in implementation/test context.
 - Prefer links to `spa --help`, `spa config explain`, `spa apps`, schema, and upstream Splunk docs over duplicated reference tables.
-- The user guide explains how to use spa after it is installed. Framework install, uninstall, shell completion setup, controller Python, VirtualBox, and WSL belong in [install.md](install.md). Link there. Do not copy those commands.
+- First-run (install through first deploy) lives on [quick-start.md](quick-start.md). The user guide explains how to use spa after it is installed. Framework install, uninstall, shell completion setup, controller Python, VirtualBox, and WSL belong in [install.md](install.md). Link there. Do not copy those commands.
 - A development clone is installed from [Develop SPA](install.md#develop-spa-git-clone). This page owns the test and authoring loop.
 - One procedure lives on one page.
 - New `splunk_config.yml` keys and `spa config explain` records follow [Adding a configuration feature](#adding-a-configuration-feature).

@@ -11,6 +11,8 @@ Work on this branch is **3.0** (M1–M3 plus the follow-on issues below). Linux 
 
 ### Added
 
+- **Quick start**: [docs/quick-start.md](docs/quick-start.md) is the linear first-run path (install spa, fill Software, one provider, then `spa init --example single_node`). README, install, user-guide, aws, ccm, AGENTS.md, and `/spa` point at it. Install.md stays the installer reference; the user guide stays day-2 operations.
+
 - **Upgrade and health skill references** ([#125](https://github.com/splunk/splunk-platform-automator/issues/125)): `/spa` points at [upgrade.md](skills/spa/spa/references/upgrade.md) (`spa run list` and existing upgrade playbooks; no top-level upgrade command) and [health.md](skills/spa/spa/references/health.md) (`spa hosts list --status`, `spa hosts check`). The human runbook stays in [docs/upgrade.md](docs/upgrade.md).
 
 - **Local Splunk archive glob** ([#74](https://github.com/splunk/splunk-platform-automator/issues/74), archive slice of [#125](https://github.com/splunk/splunk-platform-automator/issues/125)): `spa validate` and deploy preflight fail when Software lacks the installer for each role, version, and `splunk_architecture` in config (default `amd64`, not the controller CPU). Only types the config uses are required. When more than one type is `latest`, the resolved dotted versions must match. After hosts exist, deploy compares live `uname` to config, then re-globs that confirmed suffix, before `deploy_site.yml`. A mismatch also names the guest-arch tarball when it is missing. `spa doctor` stays the loose Enterprise+UF warning.
