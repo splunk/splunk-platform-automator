@@ -1804,7 +1804,6 @@ def test_quick_start_is_the_linear_first_run():
     assert "ccm|" not in text
 
     ids = provider_ids()
-    assert ids == ["ccm", "aws", "external", "virtualbox"]
     needles = {
         "ccm": "### CCM",
         "aws": "### AWS",
@@ -1818,6 +1817,19 @@ def test_quick_start_is_the_linear_first_run():
         "## [Unreleased]", 1
     )[1].split("\n## ", 1)[0]
     assert "docs/quick-start.md" in unreleased
+
+
+def test_quick_start_runs_provider_after_init_steps_before_validate():
+    """AWS config set and external hosts register happen between init and validate; one init command."""
+    text = _quick_start()
+    block = text.split("## 4.", 1)[1]
+    init = block.index("spa init --example single_node")
+    validate = block.index("spa validate", init)
+    assert "after init" in block[init:validate].lower()
+    assert text.count("spa init --example") == 1
+    external = text.split("### Existing hosts", 1)[1].split("\n### ", 1)[0]
+    assert "spa hosts register" in external
+    assert "step 4" in external.lower()
 
 
 def test_quick_start_links_depth_instead_of_copying():

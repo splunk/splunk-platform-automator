@@ -71,7 +71,7 @@ That installs the latest GitHub Release into `~/.local/share/spa` and puts `spa`
 
 First lab: [quick start](docs/quick-start.md) (install, Software, one provider, then `spa init --example single_node --provider PROVIDER`).
 
-VirtualBox: `--provider virtualbox`. Employee-only CCM: `--provider ccm`. See [CCM](docs/ccm.md).
+Employee-only CCM: `--provider ccm`. See [CCM](docs/ccm.md).
 
 Existing servers: `spa init --example TOPOLOGY --provider external ENV`, then `spa hosts register NAME --ssh-host HOST --user USER --key PATH --yes`.
 

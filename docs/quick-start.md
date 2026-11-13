@@ -24,7 +24,7 @@ Flags, uninstall, extract, and git clone: [install.md](install.md).
 
 Create `~/Software` **outside** `SPA_HOME`.
 
-1. Download the current Linux **tgz** for [Splunk Enterprise](https://www.splunk.com/en_us/download/splunk-enterprise.html) and [Universal Forwarder](https://www.splunk.com/en_us/download/universal-forwarder.html). With `splunk_version` unset (the `single_node` default), spa uses the latest tarball it finds. Pinning `splunk_version` is optional; paths and version pins: [Prepare Software](user-guide.md#prepare-software). The Universal Forwarder tarball is required before init even though `single_node` leaves its forwarder host commented out.
+1. Download the current Linux **tgz** for [Splunk Enterprise](https://www.splunk.com/en_us/download/splunk-enterprise.html) and [Universal Forwarder](https://www.splunk.com/en_us/download/universal-forwarder.html). With `splunk_version` unset (the `single_node` default), spa uses the latest tarball it finds. Pinning `splunk_version` is optional; paths and version pins: [Prepare Software](user-guide.md#prepare-software). Download the Universal Forwarder now even though `single_node` leaves its forwarder host commented out; `spa doctor` warns without it, and most other topologies need it.
 2. Extract PS baseconfig apps into the same tree (`Configurations - Base`, `Configurations - Index Replication`). Employees: [http://go/baseconfigs](http://go/baseconfigs). Others: Splunk Professional Services. Not a public Splunk.com download.
 3. Optional license: place or symlink a top-level `*.lic` (typical name `Splunk_Enterprise.lic`). Trial labs may omit; `spa doctor` warns, `spa validate` does not fail for that alone.
 
@@ -40,21 +40,21 @@ Confirm with `spa doctor` and fix every Software WARN and any FAIL. Later, `spa 
 
 ## 3. Provider checklist
 
-Complete **one** of the following. Headings follow `spa init --help` order. Commands use `PROVIDER` as the one you chose; do not paste a pipe-separated provider list into `spa init`.
+Complete **one** of the following. Step 4 uses `PROVIDER` for the one you chose.
 
 ### CCM (employee-only)
 
-`CCM_TOKEN` and an SSH key from [https://ccm.splunkits.io/](https://ccm.splunkits.io/). This heading stays even when the token is unset. Depth: [CCM](ccm.md). `spa doctor --provider ccm` reports the token as **set / not set**.
+`CCM_TOKEN` and an SSH key from [https://ccm.splunkits.io/](https://ccm.splunkits.io/). Depth: [CCM](ccm.md). `spa doctor --provider ccm` reports the token as **set / not set**.
 
 ### AWS
 
 Terraform on PATH. IAM identity / `AWS_PROFILE` (create keys in the [IAM console](https://console.aws.amazon.com/iam/)). EC2 key pair in the **env region** plus a local PEM; create the pair in the [EC2 console](https://console.aws.amazon.com/ec2/). SPA does not create keys. A security group **already in that region**, default name `Splunk_Basic` (SPA does not create groups; [ROADMAP #58](../ROADMAP.md)). Inbound rules: [Example Basic AWS Security Group](aws.md#example-basic-aws-security-group-splunk_basic). Omit `subnet_id` to use the default subnet.
 
-After init: `spa provider aws check-auth`, `spa provider aws survey --region REGION`, then `spa config set` for `terraform.aws.region`, AMI, `key_name`, `ssh_private_key_file`, and `security_group_names`. Do not keep example AMI or key names from `examples/providers/aws.yml`. `spa doctor --provider aws` names the Terraform install hint.
+After init in step 4, before `spa validate`: `spa provider aws check-auth`, `spa provider aws survey --region REGION`, then `spa config set` for `terraform.aws.region`, AMI, `key_name`, `ssh_private_key_file`, and `security_group_names`. Do not keep example AMI or key names from `examples/providers/aws.yml`. `spa doctor --provider aws` names the Terraform install hint.
 
 ### Existing hosts (`external`)
 
-OpenSSH client. `spa init --example TOPOLOGY --provider external ENV`, then `spa hosts register NAME --ssh-host HOST --user USER --key PATH --yes`. SPA does not create, stop, or terminate those machines. `spa doctor --provider external`.
+OpenSSH client and a reachable Linux host per Splunk host in the topology. After init in step 4 (`--provider external`), before `spa validate`: `spa hosts register NAME --ssh-host HOST --user USER --key PATH --yes` for each host. SPA does not create, stop, or terminate those machines. `spa doctor --provider external`.
 
 ### VirtualBox
 
@@ -68,6 +68,7 @@ Export referenced passwords **before** `spa init` so init's set / not set list i
 # export SPLUNK_ADMIN_PASSWORD (and cluster secrets if the topology references them)
 spa init --example single_node --provider PROVIDER ~/envs/my-lab
 cd ~/envs/my-lab
+# after init: finish your provider's step 3 items (AWS config set, external hosts register)
 spa validate
 spa deploy --yes
 ```
@@ -81,6 +82,7 @@ flowchart TD
   doctor --> provider["One provider checklist + doctor --provider"]
   provider --> secrets["Export referenced passwords"]
   secrets --> init["spa init single_node"]
-  init --> validate["spa validate"]
+  init --> after["Provider after-init steps"]
+  after --> validate["spa validate"]
   validate --> deploy["spa deploy --yes"]
 ```
