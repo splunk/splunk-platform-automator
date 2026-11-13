@@ -23,6 +23,7 @@ from spa.paths import (  # noqa: E402
     user_paths_yml,
     xdg_config_home,
 )
+from spa.registry import recommended_workspace  # noqa: E402
 
 
 def test_clone_is_spa_home():
@@ -235,6 +236,40 @@ def test_software_falls_back_to_spa_home_sibling(tmp_path):
     assert found == home_sw.resolve()
 
 
+def test_missing_shared_dirs_use_recommended_workspace(tmp_path):
+    spa_home = tmp_path / "prefix" / "spa"
+    spa_home.mkdir(parents=True)
+    dest = tmp_path / "envs" / "lab"
+    dest.mkdir(parents=True)
+    home = tmp_path / "home"
+    home.mkdir()
+    env = {"HOME": str(home), "XDG_CONFIG_HOME": str(tmp_path / "xdg")}
+    wanted = recommended_workspace(env)
+    assert resolve_shared_data_dir(spa_home, dest, environ=env) == wanted["software_dir"]
+    assert (
+        resolve_shared_data_dir(
+            spa_home,
+            dest,
+            configured="../baseconfigs",
+            env_var="SPA_BASECONFIG_DIR",
+            environ=env,
+            home_leaf="baseconfigs",
+        )
+        == wanted["baseconfig_dir"]
+    )
+    assert (
+        resolve_shared_data_dir(
+            spa_home,
+            dest,
+            configured="../apps",
+            env_var="SPA_APPS_DIR",
+            environ=env,
+            home_leaf="apps",
+        )
+        == wanted["apps_dir"]
+    )
+
+
 def test_software_env_wins(tmp_path):
     spa_home = tmp_path / "framework"
     spa_home.mkdir()
@@ -266,15 +301,20 @@ def test_spa_yml_software_dir(tmp_path):
 def test_spa_yml_software_dir_is_not_a_baseconfig_fallback(tmp_path):
     dest = tmp_path / "itsi"
     dest.mkdir()
+    spa_home = tmp_path / "framework"
+    spa_home.mkdir()
     software = tmp_path / "shared-sw"
     software.mkdir()
+    home = tmp_path / "home"
+    home.mkdir()
     (dest / ".spa.yml").write_text(
-        "spa_home: %s\nsoftware_dir: %s\n" % (PROJECT_ROOT, software)
+        "spa_home: %s\nsoftware_dir: %s\n" % (spa_home, software)
     )
-    paths = resolve_spa_paths(start_dir=dest, environ={}, clone_root=PROJECT_ROOT)
+    env = {"HOME": str(home), "XDG_CONFIG_HOME": str(tmp_path / "xdg")}
+    paths = resolve_spa_paths(start_dir=dest, environ=env, clone_root=spa_home)
     assert paths.software_dir == software.resolve()
     assert paths.baseconfig_dir != software.resolve()
-    assert paths.baseconfig_dir == (dest / "../baseconfigs").resolve()
+    assert paths.baseconfig_dir == recommended_workspace(env)["baseconfig_dir"]
 
 
 def test_spa_yml_apps_dir(tmp_path):
@@ -373,16 +413,20 @@ def test_save_user_paths_software_dir_does_not_fill_baseconfig_dir(tmp_path):
 def test_user_paths_yml_after_env_spa_yml(tmp_path):
     dest = tmp_path / "itsi"
     dest.mkdir()
-    (dest / ".spa.yml").write_text("spa_home: %s\n" % PROJECT_ROOT)
+    spa_home = tmp_path / "framework"
+    spa_home.mkdir()
+    (dest / ".spa.yml").write_text("spa_home: %s\n" % spa_home)
     software = tmp_path / "controller-sw"
     software.mkdir()
+    home = tmp_path / "home"
+    home.mkdir()
     xdg = tmp_path / "xdg-config"
-    save_user_paths(software_dir=str(software), environ={"XDG_CONFIG_HOME": str(xdg)})
-    env = {"XDG_CONFIG_HOME": str(xdg)}
-    paths = resolve_spa_paths(start_dir=dest, environ=env, clone_root=PROJECT_ROOT)
+    env = {"HOME": str(home), "XDG_CONFIG_HOME": str(xdg)}
+    save_user_paths(software_dir=str(software), environ=env)
+    paths = resolve_spa_paths(start_dir=dest, environ=env, clone_root=spa_home)
     assert paths.software_dir == software.resolve()
     assert paths.baseconfig_dir != software.resolve()
-    assert paths.baseconfig_dir == (dest / "../baseconfigs").resolve()
+    assert paths.baseconfig_dir == recommended_workspace(env)["baseconfig_dir"]
     assert user_paths_yml(env) == xdg / "spa" / "paths.yml"
 
 

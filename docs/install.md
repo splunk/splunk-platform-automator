@@ -68,7 +68,7 @@ What belongs in those directories, and how shared path defaults work: [Prepare S
 
 ## Uninstall
 
-`install.sh --uninstall --yes` removes the prefix (`SPA_HOME`) and the matching PATH wrapper (`~/.local/bin/spa` by default). It is **not** `spa destroy`: env dirs, Terraform state, and AWS stay untouched.
+`install.sh --uninstall --yes` removes the prefix (`SPA_HOME`) and the matching PATH wrapper (`~/.local/bin/spa` by default). It is **not** `spa destroy`: env dirs, Terraform state, AWS, and `~/.config/spa` stay untouched.
 
 ```bash
 ./install.sh --uninstall --yes

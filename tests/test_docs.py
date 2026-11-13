@@ -165,6 +165,8 @@ def test_non_clone_install_uses_the_release_prefix_one_liner():
     assert "--skip-venv" in install
     assert "--skip-doctor" in install
     assert "## Uninstall" in install
+    uninstall = install.split("## Uninstall", 1)[1].split("\n## ", 1)[0]
+    assert "~/.config/spa" in uninstall
     assert "## Extract anywhere" in install
     assert "## Develop SPA (git clone)" in install
     installer = install.split("## Installer (recommended)", 1)[1].split("\n## ", 1)[0]
