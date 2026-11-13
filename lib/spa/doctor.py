@@ -18,8 +18,8 @@ from spa.preflight import ENTERPRISE_DOWNLOAD, FORWARDER_DOWNLOAD, _has_baseconf
 
 VAGRANT_REQUIRED_PLUGINS = ("vagrant-vbguest",)
 VAGRANT_WSL_PLUGINS = ("virtualbox_WSL2",)
-_MISSING_SOFTWARE_DIR_FIX = "spa environment set --software-dir DIR"
-_MISSING_BASECONFIG_DIR_FIX = "spa environment set --baseconfig-dir DIR"
+_MISSING_SOFTWARE_DIR_FIX = "spa environment set --create-defaults --yes"
+_MISSING_BASECONFIG_DIR_FIX = "spa environment set --create-defaults --yes"
 
 
 def _brew_hint(pkg: str) -> str:

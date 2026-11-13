@@ -121,6 +121,8 @@ HELP_CONTRACTS = [
         ["environment", "set", "--help"],
         [
             "usage: spa environment set",
+            "--create-defaults",
+            "--yes",
             "--env-dir",
             "--software-dir",
             "--baseconfig-dir",

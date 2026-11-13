@@ -388,7 +388,8 @@ def test_install_without_software_completes_and_next_step_names_software(
     assert "Installed wrapper:" in result.stdout
     _, _, next_step = result.stdout.partition("Installed wrapper:")
     assert "Software" in next_step
-    assert "spa environment set --software-dir" in next_step
+    assert "spa environment set --create-defaults --yes" in next_step
+    assert "spa environment set --software-dir" not in next_step
 
 
 def test_uninstall_agent_without_yes_does_not_delete(tmp_path, framework_tarball):

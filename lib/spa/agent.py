@@ -588,7 +588,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "environment init",
-            "summary": "Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Platform-Automator or paths.yml env_dir)",
+            "summary": "Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Platform-Automator/Envs or paths.yml env_dir)",
             "flags": [
                 {"long": "--example", "help": "Topology example id (exclusive with --architecture)", "takes_value": True, "completes_from": "init list"},
                 {
@@ -619,6 +619,12 @@ COMMAND_SCHEMA = {
             "name": "environment set",
             "summary": "User-level defaults in paths.yml (env parent, Software, baseconfig, apps) and the default provider for init in providers.yml",
             "flags": [
+                {
+                    "long": "--create-defaults",
+                    "help": "Create ~/Splunk-Platform-Automator/{Software,Apps,Baseconfigs,Envs} and write missing paths.yml keys",
+                    "takes_value": False,
+                },
+                {"long": "--yes", "short": "-y", "help": "Create the default workspace without prompting"},
                 {"long": "--env-dir", "help": "Default parent for name-only init"},
                 {"long": "--software-dir", "help": "Shared installers directory (saved in paths.yml)"},
                 {"long": "--baseconfig-dir", "help": "PS baseconfig apps directory (saved in paths.yml)"},
@@ -636,7 +642,7 @@ COMMAND_SCHEMA = {
                     "completes_from": "providers",
                 },
             ],
-            "example": "spa environment set --software-dir ~/Software --apps-dir ~/labs/apps",
+            "example": "spa environment set --create-defaults --yes",
         },
         {
             "name": "environment cleanup",

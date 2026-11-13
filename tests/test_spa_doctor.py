@@ -691,10 +691,10 @@ def test_doctor_software_missing_dir_warns_all_three_and_names_path(tmp_path, mo
     assert str(software) in rows["software_binaries"]["message"]
     assert str(software) in rows["software_licenses"]["message"]
     assert str(baseconfig) in rows["software_baseconfigs"]["message"]
-    assert "spa environment set --software-dir" in rows["software_binaries"]["fix"]
-    assert "spa environment set --software-dir" in rows["software_licenses"]["fix"]
-    assert "spa environment set --baseconfig-dir" in rows["software_baseconfigs"]["fix"]
-    assert "spa environment set --software-dir" not in rows["software_baseconfigs"]["fix"]
+    assert "spa environment set --create-defaults --yes" in rows["software_binaries"]["fix"]
+    assert "spa environment set --create-defaults --yes" in rows["software_licenses"]["fix"]
+    assert "spa environment set --create-defaults --yes" in rows["software_baseconfigs"]["fix"]
+    assert "spa environment set --software-dir" not in rows["software_binaries"]["fix"]
     assert result.ok is True
     assert result.code == 0
 
@@ -728,7 +728,7 @@ def test_doctor_markers_only_under_software_dir_warn_baseconfigs(tmp_path, monke
     assert rows["software_baseconfigs"]["level"] == "warn"
     assert str(baseconfig) in rows["software_baseconfigs"]["message"]
     assert str(software) not in rows["software_baseconfigs"]["message"]
-    assert "--baseconfig-dir" in rows["software_baseconfigs"]["fix"]
+    assert "spa environment set --create-defaults --yes" in rows["software_baseconfigs"]["fix"]
 
 
 def test_doctor_software_inventory_ok_when_all_three_buckets_present(tmp_path, monkeypatch):

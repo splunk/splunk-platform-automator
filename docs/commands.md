@@ -601,7 +601,7 @@ spa environment list
 
 ## `environment init`
 
-Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Platform-Automator or paths.yml env_dir)
+Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Platform-Automator/Envs or paths.yml env_dir)
 
 | Flag | Description |
 | --- | --- |
@@ -636,6 +636,8 @@ User-level defaults in paths.yml (env parent, Software, baseconfig, apps) and th
 
 | Flag | Description |
 | --- | --- |
+| `--create-defaults` | Create ~/Splunk-Platform-Automator/{Software,Apps,Baseconfigs,Envs} and write missing paths.yml keys |
+| `-y`, `--yes` | Create the default workspace without prompting |
 | `--env-dir` | Default parent for name-only init |
 | `--software-dir` | Shared installers directory (saved in paths.yml) |
 | `--baseconfig-dir` | PS baseconfig apps directory (saved in paths.yml) |
@@ -646,7 +648,7 @@ User-level defaults in paths.yml (env parent, Software, baseconfig, apps) and th
 Example:
 
 ```bash
-spa environment set --software-dir ~/Software --apps-dir ~/labs/apps
+spa environment set --create-defaults --yes
 ```
 
 ## `environment cleanup`

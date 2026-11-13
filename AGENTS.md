@@ -22,12 +22,12 @@ When this directory has `ansible.cfg` and `bin/spa` and spa is not yet usable (i
 
 1. `bin/spa venv create --shared --yes` (clone is `SPA_HOME`)
 2. `spa skills install` (or `spa skills install cursor`)
-3. `spa doctor` — surface every WARN/FAIL Software row; do not download; do not `spa init` / `spa deploy` until Enterprise + UF tarballs and extracted PS baseconfigs are present (licenses may stay absent for a trial lab)
-4. If Software is not a sibling of the env or of `SPA_HOME`: `spa environment set --software-dir DIR`. If the PS `baseconfigs/` tree is not a sibling: `spa environment set --baseconfig-dir DIR`
+3. `spa environment set --create-defaults --yes` then put Enterprise + UF tarballs in `Software/` and extract PS apps into `Baseconfigs/`
+4. `spa doctor` — surface every WARN/FAIL Software row; do not download; do not `spa init` / `spa deploy` until those files are present (licenses may stay absent for a trial lab). Custom locations: `spa environment set --software-dir DIR`. If the PS tree is custom: `spa environment set --baseconfig-dir DIR`
 
 ## Install from a repo URL
 
-If this directory is not an SPA checkout (`ansible.cfg` + `bin/spa` absent): do not `git clone`. Use `curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh` (or `./install.sh` / `./install.sh --from tarball` when the script is already local). Add `~/.local/bin` to `PATH` if `spa` is not found. Then `spa skills install` and `spa doctor`: do not download; do not `spa init` / `spa deploy` until Enterprise + UF tarballs and extracted PS baseconfigs are present (licenses may stay absent for a trial lab). If Software is not a sibling of the env or of `SPA_HOME`: `spa environment set --software-dir DIR`. If the PS `baseconfigs/` tree is not a sibling: `spa environment set --baseconfig-dir DIR`.
+If this directory is not an SPA checkout (`ansible.cfg` + `bin/spa` absent): do not `git clone`. Use `curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh` (or `./install.sh` / `./install.sh --from tarball` when the script is already local). Add `~/.local/bin` to `PATH` if `spa` is not found. Then `spa skills install`, `spa environment set --create-defaults --yes`, and `spa doctor`: do not download; do not `spa init` / `spa deploy` until Enterprise + UF tarballs are in `Software/` and extracted PS baseconfigs are in `Baseconfigs/` (licenses may stay absent for a trial lab). Custom locations: `spa environment set --software-dir DIR`. If the PS tree is custom: `spa environment set --baseconfig-dir DIR`.
 
 ## Start here
 

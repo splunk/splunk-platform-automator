@@ -53,8 +53,9 @@ Then follow the [quick start](quick-start.md). Keep each environment outside the
 Splunk installers and PS baseconfig apps stay **out of** `SPA_HOME` (`install.sh --force` deletes the prefix). Point at them once:
 
 ```bash
-spa environment set --software-dir ~/Software --baseconfig-dir ~/baseconfigs --apps-dir ~/labs/apps
-spa init --example cm_2idxc_sh --provider aws ~/envs/my-env
+spa environment set --create-defaults --yes
+spa init --example cm_2idxc_sh --provider aws my-env
+cd ~/Splunk-Platform-Automator/Envs/my-env
 ```
 
 What belongs in those directories, and how shared path defaults work: [Prepare Software](user-guide.md#prepare-software).
@@ -85,7 +86,8 @@ mkdir -p ~/src/spa && tar -xzf spa-framework-X.Y.Z.tar.gz -C ~/src/spa
 export SPA_HOME=~/src/spa
 "$SPA_HOME/bin/spa" venv create --shared --yes
 export PATH="$SPA_HOME/bin:$PATH"
-spa init --example cm_2idxc_sh --provider aws ~/envs/my-env
+spa init --example cm_2idxc_sh --provider aws my-env
+cd ~/Splunk-Platform-Automator/Envs/my-env
 ```
 
 `bin/spa` resolves the framework from its own path, so a symlink to `$SPA_HOME/bin/spa` is enough if that tree stays put. The installer wrapper also sets `SPA_HOME` and prefers the prefix venv.
@@ -112,7 +114,7 @@ packages and Ansible collections with `spa venv upgrade --shared --yes`, or
 delete and recreate it with `spa venv rebuild --shared --yes`. These commands
 target this `SPA_HOME` explicitly, even if the shell has a stale `SPA_VENV_DIR`.
 
-Put Splunk installers in a `Software/` directory and extract PS apps into a separate `baseconfigs/` tree, each as a sibling of the env (preferred) or of `SPA_HOME`. Use `spa environment set --software-dir DIR` and `spa environment set --baseconfig-dir DIR` when they are not siblings. Checklist: [Prepare Software](user-guide.md#prepare-software). The full path contract is in the [user guide](user-guide.md#understand-the-paths).
+Put Splunk installers in `~/Splunk-Platform-Automator/Software` and extract PS apps into `~/Splunk-Platform-Automator/Baseconfigs` (`spa environment set --create-defaults --yes`). A lab that never ran `--create-defaults` can still use a sibling of the env or of `SPA_HOME`. Custom locations: `spa environment set --software-dir DIR` and `spa environment set --baseconfig-dir DIR`. Checklist: [Prepare Software](user-guide.md#prepare-software). The full path contract is in the [user guide](user-guide.md#understand-the-paths).
 
 ## VirtualBox
 

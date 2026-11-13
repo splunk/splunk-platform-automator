@@ -19,6 +19,26 @@ def _xdg(tmp_path: Path) -> dict:
     return {"XDG_CONFIG_HOME": str(tmp_path / "xdg")}
 
 
+def _home_xdg(tmp_path: Path) -> tuple[Path, dict]:
+    home = tmp_path / "home"
+    extra = {
+        "HOME": str(home),
+        "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
+        "SPA_ENV_PARENT": "",
+    }
+    return home, extra
+
+
+def _default_workspace(home: Path) -> dict[str, Path]:
+    root = home / "Splunk-Platform-Automator"
+    return {
+        "software_dir": root / "Software",
+        "baseconfig_dir": root / "Baseconfigs",
+        "apps_dir": root / "Apps",
+        "env_dir": root / "Envs",
+    }
+
+
 def test_bare_env_is_not_export():
     result = run_spa(["--no-agent", "env"])
     assert result.returncode == 2
@@ -488,7 +508,7 @@ def test_resolve_init_dest_force_prefers_existing_cwd(tmp_path):
         environ=env,
         relative_to=parent,
     )
-    assert fresh == (home / "Splunk-Platform-Automator" / "brand-new")
+    assert fresh == (home / "Splunk-Platform-Automator" / "Envs" / "brand-new")
 
 
 def _register_pair(tmp_path):
@@ -584,3 +604,91 @@ def test_cleanup_moves_default_off_a_removed_entry(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     _, data = _registry_names(tmp_path)
     assert data["default"] == "keep"
+
+
+def test_create_defaults_yes_creates_workspace_and_paths_yml(tmp_path):
+    home, extra = _home_xdg(tmp_path)
+    wanted = _default_workspace(home)
+    result = run_spa(
+        ["--no-agent", "environment", "set", "--create-defaults", "--yes"],
+        extra_env=extra,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    for path in wanted.values():
+        assert path.is_dir(), path
+    data = yaml.safe_load((tmp_path / "xdg" / "spa" / "paths.yml").read_text())
+    for key, path in wanted.items():
+        assert Path(data[key]).resolve() == path.resolve()
+    assert "Updated" in result.stdout
+    assert "paths.yml" in result.stdout
+    assert "tarballs" in result.stdout.lower()
+    assert "Baseconfigs" in result.stdout
+
+
+def test_create_defaults_agent_without_yes_fails_and_creates_nothing(tmp_path):
+    home, extra = _home_xdg(tmp_path)
+    result = run_spa(
+        ["--agent", "environment", "set", "--create-defaults"],
+        extra_env=extra,
+    )
+    assert result.returncode != 0
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert "--yes" in payload["error"]
+    assert "data" not in payload
+    root = home / "Splunk-Platform-Automator"
+    assert not root.exists()
+    assert not (tmp_path / "xdg" / "spa" / "paths.yml").exists()
+
+
+def test_create_defaults_leaves_existing_software_dir_and_fills_missing(tmp_path):
+    home, extra = _home_xdg(tmp_path)
+    wanted = _default_workspace(home)
+    custom = tmp_path / "already" / "Software"
+    custom.mkdir(parents=True)
+    (tmp_path / "xdg" / "spa").mkdir(parents=True)
+    (tmp_path / "xdg" / "spa" / "paths.yml").write_text(
+        "software_dir: %s\n" % custom,
+        encoding="utf-8",
+    )
+    result = run_spa(
+        ["--no-agent", "environment", "set", "--create-defaults", "--yes"],
+        extra_env=extra,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    data = yaml.safe_load((tmp_path / "xdg" / "spa" / "paths.yml").read_text())
+    assert Path(data["software_dir"]).resolve() == custom.resolve()
+    for key in ("baseconfig_dir", "apps_dir", "env_dir"):
+        assert Path(data[key]).resolve() == wanted[key].resolve()
+        assert wanted[key].is_dir()
+
+
+def test_name_only_init_lands_in_envs(tmp_path):
+    home, extra = _home_xdg(tmp_path)
+    from spa.registry import builtin_env_parent, resolve_init_dest
+
+    parent = builtin_env_parent(extra)
+    assert parent == (home / "Splunk-Platform-Automator" / "Envs").resolve()
+    dest, name, _persist = resolve_init_dest("my-lab", environ=extra)
+    assert name == "my-lab"
+    assert dest == parent / "my-lab"
+
+    created = run_spa(
+        ["--no-agent", "environment", "set", "--create-defaults", "--yes"],
+        extra_env=extra,
+    )
+    assert created.returncode == 0, created.stderr + created.stdout
+    init = run_spa(
+        [
+            "init",
+            "--skip-doctor",
+            "--provider",
+            "aws",
+            "--example",
+            "single_node.yml",
+            "my-lab",
+        ],
+        extra_env=extra,
+    )
+    assert init.returncode == 0, init.stderr + init.stdout
+    assert (parent / "my-lab" / ".spa.yml").is_file()

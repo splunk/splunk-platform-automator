@@ -42,10 +42,10 @@ Skills and agents should use full names (`spa hosts ssh`, `spa validate`), not `
 Move an existing 2.x clone env out of the checkout:
 
 ```bash
-spa init ~/envs/my-env
+spa init my-env
 # or from a new framework tree:
-spa init --from /path/to/old-clone ~/envs/my-env
-cd ~/envs/my-env
+spa init --from /path/to/old-clone ~/Splunk-Platform-Automator/Envs/my-env
+cd ~/Splunk-Platform-Automator/Envs/my-env
 spa validate
 ```
 

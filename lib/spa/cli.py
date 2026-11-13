@@ -1246,6 +1246,9 @@ def _run_environment(args, session, paths, as_agent: bool, env_parser) -> int:
             baseconfig_dir=getattr(args, "set_baseconfig_dir", None),
             apps_dir=getattr(args, "set_apps_dir", None),
             default=getattr(args, "set_default", None),
+            create_defaults=bool(getattr(args, "create_defaults", False)),
+            confirm=bool(getattr(args, "yes", False)),
+            agent=as_agent,
         )
         if as_agent:
             return _emit_result(result, True)
@@ -1255,6 +1258,12 @@ def _run_environment(args, session, paths, as_agent: bool, env_parser) -> int:
         data = result.data or {}
         if data.get("paths_yml"):
             print("Updated %s" % data["paths_yml"])
+        if data.get("created_defaults"):
+            for key in ("software_dir", "baseconfig_dir", "apps_dir", "env_dir"):
+                if data.get(key):
+                    print("%s: %s" % (key, data[key]))
+            if data.get("hint"):
+                print(data["hint"])
         if data.get("environments_yml"):
             print("Default environment is %s" % data["default"])
         if data.get("providers_yml"):
@@ -2268,10 +2277,22 @@ def _run(argv: Sequence[str]) -> int:
     )
     _add_mode_flags(p_env_set)
     p_env_set.add_argument(
+        "--create-defaults",
+        action="store_true",
+        help="Create ~/Splunk-Platform-Automator/{Software,Apps,Baseconfigs,Envs} and write missing paths.yml keys",
+    )
+    p_env_set.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Create the default workspace without prompting",
+    )
+    p_env_set.add_argument(
         "--env-dir",
         dest="set_env_dir",
         metavar="DIR",
-        help="Default parent for name-only init (saved in paths.yml; omit when ~/Splunk-Platform-Automator)",
+        help="Default parent for name-only init (saved in paths.yml; omit when ~/Splunk-Platform-Automator/Envs)",
     )
     p_env_set.add_argument(
         "--software-dir",
