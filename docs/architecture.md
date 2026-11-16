@@ -241,7 +241,7 @@ Do not present a convention as an enforced standard. Promote one to policy only 
 Use the narrowest gate that proves the changed contract. Markers are in [`tests/pytest.ini`](../tests/pytest.ini):
 
 - `cli`: parser, help, routing, schema, session, and provider contracts. `./tests/run_cli_tests.sh` (`pytest -m "local and cli"`). Contributor inner loop; serial by default.
-- `ansible`: tests that shell out to `ansible-playbook`. `./tests/run_ansible_tests.sh` (`pytest -m "local and ansible"`).
+- `ansible`: Ansible-job tests run playbooks through `spa run`, plus the JSONL callback exception that uses a direct `ansible-playbook` of a fixture. `./tests/run_ansible_tests.sh` (`pytest -m "local and ansible"`).
 - `unit`: every other local test. `./tests/run_unit_tests.sh` (`pytest -m "local and not cli and not ansible"`). Schema, docs, runlog, venv, paths, licenses, secrets, pack/install.
 
 PR CI always runs all three pytest jobs after `Syntax` (`CLI tests`, `Ansible tests`, `Unit tests` in `.github/workflows/ci.yml`). There is no path filter that skips a group. Each job passes `-n auto --durations=25` (xdist). Tag release stays one `./tests/run_local_tests.sh -n auto --durations=25` invocation. Push CI on `master` / `distribution` is background insurance, not a promotion wait.

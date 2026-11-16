@@ -89,6 +89,9 @@ def test_callback_emits_play_file_and_role_path(monkeypatch):
 
 
 def test_callback_imported_playbook_reports_child_file():
+    # tests/fixtures/spa_jsonl_import/site.yml is not a spa run catalog playbook.
+    # Keep a direct ansible-playbook so the callback origin is pinned on an
+    # imported child play with ANSIBLE_STDOUT_CALLBACK=default.
     playbook = shutil.which("ansible-playbook")
     if not playbook:
         venv = PROJECT / "tests" / ".venv" / "bin" / "ansible-playbook"

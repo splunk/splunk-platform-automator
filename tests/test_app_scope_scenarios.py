@@ -1,12 +1,11 @@
 """
 Scenario-based tests for app scope (debug_app_scope.yml).
 
-Runs debug_app_scope.yml with run_scope_locally=true once per scenario
-(shared by succeeds, assertions, and snapshot). No SSH or real hosts required.
+Runs spa run verification/debug_app_scope with run_scope_locally=true once
+per scenario (shared by succeeds, assertions, and snapshot). No SSH or real
+hosts required.
 
 Scenarios live under tests/configs/app_scope/<name>/splunk_config.yml.
-
-Requires: ansible-playbook on PATH (or ANSIBLE_PLAYBOOK), Python deps from tests/requirements.txt (pytest, PyYAML).
 """
 
 from __future__ import annotations
@@ -22,25 +21,11 @@ import pytest
 
 pytestmark = [pytest.mark.local, pytest.mark.ansible]
 
-
-def _ansible_playbook_executable() -> str:
-    """Path to ansible-playbook (ANSIBLE_PLAYBOOK env overrides PATH lookup)."""
-    override = (os.environ.get("ANSIBLE_PLAYBOOK") or "").strip()
-    if override:
-        return override
-    found = shutil.which("ansible-playbook")
-    if not found:
-        pytest.fail(
-            "ansible-playbook not found on PATH. Install Ansible on the controller, or set ANSIBLE_PLAYBOOK "
-            "to the full path. App scope tests shell out to debug_app_scope.yml."
-        )
-    return found
-
 # Allow importing scope_assertions when running pytest from project root
 _tests_dir = Path(__file__).resolve().parent
 if str(_tests_dir) not in sys.path:
     sys.path.insert(0, str(_tests_dir))
-from spa_testutil import worker_local_dir
+from spa_testutil import PROJECT_ROOT, SPA, spa_env, worker_local_dir, write_min_env
 from scope_assertions import (
     assert_cluster_manager_apps,
     assert_cluster_manager_target_hosts,
@@ -58,13 +43,8 @@ from scope_assertions import (
 )
 
 
-def _project_root() -> Path:
-    """Repository root (parent of tests/)."""
-    return Path(__file__).resolve().parent.parent
-
-
 def _scenarios_dir() -> Path:
-    return _project_root() / "tests" / "configs" / "app_scope"
+    return PROJECT_ROOT / "tests" / "configs" / "app_scope"
 
 
 def _scope_output_path(scenario_name: str) -> Path:
@@ -104,11 +84,13 @@ def _ensure_software_stubs(stub_dir: Path) -> None:
 
 
 def _run_scope_playbook(
-    scenario_name: str, scope_output_path: Path, unset_env: tuple[str, ...] = ()
+    scenario_name: str,
+    scope_output_path: Path,
+    unset_env: tuple[str, ...] = (),
+    *,
+    ansible_output: bool = False,
 ) -> subprocess.CompletedProcess:
-    """Run debug_app_scope.yml with -i <scenario_config> -e run_scope_locally=true etc."""
-    root = _project_root()
-    playbook = root / "ansible" / "verification" / "debug_app_scope.yml"
+    """Run spa run verification/debug_app_scope with extra -e after --."""
     config_path = _scenarios_dir() / scenario_name / "splunk_config.yml"
     assert config_path.is_file(), f"Scenario config missing: {config_path}"
     # Use workspace-local temp dirs so Ansible does not need ~/.ansible/tmp (fails in sandbox/CI).
@@ -118,38 +100,56 @@ def _run_scope_playbook(
     ansible_tmp.mkdir(parents=True, exist_ok=True)
     remote_tmp = ansible_tmp / "remote"
     remote_tmp.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        _ansible_playbook_executable(),
-        str(playbook),
-        "-i", str(config_path),
-        "-e", "run_scope_locally=true",
-        "-e", f"scope_output_path={scope_output_path}",
-        "-e", "assert_scope_invariants=true",
-    ]
+    env_dir = write_min_env(out_dir / f"{scenario_name}_env")
+    shutil.copy(config_path, env_dir / "config" / "splunk_config.yml")
     # Inventory plugin requires PS baseconfig apps, installer archives, and
     # license files under ../Software. CI has none of those; point at stubs.
-    stub_software = root / "tests" / "fixtures" / "baseconfig"
+    stub_software = PROJECT_ROOT / "tests" / "fixtures" / "baseconfig"
     _ensure_software_stubs(stub_software)
-    env = {
-        **os.environ,
-        "ANSIBLE_CONFIG": str(root / "ansible.cfg"),
-        "ANSIBLE_LOCAL_TEMP": str(ansible_tmp),
-        "ANSIBLE_REMOTE_TEMP": str(remote_tmp),
-        "SPA_BASECONFIG_DIR": str(stub_software),
-        "SPA_SOFTWARE_DIR": str(stub_software),
-        "SPLUNK_ADMIN_PASSWORD": "scenario-admin",
-    }
+    env = spa_env(
+        {
+            "SPA_HOME": str(PROJECT_ROOT),
+            "SPA_ENV_DIR": str(env_dir),
+            "SPA_VENV_DIR": str(PROJECT_ROOT / "tests" / ".venv"),
+            "SPA_SOFTWARE_DIR": str(stub_software),
+            "SPA_BASECONFIG_DIR": str(stub_software),
+            "SPLUNK_ADMIN_PASSWORD": "scenario-admin",
+            "ANSIBLE_LOCAL_TEMP": str(ansible_tmp),
+            "ANSIBLE_REMOTE_TEMP": str(remote_tmp),
+        }
+    )
+    # run_spa() merges onto os.environ, so a missing key would not unset it.
+    # Build the env dict and invoke bin/spa so unset_env can actually drop vars.
     for name in unset_env:
         env.pop(name, None)
-    collections_dir = root / "tests" / ".collections"
+    collections_dir = PROJECT_ROOT / "tests" / ".collections"
     if collections_dir.is_dir():
         existing = env.get("ANSIBLE_COLLECTIONS_PATH", "")
         env["ANSIBLE_COLLECTIONS_PATH"] = (
             f"{collections_dir}{os.pathsep}{existing}" if existing else str(collections_dir)
         )
+    cmd = [
+        sys.executable,
+        str(SPA),
+        "run",
+        "verification/debug_app_scope",
+    ]
+    if ansible_output:
+        cmd.append("--ansible-output")
+    cmd.extend(
+        [
+            "--",
+            "-e",
+            "run_scope_locally=true",
+            "-e",
+            f"scope_output_path={scope_output_path}",
+            "-e",
+            "assert_scope_invariants=true",
+        ]
+    )
     result = subprocess.run(
         cmd,
-        cwd=str(root),
+        cwd=str(PROJECT_ROOT),
         capture_output=True,
         text=True,
         timeout=120,
@@ -244,7 +244,7 @@ def test_loadgroup_keeps_one_scenario_on_one_xdist_group(tmp_path):
         cwd=tmp_path,
         capture_output=True,
         text=True,
-        env={**os.environ, "PYTHONPATH": os.pathsep.join([str(_tests_dir), str(_project_root() / "lib")])},
+        env={**os.environ, "PYTHONPATH": os.pathsep.join([str(_tests_dir), str(PROJECT_ROOT / "lib")])},
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -262,9 +262,16 @@ def test_scenario_scope_playbook_succeeds(scenario_scope_result):
 
 def test_inventory_names_unset_admin_password_lookup(tmp_path):
     """CFG-SEC-003. A blank resolved password names the unset variable."""
-    result = _run_scope_playbook("ds_only", tmp_path / "scope.json", unset_env=("SPLUNK_ADMIN_PASSWORD",))
+    result = _run_scope_playbook(
+        "ds_only",
+        tmp_path / "scope.json",
+        unset_env=("SPLUNK_ADMIN_PASSWORD",),
+        ansible_output=True,
+    )
     assert result.returncode != 0
-    assert "are not set: SPLUNK_ADMIN_PASSWORD" in result.stderr
+    combined = (result.stderr or "") + (result.stdout or "")
+    assert "failed" in combined
+    assert "are not set: SPLUNK_ADMIN_PASSWORD" in combined
 
 
 def test_scenario_scope_assertions(scenario_scope_result):

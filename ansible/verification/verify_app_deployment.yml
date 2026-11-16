@@ -14,8 +14,8 @@
 # Inventory is provided by the framework (ansible.cfg); run from project root.
 #
 # Usage:
-#   ansible-playbook ansible/verification/verify_app_deployment.yml
-#   ansible-playbook ansible/verification/verify_app_deployment.yml -e fail_on_mismatch=true
+#   spa run verification/verify_app_deployment
+#   spa run verification/verify_app_deployment -- -e fail_on_mismatch=true
 
 - name: Pre-verification checks
   hosts: all
