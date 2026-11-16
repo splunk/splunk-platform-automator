@@ -10,7 +10,13 @@ import yaml
 
 from spa.registry import resolve_init_dest
 from spa.paths import resolve_spa_paths
-from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init, write_min_env
+from spa_testutil import (
+    PROJECT_ROOT,
+    clone_sibling_baseconfig_dir,
+    run_spa,
+    run_spa_init,
+    write_min_env,
+)
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -238,7 +244,7 @@ def test_init_seeds_only_missing_global_paths(tmp_path):
 
 
 def test_init_persists_discovered_global_paths(tmp_path):
-    extra = _xdg(tmp_path)
+    _, extra = _home_xdg(tmp_path)
     software = tmp_path / "Software"
     apps = tmp_path / "apps"
     software.mkdir()
@@ -250,7 +256,11 @@ def test_init_persists_discovered_global_paths(tmp_path):
     assert result.returncode == 0, result.stderr + result.stdout
     data = yaml.safe_load((tmp_path / "xdg" / "spa" / "paths.yml").read_text())
     assert Path(data["software_dir"]).resolve() == software.resolve()
-    assert "baseconfig_dir" not in data
+    clone_bc = clone_sibling_baseconfig_dir()
+    if clone_bc is None:
+        assert "baseconfig_dir" not in data
+    else:
+        assert Path(data["baseconfig_dir"]).resolve() == clone_bc
     assert Path(data["apps_dir"]).resolve() == apps.resolve()
 
 

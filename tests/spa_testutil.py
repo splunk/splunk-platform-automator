@@ -260,6 +260,16 @@ def seed_baseconfig_dir(root: Path) -> Path:
     return baseconfig
 
 
+def clone_sibling_baseconfig_dir() -> Optional[Path]:
+    """Directory spa init would discover next to this checkout (markers required)."""
+    from spa.preflight import _has_baseconfig_apps
+
+    for candidate in (PROJECT_ROOT / ".." / "baseconfigs", PROJECT_ROOT / "baseconfigs"):
+        if candidate.is_dir() and _has_baseconfig_apps(candidate):
+            return candidate.resolve()
+    return None
+
+
 def spa_env(extra: Optional[Mapping[str, str]] = None) -> dict:
     env = os.environ.copy()
     for name in (*AGENT_ENV_VARS, *INHERITED_PATH_VARS):

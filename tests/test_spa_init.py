@@ -6,7 +6,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from spa_testutil import PROJECT_ROOT, run_spa, run_spa_inprocess, run_spa_init
+from spa_testutil import (
+    PROJECT_ROOT,
+    clone_sibling_baseconfig_dir,
+    run_spa,
+    run_spa_inprocess,
+    run_spa_init,
+)
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -275,6 +281,7 @@ def test_scaffold_creates_env_without_ansible(tmp_path):
     "fragment",
     sorted(
         [
+            *PROJECT_ROOT.joinpath("examples").glob("*.yml"),
             *PROJECT_ROOT.joinpath("examples", "providers").glob("*.yml"),
             *PROJECT_ROOT.joinpath("examples", "topologies").glob("*.yml"),
             *PROJECT_ROOT.joinpath("examples", "templates").glob("*.yml"),
@@ -289,13 +296,14 @@ def test_init_fragments_omit_plugin(fragment):
     assert "config_version" not in cfg
 
 
-def test_shipped_full_example_stamps_schema_version():
+def test_shipped_itsi_example_is_a_merge_fragment():
     loaded = yaml.safe_load(
         (PROJECT_ROOT / "examples" / "single_node_itsi.yml").read_text()
     )
-    assert list(loaded)[:2] == ["plugin", "schema_version"]
-    assert loaded["schema_version"] == 1
+    assert "plugin" not in loaded
+    assert "schema_version" not in loaded
     assert "config_version" not in loaded
+    assert "splunk_defaults" in loaded
 
 
 @pytest.mark.parametrize("provider", ["aws", "virtualbox"])
@@ -1043,14 +1051,22 @@ def test_init_software_dir_writes_user_and_env_yml(tmp_path):
     user = yaml.safe_load((xdg / "spa" / "paths.yml").read_text())
     spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
     assert Path(user["software_dir"]).resolve() == software.resolve()
-    assert "baseconfig_dir" not in user
+    clone_bc = clone_sibling_baseconfig_dir()
+    if clone_bc is None:
+        assert "baseconfig_dir" not in user
+        assert "baseconfig_dir" not in spa_yml
+    else:
+        assert Path(user["baseconfig_dir"]).resolve() == clone_bc
+        assert Path(spa_yml["baseconfig_dir"]).resolve() == clone_bc
     assert Path(spa_yml["software_dir"]).resolve() == software.resolve()
-    assert "baseconfig_dir" not in spa_yml
     second = run_spa_init(["--example", "single_node.yml", str(dest2)], env=isolated)
     assert second.returncode == 0, second.stderr + second.stdout
     spa2 = yaml.safe_load((dest2 / ".spa.yml").read_text())
     assert Path(spa2["software_dir"]).resolve() == software.resolve()
-    assert "baseconfig_dir" not in spa2
+    if clone_bc is None:
+        assert "baseconfig_dir" not in spa2
+    else:
+        assert Path(spa2["baseconfig_dir"]).resolve() == clone_bc
 
 
 def test_init_discovers_marker_bearing_baseconfigs_sibling(tmp_path, capsys):
