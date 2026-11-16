@@ -491,7 +491,10 @@ run() {
   printf '%%s\\n' "${COMPREPLY[@]}"
 }
 run 'spa --software-dir my' 'spa --software-dir my' 2
+run 'spa --baseconfig-dir my' 'spa --baseconfig-dir my' 2
+run 'spa --apps-dir my' 'spa --apps-dir my' 2
 run 'spa --env-dir my' 'spa --env-dir my' 2
+run 'spa init --from my' 'spa init --from my' 3
 run 'spa config merge --file my' 'spa config merge --file my' 4
 run 'spa init my' 'spa init my' 2
 run 'spa init ' 'spa init ""' 2
@@ -510,9 +513,18 @@ run 'spa init ' 'spa init ""' 2
     software = by_line["spa --software-dir my"]
     assert "mydir" in software
     assert "myfile" not in software
+    baseconfig = by_line["spa --baseconfig-dir my"]
+    assert "mydir" in baseconfig
+    assert "myfile" not in baseconfig
+    apps = by_line["spa --apps-dir my"]
+    assert "mydir" in apps
+    assert "myfile" not in apps
     env_dir = by_line["spa --env-dir my"]
     assert "mydir" in env_dir
     assert "myfile" not in env_dir
+    from_dir = by_line["spa init --from my"]
+    assert "mydir" in from_dir
+    assert "myfile" not in from_dir
     merge = by_line["spa config merge --file my"]
     assert "myfile" in merge
     init_dest = by_line["spa init my"]
@@ -585,6 +597,39 @@ _spa
     assert "list" in by_case["INIT"]
     assert "SENTINEL_FILES" not in by_case["FLAG"]
     assert "SENTINEL_DIRS" not in by_case["FLAG"]
+
+
+def test_reset_paths_is_boolean_not_a_directory_flag():
+    from spa.completion import _BASH, _BOOLEAN, _ZSH
+
+    assert "--reset-paths" in _BOOLEAN
+    for script in (
+        _BASH,
+        _ZSH,
+        run_spa(["completion", "bash"]).stdout,
+        run_spa(["completion", "zsh"]).stdout,
+    ):
+        dir_lines = [
+            line
+            for line in script.splitlines()
+            if "--software-dir" in line and "--apps-dir" in line
+        ]
+        assert dir_lines
+        for line in dir_lines:
+            assert "--reset-paths" not in line
+
+
+def test_environment_init_dir_flags_take_values():
+    from spa.agent import COMMAND_SCHEMA
+
+    by_name = {row["name"]: row for row in COMMAND_SCHEMA["commands"]}
+    flags = {flag["long"]: flag for flag in by_name["environment init"]["flags"]}
+    for name in ("--software-dir", "--baseconfig-dir", "--apps-dir", "--env-dir"):
+        assert flags[name]["takes_value"] is True
+        assert "completes_from" not in flags[name]
+    assert "--reset-paths" in flags
+    assert flags["--reset-paths"].get("takes_value") is not True
+    assert "completes_from" not in flags["--reset-paths"]
 
 
 def test_schema_flag_values_match_command_help():

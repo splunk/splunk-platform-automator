@@ -382,6 +382,115 @@ def test_force_without_example_keeps_config(tmp_path):
     assert not leftover.exists() and not leftover.is_symlink()
 
 
+def _isolated_home(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    xdg = tmp_path / "xdg-config"
+    return {"HOME": str(home), "XDG_CONFIG_HOME": str(xdg)}, xdg
+
+
+def _make_dir_map(root):
+    mapping = {}
+    for key, leaf in (
+        ("software_dir", "Software"),
+        ("baseconfig_dir", "baseconfigs"),
+        ("apps_dir", "apps"),
+    ):
+        path = root / leaf
+        path.mkdir(parents=True, exist_ok=True)
+        mapping[key] = path
+    return mapping
+
+
+def _write_paths_yml(xdg, dirs):
+    spa = xdg / "spa"
+    spa.mkdir(parents=True, exist_ok=True)
+    lines = ["# test paths"]
+    for key in ("software_dir", "baseconfig_dir", "apps_dir"):
+        lines.append("%s: %s" % (key, dirs[key]))
+    (spa / "paths.yml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _stamp_spa_yml_dirs(dest, dirs):
+    spa_yml = dest / ".spa.yml"
+    data = yaml.safe_load(spa_yml.read_text()) or {}
+    lines = ["spa_home: %s" % data["spa_home"]]
+    for key in ("software_dir", "baseconfig_dir", "apps_dir"):
+        lines.append("%s: %s" % (key, dirs[key]))
+    spa_yml.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _setup_stale_env(tmp_path):
+    isolated, xdg = _isolated_home(tmp_path)
+    dest = tmp_path / "env"
+    first = run_spa_init(["--example", "single_node.yml", str(dest)], env=isolated)
+    assert first.returncode == 0, first.stderr + first.stdout
+    stale = _make_dir_map(tmp_path / "stale")
+    wanted = _make_dir_map(tmp_path / "wanted")
+    _stamp_spa_yml_dirs(dest, stale)
+    _write_paths_yml(xdg, wanted)
+    marker = "# keep-me-reset-paths\n"
+    cfg = dest / "config" / "splunk_config.yml"
+    cfg.write_text(cfg.read_text() + marker)
+    return dest, isolated, xdg, stale, wanted, marker
+
+
+def _assert_spa_yml_dirs(dest, expected):
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
+    for key, path in expected.items():
+        assert Path(spa_yml[key]).resolve() == path.resolve(), key
+    return spa_yml
+
+
+def test_force_keeps_stale_dir_keys_when_paths_yml_differs(tmp_path):
+    dest, isolated, xdg, stale, wanted, marker = _setup_stale_env(tmp_path)
+    before_paths = (xdg / "spa" / "paths.yml").read_text()
+    result = run_spa_init(["--force", str(dest)], env=isolated)
+    assert result.returncode == 0, result.stderr + result.stdout
+    _assert_spa_yml_dirs(dest, stale)
+    assert marker in (dest / "config" / "splunk_config.yml").read_text()
+    assert (xdg / "spa" / "paths.yml").read_text() == before_paths
+    assert Path(wanted["software_dir"]).resolve() != Path(stale["software_dir"]).resolve()
+
+
+def test_force_reset_paths_restamps_from_paths_yml(tmp_path):
+    dest, isolated, xdg, stale, wanted, marker = _setup_stale_env(tmp_path)
+    before_paths = (xdg / "spa" / "paths.yml").read_text()
+    result = run_spa_init(["--force", "--reset-paths", str(dest)], env=isolated)
+    assert result.returncode == 0, result.stderr + result.stdout
+    _assert_spa_yml_dirs(dest, wanted)
+    assert marker in (dest / "config" / "splunk_config.yml").read_text()
+    assert (xdg / "spa" / "paths.yml").read_text() == before_paths
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
+    assert Path(spa_yml["software_dir"]).resolve() != stale["software_dir"].resolve()
+
+
+def test_reset_paths_prefers_explicit_software_dir(tmp_path):
+    dest, isolated, xdg, stale, wanted, marker = _setup_stale_env(tmp_path)
+    explicit = tmp_path / "explicit" / "Software"
+    explicit.mkdir(parents=True)
+    result = run_spa_init(
+        ["--force", "--reset-paths", "--software-dir", str(explicit), str(dest)],
+        env=isolated,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
+    assert Path(spa_yml["software_dir"]).resolve() == explicit.resolve()
+    assert Path(spa_yml["baseconfig_dir"]).resolve() == wanted["baseconfig_dir"].resolve()
+    assert Path(spa_yml["apps_dir"]).resolve() == wanted["apps_dir"].resolve()
+    assert marker in (dest / "config" / "splunk_config.yml").read_text()
+
+
+def test_reset_paths_without_force_on_existing_env_uses_force_message(tmp_path):
+    dest, isolated, xdg, stale, wanted, marker = _setup_stale_env(tmp_path)
+    result = run_spa_init(["--reset-paths", str(dest)], env=isolated)
+    assert result.returncode != 0
+    out = result.stderr + result.stdout
+    assert "Use --force to refresh .spa.yml" in out
+    _assert_spa_yml_dirs(dest, stale)
+    assert marker in (dest / "config" / "splunk_config.yml").read_text()
+
+
 def test_force_removes_incomplete_env_venv(tmp_path):
     """An empty .venv holds no state and breaks every cd into the env."""
     dest = tmp_path / "exists"

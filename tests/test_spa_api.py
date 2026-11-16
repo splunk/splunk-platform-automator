@@ -41,6 +41,7 @@ SESSION_API_PARAMETERS = {
         "migrate_set",
         "keep_source",
         "force",
+        "reset_paths",
         "env_venv",
         "python",
         "ansible",

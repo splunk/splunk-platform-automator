@@ -11,6 +11,8 @@ Work on this branch is **3.0**. Linux packages and Homebrew are later, not part 
 
 ### Added
 
+- **`spa init --reset-paths`**: with `--force`, skip this env’s existing `.spa.yml` Software/baseconfig/apps dirs and re-resolve from `--*-dir`, then `paths.yml`, then discovery. `--force` alone still keeps those dir keys. Does not rewrite `splunk_config.yml`.
+
 - **Live deployment suites**: provider-free topologies under `tests/deployment/`, AWS suite overlay, and spa-only live steps (`validate`, `deploy --yes`, `run verification/...`, `destroy --yes`). Umbrella `tests/run_deployment_tests.sh` runs every suite file; AWS-only is `tests/run_deployment_aws_tests.sh`.
 
 - **Install and path contract** ([#46](https://github.com/splunk/splunk-platform-automator/issues/46), [#48](https://github.com/splunk/splunk-platform-automator/issues/48), [#72](https://github.com/splunk/splunk-platform-automator/issues/72), [#73](https://github.com/splunk/splunk-platform-automator/issues/73), [#91](https://github.com/splunk/splunk-platform-automator/issues/91)): `SPA_HOME` is the framework; `SPA_ENV_DIR` is one environment. `install.sh` installs a prefix from the framework tarball (GitHub `releases/latest/download/install.sh`); `--uninstall` removes that prefix and launcher only. User-level Software / baseconfig / apps pointers live in `paths.yml` (`spa init --software-dir`, `spa environment set --software-dir`). `spa init` scaffolds an env (example or architecture file, `.spa.yml`, inventory, Terraform state dir) and never copies `ansible/`. `--from` / `--force` migrate a 2.x clone env; `--force` strips leftover framework files from the packaging manifest. Init requires `--provider` unless a default is saved with `spa environment set --provider NAME`.

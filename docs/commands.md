@@ -610,10 +610,11 @@ Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Plat
 | `--provider` | ccm, aws, external, or virtualbox. Required unless a default is saved (spa environment set --provider NAME) |
 | `--env-dir` | One-off parent (requires --name); does not change the default parent |
 | `--name` | Registry name (default: folder basename) |
-| `--force` | Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example) |
-| `--software-dir` | Splunk installers directory for this env (.spa.yml). If omitted, uses ~/.config/spa/paths.yml then discovery. Seeds paths.yml only when that key is unset. |
-| `--baseconfig-dir` | PS baseconfig apps directory for this env (.spa.yml). If omitted, uses ~/.config/spa/paths.yml then discovery. Seeds paths.yml only when that key is unset. |
-| `--apps-dir` | Local source: local apps directory for this env (.spa.yml). If omitted, uses ~/.config/spa/paths.yml then discovery. Seeds paths.yml only when that key is unset. |
+| `--force` | Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example; keep Software/baseconfig/apps dirs unless --reset-paths) |
+| `--reset-paths` | Skip existing .spa.yml Software/baseconfig/apps dirs; re-resolve from --*-dir, then paths.yml, then discovery |
+| `--software-dir` | Splunk installers directory for this env (.spa.yml). If omitted, uses existing .spa.yml unless --reset-paths, then ~/.config/spa/paths.yml then discovery. Seeds paths.yml only when that key is unset. |
+| `--baseconfig-dir` | PS baseconfig apps directory for this env (.spa.yml). If omitted, uses existing .spa.yml unless --reset-paths, then ~/.config/spa/paths.yml then discovery. Seeds paths.yml only when that key is unset. |
+| `--apps-dir` | Local source: local apps directory for this env (.spa.yml). If omitted, uses existing .spa.yml unless --reset-paths, then ~/.config/spa/paths.yml then discovery. Seeds paths.yml only when that key is unset. |
 
 Example:
 

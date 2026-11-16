@@ -178,6 +178,7 @@ _BOOLEAN = frozenset(
         "--markdown",
         "--status",
         "--force",
+        "--reset-paths",
         "--shared",
         "--all",
         "--extract",

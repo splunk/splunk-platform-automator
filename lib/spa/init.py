@@ -141,6 +141,7 @@ def write_spa_yml(
     baseconfig_dir: Optional[str] = None,
     apps_dir: Optional[str] = None,
     environ: Optional[dict] = None,
+    reset_paths: bool = False,
 ) -> tuple:
     env = environ if environ is not None else os.environ
     start = dest.resolve()
@@ -157,7 +158,7 @@ def write_spa_yml(
     sw = ""
     if software_dir:
         sw = str(_expand(software_dir, start))
-    elif existing.get("software_dir"):
+    elif not reset_paths and existing.get("software_dir"):
         sw = str(_expand(str(existing["software_dir"]), start))
     elif user.get("software_dir"):
         sw = str(_expand(str(user["software_dir"]), start))
@@ -173,7 +174,7 @@ def write_spa_yml(
     bc = ""
     if baseconfig_dir:
         bc = str(_expand(baseconfig_dir, start))
-    elif existing.get("baseconfig_dir"):
+    elif not reset_paths and existing.get("baseconfig_dir"):
         bc = str(_expand(str(existing["baseconfig_dir"]), start))
     elif user.get("baseconfig_dir"):
         bc = str(_expand(str(user["baseconfig_dir"]), start))
@@ -189,7 +190,7 @@ def write_spa_yml(
     apps = ""
     if apps_dir:
         apps = str(_expand(apps_dir, start))
-    elif existing.get("apps_dir"):
+    elif not reset_paths and existing.get("apps_dir"):
         apps = str(_expand(str(existing["apps_dir"]), start))
     elif user.get("apps_dir"):
         apps = str(_expand(str(user["apps_dir"]), start))
@@ -866,6 +867,7 @@ def init_env(
     skip_doctor: bool = False,
     rebuild_venv: bool = False,
     log: Optional[List[str]] = None,
+    reset_paths: bool = False,
     software_dir: Optional[str] = None,
     baseconfig_dir: Optional[str] = None,
     apps_dir: Optional[str] = None,
@@ -893,6 +895,7 @@ def init_env(
             pip_pkgs=pip_pkgs,
             skip_doctor=skip_doctor,
             rebuild_venv=rebuild_venv,
+            reset_paths=reset_paths,
             software_dir=software_dir,
             baseconfig_dir=baseconfig_dir,
             apps_dir=apps_dir,
@@ -947,6 +950,7 @@ def _init_env(
     pip_pkgs: Optional[Sequence[str]] = None,
     skip_doctor: bool = False,
     rebuild_venv: bool = False,
+    reset_paths: bool = False,
     software_dir: Optional[str] = None,
     baseconfig_dir: Optional[str] = None,
     apps_dir: Optional[str] = None,
@@ -996,6 +1000,7 @@ def _init_env(
         "software_dir": software_dir,
         "baseconfig_dir": baseconfig_dir,
         "apps_dir": apps_dir,
+        "reset_paths": reset_paths,
     }
 
     def _write() -> tuple:

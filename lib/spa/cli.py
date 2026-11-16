@@ -920,8 +920,15 @@ def _add_init_arguments(parser) -> None:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Overwrite .spa.yml (and strip old clone leftovers). "
-        "Does not replace splunk_config.yml unless --example is also given.",
+        help="Adopt/refresh an existing env and register it "
+        "(keep splunk_config.yml unless --example; "
+        "keep Software/baseconfig/apps dirs unless --reset-paths)",
+    )
+    parser.add_argument(
+        "--reset-paths",
+        action="store_true",
+        help="Skip existing .spa.yml Software/baseconfig/apps dirs; "
+        "re-resolve from --*-dir, then paths.yml, then discovery",
     )
     parser.add_argument("--venv", action="store_true", help="Create the environment Python virtualenv")
     parser.add_argument("--python", metavar="PATH", help="Python interpreter used to create the virtualenv")
@@ -1183,6 +1190,7 @@ def _run_init(args, session, as_agent: bool) -> int:
         migrate_set=args.migrate or args.from_dir is not None,
         keep_source=args.keep_source,
         force=args.force,
+        reset_paths=args.reset_paths,
         env_venv=args.venv or bool(args.python) or bool(args.ansible) or bool(args.pip),
         python=args.python,
         ansible=args.ansible,
