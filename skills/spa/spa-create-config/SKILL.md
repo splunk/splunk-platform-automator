@@ -34,7 +34,7 @@ Interactive workflow for `config/splunk_config.yml` on AWS, VirtualBox, external
 
 - App-scope test distillation → [tests/README.md](../../../tests/README.md)
 - Splunkbase search / TA lookup → load [spa-apps](../spa-apps/SKILL.md) (`spa --agent apps search` then one `spa --agent apps add`)
-- Flat deployment test configs under `tests/configs/*.yml` only
+- Live deployment topologies under `tests/deployment/topologies/` only
 - Production sizing / PS engagement (guidance only; no auto-sizing)
 - Running spa deploy without an explicit yes in chat for that run (Phase 14 asks first)
 

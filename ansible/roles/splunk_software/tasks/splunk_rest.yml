@@ -43,6 +43,9 @@
         force_basic_auth: true
         validate_certs: false
       register: splunk_software_rest_output
+      retries: 12
+      delay: 5
+      until: splunk_software_rest_output is succeeded
       changed_when: splunk_software_rest_method|default('GET') == 'POST'
 
     - name: Get rest output

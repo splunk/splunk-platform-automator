@@ -550,12 +550,12 @@ splunk_systemd: {}
 | `splunk_hosts[].external` | ExternalConfig | optional | Bring-your-own SSH block for this host only. Holds no value itself. No default. Set this on one host inside a terraform or virtualbox env. Omit the key when a root external: block covers every host. |
 | `splunk_hosts[].idxcluster` | string | optional | Indexer cluster name. Required when roles includes cluster_manager. No default for other roles. Omit the key when the host is not in an indexer cluster. Also associates indexer peers with that cluster. |
 | `splunk_hosts[].ip_addr` | string | optional | Guest IPv4 when you assign it yourself. No default. Omit the key to let the provider assign the address. |
-| `splunk_hosts[].iter` | object | optional | Generated hostnames from a numeric range. Holds no value itself. |
+| `splunk_hosts[].iter` | object | optional | Generated hostnames from a numeric range. Each generated name is letters, digits, hyphens, and dots (for an FQDN); not underscores. Holds no value itself. |
 | `splunk_hosts[].iter.numbers` | string | required; pattern=^\d+\.\.\d+$ | Inclusive numeric range such as 1..3. One host is created per number. Required. |
 | `splunk_hosts[].iter.postfix` | string | optional | Text placed after each generated number in the hostname. No default. Omit the key to add nothing after the number. |
 | `splunk_hosts[].iter.prefix` | string | optional | Text placed before each generated number in the hostname. No default. Omit the key to add nothing before the number. |
-| `splunk_hosts[].list` | list[string] | optional | Hostnames generated from this one entry. No default. Set exactly one of name, list, or iter. |
-| `splunk_hosts[].name` | string | optional | Inventory hostname for this one host. No default. Set exactly one of name, list, or iter. |
+| `splunk_hosts[].list` | list[string] | optional | Hostnames generated from this one entry. Each name is letters, digits, hyphens, and dots (for an FQDN); not underscores. No default. Set exactly one of name, list, or iter. |
+| `splunk_hosts[].name` | string | optional | Inventory hostname for this one host. Letters, digits, hyphens, and dots (for an FQDN); not underscores. No default. Set exactly one of name, list, or iter. |
 | `splunk_hosts[].os` | object | optional | Per-host override of `os`: Guest OS settings for this host only. Holds no value itself. |
 | `splunk_hosts[].os.disable_apparmor` | boolean | optional; default=True | Per-host override of `os.disable_apparmor`: When true, disable AppArmor on Ubuntu and Debian. |
 | `splunk_hosts[].os.disable_selinux` | boolean | optional; default=True | Per-host override of `os.disable_selinux`: When true, disable SELinux on RHEL and Amazon Linux. Skipped on universal forwarders. |

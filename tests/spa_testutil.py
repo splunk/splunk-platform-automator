@@ -53,6 +53,8 @@ def worker_local_dir(base: Path) -> Path:
 
 def xdist_group_name(params: Mapping) -> Optional[str]:
     """xdist loadgroup name so related parametrized tests share a worker."""
+    if "topology_id" in params:
+        return str(params["topology_id"])
     if "config_file" in params:
         return os.path.splitext(str(params["config_file"]))[0]
     scenario = params.get("scenario_scope_result")
@@ -256,6 +258,16 @@ def seed_baseconfig_dir(root: Path) -> Path:
     for name in ("org_s2_indexer_indexes", "org_cluster_manager_base"):
         (baseconfig / "ps" / name).mkdir(parents=True, exist_ok=True)
     return baseconfig
+
+
+def clone_sibling_baseconfig_dir() -> Optional[Path]:
+    """Directory spa init would discover next to this checkout (markers required)."""
+    from spa.preflight import _has_baseconfig_apps
+
+    for candidate in (PROJECT_ROOT / ".." / "baseconfigs", PROJECT_ROOT / "baseconfigs"):
+        if candidate.is_dir() and _has_baseconfig_apps(candidate):
+            return candidate.resolve()
+    return None
 
 
 def spa_env(extra: Optional[Mapping[str, str]] = None) -> dict:

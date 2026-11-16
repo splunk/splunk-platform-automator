@@ -21,8 +21,28 @@ def test_common_role_unions_acl_and_policykit_before_the_check():
     assert "splunk_use_policykit" in required
     assert "unique" in required
     assert "packages | default([])" in required
+    assert "difference" in required
+    assert "polkitd" in required
     check = text.split("Call Check Ansible requirements", 1)[1]
     assert "check_ansible_requirements.yml" in check
+
+
+def test_ansible_inventory_uses_per_host_ssh_username():
+    text = (ROOT / "terraform" / "aws" / "outputs.tf").read_text(encoding="utf-8")
+    assert "ansible_user" in text
+    assert "var.host_configs[hostname].ssh_username" in text
+    assert "local.ssh_username" in text
+
+
+def test_debian_packages_remap_missing_policykit_one():
+    text = (ROOT / "ansible" / "roles" / "common" / "tasks" / "packages.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "Try policykit-1 when requested" in text
+    assert "No package matching" in text
+    assert "polkitd" in text
+    assert "pkexec" in text
+    assert "reject('equalto', 'policykit-1')" in text
 
 
 def test_ami_lookup_returns_name_and_description():

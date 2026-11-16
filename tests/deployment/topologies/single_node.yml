@@ -1,0 +1,28 @@
+---
+# Provider-free live topology. SVA: S1. Combined search head + indexer.
+# Compose with tests/deployment/providers and a suite OS (AWS suite: ubuntu).
+
+os:
+  set_hostname: true
+
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  splunk_download:
+    splunk: true
+    splunkforwarder: true
+  splunk_set_servername: true
+  splunk_set_default_hostname: true
+  splunk_loginpage_print_userpw: false
+  splunk_ssl:
+    web:
+      enable: true
+    inputs:
+      enable: true
+    outputs:
+      enable: true
+
+splunk_hosts:
+  - name: shidx
+    roles:
+      - indexer
+      - search_head
