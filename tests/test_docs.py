@@ -290,6 +290,8 @@ def test_docs_treat_software_and_baseconfig_as_separate_trees():
     assert "also sets `baseconfig_dir`" not in prepare
     assert "Baseconfigs/" in prepare
     assert "--baseconfig-dir" in prepare
+    assert "spa init --baseconfig-dir" in prepare
+    assert "for this env" in prepare or "that env" in prepare
     install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
     assert "Professional Services baseconfig apps in a `Software/`" not in install
 
@@ -728,6 +730,9 @@ class TestConfigMarkdown:
         assert "spa provider aws describe-ami" in text
         assert "spa aws latest-ami" not in text
         assert "spa aws describe-ami" not in text
+        assert "stored in ~/.config/spa/paths.yml and copied into env .spa.yml" not in text
+        assert "spa init --baseconfig-dir" in text
+        assert "If omitted, uses ~/.config/spa/paths.yml" in text
 
 
 class TestSpaSkill:
@@ -1933,6 +1938,7 @@ def test_quick_start_is_the_linear_first_run():
     assert "universal-forwarder.html" in text
     assert "spa environment set --create-defaults --yes" in text
     assert "--baseconfig-dir" in text
+    assert "spa init --baseconfig-dir" in text
     assert "also sets `baseconfig_dir`" not in text
     assert "into the same tree" not in text
     assert "http://go/baseconfigs" in text

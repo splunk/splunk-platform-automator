@@ -611,8 +611,9 @@ Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Plat
 | `--env-dir` | One-off parent (requires --name); does not change the default parent |
 | `--name` | Registry name (default: folder basename) |
 | `--force` | Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example) |
-| `--software-dir` | Shared installers directory (saved in paths.yml) |
-| `--baseconfig-dir` | PS baseconfig apps directory |
+| `--software-dir` | Splunk installers directory for this env (.spa.yml). If omitted, uses ~/.config/spa/paths.yml then discovery. Seeds paths.yml only when that key is unset. |
+| `--baseconfig-dir` | PS baseconfig apps directory for this env (.spa.yml). If omitted, uses ~/.config/spa/paths.yml then discovery. Seeds paths.yml only when that key is unset. |
+| `--apps-dir` | Local source: local apps directory for this env (.spa.yml). If omitted, uses ~/.config/spa/paths.yml then discovery. Seeds paths.yml only when that key is unset. |
 
 Example:
 

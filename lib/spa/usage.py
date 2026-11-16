@@ -23,6 +23,14 @@ INIT_PROVIDER_HELP = (
     "%s. Required unless a default is saved "
     "(spa environment set --provider NAME)"
 ) % _PROVIDER_CHOICE
+_INIT_DIR_SCOPE = (
+    "for this env (.spa.yml). "
+    "If omitted, uses ~/.config/spa/paths.yml then discovery. "
+    "Seeds paths.yml only when that key is unset."
+)
+INIT_SOFTWARE_DIR_HELP = "Splunk installers directory %s" % _INIT_DIR_SCOPE
+INIT_BASECONFIG_DIR_HELP = "PS baseconfig apps directory %s" % _INIT_DIR_SCOPE
+INIT_APPS_DIR_HELP = "Local source: local apps directory %s" % _INIT_DIR_SCOPE
 DOCTOR_PROVIDER_HELP = (
     "%s. Repeatable. "
     "Example: spa doctor --provider ccm"

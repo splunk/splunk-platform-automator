@@ -74,6 +74,9 @@ HELP_CONTRACTS = [
             "--name",
             "--env-dir",
             "splunk_config.yml",
+            "for this env (.spa.yml)",
+            "If omitted, uses ~/.config/spa/paths.yml then discovery",
+            "Seeds paths.yml only when that key is unset",
             format_provider_choice(),
         ],
     ),
@@ -129,6 +132,7 @@ HELP_CONTRACTS = [
             "--apps-dir",
             "--default",
             "--provider",
+            "saved in paths.yml",
         ],
     ),
     (

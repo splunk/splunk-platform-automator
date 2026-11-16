@@ -31,7 +31,10 @@ from spa.usage import (
     APP_ID_HELP,
     DOCTOR_PROVIDER_HELP,
     MISSING_OPERAND,
+    INIT_APPS_DIR_HELP,
+    INIT_BASECONFIG_DIR_HELP,
     INIT_PROVIDER_HELP,
+    INIT_SOFTWARE_DIR_HELP,
     PROVIDER_HELP,
     SELECTOR_HELP,
     SET_PATH_HELP,
@@ -928,17 +931,17 @@ def _add_init_arguments(parser) -> None:
     parser.add_argument(
         "--software-dir",
         metavar="DIR",
-        help="Shared Splunk installers directory (saved in ~/.config/spa/paths.yml)",
+        help=INIT_SOFTWARE_DIR_HELP,
     )
     parser.add_argument(
         "--baseconfig-dir",
         metavar="DIR",
-        help="PS baseconfig apps directory",
+        help=INIT_BASECONFIG_DIR_HELP,
     )
     parser.add_argument(
         "--apps-dir",
         metavar="DIR",
-        help="Local source: local apps directory (saved in ~/.config/spa/paths.yml)",
+        help=INIT_APPS_DIR_HELP,
     )
 
 

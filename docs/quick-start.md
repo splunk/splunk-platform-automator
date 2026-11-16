@@ -40,7 +40,7 @@ spa environment set --create-defaults --yes
 2. Extract PS baseconfig apps into `~/Splunk-Platform-Automator/Baseconfigs` (`Configurations - Base`, `Configurations - Index Replication`). Employees: [http://go/baseconfigs](http://go/baseconfigs). Others: Splunk Professional Services. Not a public Splunk.com download.
 3. Optional license: place or symlink a top-level `*.lic` in `~/Splunk-Platform-Automator/Software` (typical name `Splunk_Enterprise.lic`). Trial labs may omit; `spa doctor` warns, `spa validate` does not fail for that alone.
 
-A custom layout still uses `spa environment set --software-dir DIR` / `--baseconfig-dir DIR`. Sibling discovery and `paths.yml`: [Prepare Software](user-guide.md#prepare-software).
+A custom layout for every env still uses `spa environment set --software-dir DIR` / `--baseconfig-dir DIR`. One env only: `spa init --baseconfig-dir DIR NAME` (same for `--software-dir`). Sibling discovery and `paths.yml`: [Prepare Software](user-guide.md#prepare-software).
 
 Confirm with `spa doctor` and fix every Software WARN and any FAIL. Later, `spa licenses list` and `spa config set splunk_defaults.splunk_license_file NAME` when using a file.
 

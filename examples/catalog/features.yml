@@ -788,8 +788,10 @@ features:
     kind: setting
     when_to_use: >-
       Paths to Splunk installer tarballs and Premium Solutions baseconfig apps. Prefer
-      spa init --software-dir and spa init --baseconfig-dir (stored in ~/.config/spa/paths.yml
-      and copied into env .spa.yml). These config keys override that only when they are not
+      spa init --software-dir and spa init --baseconfig-dir (written to that env's .spa.yml.
+      If omitted, uses ~/.config/spa/paths.yml then discovery. Seeds paths.yml only when
+      that key is unset). spa environment set --software-dir / --baseconfig-dir changes
+      the default for every env. These config keys override that only when they are not
       the built-in relative defaults such as ../Software and ../baseconfigs.
     keys: [splunk_dirs, splunk_dirs.splunk_baseconfig_dir, splunk_dirs.splunk_software_dir]
     related: ["setting.baseconfig_save"]

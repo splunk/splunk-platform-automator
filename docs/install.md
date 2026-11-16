@@ -114,7 +114,7 @@ packages and Ansible collections with `spa venv upgrade --shared --yes`, or
 delete and recreate it with `spa venv rebuild --shared --yes`. These commands
 target this `SPA_HOME` explicitly, even if the shell has a stale `SPA_VENV_DIR`.
 
-Put Splunk installers in `~/Splunk-Platform-Automator/Software` and extract PS apps into `~/Splunk-Platform-Automator/Baseconfigs` (`spa environment set --create-defaults --yes`). A lab that never ran `--create-defaults` can still use a sibling of the env or of `SPA_HOME`. Custom locations: `spa environment set --software-dir DIR` and `spa environment set --baseconfig-dir DIR`. Checklist: [Prepare Software](user-guide.md#prepare-software). The full path contract is in the [user guide](user-guide.md#understand-the-paths).
+Put Splunk installers in `~/Splunk-Platform-Automator/Software` and extract PS apps into `~/Splunk-Platform-Automator/Baseconfigs` (`spa environment set --create-defaults --yes`). A lab that never ran `--create-defaults` can still use a sibling of the env or of `SPA_HOME`. Custom locations for every env: `spa environment set --software-dir DIR` and `spa environment set --baseconfig-dir DIR`. One env only: `spa init --baseconfig-dir DIR NAME` (same for `--software-dir`). Checklist: [Prepare Software](user-guide.md#prepare-software). The full path contract is in the [user guide](user-guide.md#understand-the-paths).
 
 ## VirtualBox
 
