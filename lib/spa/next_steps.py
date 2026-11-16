@@ -228,6 +228,56 @@ def attach_license_file_next(payload: Dict[str, Any]) -> None:
     payload["next"] = [license_file_prompt()] + rows
 
 
+def licenses_add_next(
+    result: Mapping[str, Any],
+    *,
+    config_exists: bool = False,
+    configured: Optional[Sequence[str]] = None,
+    existing_canonicals: Optional[Sequence[str]] = None,
+) -> List[Dict[str, Any]]:
+    """After add: list, then config set when an env config exists."""
+    rows = [
+        item(
+            "licenses.list",
+            "Review Software licenses?",
+            "spa --agent licenses list",
+            required=False,
+        )
+    ]
+    if not config_exists:
+        return rows
+    names: List[str] = []
+    if result.get("replaced"):
+        canonical = str(result.get("canonical") or "")
+        if canonical:
+            names.append(canonical)
+        for extra in existing_canonicals or []:
+            if extra and extra not in names:
+                names.append(str(extra))
+    else:
+        for extra in configured or []:
+            if extra and extra not in names:
+                names.append(str(extra))
+        for extra in existing_canonicals or []:
+            if extra and extra not in names:
+                names.append(str(extra))
+        copied = str(result.get("basename") or "")
+        if copied and copied not in names:
+            names.append(copied)
+    if not names:
+        return rows
+    listed = json.dumps(names, separators=(",", ":"))
+    rows.append(
+        item(
+            "config.set.license_file",
+            "Add license files %s?" % ", ".join(names),
+            "spa --agent config set splunk_defaults.splunk_license_file '%s' --yes" % listed,
+            required=False,
+        )
+    )
+    return rows
+
+
 def licenses_list_next(scan: Dict[str, Any]) -> List[Dict[str, Any]]:
     proposed = [str(name) for name in (scan.get("proposed_splunk_license_file") or []) if name]
     if not proposed:

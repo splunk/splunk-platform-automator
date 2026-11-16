@@ -11,6 +11,8 @@ Work on this branch is **3.0**. Linux packages and Homebrew are later, not part 
 
 ### Added
 
+- **`spa licenses add FILE --yes`** ([#66](https://github.com/splunk/splunk-platform-automator/issues/66)): copy a local `.lic` / `.license` into Software, keeping the source basename. First file of an entitlement creates a canonical symlink (`Splunk_Enterprise.lic` / `Splunk_ITSI.lic` / `Splunk_ES.lic`). A newer NFR auto-retargets that symlink and says so; a size-extension is stacked and leaves the canonical in place. `--replace` retargets when the heuristic does not fire. Does not edit `splunk_config.yml`. No `licenses remove`.
+
 - **`spa init --reset-paths`**: with `--force`, skip this env’s existing `.spa.yml` Software/baseconfig/apps dirs and re-resolve from `--*-dir`, then `paths.yml`, then discovery. `--force` alone still keeps those dir keys. Does not rewrite `splunk_config.yml`.
 
 - **Live deployment suites**: provider-free topologies under `tests/deployment/`, AWS suite overlay, and spa-only live steps (`validate`, `deploy --yes`, `run verification/...`, `destroy --yes`). Umbrella `tests/run_deployment_tests.sh` runs every suite file; AWS-only is `tests/run_deployment_aws_tests.sh`.

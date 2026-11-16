@@ -292,6 +292,12 @@ def test_docs_treat_software_and_baseconfig_as_separate_trees():
     assert "--baseconfig-dir" in prepare
     assert "spa init --baseconfig-dir" in prepare
     assert "for this env" in prepare or "that env" in prepare
+    assert "spa licenses add FILE --yes" in prepare
+    assert "spa licenses list" in prepare
+    licenses = (
+        PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "references" / "licenses.md"
+    ).read_text(encoding="utf-8")
+    assert "spa licenses add" in licenses
     install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
     assert "Professional Services baseconfig apps in a `Software/`" not in install
 
@@ -338,6 +344,7 @@ def test_readme_and_user_guide_name_the_external_provider_for_existing_hosts():
     assert "spa init --architecture" in features
     assert "spa architecture" in features
     assert "spa licenses list" in features
+    assert "spa licenses add" in features
     assert "unset|move|merge|migrate" in features
     assert "Software directory" in features
     start = readme.split("## Start here", 1)[1].split("\n## ", 1)[0]
@@ -1961,6 +1968,7 @@ def test_quick_start_is_the_linear_first_run():
     assert "also sets `baseconfig_dir`" not in text
     assert "into the same tree" not in text
     assert "http://go/baseconfigs" in text
+    assert "spa licenses add FILE --yes" in text
     assert "spa licenses list" in text
     assert "single_node" in text
     assert "SPLUNK_ADMIN_PASSWORD" in text

@@ -7,7 +7,14 @@ from pathlib import Path
 import pytest
 
 from spa.providers import format_provider_choice
-from spa_testutil import PROJECT_ROOT, run_spa, run_spa_inprocess, run_spa_init, write_min_env
+from spa_testutil import (
+    PROJECT_ROOT,
+    min_env_vars,
+    run_spa,
+    run_spa_inprocess,
+    run_spa_init,
+    write_min_env,
+)
 
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
@@ -465,7 +472,15 @@ HELP_CONTRACTS = [
     ),
     (
         ["licenses", "--help"],
-        ["usage: spa licenses", "ACTION", "list", "Aliases: lic", "spa licenses needs an action"],
+        [
+            "usage: spa licenses",
+            "ACTION",
+            "list",
+            "add",
+            "List or add Software licenses",
+            "Aliases: lic",
+            "spa licenses needs an action",
+        ],
     ),
     (
         ["skills", "--help"],
@@ -488,6 +503,17 @@ HELP_CONTRACTS = [
             "--config",
             "--details",
             "--no-env-recommend",
+        ],
+    ),
+    (
+        ["licenses", "add", "--help"],
+        [
+            "usage: spa licenses add",
+            "FILE",
+            "--software-dir",
+            "--force",
+            "--replace",
+            "--yes",
         ],
     ),
     (
@@ -1208,7 +1234,7 @@ def test_agent_schema_is_complete_and_documented():
         ),
         "run": ("spa run list", "spa run NAME --help", "spa run NAME"),
         "logs": ("spa logs list", "spa logs RUN_ID", "spa logs --last"),
-        "licenses": ("spa licenses list",),
+        "licenses": ("spa licenses list", "spa licenses add FILE --yes"),
         "provider aws": (
             "spa provider aws check-auth",
             "spa provider aws latest-ami --os OS",
@@ -1271,7 +1297,11 @@ def test_licenses_list_is_the_catalog():
     """spa licenses is a catalog parent. list is the action; the bare parent exits 2."""
     from spa.agent import COMMAND_SCHEMA
 
-    needs_action = "spa licenses needs an action.\nList: spa licenses list"
+    needs_action = (
+        "spa licenses needs an action.\n"
+        "List: spa licenses list\n"
+        "Add:  spa licenses add FILE --yes"
+    )
     for parent in ("licenses", "lic"):
         human = run_spa(["--no-agent", parent])
         assert human.returncode == 2, parent
@@ -1300,21 +1330,37 @@ def test_licenses_list_is_the_catalog():
     assert "usage: spa licenses" in help_text.stdout
     assert "Aliases: lic" in help_text.stdout
     assert "list" in help_text.stdout
+    assert "add" in help_text.stdout
     list_help = run_spa_inprocess(["--no-agent", "licenses", "list", "--help"])
     assert list_help.returncode == 0, list_help.stderr
     assert "usage: spa licenses list" in list_help.stdout
     for flag in ("--software-dir", "--config", "--details", "--no-env-recommend"):
         assert flag in list_help.stdout
         assert flag not in _defined_options(help_text.stdout)
+    add_help = run_spa_inprocess(["--no-agent", "licenses", "add", "--help"])
+    assert add_help.returncode == 0, add_help.stderr
+    assert "usage: spa licenses add" in add_help.stdout
+    for flag in ("--software-dir", "--force", "--replace", "--yes"):
+        assert flag in add_help.stdout
+    for flag in ("--software-dir", "--force", "--replace"):
+        assert flag not in _defined_options(help_text.stdout)
 
     by_name = {row["name"]: row for row in COMMAND_SCHEMA["commands"]}
     assert "licenses list" in by_name
+    assert "licenses add" in by_name
     assert by_name["licenses"]["example"] == "spa --agent licenses list"
+    assert "add" in by_name["licenses"]["summary"].lower()
     assert "flags" not in by_name["licenses"]
     listed = by_name["licenses list"]
     assert listed["example"] == "spa --agent licenses list"
     flag_names = {flag["long"] for flag in listed.get("flags") or []}
     assert flag_names == {"--software-dir", "--config", "--details", "--no-env-recommend"}
+    added = by_name["licenses add"]
+    assert added["example"] == "spa --agent licenses add FILE --yes"
+    assert added["requires_confirmation"] is True
+    add_flags = {flag["long"] for flag in added.get("flags") or []}
+    assert add_flags == {"--software-dir", "--force", "--replace", "--yes"}
+    assert added["positionals"][0]["name"] == "FILE"
 
     parent_help = run_spa(["--agent", "licenses", "--help"])
     assert parent_help.returncode == 0, parent_help.stderr
@@ -1328,6 +1374,144 @@ def test_licenses_list_is_the_catalog():
     assert list_payload["ok"] is True
     assert list_payload["schema_version"] == 1
     assert list_payload["data"]["name"] == "licenses list"
+    add_schema = run_spa(["--agent", "licenses", "add", "--help"])
+    assert add_schema.returncode == 0, add_schema.stderr
+    add_payload = json.loads(add_schema.stdout)
+    assert add_payload["ok"] is True
+    assert add_payload["schema_version"] == 1
+    assert add_payload["data"]["name"] == "licenses add"
+
+
+def _license_add_xml(*, expiration="4102444800"):
+    return (
+        "<license><signature>must-not-be-emitted</signature><payload>"
+        "<guid>must-not-be-emitted</guid><type>enterprise</type>"
+        "<group_id>Enterprise</group_id><creation_time>1700000000</creation_time>"
+        "<expiration_time>%s</expiration_time></payload></license>" % expiration
+    )
+
+
+def test_licenses_add_human_and_agent_mutation_stack(tmp_path):
+    """Copy + envelope. A stacked size-extension leaves the canonical unchanged."""
+    software = tmp_path / "Software"
+    software.mkdir()
+    nfr = tmp_path / "Splunk_Enterprise_NFR_lab.License"
+    nfr.write_text(_license_add_xml(), encoding="utf-8")
+    first = run_spa(
+        ["--no-agent", "licenses", "add", str(nfr), "--software-dir", str(software), "--yes"]
+    )
+    assert first.returncode == 0, first.stderr
+    assert "Copied Splunk_Enterprise_NFR_lab.License" in first.stdout
+    assert "must-not-be-emitted" not in first.stdout + first.stderr
+    canonical = software / "Splunk_Enterprise.lic"
+    assert canonical.is_symlink()
+    assert canonical.readlink() == Path("Splunk_Enterprise_NFR_lab.License")
+
+    pending = tmp_path / "Splunk_Enterprise_NFR_pending.License"
+    pending.write_text(_license_add_xml(), encoding="utf-8")
+    missing_yes = run_spa(
+        ["--agent", "licenses", "add", str(pending), "--software-dir", str(software)]
+    )
+    assert missing_yes.returncode == 1
+    missing_body = json.loads(missing_yes.stdout)
+    assert missing_body["ok"] is False
+    assert "requires -y/--yes" in missing_body["error"]
+    assert missing_yes.stderr == ""
+    assert not (software / pending.name).exists()
+
+    non_tty = tmp_path / "Splunk_Enterprise_NFR_tty.License"
+    non_tty.write_text(_license_add_xml(), encoding="utf-8")
+    human_missing = run_spa(
+        ["--no-agent", "licenses", "add", str(non_tty), "--software-dir", str(software)]
+    )
+    assert human_missing.returncode == 2
+    assert "-y/--yes" in human_missing.stderr
+    assert "agent mode" not in human_missing.stderr
+    assert not (software / non_tty.name).exists()
+
+    extension = tmp_path / "Splunk_Enterprise_50GB.lic"
+    extension.write_text(_license_add_xml(), encoding="utf-8")
+    human = run_spa(
+        [
+            "--no-agent",
+            "licenses",
+            "add",
+            str(extension),
+            "--software-dir",
+            str(software),
+            "--yes",
+        ]
+    )
+    assert human.returncode == 0, human.stderr
+    assert "Copied Splunk_Enterprise_50GB.lic" in human.stdout
+    assert "canonical unchanged" in human.stdout
+    assert "must-not-be-emitted" not in human.stdout + human.stderr
+    assert "<license>" not in human.stdout
+    assert canonical.readlink() == Path("Splunk_Enterprise_NFR_lab.License")
+
+    extra = tmp_path / "Splunk_Enterprise_100GB.lic"
+    extra.write_text(_license_add_xml(), encoding="utf-8")
+    agent = run_spa(
+        [
+            "--agent",
+            "licenses",
+            "add",
+            str(extra),
+            "--software-dir",
+            str(software),
+            "--yes",
+        ]
+    )
+    assert agent.returncode == 0, agent.stderr
+    assert agent.stderr == ""
+    payload = json.loads(agent.stdout)
+    assert payload["ok"] is True
+    data = payload["data"]
+    assert data["copied"] is True
+    assert data["basename"] == "Splunk_Enterprise_100GB.lic"
+    assert data["replaced"] is False
+    assert data["status"] == "valid"
+    assert "must-not-be-emitted" not in agent.stdout
+    assert "<license>" not in agent.stdout
+    assert "path" not in data
+    assert canonical.readlink() == Path("Splunk_Enterprise_NFR_lab.License")
+    next_ids = [row["id"] for row in data.get("next") or []]
+    assert "licenses.list" in next_ids
+
+
+def test_licenses_add_agent_next_sets_license_file_when_env_config_exists(tmp_path):
+    dest = write_min_env(tmp_path / "env")
+    (dest / "config" / "splunk_config.yml").write_text(
+        "splunk_defaults:\n  splunk_admin_password: x\n",
+        encoding="utf-8",
+    )
+    software = tmp_path / "Software"
+    software.mkdir()
+    src = tmp_path / "Splunk_Enterprise_NFR_lab.License"
+    src.write_text(_license_add_xml(), encoding="utf-8")
+    result = run_spa(
+        [
+            "--agent",
+            "licenses",
+            "add",
+            str(src),
+            "--software-dir",
+            str(software),
+            "--yes",
+        ],
+        extra_env=min_env_vars(dest),
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    nxt = {row["id"]: row for row in payload["data"].get("next") or []}
+    assert "licenses.list" in nxt
+    write = nxt["config.set.license_file"]
+    assert "Splunk_Enterprise.lic" in write["ask"]
+    assert "Splunk_Enterprise_NFR_lab.License" in write["ask"]
+    assert "spa --agent config set splunk_defaults.splunk_license_file" in write["command"]
+    config = (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8")
+    assert "splunk_license_file" not in config
 
 
 def test_templates_list_is_the_catalog():

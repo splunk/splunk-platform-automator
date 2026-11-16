@@ -1850,6 +1850,7 @@ def _assert_usage_rejection(argv, message):
         (["licenses"], "spa licenses needs an action."),
         (["lic"], "spa licenses needs an action."),
         (["licenses", "--json"], "spa licenses needs an action."),
+        (["licenses"], "spa licenses add FILE --yes"),
         (["config", "templates"], "spa config templates needs an action."),
         (["config", "tpl"], "spa config templates needs an action."),
         (["provider"], "spa provider aws check-auth"),

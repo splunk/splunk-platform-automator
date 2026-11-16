@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -32,6 +33,15 @@ ITSI_CANONICAL = "Splunk_ITSI.lic"
 ES_CANONICAL = "Splunk_ES.lic"
 LICENSE_SUFFIXES = (".lic", ".license")
 MAX_LICENSE_BYTES = 5 * 1024 * 1024
+_CANONICAL_BY_CAPABILITY = {
+    "enterprise": ENTERPRISE_CANONICAL,
+    "itsi": ITSI_CANONICAL,
+    "es": ES_CANONICAL,
+}
+
+
+class LicenseAddError(Exception):
+    """Runtime failure copying a license into Software (exit 1)."""
 
 EXPIRATION_FIELDS = (
     "expiration_time",
@@ -52,6 +62,40 @@ ADDON_ALIASES = {
 
 def _err(message: str) -> None:
     print(message, file=sys.stderr)
+
+
+def format_license_add_text(data: Any) -> str:
+    """Human stdout for spa licenses add. Never includes XML, GUID, or signature."""
+    if not isinstance(data, dict):
+        return str(data) + "\n"
+    parts = [data.get("basename"), data.get("license_type"), data.get("status")]
+    if data.get("expiration"):
+        parts.append("expires %s" % data["expiration"])
+    lines = ["Copied " + "  ".join(str(part) for part in parts if part)]
+    if data.get("replaced"):
+        lines.append(
+            "replaced canonical %s -> %s (was %s)"
+            % (data.get("canonical"), data.get("basename"), data.get("previous_target"))
+        )
+    elif data.get("canonical_mode") == "copy" and data.get("canonical"):
+        lines.append("canonical -> %s" % data.get("basename"))
+        lines.append("canonical_mode: copy")
+    elif data.get("canonical") and not data.get("replaced"):
+        # First-create vs stack: canonicals[].action distinguishes them.
+        actions = [
+            row.get("action")
+            for row in (data.get("canonicals") or [])
+            if isinstance(row, dict)
+        ]
+        if actions and all(action == "unchanged" for action in actions):
+            lines.append("canonical unchanged")
+        else:
+            lines.append("canonical -> %s" % data.get("basename"))
+            if data.get("canonical_mode") == "copy":
+                lines.append("canonical_mode: copy")
+    elif data.get("canonical_mode") == "copy":
+        lines.append("canonical_mode: copy")
+    return "\n".join(lines) + "\n"
 
 
 def format_licenses_text(data: Any) -> str:
@@ -137,6 +181,202 @@ def resolve_software_dir(project_root: Path, explicit: Optional[str] = None) -> 
 
 def is_license_file(path: Path) -> bool:
     return path.is_file() and path.suffix.lower() in LICENSE_SUFFIXES
+
+
+def _is_nfr_name(name: str) -> bool:
+    return "nfr" in (name or "").lower()
+
+
+def _canonical_names_for(record: Dict[str, Any]) -> List[str]:
+    names = []
+    for capability in record.get("capabilities") or []:
+        canonical = _CANONICAL_BY_CAPABILITY.get(str(capability))
+        if canonical and canonical not in names:
+            names.append(canonical)
+    return names
+
+
+def _time_rank(record: Dict[str, Any]) -> Optional[tuple]:
+    status = record.get("status")
+    if status in {"invalid", "unknown-expiration"}:
+        return None
+    if status == "perpetual":
+        expires_rank = float("inf")
+    elif record.get("_expires_epoch") is None:
+        return None
+    else:
+        expires_rank = float(record["_expires_epoch"])
+    created = record.get("created_at") or ""
+    return (expires_rank, created)
+
+
+def _is_newer(incoming: Dict[str, Any], current: Dict[str, Any]) -> bool:
+    new_rank = _time_rank(incoming)
+    old_rank = _time_rank(current)
+    if new_rank is None or old_rank is None:
+        return False
+    return new_rank > old_rank
+
+
+def _symlink_target_name(path: Path) -> Optional[str]:
+    if not path.is_symlink():
+        return None
+    try:
+        return Path(path.readlink()).name
+    except OSError:
+        return None
+
+
+def _install_canonical_link(link: Path, dest: Path) -> str:
+    if link.exists() or link.is_symlink():
+        link.unlink()
+    try:
+        link.symlink_to(dest.name)
+        return "symlink"
+    except OSError:
+        shutil.copy2(dest, link)
+        return "copy"
+
+
+def _should_auto_replace(link: Path, dest_name: str, incoming: Dict[str, Any]) -> bool:
+    if not link.is_symlink():
+        return False
+    current_name = _symlink_target_name(link)
+    if not current_name or not _is_nfr_name(current_name) or not _is_nfr_name(dest_name):
+        return False
+    current_path = link.parent / current_name
+    if not current_path.is_file():
+        return False
+    return _is_newer(incoming, parse_license_file(current_path))
+
+
+def _resolve_add_source(source: Path) -> Path:
+    src = Path(source).expanduser()
+    if not src.is_absolute():
+        src = Path.cwd() / src
+    return src.resolve()
+
+
+def plan_license_add(
+    software_dir: Path,
+    source: Path,
+    *,
+    force: bool = False,
+    replace: bool = False,
+) -> Dict[str, Any]:
+    """Validate FILE and describe canonical actions without copying."""
+    software = Path(software_dir).expanduser().resolve()
+    src = _resolve_add_source(source)
+    if src.suffix.lower() not in LICENSE_SUFFIXES:
+        raise LicenseAddError(
+            "License file must end with %s: %s" % (" or ".join(LICENSE_SUFFIXES), src.name)
+        )
+    if not src.is_file():
+        raise LicenseAddError("License file not found: %s" % src.name)
+    parsed = parse_license_file(src)
+    if parsed.get("status") == "invalid":
+        raise LicenseAddError(
+            "License file is not valid XML: %s" % (parsed.get("parse_error") or src.name)
+        )
+    if not software.is_dir():
+        raise LicenseAddError("Software directory not found: %s" % software)
+    dest = software / src.name
+    same_file = dest.exists() and dest.resolve() == src
+    if dest.exists() and not same_file and not force:
+        raise LicenseAddError("License file already exists in Software: %s" % dest.name)
+    actions: List[Dict[str, Any]] = []
+    details = ["will copy %s into Software" % src.name]
+    for name in _canonical_names_for(parsed):
+        if dest.name == name:
+            continue
+        link = software / name
+        exists = link.exists() or link.is_symlink()
+        current_name = _symlink_target_name(link) if exists else None
+        if not exists:
+            actions.append({"name": name, "action": "created", "previous": None})
+            details.append("will create %s -> %s" % (name, src.name))
+        elif _should_auto_replace(link, dest.name, parsed) or (
+            replace and link.is_symlink()
+        ):
+            actions.append({"name": name, "action": "replaced", "previous": current_name})
+            details.append("will retarget %s from %s to %s" % (name, current_name, src.name))
+        elif replace and link.is_file() and not link.is_symlink():
+            if not force:
+                raise LicenseAddError(
+                    "Canonical %s is a regular file; pass --force to replace it" % name
+                )
+            actions.append({"name": name, "action": "replaced", "previous": current_name or name})
+            details.append("will retarget %s from %s to %s" % (name, current_name or name, src.name))
+        else:
+            actions.append({"name": name, "action": "unchanged", "previous": current_name})
+            details.append("canonical %s stays" % name)
+    return {
+        "src": src,
+        "dest": dest,
+        "software": software,
+        "record": parsed,
+        "same_file": same_file,
+        "actions": actions,
+        "details": details,
+    }
+
+
+def add_license_file(
+    software_dir: Path,
+    source: Path,
+    *,
+    force: bool = False,
+    replace: bool = False,
+) -> Dict[str, Any]:
+    """Copy a license into Software and create or retarget matching canonical names."""
+    plan = plan_license_add(software_dir, source, force=force, replace=replace)
+    dest = plan["dest"]
+    src = plan["src"]
+    if not plan["same_file"]:
+        shutil.copy2(src, dest)
+    record = parse_license_file(dest)
+    canonicals: List[Dict[str, Any]] = []
+    canonical_mode = "symlink"
+    replaced = False
+    previous_target = None
+    canonical_name = None
+    for step in plan["actions"]:
+        name = step["name"]
+        link = dest.parent / name
+        action = step["action"]
+        previous = step.get("previous")
+        current_name = _symlink_target_name(link)
+        if action in {"created", "replaced"}:
+            canonical_mode = _install_canonical_link(link, dest)
+            if action == "replaced":
+                replaced = True
+                previous_target = previous
+        canonical_name = name
+        row: Dict[str, Any] = {
+            "name": name,
+            "target": dest.name if action != "unchanged" else current_name or dest.name,
+            "mode": canonical_mode if action != "unchanged" else ("symlink" if link.is_symlink() else "copy"),
+            "action": action,
+        }
+        if previous:
+            row["previous_target"] = previous
+        canonicals.append(row)
+    payload: Dict[str, Any] = {
+        "basename": dest.name,
+        "license_type": record.get("license_type"),
+        "status": record.get("status"),
+        "expiration": record.get("expires_at"),
+        "capabilities": list(record.get("capabilities") or []),
+        "copied": True,
+        "canonicals": canonicals,
+        "replaced": replaced,
+        "canonical_mode": canonical_mode,
+    }
+    if canonical_name:
+        payload["canonical"] = canonical_name
+    if previous_target:
+        payload["previous_target"] = previous_target
+    return payload
 
 
 def _local_name(tag: str) -> str:

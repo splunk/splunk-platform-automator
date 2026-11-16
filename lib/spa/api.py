@@ -372,6 +372,16 @@ class SpaSession(Protocol):
         env_recommend: bool = True,
     ) -> CommandResult: ...
 
+    def licenses_add(
+        self,
+        path: str,
+        software_dir: Optional[str] = None,
+        force: bool = False,
+        replace: bool = False,
+        confirm: bool = False,
+        agent: bool = False,
+    ) -> CommandResult: ...
+
     def hosts_list(
         self, status: bool = False, hosts: Optional[Sequence[str]] = None
     ) -> CommandResult: ...
@@ -2428,6 +2438,73 @@ class LocalSpaSession:
         if follow:
             data["next"] = follow
         return CommandResult(ok=True, data=data)
+
+    def licenses_add(
+        self,
+        path: str,
+        software_dir: Optional[str] = None,
+        force: bool = False,
+        replace: bool = False,
+        confirm: bool = False,
+        agent: bool = False,
+    ) -> CommandResult:
+        from spa import licenses as licenses_mod
+        from spa.next_steps import licenses_add_next
+
+        software = Path(software_dir).expanduser() if software_dir else Path(self.paths.software_dir)
+        if not software.is_absolute():
+            software = (Path.cwd() / software).resolve()
+        else:
+            software = software.resolve()
+        try:
+            plan = licenses_mod.plan_license_add(
+                software, Path(path), force=force, replace=replace
+            )
+        except licenses_mod.LicenseAddError as exc:
+            return CommandResult(ok=False, error=str(exc), code=1)
+        blocked = self._confirm_gate(
+            "spa licenses add",
+            confirm=confirm,
+            agent=agent,
+            details=plan.get("details") or [],
+            risk="software_license",
+        )
+        if blocked:
+            return blocked
+        try:
+            data = licenses_mod.add_license_file(
+                software, Path(path), force=force, replace=replace
+            )
+        except licenses_mod.LicenseAddError as exc:
+            return CommandResult(ok=False, error=str(exc), code=1)
+        config_path = Path(self.paths.config_file) if self.paths.config_file else None
+        config_exists = bool(config_path and config_path.is_file())
+        configured = None
+        if config_exists and config_path is not None:
+            try:
+                configured = licenses_mod.current_license_files(
+                    licenses_mod.load_config(config_path)
+                )
+            except Exception:
+                configured = None
+        existing_canonicals = [
+            name
+            for name in (
+                licenses_mod.ENTERPRISE_CANONICAL,
+                licenses_mod.ITSI_CANONICAL,
+                licenses_mod.ES_CANONICAL,
+            )
+            if (software / name).exists() or (software / name).is_symlink()
+        ]
+        follow = licenses_add_next(
+            data if isinstance(data, dict) else {},
+            config_exists=config_exists,
+            configured=configured,
+            existing_canonicals=existing_canonicals,
+        )
+        if follow:
+            data["next"] = follow
+        return _mutation_result("licenses add", data)
 
     def architecture_plan(self, path: str) -> CommandResult:
         """Read a splunk.architecture file and plan the overlay. Read-only."""

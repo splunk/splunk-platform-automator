@@ -1,6 +1,6 @@
 # License files questionnaire
 
-Splunk license files live on the **Ansible controller** in the shared Software directory (`spa init --software-dir`; see [Prepare Software](../../../../docs/user-guide.md#prepare-software)). Default discovery is still `../Software` relative to the **env**, not the git clone. The config references **basename only**.
+Splunk license files live on the **Ansible controller** in the shared Software directory (`spa init --software-dir`; see [Prepare Software](../../../../docs/user-guide.md#prepare-software)). Default discovery is still `../Software` relative to the **env**, not the git clone. Files enter Software with `spa licenses add FILE --yes`, not `ls`. The config references **basename only**.
 
 ## Discover available licenses
 
@@ -10,7 +10,7 @@ Mandatory scan (from any directory; no relative `--config`):
 spa --env NAME --agent licenses list
 ```
 
-After every write or `spa validate`, follow `data.next` and warning ids `license_manager.license_file` / `itsi.license_file`. AskQuestion using each `ask` (include skip). On yes, run `spa --agent licenses list` then `config set splunk_defaults.splunk_license_file`. On no, tell the operator Splunk stays trial-only and ITSI runs as IT Essentials Work, then continue. Prefer `argv` when present; if a shell is used, copy `command` verbatim. Do not invent `--resolve` for this bootstrap. Do not refuse `apps add 1841` for missing license files. Never `ls` Software, never guess `Splunk_Enterprise.lic`. Treat "ITSI license is not assigned" as "add the ITSI file", not "remove ITSI".
+After every write or `spa validate`, follow `data.next` and warning ids `license_manager.license_file` / `itsi.license_file`. AskQuestion using each `ask` (include skip). On yes, run `spa --agent licenses list` then `config set splunk_defaults.splunk_license_file`. On no, tell the operator Splunk stays trial-only and ITSI runs as IT Essentials Work, then continue. Prefer `argv` when present; if a shell is used, copy `command` verbatim. Do not invent `--resolve` for this bootstrap. Do not refuse `apps add 1841` for missing license files. Never `ls` Software, never guess `Splunk_Enterprise.lic`. Copy files in with `spa licenses add FILE --yes`. Treat "ITSI license is not assigned" as "add the ITSI file", not "remove ITSI".
 
 When a license file is chosen, ask MC+LM placement (dedicated `mc` vs co-locate on `cm`). Do not silently attach LM to `cm`. Pair the license list and LM host in one write using the exact basenames from `proposed_splunk_license_file`.
 

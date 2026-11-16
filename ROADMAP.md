@@ -151,7 +151,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [ ] Git for env configs and local apps; pluggable SCM/CI (GitHub first); promote along user-named stages — [#63](https://github.com/splunk/splunk-platform-automator/issues/63)
 - [ ] Baseconfig: render/generate locally or standalone (no env) + placement markdown/JSON; ship via app deployment when using SPA (replaces optional public baseconfig-substitute download) — [#64](https://github.com/splunk/splunk-platform-automator/issues/64)
 - [ ] Splunk binary/version management (download to Software or register remote; AWS stub/touch) — [#65](https://github.com/splunk/splunk-platform-automator/issues/65)
-- [ ] `spa licenses add` + canonical NFR symlink in Software — [#66](https://github.com/splunk/splunk-platform-automator/issues/66)
+- [x] `spa licenses add` + canonical NFR symlink in Software — [#66](https://github.com/splunk/splunk-platform-automator/issues/66)
 
 ## Testing
 
