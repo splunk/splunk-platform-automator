@@ -1,0 +1,15 @@
+---
+provider: aws
+pytest_mark: aws
+topologies:
+  - id: single_node
+    os: ubuntu
+  - id: 2idx_sh_ds_hf_uf
+    os: amazon_linux
+    extra_ufs:
+      uf-ubuntu: ubuntu
+      uf-rhel: rhel
+  - id: cm_2idxc_3shc_ds
+    os: rhel
+  - id: 2site_idxc_shc_mc_ds_sh_hf_uf_itsi_apps
+    os: rhel

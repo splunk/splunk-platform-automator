@@ -557,6 +557,7 @@ def test_xdist_group_name_keeps_app_scope_scenario_together():
     assert other == "app_scope_minimal_direct"
     assert ds_only != other
     assert xdist_group_name({"config_file": "lab.yml"}) == "lab"
+    assert xdist_group_name({"topology_id": "single_node"}) == "single_node"
     assert xdist_group_name({}) is None
 
 

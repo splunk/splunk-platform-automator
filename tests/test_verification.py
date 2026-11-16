@@ -1,256 +1,100 @@
 """
-Verification Test Suite for Splunk Platform Automator.
+Standalone verification against a deployed env (including --local).
 
-This module contains verification tests that run AFTER deployment is complete:
-1. verify_data_flow.yml - Always runs
-2. check_idxc_health.yml - Runs if cluster_manager role present
-3. check_shc_health.yml - Runs if deployer role present
-
-These tests are independent of each other but require deployment to be complete.
+Live AWS coverage lives in test_deployment.py; this module keeps spa run
+verification/<stem> for an already-deployed environment.
 """
-import pytest
 import os
-import subprocess
+
+import pytest
 import yaml
 
 pytestmark = [pytest.mark.aws, pytest.mark.incremental]
 
 
 class TestSplunkVerification:
-    """
-    Verification test suite for deployed Splunk environments.
-    
-    These tests validate that the deployment was successful by running
-    Ansible verification playbooks against the deployed infrastructure.
-    """
-    
     @pytest.fixture(autouse=True, scope="class")
     def setup_class_env(self, request, workspace_manager):
-        """
-        Setup class-level variables from workspace manager.
-        """
         request.cls.manager = workspace_manager
         request.cls.work_dir = workspace_manager.work_dir
+        request.cls.env_dir = getattr(workspace_manager, "env_dir", None)
         request.cls.splunk_env_id = workspace_manager.splunk_env_id
-        request.cls.venv_bin = workspace_manager.venv_bin
-        request.cls.ansible_playbook_bin = workspace_manager.get_ansible_playbook_bin()
-        request.cls.env = workspace_manager.get_ansible_env()
-        
-        # Load config data if not already loaded
         if workspace_manager.config_data is None:
-            config_path = os.path.join(workspace_manager.work_dir, 'config', 'splunk_config.yml')
-            env_dir = getattr(workspace_manager, 'env_dir', None)
+            config_path = os.path.join(workspace_manager.work_dir, "config", "splunk_config.yml")
+            env_dir = getattr(workspace_manager, "env_dir", None)
             if env_dir:
-                config_path = os.path.join(env_dir, 'config', 'splunk_config.yml')
+                config_path = os.path.join(env_dir, "config", "splunk_config.yml")
             if os.path.isfile(config_path):
-                with open(config_path, 'r') as f:
-                    workspace_manager.config_data = yaml.safe_load(f)
-        
+                with open(config_path, encoding="utf-8") as handle:
+                    workspace_manager.config_data = yaml.safe_load(handle)
         request.cls.config_data = workspace_manager.config_data
-    
-    def _run_verification_playbook(self, playbook_name: str) -> subprocess.CompletedProcess:
-        """
-        Run a verification playbook.
-        
-        Args:
-            playbook_name: Name of playbook in ansible/verification/ directory
-            
-        Returns:
-            subprocess.CompletedProcess with result
-        """
-        playbook_path = f"ansible/verification/{playbook_name}"
-        
-        print(f"\n[VERIFY] Running {playbook_name}...")
-        
-        cmd = [self.ansible_playbook_bin, playbook_path]
-        
-        result = subprocess.run(
-            cmd,
-            cwd=self.work_dir,
-            capture_output=True,
-            text=True,
-            env=self.env
-        )
-        
-        print(f"--- {playbook_name} Output ---")
-        print(result.stdout[-3000:] if len(result.stdout) > 3000 else result.stdout)
-        
-        if result.returncode != 0:
-            print(f"--- {playbook_name} Error ---")
-            print(result.stderr[-2000:] if len(result.stderr) > 2000 else result.stderr)
-        
-        return result
-    
+
+    def _run_spa(self, args, extra=None):
+        return self.manager.run_spa(args, extra=extra)
+
     def _get_all_roles(self) -> set:
-        """Extract all roles from config."""
-        all_roles = set()
-        if self.config_data and 'splunk_hosts' in self.config_data:
-            for host in self.config_data['splunk_hosts']:
-                if 'roles' in host:
-                    all_roles.update(host['roles'])
-        return all_roles
-    
+        return self.manager.get_all_roles()
+
     def _check_deployment_complete(self):
-        """Verify that deployment was completed."""
-        # Check if the workspace indicates Splunk is configured
-        if not getattr(self.manager, 'is_splunk_configured', False):
-            # Try to check if splunk is actually running by looking for indicators
-            # This allows verification to run even if deployment tests were run separately
-            config_path = os.path.join(self.work_dir, 'config', 'splunk_config.yml')
-            env_dir = getattr(self.manager, 'env_dir', None)
-            if env_dir:
-                config_path = os.path.join(env_dir, 'config', 'splunk_config.yml')
-            if not os.path.isfile(config_path):
-                pytest.fail("Deployment not complete: splunk_config.yml not found")
-    
-    # =========================================================================
-    # Test 01: Wait for Splunk Services
-    # =========================================================================
-    def test_01_wait_for_splunk(self, config_file):
-        """
-        Step 01: Wait for Splunk to be fully running on all hosts.
-        
-        Runs: ansible/verification/wait_for_splunk.yml
-        - Waits for splunkd port to be listening
-        - Waits for splunkd process to be running
-        
-        This ensures Splunk is ready before running other verification tests.
-        """
+        if getattr(self.manager, "is_splunk_configured", False):
+            return
+        config_path = os.path.join(self.work_dir, "config", "splunk_config.yml")
+        env_dir = getattr(self.manager, "env_dir", None)
+        if env_dir:
+            config_path = os.path.join(env_dir, "config", "splunk_config.yml")
+        if not os.path.isfile(config_path):
+            pytest.fail("Deployment not complete: splunk_config.yml not found")
+
+    def test_01_wait_for_splunk(self, topology_id):
         self._check_deployment_complete()
-        
-        print("\n[WAIT] Waiting for Splunk services to be fully running...")
-        
-        result = self._run_verification_playbook("wait_for_splunk.yml")
-        
+        print("\n[WAIT] spa run verification/wait_for_splunk")
+        result = self._run_spa(["run", "verification/wait_for_splunk"])
         assert result.returncode == 0, "Timeout waiting for Splunk services to start"
         print("[WAIT] All Splunk services are running")
 
-    # =========================================================================
-    # Test 02: Wait for Bucket Fixup
-    # =========================================================================
     @pytest.mark.always_run
-    def test_02_wait_for_bucket_fixup(self, config_file):
-        """
-        Step 02: Wait for bucket fixup tasks to complete.
-        
-        Runs: ansible/verification/wait_for_bucket_fixup.yml
-        - Waits for replication_factor, search_factor, and generation fixups
-        
-        Skipped if 'cluster_manager' role is not in config.
-        """
+    def test_02_wait_for_bucket_fixup(self, topology_id):
         self._check_deployment_complete()
-        
-        roles = self._get_all_roles()
-        
-        if 'cluster_manager' not in roles:
+        if "cluster_manager" not in self._get_all_roles():
             pytest.skip("No cluster_manager role in configuration - skipping bucket fixup wait")
-        
-        print("\n[WAIT] Waiting for bucket fixup tasks to complete...")
-        
-        result = self._run_verification_playbook("wait_for_bucket_fixup.yml")
-        
+        print("\n[WAIT] spa run verification/wait_for_bucket_fixup")
+        result = self._run_spa(["run", "verification/wait_for_bucket_fixup"])
         assert result.returncode == 0, "Bucket fixup wait failed or timed out"
         print("[WAIT] Bucket fixup tasks complete")
-    
-    # =========================================================================
-    # Test 03: Check Indexer Cluster Health
-    # =========================================================================
+
     @pytest.mark.always_run
-    def test_03_check_idxc_health(self, config_file):
-        """
-        Step 03: Verify Indexer Cluster health.
-        
-        Runs: ansible/verification/check_idxc_health.yml
-        - Checks cluster manager for service_ready_flag
-        
-        Only runs if 'cluster_manager' role is present in config.
-        """
+    def test_03_check_idxc_health(self, topology_id):
         self._check_deployment_complete()
-        
-        roles = self._get_all_roles()
-        
-        if 'cluster_manager' not in roles:
+        if "cluster_manager" not in self._get_all_roles():
             pytest.skip("No cluster_manager role in configuration - skipping IDXC health check")
-        
-        print(f"\n[VERIFY] Checking Indexer Cluster health...")
-        
-        result = self._run_verification_playbook("check_idxc_health.yml")
-        
+        print("\n[VERIFY] spa run verification/check_idxc_health")
+        result = self._run_spa(["run", "verification/check_idxc_health"])
         assert result.returncode == 0, "Indexer Cluster health check failed"
         print("[VERIFY] Indexer Cluster is healthy")
-    
-    # =========================================================================
-    # Test 04: Wait for Search Head Cluster Captain
-    # =========================================================================
+
     @pytest.mark.always_run
-    def test_04_wait_for_shc_captain(self, config_file):
-        """
-        Step 04: Wait for Search Head Cluster to be ready.
-        
-        Runs: ansible/verification/wait_for_shc_captain.yml
-        - Waits for captain to report service_ready_flag = true
-        
-        Only runs if 'deployer' role is present in config.
-        """
+    def test_04_wait_for_shc_captain(self, topology_id):
         self._check_deployment_complete()
-        
-        roles = self._get_all_roles()
-        
-        if 'deployer' not in roles:
+        if "deployer" not in self._get_all_roles():
             pytest.skip("No deployer role in configuration - skipping SHC wait")
-        
-        print("\n[WAIT] Waiting for Search Head Cluster to be ready...")
-        
-        result = self._run_verification_playbook("wait_for_shc_captain.yml")
-        
+        print("\n[WAIT] spa run verification/wait_for_shc_captain")
+        result = self._run_spa(["run", "verification/wait_for_shc_captain"])
         assert result.returncode == 0, "Wait for SHC Captain failed or timed out"
         print("[WAIT] Search Head Cluster is ready")
 
-    # =========================================================================
-    # Test 05: Check Search Head Cluster Health
-    # =========================================================================
     @pytest.mark.always_run
-    def test_05_check_shc_health(self, config_file):
-        """
-        Step 05: Verify Search Head Cluster health.
-        
-        Runs: ansible/verification/check_shc_health.yml
-        - Checks SHC captain for service_ready_flag
-        
-        Only runs if 'deployer' role is present in config.
-        """
+    def test_05_check_shc_health(self, topology_id):
         self._check_deployment_complete()
-        
-        roles = self._get_all_roles()
-        
-        if 'deployer' not in roles:
+        if "deployer" not in self._get_all_roles():
             pytest.skip("No deployer role in configuration - skipping SHC health check")
-        
-        print(f"\n[VERIFY] Checking Search Head Cluster health...")
-        
-        result = self._run_verification_playbook("check_shc_health.yml")
-        
+        print("\n[VERIFY] spa run verification/check_shc_health")
+        result = self._run_spa(["run", "verification/check_shc_health"])
         assert result.returncode == 0, "Search Head Cluster health check failed"
         print("[VERIFY] Search Head Cluster is healthy")
 
-    # =========================================================================
-    # Test 06: Verify Data Flow
-    # =========================================================================
-    def test_06_verify_data_flow(self, config_file):
-        """
-        Step 06: Verify data is flowing into Splunk.
-        
-        Runs: ansible/verification/verify_data_flow.yml
-        - Searches _internal index for data
-        - Asserts hosts are sending data
-        
-        Always runs for any deployment.
-        """
+    def test_06_verify_data_flow(self, topology_id):
         self._check_deployment_complete()
-        
-        print(f"\n[VERIFY] Verifying data flow for environment: {self.splunk_env_id}")
-        
-        result = self._run_verification_playbook("verify_data_flow.yml")
-        
+        print(f"\n[VERIFY] spa run verification/verify_data_flow ({self.splunk_env_id})")
+        result = self._run_spa(["run", "verification/verify_data_flow"])
         assert result.returncode == 0, "Data flow verification failed - no data in _internal index"
         print("[VERIFY] Data flow verification passed")

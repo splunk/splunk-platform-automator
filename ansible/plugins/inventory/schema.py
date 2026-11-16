@@ -49,6 +49,31 @@ IPV4_PATTERN = (
     r"^(?:(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d?\d)$"
 )
 AMI_ID_PATTERN = r"^ami-[0-9a-fA-F]+$"
+# Linux / RFC 1123 inventory hostname: labels of letters, digits, and hyphens,
+# joined by dots for an FQDN. Underscores are not valid.
+_INVENTORY_HOSTNAME_LABEL = r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
+INVENTORY_HOSTNAME_PATTERN = (
+    r"^" + _INVENTORY_HOSTNAME_LABEL + r"(?:\." + _INVENTORY_HOSTNAME_LABEL + r")*$"
+)
+INVENTORY_HOSTNAME_RE = re.compile(INVENTORY_HOSTNAME_PATTERN)
+INVENTORY_HOSTNAME_MAX = 253
+
+
+def _require_inventory_hostname(name: str) -> str:
+    if len(name) > INVENTORY_HOSTNAME_MAX or not INVENTORY_HOSTNAME_RE.fullmatch(name):
+        raise ValueError(
+            "Inventory hostname %r is not a valid Linux hostname. "
+            "Use letters, digits, hyphens, and dots (for an FQDN); not underscores."
+            % name
+        )
+    return name
+
+
+def _iter_hostnames(prefix: Optional[str], numbers: str, postfix: Optional[str]) -> List[str]:
+    start, end = (int(part) for part in numbers.split(".."))
+    left = prefix or ""
+    right = postfix or ""
+    return ["%s%s%s" % (left, n, right) for n in range(start, end + 1)]
 
 
 # =============================================================================
@@ -1462,15 +1487,15 @@ class SplunkHost(BaseModel):
     # Host identification - exactly one must be specified
     name: Optional[str] = Field(
         None,
-        description="Inventory hostname for this one host. No default. Set exactly one of name, list, or iter.",
+        description="Inventory hostname for this one host. Letters, digits, hyphens, and dots (for an FQDN); not underscores. No default. Set exactly one of name, list, or iter.",
     )
     list: Optional[List[str]] = Field(
         None,
-        description="Hostnames generated from this one entry. No default. Set exactly one of name, list, or iter.",
+        description="Hostnames generated from this one entry. Each name is letters, digits, hyphens, and dots (for an FQDN); not underscores. No default. Set exactly one of name, list, or iter.",
     )
     iter: Optional[HostIteration] = Field(
         None,
-        description="Generated hostnames from a numeric range. Holds no value itself.",
+        description="Generated hostnames from a numeric range. Each generated name is letters, digits, hyphens, and dots (for an FQDN); not underscores. Holds no value itself.",
     )
     
     # Required for a managed host. External hosts may omit it.
@@ -1632,6 +1657,21 @@ class SplunkHost(BaseModel):
             raise ValueError("roles is required")
         return self
 
+    @field_validator("name")
+    @classmethod
+    def validate_name_is_hostname(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None:
+            _require_inventory_hostname(value)
+        return value
+
+    @field_validator("list")
+    @classmethod
+    def validate_list_are_hostnames(cls, value: Optional[List[str]]) -> Optional[List[str]]:
+        if value:
+            for item in value:
+                _require_inventory_hostname(item)
+        return value
+
     @model_validator(mode='after')
     def validate_host_identifier(self) -> 'SplunkHost':
         """Ensure exactly one of name, list, or iter is specified."""
@@ -1642,6 +1682,11 @@ class SplunkHost(BaseModel):
             raise ValueError("Host must have exactly one of: 'name', 'list', or 'iter'")
         if count > 1:
             raise ValueError("Host cannot have multiple identifiers. Use only one of: 'name', 'list', or 'iter'")
+        if self.iter is not None:
+            for hostname in _iter_hostnames(
+                self.iter.prefix, self.iter.numbers, self.iter.postfix
+            ):
+                _require_inventory_hostname(hostname)
         
         return self
 

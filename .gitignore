@@ -46,6 +46,7 @@ ansible/verification/output/
 tests/.venv
 tests/.ansible_tmp
 tests/.collections
+tests/.deployment_failures/
 tests/configs/app_scope/output/**
 !tests/configs/app_scope/output/.gitkeep
 .pytest_cache/

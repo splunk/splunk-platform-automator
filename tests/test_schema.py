@@ -442,6 +442,79 @@ class TestValidConfigurations:
         assert result.splunk_hosts[0].iter.prefix == "idx"
         assert result.splunk_hosts[0].iter.numbers == "1..5"
 
+    def test_host_name_allows_hyphen_and_fqdn(self):
+        hyphen = validate_config(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_hosts": [{"name": "uf-ubuntu", "roles": ["universal_forwarder"]}],
+            }
+        )
+        assert hyphen.splunk_hosts[0].name == "uf-ubuntu"
+        fqdn = validate_config(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_hosts": [
+                    {"name": "sh1.lab.example.com", "roles": ["search_head"]}
+                ],
+            }
+        )
+        assert fqdn.splunk_hosts[0].name == "sh1.lab.example.com"
+        listed = validate_config(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_hosts": [
+                    {
+                        "list": ["uf-rhel", "hf1.lab.example.com"],
+                        "roles": ["universal_forwarder"],
+                    }
+                ],
+            }
+        )
+        assert listed.splunk_hosts[0].list == ["uf-rhel", "hf1.lab.example.com"]
+        iterated = validate_config(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_hosts": [
+                    {
+                        "iter": {"prefix": "uf-", "numbers": "1..2"},
+                        "roles": ["universal_forwarder"],
+                    }
+                ],
+            }
+        )
+        assert iterated.splunk_hosts[0].iter.prefix == "uf-"
+
+    def test_host_name_rejects_underscore(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "uf_ubuntu", "roles": ["universal_forwarder"]}],
+        }
+        with pytest.raises(ConfigValidationError, match="not a valid Linux hostname"):
+            validate_config(config)
+
+    def test_host_list_rejects_underscore(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"list": ["idx1", "uf_rhel"], "roles": ["universal_forwarder"]}
+            ],
+        }
+        with pytest.raises(ConfigValidationError, match="not a valid Linux hostname"):
+            validate_config(config)
+
+    def test_host_iter_rejects_underscore_in_generated_name(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {
+                    "iter": {"prefix": "uf_", "numbers": "1..2"},
+                    "roles": ["universal_forwarder"],
+                }
+            ],
+        }
+        with pytest.raises(ConfigValidationError, match="not a valid Linux hostname"):
+            validate_config(config)
+
     def test_all_roles_valid(self):
         """Test that all allowed roles are accepted."""
         all_roles = [
@@ -459,7 +532,7 @@ class TestValidConfigurations:
             elif role == "indexer":
                 host = {"iter": {"numbers": "1..2"}, "roles": [role], "idxcluster": "idxc1"}
             else:
-                host = {"name": f"host_{i}", "roles": [role]}
+                host = {"name": "host-%s" % i, "roles": [role]}
             # cluster_manager requires idxcluster
             if role == "cluster_manager":
                 host["idxcluster"] = "idxc1"
@@ -1194,7 +1267,7 @@ class TestClusterConfigurations:
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [
                 {"name": "sh", "roles": ["search_head"]},
-                {"name": "idx_standalone", "roles": ["indexer"]},
+                {"name": "idx-standalone", "roles": ["indexer"]},
                 {"name": "lm", "roles": ["license_manager"]},
                 {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
                 {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
@@ -1267,7 +1340,7 @@ class TestClusterConfigurations:
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [
                 {"name": "sh", "roles": ["search_head"]},
-                {"name": "idx_standalone", "roles": ["indexer"]},
+                {"name": "idx-standalone", "roles": ["indexer"]},
                 {"name": "lm", "roles": ["license_manager"]},
                 {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
                 {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
@@ -2437,7 +2510,7 @@ class TestAppDeploymentConfig:
             "plugin": "splunk-platform-automator",
             "os": {"packages": ["java-21-openjdk"]},
             "splunk_hosts": [
-                {"name": "standalone_sh", "roles": ["search_head"]},
+                {"name": "standalone-sh", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
                 {"name": "lm", "roles": ["license_manager"]},
             ],
@@ -2503,7 +2576,7 @@ class TestAppDeploymentConfig:
             "splunk_hosts": [
                 {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
                 {"iter": {"numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
-                {"name": "standalone_sh", "roles": ["search_head"]},
+                {"name": "standalone-sh", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
                 {"name": "lm", "roles": ["license_manager"]},
             ],
@@ -2529,7 +2602,7 @@ class TestAppDeploymentConfig:
             "splunk_hosts": [
                 {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
                 {"iter": {"numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
-                {"name": "standalone_sh", "roles": ["search_head"]},
+                {"name": "standalone-sh", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
                 {"name": "lm", "roles": ["license_manager"]},
             ],
@@ -2550,7 +2623,7 @@ class TestAppDeploymentConfig:
         config = {
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [
-                {"name": "standalone_sh", "roles": ["search_head"]},
+                {"name": "standalone-sh", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
                 {"name": "lm", "roles": ["license_manager"]},
             ],
@@ -2649,7 +2722,7 @@ class TestAppDeploymentConfig:
             "splunk_hosts": [
                 {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
                 {"iter": {"numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
-                {"name": "standalone_sh", "roles": ["search_head"]},
+                {"name": "standalone-sh", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
                 {"name": "lm", "roles": ["license_manager"]},
             ],
@@ -2657,7 +2730,7 @@ class TestAppDeploymentConfig:
             "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
             "splunk_app_deployment": {
                 "apps": [
-                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "hosts_whitelist": ["standalone_sh"], "shc_whitelist": ["shc1"]}
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "hosts_whitelist": ["standalone-sh"], "shc_whitelist": ["shc1"]}
                 ]
             },
         }
@@ -2676,7 +2749,7 @@ class TestAppDeploymentConfig:
             "splunk_hosts": [
                 {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
                 {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
-                {"name": "standalone_sh", "roles": ["search_head"]},
+                {"name": "standalone-sh", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
                 {"name": "lm", "roles": ["license_manager"]},
             ],
@@ -2855,20 +2928,20 @@ class TestTargetFilterOptions:
             "splunk_hosts": [
                 {"name": "deployer1", "roles": ["deployer"], "shcluster": "shc1"},
                 {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
-                {"name": "standalone_sh", "roles": ["search_head"]},
+                {"name": "standalone-sh", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
             ],
             "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
             "splunk_app_deployment": {
                 "apps": [
-                    {"name": "MyApp", "source": "local", "target_roles": ["search_head", "indexer"], "shc_whitelist": ["shc1"], "hosts_whitelist": ["standalone_sh", "idx1"]}
+                    {"name": "MyApp", "source": "local", "target_roles": ["search_head", "indexer"], "shc_whitelist": ["shc1"], "hosts_whitelist": ["standalone-sh", "idx1"]}
                 ]
             },
         }
         result = validate_config(config)
         app = result.splunk_app_deployment.apps[0]
         assert app.get("shc_whitelist") == ["shc1"]
-        assert app.get("hosts_whitelist") == ["standalone_sh", "idx1"]
+        assert app.get("hosts_whitelist") == ["standalone-sh", "idx1"]
 
     def test_app_shc_whitelist_invalid_raises(self):
         """shc_whitelist must contain only names from splunk_shclusters."""
@@ -3022,17 +3095,17 @@ class TestTargetFilterOptions:
         config = {
             "plugin": "splunk-platform-automator",
             "splunk_hosts": [
-                {"name": "standalone_sh", "roles": ["search_head"]},
+                {"name": "standalone-sh", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
             ],
             "splunk_app_deployment": {
                 "apps": [
-                    {"name": "MyApp", "source": "local", "target_roles": ["search_head"], "hosts_whitelist": ["standalone_sh"]}
+                    {"name": "MyApp", "source": "local", "target_roles": ["search_head"], "hosts_whitelist": ["standalone-sh"]}
                 ]
             },
         }
         result = validate_config(config)
-        assert result.splunk_app_deployment.apps[0].get("hosts_whitelist") == ["standalone_sh"]
+        assert result.splunk_app_deployment.apps[0].get("hosts_whitelist") == ["standalone-sh"]
 
     def test_app_hosts_whitelist_cluster_member_raises(self):
         """hosts_whitelist and hosts_blacklist must not contain SHC or IDXC members."""
@@ -3067,7 +3140,7 @@ class TestNoDirectDeployToShcMembers:
             "splunk_hosts": [
                 {"name": "deployer1", "roles": ["deployer"], "shcluster": "shc1"},
                 {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
-                {"name": "standalone_sh", "roles": ["search_head"]},
+                {"name": "standalone-sh", "roles": ["search_head"]},
                 {"name": "idx1", "roles": ["indexer"]},
             ],
             "splunk_shclusters": [{"shc_name": "shc1", "shc_secret": "secret"}],
@@ -3098,7 +3171,7 @@ class TestNoDirectDeployToShcMembers:
                 "path": "MyApp.tgz",
                 "target_roles": ["search_head"],
                 "deployment_target": "direct",
-                "hosts_whitelist": ["standalone_sh"],
+                "hosts_whitelist": ["standalone-sh"],
             }
         ])
         result = validate_config(config)

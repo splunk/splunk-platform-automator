@@ -27,7 +27,7 @@ See [role-placement.md](role-placement.md) opening strategy question in SKILL.md
 | `sh*` | `search_head` | Standalone or SHC members |
 | `hf` / `uf` | forwarder roles | Optional |
 
-Reference: `tests/configs/2site-idxc_shc_mc_ds_hf_uf.yml`
+Reference: `tests/deployment/topologies/cm_2idxc_3shc_ds.yml`
 
 ## Lab-minimal patterns
 

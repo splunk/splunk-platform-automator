@@ -1,7 +1,7 @@
 ---
 # Scenario: deployer_standalone_sh_only
-# Deployer + SHC (sh1, sh2, sh3) + standalone SH. App with hosts_whitelist: [standalone_sh].
-# Verifies: app NOT on deployer (goes direct to standalone_sh only); direct_scope on_scope only on standalone_sh.
+# Deployer + SHC (sh1, sh2, sh3) + standalone SH. App with hosts_whitelist: [standalone-sh].
+# Verifies: app NOT on deployer (goes direct to standalone-sh only); direct_scope on_scope only on standalone-sh.
 plugin: splunk-platform-automator
 
 splunk_defaults:
@@ -27,7 +27,7 @@ splunk_hosts:
       - search_head
     shcluster: shc1
 
-  - name: standalone_sh
+  - name: standalone-sh
     roles:
       - search_head
 
@@ -41,4 +41,4 @@ splunk_app_deployment:
       source: local
       target_roles:
         - search_head
-      hosts_whitelist: [standalone_sh]
+      hosts_whitelist: [standalone-sh]

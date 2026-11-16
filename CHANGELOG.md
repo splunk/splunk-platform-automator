@@ -11,6 +11,8 @@ Work on this branch is **3.0**. Linux packages and Homebrew are later, not part 
 
 ### Added
 
+- **Live deployment suites**: provider-free topologies under `tests/deployment/`, AWS suite overlay, and spa-only live steps (`validate`, `deploy --yes`, `run verification/...`, `destroy --yes`). Umbrella `tests/run_deployment_tests.sh` runs every suite file; AWS-only is `tests/run_deployment_aws_tests.sh`. Leftover local ansible-playbook conversion is [#165](https://github.com/splunk/splunk-platform-automator/issues/165).
+
 - **Install and path contract** ([#46](https://github.com/splunk/splunk-platform-automator/issues/46), [#48](https://github.com/splunk/splunk-platform-automator/issues/48), [#72](https://github.com/splunk/splunk-platform-automator/issues/72), [#73](https://github.com/splunk/splunk-platform-automator/issues/73), [#91](https://github.com/splunk/splunk-platform-automator/issues/91)): `SPA_HOME` is the framework; `SPA_ENV_DIR` is one environment. `install.sh` installs a prefix from the framework tarball (GitHub `releases/latest/download/install.sh`); `--uninstall` removes that prefix and launcher only. User-level Software / baseconfig / apps pointers live in `paths.yml` (`spa init --software-dir`, `spa environment set --software-dir`). `spa init` scaffolds an env (example or architecture file, `.spa.yml`, inventory, Terraform state dir) and never copies `ansible/`. `--from` / `--force` migrate a 2.x clone env; `--force` strips leftover framework files from the packaging manifest. Init requires `--provider` unless a default is saved with `spa environment set --provider NAME`.
 
 - **`spa` CLI and agent mode** ([#47](https://github.com/splunk/splunk-platform-automator/issues/47), [#99](https://github.com/splunk/splunk-platform-automator/issues/99), [#105](https://github.com/splunk/splunk-platform-automator/issues/105), [#108](https://github.com/splunk/splunk-platform-automator/issues/108), [#133](https://github.com/splunk/splunk-platform-automator/issues/133)): one operator entry `bin/spa`. Catalogs are `COMMAND list` (a missing action exits 2 and names the legal command). Mutating commands require `--yes` (non-TTY never prompts). `--agent` prints one JSON envelope with `schema_version`; `spa agent schema` is the catalog. Humans see `Next:` from `data.next`. Live SSH/SCP stay text (`spa hosts ssh`, `spa hosts copy`).
@@ -47,6 +49,8 @@ Work on this branch is **3.0**. Linux packages and Homebrew are later, not part 
 
 - **AWS and Software checks**: `terraform.aws` unknown keys fail validation. One management role per environment (second deployer, `deployment_server`, or `license_manager` is rejected). Software check requires `*/org_s2_indexer_indexes` and `*/org_cluster_manager_base`.
 
+- **Inventory hostnames**: `splunk_hosts` `name`, each `list` item, and expanded `iter` names must be valid Linux hostnames (letters, digits, hyphens, and dots for an FQDN). Underscores fail `spa validate` so `hostnamectl` never sees them.
+
 - **Ansible facts and vars**: fact cache is `$SPA_ENV_DIR/.ansible_facts`. Env inventory no longer symlinks `group_vars` into the repo; framework vars load through the `spa_group_vars` plugin.
 
 - **Host link page**: `$SPA_ENV_DIR/config/index.html` is the architecture snapshot (2.x already had `create_linkpage.yml`). After a successful `spa deploy`, humans see `Next:` with that path.
@@ -74,6 +78,12 @@ Work on this branch is **3.0**. Linux packages and Homebrew are later, not part 
 - **Clone-equal layout as an operator env**: operator `spa` does not treat equal `SPA_HOME` / `SPA_ENV_DIR` as an environment. Clone remains the contributor path. See [docs/migrate.md](docs/migrate.md).
 
 ### Fixed
+
+- **Ubuntu 26.04 PolicyKit package**: latest Ubuntu LTS dropped `policykit-1`. The common role tries that name, then installs `polkitd` and `pkexec` when apt reports it is unavailable. Mixed-OS labs also drop the other family's PolicyKit name, so a Debian extra UF does not inherit Amazon Linux `polkit`.
+
+- **Mixed-OS AWS inventory**: Terraform `ansible_inventory` now uses each host's `ssh_username` (and key file) instead of the global value, so extra Ubuntu UFs next to Amazon Linux/RHEL hosts can SSH.
+
+- **Authenticated Splunk REST**: retry the localhost:8089 call so a restart mid-play does not fail with connection refused.
 
 - **`upgrade_distributed`** targets `role_cluster_manager` and runs the version check first (`upgrade_software` on both plays so `splunk_current_version` and `splunk_target_version` exist before the upgrade message). Search heads stay `serial: 1`.
 
@@ -149,7 +159,7 @@ Work on this branch is **3.0**. Linux packages and Homebrew are later, not part 
 
 - `examples/splunk_config_terraform_aws.yml` — default AMI guidance aligned with RHEL 10 / latest-OS discovery.
 - [examples/single_node_itsi.yml](examples/single_node_itsi.yml) — ITSI search tier uses Java 21 (`java-21-openjdk` / `openjdk-21-jdk`).
-- [tests/configs/2site-idxc_shc_mc_ds_sh_hf_uf_itsi_apps.yml](tests/configs/2site-idxc_shc_mc_ds_sh_hf_uf_itsi_apps.yml) — ITSI search hosts use `java-21-openjdk` on RHEL 10 (ITSI max Java 21).
+- [tests/deployment/topologies/2site_idxc_shc_mc_ds_sh_hf_uf_itsi_apps.yml](tests/deployment/topologies/2site_idxc_shc_mc_ds_sh_hf_uf_itsi_apps.yml) — ITSI search hosts use `java-21-openjdk` on RHEL 10 (ITSI max Java 21).
 - [README.md](README.md) — example `splunk_version` 10.4.0; badge formatting cleanup.
 - OS guidance: **polkit** required on Amazon Linux and RHEL (`polkit`); **policykit-1** on Ubuntu (SPA policykit check fails on UF without it).
 

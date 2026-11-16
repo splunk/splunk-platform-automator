@@ -7,7 +7,7 @@
 
 - name: Add guest packages Ansible needs
   ansible.builtin.set_fact:
-    packages: "{{ ((packages | default([])) + ['acl'] + ((['policykit-1'] if ansible_facts['os_family'] == 'Debian' else ['polkit']) if (splunk_use_policykit | default(true) | bool) else [])) | unique }}"
+    packages: "{{ (((packages | default([])) + ['acl'] + ((['policykit-1'] if ansible_facts['os_family'] == 'Debian' else ['polkit']) if (splunk_use_policykit | default(true) | bool) else [])) | unique | difference(['polkit'] if ansible_facts['os_family'] == 'Debian' else ['policykit-1', 'polkitd', 'pkexec'])) }}"
   when: ansible_facts['os_family']|lower != 'windows'
 
 - name: Call Install packages

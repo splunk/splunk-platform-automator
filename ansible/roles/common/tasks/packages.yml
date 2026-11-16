@@ -6,6 +6,34 @@
     update_cache: yes
   when: ansible_facts['os_family'] == "Debian"
 
+- name: Try policykit-1 when requested
+  ansible.builtin.package:
+    name: policykit-1
+    state: present
+  register: policykit_one_install
+  failed_when: false
+  when:
+    - ansible_facts['os_family'] == "Debian"
+    - "'policykit-1' in (packages | default([]))"
+
+- name: Install polkitd and pkexec when policykit-1 is unavailable
+  ansible.builtin.package:
+    name:
+      - polkitd
+      - pkexec
+    state: present
+  when:
+    - ansible_facts['os_family'] == "Debian"
+    - "'policykit-1' in (packages | default([]))"
+    - "'No package matching' in (policykit_one_install.msg | default(''))"
+
+- name: Drop policykit-1 after install or remap
+  ansible.builtin.set_fact:
+    packages: "{{ packages | reject('equalto', 'policykit-1') | list }}"
+  when:
+    - ansible_facts['os_family'] == "Debian"
+    - "'policykit-1' in (packages | default([]))"
+
 - name: Install additional os packages
   tags:
     - common

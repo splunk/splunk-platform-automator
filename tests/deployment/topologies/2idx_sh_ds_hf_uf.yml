@@ -1,0 +1,57 @@
+---
+# Provider-free live topology. SVA: D1.
+# Two standalone indexers (idxsingle), SH+MC+LM, DS, HF, one UF.
+# Extra OS UFs come from the suite, not this file. AWS suite: Amazon Linux.
+
+os:
+  set_hostname: true
+
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  splunk_license_file: Splunk_Enterprise.lic
+  splunk_download:
+    splunk: true
+    splunkforwarder: true
+  splunk_set_servername: true
+  splunk_set_default_hostname: true
+  splunk_loginpage_print_userpw: false
+  splunk_indexes:
+    test2_metrics:
+      datatype: metric
+  splunk_ssl:
+    web:
+      enable: true
+    inputs:
+      enable: true
+    outputs:
+      enable: true
+  splunk_conf:
+    system/local/server.conf:
+      diskUsage:
+        minFreeSpace: 500
+
+splunk_hosts:
+  # Standalone indexers (not clustered). DS targets these search peers.
+  - iter:
+      prefix: idx
+      numbers: 1..2
+    roles:
+      - indexer
+
+  - name: sh
+    roles:
+      - search_head
+      - monitoring_console
+      - license_manager
+
+  - name: ds
+    roles:
+      - deployment_server
+
+  - name: hf
+    roles:
+      - heavy_forwarder
+
+  - name: uf
+    roles:
+      - universal_forwarder

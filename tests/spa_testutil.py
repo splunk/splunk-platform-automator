@@ -53,6 +53,8 @@ def worker_local_dir(base: Path) -> Path:
 
 def xdist_group_name(params: Mapping) -> Optional[str]:
     """xdist loadgroup name so related parametrized tests share a worker."""
+    if "topology_id" in params:
+        return str(params["topology_id"])
     if "config_file" in params:
         return os.path.splitext(str(params["config_file"]))[0]
     scenario = params.get("scenario_scope_result")

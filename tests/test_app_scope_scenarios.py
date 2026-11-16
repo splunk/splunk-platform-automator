@@ -335,8 +335,8 @@ def test_scenario_scope_assertions(scenario_scope_result):
             assert "StandaloneOnlyApp" not in deployer_apps, (
                 f"StandaloneOnlyApp should not be on deployer (direct-only), got deployer.apps={deployer_apps}"
             )
-            # App is deployed via DS to standalone_sh (DS has it with target_hosts [standalone_sh])
-            assert_ds_app_target_hosts(scope, "StandaloneOnlyApp", ["standalone_sh"])
+            # App is deployed via DS to standalone-sh (DS has it with target_hosts [standalone-sh])
+            assert_ds_app_target_hosts(scope, "StandaloneOnlyApp", ["standalone-sh"])
     elif scenario_name == "cm_idxc":
         assert_cluster_manager_apps(scope, ["IndexerApp"])
         assert_cluster_manager_target_hosts(scope, ["idx1", "idx2"])
