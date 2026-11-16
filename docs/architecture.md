@@ -212,7 +212,7 @@ Human rendering and agent JSON consume the same session data. Each command belon
 - `spa config schema --markdown` and `spa agent schema --markdown` are human docs dumps and keep `--no-agent`.
 - `spa config explain` keeps the shape from its accepted config-editing plan.
 - VirtualBox `suspend` and `resume` do not call `input()` today. This contract does not add that prompt.
-- Shell completion is a human command, `spa completion bash` or `spa completion zsh`. Its `--help` is the install page. The function calls `spa --no-agent` for the word under the cursor. Agent mode exits 2 and names `spa agent schema`. Completion reads `COMMAND_SCHEMA` and offers canonical names only.
+- Shell completion is a human command, `spa completion bash` or `spa completion zsh`. Its `--help` is the install page. The function calls `spa --no-agent` for the word under the cursor. Agent mode exits 2 and names `spa agent schema`. Completion reads `COMMAND_SCHEMA` and offers canonical names only. Tab also completes local files and directories when spa has no other match.
 
 ## Enforced contracts and current conventions
 

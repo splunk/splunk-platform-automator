@@ -14,6 +14,16 @@ from spa_testutil import PROJECT_ROOT, SPA, run_spa, run_spa_inprocess, write_mi
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
 
+_DIR_FLAGS = (
+    "--start-dir",
+    "--software-dir",
+    "--baseconfig-dir",
+    "--env-dir",
+    "--apps-dir",
+)
+_FILE_FLAGS = ("--file", "--value-file", "--resolve-file")
+
+
 def test_completion_zsh_prints_a_callback_and_not_the_schema():
     result = run_spa(["completion", "zsh"])
     assert result.returncode == 0, result.stderr
@@ -26,6 +36,35 @@ def test_completion_zsh_prints_a_callback_and_not_the_schema():
     assert "hosts ssh" not in result.stdout
     assert "COMMAND_SCHEMA" not in result.stdout
     assert "splunk_hosts" not in result.stdout
+
+
+def test_completion_zsh_script_falls_back_to_paths():
+    script = run_spa(["completion", "zsh"]).stdout
+    for flag in _DIR_FLAGS:
+        assert flag in script
+    for flag in _FILE_FLAGS:
+        assert flag in script
+    assert "--from" in script
+    assert "init" in script
+    assert any(
+        "_files" in line and "-/" not in line for line in script.splitlines()
+    )
+    assert "-*" in script
+    assert "_files -/" in script
+    assert "compadd -Q" not in script
+
+
+def test_completion_bash_script_completes_paths():
+    script = run_spa(["completion", "bash"]).stdout
+    for flag in _DIR_FLAGS:
+        assert flag in script
+    for flag in _FILE_FLAGS:
+        assert flag in script
+    assert "--from" in script
+    assert "init" in script
+    assert "compgen -d" in script
+    assert "compgen -f" in script
+    assert "-o default" in script
 
 
 def test_completion_zsh_eval_does_not_call_compadd(tmp_path):
@@ -411,6 +450,141 @@ printf '%%s\\n' "${COMPREPLY[@]}"
     assert loaded.returncode == 0, loaded.stderr
     assert "deploy" in loaded.stdout.splitlines()
     assert "mydir" in loaded.stdout.splitlines()
+
+
+def _bash_completion_harness(tmp_path):
+    import shutil
+    import stat
+
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("bash is not installed")
+    wrapper = tmp_path / "bin"
+    wrapper.mkdir()
+    spa = wrapper / "spa"
+    spa.write_text(
+        "#!/bin/sh\nexec %s %s \"$@\"\n" % (sys.executable, SPA),
+        encoding="utf-8",
+    )
+    spa.chmod(spa.stat().st_mode | stat.S_IEXEC)
+    (tmp_path / "mydir").mkdir()
+    (tmp_path / "myfile").write_text("x\n", encoding="utf-8")
+    (tmp_path / "spa.bash").write_text(
+        run_spa(["completion", "bash"]).stdout, encoding="utf-8"
+    )
+    return bash, str(wrapper) + os.pathsep + os.environ.get("PATH", "")
+
+
+def test_bash_function_completes_directory_and_file_flags(tmp_path):
+    bash, path = _bash_completion_harness(tmp_path)
+    program = """
+set -e
+source '%s'
+run() {
+  COMP_LINE="$1"
+  COMP_POINT=${#COMP_LINE}
+  eval "COMP_WORDS=($2)"
+  COMP_CWORD=$3
+  COMPREPLY=()
+  _spa_completion
+  printf 'LINE %%s\\n' "$1"
+  printf '%%s\\n' "${COMPREPLY[@]}"
+}
+run 'spa --software-dir my' 'spa --software-dir my' 2
+run 'spa --env-dir my' 'spa --env-dir my' 2
+run 'spa config merge --file my' 'spa config merge --file my' 4
+run 'spa init my' 'spa init my' 2
+run 'spa init ' 'spa init ""' 2
+""" % (tmp_path / "spa.bash")
+    (tmp_path / "run.bash").write_text(program, encoding="utf-8")
+    loaded = subprocess.run(
+        [bash, str(tmp_path / "run.bash")],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PATH": path},
+    )
+    assert loaded.returncode == 0, loaded.stderr
+    chunks = loaded.stdout.split("LINE ")
+    by_line = {block.split("\n", 1)[0]: block for block in chunks if block}
+    software = by_line["spa --software-dir my"]
+    assert "mydir" in software
+    assert "myfile" not in software
+    env_dir = by_line["spa --env-dir my"]
+    assert "mydir" in env_dir
+    assert "myfile" not in env_dir
+    merge = by_line["spa config merge --file my"]
+    assert "myfile" in merge
+    init_dest = by_line["spa init my"]
+    assert "mydir" in init_dest
+    init_bare = by_line["spa init "]
+    assert "list" in init_bare.splitlines()
+
+
+def test_completion_zsh_function_falls_back_to_files(tmp_path):
+    zsh = "/bin/zsh"
+    if not os.path.exists(zsh):
+        pytest.skip("zsh is not installed")
+    wrapper = tmp_path / "bin"
+    wrapper.mkdir()
+    spa = wrapper / "spa"
+    spa.write_text(
+        "#!/bin/sh\nexec %s %s \"$@\"\n" % (sys.executable, SPA),
+        encoding="utf-8",
+    )
+    spa.chmod(spa.stat().st_mode | stat.S_IEXEC)
+    (tmp_path / "spa.zsh").write_text(
+        run_spa(["completion", "zsh"]).stdout, encoding="utf-8"
+    )
+    program = r"""
+_files() {
+  if [[ $1 == -/ ]]; then
+    print -r -- SENTINEL_DIRS
+  else
+    print -r -- SENTINEL_FILES
+  fi
+}
+compadd() {
+  if [[ $1 == -a && -n $2 ]]; then
+    print -r -- "SPA:${(j:|:)${(P)2}}"
+  fi
+}
+source ./spa.zsh
+print -r -- CASE_FILE
+words=(spa config merge --file '')
+CURRENT=5
+_spa
+print -r -- CASE_COPY
+words=(spa hosts copy '')
+CURRENT=4
+_spa
+print -r -- CASE_INIT
+words=(spa init '')
+CURRENT=3
+_spa
+print -r -- CASE_FLAG
+words=(spa deploy --xyz)
+CURRENT=3
+_spa
+"""
+    (tmp_path / "run.zsh").write_text(program, encoding="utf-8")
+    loaded = subprocess.run(
+        [zsh, "-f", str(tmp_path / "run.zsh")],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PATH": str(wrapper) + os.pathsep + os.environ.get("PATH", "")},
+    )
+    assert loaded.returncode == 0, loaded.stderr
+    chunks = loaded.stdout.split("CASE_")
+    by_case = {block.split("\n", 1)[0]: block for block in chunks if block}
+    assert "SENTINEL_FILES" in by_case["FILE"]
+    assert "SENTINEL_DIRS" not in by_case["FILE"]
+    assert "SENTINEL_FILES" in by_case["COPY"]
+    assert "SENTINEL_DIRS" in by_case["INIT"]
+    assert "list" in by_case["INIT"]
+    assert "SENTINEL_FILES" not in by_case["FLAG"]
+    assert "SENTINEL_DIRS" not in by_case["FLAG"]
 
 
 def test_schema_flag_values_match_command_help():

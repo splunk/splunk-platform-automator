@@ -51,23 +51,62 @@ Fish and PowerShell are not supported. Agents use spa agent schema, not shell co
 _BASH = """\
 # bash completion for spa
 _spa_completion() {
-  local reply candidate
-  if [[ ${COMP_CWORD:-0} -gt 0 && ${COMP_WORDS[COMP_CWORD-1]} == --start-dir ]]; then
-    COMPREPLY=()
-    while IFS= read -r candidate; do
-      [[ -n "$candidate" ]] && COMPREPLY+=("$candidate")
-    done < <(compgen -d -- "${COMP_WORDS[COMP_CWORD]}")
-    return 0
+  local reply candidate prev current i
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+  current="${COMP_WORDS[COMP_CWORD]}"
+  if [[ ${COMP_CWORD:-0} -gt 0 ]]; then
+    case "$prev" in
+      --start-dir|--software-dir|--baseconfig-dir|--env-dir|--apps-dir)
+        COMPREPLY=()
+        while IFS= read -r candidate; do
+          [[ -n "$candidate" ]] && COMPREPLY+=("$candidate")
+        done < <(compgen -d -- "${COMP_WORDS[COMP_CWORD]}")
+        return 0
+        ;;
+      --file|--value-file|--resolve-file)
+        COMPREPLY=()
+        while IFS= read -r candidate; do
+          [[ -n "$candidate" ]] && COMPREPLY+=("$candidate")
+        done < <(compgen -f -- "${COMP_WORDS[COMP_CWORD]}")
+        return 0
+        ;;
+    esac
+    if [[ "$prev" == --from ]]; then
+      for (( i = 1; i < COMP_CWORD; i++ )); do
+        if [[ "${COMP_WORDS[i]}" == init ]]; then
+          COMPREPLY=()
+          while IFS= read -r candidate; do
+            [[ -n "$candidate" ]] && COMPREPLY+=("$candidate")
+          done < <(compgen -d -- "${COMP_WORDS[COMP_CWORD]}")
+          return 0
+        fi
+      done
+    fi
   fi
   local IFS=$'\\n'
   COMPREPLY=()
   reply="$(spa --no-agent completion -- line "$COMP_POINT" "$COMP_LINE")" || return 0
-  if [[ -z "$reply" ]]; then
-    return 0
+  if [[ -n "$reply" ]]; then
+    while IFS= read -r candidate; do
+      [[ -n "$candidate" ]] && COMPREPLY+=("$candidate")
+    done <<< "$reply"
   fi
-  while IFS= read -r candidate; do
-    [[ -n "$candidate" ]] && COMPREPLY+=("$candidate")
-  done <<< "$reply"
+  if [[ ${COMP_CWORD:-0} -gt 0 && "$current" != -* ]]; then
+    case "$prev" in
+      --example|--provider|--architecture|--name|--env|--start-dir|--software-dir|--baseconfig-dir|--env-dir|--apps-dir|--from|--file|--value-file|--resolve-file|--key|--config|--hosts|--to|--default|--os|--region|--kind|--type|--apps-playbook|--dir)
+        ;;
+      *)
+        for (( i = 1; i < COMP_CWORD; i++ )); do
+          if [[ "${COMP_WORDS[i]}" == init ]]; then
+            while IFS= read -r candidate; do
+              [[ -n "$candidate" ]] && COMPREPLY+=("$candidate")
+            done < <(compgen -d -- "${COMP_WORDS[COMP_CWORD]}")
+            break
+          fi
+        done
+        ;;
+    esac
+  fi
 }
 complete -o default -F _spa_completion spa
 """
@@ -75,13 +114,49 @@ complete -o default -F _spa_completion spa
 _ZSH = """\
 #compdef spa
 _spa() {
-  if [[ ${words[CURRENT-1]} == --start-dir ]]; then
-    _files -/
-    return
-  fi
+  local prev=${words[CURRENT-1]}
+  local current=${words[CURRENT]}
+  local i
+  case $prev in
+    --start-dir|--software-dir|--baseconfig-dir|--env-dir|--apps-dir)
+      _files -/
+      return
+      ;;
+    --from)
+      for (( i = 2; i < CURRENT; i++ )); do
+        if [[ ${words[i]} == init ]]; then
+          _files -/
+          return
+        fi
+      done
+      ;;
+    --file|--value-file|--resolve-file)
+      _files
+      return
+      ;;
+  esac
   local -a candidates
   candidates=(${(f)"$(spa --no-agent completion -- "$((CURRENT - 1))" "${words[@]}")"})
-  compadd -a candidates
+  if (( ${#candidates} )); then
+    compadd -a candidates
+  fi
+  if [[ $current != -* ]]; then
+    case $prev in
+      --example|--provider|--architecture|--name|--env|--start-dir|--software-dir|--baseconfig-dir|--env-dir|--apps-dir|--from|--file|--value-file|--resolve-file|--key|--config|--hosts|--to|--default|--os|--region|--kind|--type|--apps-playbook|--dir)
+        ;;
+      *)
+        for (( i = 2; i < CURRENT; i++ )); do
+          if [[ ${words[i]} == init ]]; then
+            _files -/
+            return
+          fi
+        done
+        ;;
+    esac
+    if (( ${#candidates} == 0 )); then
+      _files
+    fi
+  fi
 }
 
 if [[ "${funcstack[1]-}" == _spa ]]; then
