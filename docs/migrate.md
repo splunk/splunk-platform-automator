@@ -51,7 +51,7 @@ spa validate
 
 `spa init` migrates `config/`, `inventory/`, Terraform state, and **`.vagrant/`** (VirtualBox machine IDs). If `.vagrant` is left in the clone, `spa deploy` would create a second set of VMs.
 
-If you copied a whole old checkout as the env directory, `spa init DIR` exits 2 until `--force`. Then env state is kept and framework leftovers under that dir are stripped (including an `inventory/group_vars` symlink into the old clone; framework vars stay in `$SPA_HOME/ansible/group_vars`). After conversion (or for any older lab that already has config), `spa env init NAME --force` registers that directory so it appears in `spa environment list`.
+If you copied a whole old checkout as the env directory, `spa init DIR` exits 2 until `--force`. Then env state is kept and framework leftovers under that dir are stripped (including an `inventory/group_vars` symlink into the old clone; framework vars stay in `$SPA_HOME/ansible/group_vars`). After conversion (or for any older lab that already has config), `spa init DIR` or `spa env init NAME` registers that directory so it appears in `spa environment list`. Use `--force` to convert leftovers or refresh `.spa.yml`; `spa init --force --reset-paths DIR` restamps Software/baseconfig/apps dirs from `paths.yml`.
 
 `spa init` does not write a `.gitignore`. To put the environment in Git later, ignore `.vault_pass`, `.vault_pass.txt`, `.venv/`, `.vagrant/`, `.terraform/`, `*.tfstate`, `*.tfstate.*`, `*.tfvars`, `tfplan`, and `saved_base_config_apps/`. Commit `config/`, `inventory/`, and `.spa.yml`.
 
