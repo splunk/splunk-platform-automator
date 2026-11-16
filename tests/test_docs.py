@@ -296,6 +296,24 @@ def test_docs_treat_software_and_baseconfig_as_separate_trees():
     assert "Professional Services baseconfig apps in a `Software/`" not in install
 
 
+def test_init_reset_paths_is_documented():
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    paths = guide.split("## Understand the paths", 1)[1].split("\n## ", 1)[0]
+    prepare = guide.split("## Prepare Software", 1)[1].split("\n## ", 1)[0]
+    assert "--reset-paths" in paths or "--reset-paths" in prepare
+    assert "spa init --force --reset-paths" in guide
+    migrate = (_docs_dir() / "migrate.md").read_text(encoding="utf-8")
+    assert "--reset-paths" in migrate
+    changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    unreleased = changelog.split("## [Unreleased]", 1)[1].split("\n## ", 1)[0]
+    assert "--reset-paths" in unreleased
+    dirs = (PROJECT_ROOT / "examples" / "catalog" / "features.yml").read_text(encoding="utf-8")
+    assert "existing .spa.yml unless --reset-paths" in dirs
+    config = format_config_markdown(PROJECT_ROOT)
+    assert "existing .spa.yml unless --reset-paths" in config
+    assert "--reset-paths" in (_docs_dir() / "config.md").read_text(encoding="utf-8")
+
+
 def test_baseconfig_link_is_the_short_go_link_and_the_changelog_names_no_link():
     """The employee baseconfig link is http://go/baseconfigs. The CHANGELOG carries no link to it."""
     for rel in ("skills/spa/spa/SKILL.md", "docs/user-guide.md"):
@@ -733,7 +751,7 @@ class TestConfigMarkdown:
         assert "spa aws describe-ami" not in text
         assert "stored in ~/.config/spa/paths.yml and copied into env .spa.yml" not in text
         assert "spa init --baseconfig-dir" in text
-        assert "If omitted, uses ~/.config/spa/paths.yml" in text
+        assert "If omitted, uses existing .spa.yml unless --reset-paths, then ~/.config/spa/paths.yml" in text
 
 
 class TestSpaSkill:

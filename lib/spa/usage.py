@@ -25,7 +25,7 @@ INIT_PROVIDER_HELP = (
 ) % _PROVIDER_CHOICE
 _INIT_DIR_SCOPE = (
     "for this env (.spa.yml). "
-    "If omitted, uses ~/.config/spa/paths.yml then discovery. "
+    "If omitted, uses existing .spa.yml unless --reset-paths, then ~/.config/spa/paths.yml then discovery. "
     "Seeds paths.yml only when that key is unset."
 )
 INIT_SOFTWARE_DIR_HELP = "Splunk installers directory %s" % _INIT_DIR_SCOPE

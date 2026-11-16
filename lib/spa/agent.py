@@ -605,12 +605,26 @@ COMMAND_SCHEMA = {
                     "takes_value": True,
                     "completes_from": "providers",
                 },
-                {"long": "--env-dir", "help": "One-off parent (requires --name); does not change the default parent"},
+                {
+                    "long": "--env-dir",
+                    "help": "One-off parent (requires --name); does not change the default parent",
+                    "takes_value": True,
+                },
                 {"long": "--name", "help": "Registry name (default: folder basename)"},
-                {"long": "--force", "help": "Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example)"},
-                {"long": "--software-dir", "help": INIT_SOFTWARE_DIR_HELP},
-                {"long": "--baseconfig-dir", "help": INIT_BASECONFIG_DIR_HELP},
-                {"long": "--apps-dir", "help": INIT_APPS_DIR_HELP},
+                {
+                    "long": "--force",
+                    "help": "Adopt/refresh an existing env and register it "
+                    "(keep splunk_config.yml unless --example; "
+                    "keep Software/baseconfig/apps dirs unless --reset-paths)",
+                },
+                {
+                    "long": "--reset-paths",
+                    "help": "Skip existing .spa.yml Software/baseconfig/apps dirs; "
+                    "re-resolve from --*-dir, then paths.yml, then discovery",
+                },
+                {"long": "--software-dir", "help": INIT_SOFTWARE_DIR_HELP, "takes_value": True},
+                {"long": "--baseconfig-dir", "help": INIT_BASECONFIG_DIR_HELP, "takes_value": True},
+                {"long": "--apps-dir", "help": INIT_APPS_DIR_HELP, "takes_value": True},
             ],
             "example": "spa environment init --architecture examples/architectures/c3.json --provider aws my-lab",
         },
