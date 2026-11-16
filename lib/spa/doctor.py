@@ -297,7 +297,7 @@ def _record_software_inventory(rec, software: Path, baseconfig: Path) -> None:
             "no license file in %s (trial labs may omit)" % path,
             _MISSING_SOFTWARE_DIR_FIX
             if not exists
-            else "place or symlink a .lic in %s; spa licenses list" % path,
+            else "spa licenses add FILE --yes; spa licenses list",
         )
 
 

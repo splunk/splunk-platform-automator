@@ -1255,7 +1255,7 @@ spa --agent architecture check examples/architectures/c3.json
 
 ## `licenses`
 
-License discovery. List Software licenses. Bare spa licenses exits 2.
+License discovery. List or add Software licenses. Bare spa licenses exits 2.
 
 Example:
 
@@ -1278,6 +1278,29 @@ Example:
 
 ```bash
 spa --agent licenses list
+```
+
+## `licenses add`
+
+Copy a license file into Software. A newer NFR auto-retargets the canonical symlink. Does not edit splunk_config.yml.
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `--software-dir` | Software directory (default: ../Software from SPA_ENV_DIR, SPA splunk_software_dir) |
+| `--force` | Overwrite an existing destination basename |
+| `--replace` | Retarget matching canonical names even when auto-replace does not fire |
+| `-y`, `--yes` | Confirm without prompting |
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `FILE` | yes | License file (.lic or .license) to copy into Software |
+
+Example:
+
+```bash
+spa --agent licenses add FILE --yes
 ```
 
 ## `run`

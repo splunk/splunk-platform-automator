@@ -190,6 +190,7 @@ SESSION_API_PARAMETERS = {
         "agent",
     ),
     "licenses": ("software_dir", "config", "env_recommend"),
+    "licenses_add": ("path", "software_dir", "force", "replace", "confirm", "agent"),
     "hosts_list": ("status", "hosts"),
     "hosts_register": (
         "name",

@@ -720,6 +720,7 @@ def test_doctor_software_empty_dir_warns_all_three_buckets(tmp_path, monkeypatch
     assert "Configurations - Base" in baseconfigs["fix"]
     assert "--baseconfig-dir" in baseconfigs["fix"]
     licenses = rows["software_licenses"]
+    assert "spa licenses add" in licenses["fix"]
     assert "spa licenses list" in licenses["fix"]
     assert "trial" in licenses["message"].lower() or "trial" in licenses["fix"].lower()
 
@@ -843,6 +844,7 @@ def test_doctor_software_warnings_do_not_fail_cli(tmp_path):
     assert ENTERPRISE_URL in out
     assert "go/baseconfigs" in out
     assert "--baseconfig-dir" in out
+    assert "spa licenses add" in out
     assert "spa licenses list" in out
 
 

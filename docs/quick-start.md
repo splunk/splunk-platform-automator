@@ -38,11 +38,11 @@ spa environment set --create-defaults --yes
 
 1. Download the current Linux **tgz** for [Splunk Enterprise](https://www.splunk.com/en_us/download/splunk-enterprise.html) and [Universal Forwarder](https://www.splunk.com/en_us/download/universal-forwarder.html) into `~/Splunk-Platform-Automator/Software`. With `splunk_version` unset (the `single_node` default), spa uses the latest tarball it finds. Pinning `splunk_version` is optional; paths and version pins: [Prepare Software](user-guide.md#prepare-software). Download the Universal Forwarder now even though `single_node` leaves its forwarder host commented out; `spa doctor` warns without it, and most other topologies need it.
 2. Extract PS baseconfig apps into `~/Splunk-Platform-Automator/Baseconfigs` (`Configurations - Base`, `Configurations - Index Replication`). Employees: [http://go/baseconfigs](http://go/baseconfigs). Others: Splunk Professional Services. Not a public Splunk.com download.
-3. Optional license: place or symlink a top-level `*.lic` in `~/Splunk-Platform-Automator/Software` (typical name `Splunk_Enterprise.lic`). Trial labs may omit; `spa doctor` warns, `spa validate` does not fail for that alone.
+3. Optional license: `spa licenses add FILE --yes`, then `spa licenses list`. A newer NFR auto-retargets the canonical symlink and says so; a size-extension add leaves the canonical in place. Leftover superseded NFR files stay until you delete them from Software. Trial labs may omit; `spa doctor` warns, `spa validate` does not fail for that alone.
 
 A custom layout for every env still uses `spa environment set --software-dir DIR` / `--baseconfig-dir DIR`. One env only: `spa init --baseconfig-dir DIR NAME` (same for `--software-dir`). Sibling discovery and `paths.yml`: [Prepare Software](user-guide.md#prepare-software).
 
-Confirm with `spa doctor` and fix every Software WARN and any FAIL. Later, `spa licenses list` and `spa config set splunk_defaults.splunk_license_file NAME` when using a file.
+Confirm with `spa doctor` and fix every Software WARN and any FAIL. Later, `spa licenses add FILE --yes`, `spa licenses list`, and `spa config set splunk_defaults.splunk_license_file NAME` when using a file.
 
 ## 3. Provider checklist
 

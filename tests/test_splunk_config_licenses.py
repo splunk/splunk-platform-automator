@@ -32,6 +32,7 @@ def _license_xml(
     license_type="enterprise",
     group_id="Enterprise",
     expiration="4102444800",
+    creation="1700000000",
     addons=(),
 ):
     addon_xml = "".join("<add_on>%s</add_on>" % addon for addon in addons)
@@ -41,7 +42,7 @@ def _license_xml(
     <guid>must-not-be-emitted</guid>
     <type>{license_type}</type>
     <group_id>{group_id}</group_id>
-    <creation_time>1700000000</creation_time>
+    <creation_time>{creation}</creation_time>
     <expiration_time>{expiration}</expiration_time>
     <add_ons>{addons}</add_ons>
   </payload>
@@ -49,6 +50,7 @@ def _license_xml(
 """.format(
         license_type=license_type,
         group_id=group_id,
+        creation=creation,
         expiration=expiration,
         addons=addon_xml,
     )
@@ -478,3 +480,282 @@ def test_build_yaml_snippet():
     snippet = licenses.build_yaml_snippet(["A.lic", "B.lic"])
     assert snippet.startswith("splunk_license_file:")
     assert "- A.lic" in snippet
+
+
+def test_add_license_file_first_nfr_creates_canonical_symlink(tmp_path):
+    software = tmp_path / "Software"
+    software.mkdir()
+    source = _write_license(tmp_path / "Splunk_Enterprise_NFR_lab.License")
+    result = licenses.add_license_file(software, source)
+    dest = software / "Splunk_Enterprise_NFR_lab.License"
+    canonical = software / "Splunk_Enterprise.lic"
+    assert dest.is_file()
+    assert dest.read_text() == source.read_text()
+    assert source.is_file()
+    assert canonical.is_symlink()
+    assert canonical.readlink() == type(canonical)("Splunk_Enterprise_NFR_lab.License")
+    assert result["copied"] is True
+    assert result["basename"] == "Splunk_Enterprise_NFR_lab.License"
+    assert result["replaced"] is False
+    assert result["canonical_mode"] == "symlink"
+
+
+def test_add_license_file_newer_nfr_auto_retargets_canonical(tmp_path):
+    software = tmp_path / "Software"
+    software.mkdir()
+    old = _write_license(
+        tmp_path / "Splunk_Enterprise_NFR_old.License",
+        expiration="1893456000",
+    )
+    licenses.add_license_file(software, old)
+    newer = _write_license(
+        tmp_path / "Splunk_Enterprise_NFR_new.License",
+        expiration="4102444800",
+    )
+    result = licenses.add_license_file(software, newer)
+    canonical = software / "Splunk_Enterprise.lic"
+    assert (software / "Splunk_Enterprise_NFR_old.License").is_file()
+    assert (software / "Splunk_Enterprise_NFR_new.License").is_file()
+    assert canonical.is_symlink()
+    assert canonical.readlink() == type(canonical)("Splunk_Enterprise_NFR_new.License")
+    assert result["replaced"] is True
+    assert result["previous_target"] == "Splunk_Enterprise_NFR_old.License"
+    assert result["canonical"] == "Splunk_Enterprise.lic"
+    rendered = licenses.format_license_add_text(result)
+    assert "Splunk_Enterprise_NFR_new.License" in rendered
+    assert "Splunk_Enterprise_NFR_old.License" in rendered
+    assert "must-not-be-emitted" not in rendered
+    assert "must-not-be-emitted" not in str(result)
+
+
+def test_add_license_file_older_nfr_and_size_extension_leave_canonical(tmp_path):
+    software = tmp_path / "Software"
+    software.mkdir()
+    first = _write_license(
+        tmp_path / "Splunk_Enterprise_NFR_lab.License",
+        expiration="4102444800",
+    )
+    licenses.add_license_file(software, first)
+    older = _write_license(
+        tmp_path / "Splunk_Enterprise_NFR_older.License",
+        expiration="1893456000",
+    )
+    older_result = licenses.add_license_file(software, older)
+    canonical = software / "Splunk_Enterprise.lic"
+    assert (software / "Splunk_Enterprise_NFR_older.License").is_file()
+    assert canonical.readlink() == type(canonical)("Splunk_Enterprise_NFR_lab.License")
+    assert older_result["replaced"] is False
+    assert older_result["basename"] == "Splunk_Enterprise_NFR_older.License"
+    assert "canonical unchanged" in licenses.format_license_add_text(older_result)
+
+    extension = _write_license(tmp_path / "Splunk_Enterprise_50GB.lic")
+    stacked = licenses.add_license_file(software, extension)
+    assert (software / "Splunk_Enterprise_50GB.lic").is_file()
+    assert canonical.readlink() == type(canonical)("Splunk_Enterprise_NFR_lab.License")
+    assert stacked["replaced"] is False
+    assert stacked["basename"] == "Splunk_Enterprise_50GB.lic"
+    assert "canonical unchanged" in licenses.format_license_add_text(stacked)
+
+
+def test_add_license_file_replace_retargets_when_heuristic_does_not_fire(tmp_path):
+    software = tmp_path / "Software"
+    software.mkdir()
+    first = _write_license(tmp_path / "Splunk_Enterprise_NFR_lab.License")
+    licenses.add_license_file(software, first)
+    extension = _write_license(tmp_path / "Splunk_Enterprise_50GB.lic")
+    result = licenses.add_license_file(software, extension, replace=True)
+    canonical = software / "Splunk_Enterprise.lic"
+    assert canonical.is_symlink()
+    assert canonical.readlink() == type(canonical)("Splunk_Enterprise_50GB.lic")
+    assert (software / "Splunk_Enterprise_NFR_lab.License").is_file()
+    assert result["replaced"] is True
+    assert result["previous_target"] == "Splunk_Enterprise_NFR_lab.License"
+    assert result["canonical"] == "Splunk_Enterprise.lic"
+
+
+def test_add_license_file_itsi_and_es_create_only_matching_canonical(tmp_path):
+    software = tmp_path / "Software"
+    software.mkdir()
+    itsi = _write_license(
+        tmp_path / "Splunk_ITSI_NFR_lab.License",
+        license_type="addon",
+        group_id="ITSI",
+        addons=("itsi",),
+    )
+    itsi_result = licenses.add_license_file(software, itsi)
+    assert (software / "Splunk_ITSI.lic").is_symlink()
+    assert (software / "Splunk_ITSI.lic").readlink() == type(itsi)("Splunk_ITSI_NFR_lab.License")
+    assert not (software / "Splunk_Enterprise.lic").exists()
+    assert not (software / "Splunk_ES.lic").exists()
+    assert itsi_result["canonical"] == "Splunk_ITSI.lic"
+
+    es = _write_license(
+        tmp_path / "Splunk_ES_NFR_lab.License",
+        license_type="addon",
+        group_id="Enterprise Security",
+        addons=("SplunkEnterpriseSecuritySuite",),
+    )
+    es_result = licenses.add_license_file(software, es)
+    assert (software / "Splunk_ES.lic").is_symlink()
+    assert (software / "Splunk_ES.lic").readlink() == type(es)("Splunk_ES_NFR_lab.License")
+    assert not (software / "Splunk_Enterprise.lic").exists()
+    assert es_result["canonical"] == "Splunk_ES.lic"
+
+    extra_itsi = _write_license(
+        tmp_path / "Splunk_ITSI_extra.lic",
+        license_type="addon",
+        group_id="ITSI",
+        addons=("itsi",),
+        expiration="1893456000",
+    )
+    extra = licenses.add_license_file(software, extra_itsi)
+    assert (software / "Splunk_ITSI.lic").readlink() == type(itsi)("Splunk_ITSI_NFR_lab.License")
+    assert extra["replaced"] is False
+    assert extra["basename"] == "Splunk_ITSI_extra.lic"
+
+
+def test_add_license_file_combo_creates_matching_canonicals(tmp_path):
+    software = tmp_path / "Software"
+    software.mkdir()
+    combo = _write_license(
+        tmp_path / "combined_NFR.License",
+        addons=("IT Service Intelligence",),
+    )
+    result = licenses.add_license_file(software, combo)
+    enterprise = software / "Splunk_Enterprise.lic"
+    itsi = software / "Splunk_ITSI.lic"
+    assert enterprise.is_symlink()
+    assert itsi.is_symlink()
+    assert enterprise.readlink() == type(enterprise)("combined_NFR.License")
+    assert itsi.readlink() == type(itsi)("combined_NFR.License")
+    assert not (software / "Splunk_ES.lic").exists()
+    assert {row["name"] for row in result["canonicals"]} == {
+        "Splunk_Enterprise.lic",
+        "Splunk_ITSI.lic",
+    }
+    assert result["replaced"] is False
+
+
+def test_add_license_file_dest_exists_invalid_and_hides_payload(tmp_path):
+    software = tmp_path / "Software"
+    software.mkdir()
+    first = _write_license(tmp_path / "lab.lic")
+    licenses.add_license_file(software, first)
+    again = tmp_path / "again"
+    again.mkdir()
+    duplicate = _write_license(again / "lab.lic")
+    with pytest.raises(licenses.LicenseAddError, match="already exists"):
+        licenses.add_license_file(software, duplicate)
+    overwritten = licenses.add_license_file(software, duplicate, force=True)
+    assert overwritten["copied"] is True
+    assert (software / "lab.lic").read_text() == duplicate.read_text()
+
+    invalid = tmp_path / "broken.lic"
+    invalid.write_text("not XML")
+    with pytest.raises(licenses.LicenseAddError, match="not valid XML"):
+        licenses.add_license_file(software, invalid)
+
+    wrong = tmp_path / "notes.txt"
+    wrong.write_text("nope")
+    with pytest.raises(licenses.LicenseAddError, match="must end with"):
+        licenses.add_license_file(software, wrong)
+
+    blob = str(overwritten) + licenses.format_license_add_text(overwritten)
+    assert "must-not-be-emitted" not in blob
+    assert "<license>" not in blob
+    assert "guid" not in blob.lower() or "guid" not in str(overwritten)
+
+
+def test_add_license_file_canonical_basename_is_a_regular_file(tmp_path):
+    software = tmp_path / "Software"
+    software.mkdir()
+    source = _write_license(tmp_path / "Splunk_Enterprise.lic")
+    result = licenses.add_license_file(software, source)
+    dest = software / "Splunk_Enterprise.lic"
+    assert dest.is_file()
+    assert not dest.is_symlink()
+    assert result["copied"] is True
+    assert result["basename"] == "Splunk_Enterprise.lic"
+    assert result.get("canonicals") == []
+
+
+def test_plan_license_add_names_auto_replace_in_details(tmp_path):
+    software = tmp_path / "Software"
+    software.mkdir()
+    old = _write_license(
+        tmp_path / "Splunk_Enterprise_NFR_old.License",
+        expiration="1893456000",
+    )
+    licenses.add_license_file(software, old)
+    newer = _write_license(
+        tmp_path / "Splunk_Enterprise_NFR_new.License",
+        expiration="4102444800",
+    )
+    plan = licenses.plan_license_add(software, newer)
+    assert any(
+        "will retarget Splunk_Enterprise.lic from Splunk_Enterprise_NFR_old.License to Splunk_Enterprise_NFR_new.License"
+        in line
+        for line in plan["details"]
+    )
+    stacked = _write_license(tmp_path / "Splunk_Enterprise_50GB.lic")
+    stack_plan = licenses.plan_license_add(software, stacked)
+    assert any("canonical Splunk_Enterprise.lic stays" in line for line in stack_plan["details"])
+    assert not (software / "Splunk_Enterprise_50GB.lic").exists()
+
+
+def test_licenses_add_next_stacks_or_uses_canonical_after_replace():
+    from spa.next_steps import licenses_add_next
+
+    stacked = licenses_add_next(
+        {"basename": "Splunk_Enterprise_50GB.lic", "replaced": False},
+        config_exists=True,
+        configured=["Splunk_Enterprise.lic"],
+        existing_canonicals=["Splunk_Enterprise.lic"],
+    )
+    assert [row["id"] for row in stacked] == ["licenses.list", "config.set.license_file"]
+    assert "Splunk_Enterprise_50GB.lic" in stacked[1]["ask"]
+    assert "Splunk_Enterprise.lic" in stacked[1]["ask"]
+
+    replaced = licenses_add_next(
+        {
+            "basename": "Splunk_Enterprise_NFR_new.License",
+            "replaced": True,
+            "canonical": "Splunk_Enterprise.lic",
+        },
+        config_exists=True,
+        configured=["Splunk_Enterprise.lic"],
+        existing_canonicals=["Splunk_Enterprise.lic"],
+    )
+    assert "Splunk_Enterprise.lic" in replaced[1]["ask"]
+    assert "Splunk_Enterprise_NFR_new.License" not in replaced[1]["ask"]
+
+    listed_only = licenses_add_next({"basename": "lab.lic", "replaced": False}, config_exists=False)
+    assert [row["id"] for row in listed_only] == ["licenses.list"]
+
+
+def test_add_license_file_windows_symlink_fallback_copies_canonical(tmp_path, monkeypatch):
+    software = tmp_path / "Software"
+    software.mkdir()
+    source = _write_license(tmp_path / "Splunk_Enterprise_NFR_lab.License")
+
+    def boom(self, *args, **kwargs):
+        raise OSError("symlink privilege not held")
+
+    monkeypatch.setattr(licenses.Path, "symlink_to", boom)
+    first = licenses.add_license_file(software, source)
+    canonical = software / "Splunk_Enterprise.lic"
+    assert canonical.is_file()
+    assert not canonical.is_symlink()
+    assert canonical.read_text() == (software / source.name).read_text()
+    assert first["canonical_mode"] == "copy"
+    assert "canonical_mode: copy" in licenses.format_license_add_text(first)
+
+    production = _write_license(tmp_path / "Splunk_Enterprise_50GB.lic")
+    with pytest.raises(licenses.LicenseAddError, match="regular file"):
+        licenses.add_license_file(software, production, replace=True)
+    replaced = licenses.add_license_file(software, production, replace=True, force=True)
+    assert canonical.is_file()
+    assert not canonical.is_symlink()
+    assert canonical.read_text() == (software / production.name).read_text()
+    assert replaced["canonical_mode"] == "copy"
+    assert replaced["replaced"] is True

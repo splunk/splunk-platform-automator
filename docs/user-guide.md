@@ -59,7 +59,7 @@ cd ~/Splunk-Platform-Automator/Envs/my-lab
    - [Splunk Universal Forwarder](https://www.splunk.com/en_us/download/universal-forwarder.html)
    - Filenames look like `splunk-<version>-<build>-linux-amd64.tgz` and `splunkforwarder-<version>-<build>-linux-amd64.tgz`. The version must match `splunk_version` in config.
 3. Extract Splunk **Professional Services Best Practices baseconfig apps** into `~/Splunk-Platform-Automator/Baseconfigs` (`Configurations - Base`, `Configurations - Index Replication`). They are not a public Splunk.com download. Splunk / Cisco employees can download them from [http://go/baseconfigs](http://go/baseconfigs). Everyone else: contact Splunk Professional Services. A custom PS tree for every env is `spa environment set --baseconfig-dir DIR`. One env only is `spa init --baseconfig-dir DIR NAME` (add `--force` to refresh an existing env).
-4. If you have a Splunk license, place or symlink it as **`Splunk_Enterprise.lic`** in the Software directory (`spa licenses list` lists basenames for config). Trial-only labs can omit licenses.
+4. If you have a Splunk license, copy it into Software with `spa licenses add FILE --yes`, then `spa licenses list`. A newer NFR auto-retargets the canonical symlink (`Splunk_Enterprise.lic` / `Splunk_ITSI.lic` / `Splunk_ES.lic`) and says so; a size-extension add leaves the canonical in place. Leftover superseded NFR files stay until you delete them from Software. Trial-only labs can omit licenses.
 
 ```text
 ~/Splunk-Platform-Automator/Software/splunk-<version>-<build>-linux-amd64.tgz

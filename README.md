@@ -46,7 +46,7 @@ each step.
 - **Guided config editing:** `spa config set|add|unset|move|merge|migrate|topology|provider` and `spa apps add|remove` make schema-checked edits with dry-run support, so you don't hand-edit `splunk_config.yml`. `spa config search` and `spa config explain` look up any setting.
 - **Architecture files:** `spa init --architecture FILE` scaffolds from a confirmed Splunk Validated Architecture plan. `spa architecture plan`, `apply`, and `check` overlay counts, replication and search factors, and extra roles.
 - **Preflight checks:** `spa validate` checks the config, inventory, and license pairings. `spa doctor` checks host tools and the Software directory (Enterprise and UF tarballs, PS baseconfigs, licenses). A missing environment variable stops the run before anything changes.
-- **License catalog:** `spa licenses list` shows Software license files, expiration, and ITSI/ES entitlements for config.
+- **License catalog:** `spa licenses add FILE --yes` copies a license into Software; `spa licenses list` shows files, expiration, and ITSI/ES entitlements for config.
 - **Lifecycle control:** `spa suspend` and `spa resume` stop and start instances to save cost, and `spa destroy` removes the environment. Changing commands require an explicit `--yes`.
 - **Run logs:** provision, deploy, and run write a log under the environment's `logs/` folder. `spa logs` replays any run, and live progress shows each step as it happens.
 - **Playbook catalog:** `spa run list` shows the shipped playbooks, including rolling upgrades for indexer and search head clusters, plus your own. `spa run NAME --help` describes each one.

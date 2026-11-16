@@ -1071,7 +1071,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "licenses",
-            "summary": "License discovery. List Software licenses. Bare spa licenses exits 2.",
+            "summary": "License discovery. List or add Software licenses. Bare spa licenses exits 2.",
             "example": "spa --agent licenses list",
         },
         {
@@ -1094,6 +1094,39 @@ COMMAND_SCHEMA = {
                 },
             ],
             "example": "spa --agent licenses list",
+        },
+        {
+            "name": "licenses add",
+            "summary": (
+                "Copy a license file into Software. A newer NFR auto-retargets the "
+                "canonical symlink. Does not edit splunk_config.yml."
+            ),
+            "requires_confirmation": True,
+            "positionals": [
+                {
+                    "name": "FILE",
+                    "required": True,
+                    "help": "License file (.lic or .license) to copy into Software",
+                },
+            ],
+            "flags": [
+                {
+                    "long": "--software-dir",
+                    "help": "Software directory (default: ../Software from SPA_ENV_DIR, SPA splunk_software_dir)",
+                },
+                {
+                    "long": "--force",
+                    "help": "Overwrite an existing destination basename",
+                    "takes_value": False,
+                },
+                {
+                    "long": "--replace",
+                    "help": "Retarget matching canonical names even when auto-replace does not fire",
+                    "takes_value": False,
+                },
+                {"long": "--yes", "short": "-y", "help": "Confirm without prompting"},
+            ],
+            "example": "spa --agent licenses add FILE --yes",
         },
         {
             "name": "run",

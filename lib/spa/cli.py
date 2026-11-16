@@ -663,7 +663,8 @@ ARCHITECTURE_NEEDS_ACTION = (
 )
 LICENSES_NEEDS_ACTION = (
     "spa licenses needs an action.\n"
-    "List: spa licenses list"
+    "List: spa licenses list\n"
+    "Add:  spa licenses add FILE --yes"
 )
 
 
@@ -774,6 +775,9 @@ _MISSING_OPERAND = {
     ("spa shell", "name"): SHELL_NEEDS_NAME,
     ("spa environment remove", "name"): (
         "spa environment remove needs NAME.\nExample: spa environment remove NAME --yes"
+    ),
+    ("spa licenses add", "FILE"): (
+        "spa licenses add needs FILE.\nExample: spa licenses add FILE --yes"
     ),
 }
 def shell_copy_examples() -> str:
@@ -2792,7 +2796,8 @@ def _run(argv: Sequence[str]) -> int:
         sub,
         "licenses",
         aliases=["lic"],
-        help="List Software licenses and propose splunk_license_file",
+        help="List or add Software licenses and propose splunk_license_file",
+        description="List or add Software licenses and propose splunk_license_file",
         epilog=LICENSES_NEEDS_ACTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -2822,6 +2827,44 @@ def _run(argv: Sequence[str]) -> int:
         "--details",
         action="store_true",
         help="Include the full license inventory",
+    )
+    p_licenses_add = _add_action(
+        licenses_sub,
+        "add",
+        help="Copy a license file into Software",
+        description=(
+            "Copy FILE into the Software directory, keeping the source basename. "
+            "Creates a canonical symlink when that entitlement is missing. "
+            "A newer NFR auto-retargets the canonical; a size-extension is stacked. "
+            "Does not edit splunk_config.yml."
+        ),
+    )
+    _add_mode_flags(p_licenses_add)
+    p_licenses_add.add_argument(
+        "file",
+        metavar="FILE",
+        help="License file (.lic or .license) to copy into Software",
+    )
+    p_licenses_add.add_argument(
+        "--software-dir",
+        help="Software directory (default: ../Software from SPA_ENV_DIR, SPA splunk_software_dir)",
+    )
+    p_licenses_add.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing destination basename",
+    )
+    p_licenses_add.add_argument(
+        "--replace",
+        action="store_true",
+        help="Retarget matching canonical names even when auto-replace does not fire",
+    )
+    p_licenses_add.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm without prompting",
     )
 
     p_architecture = _add_command(
@@ -3881,9 +3924,27 @@ def _run(argv: Sequence[str]) -> int:
 
     if args.command == "licenses":
         licenses_cmd = _action(args, "licenses_cmd")
-        if licenses_cmd != "list":
+        if licenses_cmd not in {"list", "add"}:
             return _reject(LICENSES_NEEDS_ACTION, as_agent)
         from spa import licenses as licenses_mod
+
+        if licenses_cmd == "add":
+            result = session.licenses_add(
+                getattr(args, "file"),
+                software_dir=getattr(args, "software_dir", None),
+                force=bool(getattr(args, "force", False)),
+                replace=bool(getattr(args, "replace", False)),
+                confirm=bool(getattr(args, "yes", False)),
+                agent=as_agent,
+            )
+            if as_agent:
+                return _emit_result(result, True)
+            if result.error:
+                print(result.error, file=sys.stderr)
+                return result.code
+            sys.stdout.write(licenses_mod.format_license_add_text(result.data or {}))
+            _print_next(result.data if isinstance(result.data, dict) else {})
+            return result.code
 
         result = session.licenses(
             software_dir=getattr(args, "software_dir", None),
