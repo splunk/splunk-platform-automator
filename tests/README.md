@@ -6,7 +6,7 @@ only (`validate`, `deploy --yes`, `run verification/...`, `destroy --yes`).
 
 ## Overview
 
-- **Local** (`@pytest.mark.local`) — schema, CLI, unit, and ansible-playbook tests. No AWS.
+- **Local** (`@pytest.mark.local`) — schema, CLI, unit, and Ansible-job tests (`spa run`, plus the JSONL callback fixture). No AWS.
 - **Live AWS** (`@pytest.mark.aws`) — one isolated `SPA_ENV_DIR` per topology. `SPA_HOME` is this checkout.
 - **Incremental** — tests in `test_deployment.py` are sequential per topology; a failure skips later steps.
 - **Suites** — `tests/deployment/suites/*.yml` pick topologies and OS. Live tests do not glob `tests/configs/*.yml`.
@@ -126,7 +126,7 @@ Unit tests for YAML configuration schema validation using Pydantic. These tests 
 
 ### App deployment tests (`test_app_deployment.py`)
 
-Automated tests for the app deployment playbook **without real Splunk hosts or AWS**:
+Automated tests for app deployment **without real Splunk hosts or AWS**. Pre-deployment checks run `spa run splunk_apps_deploy --yes -- --limit localhost`:
 
 | Test | Description |
 |------|-------------|
@@ -145,7 +145,7 @@ Pre-deployment playbook tests use an isolated subprocess environment (no `SPLUNK
 ./tests/run_app_deployment_tests.sh -k "SchemaValidation"
 ```
 
-Requires `ansible-playbook` on PATH for playbook tests.
+Playbook tests run through `spa run` (ansible-core in the test venv).
 
 ### ITSI content pack tests (`test_itsi_content_pack.py`)
 
@@ -166,7 +166,7 @@ pytest tests/test_app_scope_scenarios.py -k "itsi_content_pack or itsi_standalon
 
 ### App scope scenario tests (`test_app_scope_scenarios.py`)
 
-Scenario-based tests for app scope (no SSH or real hosts). Each scenario under `tests/configs/app_scope/<name>/splunk_config.yml` runs `debug_app_scope.yml` with `run_scope_locally=true` and asserts on the produced scope JSON (direct_scope, deployer, cluster_manager, deployment_server). Scenarios: minimal_direct, ds_only, deployer_shc, ds_with_hosts_whitelist, itsi_content_pack, itsi_content_pack_single_app, state_absent.
+Scenario-based tests for app scope (no SSH or real hosts). Each scenario under `tests/configs/app_scope/<name>/splunk_config.yml` runs `spa run verification/debug_app_scope -- -e run_scope_locally=true` and asserts on the produced scope JSON (direct_scope, deployer, cluster_manager, deployment_server). Scenarios: minimal_direct, ds_only, deployer_shc, ds_with_hosts_whitelist, itsi_content_pack, itsi_content_pack_single_app, state_absent.
 
 **Run app scope scenario tests:**
 ```bash
@@ -175,7 +175,7 @@ Scenario-based tests for app scope (no SSH or real hosts). Each scenario under `
 ./tests/run_app_scope_scenarios_tests.sh -k "minimal_direct"
 ```
 
-Requires `ansible-playbook`, `ansible-core`, `jmespath`, and `lxml` in the test venv (installed by the run script). Output: `tests/configs/app_scope/output/<scenario>_scope.json`.
+Requires `ansible-core`, `jmespath`, and `lxml` in the test venv (installed by the run script). Output: `tests/configs/app_scope/output/<scenario>_scope.json`.
 
 ### Adding an app-scope scenario
 
@@ -192,7 +192,7 @@ App-scope scenarios live under `tests/configs/app_scope/<name>/`. Each has a dis
 
 - While coding: the new test, then existing tests for every touched module.
 - CLI surface (parser, help, routing, schema, session, or provider contracts): `./tests/run_cli_tests.sh` (`pytest -m "local and cli"`). Serial by default.
-- Playbook-spawning tests: `./tests/run_ansible_tests.sh` (`pytest -m "local and ansible"`).
+- Playbook-spawning tests: `./tests/run_ansible_tests.sh` (`pytest -m "local and ansible"`). `test_spa_jsonl_callback.py` keeps a direct `ansible-playbook` of a fixture that is not a `spa run` catalog playbook.
 - Other local tests (schema, docs, runlog, venv, paths, licenses, secrets, pack/install): `./tests/run_unit_tests.sh` (`pytest -m "local and not cli and not ansible"`).
 - Optional before a PR: `./tests/run_local_tests.sh` (`pytest -m local`). Pass `-n auto --durations=25` to match CI; those flags are the CI default for local jobs, not the inner-loop default.
 - Merge gate: PR CI jobs `Syntax`, `CLI tests`, `Ansible tests`, and `Unit tests`. Each pytest job uses `-n auto --durations=25`. Push CI on `master` / `distribution` is background insurance.
@@ -303,7 +303,7 @@ Use `-k` with test names to run only specific steps:
 
 ### App deployment
 
-`spa deploy --yes` deploys apps. **test_09** runs `spa run verification/verify_app_deployment`. Operator behavior and routing are summarized in [Apps](../docs/apps.md). Remaining local ansible-playbook tests (`test_app_deployment.py`, `test_app_scope_scenarios.py`, `test_env_scaffold.py`) are tracked in GitHub issue #165.
+`spa deploy --yes` deploys apps. **test_09** runs `spa run verification/verify_app_deployment`. Operator behavior and routing are summarized in [Apps](../docs/apps.md). Local ansible-marker tests also drive `create_linkpage`, `verification/debug_app_scope`, and `splunk_apps_deploy` through `spa run` ([#165](https://github.com/splunk/splunk-platform-automator/issues/165)). `test_spa_jsonl_callback.py` keeps a direct `ansible-playbook` of a fixture that is not a `spa run` catalog playbook.
 
 ## Live suite layout
 

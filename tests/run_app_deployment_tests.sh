@@ -5,7 +5,7 @@
 # Runs automated tests for Splunk app deployment (splunk_apps_deploy.yml).
 #
 # - test_app_deployment.py: pre-deployment checks (duplicate app, credentials,
-#   valid config) via ansible-playbook with static localhost inventory.
+#   valid config) via spa run splunk_apps_deploy --yes -- --limit localhost.
 # - test_schema.py: TestAppDeploymentConfig (splunk_app_deployment schema).
 #
 # No real Splunk hosts or AWS required. ansible-core is installed in tests/.venv

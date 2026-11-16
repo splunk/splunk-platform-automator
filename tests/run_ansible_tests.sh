@@ -1,5 +1,5 @@
 #!/bin/bash
-# Local tests that shell out to ansible-playbook.
+# Local tests that run playbooks through spa run (plus the JSONL callback fixture).
 
 set -e
 

@@ -18,9 +18,9 @@
 # cluster_manager: list of { host, apps, apps_with_config, target_hosts } per CM host (indexer cluster members that receive manager-apps from that CM).
 #
 # Usage:
-#   ansible-playbook ansible/verification/debug_app_scope.yml
-#   ansible-playbook ansible/verification/debug_app_scope.yml -e scope_output_path=./scope_debug.json
-#   ansible-playbook ansible/verification/debug_app_scope.yml -e run_scope_locally=true
+#   spa run verification/debug_app_scope
+#   spa run verification/debug_app_scope -- -e scope_output_path=./scope_debug.json
+#   spa run verification/debug_app_scope -- -e run_scope_locally=true
 #   Optional scope checks: -e assert_scope_invariants=true (fails if any app has in_base but on_scope false: absent → removal skipped; installed → install skipped)
 #
 # Output: ansible/verification/output/scope_debug.json (or scope_output_path if set)

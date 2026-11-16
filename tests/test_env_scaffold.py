@@ -1,4 +1,8 @@
-"""Scaffold a temp env, parse inventory, and assert the clone is not written."""
+"""Scaffold a temp env, parse inventory, and assert the clone is not written.
+
+ansible-inventory stays: there is no spa inventory-dump command, and these
+asserts check plugin JSON (spa_env_dir, spa_preflight_deploy).
+"""
 
 import json
 import os
@@ -81,6 +85,7 @@ def test_separate_env_inventory_does_not_write_clone(tmp_path):
     ansible_tmp.mkdir()
     env["ANSIBLE_LOCAL_TEMP"] = str(ansible_tmp)
 
+    # Justified raw Ansible: dump plugin JSON (spa_env_dir). No spa equivalent.
     cmd = [
         "ansible-inventory",
         "--list",
@@ -174,6 +179,7 @@ def test_leftover_group_vars_symlink_does_not_block_inventory(tmp_path):
     if collections.is_dir():
         env["ANSIBLE_COLLECTIONS_PATH"] = str(collections)
 
+    # Justified raw Ansible: dump plugin JSON (spa_preflight_deploy). No spa equivalent.
     listed = subprocess.run(
         ["ansible-inventory", "--host", "shidx", "-i", str(dest / "config" / "splunk_config.yml")],
         cwd=PROJECT_ROOT,
@@ -213,6 +219,7 @@ def test_clone_equal_inventory_still_parses(tmp_path):
         else:
             text = plugin + text
     cfg.write_text(text)
+    # Justified raw Ansible: dump plugin JSON for a clone-equal inventory. No spa equivalent.
     parsed = subprocess.run(
         ["ansible-inventory", "--list", "-i", str(cfg)],
         cwd=PROJECT_ROOT,
@@ -238,18 +245,18 @@ def test_create_linkpage_writes_env_not_clone(tmp_path):
 
     env = spa_env()
     env["SPLUNK_ADMIN_PASSWORD"] = "scaffold-admin"
-    venv_bin = PROJECT_ROOT / "tests" / ".venv" / "bin"
-    if venv_bin.is_dir():
-        env["PATH"] = str(venv_bin) + os.pathsep + env.get("PATH", "")
     env["SPA_HOME"] = str(PROJECT_ROOT)
     env["SPA_ENV_DIR"] = str(dest)
+    env["SPA_VENV_DIR"] = str(PROJECT_ROOT / "tests" / ".venv")
     env["SPA_SOFTWARE_DIR"] = str(stub)
     env["SPA_BASECONFIG_DIR"] = str(stub)
-    env["ANSIBLE_CONFIG"] = str(PROJECT_ROOT / "ansible.cfg")
-    env["ANSIBLE_INVENTORY"] = str(dest / "config" / "splunk_config.yml")
-    env["ANSIBLE_LOOKUP_PLUGINS"] = str(PROJECT_ROOT / "ansible" / "plugins" / "lookup")
-    env["ANSIBLE_LOCAL_TEMP"] = str(tmp_path / "ansible_tmp")
-    os.makedirs(env["ANSIBLE_LOCAL_TEMP"], exist_ok=True)
+    # localhost plays use remote tmp (~/.ansible/tmp) unless this is set.
+    ansible_tmp = tmp_path / "ansible_tmp"
+    ansible_tmp.mkdir(exist_ok=True)
+    remote_tmp = ansible_tmp / "remote"
+    remote_tmp.mkdir(exist_ok=True)
+    env["ANSIBLE_LOCAL_TEMP"] = str(ansible_tmp)
+    env["ANSIBLE_REMOTE_TEMP"] = str(remote_tmp)
     collections = PROJECT_ROOT / "tests" / ".collections"
     if collections.is_dir():
         env["ANSIBLE_COLLECTIONS_PATH"] = str(collections)
@@ -261,13 +268,7 @@ def test_create_linkpage_writes_env_not_clone(tmp_path):
         encoding="utf-8",
     )
 
-    played = subprocess.run(
-        ["ansible-playbook", str(PROJECT_ROOT / "ansible" / "create_linkpage.yml")],
-        cwd=dest,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+    played = run_spa(["run", "create_linkpage", "--yes"], env=env)
     assert played.returncode == 0, played.stderr + played.stdout
     assert (dest / "config" / "index.html").is_file()
     html = (dest / "config" / "index.html").read_text(encoding="utf-8")

@@ -11,7 +11,7 @@ Work on this branch is **3.0**. Linux packages and Homebrew are later, not part 
 
 ### Added
 
-- **Live deployment suites**: provider-free topologies under `tests/deployment/`, AWS suite overlay, and spa-only live steps (`validate`, `deploy --yes`, `run verification/...`, `destroy --yes`). Umbrella `tests/run_deployment_tests.sh` runs every suite file; AWS-only is `tests/run_deployment_aws_tests.sh`. Leftover local ansible-playbook conversion is [#165](https://github.com/splunk/splunk-platform-automator/issues/165).
+- **Live deployment suites**: provider-free topologies under `tests/deployment/`, AWS suite overlay, and spa-only live steps (`validate`, `deploy --yes`, `run verification/...`, `destroy --yes`). Umbrella `tests/run_deployment_tests.sh` runs every suite file; AWS-only is `tests/run_deployment_aws_tests.sh`.
 
 - **Install and path contract** ([#46](https://github.com/splunk/splunk-platform-automator/issues/46), [#48](https://github.com/splunk/splunk-platform-automator/issues/48), [#72](https://github.com/splunk/splunk-platform-automator/issues/72), [#73](https://github.com/splunk/splunk-platform-automator/issues/73), [#91](https://github.com/splunk/splunk-platform-automator/issues/91)): `SPA_HOME` is the framework; `SPA_ENV_DIR` is one environment. `install.sh` installs a prefix from the framework tarball (GitHub `releases/latest/download/install.sh`); `--uninstall` removes that prefix and launcher only. User-level Software / baseconfig / apps pointers live in `paths.yml` (`spa init --software-dir`, `spa environment set --software-dir`). `spa init` scaffolds an env (example or architecture file, `.spa.yml`, inventory, Terraform state dir) and never copies `ansible/`. `--from` / `--force` migrate a 2.x clone env; `--force` strips leftover framework files from the packaging manifest. Init requires `--provider` unless a default is saved with `spa environment set --provider NAME`.
 
@@ -60,6 +60,8 @@ Work on this branch is **3.0**. Linux packages and Homebrew are later, not part 
 - **Installer one-liner** is `curl … | sh` (POSIX `install.sh`).
 
 - **CI** ([#151](https://github.com/splunk/splunk-platform-automator/issues/151)): PR CI runs a `Syntax` job plus three pytest jobs (`CLI tests`, `Ansible tests`, `Unit tests`).
+
+- **Local playbook pytest** ([#165](https://github.com/splunk/splunk-platform-automator/issues/165)): ansible-marker tests drive playbooks through `spa run` (`create_linkpage`, `verification/debug_app_scope`, `splunk_apps_deploy`). `test_spa_jsonl_callback.py` keeps a direct `ansible-playbook` of a fixture that is not a catalog playbook; env-scaffold inventory asserts still use `ansible-inventory`.
 
 ### Deprecated
 
