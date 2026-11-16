@@ -484,6 +484,49 @@ def test_force_reset_paths_restamps_from_paths_yml(tmp_path):
     assert Path(spa_yml["software_dir"]).resolve() != stale["software_dir"].resolve()
 
 
+def test_force_reset_paths_doctor_uses_restamped_dirs(tmp_path, monkeypatch):
+    dest, isolated, xdg, stale, wanted, marker = _setup_stale_env(tmp_path)
+    monkeypatch.setenv("HOME", isolated["HOME"])
+    monkeypatch.setenv("XDG_CONFIG_HOME", isolated["XDG_CONFIG_HOME"])
+    for name in (
+        "SPA_HOME",
+        "SPA_ENV_DIR",
+        "SPA_SOFTWARE_DIR",
+        "SPA_BASECONFIG_DIR",
+        "SPA_APPS_DIR",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.chdir(dest)
+    from spa.executil import apply_paths_env
+    from spa.init import init_env
+    from spa.paths import resolve_spa_paths
+
+    apply_paths_env(resolve_spa_paths(start_dir=dest, clone_root=PROJECT_ROOT))
+    assert Path(os.environ["SPA_SOFTWARE_DIR"]).resolve() == stale["software_dir"].resolve()
+    assert Path(os.environ["SPA_BASECONFIG_DIR"]).resolve() == stale["baseconfig_dir"].resolve()
+    messages = []
+    rc = init_env(
+        dest,
+        PROJECT_ROOT,
+        force=True,
+        reset_paths=True,
+        skip_doctor=False,
+        log=messages,
+    )
+    assert rc == 0
+    _assert_spa_yml_dirs(dest, wanted)
+    assert marker in (dest / "config" / "splunk_config.yml").read_text()
+    out = "\n".join(messages)
+    wanted_sw = str(wanted["software_dir"].resolve())
+    wanted_bc = str(wanted["baseconfig_dir"].resolve())
+    stale_sw = str(stale["software_dir"].resolve())
+    stale_bc = str(stale["baseconfig_dir"].resolve())
+    assert wanted_sw in out
+    assert wanted_bc in out
+    assert stale_sw not in out
+    assert stale_bc not in out
+
+
 def test_reset_paths_prefers_explicit_software_dir(tmp_path):
     dest, isolated, xdg, stale, wanted, marker = _setup_stale_env(tmp_path)
     explicit = tmp_path / "explicit" / "Software"

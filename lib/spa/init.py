@@ -590,15 +590,28 @@ def create_venv(
     subprocess.check_call(cmd)
 
 
+_DIR_ENV_KEYS = ("SPA_SOFTWARE_DIR", "SPA_BASECONFIG_DIR", "SPA_APPS_DIR")
+
+
 def run_doctor(dest: Path, spa_home: Path, skip: bool) -> None:
     if skip:
         return
     from spa.doctor import collect_checks, format_doctor_problems
 
-    result = collect_checks(
-        spa_home=str(spa_home),
-        env_dir=str(dest),
-    )
+    # CLI startup setdefaults these from the pre-write .spa.yml. Drop them so
+    # this dest's current dirs win (including after --force --reset-paths).
+    saved = {key: os.environ.pop(key, None) for key in _DIR_ENV_KEYS}
+    try:
+        result = collect_checks(
+            spa_home=str(spa_home),
+            env_dir=str(dest),
+        )
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
     problems = format_doctor_problems(result).rstrip()
     if not result.ok:
         raise InitError("%s\n%s" % (problems, DOCTOR_FAILED) if problems else DOCTOR_FAILED)
