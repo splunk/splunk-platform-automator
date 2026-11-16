@@ -389,6 +389,25 @@ def _isolated_home(tmp_path):
     return {"HOME": str(home), "XDG_CONFIG_HOME": str(xdg)}, xdg
 
 
+def _init_without_provider(dest, env):
+    """Call spa init DEST without injecting --provider (run_spa_init always adds one)."""
+    return run_spa(
+        ["--no-agent", "init", "--skip-doctor", str(dest)],
+        env=env,
+    )
+
+
+def _drop_registry_entry(xdg, name):
+    path = xdg / "spa" / "environments.yml"
+    data = yaml.safe_load(path.read_text()) or {}
+    envs = dict(data.get("environments") or {})
+    envs.pop(name, None)
+    data["environments"] = envs
+    if data.get("default") == name:
+        data["default"] = next(iter(envs), "")
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+
 def _make_dir_map(root):
     mapping = {}
     for key, leaf in (
@@ -489,6 +508,89 @@ def test_reset_paths_without_force_on_existing_env_uses_force_message(tmp_path):
     assert "Use --force to refresh .spa.yml" in out
     _assert_spa_yml_dirs(dest, stale)
     assert marker in (dest / "config" / "splunk_config.yml").read_text()
+
+
+def test_init_existing_registered_env_does_not_need_provider(tmp_path):
+    isolated, _xdg = _isolated_home(tmp_path)
+    dest = tmp_path / "lab"
+    first = run_spa_init(["--example", "single_node.yml", str(dest)], env=isolated)
+    assert first.returncode == 0, first.stderr + first.stdout
+    cfg = dest / "config" / "splunk_config.yml"
+    before = cfg.read_text()
+    spa_before = (dest / ".spa.yml").read_text()
+    result = _init_without_provider(dest, isolated)
+    out = result.stderr + result.stdout
+    assert result.returncode == 0, out
+    assert "needs --provider" not in out
+    assert cfg.read_text() == before
+    assert (dest / ".spa.yml").read_text() == spa_before
+    lower = out.lower()
+    assert "already registered as %s" % dest.name in lower
+    assert "nothing to refresh" in lower
+    assert "spa environment list" in lower
+    assert "--force" not in out
+    assert "--reset-paths" not in out
+
+
+def test_init_existing_unregistered_env_registers_without_provider(tmp_path):
+    isolated, xdg = _isolated_home(tmp_path)
+    dest = tmp_path / "lab"
+    first = run_spa_init(["--example", "single_node.yml", str(dest)], env=isolated)
+    assert first.returncode == 0, first.stderr + first.stdout
+    _drop_registry_entry(xdg, dest.name)
+    listed_before = run_spa(["environment", "list"], env=isolated)
+    assert dest.name not in listed_before.stdout
+    cfg = dest / "config" / "splunk_config.yml"
+    before = cfg.read_text()
+    spa_before = (dest / ".spa.yml").read_text()
+    result = _init_without_provider(dest, isolated)
+    out = result.stderr + result.stdout
+    assert result.returncode == 0, out
+    assert "needs --provider" not in out
+    assert cfg.read_text() == before
+    assert (dest / ".spa.yml").read_text() == spa_before
+    lower = out.lower()
+    assert "existing" in lower
+    assert dest.name in out
+    listed = run_spa(["environment", "list"], env=isolated)
+    assert dest.name in listed.stdout
+
+
+def test_init_existing_env_with_path_drift_names_reset_paths(tmp_path):
+    dest, isolated, xdg, stale, wanted, marker = _setup_stale_env(tmp_path)
+    result = _init_without_provider(dest, isolated)
+    out = result.stderr + result.stdout
+    assert result.returncode == 0, out
+    assert "needs --provider" not in out
+    assert marker in (dest / "config" / "splunk_config.yml").read_text()
+    _assert_spa_yml_dirs(dest, stale)
+    assert "--force --reset-paths" in out
+
+
+def test_init_config_without_spa_yml_needs_force_not_provider(tmp_path):
+    isolated, _xdg = _isolated_home(tmp_path)
+    dest = tmp_path / "lab"
+    (dest / "config").mkdir(parents=True)
+    (dest / "config" / "splunk_config.yml").write_text("splunk_hosts: []\n", encoding="utf-8")
+    result = _init_without_provider(dest, isolated)
+    out = result.stderr + result.stdout
+    assert result.returncode == 2, out
+    assert "needs --provider" not in out
+    assert "--force" in out
+    assert not (dest / ".spa.yml").exists()
+    assert (dest / "config" / "splunk_config.yml").read_text() == "splunk_hosts: []\n"
+
+
+def test_init_fresh_dest_without_provider_still_requires_provider(tmp_path):
+    from spa.init import INIT_PROVIDER_REQUIRED
+
+    isolated, _xdg = _isolated_home(tmp_path)
+    dest = tmp_path / "lab"
+    result = _init_without_provider(dest, isolated)
+    out = result.stderr + result.stdout
+    assert result.returncode == 2, out
+    assert INIT_PROVIDER_REQUIRED in out
+    assert not dest.exists()
 
 
 def test_force_removes_incomplete_env_venv(tmp_path):

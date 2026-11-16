@@ -17,7 +17,7 @@ from spa.framework_paths import (
     removal_plan,
 )
 from spa.paths import _expand, is_spa_home, load_spa_yml, load_user_paths, save_user_paths
-from spa.registry import recommended_workspace
+from spa.registry import env_name_for_path, looks_like_env_dir, recommended_workspace
 from spa.providers import format_provider_choice
 
 try:
@@ -347,6 +347,9 @@ def _strip_names() -> List[str]:
     return names
 
 
+_ENV_DIR_KEYS = ("software_dir", "baseconfig_dir", "apps_dir")
+
+
 def leftover_present(root: Path) -> List[str]:
     found = []
     for name in _strip_names():
@@ -358,6 +361,93 @@ def leftover_present(root: Path) -> List[str]:
             if path.is_file() and not path.is_symlink():
                 found.append("terraform/aws/" + path.name)
     return found
+
+
+def _dir_keys_differ_from_paths_yml(dest: Path) -> bool:
+    """True when paths.yml has a dir key whose resolved path differs from .spa.yml."""
+    user = load_user_paths()
+    existing: Dict[str, Any] = {}
+    spa_yml = dest / ".spa.yml"
+    if spa_yml.is_file():
+        try:
+            loaded = load_spa_yml(spa_yml)
+            if isinstance(loaded, dict):
+                existing = loaded
+        except (OSError, ValueError):
+            existing = {}
+    start = dest.resolve()
+    for key in _ENV_DIR_KEYS:
+        raw_user = str(user.get(key) or "").strip()
+        if not raw_user:
+            continue
+        try:
+            user_path = _expand(raw_user, start)
+        except OSError:
+            return True
+        raw_env = existing.get(key)
+        if not raw_env:
+            return True
+        try:
+            if _expand(str(raw_env), start) != user_path:
+                return True
+        except OSError:
+            return True
+    return False
+
+
+def _spa_home_mismatch(dest: Path, spa_home: Path) -> bool:
+    spa_yml = dest / ".spa.yml"
+    if not spa_yml.is_file():
+        return False
+    try:
+        data = load_spa_yml(spa_yml)
+    except (OSError, ValueError):
+        return True
+    if not isinstance(data, dict):
+        return True
+    raw = str(data.get("spa_home") or "").strip()
+    if not raw:
+        return True
+    try:
+        return _expand(raw, dest.resolve()) != spa_home.resolve()
+    except OSError:
+        return True
+
+
+def _existing_env_needs_force(dest: Path, spa_home: Path) -> bool:
+    if is_old_clone_tree(dest):
+        return True
+    if leftover_present(dest):
+        return True
+    if not is_spa_env(dest):
+        return True
+    return _spa_home_mismatch(dest, spa_home)
+
+
+def _handle_existing_env(
+    dest: Path, spa_home: Path, *, registry_name: Optional[str] = None
+) -> int:
+    _say("Already an environment:")
+    _say("  %s" % dest)
+    if _existing_env_needs_force(dest, spa_home):
+        raise InitError(
+            "Use spa init --force %s to refresh .spa.yml (config is kept unless --example)."
+            % dest,
+            code=2,
+        )
+    if _dir_keys_differ_from_paths_yml(dest):
+        _say(
+            "Use spa init --force --reset-paths %s to restamp Software/baseconfig/apps dirs from paths.yml."
+            % dest
+        )
+        return 0
+    name = env_name_for_path(dest)
+    if name:
+        _say("Already registered as %s. Nothing to refresh." % name)
+        _say("See spa environment list.")
+        return 0
+    _say("Registering existing environment as %s." % (registry_name or dest.name))
+    return 0
 
 
 def _say_old_clone_report(dest: Path) -> None:
@@ -636,6 +726,8 @@ def _composes_config(
         return False
     if force and (has_config(dest) or is_spa_env(dest)):
         return False
+    if looks_like_env_dir(dest):
+        return False
     return True
 
 
@@ -902,6 +994,7 @@ def init_env(
             provider=provider,
             architecture=architecture,
             report=report,
+            registry_name=registry_name,
         )
         if rc == 0:
             from spa.registry import RegistryError, register_environment
@@ -957,6 +1050,7 @@ def _init_env(
     provider: Optional[str] = None,
     architecture: Optional[str] = None,
     report: Optional[Dict[str, Any]] = None,
+    registry_name: Optional[str] = None,
 ) -> int:
     pip_pkgs = list(pip_pkgs or [])
     dest = dest.resolve()
@@ -1070,8 +1164,10 @@ def _init_env(
         warn_unused_aws_ec2(dest)
         return 0
 
-    if is_spa_env(dest) and not force:
-        raise InitError("Env already exists (%s). Use --force to refresh .spa.yml." % dest)
+    if looks_like_env_dir(dest) and not force:
+        if example_set or reset_paths:
+            raise InitError("Env already exists (%s). Use --force to refresh .spa.yml." % dest)
+        return _handle_existing_env(dest, spa_home, registry_name=registry_name)
 
     if example_set:
         ensure_env_dirs(dest)
@@ -1103,8 +1199,6 @@ def _init_env(
 
     # Fresh env. Default topology is single_node. --provider wins; otherwise
     # the default is aws, or default in ~/.config/spa/providers.yml.
-    if config_dest.exists() or (dest / ".spa.yml").exists():
-        raise InitError("Env already exists (%s). Use --force to refresh .spa.yml." % dest)
     ensure_env_dirs(dest)
     topology_id, provider_id = write_composed_config(
         config_dest,

@@ -302,6 +302,25 @@ def test_docs_treat_software_and_baseconfig_as_separate_trees():
     assert "Professional Services baseconfig apps in a `Software/`" not in install
 
 
+def test_init_detects_existing_env_without_provider():
+    """A clean env is spa init . / spa env init NAME; --force is refresh/convert."""
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    paths = guide.split("## Understand the paths", 1)[1].split("\n## ", 1)[0]
+    assert "is registered with `spa env init NAME --force`" not in paths
+    assert "spa init ." in paths
+    assert "spa env init NAME" in paths
+    assert "--force" in paths
+    assert "--reset-paths" in paths
+    changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    unreleased = changelog.split("## [Unreleased]", 1)[1].split("\n## ", 1)[0]
+    assert "spa init DEST" in unreleased
+    assert "--provider" in unreleased
+    assert "already registered" in unreleased.lower()
+    migrate = (_docs_dir() / "migrate.md").read_text(encoding="utf-8")
+    assert "spa env init NAME --force` registers that directory" not in migrate
+    assert "spa env init NAME" in migrate
+
+
 def test_init_reset_paths_is_documented():
     guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
     paths = guide.split("## Understand the paths", 1)[1].split("\n## ", 1)[0]

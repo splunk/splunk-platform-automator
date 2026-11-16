@@ -41,6 +41,8 @@ Work on this branch is **3.0**. Linux packages and Homebrew are later, not part 
 
 ### Changed
 
+- **`spa init DEST`**: detects an existing env (`.spa.yml` or `config/splunk_config.yml`) and does not require `--provider`. Says when it is already registered and fine; names `--force` / `--reset-paths` when they apply.
+
 - **Python and Ansible**: Python **3.9–3.14** and Ansible **2.21**. `spa venv` picks the newest usable 3.9–3.14 when `python3` is newer.
 
 - **Admin password required**: shipped examples set `splunk_defaults.splunk_admin_password` to `{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}`. Schema rejects an omitted or blank value. Ansible defaults no longer supply admin, indexer-cluster, or search-head-cluster passwords.
