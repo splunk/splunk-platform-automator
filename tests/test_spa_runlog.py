@@ -695,7 +695,8 @@ def test_runlog_agent_stderr_is_sparse(tmp_path):
     assert "failed" in kinds
     assert any(row.get("host") == "idx1" and row.get("task") == "Boom" for row in events)
     transcript = log.jsonl_path.read_text(encoding="utf-8")
-    assert "password=secret" in transcript
+    assert "password=secret" not in transcript
+    assert "password=***" in transcript
     fields = log.envelope_fields()
     assert fields["log"] == str(log.jsonl_path)
     assert fields["phase"]
@@ -982,7 +983,7 @@ def test_native_output_keeps_ansible_color_on_a_tty_and_not_in_jsonl(tmp_path, m
     assert "colored warning" in transcript
 
 
-def test_run_playbook_native_output_is_live_and_stored_unredacted(tmp_path, monkeypatch):
+def test_run_playbook_native_output_is_live_unredacted_and_stored_redacted(tmp_path, monkeypatch):
     extra = min_env_vars(tmp_path)
     paths = resolve_spa_paths(environ={**extra})
     fake = tmp_path / "ansible-playbook"
@@ -1030,9 +1031,9 @@ def test_run_playbook_native_output_is_live_and_stored_unredacted(tmp_path, monk
     assert live.count("PLAY [Native play]") == 1
     assert live.count("fatal: [idx1]") == 1
     assert "command failed" not in live
-    # Labs transcripts preserve the native line until issue 88 adds secret handling.
     transcript = log.jsonl_path.read_text(encoding="utf-8")
-    assert "sentinel" in transcript
+    assert "sentinel" not in transcript
+    assert "-auth ***" in transcript
     assert '"task": "List user"' in transcript
 
 
@@ -1079,7 +1080,11 @@ def test_ansible_output_without_verbose_shows_captured_native_output(tmp_path, m
     # --ansible-output shows the native callback without increasing verbosity.
     assert "FORCE_COLOR=0" in live
     assert "fatal: [idx1]" in live
-    assert "-auth admin:sentinel" in live
+    # Without -v the live lines replay stored events, so secrets stay masked.
+    assert "sentinel" not in live
+    assert "-auth ***" in live
+    transcript = log.jsonl_path.read_text(encoding="utf-8")
+    assert "sentinel" not in transcript
 
 
 def test_live_ansible_output_can_force_color_and_show_stored_time(tmp_path, monkeypatch):

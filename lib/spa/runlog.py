@@ -1368,7 +1368,7 @@ class RunLog:
 
     def emit(self, raw: Dict[str, Any]) -> Dict[str, Any]:
         with self._lock:
-            event = self._normalize(raw)
+            event = redact(self._normalize(raw))
             line = json.dumps(event, default=str, ensure_ascii=False)
             self._handle.write(line + "\n")
             self._handle.flush()
@@ -1441,7 +1441,7 @@ class RunLog:
 
         Unredacted on purpose: `spa … -v` is the debugging view, and Ansible's own
         output is reproduced byte for byte, secrets included. The local JSONL
-        transcript stores an ANSI-free copy until issue 88 adds redaction.
+        transcript stores an ANSI-free, redacted copy.
         A requested timestamp is a display prefix taken from the stored event.
         """
         if self.agent:

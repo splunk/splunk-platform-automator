@@ -79,6 +79,8 @@ Work on this branch is **3.0**. Linux packages and Homebrew are later, not part 
 
 ### Fixed
 
+- **Run-log redaction**: `$SPA_ENV_DIR/logs/*.jsonl` and `--ansible-output` mask passwords, `-auth` and similar Splunk CLI secrets, AWS keys, bearer tokens, PEM blocks, vault blobs, and license XML. Live `spa … -v` still prints Ansible output unredacted until [#88](https://github.com/splunk/splunk-platform-automator/issues/88).
+
 - **Ubuntu 26.04 PolicyKit package**: latest Ubuntu LTS dropped `policykit-1`. The common role tries that name, then installs `polkitd` and `pkexec` when apt reports it is unavailable. Mixed-OS labs also drop the other family's PolicyKit name, so a Debian extra UF does not inherit Amazon Linux `polkit`.
 
 - **Mixed-OS AWS inventory**: Terraform `ansible_inventory` now uses each host's `ssh_username` (and key file) instead of the global value, so extra Ubuntu UFs next to Amazon Linux/RHEL hosts can SSH.

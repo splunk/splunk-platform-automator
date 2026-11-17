@@ -444,7 +444,7 @@ def run_playbook(
     run_log: Optional[Any] = None,
 ) -> int:
     apply_paths_env(paths)
-    from spa.runlog import CALLBACK_EVENT_PREFIX, RunLog
+    from spa.runlog import CALLBACK_EVENT_PREFIX, RunLog, redact
 
     cmd = [tool_path(paths, "ansible-playbook"), str(playbook)]
     if extra:
@@ -463,6 +463,8 @@ def run_playbook(
         color=color,
     )
     native = bool(ansible_output or native_output or verbosity) and not agent
+    # Only -v is the byte-for-byte debugging view; --ansible-output stays masked.
+    native_raw = bool(native_output or verbosity)
     log.native_output = native
     log.timestamps = bool(timestamps) and not agent
     log.force_color = bool(color) and not agent
@@ -521,7 +523,10 @@ def run_playbook(
                 continue
             stored = log.consume_ansible_output(line)
             if native:
-                log.emit_native_output(line, event_time=str(stored.get("time") or ""))
+                log.emit_native_output(
+                    line if native_raw else redact(line),
+                    event_time=str(stored.get("time") or ""),
+                )
         rc = proc.wait()
     except KeyboardInterrupt:
         _reap_playbook_process(proc)
