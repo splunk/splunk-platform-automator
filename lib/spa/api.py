@@ -1140,6 +1140,7 @@ class LocalSpaSession:
                     customize=bool(customize),
                     content_packs=content_packs,
                     config=self._app_deployment_config(),
+                    entry=built.get("entry"),
                 )
                 if follow:
                     data["next"] = follow

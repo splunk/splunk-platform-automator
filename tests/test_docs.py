@@ -1368,6 +1368,8 @@ class TestSpaSkill:
         assert "no-op" not in workflow
         assert "apps.customize" in workflow
         assert "do not assume yes" in workflow.lower()
+        assert "With `--content-pack`, `--set` is pack-scoped" in workflow
+        assert "customize also enables objects" in workflow.lower()
         questionnaire = (
             PROJECT_ROOT
             / "skills"

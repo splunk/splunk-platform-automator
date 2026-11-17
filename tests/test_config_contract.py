@@ -2994,6 +2994,67 @@ splunk_app_deployment:
         assert "content_pack_api" not in built["entry"]
         assert "content_pack_apps" not in built["entry"]
 
+    def test_content_pack_set_applies_to_pack_items_not_library(self):
+        """CFG-APP-004. With --content-pack, pack-item --set writes those items."""
+        library = {
+            "uid": 5391,
+            "appid": "DA-ITSI-ContentLibrary",
+            "title": "Content Pack for Splunk App for Content Packs",
+        }
+        built = build_entry(
+            5391,
+            content_packs=["DA-ITSI-CP-monitoring-alerting", "DA-ITSI-CP-nix"],
+            set_values=[["content_pack_api.enabled", "true"]],
+            client=self._client(library),
+        )
+        assert "content_pack_api" not in built["entry"]
+        assert [item["content_pack_api"] for item in built["entry"]["content_pack_apps"]] == [
+            {"enabled": True},
+            {"enabled": True},
+        ]
+        library_owned = build_entry(
+            5391,
+            content_packs=["DA-ITSI-CP-nix"],
+            set_values=[["update_mode", "clean"]],
+            client=self._client(library),
+        )
+        assert library_owned["entry"]["update_mode"] == "clean"
+        assert "update_mode" not in library_owned["entry"]["content_pack_apps"][0]
+        with pytest.raises(AppsError, match="--content-pack"):
+            build_entry(
+                5391,
+                install_all_content_packs=True,
+                set_values=[["content_pack_api.enabled", "true"]],
+                client=self._client(library),
+            )
+        contract = (PROJECT_ROOT / "docs" / "config-editing.md").read_text(encoding="utf-8")
+        assert "With `--content-pack`, `--set` of pack-item fields" in contract
+
+    def test_named_content_pack_add_emits_enable_next(self):
+        """CFG-APP-012. Named 5391 add offers enable unless the pack is already enabled."""
+        from spa.next_steps import apps_add_next
+
+        nxt = apps_add_next(
+            kind="itsi_content_library",
+            app_id=5391,
+            playbooks=[{"path": "ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml"}],
+            content_packs=["DA-ITSI-CP-nix"],
+            entry={"content_pack_apps": [{"name": "DA-ITSI-CP-nix"}]},
+        )
+        assert [item["id"] for item in nxt] == [
+            "apps.customize",
+            "apps.content-pack.enable",
+            "apps.add.another",
+        ]
+        install_all = apps_add_next(
+            kind="itsi_content_library",
+            app_id=5391,
+            entry={"install_all_apps": True},
+        )
+        assert "apps.content-pack.enable" not in [item["id"] for item in install_all]
+        contract = (PROJECT_ROOT / "docs" / "config-editing.md").read_text(encoding="utf-8")
+        assert "### CFG-APP-012 — content-pack enable next" in contract
+
     def test_content_pack_customize_matches_pack_folder_playbooks(self):
         """CFG-APP-011."""
         library = {
@@ -3022,6 +3083,16 @@ splunk_app_deployment:
         assert pack["customizations"]["run_playbook_after_restart"].endswith(
             "DA-ITSI-CP-nix_configure.yml"
         )
+        assert pack["content_pack_api"] == {"enabled": True}
+        same = build_entry(
+            5391,
+            content_packs=["DA-ITSI-CP-nix"],
+            spa_home=PROJECT_ROOT,
+            customize=True,
+            set_values=[["content_pack_api.enabled", "true"]],
+            client=self._client(library),
+        )
+        assert same["entry"]["content_pack_apps"][0] == pack
 
     def test_content_pack_kind_and_policy_combinations_are_enforced(self):
         """CFG-APP-005 CFG-APP-006."""
