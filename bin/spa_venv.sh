@@ -77,6 +77,23 @@ _spa_venv_progress() {
     echo "$1" >&2
 }
 
+# Galaxy has no -q. Hide Downloading URLs on success; print the transcript on failure.
+_spa_venv_galaxy_install() {
+    local log
+    log="$(mktemp "${TMPDIR:-/tmp}/spa-galaxy.XXXXXX")" || {
+        _spa_venv_fail "spa_venv: could not create a temp file for ansible-galaxy"
+        return 1
+    }
+    if ansible-galaxy collection install "$@" >"$log" 2>&1; then
+        rm -f "$log"
+        return 0
+    fi
+    cat "$log" >&2
+    rm -f "$log"
+    _spa_venv_fail "spa_venv: ansible-galaxy collection install failed"
+    return 1
+}
+
 # ansible-core 2.21 crashes on startup under Python 3.15: it patches
 # dataclasses._is_type, which 3.15 removed. 2.22 is the first release that
 # supports 3.15, and it is not published yet. Prints old, new, or ok.
@@ -309,13 +326,13 @@ if [[ $_spa_venv_rc -eq 0 && "$_spa_venv_mode" != "done" && "$_spa_venv_mode" !=
             # --upgrade: bump every collection that has a newer Galaxy release.
             # Do not --force; that rewrites the same version instead of updating.
             _spa_venv_progress "Updating Ansible collections..."
-            ansible-galaxy collection install --upgrade \
+            _spa_venv_galaxy_install --upgrade \
                 -r "${_spa_venv_home}/requirements.yml" -p "$_spa_venv_collections"
         elif [[ "$_spa_venv_need_collections" == true ]]; then
             # --force: galaxy reports "nothing to do" when a collection exists in
             # ~/.ansible, which would leave ANSIBLE_COLLECTIONS_PATH empty here.
             _spa_venv_progress "Installing Ansible collections..."
-            ansible-galaxy collection install --force \
+            _spa_venv_galaxy_install --force \
                 -r "${_spa_venv_home}/requirements.yml" -p "$_spa_venv_collections"
         else
             # .collections sits beside the venv, so it outlives a --rebuild. Say
@@ -341,7 +358,7 @@ fi
 
 _spa_venv_exit=$_spa_venv_rc
 unset -f _spa_venv_usage _spa_venv_fail _spa_venv_progress \
-    _spa_venv_python_band _spa_venv_choose_python
+    _spa_venv_galaxy_install _spa_venv_python_band _spa_venv_choose_python
 unset _spa_venv_self _spa_venv_bin_dir _spa_venv_home _spa_venv_env \
     _spa_venv_python _spa_venv_python_explicit _spa_venv_mode _spa_venv_create _spa_venv_install \
     _spa_venv_reinstall _spa_venv_upgrade _spa_venv_rebuild \

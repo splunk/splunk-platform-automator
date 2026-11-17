@@ -26,6 +26,8 @@ Normal apps require `target_roles`. SPA then selects the distribution mechanism 
 
 `deployment_target: direct` bypasses cluster or deployment-server routing. Use it deliberately: central distribution is normally safer for clustered tiers.
 
+Schema uniqueness for `serverclass` follows the same table: only rows that would actually get a deployment-server serverclass are compared. With no deployment server, `auto` installs non-IDXC and non-SHC targets directly, so those rows have no serverclass and do not collide with each other on class name. Clustered indexer copies go through the cluster manager and clustered search-head copies through the deployer, so they do not collide with a UF serverclass of the same app name.
+
 The app `name` must match the directory produced by the archive for folder-backed apps. Bundle-backed entries such as ITSI can contain several app directories; describe those through the premium-app shape from the catalog rather than guessing archive contents.
 
 ## Filter targets

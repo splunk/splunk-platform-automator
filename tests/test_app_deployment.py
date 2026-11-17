@@ -215,7 +215,14 @@ class TestAppDeploymentSchemaValidation:
             data = yaml.safe_load(f)
         _, ConfigValidationError = _get_validate_config()
         with pytest.raises(ConfigValidationError) as exc_info:
-            _validate_config_with_app_deployment(data["splunk_app_deployment"])
+            _validate_config_with_app_deployment(
+                data["splunk_app_deployment"],
+                splunk_hosts=[
+                    {"name": "ds", "roles": ["deployment_server"]},
+                    {"name": "sh1", "roles": ["search_head"]},
+                    {"name": "uf1", "roles": ["universal_forwarder"]},
+                ],
+            )
         assert "duplicate" in str(exc_info.value).lower()
 
     def test_same_app_name_one_direct_one_ds_allowed(self):
