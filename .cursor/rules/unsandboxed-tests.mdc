@@ -1,0 +1,10 @@
+---
+description: Unsandbox pytest and tests/run_*.sh on the first Shell call
+alwaysApply: true
+---
+
+When the command is `pytest`, `./tests/run_*.sh`, or `tests/run_*.sh`, the Shell tool call must set `required_permissions: ["all"]` on the **first** attempt.
+
+Do not probe in the sandbox. Do not wait for a permission-denied / Auto-review failure to add `all`.
+
+Still request approval if the harness prompts; do not skip user approval.

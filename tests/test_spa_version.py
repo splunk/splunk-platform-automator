@@ -13,7 +13,7 @@ import pytest
 
 from spa_testutil import LIB, PROJECT_ROOT, run_spa, run_spa_inprocess, spa_env
 
-pytestmark = [pytest.mark.local, pytest.mark.cli]
+pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
 sys.path.insert(0, str(LIB))
 

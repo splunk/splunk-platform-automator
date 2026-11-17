@@ -13,7 +13,7 @@ import yaml
 
 from spa_testutil import LIB, PROJECT_ROOT, seed_baseconfig_dir, seed_software_dir, spa_env
 
-pytestmark = [pytest.mark.local, pytest.mark.cli]
+pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
 _BASH = re.compile(r"```bash\n(.*?)```", re.S)
 _TEXT = re.compile(r"```text\n(.*?)```", re.S)

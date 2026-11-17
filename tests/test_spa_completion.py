@@ -663,7 +663,7 @@ def test_schema_flag_values_match_command_help():
         flags = [flag for flag in (row.get("flags") or []) if flag.get("long")]
         if not flags:
             continue
-        result = run_spa([*str(row["name"]).split(), "--help"])
+        result = run_spa_inprocess([*str(row["name"]).split(), "--help"])
         text = result.stdout + "\n" + result.stderr
         for flag in flags:
             seen = option_takes_value(text, str(flag["long"]))

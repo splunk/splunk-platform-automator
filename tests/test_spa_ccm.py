@@ -12,7 +12,7 @@ import pytest
 from spa.paths import resolve_spa_paths
 from spa_testutil import LIB, PROJECT_ROOT
 
-pytestmark = [pytest.mark.local, pytest.mark.cli]
+pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
 
 @pytest.fixture(autouse=True)

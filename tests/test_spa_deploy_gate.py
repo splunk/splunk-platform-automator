@@ -16,7 +16,7 @@ from spa.providers import (
 )
 from spa_testutil import PROJECT_ROOT, min_env_vars, run_spa, run_spa_inprocess, seed_baseconfig_dir, seed_software_dir
 
-pytestmark = [pytest.mark.local, pytest.mark.cli]
+pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
 AWS_TWO_HOSTS = """
 plugin: splunk-platform-automator

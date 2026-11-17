@@ -10,4 +10,4 @@ source "$SCRIPT_DIR/run_venv.sh" \
 
 export PYTHONPATH="$(cd "$SCRIPT_DIR/.." && pwd)/lib${PYTHONPATH:+:$PYTHONPATH}"
 
-pytest -m "local and not cli and not ansible" tests/ "$@"
+pytest -m "local and not cli and not ansible" tests/ -n auto "$@"

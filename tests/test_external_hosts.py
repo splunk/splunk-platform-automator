@@ -9,7 +9,7 @@ import yaml
 import pytest
 from pydantic import ValidationError
 
-pytestmark = [pytest.mark.local, pytest.mark.cli]
+pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
 
 @pytest.fixture(autouse=True)

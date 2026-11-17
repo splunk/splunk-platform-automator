@@ -507,8 +507,15 @@ def test_docs_teach_living_spec_and_local_test_layers():
     assert 'pytest -m "local and ansible"' in layers
     assert 'pytest -m "local and not cli and not ansible"' in layers
     assert "-n auto" in layers
+    assert "-n 1" in layers
+    assert "unsandbox" in layers.lower()
     assert "--durations" in layers
-    assert "PR CI always runs all three" in layers
+    assert "PR CI always runs all four" in layers
+    assert "CLI help" in layers
+    assert "CLI runtime" in layers
+    assert "cli_runtime" in layers
+    assert "SPA_CLI_MARKEXPR" in layers
+    assert "tests/.venv" in layers
     assert "Live AWS" in layers
     assert "live CCM" in layers
     assert "mocked CCM" in layers
@@ -528,8 +535,20 @@ def test_docs_teach_living_spec_and_local_test_layers():
     assert 'pytest -m "local and not cli and not ansible"' in which_runner
     assert "--durations" in which_runner
     assert "-n auto" in which_runner
-    assert "CI default" in which_runner
+    assert "-n 1" in which_runner
+    assert "unsandbox" in which_runner.lower()
+    assert "CLI help" in which_runner
+    assert "CLI runtime" in which_runner
+    assert "tests/.venv" in which_runner
     assert "mocked CCM" in which_runner
+
+
+def test_unsandboxed_tests_rule_requests_all_on_first_shell():
+    rule = PROJECT_ROOT / ".cursor" / "rules" / "unsandboxed-tests.mdc"
+    assert rule.is_file()
+    text = rule.read_text(encoding="utf-8")
+    assert "required_permissions" in text
+    assert "all" in text
 
 
 def test_ci_cancels_stale_pull_request_runs():
@@ -556,22 +575,31 @@ def test_ci_and_release_report_slowest_local_tests():
 
 def test_ci_runs_syntax_then_parallel_local_jobs():
     ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    release = (PROJECT_ROOT / "RELEASE.md").read_text(encoding="utf-8")
 
     assert "needs: syntax" in ci
     assert "name: Local tests" not in ci
+    assert "name: CLI tests" not in ci
+    assert "CLI help" in ci
+    assert "CLI runtime" in ci
     for marker in (
-        "local and cli",
+        "local and cli and not cli_runtime",
+        "local and cli and cli_runtime",
         "local and ansible",
         "local and not cli and not ansible",
     ):
         assert marker in ci
-    assert ci.count("-n auto --durations=25") >= 3
+    assert ci.count("-n auto --durations=25") >= 4
     for runner in (
-        "./tests/run_cli_tests.sh -n auto --durations=25",
+        "SPA_CLI_MARKEXPR='local and cli and not cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25",
+        "SPA_CLI_MARKEXPR='local and cli and cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25",
         "./tests/run_ansible_tests.sh -n auto --durations=25",
         "./tests/run_unit_tests.sh -n auto --durations=25",
     ):
         assert runner in ci
+    assert "`CLI help`" in release
+    assert "`CLI runtime`" in release
+    assert "SPA_CLI_MARKEXPR" in release
 
 
 def test_local_and_cli_runners_do_not_share_one_ansible_tmp():

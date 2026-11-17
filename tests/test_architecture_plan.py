@@ -10,7 +10,7 @@ import yaml
 
 from spa_testutil import PROJECT_ROOT, run_spa, run_spa_inprocess, run_spa_init
 
-pytestmark = [pytest.mark.local, pytest.mark.cli]
+pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
 EXAMPLES = PROJECT_ROOT / "examples" / "architectures"
 C1 = EXAMPLES / "c1.json"

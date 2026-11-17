@@ -66,7 +66,8 @@ def xdist_group_name(params: Mapping) -> Optional[str]:
 _MARK_KEYWORDS = frozenset({"and", "or", "not"})
 _MARKER_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 LOCAL_JOB_MARKEXPRS = (
-    "local and cli",
+    "local and cli and not cli_runtime",
+    "local and cli and cli_runtime",
     "local and ansible",
     "local and not cli and not ansible",
 )
@@ -278,6 +279,8 @@ def spa_env(extra: Optional[Mapping[str, str]] = None) -> dict:
     env["PYTHONPATH"] = str(LIB) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     # Never let spa write the operator's ~/.config/spa (paths.yml, environments.yml).
     env.setdefault("XDG_CONFIG_HOME", _throwaway_xdg_config_home())
+    # Reuse the runner venv so spa init/doctor do not clone SPA_HOME/.venv.
+    env["SPA_VENV_DIR"] = str(PROJECT_ROOT / "tests" / ".venv")
     if extra:
         env.update(extra)
     return env

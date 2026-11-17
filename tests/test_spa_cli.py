@@ -53,7 +53,31 @@ def test_spa_env_drops_inherited_spa_and_ansible_paths(monkeypatch):
     clean = spa_env()
 
     for name in INHERITED_PATH_VARS:
+        if name == "SPA_VENV_DIR":
+            continue
         assert name not in clean
+    assert clean["SPA_VENV_DIR"] == str(PROJECT_ROOT / "tests" / ".venv")
+    assert clean["SPA_VENV_DIR"] != "/dirty-shell/spa_venv_dir"
+
+
+def test_spa_env_pins_default_venv_to_tests_venv():
+    clean = spa_env()
+
+    assert clean["SPA_VENV_DIR"] == str(PROJECT_ROOT / "tests" / ".venv")
+
+
+def test_run_spa_pins_default_venv_to_tests_venv(monkeypatch):
+    seen = []
+
+    def fake_run(*args, **kwargs):
+        seen.append(kwargs.get("env") or {})
+        return subprocess.CompletedProcess(args[0] if args else [], 0, "", "")
+
+    monkeypatch.setattr("spa_testutil.subprocess.run", fake_run)
+    run_spa(["--help"])
+
+    assert seen
+    assert seen[0]["SPA_VENV_DIR"] == str(PROJECT_ROOT / "tests" / ".venv")
 
 
 @pytest.mark.parametrize(
@@ -61,6 +85,8 @@ def test_spa_env_drops_inherited_spa_and_ansible_paths(monkeypatch):
     [
         ("local", True),
         ("local and cli", True),
+        ("local and cli and not cli_runtime", True),
+        ("local and cli and cli_runtime", True),
         ("local and ansible", True),
         ("local and not cli and not ansible", True),
         ("local or aws", True),
@@ -80,10 +106,12 @@ def test_local_marker_expression_selects_only_local_runs(markexpr, selects_local
     ("markers", "jobs"),
     [
         ({"local"}, ("local and not cli and not ansible",)),
-        ({"local", "cli"}, ("local and cli",)),
+        ({"local", "cli"}, ("local and cli and not cli_runtime",)),
+        ({"local", "cli", "cli_runtime"}, ("local and cli and cli_runtime",)),
         ({"local", "ansible"}, ("local and ansible",)),
         ({"local", "itsi"}, ("local and not cli and not ansible",)),
-        ({"local", "cli", "ansible"}, ("local and cli", "local and ansible")),
+        ({"local", "cli", "ansible"}, ("local and cli and not cli_runtime", "local and ansible")),
+        ({"local", "cli", "cli_runtime", "ansible"}, ("local and cli and cli_runtime", "local and ansible")),
         ({"aws"}, ()),
         ({"cli"}, ()),
         ({"ansible"}, ()),
@@ -145,10 +173,59 @@ def test_pytest_ini_registers_ansible_marker():
     assert re.search(r"(?m)^\s*ansible:\s", ini)
 
 
-def test_cli_runner_selects_local_and_cli():
+def test_pytest_ini_registers_cli_runtime_marker():
+    ini = (PROJECT_ROOT / "tests" / "pytest.ini").read_text(encoding="utf-8")
+
+    assert re.search(r"(?m)^\s*cli_runtime:\s", ini)
+
+
+def test_cli_runner_defaults_to_local_and_cli_and_honors_spa_cli_markexpr():
     text = (PROJECT_ROOT / "tests" / "run_cli_tests.sh").read_text(encoding="utf-8")
 
-    assert 'pytest -m "local and cli" tests/' in text
+    assert 'CLI_MARKEXPR="${SPA_CLI_MARKEXPR:-local and cli}"' in text
+    assert 'pytest -m "$CLI_MARKEXPR" tests/ -n auto "$@"' in text
+
+
+def test_local_runners_default_to_xdist_auto():
+    """Local runners bake -n auto before "$@" so a caller -n 1 still wins."""
+    cli = (PROJECT_ROOT / "tests" / "run_cli_tests.sh").read_text(encoding="utf-8")
+    unit = (PROJECT_ROOT / "tests" / "run_unit_tests.sh").read_text(encoding="utf-8")
+    ansible = (PROJECT_ROOT / "tests" / "run_ansible_tests.sh").read_text(encoding="utf-8")
+    local = (PROJECT_ROOT / "tests" / "run_local_tests.sh").read_text(encoding="utf-8")
+
+    assert 'pytest -m "$CLI_MARKEXPR" tests/ -n auto "$@"' in cli
+    assert "--dist=loadgroup" not in cli
+    assert 'pytest -m "local and not cli and not ansible" tests/ -n auto "$@"' in unit
+    assert 'for arg in -n auto "$@"; do' in ansible
+    assert 'pytest -m "local and ansible" tests/ -n auto "$@" "${DIST_ARGS[@]}"' in ansible
+    assert 'for arg in -n auto "$@"; do' in local
+    assert 'pytest -m local tests/ -n auto "$@" "${DIST_ARGS[@]}"' in local
+    scope = (PROJECT_ROOT / "tests" / "run_app_scope_scenarios_tests.sh").read_text(
+        encoding="utf-8"
+    )
+    assert 'for arg in -n auto "$@"; do' in scope
+    assert 'pytest tests/test_app_scope_scenarios.py -n auto "$@" "${DIST_ARGS[@]}"' in scope
+
+
+CLI_HELP_JOB = "local and cli and not cli_runtime"
+CLI_RUNTIME_JOB = "local and cli and cli_runtime"
+CLI_RUNTIME_MODULES = (
+    "test_architecture_plan.py",
+    "test_config_walkthrough.py",
+    "test_external_hosts.py",
+    "test_no_live_cloud.py",
+    "test_spa_apps.py",
+    "test_spa_ccm.py",
+    "test_spa_deploy_gate.py",
+    "test_spa_doctor.py",
+    "test_spa_environment.py",
+    "test_spa_hosts.py",
+    "test_spa_init.py",
+    "test_spa_preflight.py",
+    "test_spa_providers.py",
+    "test_spa_skills.py",
+    "test_spa_version.py",
+)
 
 
 def test_local_modules_partition_into_cli_ansible_unit_jobs():
@@ -168,13 +245,25 @@ def test_local_modules_partition_into_cli_ansible_unit_jobs():
         assert len(matched) == 1, (path.name, sorted(marks), matched)
         jobs[matched[0]].append(path.name)
 
-    assert "test_spa_install.py" not in jobs["local and cli"]
+    assert "test_spa_install.py" not in jobs[CLI_HELP_JOB]
+    assert "test_spa_install.py" not in jobs[CLI_RUNTIME_JOB]
     assert "test_spa_install.py" in jobs["local and not cli and not ansible"]
     for name in PLAYBOOK_SPAWNING_MODULES:
         assert name in jobs["local and ansible"], name
-    assert jobs["local and cli"]
+    assert "test_config_explain.py" in jobs[CLI_HELP_JOB]
+    for name in CLI_RUNTIME_MODULES:
+        assert name in jobs[CLI_RUNTIME_JOB], name
+        assert name not in jobs[CLI_HELP_JOB], name
+    assert jobs[CLI_HELP_JOB]
+    assert jobs[CLI_RUNTIME_JOB]
     assert jobs["local and ansible"]
     assert jobs["local and not cli and not ansible"]
+    assert set(LOCAL_JOB_MARKEXPRS) == {
+        CLI_HELP_JOB,
+        CLI_RUNTIME_JOB,
+        "local and ansible",
+        "local and not cli and not ansible",
+    }
 
 
 def test_spa_env_keeps_explicit_test_path_overrides(monkeypatch):
@@ -246,6 +335,39 @@ def test_complete_help_contract_uses_inprocess_runner():
         }
         assert "run_spa_inprocess" in called, name
         assert "run_spa" not in called, name
+
+
+def test_help_and_schema_outlier_loops_use_inprocess_runner():
+    """xdist cannot split these loops; they must not spawn bin/spa per command."""
+    import ast
+
+    cases = (
+        (
+            PROJECT_ROOT / "tests" / "test_spa_completion.py",
+            {"test_schema_flag_values_match_command_help"},
+        ),
+        (
+            PROJECT_ROOT / "tests" / "test_spa_cli_contract.py",
+            {"test_agent_schema_is_complete_and_documented"},
+        ),
+    )
+    for path, expected in cases:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        bodies = {
+            node.name: node
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name in expected
+        }
+        assert set(bodies) == expected, path.name
+        for name, node in bodies.items():
+            called = {
+                child.func.id
+                for child in ast.walk(node)
+                if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
+            }
+            assert "run_spa_inprocess" in called, (path.name, name)
+            assert "run_spa" not in called, (path.name, name)
 
 
 @pytest.mark.no_spa_env
