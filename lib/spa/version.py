@@ -212,9 +212,16 @@ def _bootstrap_command() -> str:
 
 
 def _user_content_error(spa_home: Path) -> Optional[str]:
+    # Match case-insensitively: older layouts used baseconfigs/ and apps/, and Linux is case-sensitive.
+    try:
+        entries = sorted(entry.name for entry in Path(spa_home).iterdir())
+    except OSError:
+        entries = []
     for name, flag in USER_CONTENT_DIRS:
-        path = Path(spa_home) / name
-        if path.exists():
+        for entry in entries:
+            if entry.lower() != name.lower():
+                continue
+            path = Path(spa_home) / entry
             return (
                 "%s is inside SPA_HOME; spa self update replaces SPA_HOME and would delete it.\n"
                 "Move it outside SPA_HOME and point spa at it with "

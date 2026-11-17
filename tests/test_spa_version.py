@@ -820,7 +820,9 @@ def test_self_update_forwards_from_as_absolute_path(tmp_path, monkeypatch):
     [
         ("Software", "--software-dir"),
         ("Baseconfigs", "--baseconfig-dir"),
+        ("baseconfigs", "--baseconfig-dir"),
         ("Apps", "--apps-dir"),
+        ("apps", "--apps-dir"),
         ("Envs", "--env-dir"),
     ],
 )

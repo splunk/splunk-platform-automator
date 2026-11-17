@@ -12,8 +12,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from spa.paths import (
     _expand,
+    clone_root_from_this_file,
     is_spa_home,
     load_spa_yml,
+    running_spa_home,
     save_user_paths,
     user_paths_yml,
     user_spa_config_dir,
@@ -586,6 +588,27 @@ def _protected_paths(environ: Optional[Dict[str, str]] = None) -> List[Path]:
     return out
 
 
+def _framework_refusal(resolved: Path, environ: Optional[Dict[str, str]] = None) -> Optional[str]:
+    if is_spa_home(resolved):
+        return (
+            "Refusing to delete %s: it is an SPA framework (SPA_HOME or a checkout), "
+            "not an environment." % resolved
+        )
+    homes = [clone_root_from_this_file()]
+    try:
+        homes.append(running_spa_home(environ))
+    except OSError:
+        pass
+    for home in homes:
+        try:
+            home = home.resolve()
+        except OSError:
+            continue
+        if home == resolved or resolved in home.parents:
+            return "Refusing to delete %s: it contains SPA_HOME %s." % (resolved, home)
+    return None
+
+
 def remove_environment(
     name: str,
     *,
@@ -622,8 +645,14 @@ def remove_environment(
                 raise RegistryError("Refusing to delete %s" % resolved)
         except OSError:
             continue
-    if not looks_like_env_dir(dest) and ident not in envs:
-        raise RegistryError("%s does not look like an SPA environment" % dest)
+    refusal = _framework_refusal(resolved, environ)
+    if refusal:
+        raise RegistryError(refusal)
+    if (dest.exists() or ident not in envs) and not looks_like_env_dir(dest):
+        raise RegistryError(
+            "%s does not look like an SPA environment (no .spa.yml or config/splunk_config.yml)"
+            % dest
+        )
     if looks_deployed(dest) and not force:
         raise RegistryError(
             "Environment %s looks deployed (inventory, Terraform state, or VirtualBox machines).\n"

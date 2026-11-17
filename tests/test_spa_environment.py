@@ -365,6 +365,83 @@ def test_remove_refuses_deployed_without_force(tmp_path):
     assert not dest.exists()
 
 
+def _remove_env(tmp_path: Path, spa_home: Path) -> dict:
+    return {
+        "HOME": str(tmp_path / "home"),
+        "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
+        "SPA_HOME": str(spa_home),
+    }
+
+
+def _fake_framework(path: Path) -> Path:
+    (path / "ansible").mkdir(parents=True)
+    (path / "bin").mkdir()
+    (path / "ansible.cfg").write_text("[defaults]\n", encoding="utf-8")
+    return path
+
+
+def test_remove_refuses_registered_clone_even_with_env_config(tmp_path):
+    from spa.registry import RegistryError, register_environment, remove_environment
+
+    clone = _fake_framework(tmp_path / "old-clone")
+    (clone / "config").mkdir()
+    (clone / "config" / "splunk_config.yml").write_text("splunk_hosts: []\n", encoding="utf-8")
+    env = _remove_env(tmp_path, tmp_path / "elsewhere")
+    register_environment("old-clone", clone, env)
+    with pytest.raises(RegistryError, match="SPA framework"):
+        remove_environment("old-clone", confirm=True, force=True, environ=env)
+    assert (clone / "ansible.cfg").is_file()
+    assert "old-clone" in _registry_names(tmp_path)[0]
+
+
+def test_remove_refuses_clone_by_path(tmp_path):
+    from spa.registry import RegistryError, remove_environment
+
+    clone = _fake_framework(tmp_path / "clone")
+    (clone / ".spa.yml").write_text("spa_home: .\n", encoding="utf-8")
+    env = _remove_env(tmp_path, tmp_path / "elsewhere")
+    with pytest.raises(RegistryError, match="SPA framework"):
+        remove_environment(str(clone), confirm=True, force=True, environ=env)
+    assert clone.is_dir()
+
+
+def test_remove_refuses_dir_containing_spa_home(tmp_path):
+    from spa.registry import RegistryError, register_environment, remove_environment
+
+    parent = tmp_path / "parent"
+    spa_home = _fake_framework(parent / "spa")
+    (parent / ".spa.yml").write_text("spa_home: spa\n", encoding="utf-8")
+    env = _remove_env(tmp_path, spa_home)
+    register_environment("parent", parent, env)
+    with pytest.raises(RegistryError, match="contains SPA_HOME"):
+        remove_environment("parent", confirm=True, force=True, environ=env)
+    assert spa_home.is_dir()
+
+
+def test_remove_refuses_registered_dir_that_is_not_an_env(tmp_path):
+    from spa.registry import RegistryError, register_environment, remove_environment
+
+    stray = tmp_path / "photos"
+    stray.mkdir()
+    (stray / "keep.txt").write_text("x", encoding="utf-8")
+    env = _remove_env(tmp_path, tmp_path / "elsewhere")
+    register_environment("photos", stray, env)
+    with pytest.raises(RegistryError, match="does not look like an SPA environment"):
+        remove_environment("photos", confirm=True, force=True, environ=env)
+    assert (stray / "keep.txt").is_file()
+    assert "photos" in _registry_names(tmp_path)[0]
+
+
+def test_remove_unregisters_entry_whose_dir_is_gone(tmp_path):
+    from spa.registry import register_environment, remove_environment
+
+    env = _remove_env(tmp_path, tmp_path / "elsewhere")
+    register_environment("gone", tmp_path / "gone", env)
+    payload = remove_environment("gone", confirm=True, force=False, environ=env)
+    assert payload["name"] == "gone"
+    assert "gone" not in _registry_names(tmp_path)[0]
+
+
 def test_test_runs_never_touch_the_user_registry(tmp_path):
     """A test run must not register envs in the operator's ~/.config/spa."""
     from spa.registry import user_environments_yml
