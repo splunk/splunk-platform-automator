@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
 
-from spa.skills import SkillsError, install_skills, remove_skills
+from spa.skills import SkillsError, install_skills, remove_skills, update_skills
 from spa_testutil import run_spa, run_spa_inprocess, spa_env
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
@@ -71,6 +72,22 @@ def _install(tmp_path: Path, **kwargs):
     )
 
 
+def _update(tmp_path: Path, **kwargs):
+    source = kwargs.pop("source", None) or _source(tmp_path)
+    home = kwargs.pop("home", None) or (tmp_path / "home")
+    home.mkdir(parents=True, exist_ok=True)
+    environ = {"HOME": str(home)}
+    environ.update(kwargs.pop("environ", {}))
+    return update_skills(
+        source=source,
+        home=home,
+        environ=environ,
+        path_env=kwargs.pop("path_env", ""),
+        config_dir=kwargs.pop("config_dir", tmp_path / "config" / "spa"),
+        **kwargs,
+    )
+
+
 def _assert_copied(dest: Path, source: Path) -> None:
     assert dest.is_dir()
     assert not dest.is_symlink()
@@ -78,6 +95,116 @@ def _assert_copied(dest: Path, source: Path) -> None:
     assert (dest / "SKILL.md").read_text(encoding="utf-8") == (source / "SKILL.md").read_text(
         encoding="utf-8"
     )
+
+
+def test_update_replaces_recorded_copy_that_differs(tmp_path):
+    source = tmp_path / "skills" / "spa"
+    _package(source, "spa")
+    config = tmp_path / "config" / "spa"
+    _install(tmp_path, source=source, platform="cursor", name="spa", config_dir=config)
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    (dest / "SKILL.md").write_text("stale dest\n", encoding="utf-8")
+    (source / "spa" / "SKILL.md").write_text("---\nname: spa\n---\nrefreshed\n", encoding="utf-8")
+
+    result = _update(tmp_path, source=source, config_dir=config)
+
+    assert result["action"] == "update"
+    assert result["platforms"] == ["cursor"]
+    assert result["updated"] == ["spa"]
+    assert result["unchanged"] == []
+    _assert_copied(dest, source / "spa")
+
+
+def test_update_lists_identical_package_unchanged_without_rewrite(tmp_path):
+    source = tmp_path / "skills" / "spa"
+    _package(source, "spa")
+    config = tmp_path / "config" / "spa"
+    _install(tmp_path, source=source, platform="cursor", name="spa", config_dir=config)
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    skill = dest / "SKILL.md"
+    os.utime(skill, (1_600_000_000, 1_600_000_000))
+    before = skill.stat().st_mtime
+
+    result = _update(tmp_path, source=source, config_dir=config)
+
+    assert result["updated"] == []
+    assert result["unchanged"] == ["spa"]
+    assert result["platforms"] == ["cursor"]
+    assert skill.stat().st_mtime == before
+    _assert_copied(dest, source / "spa")
+
+
+def test_update_copies_new_framework_package_onto_recorded_platform(tmp_path):
+    source = tmp_path / "skills" / "spa"
+    _package(source, "spa")
+    config = tmp_path / "config" / "spa"
+    _install(tmp_path, source=source, platform="cursor", name="spa", config_dir=config)
+    _package(source, "spa-apps")
+
+    result = _update(tmp_path, source=source, config_dir=config)
+
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa-apps"
+    assert "spa-apps" in result["updated"]
+    assert "spa" in result["unchanged"]
+    _assert_copied(dest, source / "spa-apps")
+    recorded = (config / "skills.yml").read_text(encoding="utf-8")
+    assert str(dest) in recorded
+
+
+def test_update_empty_registry_is_ok_and_names_install(tmp_path):
+    source = tmp_path / "skills" / "spa"
+    _package(source, "spa")
+    config = tmp_path / "config" / "spa"
+    bindir = tmp_path / "bin"
+    _touch_bin(bindir, "cursor")
+
+    result = _update(
+        tmp_path,
+        source=source,
+        config_dir=config,
+        path_env=str(bindir),
+        environ={"CURSOR_AGENT": "1"},
+    )
+
+    assert result["updated"] == []
+    assert result["unchanged"] == []
+    assert result["platforms"] == []
+    commands = [str(row.get("command") or "") for row in (result.get("next") or [])]
+    assert any(command == "spa skills install" for command in commands)
+    assert not (tmp_path / "home" / ".cursor" / "skills").exists()
+
+
+def test_update_does_not_autodetect_or_touch_unrecorded_neighbors(tmp_path):
+    source = tmp_path / "skills" / "spa"
+    _package(source, "spa")
+    config = tmp_path / "config" / "spa"
+    _install(tmp_path, source=source, platform="cursor", name="spa", config_dir=config)
+    (source / "spa" / "SKILL.md").write_text("---\nname: spa\n---\nrefreshed\n", encoding="utf-8")
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    neighbor = tmp_path / "home" / ".cursor" / "skills" / "my-notes"
+    neighbor.mkdir()
+    (neighbor / "SKILL.md").write_text("keep\n", encoding="utf-8")
+    wind = tmp_path / "home" / ".windsurf" / "skills" / "spa"
+    wind.mkdir(parents=True)
+    (wind / "SKILL.md").write_text("leave\n", encoding="utf-8")
+    bindir = tmp_path / "bin"
+    _touch_bin(bindir, "cursor")
+    _touch_bin(bindir, "claude")
+
+    result = _update(
+        tmp_path,
+        source=source,
+        config_dir=config,
+        path_env=str(bindir),
+        environ={"SPA_SKILLS_PLATFORMS": "claude-code,windsurf"},
+    )
+
+    assert result["platforms"] == ["cursor"]
+    assert "spa" in result["updated"]
+    _assert_copied(dest, source / "spa")
+    assert (neighbor / "SKILL.md").read_text(encoding="utf-8") == "keep\n"
+    assert (wind / "SKILL.md").read_text(encoding="utf-8") == "leave\n"
+    assert not (tmp_path / "home" / ".claude" / "skills").exists()
 
 
 def test_install_copies_every_package_and_records_paths(tmp_path):
@@ -302,6 +429,7 @@ def test_skills_help_lists_platforms():
         "antigravity (agy)",
         "or all",
         "cursor,claude",
+        "spa skills update",
     ):
         assert name in result.stdout, name
 
@@ -391,6 +519,62 @@ def test_remove_deletes_only_spa_adapters(tmp_path):
     assert not (rules / "spa-contribute.mdc").exists()
     assert not stale.exists()
     assert neighbor.read_text(encoding="utf-8") == "keep\n"
+
+
+def test_cli_update_does_not_require_yes_and_refreshes_stale_copy(tmp_path):
+    env = _cli_env(tmp_path, SPA_SKILLS_PLATFORMS="cursor")
+    installed = run_spa(["--agent", "skills", "install", "--name", "spa"], env=env)
+    assert installed.returncode == 0, installed.stdout + installed.stderr
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    (dest / "SKILL.md").write_text("stale dest\n", encoding="utf-8")
+
+    updated = run_spa(["--agent", "skills", "update"], env=env)
+    assert updated.returncode == 0, updated.stdout + updated.stderr
+    payload = json.loads(updated.stdout)
+    assert payload["ok"] is True
+    assert "data" in payload
+    assert "spa" in payload["data"]["updated"]
+    assert payload["data"]["platforms"] == ["cursor"]
+    source = Path(__file__).resolve().parents[1] / "skills" / "spa" / "spa"
+    _assert_copied(dest, source)
+
+
+def test_cli_update_empty_registry_names_install(tmp_path):
+    env = _cli_env(tmp_path, CURSOR_AGENT="1")
+    result = run_spa(["--no-agent", "skills", "update"], env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "spa skills install" in result.stderr
+    assert not (tmp_path / "home" / ".cursor" / "skills").exists()
+
+
+def test_bare_skills_names_update():
+    human = run_spa(["--no-agent", "skills"])
+    assert human.returncode == 2
+    assert "spa skills update" in human.stderr
+    agent = run_spa(["--agent", "skills"])
+    assert agent.returncode == 2
+    payload = json.loads(agent.stdout)
+    assert payload["ok"] is False
+    assert "spa skills update" in payload["error"]
+
+
+def test_schema_includes_skills_update():
+    from spa.agent import COMMAND_SCHEMA
+
+    by_name = {row["name"]: row for row in COMMAND_SCHEMA["commands"]}
+    update = by_name["skills update"]
+    assert update.get("read_only") is True
+    assert update["example"] == "spa --agent skills update"
+    flags = {flag["long"] for flag in update.get("flags") or []}
+    assert "--yes" not in flags
+    help_text = run_spa_inprocess(["--no-agent", "skills", "update", "--help"])
+    assert help_text.returncode == 0, help_text.stderr
+    assert "usage: spa skills update" in help_text.stdout
+    assert "--yes" not in help_text.stdout
+    agent_help = run_spa(["--agent", "skills", "update", "--help"])
+    assert agent_help.returncode == 0, agent_help.stderr
+    payload = json.loads(agent_help.stdout)
+    assert payload["data"]["name"] == "skills update"
 
 
 def test_cli_install_and_remove_round_trip(tmp_path):

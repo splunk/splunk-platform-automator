@@ -775,6 +775,7 @@ VENV_NEEDS_ACTION = (
 SKILLS_NEEDS_ACTION = (
     "spa skills needs an action.\n"
     "Install:    spa skills install [PLATFORM]\n"
+    "Update:     spa skills update\n"
     "Remove:     spa skills remove [PLATFORM] --yes\n"
     "Platforms:  %s.\n"
     "Several:    spa skills install cursor,claude" % _SKILLS_PLATFORMS
@@ -1386,6 +1387,7 @@ def _run_skills(args, session, as_agent: bool) -> int:
     from spa.skills import format_skills_text
 
     sys.stdout.write(format_skills_text(result.data or {}))
+    _print_next(result.data if isinstance(result.data, dict) else {})
     return 0
 
 
@@ -2214,7 +2216,7 @@ def _run(argv: Sequence[str]) -> int:
         sub,
         "skills",
         aliases=["sk"],
-        help="Install or remove SPA agent skills in user IDE directories",
+        help="Install, update, or remove SPA agent skills in user IDE directories",
         epilog=SKILLS_NEEDS_ACTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -2238,6 +2240,13 @@ def _run(argv: Sequence[str]) -> int:
         action="store_true",
         help="Install every SPA skill package (default)",
     )
+    p_skills_update = _add_action(
+        skills_sub,
+        "update",
+        help="Refresh recorded IDE skill copies from $SPA_HOME/skills/spa",
+        usage="spa skills update",
+    )
+    _add_mode_flags(p_skills_update)
     p_skills_remove = _add_action(
         skills_sub,
         "remove",

@@ -490,7 +490,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "skills",
-            "summary": "Install or remove SPA agent skills from $SPA_HOME/skills/spa/ into user IDE directories",
+            "summary": "Install, update, or remove SPA agent skills from $SPA_HOME/skills/spa/ into user IDE directories",
             "example": "spa skills install",
         },
         {
@@ -509,6 +509,12 @@ COMMAND_SCHEMA = {
                 {"long": "--all", "help": "Install every SPA skill package (default)"},
             ],
             "example": "spa skills install cursor",
+        },
+        {
+            "name": "skills update",
+            "summary": "Refresh IDE skill copies recorded in ~/.config/spa/skills.yml from $SPA_HOME/skills/spa. Does not auto-detect platforms.",
+            "read_only": True,
+            "example": "spa --agent skills update",
         },
         {
             "name": "skills remove",

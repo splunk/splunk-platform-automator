@@ -455,7 +455,7 @@ Host prerequisite checks
 
 ## `skills`
 
-Install or remove SPA agent skills from $SPA_HOME/skills/spa/ into user IDE directories
+Install, update, or remove SPA agent skills from $SPA_HOME/skills/spa/ into user IDE directories
 
 Example:
 
@@ -480,6 +480,16 @@ Example:
 
 ```bash
 spa skills install cursor
+```
+
+## `skills update`
+
+Refresh IDE skill copies recorded in ~/.config/spa/skills.yml from $SPA_HOME/skills/spa. Does not auto-detect platforms.
+
+Example:
+
+```bash
+spa --agent skills update
 ```
 
 ## `skills remove`

@@ -504,12 +504,17 @@ HELP_CONTRACTS = [
             "usage: spa skills",
             "Copy SPA skills into a user IDE skill directory",
             "install",
+            "update",
             "remove",
         ],
     ),
     (
         ["skills", "install", "--help"],
         ["usage: spa skills install", "--name", "--all"],
+    ),
+    (
+        ["skills", "update", "--help"],
+        ["usage: spa skills update"],
     ),
     (
         ["licenses", "list", "--help"],

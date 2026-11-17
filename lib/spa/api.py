@@ -1250,7 +1250,7 @@ class LocalSpaSession:
         from pathlib import Path
 
         from spa.paths import user_spa_config_dir
-        from spa.skills import SkillsError, install_skills, remove_skills
+        from spa.skills import SkillsError, install_skills, remove_skills, update_skills
 
         if action == "remove":
             blocked = self._confirm_gate(
@@ -1261,16 +1261,26 @@ class LocalSpaSession:
             )
             if blocked:
                 return blocked
-        elif action != "install":
+        elif action not in {"install", "update"}:
             return CommandResult(
                 ok=False,
-                error="spa skills needs an action.\nInstall:  spa skills install [PLATFORM]\nRemove:   spa skills remove [PLATFORM] --yes",
+                error=(
+                    "spa skills needs an action.\n"
+                    "Install:  spa skills install [PLATFORM]\n"
+                    "Update:   spa skills update\n"
+                    "Remove:   spa skills remove [PLATFORM] --yes"
+                ),
                 code=2,
             )
         source = self.paths.spa_home / "skills" / "spa"
         home = Path(os.environ.get("HOME") or str(Path.home()))
         config_dir = user_spa_config_dir(os.environ)
-        runner = remove_skills if action == "remove" else install_skills
+        if action == "remove":
+            runner = remove_skills
+        elif action == "update":
+            runner = update_skills
+        else:
+            runner = install_skills
         try:
             data = runner(
                 source=source,
