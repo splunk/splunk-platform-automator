@@ -389,6 +389,33 @@ def _isolated_home(tmp_path):
     return {"HOME": str(home), "XDG_CONFIG_HOME": str(xdg)}, xdg
 
 
+def _mini_framework(root):
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "ansible.cfg").write_text("[defaults]\n", encoding="utf-8")
+    (root / "ansible").mkdir()
+    (root / "bin").mkdir()
+    return root
+
+
+def _env_with_recorded_spa_home(tmp_path, spa_home_value):
+    isolated, _xdg = _isolated_home(tmp_path)
+    dest = tmp_path / "lab"
+    dest.mkdir()
+    (dest / "config").mkdir()
+    (dest / "config" / "splunk_config.yml").write_text(
+        "plugin: splunk-platform-automator\nsplunk_hosts: []\n",
+        encoding="utf-8",
+    )
+    dirs = _make_dir_map(tmp_path / "shared")
+    lines = []
+    if spa_home_value is not None:
+        lines.append("spa_home: %s" % spa_home_value)
+    for key, path in dirs.items():
+        lines.append("%s: %s" % (key, path))
+    (dest / ".spa.yml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return dest, isolated, dirs
+
+
 def _init_without_provider(dest, env):
     """Call spa init DEST without injecting --provider (run_spa_init always adds one)."""
     return run_spa(
@@ -551,6 +578,70 @@ def test_reset_paths_without_force_on_existing_env_uses_force_message(tmp_path):
     assert "Use --force to refresh .spa.yml" in out
     _assert_spa_yml_dirs(dest, stale)
     assert marker in (dest / "config" / "splunk_config.yml").read_text()
+
+
+def _assert_spa_home_repair(result, dest, recorded):
+    out = result.stderr + result.stdout
+    assert result.returncode == 2, out
+    assert "spa init --force" in out
+    assert str(dest.resolve()) in out
+    assert os.path.realpath(PROJECT_ROOT) in out
+    if recorded is None:
+        assert "(missing)" in out
+    else:
+        assert str(recorded) in out
+    return out
+
+
+@pytest.mark.no_spa_env
+@pytest.mark.parametrize("kind", ["missing_key", "missing_path", "empty_dir"])
+def test_unusable_spa_home_fails_closed_from_env_cwd(tmp_path, kind):
+    if kind == "missing_key":
+        recorded = None
+    elif kind == "missing_path":
+        recorded = tmp_path / "gone-prefix"
+    else:
+        recorded = tmp_path / "empty-prefix"
+        recorded.mkdir()
+    dest, isolated, dirs = _env_with_recorded_spa_home(tmp_path, recorded)
+    before_yml = (dest / ".spa.yml").read_text(encoding="utf-8")
+    before_cfg = (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8")
+    for args in (["run", "list"], ["validate"], ["doctor"]):
+        result = run_spa(args, env=isolated, cwd=dest)
+        _assert_spa_home_repair(result, dest, recorded)
+    init = run_spa(["--no-agent", "init", "--skip-doctor", "."], env=isolated, cwd=dest)
+    _assert_spa_home_repair(init, dest, recorded)
+    assert (dest / ".spa.yml").read_text(encoding="utf-8") == before_yml
+    assert (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8") == before_cfg
+    assert dirs["software_dir"].is_dir()
+
+
+@pytest.mark.no_spa_env
+def test_unusable_spa_home_force_retargets_running_framework(tmp_path):
+    gone = tmp_path / "gone-prefix"
+    dest, isolated, dirs = _env_with_recorded_spa_home(tmp_path, gone)
+    before_cfg = (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8")
+    result = run_spa_init(["--force", "."], env=isolated, cwd=dest)
+    assert result.returncode == 0, result.stderr + result.stdout
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text(encoding="utf-8"))
+    assert Path(spa_yml["spa_home"]).resolve() == Path(os.path.realpath(PROJECT_ROOT))
+    for key, path in dirs.items():
+        assert Path(spa_yml[key]).resolve() == path.resolve(), key
+    assert (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8") == before_cfg
+
+
+@pytest.mark.no_spa_env
+def test_usable_other_spa_home_needs_force_only_on_init(tmp_path):
+    other = _mini_framework(tmp_path / "other-spa")
+    dest, isolated, _dirs = _env_with_recorded_spa_home(tmp_path, other)
+    before_yml = (dest / ".spa.yml").read_text(encoding="utf-8")
+    init = run_spa(["--no-agent", "init", "--skip-doctor", "."], env=isolated, cwd=dest)
+    _assert_spa_home_repair(init, dest, other)
+    assert (dest / ".spa.yml").read_text(encoding="utf-8") == before_yml
+    for args in (["run", "list"], ["validate"]):
+        result = run_spa(args, env=isolated, cwd=dest)
+        out = result.stderr + result.stdout
+        assert "spa init --force" not in out
 
 
 def test_init_existing_registered_env_does_not_need_provider(tmp_path):

@@ -111,6 +111,9 @@ def env_dir_required_error(paths: SpaPaths) -> Optional[str]:
             "Or migrate:       spa init --from %s DEST"
             % (old, old, old)
         )
+    recorded = recorded_spa_home_error(paths)
+    if recorded:
+        return recorded
     if is_framework_as_env(paths):
         return ENV_DIR_REQUIRED_HINT
     return None
@@ -129,6 +132,88 @@ def clone_root_from_this_file() -> Path:
         if is_spa_home(alt):
             return alt
     return candidate
+
+
+# SPA_HOME from process start, before resolve_spa_paths stamps .spa.yml into os.environ.
+_PROCESS_SPA_HOME = (os.environ.get("SPA_HOME") or "").strip()
+
+
+def running_spa_home(
+    environ: Optional[Dict[str, str]] = None,
+    start_dir: Optional[Path] = None,
+) -> Path:
+    """Framework that is actually running: inbound SPA_HOME if usable, else this checkout.
+
+    Uses the process-start SPA_HOME (or an explicit ``environ``), not a value later
+    stamped from ``.spa.yml`` by ``apply_paths_env``.
+    """
+    start = Path(start_dir) if start_dir is not None else Path.cwd()
+    if environ is not None:
+        env_home = (environ.get("SPA_HOME") or "").strip()
+    else:
+        env_home = _PROCESS_SPA_HOME
+    if env_home:
+        try:
+            return _expand(env_home, start)
+        except OSError:
+            return clone_root_from_this_file()
+    return clone_root_from_this_file()
+
+
+def spa_home_repair_error(
+    dest: Path,
+    recorded: str,
+    running: Path,
+    *,
+    usable: bool = False,
+) -> str:
+    """Exit-2 hint to retarget dest `.spa.yml` spa_home with spa init --force."""
+    if usable:
+        lead = "This environment's spa_home is not the running SPA framework."
+    else:
+        lead = (
+            "This environment's spa_home is missing, empty, or not a usable SPA framework."
+        )
+    display = (recorded or "").strip() or "(missing)"
+    return (
+        "%s\n"
+        "  recorded:  %s\n"
+        "  running:   %s\n"
+        "Repair:  spa init --force %s"
+        % (lead, display, running, dest)
+    )
+
+
+def recorded_spa_home_error(
+    paths: SpaPaths,
+    environ: Optional[Dict[str, str]] = None,
+) -> Optional[str]:
+    """Message when dest `.spa.yml` spa_home is missing, empty, or not a framework."""
+    dest = paths.spa_env_dir
+    spa_yml = dest / SPA_YML_NAME
+    if not spa_yml.is_file():
+        return None
+    try:
+        data = load_spa_yml(spa_yml)
+    except (OSError, ValueError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    raw = str(data.get("spa_home") or "").strip()
+    usable = False
+    if raw:
+        try:
+            usable = is_spa_home(_expand(raw, spa_yml.parent))
+        except OSError:
+            usable = False
+    if usable:
+        return None
+    return spa_home_repair_error(
+        dest.resolve(),
+        raw,
+        running_spa_home(environ=environ),
+        usable=False,
+    )
 
 
 def find_spa_yml(start: Optional[Path] = None) -> Optional[Path]:

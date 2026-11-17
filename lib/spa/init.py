@@ -16,7 +16,14 @@ from spa.framework_paths import (
     framework_actions,
     removal_plan,
 )
-from spa.paths import _expand, is_spa_home, load_spa_yml, load_user_paths, save_user_paths
+from spa.paths import (
+    _expand,
+    is_spa_home,
+    load_spa_yml,
+    load_user_paths,
+    save_user_paths,
+    spa_home_repair_error,
+)
 from spa.registry import env_name_for_path, looks_like_env_dir, recommended_workspace
 from spa.providers import format_provider_choice
 
@@ -414,14 +421,25 @@ def _spa_home_mismatch(dest: Path, spa_home: Path) -> bool:
         return True
 
 
-def _existing_env_needs_force(dest: Path, spa_home: Path) -> bool:
+def _existing_env_needs_force(dest: Path, _spa_home: Path) -> bool:
     if is_old_clone_tree(dest):
         return True
     if leftover_present(dest):
         return True
-    if not is_spa_env(dest):
-        return True
-    return _spa_home_mismatch(dest, spa_home)
+    return not is_spa_env(dest)
+
+
+def _recorded_spa_home_raw(dest: Path) -> str:
+    spa_yml = dest / ".spa.yml"
+    if not spa_yml.is_file():
+        return ""
+    try:
+        data = load_spa_yml(spa_yml)
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    return str(data.get("spa_home") or "").strip()
 
 
 def _handle_existing_env(
@@ -433,6 +451,18 @@ def _handle_existing_env(
         raise InitError(
             "Use spa init --force %s to refresh .spa.yml (config is kept unless --example)."
             % dest,
+            code=2,
+        )
+    if _spa_home_mismatch(dest, spa_home):
+        raw = _recorded_spa_home_raw(dest)
+        usable = False
+        if raw:
+            try:
+                usable = is_spa_home(_expand(raw, dest.resolve()))
+            except OSError:
+                usable = False
+        raise InitError(
+            spa_home_repair_error(dest, raw, spa_home, usable=usable),
             code=2,
         )
     if _dir_keys_differ_from_paths_yml(dest):

@@ -3446,6 +3446,8 @@ def _run(argv: Sequence[str]) -> int:
         want_json = as_agent or bool(getattr(args, "json", False))
         if want_json:
             return _emit_result(result, True)
+        if not result.ok and result.data is None:
+            return _print_command_error(result, as_agent)
         sys.stdout.write(format_doctor_text(result))
         return result.code
 

@@ -321,6 +321,15 @@ def test_init_detects_existing_env_without_provider():
     assert "spa env init NAME" in migrate
 
 
+def test_unusable_spa_home_repair_is_documented():
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    paths = guide.split("## Understand the paths", 1)[1].split("\n## ", 1)[0]
+    assert "spa init --force DEST" in paths
+    assert "spa_home" in paths
+    migrate = (_docs_dir() / "migrate.md").read_text(encoding="utf-8")
+    assert "spa init --force DEST" in migrate
+
+
 def test_init_reset_paths_is_documented():
     guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
     paths = guide.split("## Understand the paths", 1)[1].split("\n## ", 1)[0]

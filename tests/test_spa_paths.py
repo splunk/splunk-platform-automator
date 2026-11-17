@@ -26,6 +26,25 @@ from spa.paths import (  # noqa: E402
 from spa.registry import recommended_workspace  # noqa: E402
 
 
+def _mini_framework(root):
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "ansible.cfg").write_text("[defaults]\n", encoding="utf-8")
+    (root / "ansible").mkdir()
+    (root / "bin").mkdir()
+    return root
+
+
+def _dest_with_spa_yml(tmp_path, spa_home_value):
+    dest = tmp_path / "lab"
+    dest.mkdir()
+    if spa_home_value is None:
+        text = "software_dir: %s\n" % (tmp_path / "Software")
+    else:
+        text = "spa_home: %s\n" % spa_home_value
+    (dest / ".spa.yml").write_text(text, encoding="utf-8")
+    return dest
+
+
 def test_clone_is_spa_home():
     assert is_spa_home(PROJECT_ROOT)
 
@@ -449,3 +468,55 @@ def test_env_spa_yml_wins_over_user_paths(tmp_path):
         clone_root=PROJECT_ROOT,
     )
     assert paths.software_dir == env_sw.resolve()
+
+
+def _assert_unusable_spa_home_error(message, dest, recorded, monkeypatch):
+    monkeypatch.delenv("SPA_HOME", raising=False)
+    assert message is not None
+    assert "spa init --force" in message
+    assert str(dest.resolve()) in message
+    running = os.path.realpath(PROJECT_ROOT)
+    assert running in message
+    if recorded is None:
+        assert "(missing)" in message
+    else:
+        assert str(recorded) in message
+
+
+def test_recorded_spa_home_missing_key_fails_closed(tmp_path, monkeypatch):
+    monkeypatch.delenv("SPA_HOME", raising=False)
+    dest = _dest_with_spa_yml(tmp_path, None)
+    before = (dest / ".spa.yml").read_text(encoding="utf-8")
+    paths = resolve_spa_paths(start_dir=dest, environ={}, clone_root=PROJECT_ROOT)
+    _assert_unusable_spa_home_error(env_dir_required_error(paths), dest, None, monkeypatch)
+    assert (dest / ".spa.yml").read_text(encoding="utf-8") == before
+
+
+def test_recorded_spa_home_missing_path_fails_closed(tmp_path, monkeypatch):
+    monkeypatch.delenv("SPA_HOME", raising=False)
+    gone = tmp_path / "gone-prefix"
+    dest = _dest_with_spa_yml(tmp_path, gone)
+    before = (dest / ".spa.yml").read_text(encoding="utf-8")
+    paths = resolve_spa_paths(start_dir=dest, environ={}, clone_root=PROJECT_ROOT)
+    _assert_unusable_spa_home_error(env_dir_required_error(paths), dest, gone, monkeypatch)
+    assert (dest / ".spa.yml").read_text(encoding="utf-8") == before
+
+
+def test_recorded_spa_home_empty_dir_fails_closed(tmp_path, monkeypatch):
+    monkeypatch.delenv("SPA_HOME", raising=False)
+    empty = tmp_path / "empty-prefix"
+    empty.mkdir()
+    dest = _dest_with_spa_yml(tmp_path, empty)
+    before = (dest / ".spa.yml").read_text(encoding="utf-8")
+    paths = resolve_spa_paths(start_dir=dest, environ={}, clone_root=PROJECT_ROOT)
+    _assert_unusable_spa_home_error(env_dir_required_error(paths), dest, empty, monkeypatch)
+    assert (dest / ".spa.yml").read_text(encoding="utf-8") == before
+
+
+def test_recorded_usable_other_spa_home_is_not_a_global_failure(tmp_path, monkeypatch):
+    monkeypatch.delenv("SPA_HOME", raising=False)
+    other = _mini_framework(tmp_path / "other-spa")
+    dest = _dest_with_spa_yml(tmp_path, other)
+    paths = resolve_spa_paths(start_dir=dest, environ={}, clone_root=PROJECT_ROOT)
+    assert paths.spa_home == other.resolve()
+    assert env_dir_required_error(paths) is None

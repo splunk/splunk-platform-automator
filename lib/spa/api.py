@@ -14,7 +14,14 @@ from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence, Tupl
 
 from spa.agent import COMMAND_SCHEMA, SCHEMA_VERSION
 from spa.executil import apply_paths_env
-from spa.paths import SpaPaths, env_dir_required_error, format_export, resolve_spa_paths
+from spa.paths import (
+    SpaPaths,
+    env_dir_required_error,
+    format_export,
+    recorded_spa_home_error,
+    resolve_spa_paths,
+    running_spa_home,
+)
 
 
 ProgressCallback = Callable[[Dict[str, Any]], None]
@@ -1211,6 +1218,9 @@ class LocalSpaSession:
                     ok=False, error=unknown_doctor_provider(raw), code=2
                 )
             requested.append(PROVIDER_ALIASES[key])
+        blocked = recorded_spa_home_error(self.paths)
+        if blocked:
+            return CommandResult(ok=False, error=blocked, code=2)
         return collect_checks(
             spa_home=spa_home,
             env_dir=env_dir,
@@ -1356,7 +1366,7 @@ class LocalSpaSession:
         try:
             rc = init_env(
                 Path(env_dir),
-                self.paths.spa_home,
+                running_spa_home(),
                 example=example,
                 example_set=example_set,
                 from_dir=Path(from_dir) if from_dir else None,
