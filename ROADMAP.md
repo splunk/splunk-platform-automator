@@ -157,6 +157,8 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 
 - [x] Local pytest + GitHub Actions CI ([tests/README.md](tests/README.md))
 - [x] Speed PR local-test CI under ~5 minutes — [#151](https://github.com/splunk/splunk-platform-automator/issues/151)
+- [x] Live AWS suites under `tests/deployment/` (spa-only `validate` / `deploy` / `run verification` / `destroy`)
+- [x] Leftover local playbook pytest through `spa run` — [#165](https://github.com/splunk/splunk-platform-automator/issues/165)
 - [ ] Hermetic CLI argv contract: isolate inherited `SPA_*` / `ANSIBLE_*` from `run_spa`, table-driven flags/aliases/`--` extras from `spa agent schema` — [#89](https://github.com/splunk/splunk-platform-automator/issues/89)
 - [ ] Broader schema / example sweep
 - [ ] Optional nightly AWS job — not required on every PR
