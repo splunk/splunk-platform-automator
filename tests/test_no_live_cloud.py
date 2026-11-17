@@ -8,7 +8,7 @@ import pytest
 
 from spa_testutil import LIVE_CLOUD_ENV_VARS, spa_env
 
-pytestmark = [pytest.mark.local, pytest.mark.cli]
+pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
 
 def test_in_process_tests_have_no_cloud_credentials():

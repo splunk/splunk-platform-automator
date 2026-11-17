@@ -43,9 +43,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: CLI tests
-            marker: local and cli
-            run: ./tests/run_cli_tests.sh -n auto --durations=25
+          - name: CLI help
+            marker: local and cli and not cli_runtime
+            run: SPA_CLI_MARKEXPR='local and cli and not cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25
+          - name: CLI runtime
+            marker: local and cli and cli_runtime
+            run: SPA_CLI_MARKEXPR='local and cli and cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25
           - name: Ansible tests
             marker: local and ansible
             run: ./tests/run_ansible_tests.sh -n auto --durations=25

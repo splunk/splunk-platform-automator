@@ -13,7 +13,7 @@ from spa.providers import ProviderError, detect_provider
 from spa.providers.aws import Provider as AwsProvider
 from spa_testutil import PROJECT_ROOT
 
-pytestmark = [pytest.mark.local, pytest.mark.cli]
+pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
 
 @pytest.fixture(autouse=True)

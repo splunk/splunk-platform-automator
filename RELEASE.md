@@ -60,13 +60,16 @@ Pull-request CI is the merge gate. The same workflow on `push` to `master` or `d
 On every pull request, and on every push to a branch listed under `on.push.branches` in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), that workflow runs:
 
 - `Syntax`: `bash -n` on `bin/*.sh`, `tests/run_*.sh`, `scripts/*.sh`, and `python -m compileall`
-- `CLI tests`: `./tests/run_cli_tests.sh -n auto --durations=25` (`pytest -m "local and cli"`)
+- `CLI help`: `SPA_CLI_MARKEXPR='local and cli and not cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25`
+- `CLI runtime`: `SPA_CLI_MARKEXPR='local and cli and cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25`
 - `Ansible tests`: `./tests/run_ansible_tests.sh -n auto --durations=25` (`pytest -m "local and ansible"`)
 - `Unit tests`: `./tests/run_unit_tests.sh -n auto --durations=25` (`pytest -m "local and not cli and not ansible"`)
 
+Local `./tests/run_cli_tests.sh` still runs both CLI tracks (`pytest -m "local and cli"`).
+
 CI does **not** provision AWS, download Splunkbase apps, or read `config/splunk_config.yml`.
 
-`master` is protected by the repository **ruleset `master`** (Settings → Rules → Rulesets, target: default branch), not classic branch protection. It requires a pull request, blocks deletion and force-push, and requires the status checks `Syntax`, `CLI tests`, `Ansible tests`, and `Unit tests` (shown as `CI / Syntax` and so on). Rename a CI job and you must update the ruleset in the same merge to `master`, or every PR into `master` waits for a check that never reports. The ruleset does not cover `distribution`.
+`master` is protected by the repository **ruleset `master`** (Settings → Rules → Rulesets, target: default branch), not classic branch protection. It requires a pull request, blocks deletion and force-push, and requires the status checks `Syntax`, `CLI help`, `CLI runtime`, `Ansible tests`, and `Unit tests` (shown as `CI / Syntax` and so on). Rename a CI job and you must update the ruleset in the same merge to `master`, or every PR into `master` waits for a check that never reports. The ruleset does not cover `distribution`.
 
 Until `distribution` is merged into `master`, the ruleset still requires the old single check `Local tests`. Swap it in that merge, not earlier: [#155](https://github.com/splunk/splunk-platform-automator/issues/155).
 

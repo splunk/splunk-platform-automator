@@ -12,4 +12,6 @@ source "$SCRIPT_DIR/run_venv.sh" \
 
 export PYTHONPATH="$(cd "$SCRIPT_DIR/.." && pwd)/lib${PYTHONPATH:+:$PYTHONPATH}"
 
-pytest -m "local and cli" tests/ -n auto "$@"
+# Default is both CLI tracks. CI sets SPA_CLI_MARKEXPR to run help or runtime.
+CLI_MARKEXPR="${SPA_CLI_MARKEXPR:-local and cli}"
+pytest -m "$CLI_MARKEXPR" tests/ -n auto "$@"

@@ -18,7 +18,7 @@ from spa_testutil import (
     write_min_env,
 )
 
-pytestmark = [pytest.mark.local, pytest.mark.cli]
+pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
 
 def _xdg(tmp_path: Path) -> dict:

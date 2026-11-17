@@ -191,11 +191,11 @@ App-scope scenarios live under `tests/configs/app_scope/<name>/`. Each has a dis
 ### When to run which runner
 
 - While coding: the new test, then existing tests for every touched module.
-- CLI surface (parser, help, routing, schema, session, or provider contracts): `./tests/run_cli_tests.sh` (`pytest -m "local and cli"`). Defaults to `-n auto`; pass `-n 1` for serial.
+- CLI surface (parser, help, routing, schema, session, or provider contracts): `./tests/run_cli_tests.sh` (`pytest -m "local and cli"`). Defaults to `-n auto`; pass `-n 1` for serial. That local command still runs both CLI tracks; CI sets `SPA_CLI_MARKEXPR` to `local and cli and not cli_runtime` (`CLI help`) or `local and cli and cli_runtime` (`CLI runtime`).
 - Playbook-spawning tests: `./tests/run_ansible_tests.sh` (`pytest -m "local and ansible"`). `test_spa_jsonl_callback.py` keeps a direct `ansible-playbook` of a fixture that is not a `spa run` catalog playbook.
 - Other local tests (schema, docs, runlog, venv, paths, licenses, secrets, pack/install): `./tests/run_unit_tests.sh` (`pytest -m "local and not cli and not ansible"`).
 - Optional before a PR: `./tests/run_local_tests.sh` (`pytest -m local`). Defaults to `-n auto`; pass `-n 1` for serial, or `--durations=25` to match CI durations.
-- Merge gate: PR CI jobs `Syntax`, `CLI tests`, `Ansible tests`, and `Unit tests`. Each pytest job uses `-n auto --durations=25`. Push CI on `master` / `distribution` is background insurance.
+- Merge gate: PR CI jobs `Syntax`, `CLI help`, `CLI runtime`, `Ansible tests`, and `Unit tests`. Each pytest job uses `-n auto --durations=25`. Push CI on `master` / `distribution` is background insurance.
 - Contributor agents unsandbox `pytest` and `./tests/run_*.sh` (Shell `required_permissions: ["all"]` on the first attempt).
 
 Live AWS (`@pytest.mark.aws`) and live CCM are not in PR CI. The CLI suite includes mocked CCM.

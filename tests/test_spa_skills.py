@@ -12,7 +12,7 @@ import pytest
 from spa.skills import SkillsError, install_skills, remove_skills, update_skills
 from spa_testutil import run_spa, run_spa_inprocess, spa_env
 
-pytestmark = [pytest.mark.local, pytest.mark.cli]
+pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
 _DETECT_VARS = (
     "SPA_SKILLS_PLATFORMS",

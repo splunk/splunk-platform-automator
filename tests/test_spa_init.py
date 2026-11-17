@@ -14,7 +14,7 @@ from spa_testutil import (
     run_spa_init,
 )
 
-pytestmark = [pytest.mark.local, pytest.mark.cli]
+pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
 
 def test_init_example_accepts_topology_c1():

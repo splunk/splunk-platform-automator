@@ -66,7 +66,8 @@ def xdist_group_name(params: Mapping) -> Optional[str]:
 _MARK_KEYWORDS = frozenset({"and", "or", "not"})
 _MARKER_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 LOCAL_JOB_MARKEXPRS = (
-    "local and cli",
+    "local and cli and not cli_runtime",
+    "local and cli and cli_runtime",
     "local and ansible",
     "local and not cli and not ansible",
 )

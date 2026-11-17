@@ -61,6 +61,8 @@ def test_spa_env_drops_inherited_spa_and_ansible_paths(monkeypatch):
     [
         ("local", True),
         ("local and cli", True),
+        ("local and cli and not cli_runtime", True),
+        ("local and cli and cli_runtime", True),
         ("local and ansible", True),
         ("local and not cli and not ansible", True),
         ("local or aws", True),
@@ -80,10 +82,12 @@ def test_local_marker_expression_selects_only_local_runs(markexpr, selects_local
     ("markers", "jobs"),
     [
         ({"local"}, ("local and not cli and not ansible",)),
-        ({"local", "cli"}, ("local and cli",)),
+        ({"local", "cli"}, ("local and cli and not cli_runtime",)),
+        ({"local", "cli", "cli_runtime"}, ("local and cli and cli_runtime",)),
         ({"local", "ansible"}, ("local and ansible",)),
         ({"local", "itsi"}, ("local and not cli and not ansible",)),
-        ({"local", "cli", "ansible"}, ("local and cli", "local and ansible")),
+        ({"local", "cli", "ansible"}, ("local and cli and not cli_runtime", "local and ansible")),
+        ({"local", "cli", "cli_runtime", "ansible"}, ("local and cli and cli_runtime", "local and ansible")),
         ({"aws"}, ()),
         ({"cli"}, ()),
         ({"ansible"}, ()),
@@ -145,10 +149,17 @@ def test_pytest_ini_registers_ansible_marker():
     assert re.search(r"(?m)^\s*ansible:\s", ini)
 
 
-def test_cli_runner_selects_local_and_cli():
+def test_pytest_ini_registers_cli_runtime_marker():
+    ini = (PROJECT_ROOT / "tests" / "pytest.ini").read_text(encoding="utf-8")
+
+    assert re.search(r"(?m)^\s*cli_runtime:\s", ini)
+
+
+def test_cli_runner_defaults_to_local_and_cli_and_honors_spa_cli_markexpr():
     text = (PROJECT_ROOT / "tests" / "run_cli_tests.sh").read_text(encoding="utf-8")
 
-    assert 'pytest -m "local and cli" tests/' in text
+    assert 'CLI_MARKEXPR="${SPA_CLI_MARKEXPR:-local and cli}"' in text
+    assert 'pytest -m "$CLI_MARKEXPR" tests/ -n auto "$@"' in text
 
 
 def test_local_runners_default_to_xdist_auto():
@@ -158,7 +169,7 @@ def test_local_runners_default_to_xdist_auto():
     ansible = (PROJECT_ROOT / "tests" / "run_ansible_tests.sh").read_text(encoding="utf-8")
     local = (PROJECT_ROOT / "tests" / "run_local_tests.sh").read_text(encoding="utf-8")
 
-    assert 'pytest -m "local and cli" tests/ -n auto "$@"' in cli
+    assert 'pytest -m "$CLI_MARKEXPR" tests/ -n auto "$@"' in cli
     assert "--dist=loadgroup" not in cli
     assert 'pytest -m "local and not cli and not ansible" tests/ -n auto "$@"' in unit
     assert 'for arg in -n auto "$@"; do' in ansible
@@ -170,6 +181,27 @@ def test_local_runners_default_to_xdist_auto():
     )
     assert 'for arg in -n auto "$@"; do' in scope
     assert 'pytest tests/test_app_scope_scenarios.py -n auto "$@" "${DIST_ARGS[@]}"' in scope
+
+
+CLI_HELP_JOB = "local and cli and not cli_runtime"
+CLI_RUNTIME_JOB = "local and cli and cli_runtime"
+CLI_RUNTIME_MODULES = (
+    "test_architecture_plan.py",
+    "test_config_walkthrough.py",
+    "test_external_hosts.py",
+    "test_no_live_cloud.py",
+    "test_spa_apps.py",
+    "test_spa_ccm.py",
+    "test_spa_deploy_gate.py",
+    "test_spa_doctor.py",
+    "test_spa_environment.py",
+    "test_spa_hosts.py",
+    "test_spa_init.py",
+    "test_spa_preflight.py",
+    "test_spa_providers.py",
+    "test_spa_skills.py",
+    "test_spa_version.py",
+)
 
 
 def test_local_modules_partition_into_cli_ansible_unit_jobs():
@@ -189,13 +221,25 @@ def test_local_modules_partition_into_cli_ansible_unit_jobs():
         assert len(matched) == 1, (path.name, sorted(marks), matched)
         jobs[matched[0]].append(path.name)
 
-    assert "test_spa_install.py" not in jobs["local and cli"]
+    assert "test_spa_install.py" not in jobs[CLI_HELP_JOB]
+    assert "test_spa_install.py" not in jobs[CLI_RUNTIME_JOB]
     assert "test_spa_install.py" in jobs["local and not cli and not ansible"]
     for name in PLAYBOOK_SPAWNING_MODULES:
         assert name in jobs["local and ansible"], name
-    assert jobs["local and cli"]
+    assert "test_config_explain.py" in jobs[CLI_HELP_JOB]
+    for name in CLI_RUNTIME_MODULES:
+        assert name in jobs[CLI_RUNTIME_JOB], name
+        assert name not in jobs[CLI_HELP_JOB], name
+    assert jobs[CLI_HELP_JOB]
+    assert jobs[CLI_RUNTIME_JOB]
     assert jobs["local and ansible"]
     assert jobs["local and not cli and not ansible"]
+    assert set(LOCAL_JOB_MARKEXPRS) == {
+        CLI_HELP_JOB,
+        CLI_RUNTIME_JOB,
+        "local and ansible",
+        "local and not cli and not ansible",
+    }
 
 
 def test_spa_env_keeps_explicit_test_path_overrides(monkeypatch):
