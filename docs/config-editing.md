@@ -434,7 +434,10 @@ authored configuration and states that deployed software is not uninstalled.
 accepts any other schema-backed app field, including nested values and all host
 and cluster filters. It is exact replacement, not fragment merge. Classification
 fields (`name`, `app_id`, and `premium_app`) and a field already owned by a
-dedicated flag are rejected.
+dedicated flag are rejected. With `--content-pack`, `--set` of pack-item fields
+(`content_pack_api.*`, `customizations.*`, `content_pack_install`) applies to
+those pack items, not `DA-ITSI-ContentLibrary`. Library-owned fields stay on
+the library row. Without `--content-pack`, pack-item `--set` remains invalid.
 
 ### CFG-APP-005 — app kinds
 
@@ -456,9 +459,20 @@ library and ITSI entries.
 `spa apps add 5391 --content-pack NAME` matches curated playbooks by pack
 folder (`itsi_content_pack_single`). Without `--customize`, successful add
 puts `apps.customize` on `data.next` (not required) when a playbook matches.
-`--customize` attaches that pack's playbook on the `content_pack_apps` item.
+`--customize` attaches that pack's playbook on the `content_pack_apps` item
+and also sets `content_pack_api.enabled: true`. Combining `--customize` with
+`--set content_pack_api.enabled true` is a no-op beyond that (idempotent).
 A later add of the same named pack with `--customize` updates that item.
 Skills follow `data.next` and never assume yes.
+
+### CFG-APP-012 — content-pack enable next
+
+A named 5391 add that did not write `content_pack_api.enabled: true` emits
+`data.next` `apps.content-pack.enable` (`required: false`). The envelope
+command is `spa apps add 5391 --content-pack NAME --set content_pack_api.enabled true`.
+Ask even when there is no playbook. Skip when `--customize` or
+`--set content_pack_api.enabled true` already wrote it.
+`--install-all-content-packs` does not emit this next item.
 
 ### CFG-APP-007 — deterministic ITSI dependency
 
@@ -587,6 +601,7 @@ Each contract ID maps to executable behavioral evidence:
 - `CFG-APP-009`: `tests/test_config_contract.py::TestDependencyContract::test_ambiguous_itsi_search_tier_preserves_bytes_until_one_filter`
 - `CFG-APP-010`: `tests/test_config_contract.py::TestAppContract::test_content_pack_discovery_and_add_help_are_actionable`
 - `CFG-APP-011`: `tests/test_config_contract.py::TestAppContract::test_content_pack_customize_matches_pack_folder_playbooks`
+- `CFG-APP-012`: `tests/test_config_contract.py::TestAppContract::test_named_content_pack_add_emits_enable_next`
 - `CFG-SEC-001`: `tests/test_config_contract.py::TestPathContract::test_from_env_authors_lookup_and_get_redacts_secret`
 - `CFG-SEC-002`: `tests/test_config_contract.py::TestSecurityContract::test_catalog_and_documentation_examples_are_credential_and_certificate_safe`
 - `CFG-SEC-003`: `tests/test_config_contract.py::TestSecurityContract::test_explicit_env_lookup_requires_a_non_empty_value`

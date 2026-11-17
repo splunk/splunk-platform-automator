@@ -345,6 +345,25 @@ class TestContentLibrary5391Rules:
         assert "content_pack_install" in msg
         assert "bool" in msg.lower()
 
+    def test_configure_playbook_requires_enabled_true(self):
+        """A configure playbook requires explicit content_pack_api.enabled: true."""
+        omitted = _library_entry()
+        del omitted["content_pack_apps"][0]["content_pack_api"]
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(omitted))
+        assert "enabled" in str(exc_info.value)
+
+        disabled = _library_entry()
+        disabled["content_pack_apps"][0]["content_pack_api"] = {"enabled": False}
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(_library_config(disabled))
+        assert "enabled" in str(exc_info.value)
+
+    def test_configure_playbook_with_enabled_true_passes(self):
+        result = validate_config(_library_config(_library_entry()))
+        pack = result.splunk_app_deployment.apps[1]["content_pack_apps"][0]
+        assert pack["content_pack_api"]["enabled"] is True
+
     def test_operator_library_example_is_accepted(self):
         """Guard: the library entry exactly as the operator writes it stays valid (passes before and after the change)."""
         entry = _library_entry(
@@ -355,7 +374,7 @@ class TestContentLibrary5391Rules:
                     "content_pack_install": True,
                     "content_pack_api": {
                         "install_all": True,
-                        "enabled": False,
+                        "enabled": True,
                         "saved_search_action": "disable",
                         "backfill": False,
                         "resolution": "overwrite",
@@ -2015,6 +2034,43 @@ class TestAppDeploymentConfig:
         assert cp.get("itsi_content_pack") is True
         assert cp.get("content_pack_api", {}).get("enabled") is True
         assert "content_pack_apps" not in cp or cp.get("content_pack_apps") is None
+
+    def test_single_app_configure_playbook_requires_enabled_true(self):
+        """Single-app configure playbooks also require explicit content_pack_api.enabled: true."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "os": {"packages": ["java-21-openjdk"]},
+            "splunk_hosts": [
+                {"name": "h1", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
+                    {
+                        "name": "DA-ITSI-CP-CUST-ATLAS-AWS-EBS",
+                        "itsi_content_pack": True,
+                        "state": "installed",
+                        "source": "splunkbase",
+                        "app_id": 7294,
+                        "customizations": {
+                            "run_playbook_after_restart": "ansible/apps_playbooks/example.yml",
+                        },
+                    },
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "enabled" in str(exc_info.value)
+        config["splunk_app_deployment"]["apps"][1]["content_pack_api"] = {
+            "install_all": True,
+            "enabled": True,
+        }
+        result = validate_config(config)
+        assert result.splunk_app_deployment.apps[1]["content_pack_api"]["enabled"] is True
 
     def test_itsi_content_pack_single_app_top_level_content_pack_install_raises(self):
         """Single-app itsi_content_pack with top-level content_pack_install must raise."""

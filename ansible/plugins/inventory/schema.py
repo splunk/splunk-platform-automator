@@ -592,6 +592,21 @@ CONTENT_PACK_API_TYPES = {
 
 CONTENT_PACK_CUSTOMIZATION_KEYS = ("run_playbook_after_restart", "force_run_playbook_after_restart", "extra_vars")
 
+
+def _require_enabled_for_configure_playbook(
+    api_opts: Any, customizations: Any, loc: str
+) -> None:
+    """Configure playbooks need objects enabled; omitted or false is invalid."""
+    if not isinstance(customizations, dict):
+        return
+    playbook = customizations.get("run_playbook_after_restart")
+    if not (isinstance(playbook, str) and playbook.strip()):
+        return
+    if not isinstance(api_opts, dict) or api_opts.get("enabled") is not True:
+        raise ValueError(
+            f"{loc}: customizations.run_playbook_after_restart requires content_pack_api.enabled: true"
+        )
+
 CONTENT_LIBRARY_ENTRY_KEYS = (
     "name",
     "source",
@@ -698,6 +713,11 @@ def _validate_content_library_entry(app: Dict[str, Any], i: int, name: str) -> N
                         f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations."
                         f"force_run_playbook_after_restart must be a bool, got {type(cust_opts['force_run_playbook_after_restart']).__name__}"
                     )
+            _require_enabled_for_configure_playbook(
+                api_opts,
+                cust_opts,
+                f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}]",
+            )
             if isinstance(pack_name, str) and pack_name.strip() == str(app.get("name", "")).strip():
                 raise ValueError(
                     f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}] repeats the library {app.get('name')!r}. "
@@ -983,6 +1003,11 @@ class SplunkAppDeploymentConfig(BaseModel):
                             raise ValueError(
                                 f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.extra_vars must be a dictionary"
                             )
+                    _require_enabled_for_configure_playbook(
+                        api_opts,
+                        cust,
+                        f"splunk_app_deployment.apps[{i}] (name={name!r})",
+                    )
                 else:
                     for bad_key in ("content_pack_install", "content_pack_api", "customizations"):
                         if app.get(bad_key) is not None:

@@ -136,6 +136,23 @@ def _java_search_heads_next(config: Optional[Mapping[str, Any]]) -> Optional[Dic
     )
 
 
+def _named_packs_enabled(
+    entry: Optional[Mapping[str, Any]], content_packs: Sequence[str]
+) -> bool:
+    items = {
+        str(item.get("name")): item
+        for item in ((entry or {}).get("content_pack_apps") or [])
+        if isinstance(item, Mapping)
+    }
+    if not content_packs:
+        return False
+    for name in content_packs:
+        api = (items.get(str(name)) or {}).get("content_pack_api")
+        if not isinstance(api, Mapping) or api.get("enabled") is not True:
+            return False
+    return True
+
+
 def apps_add_next(
     *,
     kind: str,
@@ -144,6 +161,7 @@ def apps_add_next(
     customize: bool = False,
     content_packs: Optional[Sequence[str]] = None,
     config: Optional[Mapping[str, Any]] = None,
+    entry: Optional[Mapping[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     if kind == "premium_itsi" or app_id == ITSI_ID:
         rows: List[Dict[str, Any]] = []
@@ -196,6 +214,18 @@ def apps_add_next(
                 "Configure / set up / customize this app with --customize? "
                 "That flag does not change target_roles.",
                 retry,
+            )
+        )
+    if content_packs and not _named_packs_enabled(entry, content_packs):
+        flags = " ".join("--content-pack %s" % pack for pack in content_packs)
+        rows.append(
+            item(
+                "apps.content-pack.enable",
+                "Enable this content pack's objects with "
+                "--set content_pack_api.enabled true? With --content-pack, "
+                "--set applies to the pack item, not the library.",
+                "spa --agent apps add %s %s --set content_pack_api.enabled true --yes"
+                % (app_id or "APP_ID", flags),
             )
         )
     rows.append(item("apps.add.another", "Add another app?"))

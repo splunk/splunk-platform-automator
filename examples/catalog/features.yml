@@ -1087,7 +1087,7 @@ features:
         note: When true, install all objects in the pack.
       - path: splunk_app_deployment.apps[].content_pack_apps[].content_pack_api.enabled
         type: boolean
-        note: Default false. Set true to enable installed objects.
+        note: Default false. Omit the key to leave objects disabled. Configure playbooks require true.
       - path: splunk_app_deployment.apps[].content_pack_apps[].content_pack_api.saved_search_action
         type: string
         note: For example disable or enable saved searches in the pack.
@@ -1167,7 +1167,7 @@ features:
         type: boolean
       - path: splunk_app_deployment.apps[].content_pack_api.enabled
         type: boolean
-        note: Default false. Set true to enable installed objects.
+        note: Default false. Omit the key to leave objects disabled. Configure playbooks require true.
       - path: splunk_app_deployment.apps[].customizations
         type: object
         note: Top-level for single-app packs only.

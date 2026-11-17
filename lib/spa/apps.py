@@ -25,6 +25,9 @@ ITE_WORK_ID = 5403
 ITSI_ID = 1841
 CONTENT_LIBRARY_ID = 5391
 ES_ID = 263
+PACK_ITEM_SET_ROOTS = frozenset(
+    {"content_pack_install", "content_pack_api", "customizations"}
+)
 NIX_ID = 833
 SINGLE_PACK_IDS = frozenset({7294})
 
@@ -528,6 +531,28 @@ def _customizations_from_playbooks(
     return yaml.safe_load(rendered)[0].get("customizations"), lines
 
 
+def _enable_pack_api(target: Dict[str, Any]) -> None:
+    api = target.get("content_pack_api")
+    if not isinstance(api, dict):
+        api = {}
+        target["content_pack_api"] = api
+    api["enabled"] = True
+
+
+def _assign_set_field(target: Dict[str, Any], field: str, value: Any) -> None:
+    current = target
+    parts = field.split(".")
+    for part in parts[:-1]:
+        child = current.get(part)
+        if child is None:
+            child = {}
+            current[part] = child
+        if not isinstance(child, dict):
+            raise AppsError("--set %s has a non-mapping parent" % field)
+        current = child
+    current[parts[-1]] = value
+
+
 def build_entry(
     app_id_raw: Any,
     *,
@@ -658,17 +683,21 @@ def build_entry(
         ):
             omitted_defaults.append({"path": field, "value": value})
             continue
-        current = entry
-        parts = field.split(".")
-        for part in parts[:-1]:
-            child = current.get(part)
-            if child is None:
-                child = {}
-                current[part] = child
-            if not isinstance(child, dict):
-                raise AppsError("--set %s has a non-mapping parent" % field)
-            current = child
-        current[parts[-1]] = value
+        root = field.split(".", 1)[0]
+        if content_packs and root in PACK_ITEM_SET_ROOTS:
+            for item in entry.get("content_pack_apps") or []:
+                if isinstance(item, dict):
+                    _assign_set_field(item, field, value)
+            continue
+        if (
+            kind == "itsi_content_library"
+            and not content_packs
+            and root in PACK_ITEM_SET_ROOTS
+        ):
+            raise AppsError(
+                "--set %s requires --content-pack NAME" % field
+            )
+        _assign_set_field(entry, field, value)
 
     related = []
     customization_lines: List[str] = []
@@ -703,6 +732,7 @@ def build_entry(
                     target = items.get(pack_name)
                     if attached is not None and target is not None:
                         target["customizations"] = attached
+                        _enable_pack_api(target)
             elif related:
                 notes.extend(advertise_notes(related))
         else:
@@ -713,6 +743,8 @@ def build_entry(
                 attached, customization_lines = _customizations_from_playbooks(related)
                 if attached is not None:
                     entry["customizations"] = attached
+                    if kind == "itsi_content_pack_single":
+                        _enable_pack_api(entry)
             elif related:
                 notes.extend(advertise_notes(related))
 

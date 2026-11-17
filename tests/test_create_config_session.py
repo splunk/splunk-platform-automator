@@ -153,6 +153,76 @@ def _library_app(app_id, client=None):
     }
 
 
+def test_apps_add_content_pack_enable_next_order():
+    """CFG-APP-012. Named 5391 add offers enable unless the pack is already enabled."""
+    from spa.next_steps import apps_add_next
+
+    playbooks = [{"path": "ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml"}]
+    nxt = apps_add_next(
+        kind="itsi_content_library",
+        app_id=5391,
+        playbooks=playbooks,
+        content_packs=["DA-ITSI-CP-nix"],
+        entry={"content_pack_apps": [{"name": "DA-ITSI-CP-nix"}]},
+    )
+    assert [item["id"] for item in nxt] == [
+        "apps.customize",
+        "apps.content-pack.enable",
+        "apps.add.another",
+    ]
+    enable = nxt[1]
+    assert enable["required"] is False
+    assert enable["command"] == (
+        "spa --agent apps add 5391 --content-pack DA-ITSI-CP-nix "
+        "--set content_pack_api.enabled true --yes"
+    )
+    assert enable["argv"] == [
+        "spa",
+        "--agent",
+        "apps",
+        "add",
+        "5391",
+        "--content-pack",
+        "DA-ITSI-CP-nix",
+        "--set",
+        "content_pack_api.enabled",
+        "true",
+        "--yes",
+    ]
+    no_playbook = apps_add_next(
+        kind="itsi_content_library",
+        app_id=5391,
+        content_packs=["DA-ITSI-CP-unknown"],
+        entry={"content_pack_apps": [{"name": "DA-ITSI-CP-unknown"}]},
+    )
+    assert [item["id"] for item in no_playbook] == [
+        "apps.content-pack.enable",
+        "apps.add.another",
+    ]
+    already = apps_add_next(
+        kind="itsi_content_library",
+        app_id=5391,
+        playbooks=playbooks,
+        customize=True,
+        content_packs=["DA-ITSI-CP-nix"],
+        entry={
+            "content_pack_apps": [
+                {
+                    "name": "DA-ITSI-CP-nix",
+                    "content_pack_api": {"enabled": True},
+                }
+            ]
+        },
+    )
+    assert [item["id"] for item in already] == ["apps.add.another"]
+    install_all = apps_add_next(
+        kind="itsi_content_library",
+        app_id=5391,
+        entry={"install_all_apps": True},
+    )
+    assert "apps.content-pack.enable" not in [item["id"] for item in install_all]
+
+
 def test_apps_add_content_pack_offers_customize_next(tmp_path, monkeypatch, capsys):
     """CFG-APP-011."""
     env = write_min_env(tmp_path / "env")
@@ -180,8 +250,9 @@ def test_apps_add_content_pack_offers_customize_next(tmp_path, monkeypatch, caps
     payload = json.loads(capsys.readouterr().out)
     assert rc == 0, payload
     assert payload["ok"] is True
-    assert _next_ids(payload["data"])[0] == "apps.customize"
+    assert _next_ids(payload["data"])[:2] == ["apps.customize", "apps.content-pack.enable"]
     customize = payload["data"]["next"][0]
+    enable = payload["data"]["next"][1]
     assert customize["required"] is False
     ask = customize["ask"].lower()
     assert "configure" in ask
@@ -202,6 +273,11 @@ def test_apps_add_content_pack_offers_customize_next(tmp_path, monkeypatch, caps
         "--customize",
         "--yes",
     ]
+    assert enable["required"] is False
+    assert enable["command"] == (
+        "spa --agent apps add 5391 --content-pack DA-ITSI-CP-nix "
+        "--set content_pack_api.enabled true --yes"
+    )
     authored = YAML(typ="safe").load(config.read_text(encoding="utf-8"))
     library = next(
         app
@@ -241,6 +317,7 @@ def test_apps_add_content_pack_customize_attaches_pack_playbook(
     assert rc == 0, payload
     assert payload["ok"] is True
     assert "apps.customize" not in _next_ids(payload["data"])
+    assert "apps.content-pack.enable" not in _next_ids(payload["data"])
     authored = YAML(typ="safe").load(config.read_text(encoding="utf-8"))
     library = next(
         app
@@ -250,6 +327,7 @@ def test_apps_add_content_pack_customize_attaches_pack_playbook(
     assert library["content_pack_apps"] == [
         {
             "name": "DA-ITSI-CP-nix",
+            "content_pack_api": {"enabled": True},
             "customizations": {
                 "run_playbook_after_restart": (
                     "ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml"
@@ -257,6 +335,98 @@ def test_apps_add_content_pack_customize_attaches_pack_playbook(
             },
         }
     ]
+
+
+def test_apps_add_content_pack_set_enabled_writes_pack_item(
+    tmp_path, monkeypatch, capsys
+):
+    """CFG-APP-004 CFG-APP-012. Pack-scoped --set enables that pack and skips enable next."""
+    env = write_min_env(tmp_path / "env")
+    config = env / "config" / "splunk_config.yml"
+    config.write_text(_hosts_config(), encoding="utf-8")
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(env))
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(config))
+    monkeypatch.setenv("SPLUNK_ADMIN_PASSWORD", "test")
+    monkeypatch.setattr("spa.apps.get_app", _library_app)
+    from spa.cli import _run
+
+    rc = _run(
+        [
+            "--agent",
+            "--start-dir",
+            str(env),
+            "apps",
+            "add",
+            "5391",
+            "--content-pack",
+            "DA-ITSI-CP-monitoring-alerting",
+            "--set",
+            "content_pack_api.enabled",
+            "true",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0, payload
+    assert payload["ok"] is True
+    assert "apps.content-pack.enable" not in _next_ids(payload["data"])
+    authored = YAML(typ="safe").load(config.read_text(encoding="utf-8"))
+    library = next(
+        app
+        for app in authored["splunk_app_deployment"]["apps"]
+        if app.get("app_id") == 5391
+    )
+    assert library["content_pack_apps"] == [
+        {
+            "name": "DA-ITSI-CP-monitoring-alerting",
+            "content_pack_api": {"enabled": True},
+        }
+    ]
+
+
+def test_apps_add_content_pack_customize_and_set_enabled_is_idempotent(
+    tmp_path, monkeypatch, capsys
+):
+    env = write_min_env(tmp_path / "env")
+    config = env / "config" / "splunk_config.yml"
+    config.write_text(_hosts_config(), encoding="utf-8")
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(env))
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(config))
+    monkeypatch.setenv("SPLUNK_ADMIN_PASSWORD", "test")
+    monkeypatch.setattr("spa.apps.get_app", _library_app)
+    from spa.cli import _run
+
+    rc = _run(
+        [
+            "--agent",
+            "--start-dir",
+            str(env),
+            "apps",
+            "add",
+            "5391",
+            "--content-pack",
+            "DA-ITSI-CP-nix",
+            "--customize",
+            "--set",
+            "content_pack_api.enabled",
+            "true",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0, payload
+    assert "apps.customize" not in _next_ids(payload["data"])
+    assert "apps.content-pack.enable" not in _next_ids(payload["data"])
+    authored = YAML(typ="safe").load(config.read_text(encoding="utf-8"))
+    library = next(
+        app
+        for app in authored["splunk_app_deployment"]["apps"]
+        if app.get("app_id") == 5391
+    )
+    assert library["content_pack_apps"][0]["content_pack_api"] == {"enabled": True}
+    assert library["content_pack_apps"][0]["customizations"][
+        "run_playbook_after_restart"
+    ].endswith("DA-ITSI-CP-nix_configure.yml")
 
 
 def test_apps_add_content_pack_customize_retry_updates_existing_pack(
@@ -343,7 +513,10 @@ def test_apps_add_content_pack_without_playbook_skips_customize_next(
     assert rc == 0, payload
     assert payload["ok"] is True
     assert "apps.customize" not in _next_ids(payload["data"])
-    assert _next_ids(payload["data"]) == ["apps.add.another"]
+    assert _next_ids(payload["data"]) == [
+        "apps.content-pack.enable",
+        "apps.add.another",
+    ]
 
 
 def test_apps_add_nix_without_roles_is_a_choice(tmp_path, monkeypatch, capsys):

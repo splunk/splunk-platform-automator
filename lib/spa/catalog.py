@@ -413,6 +413,7 @@ _APP_ENTRY_FIELD_TYPES = {
     "itsi_content_pack": "boolean",
     "install_all_apps": "boolean",
     "content_pack_apps": "list[map]",
+    "content_pack_install": "boolean",
     "content_pack_api": "map",
     "customizations": "map",
 }

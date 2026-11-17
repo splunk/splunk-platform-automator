@@ -37,6 +37,8 @@ Work on this branch is **3.0**. Linux packages and Homebrew are later, not part 
 
 ### Changed
 
+- **Content pack enable**: with `--content-pack`, `--set` of pack-item fields writes those pack items, not `DA-ITSI-ContentLibrary`. `--customize` also sets `content_pack_api.enabled: true`. Named 5391 add that did not enable emits `data.next` `apps.content-pack.enable`. A configure playbook requires explicit `enabled: true`. Ansible `cp_api_enabled` stays false so `--install-all-content-packs` does not enable the whole library.
+
 - **Python and Ansible**: Python **3.9–3.14** and Ansible **2.21**. `spa venv` picks the newest usable 3.9–3.14 when `python3` is newer.
 
 - **Admin password required**: shipped examples set `splunk_defaults.splunk_admin_password` to `{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}`. Schema rejects an omitted or blank value. Ansible defaults no longer supply admin, indexer-cluster, or search-head-cluster passwords.
