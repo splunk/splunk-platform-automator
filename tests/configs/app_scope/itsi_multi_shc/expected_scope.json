@@ -76,6 +76,7 @@
                     "content_pack_apps": [
                         {
                             "content_pack_api": {
+                                "enabled": true,
                                 "install_all": true
                             },
                             "content_pack_install": true,

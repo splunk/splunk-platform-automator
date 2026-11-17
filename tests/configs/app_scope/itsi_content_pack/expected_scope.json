@@ -33,6 +33,9 @@
                     "app_id": 5391,
                     "content_pack_apps": [
                         {
+                            "content_pack_api": {
+                                "enabled": true
+                            },
                             "content_pack_install": true,
                             "customizations": {
                                 "run_playbook_after_restart": "ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml"
