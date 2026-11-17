@@ -274,6 +274,73 @@ def test_collections_progress_reports_install_and_already_installed(tmp_path):
     assert "Installing Ansible collections..." not in present.stderr
 
 
+def test_collections_install_hides_galaxy_download_noise(tmp_path):
+    """Galaxy has no -q; install.sh would otherwise print Downloading URLs."""
+    venv = tmp_path / "venv"
+    bin_dir = venv / "bin"
+    bin_dir.mkdir(parents=True)
+    (bin_dir / "activate").write_text(
+        'PATH="%s:$PATH"\nexport PATH\n' % bin_dir, encoding="utf-8"
+    )
+    pip = bin_dir / "pip"
+    pip.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    pip.chmod(0o755)
+    galaxy = bin_dir / "ansible-galaxy"
+    galaxy.write_text(
+        "#!/bin/sh\n"
+        "echo 'Starting galaxy collection install process'\n"
+        "echo 'Downloading https://galaxy.ansible.com/api/v3/plugin/ansible/"
+        "content/published/collections/artifacts/community-general-14.0.1.tar.gz "
+        "to /tmp/community-general-14.0.1-pl2mjphf'\n"
+        "echo \"Installing 'community.general:14.0.1' to '/tmp/collections'\"\n",
+        encoding="utf-8",
+    )
+    galaxy.chmod(0o755)
+    collections = tmp_path / "collections"
+
+    result = _run(
+        ["--create", "--dir", str(venv)],
+        env={"SPA_COLLECTIONS_DIR": str(collections)},
+    )
+    combined = result.stdout + result.stderr
+    assert result.returncode == 0, combined
+    assert "Installing Ansible collections..." in result.stderr
+    assert "Downloading" not in combined
+    assert "Starting galaxy collection install process" not in combined
+
+
+def test_collections_install_failure_fails_the_venv_script(tmp_path):
+    """Quiet galaxy output must not swallow a failed collection install."""
+    venv = tmp_path / "venv"
+    bin_dir = venv / "bin"
+    bin_dir.mkdir(parents=True)
+    (bin_dir / "activate").write_text(
+        'PATH="%s:$PATH"\nexport PATH\n' % bin_dir, encoding="utf-8"
+    )
+    pip = bin_dir / "pip"
+    pip.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    pip.chmod(0o755)
+    galaxy = bin_dir / "ansible-galaxy"
+    galaxy.write_text(
+        "#!/bin/sh\n"
+        "echo 'Downloading https://galaxy.ansible.com/example.tar.gz to /tmp/x'\n"
+        "echo 'ERROR! Failed to download collection'\n"
+        "exit 1\n",
+        encoding="utf-8",
+    )
+    galaxy.chmod(0o755)
+    collections = tmp_path / "collections"
+
+    result = _run(
+        ["--create", "--dir", str(venv)],
+        env={"SPA_COLLECTIONS_DIR": str(collections)},
+    )
+    combined = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "Virtual environment ready:" not in result.stdout
+    assert "Failed to download collection" in combined
+
+
 def test_reinstall_runs_requirements_for_existing_venv(tmp_path):
     venv = tmp_path / "venv"
     bin_dir = venv / "bin"
@@ -657,7 +724,8 @@ def test_unknown_option_fails():
 
 def test_collections_install_is_forced_into_target_path():
     body = SCRIPT.read_text()
-    assert "collection install --force" in body
+    assert "ansible-galaxy collection install" in body
+    assert "_spa_venv_galaxy_install --force" in body
 
 
 def test_collections_not_reinstalled_when_present():
