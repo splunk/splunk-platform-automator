@@ -1088,6 +1088,7 @@ def _print_version(result: CommandResult, as_agent: bool) -> int:
     from spa.version import format_version_text
 
     sys.stdout.write(format_version_text(result.data or {}))
+    _print_next(result.data if isinstance(result.data, dict) else {})
     return result.code
 
 
@@ -2275,12 +2276,26 @@ def _run(argv: Sequence[str]) -> int:
     p_doc.add_argument("--strict", action="store_true", help="Treat optional-tool warnings as failures")
     _add_env_selector(p_doc)
 
-    _add_command(
+    p_version = _add_command(
         sub,
         "version",
         help="Print the installed SPA version",
-        description="Print the installed SPA version from SPA_HOME/VERSION. Does not contact the network.",
+        description=(
+            "Print the installed SPA version from SPA_HOME/VERSION. "
+            "Does not contact the network. spa version check compares that to GitHub latest."
+        ),
     )
+    version_sub = p_version.add_subparsers(dest="version_cmd", metavar="ACTION", required=False)
+    p_version_check = _add_action(
+        version_sub,
+        "check",
+        help="Compare the installed SPA version to the latest GitHub Release",
+        description=(
+            "Compare the installed SPA version to the latest GitHub Release. "
+            "Read-only. Does not write the prefix. Exit 0 when outdated."
+        ),
+    )
+    _add_mode_flags(p_version_check)
 
     p_venv = _add_command(
         sub,
@@ -3482,7 +3497,10 @@ def _run(argv: Sequence[str]) -> int:
         return _run_skills(args, session, as_agent)
 
     if args.command == "version":
-        return _print_version(session.version(), as_agent)
+        return _print_version(
+            session.version(check=_action(args, "version_cmd") == "check"),
+            as_agent,
+        )
 
     if args.command == "doctor":
         from spa.doctor import format_doctor_text

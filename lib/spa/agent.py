@@ -470,6 +470,12 @@ COMMAND_SCHEMA = {
             "example": "spa --agent version",
         },
         {
+            "name": "version check",
+            "summary": "Compare the installed SPA version to the latest GitHub Release. Read-only. Exit 0 when outdated.",
+            "read_only": True,
+            "example": "spa --agent version check",
+        },
+        {
             "name": "doctor",
             "summary": "Host prerequisite checks",
             "flags": [

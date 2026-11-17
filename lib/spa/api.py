@@ -1231,8 +1231,10 @@ class LocalSpaSession:
         )
 
     def version(self, check: bool = False) -> CommandResult:
-        from spa.version import local_version
+        from spa.version import check_version, local_version
 
+        if check:
+            return check_version(self.paths.spa_home)
         return local_version(self.paths.spa_home)
 
     def skills(

@@ -434,6 +434,16 @@ Example:
 spa --agent version
 ```
 
+## `version check`
+
+Compare the installed SPA version to the latest GitHub Release. Read-only. Exit 0 when outdated.
+
+Example:
+
+```bash
+spa --agent version check
+```
+
 ## `doctor`
 
 Host prerequisite checks
