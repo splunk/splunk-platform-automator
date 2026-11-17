@@ -438,6 +438,278 @@ def test_install_without_software_completes_and_next_step_names_software(
     assert "spa environment set --software-dir" not in next_step
 
 
+def _installed_prefix(tmp_path, framework_tarball):
+    prefix = tmp_path / "prefix"
+    bindir = tmp_path / "bin"
+    result = _run_install(
+        framework_tarball,
+        _install_env(tmp_path),
+        extra_args=["--prefix", str(prefix), "--bindir", str(bindir)],
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    (prefix / "VERSION").write_text("0.0.1-old\n")
+    (prefix / "marker.txt").write_text("old tree")
+    return prefix, bindir
+
+
+def _assert_prefix_unchanged(prefix):
+    assert (prefix / "VERSION").read_text() == "0.0.1-old\n"
+    assert (prefix / "marker.txt").read_text() == "old tree"
+    assert (prefix / "bin" / "spa").is_file()
+    _assert_no_staging_siblings(prefix)
+
+
+def _assert_no_staging_siblings(prefix):
+    leftovers = [
+        p.name
+        for p in prefix.parent.iterdir()
+        if p.name.startswith(prefix.name + ".new.")
+        or p.name.startswith(prefix.name + ".old.")
+    ]
+    assert leftovers == []
+
+
+def _force_install(prefix, bindir, archive, env):
+    return subprocess.run(
+        [
+            "sh",
+            str(INSTALL),
+            "--force",
+            "--from",
+            str(archive),
+            "--prefix",
+            str(prefix),
+            "--bindir",
+            str(bindir),
+            "--skip-venv",
+            "--skip-doctor",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+def test_force_from_missing_tarball_keeps_prefix(tmp_path, framework_tarball):
+    prefix, bindir = _installed_prefix(tmp_path, framework_tarball)
+    result = _force_install(
+        prefix, bindir, tmp_path / "missing.tar.gz", _install_env(tmp_path)
+    )
+    assert result.returncode == 1, result.stderr + result.stdout
+    assert "tarball not found" in result.stderr
+    _assert_prefix_unchanged(prefix)
+
+
+def test_force_from_corrupt_tarball_keeps_prefix(tmp_path, framework_tarball):
+    prefix, bindir = _installed_prefix(tmp_path, framework_tarball)
+    corrupt = tmp_path / "corrupt.tar.gz"
+    corrupt.write_text("not a gzip archive\n")
+    result = _force_install(prefix, bindir, corrupt, _install_env(tmp_path))
+    assert result.returncode == 1, result.stderr + result.stdout
+    _assert_prefix_unchanged(prefix)
+
+
+def test_force_from_tarball_without_bin_spa_keeps_prefix(tmp_path, framework_tarball):
+    prefix, bindir = _installed_prefix(tmp_path, framework_tarball)
+    tree = tmp_path / "partial"
+    (tree / "ansible").mkdir(parents=True)
+    (tree / "ansible.cfg").write_text("[defaults]\n")
+    partial = tmp_path / "partial.tar.gz"
+    with tarfile.open(partial, "w:gz") as tar:
+        tar.add(tree, arcname=".")
+    result = _force_install(prefix, bindir, partial, _install_env(tmp_path))
+    assert result.returncode == 1, result.stderr + result.stdout
+    assert "missing ansible.cfg / bin/spa / ansible/" in result.stderr
+    _assert_prefix_unchanged(prefix)
+
+
+def test_force_from_good_tarball_replaces_prefix(tmp_path, framework_tarball):
+    prefix, bindir = _installed_prefix(tmp_path, framework_tarball)
+    (bindir / "spa").write_text("#!/bin/sh\necho stale\n")
+    result = _force_install(prefix, bindir, framework_tarball, _install_env(tmp_path))
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert not (prefix / "marker.txt").exists()
+    assert (prefix / "VERSION").read_text() != "0.0.1-old\n"
+    assert (prefix / "bin" / "spa").is_file()
+    _assert_no_staging_siblings(prefix)
+    wrapper = (bindir / "spa").read_text()
+    assert "stale" not in wrapper
+    assert str(prefix) in wrapper
+
+
+FAKE_TOKEN = "ghp_faketoken0123456789"
+
+FAKE_CURL = r"""#!/bin/sh
+{ for a in "$@"; do printf '%s\n' "$a"; done; echo '---'; } >> "$FAKE_LOG.curl"
+[ -n "${FAKE_CURL_FAIL:-}" ] && exit 6
+out=""
+url=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -o) out="$2"; shift 2 ;;
+        -H) shift 2 ;;
+        -*) shift ;;
+        *) url="$1"; shift ;;
+    esac
+done
+case "$url" in
+    */releases/latest) printf '{"tag_name": "v9.9.9"}\n' ;;
+    */releases/tags/*)
+        printf '{"assets": [{"name": "spa-framework-9.9.9.tar.gz", "url": "https://api.github.com/repos/x/y/releases/assets/1"}]}\n' ;;
+    *) cp "$FAKE_TARBALL" "$out" ;;
+esac
+"""
+
+FAKE_GH = r"""#!/bin/sh
+{ for a in "$@"; do printf '%s\n' "$a"; done; echo '---'; } >> "$FAKE_LOG.gh"
+case "$1 $2" in
+    "auth status") exit 0 ;;
+    "release view") echo v9.9.9 ;;
+    "release download")
+        dir=""; pattern=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -D) dir="$2"; shift 2 ;;
+                --pattern) pattern="$2"; shift 2 ;;
+                *) shift ;;
+            esac
+        done
+        cp "$FAKE_TARBALL" "$dir/$pattern" ;;
+    *) exit 1 ;;
+esac
+"""
+
+
+def _fake_download_env(tmp_path, framework_tarball, with_gh=False, extra=None):
+    """Env with fake curl (and optionally gh) first on a minimal PATH without real gh."""
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    curl = fakebin / "curl"
+    curl.write_text(FAKE_CURL)
+    curl.chmod(0o755)
+    if with_gh:
+        gh = fakebin / "gh"
+        gh.write_text(FAKE_GH)
+        gh.chmod(0o755)
+    (fakebin / "python3").symlink_to(sys.executable)
+    home = tmp_path / "home"
+    home.mkdir()
+    env = _install_env(
+        home,
+        {
+            "PATH": "%s:/usr/bin:/bin" % fakebin,
+            "FAKE_LOG": str(tmp_path / "fake"),
+            "FAKE_TARBALL": str(framework_tarball),
+        },
+    )
+    env.pop("GITHUB_TOKEN", None)
+    if extra:
+        env.update(extra)
+    return env
+
+
+def _fake_calls(tmp_path, tool):
+    log = tmp_path / ("fake." + tool)
+    if not log.is_file():
+        return []
+    calls, cur = [], []
+    for line in log.read_text().splitlines():
+        if line == "---":
+            calls.append(cur)
+            cur = []
+        else:
+            cur.append(line)
+    return calls
+
+
+def _run_download_install(tmp_path, env, extra_args=None):
+    """Run a copy of install.sh outside any SPA tree so it must download."""
+    script = tmp_path / "standalone" / "install.sh"
+    script.parent.mkdir()
+    script.write_text(INSTALL.read_text())
+    return subprocess.run(
+        [
+            "sh",
+            str(script),
+            "--prefix",
+            str(tmp_path / "prefix"),
+            "--bindir",
+            str(tmp_path / "bin"),
+            "--skip-venv",
+            "--skip-doctor",
+            *(extra_args or []),
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+def _call_url(call):
+    return next(a for a in call if a.startswith("https://"))
+
+
+def _has_auth(call):
+    return any(a.lower().startswith("authorization:") for a in call)
+
+
+def test_download_anonymous_without_gh_or_token(tmp_path, framework_tarball):
+    env = _fake_download_env(tmp_path, framework_tarball)
+    result = _run_download_install(tmp_path, env)
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (tmp_path / "prefix" / "bin" / "spa").is_file()
+    calls = _fake_calls(tmp_path, "curl")
+    urls = [_call_url(c) for c in calls]
+    assert urls[0] == (
+        "https://api.github.com/repos/splunk/splunk-platform-automator/releases/latest"
+    )
+    assert urls[-1] == (
+        "https://github.com/splunk/splunk-platform-automator/releases/download/"
+        "v9.9.9/spa-framework-9.9.9.tar.gz"
+    )
+    assert not any(_has_auth(c) for c in calls)
+    assert "private repo" not in result.stderr
+
+
+def test_download_with_token_only_sends_it_to_api(tmp_path, framework_tarball):
+    env = _fake_download_env(
+        tmp_path, framework_tarball, extra={"GITHUB_TOKEN": FAKE_TOKEN}
+    )
+    result = _run_download_install(tmp_path, env)
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (tmp_path / "prefix" / "bin" / "spa").is_file()
+    calls = _fake_calls(tmp_path, "curl")
+    assert calls
+    for call in calls:
+        url = _call_url(call)
+        if _has_auth(call):
+            assert url.startswith("https://api.github.com/"), url
+    assert any(_has_auth(c) for c in calls)
+    assert FAKE_TOKEN not in result.stdout + result.stderr
+
+
+def test_download_uses_gh_when_authenticated(tmp_path, framework_tarball):
+    env = _fake_download_env(tmp_path, framework_tarball, with_gh=True)
+    result = _run_download_install(tmp_path, env)
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (tmp_path / "prefix" / "bin" / "spa").is_file()
+    gh_calls = _fake_calls(tmp_path, "gh")
+    assert any(c[:2] == ["release", "download"] for c in gh_calls)
+    assert _fake_calls(tmp_path, "curl") == []
+
+
+def test_download_offline_keeps_prefix_and_names_from(tmp_path, framework_tarball):
+    prefix, bindir = _installed_prefix(tmp_path, framework_tarball)
+    env = _fake_download_env(
+        tmp_path, framework_tarball, extra={"FAKE_CURL_FAIL": "1"}
+    )
+    result = _run_download_install(tmp_path, env, extra_args=["--force"])
+    assert result.returncode == 1, result.stderr + result.stdout
+    assert "offline" in result.stderr
+    assert "--from FILE" in result.stderr
+    _assert_prefix_unchanged(prefix)
+
+
 def test_uninstall_agent_without_yes_does_not_delete(tmp_path, framework_tarball):
     archive = framework_tarball
     home = tmp_path / "home"

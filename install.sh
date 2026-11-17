@@ -256,20 +256,35 @@ normalize_tag() {
     esac
 }
 
+github_unreachable() {
+    echo "ERROR: could not reach GitHub releases for ${REPO} (offline or rate-limited)." >&2
+    echo "Retry later, or on an offline host pass --from FILE with a spa-framework-X.Y.Z.tar.gz." >&2
+    exit 1
+}
+
+# GITHUB_TOKEN only raises the API rate limit; it is never sent to github.com download URLs.
+github_api() {
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" "$1"
+    else
+        curl -fsSL -H "Accept: application/vnd.github+json" "$1"
+    fi
+}
+
 download_release() {
     dest="$1"
     tag="$(normalize_tag "$VERSION")"
     if [ -z "$tag" ]; then
         if gh_ok; then
-            tag="$(gh release view --repo "$REPO" --json tagName -q .tagName)"
-        elif [ -n "${GITHUB_TOKEN:-}" ]; then
-            tag="$(curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${REPO}/releases/latest" |
-                python3 -c 'import json,sys; print(json.load(sys.stdin).get("tag_name",""))')"
+            tag="$(gh release view --repo "$REPO" --json tagName -q .tagName)" ||
+                github_unreachable
         else
-            echo "ERROR: set --from FILE, or run gh auth login / set GITHUB_TOKEN to download a release." >&2
-            exit 1
+            latest="$(github_api "https://api.github.com/repos/${REPO}/releases/latest")" ||
+                github_unreachable
+            tag="$(printf '%s' "$latest" |
+                python3 -c 'import json,sys; print(json.load(sys.stdin).get("tag_name",""))')" ||
+                github_unreachable
         fi
     fi
     [ -n "$tag" ] || { echo "ERROR: could not resolve a release tag" >&2; exit 1; }
@@ -277,18 +292,20 @@ download_release() {
     name="spa-framework-${ver}.tar.gz"
     echo "Downloading ${name} from ${REPO} ${tag}..."
     if gh_ok; then
-        gh release download "$tag" --repo "$REPO" --pattern "$name" -D "$(dirname "$dest")"
+        gh release download "$tag" --repo "$REPO" --pattern "$name" -D "$(dirname "$dest")" ||
+            github_unreachable
         mv "$(dirname "$dest")/$name" "$dest"
         return
     fi
     if [ -z "${GITHUB_TOKEN:-}" ]; then
-        echo "ERROR: need gh auth or GITHUB_TOKEN to download from a private repo." >&2
-        exit 1
+        curl -fsSL -L -o "$dest" \
+            "https://github.com/${REPO}/releases/download/${tag}/${name}" ||
+            github_unreachable
+        return
     fi
-    asset_url="$(curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-        -H "Accept: application/vnd.github+json" \
-        "https://api.github.com/repos/${REPO}/releases/tags/${tag}" |
-        python3 -c '
+    release="$(github_api "https://api.github.com/repos/${REPO}/releases/tags/${tag}")" ||
+        github_unreachable
+    asset_url="$(printf '%s' "$release" | python3 -c '
 import json, sys
 want = sys.argv[1]
 data = json.load(sys.stdin)
@@ -299,35 +316,43 @@ for asset in data.get("assets", []):
 ' "$name")"
     [ -n "$asset_url" ] || { echo "ERROR: release ${tag} has no asset ${name}" >&2; exit 1; }
     curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-        -H "Accept: application/octet-stream" -L -o "$dest" "$asset_url"
+        -H "Accept: application/octet-stream" -L -o "$dest" "$asset_url" ||
+        github_unreachable
 }
 
-if [ -e "$PREFIX" ] && [ "$FORCE" = true ]; then
-    rm -rf "$PREFIX"
-elif [ -e "$PREFIX" ]; then
+extract_tarball() {
+    mkdir -p "$tmp/tree"
+    tar -xzf "$1" -C "$tmp/tree" || {
+        echo "ERROR: could not extract $1 (not a spa-framework tar.gz?)" >&2
+        exit 1
+    }
+}
+
+if [ -e "$PREFIX" ] && [ "$FORCE" != true ]; then
     if is_spa_tree "$PREFIX" || [ -n "$(ls -A "$PREFIX" 2>/dev/null || true)" ]; then
         echo "ERROR: ${PREFIX} already exists. Pass --force to replace it." >&2
         exit 2
     fi
 fi
 
+# The prefix is only replaced after a checked tree is staged next to it.
+stage="$PREFIX.new.$$"
+old="$PREFIX.old.$$"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/spa-install.XXXXXX")"
-cleanup() { rm -rf "$tmp"; }
+cleanup() { rm -rf "$tmp" "$stage"; }
 trap cleanup EXIT
 
 src=""
 if [ -n "$FROM" ]; then
     FROM="$(expand_tilde "$FROM")"
     [ -f "$FROM" ] || { echo "ERROR: tarball not found: $FROM" >&2; exit 1; }
-    mkdir -p "$tmp/tree"
-    tar -xzf "$FROM" -C "$tmp/tree"
+    extract_tarball "$FROM"
     src="$tmp/tree"
 elif [ -n "$SELF" ] && is_spa_tree "$(cd "$(dirname "$SELF")" && pwd)"; then
     src="$(cd "$(dirname "$SELF")" && pwd)"
 else
     download_release "$tmp/spa-framework.tar.gz"
-    mkdir -p "$tmp/tree"
-    tar -xzf "$tmp/spa-framework.tar.gz" -C "$tmp/tree"
+    extract_tarball "$tmp/spa-framework.tar.gz"
     src="$tmp/tree"
 fi
 
@@ -336,9 +361,20 @@ if ! is_spa_tree "$src"; then
     exit 1
 fi
 
-mkdir -p "$PREFIX"
-copy_tree "$src" "$PREFIX"
-chmod 0755 "$PREFIX/bin/spa" "$PREFIX/bin/spa_venv.sh" || true
+mkdir -p "$(dirname "$PREFIX")"
+copy_tree "$src" "$stage"
+chmod 0755 "$stage/bin/spa" "$stage/bin/spa_venv.sh" || true
+if [ -e "$PREFIX" ] || [ -L "$PREFIX" ]; then
+    mv "$PREFIX" "$old"
+    if ! mv "$stage" "$PREFIX"; then
+        mv "$old" "$PREFIX"
+        echo "ERROR: could not move the new tree into ${PREFIX}; previous install kept." >&2
+        exit 1
+    fi
+    rm -rf "$old"
+else
+    mv "$stage" "$PREFIX"
+fi
 write_wrapper
 
 if [ "$SKIP_VENV" != true ]; then
