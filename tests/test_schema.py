@@ -85,6 +85,43 @@ def _library_entry(**overrides):
     return entry
 
 
+def _idxc_shc_hosts(*, deployment_server=True, universal_forwarder=True, standalone_search_head=False):
+    """IDXC + SHC lab used by app-routing uniqueness tests (acme-lab shape)."""
+    hosts = [
+        {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+        {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
+        {"name": "idx2", "roles": ["indexer"], "idxcluster": "idxc1"},
+        {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
+        {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+    ]
+    if standalone_search_head:
+        hosts.append({"name": "sh-standalone", "roles": ["search_head"]})
+    if deployment_server:
+        hosts.append({"name": "ds", "roles": ["deployment_server"]})
+    if universal_forwarder:
+        hosts.append({"name": "uf1", "roles": ["universal_forwarder"]})
+    return hosts
+
+
+def _idxc_shc_sections():
+    return {
+        "splunk_idxclusters": [{"idxc_name": "idxc1", "idxc_password": "secret"}],
+        "splunk_shclusters": [{"shc_name": "shc1", "shc_password": "secret"}],
+    }
+
+
+def _ta_nix(target_roles, **overrides):
+    app = {
+        "name": "Splunk_TA_nix",
+        "source": "splunkbase",
+        "app_id": 833,
+        "version": "latest",
+        "target_roles": list(target_roles),
+    }
+    app.update(overrides)
+    return app
+
+
 class TestContentLibrary5391Rules:
     """Content Library 5391 entries: identity by app_id or local folder name, and a closed key set."""
 
@@ -441,6 +478,28 @@ class TestValidConfigurations:
         result = validate_config(config)
         assert result.splunk_hosts[0].iter.prefix == "idx"
         assert result.splunk_hosts[0].iter.numbers == "1..5"
+
+    def test_iter_numbers_equal_range_on_indexer_valid(self):
+        """A one-host site uses 3..3; that inclusive equal range must validate."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"iter": {"prefix": "idx", "numbers": "3..3"}, "roles": ["indexer"]}
+            ],
+        }
+        result = validate_config(config)
+        assert result.splunk_hosts[0].iter.numbers == "3..3"
+
+    def test_iter_numbers_ascending_range_valid(self):
+        """Ascending ranges such as 1..2 stay valid."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"iter": {"prefix": "idx", "numbers": "1..2"}, "roles": ["indexer"]}
+            ],
+        }
+        result = validate_config(config)
+        assert result.splunk_hosts[0].iter.numbers == "1..2"
 
     def test_host_name_allows_hyphen_and_fqdn(self):
         hyphen = validate_config(
@@ -857,6 +916,42 @@ class TestInvalidConfigurations:
             validate_config(config)
         assert "numbers" in str(exc_info.value).lower() or "pattern" in str(exc_info.value).lower()
 
+    def test_iter_numbers_start_greater_than_end_on_indexer_raises(self):
+        """Inverted indexer iter.numbers 5..2 must name the field and both numbers."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"iter": {"prefix": "idx", "numbers": "5..2"}, "roles": ["indexer"]}
+            ],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value)
+        lower = msg.lower()
+        assert "numbers" in lower
+        assert "5" in msg and "2" in msg
+
+    def test_iter_numbers_start_greater_than_end_on_search_head_raises(self):
+        """The same start<=end rule applies to SHC iter rows (10..3)."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
+                {
+                    "iter": {"prefix": "sh", "numbers": "10..3"},
+                    "roles": ["search_head"],
+                    "shcluster": "shc1",
+                },
+            ],
+            "splunk_shclusters": [{"shc_name": "shc1", "shc_password": "secret"}],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value)
+        lower = msg.lower()
+        assert "numbers" in lower
+        assert "10" in msg and "3" in msg
+
     def test_negative_memory(self):
         """Test that negative memory value raises error."""
         config = {
@@ -969,6 +1064,31 @@ class TestClusterConfigurations:
         result = validate_config(config)
         assert len(result.splunk_shclusters) == 1
         assert result.splunk_shclusters[0].shc_name == "shc1"
+
+    def test_shc_iter_one_host_site_range_valid(self):
+        """SHC members may use a length-1 inclusive range (3..3) alongside 1..2."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_shclusters": [
+                {"shc_name": "shc1", "shc_password": "secret", "shc_replication_port": 9887}
+            ],
+            "splunk_hosts": [
+                {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
+                {
+                    "iter": {"prefix": "sh", "numbers": "1..2"},
+                    "roles": ["search_head"],
+                    "shcluster": "shc1",
+                },
+                {
+                    "iter": {"prefix": "sh", "numbers": "3..3"},
+                    "roles": ["search_head"],
+                    "shcluster": "shc1",
+                },
+            ],
+        }
+        result = validate_config(config)
+        numbers = [h.iter.numbers for h in result.splunk_hosts if h.iter]
+        assert numbers == ["1..2", "3..3"]
 
     def test_invalid_replication_port(self):
         """Test that invalid port number raises error."""
@@ -2503,6 +2623,123 @@ class TestAppDeploymentConfig:
         }
         result = validate_config(config)
         assert len(result.splunk_app_deployment.apps) == 3
+
+    def test_clustered_indexer_search_head_and_uf_same_app_valid(self):
+        """Acme-lab: IDXC+SHC indexer/SH copy of Splunk_TA_nix does not collide with the UF serverclass."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": _idxc_shc_hosts(),
+            **_idxc_shc_sections(),
+            "splunk_app_deployment": {
+                "apps": [
+                    _ta_nix(["indexer", "search_head"]),
+                    _ta_nix(["universal_forwarder"]),
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert len(result.splunk_app_deployment.apps) == 2
+
+    def test_idxc_indexer_only_and_uf_same_app_valid(self):
+        """Indexer-only is never DS-eligible, so it does not collide with a UF serverclass in an IDXC lab."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+                {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"name": "idx2", "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"name": "ds", "roles": ["deployment_server"]},
+                {"name": "uf1", "roles": ["universal_forwarder"]},
+            ],
+            "splunk_idxclusters": [{"idxc_name": "idxc1", "idxc_password": "secret"}],
+            "splunk_app_deployment": {
+                "apps": [
+                    _ta_nix(["indexer"]),
+                    _ta_nix(["universal_forwarder"]),
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert len(result.splunk_app_deployment.apps) == 2
+
+    def test_no_ds_clustered_indexer_search_head_and_uf_same_app_valid(self):
+        """Without a deployment server, clustered indexer/SH plus UF copies share no serverclass."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": _idxc_shc_hosts(deployment_server=False),
+            **_idxc_shc_sections(),
+            "splunk_app_deployment": {
+                "apps": [
+                    _ta_nix(["indexer", "search_head"]),
+                    _ta_nix(["universal_forwarder"]),
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert len(result.splunk_app_deployment.apps) == 2
+
+    def test_no_ds_standalone_and_uf_same_app_valid(self):
+        """Without a DS, standalone indexer/SH plus UF are all direct; default class is not a collision."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "sh1", "roles": ["search_head"]},
+                {"name": "uf1", "roles": ["universal_forwarder"]},
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    _ta_nix(["indexer", "search_head"]),
+                    _ta_nix(["universal_forwarder"]),
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert len(result.splunk_app_deployment.apps) == 2
+
+    def test_standalone_search_head_and_uf_same_default_serverclass_raises(self):
+        """With a DS, standalone SH and UF are both clients; the same default serverclass must fail."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "ds", "roles": ["deployment_server"]},
+                {"name": "sh1", "roles": ["search_head"]},
+                {"name": "uf1", "roles": ["universal_forwarder"]},
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "Foo", "source": "local", "target_roles": ["search_head"]},
+                    {"name": "Foo", "source": "local", "target_roles": ["universal_forwarder"]},
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "duplicate" in msg and "serverclass" in msg and "app_foo" in msg
+
+    def test_same_app_name_ds_distinct_serverclass_allowed(self):
+        """SH vs UF copies of the same app are allowed when they use distinct serverclass names."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "ds", "roles": ["deployment_server"]},
+                {"name": "sh1", "roles": ["search_head"]},
+                {"name": "uf1", "roles": ["universal_forwarder"]},
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    _ta_nix(["search_head"]),
+                    _ta_nix(
+                        ["universal_forwarder"],
+                        serverclass="app_Splunk_TA_nix_uf",
+                        target_path="/opt/splunk/etc/deployment-apps/Splunk_TA_nix_uf",
+                    ),
+                ]
+            },
+        }
+        result = validate_config(config)
+        assert len(result.splunk_app_deployment.apps) == 2
 
     def test_premium_app_single_standalone_sh_no_target_filter_required(self):
         """Single standalone search head: premium app without shc/hosts filters is allowed."""

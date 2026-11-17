@@ -13,6 +13,8 @@ from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
+from app_routing import METHOD_DS, UF_HF_ROLES, resolve_app_routing, topology_from_hosts
+
 
 # =============================================================================
 # Enums for allowed values
@@ -756,8 +758,9 @@ class SplunkAppDeploymentConfig(BaseModel):
         """Validate each app entry: required name, allowed source/deployment_target/target_roles.
 
         The same app name may appear multiple times with different target_roles and customizations
-        (e.g. one entry for indexer cluster, one for universal_forwarder). deployment_target is
-        calculated from roles and inventory at deploy time, not used as a uniqueness key here.
+        (e.g. one entry for indexer cluster, one for universal_forwarder). Same-destination
+        uniqueness is (name, target_roles, filters, deployment_target). Duplicate serverclass
+        and duplicate DS-name checks live on SplunkConfig because they need topology.
         """
         if not self.apps:
             return self
@@ -1183,104 +1186,6 @@ class SplunkAppDeploymentConfig(BaseModel):
                         f"ITSI app has state {itsi_state!r}; content pack has state {cp_state!r}. They must always be the same (both 'installed' or both 'absent')."
                     )
 
-        # Roles that receive apps from the deployment server (DS). UF/HF are DS clients; indexer (when not
-        # direct) can also be managed by DS and gets a serverclass. search_head-only goes via deployer.
-        DS_CLIENT_ROLES = ("universal_forwarder", "heavy_forwarder", "universal_forwarder_windows")
-        # Roles that get a serverclass on the DS when the app is DS-managed (so we must enforce unique serverclass).
-        DS_SERVERCLASS_ROLES = DS_CLIENT_ROLES + ("indexer",)
-
-        def _app_is_ds_distributed(app: dict) -> bool:
-            """True if this app is distributed via the deployment server (targets UF/HF)."""
-            deployment_target = app.get("deployment_target", "auto")
-            if isinstance(deployment_target, str):
-                deployment_target = deployment_target.strip().lower() or "auto"
-            else:
-                deployment_target = "auto"
-            if deployment_target == "direct":
-                return False
-            target_roles = app.get("target_roles")
-            if not isinstance(target_roles, list) or len(target_roles) == 0:
-                return False
-            return any(
-                r and isinstance(r, str) and r.strip().lower() in DS_CLIENT_ROLES
-                for r in target_roles
-            )
-
-        def _app_uses_ds_serverclass(app: dict) -> bool:
-            """True if this app gets a serverclass on the DS (DS-managed and targets UF/HF or indexer).
-            Excludes search_head-only (deployer); includes indexer so indexer+UF same name is flagged."""
-            if not _app_is_ds_managed(app):
-                return False
-            target_roles = app.get("target_roles")
-            if not isinstance(target_roles, list) or len(target_roles) == 0:
-                return False
-            return any(
-                r and isinstance(r, str) and r.strip().lower() in DS_SERVERCLASS_ROLES
-                for r in target_roles
-            )
-
-        def _app_is_ds_managed(app: dict) -> bool:
-            """True if this app is managed by the deployment server (would be in ds_apps)."""
-            deployment_target = app.get("deployment_target", "auto")
-            if isinstance(deployment_target, str):
-                deployment_target = deployment_target.strip().lower() or "auto"
-            else:
-                deployment_target = "auto"
-            if deployment_target == "direct":
-                return False
-            premium_app = app.get("premium_app")
-            if premium_app and isinstance(premium_app, str) and premium_app.strip():
-                return False
-            target_roles = app.get("target_roles")
-            return isinstance(target_roles, list) and len(target_roles) > 0
-
-        # Duplicate check for deployment-server–distributed apps: same app name may not appear twice when
-        # both are distributed via the deployment server (i.e. both target UF/HF). Apps that go only to
-        # deployer (search_head), cluster manager (indexer), or direct are not considered here.
-        seen_ds_name: Dict[str, int] = {}
-        for i, app in enumerate(self.apps):
-            name = app.get("name")
-            if name is None or not isinstance(name, str):
-                continue
-            name = name.strip()
-            premium_app = app.get("premium_app")
-            if premium_app and isinstance(premium_app, str) and premium_app.strip():
-                continue
-            if not _app_is_ds_distributed(app):
-                continue
-            if name in seen_ds_name:
-                raise ValueError(
-                    f"Duplicate app deployment: app {name!r} is defined more than once for deployment server distribution "
-                    f"(apps[{seen_ds_name[name]}] and apps[{i}]). Apps managed by the same deployment server must have unique names; "
-                    "target_roles do not distinguish destination when both are managed by the same DS."
-                )
-            seen_ds_name[name] = i
-
-        # Duplicate serverclass check among apps that get a serverclass on the DS: DS-managed and target
-        # UF/HF or indexer. search_head-only excluded (deployer). So indexer (no direct) + UF same name → flagged;
-        # search_head + UF → not flagged (only UF uses serverclass).
-        seen_sc: Dict[str, tuple] = {}  # serverclass -> (app_index, app_name)
-        for i, app in enumerate(self.apps):
-            if not _app_uses_ds_serverclass(app):
-                continue
-            name = app.get("name")
-            if name is None or not isinstance(name, str) or not name.strip():
-                continue
-            name = name.strip()
-            sc = app.get("serverclass")
-            if isinstance(sc, str) and sc.strip():
-                effective_sc = sc.strip()
-            else:
-                effective_sc = "app_" + name
-            if effective_sc in seen_sc:
-                first_i, first_name = seen_sc[effective_sc]
-                raise ValueError(
-                    f"Duplicate serverclass: two apps managed by the deployment server use the same serverclass "
-                    f"{effective_sc!r} (apps[{first_i}] and apps[{i}], both name={name!r}). "
-                    "Give each entry a unique serverclass (and target_path if they need different customizations), "
-                    "e.g. serverclass: \"app_Splunk_TA_nix_indexer\" and serverclass: \"app_Splunk_TA_nix_uf\"."
-                )
-            seen_sc[effective_sc] = (i, name)
         return self
 
     @model_validator(mode='after')
@@ -1433,12 +1338,29 @@ class HostIteration(BaseModel):
     numbers: str = Field(
         ...,
         pattern=r'^\d+\.\.\d+$',
-        description="Inclusive numeric range such as 1..3. One host is created per number. Required.",
+        description=(
+            "Inclusive numeric range such as 1..3 or 3..3. "
+            "The first number must be less than or equal to the last. "
+            "One host is created per number. Required."
+        ),
     )
     postfix: Optional[str] = Field(
         None,
         description="Text placed after each generated number in the hostname. No default. Omit the key to add nothing after the number.",
     )
+
+    @field_validator("numbers")
+    @classmethod
+    def validate_numbers_order(cls, value: str) -> str:
+        start_s, end_s = value.split("..")
+        start, end = int(start_s), int(end_s)
+        if start > end:
+            raise ValueError(
+                "iter.numbers %r is inverted: first number %s is greater than last number %s. "
+                "Use an inclusive range such as 1..3 or 3..3."
+                % (value, start, end)
+            )
+        return value
 
 
 class ExternalConfig(BaseModel):
@@ -2640,6 +2562,53 @@ class SplunkConfig(BaseModel):
                         f"to be a deployment client of the deployment server. Hosts with those roles in splunk_hosts: {sorted(ds_client_roles_with_hosts)!r}. "
                         "Add a host with one of the app's target_roles (e.g. universal_forwarder, heavy_forwarder, indexer)."
                     )
+        return self
+
+    @model_validator(mode='after')
+    def validate_app_deployment_routing_uniqueness(self) -> 'SplunkConfig':
+        """Duplicate serverclass / DS-app-name checks using topology-aware routing."""
+        dep = self.splunk_app_deployment
+        if not dep or not dep.apps:
+            return self
+        snapshot = topology_from_hosts(self.splunk_hosts)
+        seen_sc: Dict[str, tuple] = {}
+        seen_ds_name: Dict[str, int] = {}
+        for i, app in enumerate(dep.apps):
+            if not isinstance(app, dict):
+                continue
+            routing = resolve_app_routing(app, snapshot)
+            if METHOD_DS not in routing.methods:
+                continue
+            name = app.get("name")
+            if name is None or not isinstance(name, str) or not name.strip():
+                continue
+            name = name.strip()
+            effective_sc = routing.effective_serverclass
+            if effective_sc:
+                if effective_sc in seen_sc:
+                    first_i, _first_name = seen_sc[effective_sc]
+                    raise ValueError(
+                        f"Duplicate serverclass: two apps managed by the deployment server use the same serverclass "
+                        f"{effective_sc!r} (apps[{first_i}] and apps[{i}], both name={name!r}). "
+                        "Give each entry a unique serverclass (and target_path if they need different customizations), "
+                        "e.g. serverclass: \"app_Splunk_TA_nix_indexer\" and serverclass: \"app_Splunk_TA_nix_uf\"."
+                    )
+                seen_sc[effective_sc] = (i, name)
+            target_roles = app.get("target_roles")
+            if not isinstance(target_roles, list):
+                continue
+            if not any(
+                isinstance(role, str) and role.strip().lower() in UF_HF_ROLES
+                for role in target_roles
+            ):
+                continue
+            if name in seen_ds_name:
+                raise ValueError(
+                    f"Duplicate app deployment: app {name!r} is defined more than once for deployment server distribution "
+                    f"(apps[{seen_ds_name[name]}] and apps[{i}]). Apps managed by the same deployment server must have unique names; "
+                    "target_roles do not distinguish destination when both are managed by the same DS."
+                )
+            seen_ds_name[name] = i
         return self
 
     @model_validator(mode='after')

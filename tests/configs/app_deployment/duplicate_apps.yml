@@ -2,13 +2,15 @@
 #
 # Schema flags duplicates in two cases (not only target_roles):
 #
-# 1) Same (name, deployment_target, target_roles) = same target hosts and directory → duplicate.
+# 1) Same (name, deployment_target, target_roles, filters) = same target hosts and directory.
 #    Customizations (e.g. local_configs) do not change destination.
 #
-# 2) Same app name when both are deployment-server–distributed (target_roles set,
-#    deployment_target != 'direct', not premium_app) → duplicate.
+# 2) Two rows that actually get a DS serverclass and share the effective serverclass
+#    (explicit serverclass or default app_<name>). Topology decides DS use: clustered
+#    indexer/SH copies do not collide with a UF serverclass. Standalone search_head
+#    plus universal_forwarder with a deployment_server host do (both are DS clients).
 #
-# This config triggers (1): two entries with identical name, deployment_target, and target_roles.
+# This config triggers (2) when validated against ds + standalone SH + UF hosts.
 # The second entry adds customizations to show that customizations do not avoid the duplicate.
 splunk_app_deployment:
   apps:

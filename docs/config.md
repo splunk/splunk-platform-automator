@@ -551,7 +551,7 @@ splunk_systemd: {}
 | `splunk_hosts[].idxcluster` | string | optional | Indexer cluster name. Required when roles includes cluster_manager. No default for other roles. Omit the key when the host is not in an indexer cluster. Also associates indexer peers with that cluster. |
 | `splunk_hosts[].ip_addr` | string | optional | Guest IPv4 when you assign it yourself. No default. Omit the key to let the provider assign the address. |
 | `splunk_hosts[].iter` | object | optional | Generated hostnames from a numeric range. Each generated name is letters, digits, hyphens, and dots (for an FQDN); not underscores. Holds no value itself. |
-| `splunk_hosts[].iter.numbers` | string | required; pattern=^\d+\.\.\d+$ | Inclusive numeric range such as 1..3. One host is created per number. Required. |
+| `splunk_hosts[].iter.numbers` | string | required; pattern=^\d+\.\.\d+$ | Inclusive numeric range such as 1..3 or 3..3. The first number must be less than or equal to the last. One host is created per number. Required. |
 | `splunk_hosts[].iter.postfix` | string | optional | Text placed after each generated number in the hostname. No default. Omit the key to add nothing after the number. |
 | `splunk_hosts[].iter.prefix` | string | optional | Text placed before each generated number in the hostname. No default. Omit the key to add nothing before the number. |
 | `splunk_hosts[].list` | list[string] | optional | Hostnames generated from this one entry. Each name is letters, digits, hyphens, and dots (for an FQDN); not underscores. No default. Set exactly one of name, list, or iter. |
