@@ -1431,6 +1431,54 @@ def test_destroy_yes_after_subcommand_auto_approves(monkeypatch):
     assert captured["extra"][:2] == ["-e", "auto_approve=true"]
 
 
+@pytest.mark.parametrize(
+    ("outcome", "expected"),
+    [
+        (0, "Destroyed "),
+        ({"deployment_id": "dep-7", "cleared": True}, "deployment dep-7"),
+        ({"deployment_id": None, "cleared": True}, "No deployment recorded"),
+        (
+            {"unregistered": ["ext1", "ext2"], "note": "Those machines were not shut down."},
+            "Unregistered 2 hosts",
+        ),
+    ],
+)
+def test_human_destroy_reports_success(monkeypatch, capsys, outcome, expected):
+    class FakeProvider:
+        name = "test"
+
+        def destroy(self, extra, **_kwargs):
+            return outcome
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    from spa.cli import main
+
+    rc = main(["--no-agent", "destroy", "--yes"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert expected in out
+    if isinstance(outcome, dict) and outcome.get("note"):
+        assert "ext1, ext2" in out
+        assert "not shut down" in out
+
+
+def test_human_destroy_failure_has_no_success_line(monkeypatch, capsys):
+    class FakeProvider:
+        name = "test"
+
+        def destroy(self, extra, **_kwargs):
+            return 2
+
+    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
+    from spa.cli import main
+
+    rc = main(["--no-agent", "destroy", "--yes"])
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert "Destroyed" not in captured.out
+    assert "destroy failed" in captured.err
+
+
 @pytest.mark.parametrize("command", ["suspend", "resume"])
 def test_lifecycle_commands_dispatch_to_provider(monkeypatch, command):
     called = {}

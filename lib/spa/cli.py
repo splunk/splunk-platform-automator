@@ -1130,6 +1130,31 @@ def _human_next_command(command: str) -> str:
     return " ".join(part for part in command.split() if part != "--agent")
 
 
+def _hosts_phrase(names: List[str]) -> str:
+    noun = "host" if len(names) == 1 else "hosts"
+    return "%d %s: %s" % (len(names), noun, ", ".join(names))
+
+
+def _destroy_summary(data: Dict[str, Any], env_name: str) -> str:
+    if "unregistered" in data:
+        names = [str(name) for name in data.get("unregistered") or []]
+        if not names:
+            line = "No external hosts were registered in %s." % env_name
+        else:
+            line = "Unregistered %s from %s." % (_hosts_phrase(names), env_name)
+        note = str(data.get("note") or "").strip()
+        return "%s %s" % (line, note) if note and names else line
+    if data.get("cleared") and not data.get("deployment_id"):
+        return "No deployment recorded for %s; cleared local state." % env_name
+    target = env_name
+    if data.get("deployment_id"):
+        target = "%s (deployment %s)" % (env_name, data["deployment_id"])
+    names = [str(name) for name in data.get("destroyed") or []]
+    if names:
+        return "Destroyed %s. Removed %s." % (target, _hosts_phrase(names))
+    return "Destroyed %s." % target
+
+
 def _print_next(data: Optional[Dict[str, Any]]) -> None:
     items = (data or {}).get("next") or []
     if not items:
@@ -3708,11 +3733,11 @@ def _run(argv: Sequence[str]) -> int:
         )
         if as_agent:
             return _emit_result(result, True)
+        data = result.data if isinstance(result.data, dict) else {}
         if result.error:
             print(result.error, file=sys.stderr)
-        elif (result.data or {}).get("note"):
-            print(result.data["note"])
-        data = result.data if isinstance(result.data, dict) else {}
+        elif result.ok:
+            print(_destroy_summary(data, Path(paths.spa_env_dir).name))
         for warning in data.get("warnings") or []:
             print(_warning_text(warning), file=sys.stderr)
         _print_next(data)
