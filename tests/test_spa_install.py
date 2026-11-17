@@ -43,7 +43,7 @@ def _install_env(home: Path, extra=None):
     return env
 
 
-def _run_install(archive: Path, env, extra_args=None):
+def _run_install(archive: Path, env, extra_args=None, cwd=None):
     cmd = [
         "sh",
         str(INSTALL),
@@ -53,7 +53,7 @@ def _run_install(archive: Path, env, extra_args=None):
         "--skip-doctor",
         *(extra_args or []),
     ]
-    return subprocess.run(cmd, capture_output=True, text=True, env=env)
+    return subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=cwd)
 
 
 def test_pack_framework_excludes_tests_and_lab_config(framework_tarball):
@@ -267,9 +267,9 @@ def test_install_from_stdin_pipe(tmp_path, framework_tarball):
     assert (bindir / "spa").is_file()
 
 
-def _run_uninstall(env, extra_args=None):
+def _run_uninstall(env, extra_args=None, cwd=None):
     cmd = ["sh", str(INSTALL), "--uninstall", *(extra_args or [])]
-    return subprocess.run(cmd, capture_output=True, text=True, env=env)
+    return subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=cwd)
 
 
 def test_uninstall_default_prefix_and_wrapper(tmp_path, framework_tarball):
@@ -537,6 +537,173 @@ def test_force_from_good_tarball_replaces_prefix(tmp_path, framework_tarball):
     wrapper = (bindir / "spa").read_text()
     assert "stale" not in wrapper
     assert str(prefix) in wrapper
+
+
+def test_force_refuses_non_spa_prefix(tmp_path, framework_tarball):
+    prefix = tmp_path / "prefix"
+    prefix.mkdir()
+    (prefix / "keep.txt").write_text("stay")
+    bindir = tmp_path / "bin"
+    result = _force_install(prefix, bindir, framework_tarball, _install_env(tmp_path))
+    assert result.returncode == 1, result.stderr + result.stdout
+    assert "not an SPA install prefix" in result.stderr
+    assert (prefix / "keep.txt").read_text() == "stay"
+    assert not (prefix / "bin").exists()
+    assert not (bindir / "spa").exists()
+    _assert_no_staging_siblings(prefix)
+
+
+def test_force_refuses_file_at_prefix(tmp_path, framework_tarball):
+    prefix = tmp_path / "prefix"
+    prefix.write_text("a file")
+    result = _force_install(
+        prefix, tmp_path / "bin", framework_tarball, _install_env(tmp_path)
+    )
+    assert result.returncode == 1, result.stderr + result.stdout
+    assert "not an SPA install prefix" in result.stderr
+    assert prefix.read_text() == "a file"
+
+
+def test_force_allows_empty_prefix_dir(tmp_path, framework_tarball):
+    prefix = tmp_path / "prefix"
+    prefix.mkdir()
+    result = _force_install(
+        prefix, tmp_path / "bin", framework_tarball, _install_env(tmp_path)
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (prefix / "bin" / "spa").is_file()
+
+
+@pytest.mark.parametrize("git_kind", ["dir", "file"])
+def test_force_refuses_prefix_with_git(tmp_path, framework_tarball, git_kind):
+    prefix, bindir = _installed_prefix(tmp_path, framework_tarball)
+    if git_kind == "dir":
+        (prefix / ".git").mkdir()
+    else:
+        (prefix / ".git").write_text("gitdir: /elsewhere/.git/worktrees/x\n")
+    result = _force_install(prefix, bindir, framework_tarball, _install_env(tmp_path))
+    assert result.returncode == 1, result.stderr + result.stdout
+    assert "contains .git" in result.stderr
+    assert (prefix / ".git").exists()
+    _assert_prefix_unchanged(prefix)
+
+
+def test_uninstall_refuses_prefix_with_git(tmp_path, framework_tarball):
+    prefix, bindir = _installed_prefix(tmp_path, framework_tarball)
+    (prefix / ".git").mkdir()
+    result = _run_uninstall(
+        _install_env(tmp_path),
+        extra_args=["--yes", "--prefix", str(prefix), "--bindir", str(bindir)],
+    )
+    assert result.returncode == 1, result.stderr + result.stdout
+    assert "contains .git" in result.stderr
+    assert (bindir / "spa").is_file()
+    _assert_prefix_unchanged(prefix)
+
+
+def test_uninstall_refuses_non_spa_before_prompting(tmp_path):
+    prefix = tmp_path / "not-spa"
+    prefix.mkdir()
+    (prefix / "keep.txt").write_text("stay")
+    env = _install_env(tmp_path)
+    for name in AGENT_ENV_VARS:
+        env.pop(name, None)
+    result = subprocess.run(
+        ["sh", str(INSTALL), "--uninstall", "--prefix", str(prefix)],
+        input="y\n",
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 1
+    assert "not an SPA install prefix" in result.stderr
+    assert "Proceed?" not in result.stderr
+    assert (prefix / "keep.txt").read_text() == "stay"
+
+
+def test_install_strips_trailing_slash_from_prefix(tmp_path, framework_tarball):
+    prefix = tmp_path / "prefix"
+    bindir = tmp_path / "bin"
+    env = _install_env(tmp_path)
+    result = _run_install(
+        framework_tarball,
+        env,
+        extra_args=["--prefix", str(prefix) + "//", "--bindir", str(bindir)],
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "SPA_HOME=%s\n" % prefix in result.stdout
+    assert "export SPA_HOME='%s'\n" % prefix in (bindir / "spa").read_text()
+    _assert_no_staging_siblings(prefix)
+
+    result = _run_uninstall(
+        env, extra_args=["--yes", "--prefix", str(prefix) + "/", "--bindir", str(bindir)]
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "Removed prefix: %s\n" % prefix in result.stdout
+    assert not prefix.exists()
+    assert not (bindir / "spa").exists()
+
+
+@pytest.mark.parametrize(
+    "form", ["~", "~/", "~//", "{home}/", "{home}///"]
+)
+@pytest.mark.parametrize("mode", ["force", "uninstall"])
+def test_rejects_home_directory_prefix(tmp_path, framework_tarball, form, mode):
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "keep.txt").write_text("stay")
+    work = tmp_path / "work"
+    work.mkdir()
+    env = _install_env(home)
+    prefix_arg = form.format(home=home)
+    if mode == "force":
+        result = _run_install(
+            framework_tarball,
+            env,
+            extra_args=["--force", "--prefix", prefix_arg],
+            cwd=work,
+        )
+    else:
+        result = _run_uninstall(
+            env, extra_args=["--yes", "--prefix", prefix_arg], cwd=work
+        )
+    assert result.returncode == 1, result.stderr + result.stdout
+    assert "cannot be your home directory or /" in result.stderr
+    assert sorted(p.name for p in home.iterdir()) == ["keep.txt"]
+    assert list(work.iterdir()) == []
+
+
+def test_rejects_home_directory_prefix_from_env(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    result = _run_uninstall(
+        _install_env(home, {"SPA_PREFIX": "~/"}), extra_args=["--yes"], cwd=work
+    )
+    assert result.returncode == 1, result.stderr + result.stdout
+    assert "cannot be your home directory or /" in result.stderr
+    assert home.is_dir()
+    assert list(work.iterdir()) == []
+
+
+def test_install_expands_tilde_slash_prefix(tmp_path, framework_tarball):
+    home = tmp_path / "home"
+    home.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    result = _run_install(
+        framework_tarball,
+        _install_env(home),
+        extra_args=["--prefix", "~/spa-here/", "--bindir", "~/bin"],
+        cwd=work,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (home / "spa-here" / "bin" / "spa").is_file()
+    assert "export SPA_HOME='%s'\n" % (home / "spa-here") in (
+        home / "bin" / "spa"
+    ).read_text()
+    assert list(work.iterdir()) == []
 
 
 FAKE_TOKEN = "ghp_faketoken0123456789"

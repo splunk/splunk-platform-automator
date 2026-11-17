@@ -46,7 +46,7 @@ expand_tilde() {
     _p=$1
     case "$_p" in
         "~") printf '%s' "$HOME" ;;
-        ~/*) printf '%s' "$HOME/${_p#~/}" ;;
+        "~/"*) printf '%s' "$HOME/${_p#"~/"}" ;;
         *) printf '%s' "$_p" ;;
     esac
 }
@@ -123,14 +123,47 @@ case "$BINDIR" in
     /*) ;;
     *) BINDIR="$(pwd)/$BINDIR" ;;
 esac
+strip_trailing_slashes() {
+    _p=$1
+    while [ "${#_p}" -gt 1 ]; do
+        case "$_p" in
+            */) _p=${_p%/} ;;
+            *) break ;;
+        esac
+    done
+    printf '%s' "$_p"
+}
+
+PREFIX="$(strip_trailing_slashes "$PREFIX")"
 USER_CONFIG="$(xdg_config_home)/spa"
-if [ "$PREFIX" = "$HOME" ] || [ "$PREFIX" = / ]; then
+if [ "$PREFIX" = "$(strip_trailing_slashes "$HOME")" ] || [ "$PREFIX" = / ]; then
     echo "ERROR: --prefix cannot be your home directory or /" >&2
     exit 1
 fi
 
 is_spa_tree() {
     [ -f "$1/ansible.cfg" ] && [ -x "$1/bin/spa" ] && [ -d "$1/ansible" ]
+}
+
+# Shared by --force and --uninstall: only an SPA prefix install may be removed.
+# action: "replace" or "delete"
+guard_removable_prefix() {
+    action=$1
+    [ -e "$PREFIX" ] || [ -L "$PREFIX" ] || return 0
+    if [ -e "$PREFIX/.git" ]; then
+        echo "ERROR: ${PREFIX} contains .git (a git checkout, not a prefix install)." >&2
+        echo "Refusing to ${action} it. Update a checkout with git; remove it by hand if intended." >&2
+        exit 1
+    fi
+    if is_spa_tree "$PREFIX"; then
+        return 0
+    fi
+    if [ -d "$PREFIX" ] && [ ! -L "$PREFIX" ] && [ -z "$(ls -A "$PREFIX" 2>/dev/null || true)" ]; then
+        return 0
+    fi
+    echo "ERROR: ${PREFIX} is not an SPA install prefix (need ansible.cfg, bin/spa, ansible/)." >&2
+    echo "Refusing to ${action} it. This is not spa destroy; env dirs and AWS are untouched." >&2
+    exit 1
 }
 
 is_agent() {
@@ -175,12 +208,8 @@ confirm_uninstall() {
 }
 
 do_uninstall() {
+    guard_removable_prefix delete
     confirm_uninstall
-    if [ -e "$PREFIX" ] && ! is_spa_tree "$PREFIX"; then
-        echo "ERROR: ${PREFIX} is not an SPA install prefix (need ansible.cfg, bin/spa, ansible/)." >&2
-        echo "Refusing to delete it. This is not spa destroy; env dirs and AWS are untouched." >&2
-        exit 1
-    fi
     wrap="$BINDIR/spa"
     if wrapper_matches_prefix; then
         rm -f "$wrap"
@@ -320,6 +349,9 @@ if [ -e "$PREFIX" ] && [ "$FORCE" != true ]; then
         echo "ERROR: ${PREFIX} already exists. Pass --force to replace it." >&2
         exit 2
     fi
+fi
+if [ "$FORCE" = true ]; then
+    guard_removable_prefix replace
 fi
 
 # The prefix is only replaced after a checked tree is staged next to it.
