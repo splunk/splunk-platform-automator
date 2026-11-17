@@ -464,6 +464,42 @@ COMMAND_SCHEMA = {
             "example": "spa validate --splunk-config aws",
         },
         {
+            "name": "version",
+            "summary": "Print the installed SPA version from SPA_HOME/VERSION. Does not contact the network.",
+            "read_only": True,
+            "example": "spa --agent version",
+        },
+        {
+            "name": "version check",
+            "summary": "Compare the installed SPA version to the latest GitHub Release. Read-only. Exit 0 when outdated.",
+            "read_only": True,
+            "example": "spa --agent version check",
+        },
+        {
+            "name": "self",
+            "summary": "Update this prefix install of SPA from GitHub Releases. Bare spa self exits 2.",
+            "example": "spa self update --yes",
+        },
+        {
+            "name": "self update",
+            "summary": "Replace a prefix install of SPA from GitHub Releases (or --from FILE) with the prefix's own install.sh, then refresh recorded IDE skill copies. Clone and unknown installs refuse, as do Software, Baseconfigs, Apps, or Envs inside SPA_HOME.",
+            "requires_confirmation": True,
+            "flags": [
+                {"long": "--yes", "short": "-y", "help": "Confirm replacing the SPA install prefix"},
+                {
+                    "long": "--version",
+                    "help": "Release tag or X.Y.Z (default: latest)",
+                    "takes_value": True,
+                },
+                {
+                    "long": "--from",
+                    "help": "Install from a local spa-framework tar.gz instead of GitHub (offline hosts)",
+                    "takes_value": True,
+                },
+            ],
+            "example": "spa self update --yes",
+        },
+        {
             "name": "doctor",
             "summary": "Host prerequisite checks",
             "flags": [
@@ -478,7 +514,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "skills",
-            "summary": "Install or remove SPA agent skills from $SPA_HOME/skills/spa/ into user IDE directories",
+            "summary": "Install, update, or remove SPA agent skills from $SPA_HOME/skills/spa/ into user IDE directories",
             "example": "spa skills install",
         },
         {
@@ -497,6 +533,11 @@ COMMAND_SCHEMA = {
                 {"long": "--all", "help": "Install every SPA skill package (default)"},
             ],
             "example": "spa skills install cursor",
+        },
+        {
+            "name": "skills update",
+            "summary": "Refresh IDE skill copies recorded in ~/.config/spa/skills.yml from $SPA_HOME/skills/spa and remove recorded packages the framework dropped. Does not auto-detect platforms.",
+            "example": "spa --agent skills update",
         },
         {
             "name": "skills remove",

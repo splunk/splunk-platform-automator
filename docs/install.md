@@ -60,6 +60,29 @@ cd ~/Splunk-Platform-Automator/Envs/my-env
 
 What belongs in those directories, and how shared path defaults work: [Prepare Software](user-guide.md#prepare-software).
 
+## Upgrade
+
+When `spa` is already on PATH from a prefix install, upgrade in place:
+
+```bash
+spa version check
+spa self update --yes
+```
+
+`spa self update` runs the prefix's own `install.sh --force` against the chosen GitHub Release, then refreshes recorded IDE skill copies (and removes recorded packages the new release dropped). Both that command and a first install download with curl (the same public `releases/latest` URLs as `curl … | sh`); neither needs `gh`. `GITHUB_TOKEN` only raises the GitHub API rate limit. On an offline host, copy a `spa-framework-X.Y.Z.tar.gz` over and run `spa self update --from FILE --yes`.
+
+Environment directories and `~/.config/spa` live outside `$SPA_HOME` and stay. `Software`, `Baseconfigs`, `Apps`, and `Envs` must also live outside `$SPA_HOME`: `spa self update` refuses while any of them is inside it. Move the folder out and point spa at it with `spa environment set --software-dir DIR` (or `--baseconfig-dir`, `--apps-dir`, `--env-dir`).
+
+A git clone is not a prefix: `git pull`, then `spa venv upgrade --shared --yes` and `spa skills update`.
+
+If `spa` is not on PATH, bootstrap (or re-bootstrap) with the installer. `--force` replaces an existing prefix:
+
+```sh
+curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh -s -- --force
+```
+
+Uninstall stays `install.sh --uninstall`. Splunk upgrades stay `spa run upgrade_*`.
+
 ## Shell completion
 
 `spa completion bash` and `spa completion zsh` print a function. spa does not edit the shell startup file.

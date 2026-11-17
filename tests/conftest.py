@@ -416,6 +416,7 @@ def _default_spa_env_dir(request, tmp_path, monkeypatch):
     dest = write_min_env(tmp_path / "spa-operator-env")
     monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
     monkeypatch.setenv("SPA_ENV_DIR", str(dest))
+    monkeypatch.delenv("SPLUNK_CONFIG_FILE", raising=False)
     monkeypatch.setattr(
         spa_testutil,
         "DEFAULT_SUBPROCESS_ENV",

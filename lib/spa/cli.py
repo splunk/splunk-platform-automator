@@ -86,11 +86,12 @@ _HIDDEN_ALIASES = {
 _VISIBLE_ALIAS: Dict[str, frozenset] = {}
 # These must keep working without a venv: they are how an operator inspects or
 # builds one. Every other command reads YAML or runs Ansible, so it is gated.
-VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills", "completion", "licenses"})
+VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills", "completion", "licenses", "version", "self"})
 GLOBAL_OPTS_WITH_VALUE = ("--start-dir", "--env")
 # Header flags take a value. Their value must not be read as a command word,
 # so `config header --intent set` stays `config header` and not `config header set`.
 _COMMAND_WORD_VALUE_FLAGS = GLOBAL_OPTS_WITH_VALUE + (
+    "--version",
     "--architecture",
     "--intent",
     "--requirements",
@@ -245,6 +246,28 @@ def _run_help_target(head: Sequence[str]) -> Optional[str]:
     if names:
         return names[0]
     return ""
+
+
+def _root_version_requested(head: Sequence[str]) -> bool:
+    """True when --version appears before the first command word.
+
+    Root argparse must not grow a --version optional: subcommands inherit it
+    and would steal spa apps download --version.
+    """
+    index = 0
+    tokens = list(head)
+    while index < len(tokens):
+        token = tokens[index]
+        if token in GLOBAL_OPTS_WITH_VALUE:
+            index += 2
+            continue
+        if token == "--version":
+            return True
+        if token.startswith("-"):
+            index += 1
+            continue
+        return False
+    return False
 
 
 def _positional_tokens(head: Sequence[str]) -> List[str]:
@@ -753,9 +776,14 @@ VENV_NEEDS_ACTION = (
 SKILLS_NEEDS_ACTION = (
     "spa skills needs an action.\n"
     "Install:    spa skills install [PLATFORM]\n"
+    "Update:     spa skills update\n"
     "Remove:     spa skills remove [PLATFORM] --yes\n"
     "Platforms:  %s.\n"
     "Several:    spa skills install cursor,claude" % _SKILLS_PLATFORMS
+)
+SELF_NEEDS_ACTION = (
+    "spa self needs an action.\n"
+    "Update: spa self update --yes"
 )
 _SKILLS_PLATFORM_HELP = (
     "One IDE or a comma-separated list: %s. Omit to use SPA_SKILLS_PLATFORMS or auto-detect."
@@ -1058,6 +1086,32 @@ def _emit_result(result: CommandResult, as_agent: bool, identity=None) -> int:
     return result.code
 
 
+def _print_version(result: CommandResult, as_agent: bool) -> int:
+    if as_agent:
+        return _emit_result(result, True)
+    if not result.ok:
+        return _print_command_error(result, False)
+    from spa.version import format_version_text
+
+    sys.stdout.write(format_version_text(result.data or {}))
+    _print_next(result.data if isinstance(result.data, dict) else {})
+    return result.code
+
+
+def _run_local_version(head: Sequence[str]) -> int:
+    as_agent = agent_mode(
+        force_agent="--agent" in head or "--json" in head,
+        force_human="--no-agent" in head,
+    )
+    try:
+        paths = _paths(_start_dir_from_head(head), _env_selector_from_head(head))
+    except Exception as exc:
+        emit(False, error=str(exc), as_agent=as_agent)
+        return 1
+    session = open_session(paths=paths)
+    return _print_version(session.version(), as_agent)
+
+
 def _print_command_error(result: CommandResult, as_agent: bool = False) -> int:
     if as_agent:
         return _emit_result(result, True)
@@ -1338,6 +1392,7 @@ def _run_skills(args, session, as_agent: bool) -> int:
     from spa.skills import format_skills_text
 
     sys.stdout.write(format_skills_text(result.data or {}))
+    _print_next(result.data if isinstance(result.data, dict) else {})
     return 0
 
 
@@ -1429,6 +1484,8 @@ def _run(argv: Sequence[str]) -> int:
     schema_help = _schema_help(head)
     if schema_help is not None:
         return schema_help
+    if _root_version_requested(head) and not any(token in {"-h", "--help"} for token in head):
+        return _run_local_version(head)
 
     parse_as_agent = agent_mode(
         force_agent="--agent" in head or "--json" in head,
@@ -2164,7 +2221,7 @@ def _run(argv: Sequence[str]) -> int:
         sub,
         "skills",
         aliases=["sk"],
-        help="Install or remove SPA agent skills in user IDE directories",
+        help="Install, update, or remove SPA agent skills in user IDE directories",
         epilog=SKILLS_NEEDS_ACTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -2188,6 +2245,13 @@ def _run(argv: Sequence[str]) -> int:
         action="store_true",
         help="Install every SPA skill package (default)",
     )
+    p_skills_update = _add_action(
+        skills_sub,
+        "update",
+        help="Refresh recorded IDE skill copies from $SPA_HOME/skills/spa",
+        usage="spa skills update",
+    )
+    _add_mode_flags(p_skills_update)
     p_skills_remove = _add_action(
         skills_sub,
         "remove",
@@ -2225,6 +2289,62 @@ def _run(argv: Sequence[str]) -> int:
     )
     p_doc.add_argument("--strict", action="store_true", help="Treat optional-tool warnings as failures")
     _add_env_selector(p_doc)
+
+    p_version = _add_command(
+        sub,
+        "version",
+        help="Print the installed SPA version",
+        description=(
+            "Print the installed SPA version from SPA_HOME/VERSION. "
+            "Does not contact the network. spa version check compares that to GitHub latest."
+        ),
+    )
+    version_sub = p_version.add_subparsers(dest="version_cmd", metavar="ACTION", required=False)
+    p_version_check = _add_action(
+        version_sub,
+        "check",
+        help="Compare the installed SPA version to the latest GitHub Release",
+        description=(
+            "Compare the installed SPA version to the latest GitHub Release. "
+            "Read-only. Does not write the prefix. Exit 0 when outdated."
+        ),
+    )
+    _add_mode_flags(p_version_check)
+
+    p_self = _add_command(
+        sub,
+        "self",
+        help="Update this prefix install of SPA from GitHub Releases",
+        epilog=SELF_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    self_sub = p_self.add_subparsers(dest="self_cmd", metavar="ACTION")
+    p_self_update = _add_action(
+        self_sub,
+        "update",
+        help="Replace a prefix install of SPA from GitHub Releases",
+        usage="spa self update --yes",
+    )
+    _add_mode_flags(p_self_update)
+    p_self_update.add_argument(
+        "--version",
+        dest="self_version",
+        metavar="X.Y.Z",
+        help="Release tag or X.Y.Z (default: latest)",
+    )
+    p_self_update.add_argument(
+        "--from",
+        dest="self_from",
+        metavar="FILE",
+        help="Install from a local spa-framework tar.gz instead of GitHub (offline hosts)",
+    )
+    p_self_update.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm replacing the SPA install prefix (required in agent mode)",
+    )
 
     p_venv = _add_command(
         sub,
@@ -3047,7 +3167,7 @@ def _run(argv: Sequence[str]) -> int:
         args, "ccm_action", None
     ) not in {"set", "extend"}
     if (
-        args.command not in {"init", "agent", "environment", "doctor", "venv", "skills", "completion"}
+        args.command not in {"init", "agent", "environment", "doctor", "venv", "skills", "completion", "version", "self"}
         and not apps_without_env
         and not config_without_env
         and not architecture_without_env
@@ -3424,6 +3544,25 @@ def _run(argv: Sequence[str]) -> int:
 
     if args.command == "skills":
         return _run_skills(args, session, as_agent)
+
+    if args.command == "version":
+        return _print_version(
+            session.version(check=_action(args, "version_cmd") == "check"),
+            as_agent,
+        )
+
+    if args.command == "self":
+        if _action(args, "self_cmd") != "update":
+            return _reject(SELF_NEEDS_ACTION, as_agent)
+        return _print_version(
+            session.self_update(
+                version=getattr(args, "self_version", None),
+                from_file=getattr(args, "self_from", None),
+                confirm=bool(getattr(args, "yes", False)),
+                agent=as_agent,
+            ),
+            as_agent,
+        )
 
     if args.command == "doctor":
         from spa.doctor import format_doctor_text

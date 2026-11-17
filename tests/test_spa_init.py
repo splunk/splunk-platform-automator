@@ -524,6 +524,12 @@ def test_force_reset_paths_doctor_uses_restamped_dirs(tmp_path, monkeypatch):
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.chdir(dest)
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    terraform = bindir / "terraform"
+    terraform.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    terraform.chmod(0o755)
+    monkeypatch.setenv("PATH", str(bindir) + os.pathsep + os.environ.get("PATH", ""))
     from spa.executil import apply_paths_env
     from spa.init import init_env
     from spa.paths import resolve_spa_paths

@@ -424,6 +424,54 @@ Example:
 spa validate --splunk-config aws
 ```
 
+## `version`
+
+Print the installed SPA version from SPA_HOME/VERSION. Does not contact the network.
+
+Example:
+
+```bash
+spa --agent version
+```
+
+## `version check`
+
+Compare the installed SPA version to the latest GitHub Release. Read-only. Exit 0 when outdated.
+
+Example:
+
+```bash
+spa --agent version check
+```
+
+## `self`
+
+Update this prefix install of SPA from GitHub Releases. Bare spa self exits 2.
+
+Example:
+
+```bash
+spa self update --yes
+```
+
+## `self update`
+
+Replace a prefix install of SPA from GitHub Releases (or --from FILE) with the prefix's own install.sh, then refresh recorded IDE skill copies. Clone and unknown installs refuse, as do Software, Baseconfigs, Apps, or Envs inside SPA_HOME.
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `-y`, `--yes` | Confirm replacing the SPA install prefix |
+| `--version` | Release tag or X.Y.Z (default: latest) |
+| `--from` | Install from a local spa-framework tar.gz instead of GitHub (offline hosts) |
+
+Example:
+
+```bash
+spa self update --yes
+```
+
 ## `doctor`
 
 Host prerequisite checks
@@ -435,7 +483,7 @@ Host prerequisite checks
 
 ## `skills`
 
-Install or remove SPA agent skills from $SPA_HOME/skills/spa/ into user IDE directories
+Install, update, or remove SPA agent skills from $SPA_HOME/skills/spa/ into user IDE directories
 
 Example:
 
@@ -460,6 +508,16 @@ Example:
 
 ```bash
 spa skills install cursor
+```
+
+## `skills update`
+
+Refresh IDE skill copies recorded in ~/.config/spa/skills.yml from $SPA_HOME/skills/spa and remove recorded packages the framework dropped. Does not auto-detect platforms.
+
+Example:
+
+```bash
+spa --agent skills update
 ```
 
 ## `skills remove`

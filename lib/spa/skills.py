@@ -1,4 +1,4 @@
-"""Install and remove SPA agent skills in user IDE directories.
+"""Install, update, and remove SPA agent skills in user IDE directories.
 
 Canonical packages live under ``$SPA_HOME/skills/spa/``. Install copies each
 package into the user skill directory for the chosen IDE. Detection follows
@@ -137,6 +137,78 @@ def install_skills(
     }
 
 
+def update_skills(
+    *,
+    source: Path,
+    home: Path,
+    platform: Optional[str] = None,
+    name: Optional[str] = None,
+    all_packages: bool = False,
+    environ: Optional[Dict[str, str]] = None,
+    path_env: Optional[str] = None,
+    config_dir: Optional[Path] = None,
+) -> dict:
+    """Refresh recorded IDE copies from ``source``. Does not auto-detect platforms."""
+    del home, platform, name, all_packages, path_env
+    env = environ if environ is not None else os.environ
+    record = _skills_yml(config_dir, env)
+    copies = _load_copies(record)
+    packages = discover_packages(source)
+    updated: List[str] = []
+    unchanged: List[str] = []
+    removed: List[str] = []
+    platforms: List[str] = []
+    roots: List[Path] = []
+    for dest_str in sorted(copies):
+        dest = Path(dest_str)
+        plat = _platform_for_copy(dest)
+        if plat is None:
+            continue
+        if plat not in platforms:
+            platforms.append(plat)
+        if dest.parent not in roots:
+            roots.append(dest.parent)
+        # An empty source is a broken tree, not "every package was dropped".
+        if packages and dest.name not in packages:
+            _delete_package(dest, copies)
+            if dest.name not in removed:
+                removed.append(dest.name)
+    for root in roots:
+        for package in packages:
+            dest = root / package
+            src = source / package
+            if _trees_equal(src, dest):
+                copies.add(str(dest))
+                if package not in unchanged and package not in updated:
+                    unchanged.append(package)
+                continue
+            root.mkdir(parents=True, exist_ok=True)
+            _place_package(src, dest, copies)
+            if package not in updated:
+                updated.append(package)
+            if package in unchanged:
+                unchanged.remove(package)
+    _save_copies(record, copies)
+    data = {
+        "action": "update",
+        "platforms": platforms,
+        "updated": updated,
+        "unchanged": unchanged,
+        "removed": removed,
+    }
+    if not platforms:
+        data["next"] = [
+            {
+                "id": "skills_install",
+                "ask": "Install SPA skills into an IDE?",
+                "required": False,
+                "command": "spa skills install",
+                "argv": ["spa", "skills", "install"],
+            }
+        ]
+    return data
+
+
 def remove_skills(
     *,
     source: Path,
@@ -212,6 +284,15 @@ def format_skills_text(data: dict) -> str:
     if data.get("action") == "install":
         names = ", ".join(data.get("installed") or []) or "nothing"
         return "Installed %s on %s (%s)\n" % (names, platforms, via)
+    if data.get("action") == "update":
+        if not platforms:
+            return "No recorded SPA skill copies\n"
+        updated = ", ".join(data.get("updated") or []) or "nothing"
+        unchanged = ", ".join(data.get("unchanged") or []) or "nothing"
+        text = "Updated %s on %s\nUnchanged %s\n" % (updated, platforms, unchanged)
+        if data.get("removed"):
+            text += "Removed %s\n" % ", ".join(data["removed"])
+        return text
     names = ", ".join(data.get("removed") or []) or "nothing"
     return "Removed %s on %s (%s)\n" % (names, platforms, via)
 
@@ -348,6 +429,45 @@ def _detect_error(path_hits: Sequence[str], dir_hits: Sequence[str]) -> SkillsEr
         parts.append("Or in this shell: export %s=%s" % (_ENV_PLATFORMS, ",".join(detected)))
     parts.append("Specify a platform explicitly: %s, or `all`." % supported_platform_list())
     return SkillsError(" ".join(parts), code=2)
+
+
+def _trees_equal(left: Path, right: Path) -> bool:
+    """True when both dirs exist, are not symlinks, and file contents match."""
+    if not left.is_dir() or not right.is_dir():
+        return False
+    if left.is_symlink() or right.is_symlink():
+        return False
+    left_files = _relative_files(left)
+    right_files = _relative_files(right)
+    if left_files.keys() != right_files.keys():
+        return False
+    for rel, lpath in left_files.items():
+        rpath = right_files[rel]
+        if lpath.is_symlink() or rpath.is_symlink():
+            return False
+        if not lpath.is_file() or not rpath.is_file():
+            return False
+        if lpath.read_bytes() != rpath.read_bytes():
+            return False
+    return True
+
+
+def _relative_files(root: Path) -> Dict[str, Path]:
+    files: Dict[str, Path] = {}
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() and not path.is_symlink():
+            continue
+        files[path.relative_to(root).as_posix()] = path
+    return files
+
+
+def _platform_for_copy(dest: Path) -> Optional[str]:
+    parent = dest.parent.as_posix()
+    for spec in PLATFORMS:
+        suffix = "/" + spec.user_skills
+        if parent.endswith(suffix) or parent == spec.user_skills:
+            return spec.name
+    return None
 
 
 def _skills_root(home: Path, platform: str) -> Path:

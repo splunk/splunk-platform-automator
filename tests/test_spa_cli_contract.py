@@ -32,6 +32,8 @@ HELP_CONTRACTS = [
             "init",
             "validate",
             "doctor",
+            "version",
+            "self",
             "venv",
             "environment",
             "deploy",
@@ -101,6 +103,38 @@ HELP_CONTRACTS = [
             "--provider",
             "--strict",
             "--json",
+        ],
+    ),
+    (
+        ["version", "--help"],
+        [
+            "usage: spa version",
+            "Print the installed SPA version",
+            "check",
+        ],
+    ),
+    (
+        ["version", "check", "--help"],
+        [
+            "usage: spa version check",
+            "GitHub",
+        ],
+    ),
+    (
+        ["self", "--help"],
+        [
+            "usage: spa self",
+            "update",
+            "spa self needs an action",
+            "spa self update",
+        ],
+    ),
+    (
+        ["self", "update", "--help"],
+        [
+            "usage: spa self update",
+            "--yes",
+            "--version",
         ],
     ),
     (
@@ -488,12 +522,17 @@ HELP_CONTRACTS = [
             "usage: spa skills",
             "Copy SPA skills into a user IDE skill directory",
             "install",
+            "update",
             "remove",
         ],
     ),
     (
         ["skills", "install", "--help"],
         ["usage: spa skills install", "--name", "--all"],
+    ),
+    (
+        ["skills", "update", "--help"],
+        ["usage: spa skills update"],
     ),
     (
         ["licenses", "list", "--help"],
@@ -1045,7 +1084,7 @@ def _help_action_names():
     names = set()
     for name, _alias in _command_rows(root.stdout):
         names.add("agent schema" if name == "agent" else name)
-    for parent in ("environment", "hosts", "apps", "config", "skills", "venv", "completion", "architecture", "licenses", "provider"):
+    for parent in ("environment", "hosts", "apps", "config", "skills", "venv", "completion", "architecture", "licenses", "provider", "version", "self"):
         child = run_spa_inprocess(["--no-agent", parent, "--help"])
         assert child.returncode == 0, child.stderr
         for name, _alias in _command_rows(child.stdout):

@@ -35,6 +35,7 @@ Ship M1–M3 on one integration branch, then **3.0** when that branch is ready t
 - [x] Documented extract-anywhere: unpack the tarball, set `SPA_HOME`, run `spa` from that tree (**M3**)
 - [x] User-level Software / baseconfig / apps pointers (`~/.config/spa/paths.yml`; `spa init --software-dir`) so prefix installs do not look next to `~/.local/share/spa` — [#73](https://github.com/splunk/splunk-platform-automator/issues/73)
 - [x] `install.sh --uninstall` (prefix + launcher only; never env dirs / Terraform / AWS) — [#72](https://github.com/splunk/splunk-platform-automator/issues/72)
+- [x] Operator self-update: `spa version` / `spa version check` / `spa self update` from GitHub Releases for a prefix install; clone stays `git pull` — [#172](https://github.com/splunk/splunk-platform-automator/issues/172)
 - [ ] Optional later: native Linux packages (`.deb` / `.rpm`) from the same tarball, unpack to `/opt/spa`; `install.sh` prefers the distro package when it matches
 - [ ] Optional later: Homebrew tap of the same tarball (no brew Ansible/Pydantic; `spa_venv` stays the Python path)
 - [ ] Use uv **inside** `spa_venv.sh` / `install.sh` (pinned binary; keep `spa venv` and `.venv`). Not an operator `uv` install. Galaxy collections unchanged. Optional lockfile / `uv python install` when the host has no usable Python. — [#83](https://github.com/splunk/splunk-platform-automator/issues/83)
