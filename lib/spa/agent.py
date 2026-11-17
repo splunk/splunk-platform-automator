@@ -536,8 +536,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "skills update",
-            "summary": "Refresh IDE skill copies recorded in ~/.config/spa/skills.yml from $SPA_HOME/skills/spa. Does not auto-detect platforms.",
-            "read_only": True,
+            "summary": "Refresh IDE skill copies recorded in ~/.config/spa/skills.yml from $SPA_HOME/skills/spa and remove recorded packages the framework dropped. Does not auto-detect platforms.",
             "example": "spa --agent skills update",
         },
         {

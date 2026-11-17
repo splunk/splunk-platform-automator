@@ -151,24 +151,7 @@ def test_version_skips_env_dir_and_venv_gates(tmp_path):
 
 LATEST_URL = "https://github.com/splunk/splunk-platform-automator/releases/tag/v2.6.0"
 SECRET_TOKEN = "ghp_leaked_token_value_xyz"
-AUTH_PHRASES = ("set --from", "gh auth login", "GITHUB_TOKEN")
-
-
-def _fake_gh_run(*, auth_ok=True, tag="v2.6.0", view_rc=0):
-    calls = []
-
-    def run(argv, **kwargs):
-        argv = list(argv)
-        calls.append(argv)
-        if argv[:4] == ["gh", "auth", "status", "-h"]:
-            return subprocess.CompletedProcess(argv, 0 if auth_ok else 1, "", "")
-        if argv[:3] == ["gh", "release", "view"]:
-            stdout = tag + "\n" if view_rc == 0 else ""
-            return subprocess.CompletedProcess(argv, view_rc, stdout, "denied")
-        raise AssertionError("unexpected gh argv: %s" % argv)
-
-    run.calls = calls
-    return run
+OFFLINE_PHRASES = ("offline", "rate limit", "spa version check")
 
 
 class _FakeResponse:
@@ -206,13 +189,19 @@ def _check_home(tmp_path, *, version="2.5.2", git=True, name="clone"):
     return home
 
 
-def test_check_outdated_via_gh(tmp_path, monkeypatch):
+def test_check_outdated_via_api(tmp_path, monkeypatch):
     from spa.version import check_version
 
     home = _check_home(tmp_path)
-    runner = _fake_gh_run(tag="v2.6.0")
+    urlopen = _fake_urlopen({"tag_name": "v2.6.0", "html_url": LATEST_URL})
+
+    def boom_run(argv, **_kwargs):
+        raise AssertionError("gh must not run: %s" % argv)
+
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr("spa.version.shutil.which", lambda name: "/usr/bin/gh" if name == "gh" else None)
-    monkeypatch.setattr("spa.version.subprocess.run", runner)
+    monkeypatch.setattr("spa.version.subprocess.run", boom_run)
+    monkeypatch.setattr("spa.version.urllib.request.urlopen", urlopen)
     result = check_version(home)
     assert result.ok is True
     assert result.code == 0
@@ -223,7 +212,8 @@ def test_check_outdated_via_gh(tmp_path, monkeypatch):
     assert data["install_kind"] == "clone"
     assert data["release_url"] == LATEST_URL
     assert data["next"][0]["command"] == "spa self update --yes"
-    assert any("release view" in " ".join(call) for call in runner.calls)
+    assert len(urlopen.requests) == 1
+    assert _auth_header(urlopen.requests[0]) is None
 
 
 def test_check_current_via_github_token(tmp_path, monkeypatch):
@@ -252,13 +242,37 @@ def test_check_current_via_github_token(tmp_path, monkeypatch):
     assert data["install_kind"] == "prefix"
     assert "next" not in data
     assert urlopen.requests
-    req = urlopen.requests[0]
-    header = (
+    for req in urlopen.requests:
+        assert req.full_url.startswith("https://api.github.com/")
+    assert SECRET_TOKEN in (_auth_header(urlopen.requests[0]) or "")
+
+
+def _auth_header(req):
+    return (
         req.get_header("Authorization")
         or req.headers.get("Authorization")
         or getattr(req, "unredirected_hdrs", {}).get("Authorization")
     )
-    assert SECRET_TOKEN in (header or "")
+
+
+def test_check_anonymous_without_gh_or_token(tmp_path, monkeypatch):
+    from spa.version import check_version
+
+    home = _check_home(tmp_path)
+    urlopen = _fake_urlopen({"tag_name": "v2.6.0", "html_url": LATEST_URL})
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr("spa.version.shutil.which", lambda name: None)
+    monkeypatch.setattr("spa.version.urllib.request.urlopen", urlopen)
+    result = check_version(home)
+    assert result.ok is True, result.error
+    assert result.data["latest"] == "2.6.0"
+    assert result.data["outdated"] is True
+    assert len(urlopen.requests) == 1
+    req = urlopen.requests[0]
+    assert req.full_url == (
+        "https://api.github.com/repos/splunk/splunk-platform-automator/releases/latest"
+    )
+    assert _auth_header(req) is None
 
 
 def test_check_clone_still_queries_github(tmp_path, monkeypatch):
@@ -278,11 +292,15 @@ def test_check_clone_still_queries_github(tmp_path, monkeypatch):
     assert result.data["outdated"] is True
 
 
-def test_check_auth_failure_names_install_sh_and_hides_token(tmp_path, monkeypatch):
+@pytest.mark.parametrize("token", [SECRET_TOKEN, None])
+def test_check_offline_names_retry_and_hides_token(tmp_path, monkeypatch, token):
     from spa.version import check_version
 
     home = _check_home(tmp_path)
-    monkeypatch.setenv("GITHUB_TOKEN", SECRET_TOKEN)
+    if token:
+        monkeypatch.setenv("GITHUB_TOKEN", token)
+    else:
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr("spa.version.shutil.which", lambda name: None)
     monkeypatch.setattr(
         "spa.version.urllib.request.urlopen",
@@ -293,23 +311,27 @@ def test_check_auth_failure_names_install_sh_and_hides_token(tmp_path, monkeypat
     assert result.code == 1
     assert result.data is None
     error = result.error or ""
-    for phrase in AUTH_PHRASES:
+    for phrase in OFFLINE_PHRASES:
         assert phrase in error
+    assert "gh auth login" not in error
     assert SECRET_TOKEN not in error
 
 
-def test_check_prefers_gh_over_github_token(tmp_path, monkeypatch):
+def test_check_ignores_gh_even_when_authenticated(tmp_path, monkeypatch):
     from spa.version import fetch_latest_release
 
-    runner = _fake_gh_run(tag="v2.6.0")
-    urlopen = _fake_urlopen(error=AssertionError("token path must not run when gh auth works"))
+    urlopen = _fake_urlopen({"tag_name": "v2.6.0", "html_url": LATEST_URL})
+
+    def boom_run(argv, **_kwargs):
+        raise AssertionError("gh must not run: %s" % argv)
+
     monkeypatch.setenv("GITHUB_TOKEN", SECRET_TOKEN)
     monkeypatch.setattr("spa.version.shutil.which", lambda name: "/usr/bin/gh" if name == "gh" else None)
-    monkeypatch.setattr("spa.version.subprocess.run", runner)
+    monkeypatch.setattr("spa.version.subprocess.run", boom_run)
     monkeypatch.setattr("spa.version.urllib.request.urlopen", urlopen)
     release = fetch_latest_release()
     assert release["tag"] == "v2.6.0"
-    assert not urlopen.requests
+    assert SECRET_TOKEN in (_auth_header(urlopen.requests[0]) or "")
 
 
 def test_human_check_outdated_prints_next_on_stderr(monkeypatch):
@@ -359,21 +381,19 @@ def test_agent_check_envelope_includes_outdated(monkeypatch):
     assert data["next"][0]["command"] == "spa self update --yes"
 
 
-def test_human_check_auth_failure_exit_1(monkeypatch):
-    from spa.version import VersionError
+def test_human_check_offline_exit_1(monkeypatch):
+    from spa.version import VersionError, offline_error
 
     monkeypatch.setenv("GITHUB_TOKEN", SECRET_TOKEN)
 
     def boom(**_kwargs):
-        raise VersionError(
-            "set --from FILE, or run gh auth login / set GITHUB_TOKEN to download a release."
-        )
+        raise VersionError(offline_error("splunk/splunk-platform-automator"))
 
     monkeypatch.setattr("spa.version.fetch_latest_release", boom)
     result = run_spa_inprocess(["--no-agent", "version", "check"])
     assert result.returncode == 1
     combined = result.stdout + result.stderr
-    for phrase in AUTH_PHRASES:
+    for phrase in OFFLINE_PHRASES:
         assert phrase in result.stderr
     assert SECRET_TOKEN not in combined
     agent = run_spa_inprocess(["--agent", "version", "check"])
@@ -382,7 +402,7 @@ def test_human_check_auth_failure_exit_1(monkeypatch):
     payload = json.loads(agent.stdout)
     assert payload["ok"] is False
     assert "data" not in payload
-    for phrase in AUTH_PHRASES:
+    for phrase in OFFLINE_PHRASES:
         assert phrase in payload["error"]
     assert SECRET_TOKEN not in agent.stdout
 
@@ -490,6 +510,32 @@ def test_self_update_prefix_invokes_runner_with_force_prefix_bindir(tmp_path):
     assert str(config_dir) not in argv
     assert str(config_dir.parent) not in argv
     assert (config_dir / "keep-me").is_file()
+
+
+def test_self_update_passes_wrapper_spa_home_unresolved_as_prefix(tmp_path):
+    from spa.version import self_update
+
+    real = tmp_path / "real-share"
+    real.mkdir()
+    link = tmp_path / "share"
+    link.symlink_to(real, target_is_directory=True)
+    home, _ = _prefix_home(real)
+    linked_home = link / home.name
+    wrapper = tmp_path / "bin" / "spa"
+    wrapper.parent.mkdir()
+    _write_install_wrapper(wrapper, linked_home)
+    calls = []
+    result = self_update(
+        home,
+        spa_bin=str(wrapper),
+        confirm=True,
+        runner=_recording_runner(calls, home),
+        skills_update=lambda **_kwargs: {"platforms": []},
+    )
+    assert result.ok is True, result.error
+    argv = calls[0]
+    assert argv[argv.index("--prefix") + 1] == str(linked_home)
+    assert result.data["install_kind"] == "prefix"
 
 
 def test_self_update_refreshes_recorded_skills_from_new_tree(tmp_path):

@@ -13,12 +13,9 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Sequence, Tuple
 
-from spa.install_kind import classify_install_kind
+from spa.install_kind import classify_install_kind, installer_wrapper_home
 
 DEFAULT_REPO = "splunk/splunk-platform-automator"
-AUTH_ERROR = (
-    "set --from FILE, or run gh auth login / set GITHUB_TOKEN to download a release."
-)
 CLONE_ERROR = (
     "This SPA install is a git checkout (install_kind=clone). "
     "spa self update replaces a prefix and would delete .git.\n"
@@ -40,7 +37,14 @@ InstallRunner = Callable[[Sequence[str]], Tuple[int, str]]
 
 
 class VersionError(RuntimeError):
-    """GitHub latest-release resolution failed (offline or unauthenticated)."""
+    """GitHub latest-release resolution failed (offline or rate-limited)."""
+
+
+def offline_error(repo: str) -> str:
+    return (
+        "Could not reach GitHub releases for %s (offline or rate limit). "
+        "Retry spa version check later; set GITHUB_TOKEN to raise the API rate limit." % repo
+    )
 
 
 def read_local_version(spa_home: Path) -> str:
@@ -108,69 +112,28 @@ def _release_url(repo: str, tag: str) -> str:
     return "https://github.com/%s/releases/tag/%s" % (repo, tag)
 
 
-def gh_ok() -> bool:
-    if not shutil.which("gh"):
-        return False
-    try:
-        result = subprocess.run(
-            ["gh", "auth", "status", "-h", "github.com"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return False
-    return result.returncode == 0
-
-
 def fetch_latest_release() -> Dict[str, str]:
-    """Resolve GitHub latest tag the same way install.sh does (gh, else GITHUB_TOKEN)."""
+    """Resolve GitHub latest tag the same way install.sh does (curl/API; GITHUB_TOKEN optional)."""
     repo = (os.environ.get("SPA_REPO") or "").strip() or DEFAULT_REPO
-    if gh_ok():
-        try:
-            result = subprocess.run(
-                [
-                    "gh",
-                    "release",
-                    "view",
-                    "--repo",
-                    repo,
-                    "--json",
-                    "tagName",
-                    "-q",
-                    ".tagName",
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-        except OSError as exc:
-            raise VersionError(AUTH_ERROR) from exc
-        tag = (result.stdout or "").strip()
-        if result.returncode != 0 or not tag:
-            raise VersionError(AUTH_ERROR)
-        return {"tag": tag, "url": _release_url(repo, tag)}
-    token = (os.environ.get("GITHUB_TOKEN") or "").strip()
-    if not token:
-        raise VersionError(AUTH_ERROR)
+    error = offline_error(repo)
     request = urllib.request.Request(
         "https://api.github.com/repos/%s/releases/latest" % repo,
-        headers={
-            "Authorization": "Bearer %s" % token,
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "spa",
-        },
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "spa"},
     )
+    token = (os.environ.get("GITHUB_TOKEN") or "").strip()
+    if token:
+        # Unredirected: urllib copies ordinary headers onto redirect targets.
+        request.add_unredirected_header("Authorization", "Bearer %s" % token)
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (OSError, ValueError, urllib.error.URLError) as exc:
-        raise VersionError(AUTH_ERROR) from exc
+        raise VersionError(error) from exc
     if not isinstance(payload, dict):
-        raise VersionError(AUTH_ERROR)
+        raise VersionError(error)
     tag = str(payload.get("tag_name") or "").strip()
     if not tag:
-        raise VersionError(AUTH_ERROR)
+        raise VersionError(error)
     url = str(payload.get("html_url") or "").strip() or _release_url(repo, tag)
     return {"tag": tag, "url": url}
 
@@ -201,7 +164,8 @@ def check_version(
     tag = str((release or {}).get("tag") or "")
     latest = normalize_tag(tag)
     if not latest:
-        return CommandResult(ok=False, error=AUTH_ERROR, code=1)
+        repo = (os.environ.get("SPA_REPO") or "").strip() or DEFAULT_REPO
+        return CommandResult(ok=False, error=offline_error(repo), code=1)
     outdated = _version_key(latest) > _version_key(version)
     data: Dict[str, Any] = {
         "version": version,
@@ -293,6 +257,19 @@ def _wrapper_bindir(spa_bin: Optional[str]) -> Optional[str]:
     return str(Path(path).expanduser().parent)
 
 
+def _wrapper_prefix(spa_bin: Optional[str]) -> Optional[str]:
+    """SPA_HOME exactly as the install.sh wrapper wrote it, so install.sh rewrites the same path."""
+    path = spa_bin or shutil.which("spa")
+    if not path:
+        return None
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    home = installer_wrapper_home(text)
+    return str(home) if home is not None else None
+
+
 def _self_update_next(*, skills_error: bool, recorded: bool):
     from spa.next_steps import item
 
@@ -374,7 +351,8 @@ def self_update(
     bindir = _wrapper_bindir(spa_bin)
     if not bindir:
         return CommandResult(ok=False, error=UNKNOWN_ERROR, code=1)
-    prefix = str(Path(spa_home).resolve())
+    resolved_home = str(Path(spa_home).resolve())
+    prefix = _wrapper_prefix(spa_bin) or resolved_home
     _preload_result_modules()
     tmp = Path(tempfile.mkdtemp(prefix="spa-self-update-"))
     try:
@@ -423,6 +401,7 @@ def self_update(
         skills_payload = {
             "updated": list((skills_data or {}).get("updated") or []),
             "unchanged": list((skills_data or {}).get("unchanged") or []),
+            "removed": list((skills_data or {}).get("removed") or []),
             "platforms": list((skills_data or {}).get("platforms") or []),
         }
     except (SkillsError, OSError) as exc:
@@ -432,7 +411,7 @@ def self_update(
     data: Dict[str, Any] = {
         "version": new_version,
         "previous": previous,
-        "spa_home": prefix,
+        "spa_home": resolved_home,
         "install_kind": kind,
         "skills": skills_payload,
         "next": _self_update_next(skills_error=skills_error, recorded=recorded),

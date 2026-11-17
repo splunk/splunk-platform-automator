@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -205,6 +206,65 @@ def test_update_does_not_autodetect_or_touch_unrecorded_neighbors(tmp_path):
     assert (neighbor / "SKILL.md").read_text(encoding="utf-8") == "keep\n"
     assert (wind / "SKILL.md").read_text(encoding="utf-8") == "leave\n"
     assert not (tmp_path / "home" / ".claude" / "skills").exists()
+
+
+def test_update_prunes_recorded_package_dropped_from_framework(tmp_path):
+    source = _source(tmp_path)
+    config = tmp_path / "config" / "spa"
+    _install(tmp_path, source=source, platform="cursor", config_dir=config)
+    root = tmp_path / "home" / ".cursor" / "skills"
+    neighbor = root / "my-notes"
+    neighbor.mkdir()
+    (neighbor / "SKILL.md").write_text("keep\n", encoding="utf-8")
+    shutil.rmtree(source / "spa-apps")
+
+    result = _update(tmp_path, source=source, config_dir=config)
+
+    assert result["removed"] == ["spa-apps"]
+    assert result["unchanged"] == ["spa"]
+    assert not (root / "spa-apps").exists()
+    assert (root / "spa").is_dir()
+    assert (neighbor / "SKILL.md").read_text(encoding="utf-8") == "keep\n"
+    recorded = (config / "skills.yml").read_text(encoding="utf-8")
+    assert str(root / "spa-apps") not in recorded
+    assert str(root / "spa") in recorded
+
+
+def test_update_refreshes_every_recorded_root_for_one_platform(tmp_path):
+    source = tmp_path / "skills" / "spa"
+    _package(source, "spa")
+    config = tmp_path / "config" / "spa"
+    first = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    second = tmp_path / "other" / ".cursor" / "skills" / "spa"
+    for dest in (first, second):
+        dest.mkdir(parents=True)
+        (dest / "SKILL.md").write_text("stale\n", encoding="utf-8")
+    config.mkdir(parents=True)
+    (config / "skills.yml").write_text(
+        'copies:\n- "%s"\n- "%s"\n' % (first, second), encoding="utf-8"
+    )
+
+    result = _update(tmp_path, source=source, config_dir=config)
+
+    assert result["platforms"] == ["cursor"]
+    assert result["updated"] == ["spa"]
+    _assert_copied(first, source / "spa")
+    _assert_copied(second, source / "spa")
+
+
+def test_update_human_text_lists_removed_packages():
+    from spa.skills import format_skills_text
+
+    text = format_skills_text(
+        {
+            "action": "update",
+            "platforms": ["cursor"],
+            "updated": [],
+            "unchanged": ["spa"],
+            "removed": ["spa-old"],
+        }
+    )
+    assert "Removed spa-old" in text
 
 
 def test_install_copies_every_package_and_records_paths(tmp_path):
@@ -563,7 +623,8 @@ def test_schema_includes_skills_update():
 
     by_name = {row["name"]: row for row in COMMAND_SCHEMA["commands"]}
     update = by_name["skills update"]
-    assert update.get("read_only") is True
+    assert "read_only" not in update
+    assert "requires_confirmation" not in update
     assert update["example"] == "spa --agent skills update"
     flags = {flag["long"] for flag in update.get("flags") or []}
     assert "--yes" not in flags

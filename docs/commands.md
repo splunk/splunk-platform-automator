@@ -512,7 +512,7 @@ spa skills install cursor
 
 ## `skills update`
 
-Refresh IDE skill copies recorded in ~/.config/spa/skills.yml from $SPA_HOME/skills/spa. Does not auto-detect platforms.
+Refresh IDE skill copies recorded in ~/.config/spa/skills.yml from $SPA_HOME/skills/spa and remove recorded packages the framework dropped. Does not auto-detect platforms.
 
 Example:
 

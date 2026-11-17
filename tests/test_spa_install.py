@@ -690,14 +690,16 @@ def test_download_with_token_only_sends_it_to_api(tmp_path, framework_tarball):
     assert FAKE_TOKEN not in result.stdout + result.stderr
 
 
-def test_download_uses_gh_when_authenticated(tmp_path, framework_tarball):
+def test_download_ignores_gh_and_uses_curl(tmp_path, framework_tarball):
     env = _fake_download_env(tmp_path, framework_tarball, with_gh=True)
     result = _run_download_install(tmp_path, env)
     assert result.returncode == 0, result.stderr + result.stdout
     assert (tmp_path / "prefix" / "bin" / "spa").is_file()
-    gh_calls = _fake_calls(tmp_path, "gh")
-    assert any(c[:2] == ["release", "download"] for c in gh_calls)
-    assert _fake_calls(tmp_path, "curl") == []
+    assert _fake_calls(tmp_path, "gh") == []
+    urls = [_call_url(c) for c in _fake_calls(tmp_path, "curl")]
+    assert urls[-1].startswith(
+        "https://github.com/splunk/splunk-platform-automator/releases/download/"
+    )
 
 
 def test_download_offline_keeps_prefix_and_names_from(tmp_path, framework_tarball):

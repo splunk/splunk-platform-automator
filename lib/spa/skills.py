@@ -156,8 +156,9 @@ def update_skills(
     packages = discover_packages(source)
     updated: List[str] = []
     unchanged: List[str] = []
+    removed: List[str] = []
     platforms: List[str] = []
-    roots: Dict[str, Path] = {}
+    roots: List[Path] = []
     for dest_str in sorted(copies):
         dest = Path(dest_str)
         plat = _platform_for_copy(dest)
@@ -165,9 +166,14 @@ def update_skills(
             continue
         if plat not in platforms:
             platforms.append(plat)
-        roots.setdefault(plat, dest.parent)
-    for plat in platforms:
-        root = roots[plat]
+        if dest.parent not in roots:
+            roots.append(dest.parent)
+        # An empty source is a broken tree, not "every package was dropped".
+        if packages and dest.name not in packages:
+            _delete_package(dest, copies)
+            if dest.name not in removed:
+                removed.append(dest.name)
+    for root in roots:
         for package in packages:
             dest = root / package
             src = source / package
@@ -188,6 +194,7 @@ def update_skills(
         "platforms": platforms,
         "updated": updated,
         "unchanged": unchanged,
+        "removed": removed,
     }
     if not platforms:
         data["next"] = [
@@ -282,7 +289,10 @@ def format_skills_text(data: dict) -> str:
             return "No recorded SPA skill copies\n"
         updated = ", ".join(data.get("updated") or []) or "nothing"
         unchanged = ", ".join(data.get("unchanged") or []) or "nothing"
-        return "Updated %s on %s\nUnchanged %s\n" % (updated, platforms, unchanged)
+        text = "Updated %s on %s\nUnchanged %s\n" % (updated, platforms, unchanged)
+        if data.get("removed"):
+            text += "Removed %s\n" % ", ".join(data["removed"])
+        return text
     names = ", ".join(data.get("removed") or []) or "nothing"
     return "Removed %s on %s (%s)\n" % (names, platforms, via)
 

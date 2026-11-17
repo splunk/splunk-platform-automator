@@ -11,7 +11,9 @@
 #   ./install.sh
 #   ./install.sh --from spa-framework-X.Y.Z.tar.gz --prefix /opt/spa
 #
-# Env: SPA_PREFIX, SPA_BINDIR, SPA_VERSION, XDG_DATA_HOME, GITHUB_TOKEN (download only; never printed).
+# No credentials needed (public releases). Downloads use curl, never gh.
+# Env: SPA_PREFIX, SPA_BINDIR, SPA_VERSION, XDG_DATA_HOME,
+#      GITHUB_TOKEN (optional; raises the API rate limit; never printed).
 set -eu
 
 REPO="${SPA_REPO:-splunk/splunk-platform-automator}"
@@ -126,10 +128,6 @@ if [ "$PREFIX" = "$HOME" ] || [ "$PREFIX" = / ]; then
     echo "ERROR: --prefix cannot be your home directory or /" >&2
     exit 1
 fi
-
-gh_ok() {
-    command -v gh >/dev/null 2>&1 && gh auth status -h github.com >/dev/null 2>&1
-}
 
 is_spa_tree() {
     [ -f "$1/ansible.cfg" ] && [ -x "$1/bin/spa" ] && [ -d "$1/ansible" ]
@@ -276,27 +274,16 @@ download_release() {
     dest="$1"
     tag="$(normalize_tag "$VERSION")"
     if [ -z "$tag" ]; then
-        if gh_ok; then
-            tag="$(gh release view --repo "$REPO" --json tagName -q .tagName)" ||
-                github_unreachable
-        else
-            latest="$(github_api "https://api.github.com/repos/${REPO}/releases/latest")" ||
-                github_unreachable
-            tag="$(printf '%s' "$latest" |
-                python3 -c 'import json,sys; print(json.load(sys.stdin).get("tag_name",""))')" ||
-                github_unreachable
-        fi
+        latest="$(github_api "https://api.github.com/repos/${REPO}/releases/latest")" ||
+            github_unreachable
+        tag="$(printf '%s' "$latest" |
+            python3 -c 'import json,sys; print(json.load(sys.stdin).get("tag_name",""))')" ||
+            github_unreachable
     fi
     [ -n "$tag" ] || { echo "ERROR: could not resolve a release tag" >&2; exit 1; }
     ver="${tag#v}"
     name="spa-framework-${ver}.tar.gz"
     echo "Downloading ${name} from ${REPO} ${tag}..."
-    if gh_ok; then
-        gh release download "$tag" --repo "$REPO" --pattern "$name" -D "$(dirname "$dest")" ||
-            github_unreachable
-        mv "$(dirname "$dest")/$name" "$dest"
-        return
-    fi
     if [ -z "${GITHUB_TOKEN:-}" ]; then
         curl -fsSL -L -o "$dest" \
             "https://github.com/${REPO}/releases/download/${tag}/${name}" ||
