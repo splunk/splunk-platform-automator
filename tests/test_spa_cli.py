@@ -151,6 +151,27 @@ def test_cli_runner_selects_local_and_cli():
     assert 'pytest -m "local and cli" tests/' in text
 
 
+def test_local_runners_default_to_xdist_auto():
+    """Local runners bake -n auto before "$@" so a caller -n 1 still wins."""
+    cli = (PROJECT_ROOT / "tests" / "run_cli_tests.sh").read_text(encoding="utf-8")
+    unit = (PROJECT_ROOT / "tests" / "run_unit_tests.sh").read_text(encoding="utf-8")
+    ansible = (PROJECT_ROOT / "tests" / "run_ansible_tests.sh").read_text(encoding="utf-8")
+    local = (PROJECT_ROOT / "tests" / "run_local_tests.sh").read_text(encoding="utf-8")
+
+    assert 'pytest -m "local and cli" tests/ -n auto "$@"' in cli
+    assert "--dist=loadgroup" not in cli
+    assert 'pytest -m "local and not cli and not ansible" tests/ -n auto "$@"' in unit
+    assert 'for arg in -n auto "$@"; do' in ansible
+    assert 'pytest -m "local and ansible" tests/ -n auto "$@" "${DIST_ARGS[@]}"' in ansible
+    assert 'for arg in -n auto "$@"; do' in local
+    assert 'pytest -m local tests/ -n auto "$@" "${DIST_ARGS[@]}"' in local
+    scope = (PROJECT_ROOT / "tests" / "run_app_scope_scenarios_tests.sh").read_text(
+        encoding="utf-8"
+    )
+    assert 'for arg in -n auto "$@"; do' in scope
+    assert 'pytest tests/test_app_scope_scenarios.py -n auto "$@" "${DIST_ARGS[@]}"' in scope
+
+
 def test_local_modules_partition_into_cli_ansible_unit_jobs():
     from spa_testutil import (
         LOCAL_JOB_MARKEXPRS,

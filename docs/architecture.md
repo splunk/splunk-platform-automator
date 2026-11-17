@@ -240,13 +240,13 @@ Do not present a convention as an enforced standard. Promote one to policy only 
 
 Use the narrowest gate that proves the changed contract. Markers are in [`tests/pytest.ini`](../tests/pytest.ini):
 
-- `cli`: parser, help, routing, schema, session, and provider contracts. `./tests/run_cli_tests.sh` (`pytest -m "local and cli"`). Contributor inner loop; serial by default.
+- `cli`: parser, help, routing, schema, session, and provider contracts. `./tests/run_cli_tests.sh` (`pytest -m "local and cli"`). Contributor inner loop; local runners default to `-n auto`; pass `-n 1` for serial.
 - `ansible`: Ansible-job tests run playbooks through `spa run`, plus the JSONL callback exception that uses a direct `ansible-playbook` of a fixture. `./tests/run_ansible_tests.sh` (`pytest -m "local and ansible"`).
 - `unit`: every other local test. `./tests/run_unit_tests.sh` (`pytest -m "local and not cli and not ansible"`). Schema, docs, runlog, venv, paths, licenses, secrets, pack/install.
 
 PR CI always runs all three pytest jobs after `Syntax` (`CLI tests`, `Ansible tests`, `Unit tests` in `.github/workflows/ci.yml`). There is no path filter that skips a group. Each job passes `-n auto --durations=25` (xdist). Tag release stays one `./tests/run_local_tests.sh -n auto --durations=25` invocation. Push CI on `master` / `distribution` is background insurance, not a promotion wait.
 
-`./tests/run_local_tests.sh` runs the complete local suite without AWS or a live Splunk deployment. It is optional locally on every slice; PR CI is the full-suite merge gate. Pass `-n auto --durations=25` through that script for a CI-shaped local run. Do not bake `-n auto` into `run_cli_tests.sh`.
+`./tests/run_local_tests.sh` runs the complete local suite without AWS or a live Splunk deployment. It is optional locally on every slice; PR CI is the full-suite merge gate. Local runners already default to `-n auto`; pass `--durations=25` for CI-shaped durations, or `-n 1` for serial. Contributor agents unsandbox `pytest` and `./tests/run_*.sh` (Shell `required_permissions: ["all"]` on the first attempt).
 
 - [`tests/test_spa_playbooks.py`](../tests/test_spa_playbooks.py) covers playbook metadata and resolution.
 - [`tests/test_spa_runlog.py`](../tests/test_spa_runlog.py) and [`tests/test_spa_jsonl_callback.py`](../tests/test_spa_jsonl_callback.py) cover progress and execution events.

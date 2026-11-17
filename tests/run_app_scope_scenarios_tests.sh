@@ -35,7 +35,7 @@ echo -e "${GREEN}=== Splunk Platform Automator - App Scope Scenario Tests ===${N
 source "$SCRIPT_DIR/run_venv.sh" 'pydantic>=2.0' 'ansible-core' 'jmespath' 'lxml'
 
 DIST_ARGS=()
-for arg in "$@"; do
+for arg in -n auto "$@"; do
     if [[ "$arg" == "-n" ]] || [[ "$arg" =~ ^-n[0-9]+ ]]; then
         # loadgroup honors xdist_group so one app-scope scenario stays on one worker
         DIST_ARGS=(--dist=loadgroup)
@@ -43,6 +43,6 @@ for arg in "$@"; do
     fi
 done
 
-pytest tests/test_app_scope_scenarios.py "$@" "${DIST_ARGS[@]}"
+pytest tests/test_app_scope_scenarios.py -n auto "$@" "${DIST_ARGS[@]}"
 
 echo -e "${GREEN}=== App scope scenario tests complete ===${NC}"

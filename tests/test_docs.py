@@ -507,6 +507,8 @@ def test_docs_teach_living_spec_and_local_test_layers():
     assert 'pytest -m "local and ansible"' in layers
     assert 'pytest -m "local and not cli and not ansible"' in layers
     assert "-n auto" in layers
+    assert "-n 1" in layers
+    assert "unsandbox" in layers.lower()
     assert "--durations" in layers
     assert "PR CI always runs all three" in layers
     assert "Live AWS" in layers
@@ -528,8 +530,17 @@ def test_docs_teach_living_spec_and_local_test_layers():
     assert 'pytest -m "local and not cli and not ansible"' in which_runner
     assert "--durations" in which_runner
     assert "-n auto" in which_runner
-    assert "CI default" in which_runner
+    assert "-n 1" in which_runner
+    assert "unsandbox" in which_runner.lower()
     assert "mocked CCM" in which_runner
+
+
+def test_unsandboxed_tests_rule_requests_all_on_first_shell():
+    rule = PROJECT_ROOT / ".cursor" / "rules" / "unsandboxed-tests.mdc"
+    assert rule.is_file()
+    text = rule.read_text(encoding="utf-8")
+    assert "required_permissions" in text
+    assert "all" in text
 
 
 def test_ci_cancels_stale_pull_request_runs():
