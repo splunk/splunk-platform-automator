@@ -142,6 +142,7 @@ class SpaSession(Protocol):
         version: Optional[str] = None,
         confirm: bool = False,
         agent: bool = False,
+        from_file: Optional[str] = None,
     ) -> CommandResult: ...
 
     def skills(
@@ -1249,6 +1250,7 @@ class LocalSpaSession:
         version: Optional[str] = None,
         confirm: bool = False,
         agent: bool = False,
+        from_file: Optional[str] = None,
     ) -> CommandResult:
         import shutil
 
@@ -1258,6 +1260,7 @@ class LocalSpaSession:
             self.paths.spa_home,
             spa_bin=shutil.which("spa"),
             version=version,
+            from_file=from_file,
             confirm=confirm,
             agent=agent,
         )

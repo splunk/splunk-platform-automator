@@ -1,6 +1,8 @@
 """Framework tarball and install.sh (Distribution M3)."""
 
+import json
 import os
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -9,7 +11,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from spa_testutil import AGENT_ENV_VARS, INHERITED_PATH_VARS, PROJECT_ROOT, spa_env
+from spa_testutil import AGENT_ENV_VARS, INHERITED_PATH_VARS, LIB, PROJECT_ROOT, spa_env
 
 pytestmark = pytest.mark.local
 
@@ -708,6 +710,146 @@ def test_download_offline_keeps_prefix_and_names_from(tmp_path, framework_tarbal
     assert "offline" in result.stderr
     assert "--from FILE" in result.stderr
     _assert_prefix_unchanged(prefix)
+
+
+SKILL_MARKER = "self-update-e2e-marker"
+
+
+def _next_release_tarball(tmp_path, framework_tarball, venv_stub=None):
+    tree = tmp_path / "next-tree"
+    tree.mkdir()
+    with tarfile.open(framework_tarball, "r:gz") as tar:
+        tar.extractall(tree)
+    (tree / "VERSION").write_text("9.9.9\n")
+    skill = tree / "skills" / "spa" / "spa" / "SKILL.md"
+    skill.write_text(skill.read_text() + "\n" + SKILL_MARKER + "\n")
+    if venv_stub is not None:
+        stub = tree / "bin" / "spa_venv.sh"
+        stub.write_text(venv_stub)
+        stub.chmod(0o755)
+    archive = tmp_path / "spa-framework-9.9.9.tar.gz"
+    with tarfile.open(archive, "w:gz") as tar:
+        tar.add(tree, arcname=".")
+    return archive
+
+
+def _record_cursor_skill(tmp_path, prefix):
+    home = tmp_path / "home"
+    dest = home / ".cursor" / "skills" / "spa"
+    dest.parent.mkdir(parents=True)
+    shutil.copytree(prefix / "skills" / "spa" / "spa", dest)
+    config_dir = tmp_path / "xdg" / "spa"
+    config_dir.mkdir(parents=True)
+    (config_dir / "skills.yml").write_text(
+        "# SPA skill copies. Not secrets.\ncopies:\n  - %s\n" % dest
+    )
+    return home, dest, config_dir
+
+
+def test_self_update_from_tarball_end_to_end_in_process(tmp_path, framework_tarball):
+    sys.path.insert(0, str(LIB))
+    from spa.install_kind import classify_install_kind
+    from spa.version import _install_runner, self_update
+
+    prefix = tmp_path / "prefix"
+    bindir = tmp_path / "bin"
+    result = _run_install(
+        framework_tarball,
+        _install_env(tmp_path),
+        extra_args=["--prefix", str(prefix), "--bindir", str(bindir)],
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    previous = (prefix / "VERSION").read_text().strip()
+    archive = _next_release_tarball(tmp_path, framework_tarball)
+    home, dest, config_dir = _record_cursor_skill(tmp_path, prefix)
+    env_dir = tmp_path / "envs" / "lab"
+    env_dir.mkdir(parents=True)
+    (env_dir / "keep.txt").write_text("env\n")
+
+    def runner(argv):
+        return _install_runner([*argv, "--skip-venv", "--skip-doctor"], agent=True)
+
+    outcome = self_update(
+        prefix,
+        spa_bin=str(bindir / "spa"),
+        confirm=True,
+        agent=True,
+        from_file=str(archive),
+        runner=runner,
+        config_dir=config_dir,
+        home=home,
+    )
+    assert outcome.ok is True, outcome.error
+    assert outcome.data["version"] == "9.9.9"
+    assert outcome.data["previous"] == previous
+    assert (prefix / "VERSION").read_text() == "9.9.9\n"
+    assert classify_install_kind(prefix, str(bindir / "spa")) == "prefix"
+    assert (config_dir / "skills.yml").is_file()
+    assert (env_dir / "keep.txt").read_text() == "env\n"
+    assert SKILL_MARKER in (dest / "SKILL.md").read_text()
+    assert "spa" in outcome.data["skills"]["updated"]
+
+
+def _python_shim_venv_stub():
+    return (
+        "#!/bin/sh\n"
+        'home="$(cd "$(dirname "$0")/.." && pwd)"\n'
+        'mkdir -p "$home/.venv/bin"\n'
+        "printf '#!/bin/sh\\nexec %s \"$@\"\\n' > \"$home/.venv/bin/python\"\n"
+        'chmod 0755 "$home/.venv/bin/python"\n'
+    ) % sys.executable
+
+
+def test_self_update_from_tarball_end_to_end_real_process(tmp_path, framework_tarball):
+    prefix = tmp_path / "prefix"
+    bindir = tmp_path / "bin"
+    result = _run_install(
+        framework_tarball,
+        _install_env(tmp_path),
+        extra_args=["--prefix", str(prefix), "--bindir", str(bindir)],
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    stub = prefix / "bin" / "spa_venv.sh"
+    stub.write_text(_python_shim_venv_stub())
+    subprocess.run([str(stub), "--create"], check=True)
+    archive = _next_release_tarball(
+        tmp_path, framework_tarball, venv_stub=_python_shim_venv_stub()
+    )
+    env = spa_env(
+        {
+            "HOME": str(tmp_path / "home"),
+            "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
+            "PATH": os.pathsep.join(
+                [str(bindir), str(Path(sys.executable).parent), "/usr/bin", "/bin"]
+            ),
+        }
+    )
+    env.pop("PYTHONPATH", None)
+    (tmp_path / "home").mkdir()
+    result = subprocess.run(
+        [
+            str(prefix / ".venv" / "bin" / "python"),
+            str(prefix / "bin" / "spa"),
+            "--agent",
+            "self",
+            "update",
+            "--from",
+            str(archive),
+            "--yes",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=tmp_path,
+        timeout=600,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    assert len(lines) == 1, result.stdout
+    payload = json.loads(lines[0])
+    assert payload["ok"] is True
+    assert payload["data"]["version"] == "9.9.9"
+    assert (prefix / "VERSION").read_text() == "9.9.9\n"
 
 
 def test_uninstall_agent_without_yes_does_not_delete(tmp_path, framework_tarball):

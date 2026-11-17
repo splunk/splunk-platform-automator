@@ -456,7 +456,7 @@ spa self update --yes
 
 ## `self update`
 
-Replace a prefix install of SPA from GitHub Releases, then refresh recorded IDE skill copies. Clone and unknown installs refuse.
+Replace a prefix install of SPA from GitHub Releases (or --from FILE) with the prefix's own install.sh, then refresh recorded IDE skill copies. Clone and unknown installs refuse, as do Software, Baseconfigs, Apps, or Envs inside SPA_HOME.
 
 Requires confirmation: yes (`--yes`).
 
@@ -464,6 +464,7 @@ Requires confirmation: yes (`--yes`).
 | --- | --- |
 | `-y`, `--yes` | Confirm replacing the SPA install prefix |
 | `--version` | Release tag or X.Y.Z (default: latest) |
+| `--from` | Install from a local spa-framework tar.gz instead of GitHub (offline hosts) |
 
 Example:
 

@@ -482,13 +482,18 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "self update",
-            "summary": "Replace a prefix install of SPA from GitHub Releases, then refresh recorded IDE skill copies. Clone and unknown installs refuse.",
+            "summary": "Replace a prefix install of SPA from GitHub Releases (or --from FILE) with the prefix's own install.sh, then refresh recorded IDE skill copies. Clone and unknown installs refuse, as do Software, Baseconfigs, Apps, or Envs inside SPA_HOME.",
             "requires_confirmation": True,
             "flags": [
                 {"long": "--yes", "short": "-y", "help": "Confirm replacing the SPA install prefix"},
                 {
                     "long": "--version",
                     "help": "Release tag or X.Y.Z (default: latest)",
+                    "takes_value": True,
+                },
+                {
+                    "long": "--from",
+                    "help": "Install from a local spa-framework tar.gz instead of GitHub (offline hosts)",
                     "takes_value": True,
                 },
             ],

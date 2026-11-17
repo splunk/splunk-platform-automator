@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import urllib.error
@@ -419,9 +420,11 @@ def test_schema_includes_version_check():
 CLONE_REFUSE = ("git pull", "spa venv upgrade --shared --yes", "rebuild", "spa skills update")
 
 
-def _prefix_home(tmp_path, *, version="2.5.2"):
+def _prefix_home(tmp_path, *, version="2.5.2", install_sh="#!/bin/sh\nexit 0\n"):
     home = _checkout(tmp_path, "prefix")
     home.joinpath("VERSION").write_text(version + "\n")
+    (home / "install.sh").write_text(install_sh)
+    (home / "install.sh").chmod(0o755)
     wrapper = tmp_path / "local" / "bin" / "spa"
     wrapper.parent.mkdir(parents=True)
     _write_install_wrapper(wrapper, home)
@@ -449,7 +452,7 @@ def _recording_runner(calls, home: Path, *, version="3.1.0", skill_body=None):
         (home / "VERSION").write_text(version + "\n")
         if skill_body is not None:
             _skill_package(home / "skills" / "spa", "spa", skill_body)
-        return 0
+        return 0, ""
 
     return runner
 
@@ -463,15 +466,12 @@ def test_self_update_prefix_invokes_runner_with_force_prefix_bindir(tmp_path):
     config_dir = tmp_path / "xdg" / "spa"
     config_dir.mkdir(parents=True)
     (config_dir / "keep-me").write_text("ok\n")
-    script = tmp_path / "install.sh"
-    script.write_text("#!/bin/sh\n")
     calls = []
     result = self_update(
         home,
         spa_bin=str(wrapper),
         confirm=True,
         runner=_recording_runner(calls, home),
-        script=script,
         config_dir=config_dir,
     )
     assert result.ok is True
@@ -502,15 +502,12 @@ def test_self_update_refreshes_recorded_skills_from_new_tree(tmp_path):
     _skill_package(dest.parent, "spa", "old")
     config_dir = tmp_path / "xdg" / "spa"
     _write_skills_yml(config_dir / "skills.yml", [str(dest)])
-    script = tmp_path / "install.sh"
-    script.write_text("#!/bin/sh\n")
     calls = []
     result = self_update(
         home,
         spa_bin=str(wrapper),
         confirm=True,
         runner=_recording_runner(calls, home, skill_body="new-from-release"),
-        script=script,
         config_dir=config_dir,
         home=tmp_path / "home",
     )
@@ -539,7 +536,6 @@ def test_self_update_non_tty_requires_yes(tmp_path, monkeypatch):
         confirm=False,
         agent=False,
         runner=_recording_runner(calls, home),
-        script=tmp_path / "install.sh",
     )
     assert result.ok is False
     assert result.code == 2
@@ -559,7 +555,6 @@ def test_self_update_agent_requires_yes(tmp_path):
         confirm=False,
         agent=True,
         runner=_recording_runner(calls, home),
-        script=tmp_path / "install.sh",
     )
     assert result.ok is False
     assert result.code == 1
@@ -576,7 +571,6 @@ def test_self_update_refuses_clone(tmp_path):
         home,
         confirm=True,
         runner=_recording_runner(calls, home),
-        script=tmp_path / "install.sh",
     )
     assert result.ok is False
     assert result.code == 1
@@ -600,7 +594,6 @@ def test_self_update_refuses_symlink_into_checkout(tmp_path):
         spa_bin=str(link),
         confirm=True,
         runner=_recording_runner(calls, home),
-        script=tmp_path / "install.sh",
     )
     assert result.ok is False
     assert result.code == 1
@@ -624,7 +617,6 @@ def test_self_update_refuses_hardlink_into_checkout(tmp_path):
         spa_bin=str(hard),
         confirm=True,
         runner=_recording_runner(calls, home),
-        script=tmp_path / "install.sh",
     )
     assert result.ok is False
     assert result.code == 1
@@ -644,7 +636,6 @@ def test_self_update_refuses_unknown(tmp_path):
         spa_bin=str(home / "bin" / "spa"),
         confirm=True,
         runner=_recording_runner(calls, home),
-        script=tmp_path / "install.sh",
     )
     assert result.ok is False
     assert result.code == 1
@@ -663,7 +654,6 @@ def test_self_update_forwards_version_flag(tmp_path):
         version="3.1.0",
         confirm=True,
         runner=_recording_runner(calls, home, version="3.1.0"),
-        script=tmp_path / "install.sh",
     )
     assert result.ok is True
     argv = calls[0]
@@ -688,7 +678,6 @@ def test_self_update_skills_error_keeps_prefix_ok(tmp_path):
         spa_bin=str(wrapper),
         confirm=True,
         runner=_recording_runner(calls, home),
-        script=tmp_path / "install.sh",
         skills_update=boom,
     )
     assert result.ok is True
@@ -711,7 +700,6 @@ def test_self_update_empty_skills_names_install_and_doctor(tmp_path):
         spa_bin=str(wrapper),
         confirm=True,
         runner=_recording_runner([], home),
-        script=tmp_path / "install.sh",
         config_dir=config_dir,
         home=tmp_path / "home",
     )
@@ -719,6 +707,236 @@ def test_self_update_empty_skills_names_install_and_doctor(tmp_path):
     next_commands = [item["command"] for item in result.data["next"]]
     assert "spa skills install" in next_commands
     assert "spa doctor" in next_commands
+
+
+BOOTSTRAP = "releases/latest/download/install.sh | sh -s -- --force"
+
+
+def test_self_update_runs_a_temp_copy_of_prefix_install_sh(tmp_path):
+    from spa.version import self_update
+
+    home, wrapper = _prefix_home(tmp_path, install_sh="#!/bin/sh\n# prefix copy\n")
+    seen = {}
+
+    def runner(argv):
+        script = Path(argv[0])
+        seen["script"] = script
+        seen["text"] = script.read_text()
+        (home / "VERSION").write_text("3.1.0\n")
+        return 0, ""
+
+    result = self_update(home, spa_bin=str(wrapper), confirm=True, runner=runner)
+    assert result.ok is True, result.error
+    script = seen["script"]
+    assert script.name == "install.sh"
+    assert home.resolve() not in script.resolve().parents
+    assert seen["text"] == "#!/bin/sh\n# prefix copy\n"
+    assert not script.parent.exists()
+
+
+def test_self_update_without_prefix_install_sh_names_bootstrap(tmp_path):
+    from spa.version import self_update
+
+    home, wrapper = _prefix_home(tmp_path)
+    (home / "install.sh").unlink()
+    calls = []
+    result = self_update(
+        home, spa_bin=str(wrapper), confirm=True, runner=_recording_runner(calls, home)
+    )
+    assert result.ok is False
+    assert result.code == 1
+    assert not calls
+    assert "install.sh" in (result.error or "")
+    assert "curl -fsSL" in (result.error or "")
+    assert BOOTSTRAP in (result.error or "")
+
+
+def test_self_update_forwards_from_as_absolute_path(tmp_path, monkeypatch):
+    from spa.version import self_update
+
+    home, wrapper = _prefix_home(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    calls = []
+    result = self_update(
+        home,
+        spa_bin=str(wrapper),
+        confirm=True,
+        from_file="./new.tar.gz",
+        runner=_recording_runner(calls, home),
+    )
+    assert result.ok is True, result.error
+    argv = calls[0]
+    assert argv[argv.index("--from") + 1] == str(tmp_path / "new.tar.gz")
+
+
+@pytest.mark.parametrize(
+    "folder,flag",
+    [
+        ("Software", "--software-dir"),
+        ("Baseconfigs", "--baseconfig-dir"),
+        ("Apps", "--apps-dir"),
+        ("Envs", "--env-dir"),
+    ],
+)
+def test_self_update_refuses_user_content_in_prefix(tmp_path, folder, flag):
+    from spa.version import self_update
+
+    home, wrapper = _prefix_home(tmp_path)
+    (home / folder).mkdir()
+    calls = []
+    result = self_update(
+        home,
+        spa_bin=str(wrapper),
+        confirm=False,
+        agent=True,
+        runner=_recording_runner(calls, home),
+    )
+    assert result.ok is False
+    assert result.code == 1
+    assert not calls
+    error = result.error or ""
+    assert str(home / folder) in error
+    assert "spa environment set %s DIR" % flag in error
+    assert "-y/--yes" not in error
+
+
+def test_self_update_agent_failure_reports_redacted_install_tail(tmp_path):
+    from spa.version import self_update
+
+    lines = "".join("echo 'line %02d'\n" % n for n in range(1, 31))
+    install_sh = (
+        "#!/bin/sh\n" + lines + "echo 'GITHUB_TOKEN=ghp_fakeSecret123'\n"
+        "echo 'ERROR: could not reach GitHub releases' >&2\nexit 3\n"
+    )
+    home, wrapper = _prefix_home(tmp_path, install_sh=install_sh)
+    result = self_update(home, spa_bin=str(wrapper), confirm=True, agent=True)
+    assert result.ok is False
+    assert result.code == 1
+    error = result.error or ""
+    assert "exit 3" in error
+    assert "ERROR: could not reach GitHub releases" in error
+    assert "line 30" in error
+    assert "line 05" not in error
+    assert "ghp_fakeSecret123" not in json.dumps(result.to_dict())
+    assert BOOTSTRAP not in error
+
+
+def test_self_update_failure_with_missing_bin_spa_names_bootstrap(tmp_path):
+    from spa.version import self_update
+
+    home, wrapper = _prefix_home(tmp_path)
+
+    def runner(_argv):
+        (home / "bin" / "spa").unlink()
+        return 1, ""
+
+    result = self_update(home, spa_bin=str(wrapper), confirm=True, agent=True, runner=runner)
+    assert result.ok is False
+    assert result.code == 1
+    assert BOOTSTRAP in (result.error or "")
+
+
+_HARNESS = r"""
+import shutil, sys
+from pathlib import Path
+
+prefix, wrapper, new_tree, mode, agent, cfg, home = sys.argv[1:8]
+sys.path.insert(0, str(Path(prefix) / "lib"))
+from spa import cli
+from spa.version import self_update
+
+def runner(_argv):
+    shutil.rmtree(prefix)
+    if mode == "fail":
+        return 1, "ERROR: boom\n"
+    shutil.copytree(new_tree, prefix, symlinks=True)
+    return 0, ""
+
+as_agent = agent == "1"
+result = self_update(
+    Path(prefix),
+    spa_bin=wrapper,
+    confirm=True,
+    agent=as_agent,
+    runner=runner,
+    config_dir=Path(cfg),
+    home=Path(home),
+)
+sys.exit(cli._print_version(result, as_agent))
+"""
+
+
+def _copied_lib_prefix(root: Path, version: str) -> Path:
+    root.mkdir(parents=True)
+    shutil.copytree(
+        LIB, root / "lib", ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
+    )
+    (root / "ansible").symlink_to(PROJECT_ROOT / "ansible")
+    (root / "bin").mkdir()
+    shutil.copy2(PROJECT_ROOT / "bin" / "spa", root / "bin" / "spa")
+    (root / "VERSION").write_text(version + "\n")
+    (root / "install.sh").write_text("#!/bin/sh\nexit 0\n")
+    (root / "install.sh").chmod(0o755)
+    return root
+
+
+def _run_harness(tmp_path, mode, agent):
+    prefix = _copied_lib_prefix(tmp_path / "prefix", "2.5.2")
+    new_tree = _copied_lib_prefix(tmp_path / "new-tree", "9.9.9")
+    for name in ("next_steps.py", "runlog.py"):
+        (new_tree / "lib" / "spa" / name).write_text(
+            "raise RuntimeError('imported from the new tree')\n"
+        )
+    wrapper = tmp_path / "local" / "bin" / "spa"
+    wrapper.parent.mkdir(parents=True)
+    _write_install_wrapper(wrapper, prefix)
+    (tmp_path / "xdg").mkdir()
+    env = spa_env({"PYTHONDONTWRITEBYTECODE": "1", "HOME": str(tmp_path / "home")})
+    env.pop("PYTHONPATH", None)
+    return subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _HARNESS,
+            str(prefix),
+            str(wrapper),
+            str(new_tree),
+            mode,
+            "1" if agent else "0",
+            str(tmp_path / "xdg"),
+            str(tmp_path / "home"),
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=tmp_path,
+    )
+
+
+@pytest.mark.parametrize("agent", [True, False])
+def test_self_update_failure_after_tree_deleted_still_renders(tmp_path, agent):
+    result = _run_harness(tmp_path, "fail", agent)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "Traceback" not in result.stderr
+    if agent:
+        payload = json.loads(result.stdout)
+        assert payload["ok"] is False
+        assert "ERROR: boom" in payload["error"]
+    else:
+        assert "install.sh --force failed" in result.stderr
+
+
+@pytest.mark.parametrize("agent", [True, False])
+def test_self_update_success_does_not_import_from_new_tree(tmp_path, agent):
+    result = _run_harness(tmp_path, "ok", agent)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Traceback" not in result.stderr
+    if agent:
+        payload = json.loads(result.stdout)
+        assert payload["ok"] is True
+        assert payload["data"]["version"] == "9.9.9"
+    else:
+        assert result.stdout == "spa 9.9.9 (was 2.5.2)\n"
 
 
 def test_schema_includes_self_update():
@@ -732,10 +950,12 @@ def test_schema_includes_self_update():
     flags = {flag["long"]: flag for flag in update["flags"]}
     assert "--yes" in flags
     assert flags["--version"]["takes_value"] is True
+    assert flags["--from"]["takes_value"] is True
     help_text = run_spa_inprocess(["--no-agent", "self", "update", "--help"])
     assert help_text.returncode == 0, help_text.stderr
     assert "usage: spa self update" in help_text.stdout
     assert "--version" in help_text.stdout
+    assert "--from FILE" in help_text.stdout
     assert "--yes" in help_text.stdout
     agent_help = run_spa(["--agent", "self", "update", "--help"])
     assert agent_help.returncode == 0, agent_help.stderr
@@ -781,31 +1001,57 @@ def test_cli_self_update_forwards_version_and_yes(monkeypatch):
     assert captured.get("version") == "3.1.0"
     assert result.stdout == "spa 3.1.0 (was 2.5.2)\n"
 
+    captured.clear()
+    result = run_spa_inprocess(
+        ["--no-agent", "self", "update", "--from", "./new.tar.gz", "--yes"]
+    )
+    assert result.returncode == 0, result.stderr
+    assert captured.get("from_file") == "./new.tar.gz"
 
-def test_default_install_runner_hides_output_in_agent_mode(tmp_path, capsys):
+
+def test_default_install_runner_hides_output_in_agent_mode(tmp_path, capfd):
     from spa.version import _install_runner
 
     script = tmp_path / "install.sh"
     script.write_text("#!/bin/sh\necho leaked-out\necho leaked-err >&2\n")
     script.chmod(0o755)
-    rc = _install_runner([str(script)], agent=True)
+    rc, output = _install_runner([str(script)], agent=True)
     assert rc == 0
-    captured = capsys.readouterr()
+    captured = capfd.readouterr()
     assert "leaked" not in captured.out + captured.err
+    assert "leaked-out" in output
+    assert "leaked-err" in output
 
 
-def test_default_install_runner_prints_progress_on_stderr_for_humans(tmp_path, capsys):
+def test_default_install_runner_streams_to_stderr_for_humans(tmp_path, capfd):
     from spa.version import _install_runner
 
     script = tmp_path / "install.sh"
     script.write_text("#!/bin/sh\necho leaked-out\necho leaked-err >&2\n")
     script.chmod(0o755)
-    rc = _install_runner([str(script)], agent=False)
+    rc, output = _install_runner([str(script)], agent=False)
     assert rc == 0
-    captured = capsys.readouterr()
+    assert output == ""
+    captured = capfd.readouterr()
     assert captured.out == ""
     assert "leaked-out" in captured.err
     assert "leaked-err" in captured.err
+
+
+def test_default_install_runner_does_not_pipe_for_humans(tmp_path, monkeypatch):
+    from spa import version as version_mod
+
+    seen = {}
+
+    def fake_run(argv, **kwargs):
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(version_mod.subprocess, "run", fake_run)
+    version_mod._install_runner(["install.sh"], agent=False)
+    assert not seen.get("capture_output")
+    assert seen.get("stdout") is not subprocess.PIPE
+    assert seen.get("stderr") is not subprocess.PIPE
 
 
 def test_self_update_skips_env_dir_and_venv_gates(tmp_path, monkeypatch):

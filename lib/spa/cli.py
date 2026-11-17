@@ -2333,6 +2333,12 @@ def _run(argv: Sequence[str]) -> int:
         help="Release tag or X.Y.Z (default: latest)",
     )
     p_self_update.add_argument(
+        "--from",
+        dest="self_from",
+        metavar="FILE",
+        help="Install from a local spa-framework tar.gz instead of GitHub (offline hosts)",
+    )
+    p_self_update.add_argument(
         "-y",
         "--yes",
         action="store_true",
@@ -3551,6 +3557,7 @@ def _run(argv: Sequence[str]) -> int:
         return _print_version(
             session.self_update(
                 version=getattr(args, "self_version", None),
+                from_file=getattr(args, "self_from", None),
                 confirm=bool(getattr(args, "yes", False)),
                 agent=as_agent,
             ),
