@@ -1344,6 +1344,31 @@ def test_init_uses_existing_shared_venv(tmp_path):
     assert "Creating Python venv" not in out
 
 
+def test_create_venv_reuses_pinned_spa_venv_dir(tmp_path, monkeypatch):
+    pinned = tmp_path / "runner-venv"
+    (pinned / "bin").mkdir(parents=True)
+    (pinned / "bin" / "activate").write_text("# fake\n", encoding="utf-8")
+    monkeypatch.setenv("SPA_VENV_DIR", str(pinned))
+    calls = []
+    monkeypatch.setattr(
+        "spa.init.subprocess.check_call",
+        lambda *args, **kwargs: calls.append(args) or 0,
+    )
+    spa_home = tmp_path / "spa"
+    (spa_home / "bin").mkdir(parents=True)
+    (spa_home / "bin" / "spa_venv.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+    dest = tmp_path / "env"
+    dest.mkdir()
+    from spa.init import create_venv
+
+    create_venv(
+        dest, spa_home, env_venv=False, python=None, ansible=None, pip_pkgs=(), rebuild=False
+    )
+
+    assert calls == []
+    assert not (spa_home / ".venv").exists()
+
+
 def test_ansible_pin_passed_to_venv(tmp_path, monkeypatch):
     calls = []
 

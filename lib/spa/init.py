@@ -586,6 +586,12 @@ def create_venv(
         venv_dir = dest / ".venv"
     else:
         venv_dir = spa_home / ".venv"
+        explicit = (os.environ.get("SPA_VENV_DIR") or "").strip()
+        if explicit and not rebuild and not ansible and not pip_pkgs:
+            pinned = Path(explicit).expanduser()
+            if (pinned / "bin" / "activate").is_file():
+                _say("  venv:      %s (existing)" % pinned)
+                return
     if rebuild and (venv_dir / "bin" / "activate").is_file():
         shutil.rmtree(venv_dir)
     if (venv_dir / "bin" / "activate").is_file() and not rebuild:
