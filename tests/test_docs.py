@@ -515,6 +515,7 @@ def test_docs_teach_living_spec_and_local_test_layers():
     assert "CLI runtime" in layers
     assert "cli_runtime" in layers
     assert "SPA_CLI_MARKEXPR" in layers
+    assert "tests/.venv" in layers
     assert "Live AWS" in layers
     assert "live CCM" in layers
     assert "mocked CCM" in layers
@@ -538,6 +539,7 @@ def test_docs_teach_living_spec_and_local_test_layers():
     assert "unsandbox" in which_runner.lower()
     assert "CLI help" in which_runner
     assert "CLI runtime" in which_runner
+    assert "tests/.venv" in which_runner
     assert "mocked CCM" in which_runner
 
 

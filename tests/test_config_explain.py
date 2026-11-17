@@ -157,38 +157,44 @@ def _explain_inventory_paths():
     return paths
 
 
-def test_explain_commands_are_human_spelling_on_every_page():
+@pytest.mark.parametrize(
+    "path",
+    sorted(_explain_inventory_paths()),
+    ids=lambda value: value or "<root>",
+)
+def test_explain_commands_are_human_spelling_on_every_page(path):
     """CFG-CLI-005. Explain command/example never includes --agent, including templates."""
+    try:
+        data = explain_config(path)
+    except (KeyError, TypeError):
+        return
+    blob = json.dumps(data)
+    label = path or "<root>"
+    assert "--agent" not in blob, label
+    assert "--agent" not in format_explain(data), label
+    command = data.get("command")
+    if command:
+        assert str(command).startswith("spa "), (path, command)
+
+
+def test_explain_inventory_includes_canonical_human_commands():
+    """Inventory-wide command examples without re-walking every explain page."""
+    template = explain_config("template.remote-provider")
+    assert "config merge" in template["command"]
     seen_commands = []
-    for path in sorted(_explain_inventory_paths()):
-        try:
-            data = explain_config(path)
-        except (KeyError, TypeError):
-            continue
-        blob = json.dumps(data)
-        assert "--agent" not in blob, path or "<root>"
-        assert "--agent" not in format_explain(data), path or "<root>"
-        command = data.get("command")
-        if command:
-            seen_commands.append((path or "<root>", command))
-            assert str(command).startswith("spa "), (path, command)
     for item in load_features(PROJECT_ROOT):
         command = feature_command(item)
         if not command or not command.get("command"):
             continue
         text = command["command"]
-        seen_commands.append((item.get("id") or item.get("selector"), text))
+        seen_commands.append(text)
         assert "--agent" not in text, text
         assert text.startswith("spa "), text
-    assert any(
-        path == "template.remote-provider" and "config merge" in command
-        for path, command in seen_commands
-    )
-    assert any(command.startswith("spa config set ") for _path, command in seen_commands)
-    assert any(command.startswith("spa config topology ") for _path, command in seen_commands)
-    assert any(command.startswith("spa config provider ") for _path, command in seen_commands)
-    assert any(command.startswith("spa config add ") for _path, command in seen_commands)
-    assert any(command.startswith("spa apps add ") for _path, command in seen_commands)
+    assert any(command.startswith("spa config set ") for command in seen_commands)
+    assert any(command.startswith("spa config topology ") for command in seen_commands)
+    assert any(command.startswith("spa config provider ") for command in seen_commands)
+    assert any(command.startswith("spa config add ") for command in seen_commands)
+    assert any(command.startswith("spa apps add ") for command in seen_commands)
 
 
 def test_candidates_are_user_paths_for_a_later_shell():

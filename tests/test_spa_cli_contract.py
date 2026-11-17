@@ -1186,7 +1186,7 @@ def _help_action_names():
 
 
 def test_agent_schema_is_complete_and_documented():
-    result = run_spa(["agent", "schema"])
+    result = run_spa_inprocess(["agent", "schema"])
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
@@ -1285,13 +1285,13 @@ def test_agent_schema_is_complete_and_documented():
     }
     for parent, phrases in bare_parents.items():
         argv = parent.split()
-        human = run_spa(["--no-agent", *argv])
+        human = run_spa_inprocess(["--no-agent", *argv])
         assert human.returncode == 2, parent
         assert human.stdout.strip() == "", parent
         assert "the following arguments are required" not in human.stderr, parent
         for phrase in phrases:
             assert phrase in human.stderr, (parent, phrase)
-        agent = run_spa(["--json", *argv])
+        agent = run_spa_inprocess(["--json", *argv])
         assert agent.returncode == 2, parent
         assert agent.stderr == "", parent
         body = json.loads(agent.stdout)
@@ -1313,18 +1313,18 @@ def test_agent_schema_is_complete_and_documented():
         (["feat"], "spa features was removed."),
     )
     for argv, phrase in operands:
-        human = run_spa(["--no-agent", *argv])
+        human = run_spa_inprocess(["--no-agent", *argv])
         assert human.returncode == 2, argv
         assert phrase in human.stderr, argv
         assert "the following arguments are required" not in human.stderr, argv
-        agent = run_spa(["--json", *argv])
+        agent = run_spa_inprocess(["--json", *argv])
         assert agent.returncode == 2, argv
         assert agent.stderr == "", argv
         body = json.loads(agent.stdout)
         assert body["ok"] is False and "data" not in body
         assert phrase in body["error"], argv
 
-    aws = run_spa(["--no-agent", "provider", "aws"])
+    aws = run_spa_inprocess(["--no-agent", "provider", "aws"])
     assert aws.returncode == 2, aws.stderr
     assert "spa provider aws needs an action." in aws.stderr
     assert "spa provider aws regions list" in aws.stderr

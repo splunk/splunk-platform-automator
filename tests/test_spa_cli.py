@@ -53,7 +53,31 @@ def test_spa_env_drops_inherited_spa_and_ansible_paths(monkeypatch):
     clean = spa_env()
 
     for name in INHERITED_PATH_VARS:
+        if name == "SPA_VENV_DIR":
+            continue
         assert name not in clean
+    assert clean["SPA_VENV_DIR"] == str(PROJECT_ROOT / "tests" / ".venv")
+    assert clean["SPA_VENV_DIR"] != "/dirty-shell/spa_venv_dir"
+
+
+def test_spa_env_pins_default_venv_to_tests_venv():
+    clean = spa_env()
+
+    assert clean["SPA_VENV_DIR"] == str(PROJECT_ROOT / "tests" / ".venv")
+
+
+def test_run_spa_pins_default_venv_to_tests_venv(monkeypatch):
+    seen = []
+
+    def fake_run(*args, **kwargs):
+        seen.append(kwargs.get("env") or {})
+        return subprocess.CompletedProcess(args[0] if args else [], 0, "", "")
+
+    monkeypatch.setattr("spa_testutil.subprocess.run", fake_run)
+    run_spa(["--help"])
+
+    assert seen
+    assert seen[0]["SPA_VENV_DIR"] == str(PROJECT_ROOT / "tests" / ".venv")
 
 
 @pytest.mark.parametrize(
@@ -311,6 +335,39 @@ def test_complete_help_contract_uses_inprocess_runner():
         }
         assert "run_spa_inprocess" in called, name
         assert "run_spa" not in called, name
+
+
+def test_help_and_schema_outlier_loops_use_inprocess_runner():
+    """xdist cannot split these loops; they must not spawn bin/spa per command."""
+    import ast
+
+    cases = (
+        (
+            PROJECT_ROOT / "tests" / "test_spa_completion.py",
+            {"test_schema_flag_values_match_command_help"},
+        ),
+        (
+            PROJECT_ROOT / "tests" / "test_spa_cli_contract.py",
+            {"test_agent_schema_is_complete_and_documented"},
+        ),
+    )
+    for path, expected in cases:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        bodies = {
+            node.name: node
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name in expected
+        }
+        assert set(bodies) == expected, path.name
+        for name, node in bodies.items():
+            called = {
+                child.func.id
+                for child in ast.walk(node)
+                if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
+            }
+            assert "run_spa_inprocess" in called, (path.name, name)
+            assert "run_spa" not in called, (path.name, name)
 
 
 @pytest.mark.no_spa_env
