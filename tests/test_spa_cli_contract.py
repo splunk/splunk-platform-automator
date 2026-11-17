@@ -33,6 +33,7 @@ HELP_CONTRACTS = [
             "validate",
             "doctor",
             "version",
+            "self",
             "venv",
             "environment",
             "deploy",
@@ -117,6 +118,23 @@ HELP_CONTRACTS = [
         [
             "usage: spa version check",
             "GitHub",
+        ],
+    ),
+    (
+        ["self", "--help"],
+        [
+            "usage: spa self",
+            "update",
+            "spa self needs an action",
+            "spa self update",
+        ],
+    ),
+    (
+        ["self", "update", "--help"],
+        [
+            "usage: spa self update",
+            "--yes",
+            "--version",
         ],
     ),
     (
@@ -1066,7 +1084,7 @@ def _help_action_names():
     names = set()
     for name, _alias in _command_rows(root.stdout):
         names.add("agent schema" if name == "agent" else name)
-    for parent in ("environment", "hosts", "apps", "config", "skills", "venv", "completion", "architecture", "licenses", "provider", "version"):
+    for parent in ("environment", "hosts", "apps", "config", "skills", "venv", "completion", "architecture", "licenses", "provider", "version", "self"):
         child = run_spa_inprocess(["--no-agent", parent, "--help"])
         assert child.returncode == 0, child.stderr
         for name, _alias in _command_rows(child.stdout):

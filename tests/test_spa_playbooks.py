@@ -226,6 +226,11 @@ def test_prompt_text_for_local_risks_never_mentions_hosts():
     assert "will delete and recreate the Python environment for this framework" in rebuild
     assert "host" not in rebuild
 
+    self_update = prompt_text("spa self update", risk="self_update")
+    assert "prefix" in self_update
+    assert "Python environment" not in self_update
+    assert "host" not in self_update
+
 
 def test_ensure_confirmed_human_prompt_uses_risk(monkeypatch):
     seen = []

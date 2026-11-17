@@ -33,6 +33,8 @@ Work on this branch is **3.0**. Linux packages and Homebrew are later, not part 
 
 - **Skills and docs** ([#55](https://github.com/splunk/splunk-platform-automator/issues/55), [#61](https://github.com/splunk/splunk-platform-automator/issues/61), [#67](https://github.com/splunk/splunk-platform-automator/issues/67), [#101](https://github.com/splunk/splunk-platform-automator/issues/101), [#125](https://github.com/splunk/splunk-platform-automator/issues/125)): `spa skills install` copies packages from `$SPA_HOME/skills/spa/` into the IDE skill directory. Operator skills are `/spa` (including [upgrade.md](skills/spa/spa/references/upgrade.md) and [health.md](skills/spa/spa/references/health.md)), `/spa-create-config`, and `/spa-apps`. First-run path is [docs/quick-start.md](docs/quick-start.md). Generated catalogs are [docs/commands.md](docs/commands.md) and [docs/config.md](docs/config.md). Contributor map: [docs/architecture.md](docs/architecture.md).
 
+- **SPA version and self-update** ([#172](https://github.com/splunk/splunk-platform-automator/issues/172)): `spa --version` / `spa version` print the installed framework (no network). `spa version check` compares that to GitHub latest. `spa skills update` refreshes recorded IDE copies from `$SPA_HOME/skills/spa`. `spa self update --yes` replaces a prefix install from GitHub Releases, then runs that skills refresh. A clone or unknown install refuses; uninstall stays `install.sh --uninstall`.
+
 ### Changed
 
 - **Python and Ansible**: Python **3.9–3.14** and Ansible **2.21**. `spa venv` picks the newest usable 3.9–3.14 when `python3` is newer.

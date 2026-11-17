@@ -86,11 +86,12 @@ _HIDDEN_ALIASES = {
 _VISIBLE_ALIAS: Dict[str, frozenset] = {}
 # These must keep working without a venv: they are how an operator inspects or
 # builds one. Every other command reads YAML or runs Ansible, so it is gated.
-VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills", "completion", "licenses", "version"})
+VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills", "completion", "licenses", "version", "self"})
 GLOBAL_OPTS_WITH_VALUE = ("--start-dir", "--env")
 # Header flags take a value. Their value must not be read as a command word,
 # so `config header --intent set` stays `config header` and not `config header set`.
 _COMMAND_WORD_VALUE_FLAGS = GLOBAL_OPTS_WITH_VALUE + (
+    "--version",
     "--architecture",
     "--intent",
     "--requirements",
@@ -779,6 +780,10 @@ SKILLS_NEEDS_ACTION = (
     "Remove:     spa skills remove [PLATFORM] --yes\n"
     "Platforms:  %s.\n"
     "Several:    spa skills install cursor,claude" % _SKILLS_PLATFORMS
+)
+SELF_NEEDS_ACTION = (
+    "spa self needs an action.\n"
+    "Update: spa self update --yes"
 )
 _SKILLS_PLATFORM_HELP = (
     "One IDE or a comma-separated list: %s. Omit to use SPA_SKILLS_PLATFORMS or auto-detect."
@@ -2306,6 +2311,35 @@ def _run(argv: Sequence[str]) -> int:
     )
     _add_mode_flags(p_version_check)
 
+    p_self = _add_command(
+        sub,
+        "self",
+        help="Update this prefix install of SPA from GitHub Releases",
+        epilog=SELF_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    self_sub = p_self.add_subparsers(dest="self_cmd", metavar="ACTION")
+    p_self_update = _add_action(
+        self_sub,
+        "update",
+        help="Replace a prefix install of SPA from GitHub Releases",
+        usage="spa self update --yes",
+    )
+    _add_mode_flags(p_self_update)
+    p_self_update.add_argument(
+        "--version",
+        dest="self_version",
+        metavar="X.Y.Z",
+        help="Release tag or X.Y.Z (default: latest)",
+    )
+    p_self_update.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm replacing the SPA install prefix (required in agent mode)",
+    )
+
     p_venv = _add_command(
         sub,
         "venv",
@@ -3127,7 +3161,7 @@ def _run(argv: Sequence[str]) -> int:
         args, "ccm_action", None
     ) not in {"set", "extend"}
     if (
-        args.command not in {"init", "agent", "environment", "doctor", "venv", "skills", "completion", "version"}
+        args.command not in {"init", "agent", "environment", "doctor", "venv", "skills", "completion", "version", "self"}
         and not apps_without_env
         and not config_without_env
         and not architecture_without_env
@@ -3508,6 +3542,18 @@ def _run(argv: Sequence[str]) -> int:
     if args.command == "version":
         return _print_version(
             session.version(check=_action(args, "version_cmd") == "check"),
+            as_agent,
+        )
+
+    if args.command == "self":
+        if _action(args, "self_cmd") != "update":
+            return _reject(SELF_NEEDS_ACTION, as_agent)
+        return _print_version(
+            session.self_update(
+                version=getattr(args, "self_version", None),
+                confirm=bool(getattr(args, "yes", False)),
+                agent=as_agent,
+            ),
             as_agent,
         )
 

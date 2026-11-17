@@ -444,6 +444,33 @@ Example:
 spa --agent version check
 ```
 
+## `self`
+
+Update this prefix install of SPA from GitHub Releases. Bare spa self exits 2.
+
+Example:
+
+```bash
+spa self update --yes
+```
+
+## `self update`
+
+Replace a prefix install of SPA from GitHub Releases, then refresh recorded IDE skill copies. Clone and unknown installs refuse.
+
+Requires confirmation: yes (`--yes`).
+
+| Flag | Description |
+| --- | --- |
+| `-y`, `--yes` | Confirm replacing the SPA install prefix |
+| `--version` | Release tag or X.Y.Z (default: latest) |
+
+Example:
+
+```bash
+spa self update --yes
+```
+
 ## `doctor`
 
 Host prerequisite checks

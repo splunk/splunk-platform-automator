@@ -60,6 +60,25 @@ cd ~/Splunk-Platform-Automator/Envs/my-env
 
 What belongs in those directories, and how shared path defaults work: [Prepare Software](user-guide.md#prepare-software).
 
+## Upgrade
+
+When `spa` is already on PATH from a prefix install, upgrade in place:
+
+```bash
+spa version check
+spa self update --yes
+```
+
+`spa self update` replaces `$SPA_HOME` with the chosen GitHub Release (the same `--force` prefix replace as `install.sh`) and then refreshes recorded IDE skill copies. Environment directories, `~/.config/spa`, Software, and Baseconfigs stay. A git clone is not a prefix: `git pull`, then `spa venv upgrade --shared --yes` and `spa skills update`.
+
+If `spa` is not on PATH, bootstrap (or re-bootstrap) with the installer. `--force` replaces an existing prefix:
+
+```sh
+curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh -s -- --force
+```
+
+Uninstall stays `install.sh --uninstall`. Splunk upgrades stay `spa run upgrade_*`.
+
 ## Shell completion
 
 `spa completion bash` and `spa completion zsh` print a function. spa does not edit the shell startup file.

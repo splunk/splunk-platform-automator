@@ -199,6 +199,19 @@ def test_non_clone_install_uses_the_release_prefix_one_liner():
     assert "spa environment set --baseconfig-dir" in checkout_section
 
 
+def test_prefix_upgrade_is_spa_self_update():
+    """Installed spa upgrades in place; curl|sh stays the bootstrap when spa is missing."""
+    install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    skill = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
+    assert "spa self update" in install
+    assert RELEASE_INSTALL_ONE_LINER in install
+    uninstall = install.split("## Uninstall", 1)[1].split("\n## ", 1)[0]
+    assert "install.sh --uninstall" in uninstall
+    assert "spa self update" in guide
+    assert "spa self update" in skill
+
+
 def test_architecture_notes_provider_order():
     """A new provider sets Provider.order; public lists come from provider_ids()."""
     architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")

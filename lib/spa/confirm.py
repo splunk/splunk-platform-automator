@@ -48,6 +48,7 @@ CONSEQUENCE = {
     "registry_cleanup": "will remove registry entries for missing environments (no directories are deleted)",
     "local_paths": "will create directories and write ~/.config/spa/paths.yml",
     "software_license": "will copy a license file into the Software directory",
+    "self_update": "will replace the SPA install prefix with a GitHub Release",
 }
 
 

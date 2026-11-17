@@ -1,6 +1,7 @@
-"""Local spa version, install_kind, and GitHub version check (issue #172)."""
+"""Local spa version, install_kind, GitHub check, and prefix self-update (issue #172)."""
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -413,3 +414,418 @@ def test_schema_includes_version_check():
     assert agent_help.returncode == 0, agent_help.stderr
     payload = json.loads(agent_help.stdout)
     assert payload["data"]["name"] == "version check"
+
+
+CLONE_REFUSE = ("git pull", "spa venv upgrade --shared --yes", "rebuild", "spa skills update")
+
+
+def _prefix_home(tmp_path, *, version="2.5.2"):
+    home = _checkout(tmp_path, "prefix")
+    home.joinpath("VERSION").write_text(version + "\n")
+    wrapper = tmp_path / "local" / "bin" / "spa"
+    wrapper.parent.mkdir(parents=True)
+    _write_install_wrapper(wrapper, home)
+    return home, wrapper
+
+
+def _skill_package(root: Path, name: str, body: str) -> Path:
+    dest = root / name
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "SKILL.md").write_text("---\nname: %s\n---\n%s\n" % (name, body), encoding="utf-8")
+    return dest
+
+
+def _write_skills_yml(path: Path, copies) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = ["# SPA skill copies. Not secrets.", "copies:"]
+    for item in copies:
+        lines.append("  - %s" % item)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _recording_runner(calls, home: Path, *, version="3.1.0", skill_body=None):
+    def runner(argv):
+        calls.append(list(argv))
+        (home / "VERSION").write_text(version + "\n")
+        if skill_body is not None:
+            _skill_package(home / "skills" / "spa", "spa", skill_body)
+        return 0
+
+    return runner
+
+
+def test_self_update_prefix_invokes_runner_with_force_prefix_bindir(tmp_path):
+    from spa.version import self_update
+
+    home, wrapper = _prefix_home(tmp_path)
+    env_dir = tmp_path / "env"
+    env_dir.mkdir()
+    config_dir = tmp_path / "xdg" / "spa"
+    config_dir.mkdir(parents=True)
+    (config_dir / "keep-me").write_text("ok\n")
+    script = tmp_path / "install.sh"
+    script.write_text("#!/bin/sh\n")
+    calls = []
+    result = self_update(
+        home,
+        spa_bin=str(wrapper),
+        confirm=True,
+        runner=_recording_runner(calls, home),
+        script=script,
+        config_dir=config_dir,
+    )
+    assert result.ok is True
+    assert result.code == 0
+    data = result.data
+    assert data["previous"] == "2.5.2"
+    assert data["version"] == "3.1.0"
+    assert data["install_kind"] == "prefix"
+    assert data["spa_home"] == str(home.resolve())
+    assert calls
+    argv = calls[0]
+    assert "--force" in argv
+    assert argv[argv.index("--prefix") + 1] == str(home.resolve())
+    assert argv[argv.index("--bindir") + 1] == str(wrapper.parent)
+    assert str(env_dir) not in argv
+    assert str(config_dir) not in argv
+    assert str(config_dir.parent) not in argv
+    assert (config_dir / "keep-me").is_file()
+
+
+def test_self_update_refreshes_recorded_skills_from_new_tree(tmp_path):
+    from spa.version import self_update
+
+    home, wrapper = _prefix_home(tmp_path)
+    source = home / "skills" / "spa"
+    _skill_package(source, "spa", "old")
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    _skill_package(dest.parent, "spa", "old")
+    config_dir = tmp_path / "xdg" / "spa"
+    _write_skills_yml(config_dir / "skills.yml", [str(dest)])
+    script = tmp_path / "install.sh"
+    script.write_text("#!/bin/sh\n")
+    calls = []
+    result = self_update(
+        home,
+        spa_bin=str(wrapper),
+        confirm=True,
+        runner=_recording_runner(calls, home, skill_body="new-from-release"),
+        script=script,
+        config_dir=config_dir,
+        home=tmp_path / "home",
+    )
+    assert result.ok is True
+    assert calls
+    assert "new-from-release" in (dest / "SKILL.md").read_text(encoding="utf-8")
+    assert (config_dir / "skills.yml").is_file()
+    skills = result.data["skills"]
+    assert "spa" in skills["updated"]
+    assert "cursor" in skills["platforms"]
+    assert "error" not in skills
+    next_commands = [item["command"] for item in result.data["next"]]
+    assert "spa doctor" in next_commands
+    assert "spa skills update" not in next_commands
+
+
+def test_self_update_non_tty_requires_yes(tmp_path, monkeypatch):
+    from spa.version import self_update
+
+    home, wrapper = _prefix_home(tmp_path)
+    calls = []
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    result = self_update(
+        home,
+        spa_bin=str(wrapper),
+        confirm=False,
+        agent=False,
+        runner=_recording_runner(calls, home),
+        script=tmp_path / "install.sh",
+    )
+    assert result.ok is False
+    assert result.code == 2
+    assert "-y/--yes" in (result.error or "")
+    assert "agent mode" not in (result.error or "")
+    assert not calls
+
+
+def test_self_update_agent_requires_yes(tmp_path):
+    from spa.version import self_update
+
+    home, wrapper = _prefix_home(tmp_path)
+    calls = []
+    result = self_update(
+        home,
+        spa_bin=str(wrapper),
+        confirm=False,
+        agent=True,
+        runner=_recording_runner(calls, home),
+        script=tmp_path / "install.sh",
+    )
+    assert result.ok is False
+    assert result.code == 1
+    assert "-y/--yes" in (result.error or "")
+    assert not calls
+
+
+def test_self_update_refuses_clone(tmp_path):
+    from spa.version import self_update
+
+    home = _check_home(tmp_path)
+    calls = []
+    result = self_update(
+        home,
+        confirm=True,
+        runner=_recording_runner(calls, home),
+        script=tmp_path / "install.sh",
+    )
+    assert result.ok is False
+    assert result.code == 1
+    assert not calls
+    error = result.error or ""
+    for phrase in CLONE_REFUSE:
+        assert phrase in error, phrase
+
+
+def test_self_update_refuses_symlink_into_checkout(tmp_path):
+    from spa.version import self_update
+
+    home = _check_home(tmp_path)
+    bindir = tmp_path / "local" / "bin"
+    bindir.mkdir(parents=True)
+    link = bindir / "spa"
+    link.symlink_to(home / "bin" / "spa")
+    calls = []
+    result = self_update(
+        home,
+        spa_bin=str(link),
+        confirm=True,
+        runner=_recording_runner(calls, home),
+        script=tmp_path / "install.sh",
+    )
+    assert result.ok is False
+    assert result.code == 1
+    assert not calls
+    error = result.error or ""
+    for phrase in CLONE_REFUSE:
+        assert phrase in error, phrase
+
+
+def test_self_update_refuses_hardlink_into_checkout(tmp_path):
+    from spa.version import self_update
+
+    home = _check_home(tmp_path)
+    bindir = tmp_path / "local" / "bin"
+    bindir.mkdir(parents=True)
+    hard = bindir / "spa"
+    os.link(home / "bin" / "spa", hard)
+    calls = []
+    result = self_update(
+        home,
+        spa_bin=str(hard),
+        confirm=True,
+        runner=_recording_runner(calls, home),
+        script=tmp_path / "install.sh",
+    )
+    assert result.ok is False
+    assert result.code == 1
+    assert not calls
+    error = result.error or ""
+    for phrase in CLONE_REFUSE:
+        assert phrase in error, phrase
+
+
+def test_self_update_refuses_unknown(tmp_path):
+    from spa.version import self_update
+
+    home = _checkout(tmp_path, "extract")
+    calls = []
+    result = self_update(
+        home,
+        spa_bin=str(home / "bin" / "spa"),
+        confirm=True,
+        runner=_recording_runner(calls, home),
+        script=tmp_path / "install.sh",
+    )
+    assert result.ok is False
+    assert result.code == 1
+    assert not calls
+    assert "spa doctor" in (result.error or "")
+
+
+def test_self_update_forwards_version_flag(tmp_path):
+    from spa.version import self_update
+
+    home, wrapper = _prefix_home(tmp_path)
+    calls = []
+    result = self_update(
+        home,
+        spa_bin=str(wrapper),
+        version="3.1.0",
+        confirm=True,
+        runner=_recording_runner(calls, home, version="3.1.0"),
+        script=tmp_path / "install.sh",
+    )
+    assert result.ok is True
+    argv = calls[0]
+    assert argv[argv.index("--version") + 1] == "3.1.0"
+    assert argv.count("3.1.0") == 1
+    assert "--version" in argv
+    assert argv[argv.index("--force") + 1] != "3.1.0"
+
+
+def test_self_update_skills_error_keeps_prefix_ok(tmp_path):
+    from spa.skills import SkillsError
+    from spa.version import self_update
+
+    home, wrapper = _prefix_home(tmp_path)
+    calls = []
+
+    def boom(**_kwargs):
+        raise SkillsError("cannot refresh recorded skills", code=1)
+
+    result = self_update(
+        home,
+        spa_bin=str(wrapper),
+        confirm=True,
+        runner=_recording_runner(calls, home),
+        script=tmp_path / "install.sh",
+        skills_update=boom,
+    )
+    assert result.ok is True
+    assert calls
+    assert result.data["version"] == "3.1.0"
+    assert result.data["previous"] == "2.5.2"
+    assert result.data["skills"]["error"] == "cannot refresh recorded skills"
+    next_commands = [item["command"] for item in result.data["next"]]
+    assert "spa skills update" in next_commands
+
+
+def test_self_update_empty_skills_names_install_and_doctor(tmp_path):
+    from spa.version import self_update
+
+    home, wrapper = _prefix_home(tmp_path)
+    config_dir = tmp_path / "xdg" / "spa"
+    config_dir.mkdir(parents=True)
+    result = self_update(
+        home,
+        spa_bin=str(wrapper),
+        confirm=True,
+        runner=_recording_runner([], home),
+        script=tmp_path / "install.sh",
+        config_dir=config_dir,
+        home=tmp_path / "home",
+    )
+    assert result.ok is True
+    next_commands = [item["command"] for item in result.data["next"]]
+    assert "spa skills install" in next_commands
+    assert "spa doctor" in next_commands
+
+
+def test_schema_includes_self_update():
+    from spa.agent import COMMAND_SCHEMA
+
+    by_name = {row["name"]: row for row in COMMAND_SCHEMA["commands"]}
+    parent = by_name["self"]
+    assert parent["example"] == "spa self update --yes"
+    update = by_name["self update"]
+    assert update["requires_confirmation"] is True
+    flags = {flag["long"]: flag for flag in update["flags"]}
+    assert "--yes" in flags
+    assert flags["--version"]["takes_value"] is True
+    help_text = run_spa_inprocess(["--no-agent", "self", "update", "--help"])
+    assert help_text.returncode == 0, help_text.stderr
+    assert "usage: spa self update" in help_text.stdout
+    assert "--version" in help_text.stdout
+    assert "--yes" in help_text.stdout
+    agent_help = run_spa(["--agent", "self", "update", "--help"])
+    assert agent_help.returncode == 0, agent_help.stderr
+    payload = json.loads(agent_help.stdout)
+    assert payload["data"]["name"] == "self update"
+
+
+def test_bare_self_names_self_update():
+    human = run_spa_inprocess(["--no-agent", "self"])
+    assert human.returncode == 2
+    assert "spa self update" in human.stderr
+    agent = run_spa_inprocess(["--agent", "self"])
+    assert agent.returncode == 2
+    assert agent.stderr == ""
+    payload = json.loads(agent.stdout)
+    assert payload["ok"] is False
+    assert "spa self update" in payload["error"]
+
+
+def test_cli_self_update_forwards_version_and_yes(monkeypatch):
+    from spa.api import CommandResult
+
+    captured = {}
+
+    def fake_self_update(spa_home, **kwargs):
+        captured["spa_home"] = spa_home
+        captured.update(kwargs)
+        return CommandResult(
+            ok=True,
+            data={
+                "version": "3.1.0",
+                "previous": "2.5.2",
+                "spa_home": str(spa_home),
+                "install_kind": "prefix",
+                "skills": {"updated": [], "unchanged": [], "platforms": []},
+            },
+        )
+
+    monkeypatch.setattr("spa.version.self_update", fake_self_update)
+    result = run_spa_inprocess(["--no-agent", "self", "update", "--version", "3.1.0", "--yes"])
+    assert result.returncode == 0, result.stderr
+    assert captured.get("confirm") is True
+    assert captured.get("version") == "3.1.0"
+    assert result.stdout == "spa 3.1.0 (was 2.5.2)\n"
+
+
+def test_default_install_runner_hides_output_in_agent_mode(tmp_path, capsys):
+    from spa.version import _install_runner
+
+    script = tmp_path / "install.sh"
+    script.write_text("#!/bin/sh\necho leaked-out\necho leaked-err >&2\n")
+    script.chmod(0o755)
+    rc = _install_runner([str(script)], agent=True)
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "leaked" not in captured.out + captured.err
+
+
+def test_default_install_runner_prints_progress_on_stderr_for_humans(tmp_path, capsys):
+    from spa.version import _install_runner
+
+    script = tmp_path / "install.sh"
+    script.write_text("#!/bin/sh\necho leaked-out\necho leaked-err >&2\n")
+    script.chmod(0o755)
+    rc = _install_runner([str(script)], agent=False)
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "leaked-out" in captured.err
+    assert "leaked-err" in captured.err
+
+
+def test_self_update_skips_env_dir_and_venv_gates(tmp_path, monkeypatch):
+    from spa.api import CommandResult
+
+    monkeypatch.setattr(
+        "spa.version.self_update",
+        lambda spa_home, **_kwargs: CommandResult(
+            ok=True,
+            data={
+                "version": "3.1.0",
+                "previous": "2.5.2",
+                "spa_home": str(spa_home),
+                "install_kind": "prefix",
+                "skills": {"updated": [], "unchanged": [], "platforms": []},
+            },
+        ),
+    )
+    env = spa_env()
+    env["PATH"] = "/usr/bin:/bin"
+    result = run_spa_inprocess(["--no-agent", "self", "update", "--yes"], env=env, cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert "spa 3.1.0 (was 2.5.2)" in result.stdout

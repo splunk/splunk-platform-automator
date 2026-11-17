@@ -476,6 +476,25 @@ COMMAND_SCHEMA = {
             "example": "spa --agent version check",
         },
         {
+            "name": "self",
+            "summary": "Update this prefix install of SPA from GitHub Releases. Bare spa self exits 2.",
+            "example": "spa self update --yes",
+        },
+        {
+            "name": "self update",
+            "summary": "Replace a prefix install of SPA from GitHub Releases, then refresh recorded IDE skill copies. Clone and unknown installs refuse.",
+            "requires_confirmation": True,
+            "flags": [
+                {"long": "--yes", "short": "-y", "help": "Confirm replacing the SPA install prefix"},
+                {
+                    "long": "--version",
+                    "help": "Release tag or X.Y.Z (default: latest)",
+                    "takes_value": True,
+                },
+            ],
+            "example": "spa self update --yes",
+        },
+        {
             "name": "doctor",
             "summary": "Host prerequisite checks",
             "flags": [
