@@ -86,7 +86,7 @@ _HIDDEN_ALIASES = {
 _VISIBLE_ALIAS: Dict[str, frozenset] = {}
 # These must keep working without a venv: they are how an operator inspects or
 # builds one. Every other command reads YAML or runs Ansible, so it is gated.
-VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills", "completion", "licenses"})
+VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills", "completion", "licenses", "version"})
 GLOBAL_OPTS_WITH_VALUE = ("--start-dir", "--env")
 # Header flags take a value. Their value must not be read as a command word,
 # so `config header --intent set` stays `config header` and not `config header set`.
@@ -245,6 +245,28 @@ def _run_help_target(head: Sequence[str]) -> Optional[str]:
     if names:
         return names[0]
     return ""
+
+
+def _root_version_requested(head: Sequence[str]) -> bool:
+    """True when --version appears before the first command word.
+
+    Root argparse must not grow a --version optional: subcommands inherit it
+    and would steal spa apps download --version.
+    """
+    index = 0
+    tokens = list(head)
+    while index < len(tokens):
+        token = tokens[index]
+        if token in GLOBAL_OPTS_WITH_VALUE:
+            index += 2
+            continue
+        if token == "--version":
+            return True
+        if token.startswith("-"):
+            index += 1
+            continue
+        return False
+    return False
 
 
 def _positional_tokens(head: Sequence[str]) -> List[str]:
@@ -1058,6 +1080,31 @@ def _emit_result(result: CommandResult, as_agent: bool, identity=None) -> int:
     return result.code
 
 
+def _print_version(result: CommandResult, as_agent: bool) -> int:
+    if as_agent:
+        return _emit_result(result, True)
+    if not result.ok:
+        return _print_command_error(result, False)
+    from spa.version import format_version_text
+
+    sys.stdout.write(format_version_text(result.data or {}))
+    return result.code
+
+
+def _run_local_version(head: Sequence[str]) -> int:
+    as_agent = agent_mode(
+        force_agent="--agent" in head or "--json" in head,
+        force_human="--no-agent" in head,
+    )
+    try:
+        paths = _paths(_start_dir_from_head(head), _env_selector_from_head(head))
+    except Exception as exc:
+        emit(False, error=str(exc), as_agent=as_agent)
+        return 1
+    session = open_session(paths=paths)
+    return _print_version(session.version(), as_agent)
+
+
 def _print_command_error(result: CommandResult, as_agent: bool = False) -> int:
     if as_agent:
         return _emit_result(result, True)
@@ -1429,6 +1476,8 @@ def _run(argv: Sequence[str]) -> int:
     schema_help = _schema_help(head)
     if schema_help is not None:
         return schema_help
+    if _root_version_requested(head) and not any(token in {"-h", "--help"} for token in head):
+        return _run_local_version(head)
 
     parse_as_agent = agent_mode(
         force_agent="--agent" in head or "--json" in head,
@@ -2225,6 +2274,13 @@ def _run(argv: Sequence[str]) -> int:
     )
     p_doc.add_argument("--strict", action="store_true", help="Treat optional-tool warnings as failures")
     _add_env_selector(p_doc)
+
+    _add_command(
+        sub,
+        "version",
+        help="Print the installed SPA version",
+        description="Print the installed SPA version from SPA_HOME/VERSION. Does not contact the network.",
+    )
 
     p_venv = _add_command(
         sub,
@@ -3047,7 +3103,7 @@ def _run(argv: Sequence[str]) -> int:
         args, "ccm_action", None
     ) not in {"set", "extend"}
     if (
-        args.command not in {"init", "agent", "environment", "doctor", "venv", "skills", "completion"}
+        args.command not in {"init", "agent", "environment", "doctor", "venv", "skills", "completion", "version"}
         and not apps_without_env
         and not config_without_env
         and not architecture_without_env
@@ -3424,6 +3480,9 @@ def _run(argv: Sequence[str]) -> int:
 
     if args.command == "skills":
         return _run_skills(args, session, as_agent)
+
+    if args.command == "version":
+        return _print_version(session.version(), as_agent)
 
     if args.command == "doctor":
         from spa.doctor import format_doctor_text

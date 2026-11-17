@@ -464,6 +464,12 @@ COMMAND_SCHEMA = {
             "example": "spa validate --splunk-config aws",
         },
         {
+            "name": "version",
+            "summary": "Print the installed SPA version from SPA_HOME/VERSION. Does not contact the network.",
+            "read_only": True,
+            "example": "spa --agent version",
+        },
+        {
             "name": "doctor",
             "summary": "Host prerequisite checks",
             "flags": [

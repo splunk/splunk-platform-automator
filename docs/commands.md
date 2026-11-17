@@ -424,6 +424,16 @@ Example:
 spa validate --splunk-config aws
 ```
 
+## `version`
+
+Print the installed SPA version from SPA_HOME/VERSION. Does not contact the network.
+
+Example:
+
+```bash
+spa --agent version
+```
+
 ## `doctor`
 
 Host prerequisite checks

@@ -32,6 +32,7 @@ HELP_CONTRACTS = [
             "init",
             "validate",
             "doctor",
+            "version",
             "venv",
             "environment",
             "deploy",
@@ -101,6 +102,13 @@ HELP_CONTRACTS = [
             "--provider",
             "--strict",
             "--json",
+        ],
+    ),
+    (
+        ["version", "--help"],
+        [
+            "usage: spa version",
+            "Print the installed SPA version",
         ],
     ),
     (

@@ -135,6 +135,8 @@ class SpaSession(Protocol):
         strict: bool = False,
     ) -> CommandResult: ...
 
+    def version(self, check: bool = False) -> CommandResult: ...
+
     def skills(
         self,
         action: str,
@@ -1227,6 +1229,11 @@ class LocalSpaSession:
             provider=requested,
             strict=strict,
         )
+
+    def version(self, check: bool = False) -> CommandResult:
+        from spa.version import local_version
+
+        return local_version(self.paths.spa_home)
 
     def skills(
         self,
