@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init, spa_env
+from spa_testutil import INHERITED_PATH_VARS, PROJECT_ROOT, run_spa, run_spa_init, spa_env
 
 pytestmark = [pytest.mark.local, pytest.mark.cli]
 
@@ -668,6 +668,8 @@ def _isolate_dirs(tmp_path, monkeypatch, *, software=None, baseconfig=None):
     home.mkdir()
     xdg = tmp_path / "xdg"
     xdg.mkdir()
+    for name in INHERITED_PATH_VARS:
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
     if software is None:
@@ -695,6 +697,23 @@ def _seed_baseconfig_markers(software):
     (software / "Configurations - Index Replication" / "org_cluster_manager_base").mkdir(
         parents=True
     )
+
+
+def test_doctor_software_inventory_ignores_leaked_ccm_config(tmp_path, monkeypatch):
+    """A leftover SPLUNK_CONFIG_FILE from an in-process CCM test must not fail software inventory."""
+    leaked = tmp_path / "leaked-ccm.yml"
+    leaked.write_text("ccm:\n  instance_type: t3a.medium\n", encoding="utf-8")
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(leaked))
+    spa_home, software, baseconfig = _isolate_dirs(tmp_path, monkeypatch)
+    software.mkdir()
+    baseconfig.mkdir()
+    result = _collect_software(spa_home)
+    rows = _software_rows(result)
+    assert all(row["level"] == "warn" for row in rows.values())
+    assert result.ok is True
+    assert result.code == 0
+    by_id = {row["id"]: row for row in result.data["checks"]}
+    assert "ccm_token" not in by_id
 
 
 def test_doctor_software_empty_dir_warns_all_three_buckets(tmp_path, monkeypatch):
@@ -737,6 +756,7 @@ def test_doctor_missing_dirs_name_recommended_workspace(tmp_path, monkeypatch):
     monkeypatch.delenv("SPA_SOFTWARE_DIR", raising=False)
     monkeypatch.delenv("SPA_BASECONFIG_DIR", raising=False)
     monkeypatch.delenv("SPA_ENV_DIR", raising=False)
+    monkeypatch.delenv("SPLUNK_CONFIG_FILE", raising=False)
     wanted = recommended_workspace()
     result = _collect_software(spa_home)
     rows = _software_rows(result)
