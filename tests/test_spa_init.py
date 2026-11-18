@@ -182,6 +182,120 @@ def test_init_list_examples():
     assert "[--provider %s]" % "|".join(provider_ids()) in out
 
 
+def _init_list_next(extra_env=None, argv=None):
+    import json
+
+    result = run_spa(["--agent", *(argv or ["init", "list"])], extra_env=extra_env)
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    return payload["data"]["next"]
+
+
+def test_init_list_next_is_topology_then_provider():
+    from spa.providers import provider_ids
+
+    nxt = _init_list_next()
+    ids = [row["id"] for row in nxt]
+    assert ids == ["topology", "provider"]
+    topology = nxt[0]
+    assert "topology" in topology["ask"].lower()
+    assert topology["required"] is True
+    assert "choice" not in topology
+    assert "command" not in topology
+    provider = nxt[1]
+    allowed = [name for name in provider_ids() if name != "ccm"]
+    assert provider["ask"].lower().startswith("which provider")
+    assert provider["required"] is True
+    assert provider["choice"]["allowed"] == allowed
+    assert "ccm" not in allowed
+    assert "command" not in provider
+    assert "mode.write" not in ids
+    env_nxt = _init_list_next(argv=["environment", "init", "list"])
+    assert [row["id"] for row in env_nxt] == ids
+
+
+def test_init_list_provider_choice_includes_ccm_when_token_is_set():
+    from spa.providers import provider_ids
+
+    nxt = _init_list_next(extra_env={"CCM_TOKEN": "test-ccm-pat-value"})
+    provider = next(row for row in nxt if row["id"] == "provider")
+    assert provider["choice"]["allowed"] == list(provider_ids())
+    assert provider["choice"]["allowed"][0] == "ccm"
+
+
+def test_human_init_list_prints_next():
+    result = run_spa(["--no-agent", "init", "list"])
+    assert result.returncode == 0, result.stderr
+    err = result.stderr
+    assert "Next:" in err
+    assert "Which topology example?" in err
+    assert "Which provider?" in err
+    assert "--agent" not in err
+    assert "single_node" in result.stdout
+
+
+def test_agent_init_example_attaches_remaining_next(tmp_path):
+    import json
+
+    dest = tmp_path / "lab"
+    result = run_spa(
+        [
+            "--agent",
+            "init",
+            "--example",
+            "single_node",
+            "--provider",
+            "aws",
+            "--skip-doctor",
+            str(dest),
+        ],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    data = payload["data"]
+    assert data["remaining"] == ["os", "aws", "apps", "licenses"]
+    ids = [row["id"] for row in data["next"]]
+    assert ids == ["os", "aws", "apps.search", "licenses.list"]
+    aws = next(row for row in data["next"] if row["id"] == "aws")
+    assert aws["command"] == "spa --agent provider aws latest-ami"
+    assert "hardware" not in data["remaining"]
+    assert "architecture" not in data
+
+
+def test_human_init_example_prints_remaining_next(tmp_path):
+    dest = tmp_path / "lab"
+    result = run_spa_init(
+        ["--example", "single_node", "--provider", "aws", str(dest)],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    err = result.stderr
+    assert "Next:" in err
+    assert "Set guest OS packages?" in err
+    assert "Find a current AMI and SSH user for this region?" in err
+    assert "spa provider aws latest-ami" in err
+    assert "Add apps?" in err
+    assert "Scan Software licenses?" in err
+    assert "--agent" not in err
+
+
+def test_failed_init_omits_remaining_next(tmp_path):
+    import json
+
+    dest = tmp_path / "lab"
+    result = run_spa(
+        ["--agent", "environment", "init", "--skip-doctor", "--example", "single_node.yml", str(dest)],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert "data" not in payload
+    assert "next" not in payload
+    assert not dest.exists()
+
+
 def test_init_provider_ccm_writes_root_ccm_block(tmp_path):
     dest = tmp_path / "lab"
     result = run_spa_init(["--example", "single_node", "--provider", "ccm", str(dest)])

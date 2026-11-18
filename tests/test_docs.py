@@ -1763,6 +1763,28 @@ class TestReviewFindings67:
         assert "spa provider aws" in migrate
 
 
+def test_user_guide_path_a_follows_init_list_and_remaining_next():
+    """Path A uses spa init list next, then init remaining, without a wizard."""
+    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
+    configure = guide[
+        guide.index("## Configure an environment") : guide.index("## Run the lifecycle")
+    ]
+    path_a = configure[: configure.index("### Start from a confirmed architecture file")]
+    assert "spa init list" in path_a
+    assert "Next:" in path_a
+    assert "topology" in path_a.lower()
+    assert "provider" in path_a.lower()
+    assert "remaining" in path_a.lower()
+    assert "latest-ami" in path_a
+    assert "SSH user" in path_a
+    assert "ssh_username" in path_a
+    assert "spa config wizard" not in configure
+    changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    unreleased = changelog.split("## [Unreleased]", 1)[1].split("\n## ", 1)[0]
+    assert "spa init list" in unreleased
+    assert "remaining" in unreleased.lower()
+
+
 def test_user_guide_teaches_adding_a_host_then_deploy():
     """Scale-out is config add (or hosts register), then spa deploy --yes."""
     guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")

@@ -516,6 +516,38 @@ def provision_next(env_name: Optional[str] = None) -> List[Dict[str, Any]]:
     ]
 
 
+def _provider_choice_allowed(
+    environ: Optional[Mapping[str, str]] = None,
+) -> List[str]:
+    from spa.providers import provider_ids
+    from spa.providers.ccm import token_present
+
+    allowed = list(provider_ids())
+    if not token_present(environ):
+        return [name for name in allowed if name != "ccm"]
+    return allowed
+
+
+def init_list_next(
+    *,
+    environ: Optional[Mapping[str, str]] = None,
+) -> List[Dict[str, Any]]:
+    """Path A: topology from the catalog, then provider. No init command."""
+    return [
+        item(
+            "topology",
+            "Which topology example?",
+            required=True,
+        ),
+        item(
+            "provider",
+            "Which provider?",
+            choice={"allowed": _provider_choice_allowed(environ)},
+            required=True,
+        ),
+    ]
+
+
 def architecture_plan_next(
     plan: Mapping[str, Any],
     *,
@@ -523,12 +555,6 @@ def architecture_plan_next(
     environ: Optional[Mapping[str, str]] = None,
 ) -> List[Dict[str, Any]]:
     """Path B: the architecture file is the plan (write mode), then provider."""
-    from spa.providers import provider_ids
-    from spa.providers.ccm import token_present
-
-    allowed = list(provider_ids())
-    if not token_present(environ):
-        allowed = [name for name in allowed if name != "ccm"]
     init = (
         "spa --agent environment init PARENT/NAME --architecture %s --provider"
         % architecture_file
@@ -545,7 +571,7 @@ def architecture_plan_next(
         item(
             "provider",
             "Which provider?",
-            choice={"allowed": allowed},
+            choice={"allowed": _provider_choice_allowed(environ)},
             required=True,
         ),
     ]

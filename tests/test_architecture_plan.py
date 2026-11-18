@@ -97,6 +97,7 @@ def test_remaining_questions_skips_settled_hardware_os_aws_apps_licenses():
                 "region": "eu-central-1",
                 "ami_id": "ami-0123456789abcdef0",
                 "instance_type": "t3.medium",
+                "ssh_username": "ec2-user",
             }
         },
         "os": {"packages": ["acl", "polkit"]},
@@ -108,7 +109,13 @@ def test_remaining_questions_skips_settled_hardware_os_aws_apps_licenses():
     assert remaining_questions(aws, has_provider=True) == []
 
     aws_only = {"terraform": {"aws": {"region": "eu-central-1", "ami_id": "ami-0123456789abcdef0"}}}
-    assert remaining_questions(aws_only, has_provider=True) == ["hardware", "os", "apps", "licenses"]
+    assert remaining_questions(aws_only, has_provider=True) == [
+        "hardware",
+        "os",
+        "aws",
+        "apps",
+        "licenses",
+    ]
     unfinished_aws = {"terraform": {"aws": {"region": "eu-central-1", "instance_type": "t3.medium"}}}
     remaining = remaining_questions(unfinished_aws, has_provider=True)
     assert "aws" in remaining
@@ -427,6 +434,49 @@ def test_agent_init_architecture_includes_deferred_warnings(tmp_path):
     assert any("license_manager is required" in item for item in warnings)
     assert any("deployment.roles.license_master.count" in item for item in warnings)
     assert "license_manager" in payload["data"]["architecture"]["remaining"]
+
+
+def test_agent_init_architecture_attaches_remaining_next(tmp_path):
+    dest = tmp_path / "c3-lab"
+    result = run_spa(
+        [
+            "--agent",
+            "init",
+            "--architecture",
+            str(C3),
+            "--provider",
+            "aws",
+            "--skip-doctor",
+            str(dest),
+        ],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    data = payload["data"]
+    assert data["remaining"] == data["architecture"]["remaining"]
+    assert data["remaining"][:4] == ["os", "aws", "apps", "licenses"]
+    assert "license_manager" in data["remaining"]
+    assert "hardware" not in data["remaining"]
+    ids = [row["id"] for row in data["next"]]
+    assert ids[:4] == ["os", "aws", "apps.search", "licenses.list"]
+    assert "license_manager.placement" in ids
+    aws = next(row for row in data["next"] if row["id"] == "aws")
+    assert aws["command"] == "spa --agent provider aws latest-ami"
+
+
+def test_human_init_architecture_prints_remaining_next(tmp_path):
+    dest = tmp_path / "c3-lab"
+    result = run_spa_init(
+        ["--architecture", str(C3), "--provider", "aws", str(dest)],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    err = result.stderr
+    assert "Next:" in err
+    assert "Find a current AMI and SSH user for this region?" in err
+    assert "spa provider aws latest-ami" in err
+    assert "--agent" not in err
 
 
 def test_init_architecture_and_example_are_exclusive(tmp_path):

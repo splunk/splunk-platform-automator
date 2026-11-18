@@ -442,7 +442,7 @@ def _os_settled(config: Optional[Mapping[str, Any]]) -> bool:
 
 def _aws_settled(config: Optional[Mapping[str, Any]]) -> bool:
     aws = _mapping_at(config, "terraform", "aws")
-    return bool(aws.get("region") and aws.get("ami_id"))
+    return bool(aws.get("region") and aws.get("ami_id") and aws.get("ssh_username"))
 
 
 def _apps_settled(config: Optional[Mapping[str, Any]]) -> bool:

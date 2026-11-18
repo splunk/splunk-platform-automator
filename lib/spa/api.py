@@ -658,8 +658,13 @@ class LocalSpaSession:
 
     def list_examples(self) -> CommandResult:
         from spa.init import list_examples
+        from spa.next_steps import init_list_next
 
-        return CommandResult(ok=True, data=list_examples(self.paths.spa_home))
+        data = list_examples(self.paths.spa_home)
+        follow = init_list_next()
+        if follow:
+            data["next"] = follow
+        return CommandResult(ok=True, data=data)
 
     def _config_discovery(
         self,
@@ -1459,7 +1464,16 @@ class LocalSpaSession:
             "name": registry_name or Path(env_dir).name,
             "messages": messages,
         }
-        if report:
+        if rc == 0:
+            remaining = list(report.get("remaining") or [])
+            if remaining:
+                from spa.next_steps import remaining_next
+
+                data["remaining"] = remaining
+                follow = remaining_next(remaining)
+                if follow:
+                    data["next"] = follow
+        if any(key != "remaining" for key in report):
             data["architecture"] = report
         return CommandResult(
             ok=rc == 0,

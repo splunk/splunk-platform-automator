@@ -84,6 +84,8 @@ spa config explain splunk_idxclusters.idxc_name
 spa validate
 ```
 
+`spa init list` prints `Next:` for topology, then provider (`ccm` is omitted until `CCM_TOKEN` is set). It does not emit an init command; choose `PARENT/NAME` at the location/name gate, then `spa init --example TOPOLOGY --provider`. After a successful init, follow `remaining` / `Next:` in order (OS packages, a current AMI and SSH user, apps, licenses). Hardware is already set from the AWS example (`t3.medium`). Region plus `ami_id` without `ssh_username` is not settled: remaining still asks `spa provider aws latest-ami` so you can keep that AMI or replace it.
+
 ### Start from a confirmed architecture file
 
 A confirmed `splunk.architecture` schema 1 file (from the SVA skill or `examples/architectures/c3.json`) selects the catalog topology and overlays counts, RF/SF, `org_prefix`, and extra roles. Provider is required at init. Hardware sizing, OS, AWS, apps, and licenses stay ordinary `spa config` / `spa apps` questions after the host list exists.
