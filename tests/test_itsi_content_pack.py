@@ -24,6 +24,7 @@ VERIFY_YML = REPO_ROOT / "ansible/roles/apps_direct/tasks/verify.yml"
 VERIFY_CP_WRAPPER = REPO_ROOT / "ansible/roles/apps_direct/tasks/verify_content_pack_app_dirs.yml"
 VERIFY_CP_DIRS = REPO_ROOT / "ansible/roles/apps_itsi_content_pack/tasks/verify_app_dirs.yml"
 VERIFY_CP_SINGLE = REPO_ROOT / "ansible/roles/apps_itsi_content_pack/tasks/verify_single_dir.yml"
+ITSI_LM_INSTALL = REPO_ROOT / "ansible/roles/apps_itsi/tasks/itsi_install_license_manager.yml"
 
 
 def _load_tasks(path: Path) -> list:
@@ -123,3 +124,79 @@ class TestItsiContentPackRoleWiring:
         assert "_cp_verify_index" not in cp_dirs
         assert not (REPO_ROOT / "ansible/roles/apps_common/tasks/build_content_pack_verify_index.yml").exists()
         assert not (REPO_ROOT / "ansible/roles/apps_common/tasks/resolve_content_pack_verify_fs_dirs.yml").exists()
+
+
+class TestItsiLicenseManagerRestart:
+    """License manager must restart after ITSI license apps before content-pack API."""
+
+    def test_license_manager_flushes_restart_after_unarchive(self):
+        tasks = _load_tasks(ITSI_LM_INSTALL)
+        names = [task.get("name") for task in tasks if isinstance(task, dict)]
+        unarchive_idx = names.index("Transfer and unarchive ITSI license apps to etc/apps")
+        flag_idx = names.index(
+            "Set app_path and restart flag so license manager Restart splunk handler runs"
+        )
+        flush_idx = names.index(
+            "Flush handlers so license manager restarts after ITSI license apps"
+        )
+        assert unarchive_idx < flag_idx < flush_idx
+        unarchive = tasks[unarchive_idx]
+        assert unarchive.get("notify") == "Restart splunk"
+        flag = tasks[flag_idx]
+        assert flag["ansible.builtin.set_fact"]["restart_splunk_direct_etc_apps"] is True
+        assert flag["ansible.builtin.set_fact"]["app_path"] == "{{ splunk_home }}/etc/apps"
+        assert tasks[flush_idx].get("ansible.builtin.meta") == "flush_handlers"
+        wait_names = names[flush_idx:]
+        assert "Wait for splunkd port after license manager restart" in wait_names
+        assert "Wait for splunkd full service after license manager restart" in wait_names
+
+
+class TestItsiContentPackSuiteStateWait:
+    """ITSI 5+ content-pack POST requires suite_state before install."""
+
+    def test_cp_api_install_waits_for_suite_state_before_refresh(self):
+        tasks = _load_tasks(REPO_ROOT / "ansible/roles/apps_itsi_content_pack/tasks/cp_api_install.yml")
+        names = [task.get("name") for task in tasks if isinstance(task, dict)]
+        wait_idx = names.index(
+            "Wait until ITSI suite_state is plus (or pre-ITSI 404) before content pack API"
+        )
+        fail_idx = names.index("Fail if ITSI suite_state is still undefined")
+        refresh_idx = names.index("Refresh content pack registry ({{ app_name }})")
+        post_idx = names.index(
+            "Install content pack ({{ app_name }}) via ITSI API (POST) (post-restart)"
+        )
+        assert wait_idx < fail_idx < refresh_idx < post_idx
+        wait = tasks[wait_idx]
+        assert "itsi_feature_flagging_state/suite_state" in wait["ansible.builtin.uri"]["url"]
+        assert wait.get("retries") == 90
+        assert wait.get("delay") == 10
+        until = wait.get("until") or ""
+        assert "plus" in until
+        assert "404" in until
+
+
+class TestItsiContentPackBackupRestoreWait:
+    """Configure POSTs must wait out ITSI backup/restore lock (SI-BR_0001)."""
+
+    def test_deploy_waits_for_backup_jobs_before_configure(self):
+        content = (REPO_ROOT / "ansible/splunk_apps_deploy.yml").read_text(encoding="utf-8")
+        assert "Wait until ITSI backup/restore jobs are idle before configure playbooks" in content
+        assert "backup_restore_interface/backup_restore" in content
+        api_idx = content.index("Run cp_api_install (content pack API install) for each app")
+        wait_idx = content.index(
+            "Wait until ITSI backup/restore jobs are idle before configure playbooks"
+        )
+        cfg_idx = content.index("Run run_playbook_after_restart (configure) for app")
+        assert api_idx < wait_idx < cfg_idx
+
+    def test_enable_services_retries_backup_restore_lock(self):
+        for rel in (
+            "ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml",
+            "ansible/apps_playbooks/DA-ITSI-CP-windows_configure.yml",
+            "ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml",
+        ):
+            tasks = _load_tasks(REPO_ROOT / rel)
+            enable = next(task for task in tasks if task.get("name") == "Enable Services")
+            assert enable.get("retries") == 30
+            assert enable.get("delay") == 10
+            assert "SI-BR_0001" in (enable.get("until") or "")

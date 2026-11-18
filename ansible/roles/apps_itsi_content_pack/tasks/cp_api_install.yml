@@ -2,13 +2,52 @@
 # Post-restart task: install content pack via ITSI API.
 # Included from splunk_apps_deploy.yml Step 5 when content_pack_install is true.
 # Expects: app_name, customization_extra_vars (version, install_all, saved_search_action, backfill, resolution, enabled, prefix).
-# The registry is refreshed first: until then ITSI answers the GET check with HTTP 500 for a pack it has not catalogued yet.
+# ITSI 5+ suitification writes suite_state after splunkd is up; POST install returns HTTP 500
+# "Suitification State is expected to be defined" until that KV record exists. The first write
+# is often name=standard; Plus license then upgrades it to plus. Installing while still
+# standard omits Event Analytics objects (NEAPs, EA services). Wait for plus (or HTTP 404
+# on pre-suitification ITSI). If the lab stays Standard, retries exhaust and we proceed.
+# Then refresh the registry: until then ITSI answers the GET check with HTTP 500 for a pack
+# it has not catalogued yet.
 # Only runs POST install when the content pack is not already installed (GET check). Any GET status other than 200 is treated as not installed.
 # When the pack is already installed we set content_pack_already_installed; Step 5 skips run_playbook_after_restart unless customizations.force_run_playbook_after_restart is true (default false).
 # SHC wait (service_ready_flag, rolling_restart_flag) is done once in splunk_apps_deploy.yml Step 5 before the playbook loop.
 # customization_extra_vars is set when building post_restart_playbooks_to_run / _pending_post_restart_first_shc in
 # apps_itsi_content_pack/tasks/main.yml, where each key is resolved from item.content_pack_api with role defaults
 # (cp_api_* from defaults/main.yml). Here we only fallback to the same hardcoded values if a key is missing (e.g. older playbook data).
+
+- name: "Wait until ITSI suite_state is plus (or pre-ITSI 404) before content pack API"
+  ansible.builtin.uri:
+    url: "https://localhost:8089/servicesNS/nobody/SA-ITOA/storage/collections/data/itsi_feature_flagging_state/suite_state"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: GET
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200, 404, 500, 502, 503]
+  register: _cp_suite_state
+  failed_when: false
+  until: >-
+    (_cp_suite_state.status | default(0) | int) == 404
+    or (
+      (_cp_suite_state.status | default(0) | int) == 200
+      and (_cp_suite_state.json.name | default('') | string | lower) == 'plus'
+    )
+  retries: 90
+  delay: 10
+
+- name: "Fail if ITSI suite_state is still undefined"
+  ansible.builtin.fail:
+    msg: >-
+      ITSI suite_state was not defined after waiting
+      (HTTP {{ _cp_suite_state.status | default('unknown') }});
+      content pack install requires suitification to complete.
+  when: >-
+    (_cp_suite_state.status | default(0) | int) != 404
+    and not (
+      (_cp_suite_state.status | default(0) | int) == 200
+      and (_cp_suite_state.json.name | default('') | string | length) > 0
+    )
 
 - name: "Refresh content pack registry ({{ app_name }})"
   ansible.builtin.uri:

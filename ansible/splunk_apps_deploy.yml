@@ -227,6 +227,37 @@
         - inventory_hostname not in (groups['role_deployer'] | default([]))
         - (_cp_item.app_updated_this_run | default(true) | bool) or ((_cp_item.extra_vars | default({})).get('force_run_playbook_after_restart', false) | bool)
 
+    # Content-pack install can leave an ITSI backup/restore job running; configure POSTs then
+    # return HTTP 405 SI-BR_0001 until that job finishes.
+    - name: "Wait until ITSI backup/restore jobs are idle before configure playbooks"
+      tags:
+        - splunk
+        - splunk_apps
+      ansible.builtin.uri:
+        url: "https://localhost:8089/servicesNS/nobody/SA-ITOA/backup_restore_interface/backup_restore?limit=20&sort_key=last_queued_time&sort_dir=0"
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        method: GET
+        force_basic_auth: true
+        validate_certs: false
+        status_code: [200, 404, 500]
+      register: _cp_backup_jobs
+      failed_when: false
+      until: >-
+        (_cp_backup_jobs.status | default(0) | int) == 404
+        or (
+          (_cp_backup_jobs.status | default(0) | int) == 200
+          and (
+            (_cp_backup_jobs.json | default([]) | json_query("[?status=='In Progress']") | default([])) | length
+          ) == 0
+        )
+      retries: 30
+      delay: 10
+      when:
+        - (post_restart_playbooks_to_run | default([]) | selectattr('playbook', 'search', 'cp_api_install') | list | length) > 0
+        - inventory_hostname not in (groups['role_deployer'] | default([]))
+        - inventory_hostname in (groups['role_search_head'] | default([]))
+
     # Run run_playbook_after_restart (configure) playbooks:
     # - Normal apps: only when app was updated this run (app_updated_this_run) OR force_run_playbook_after_restart is true
     # - Content packs: only when pack was not already installed (content_pack_already_installed) OR force_run_playbook_after_restart is true

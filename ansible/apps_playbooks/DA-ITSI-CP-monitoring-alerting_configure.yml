@@ -178,10 +178,19 @@
     body_format: json
     force_basic_auth: true
     validate_certs: false
-    status_code: [200]
+    status_code: [200, 405]
   loop: "{{ services_objects.results | default([]) }}"
   loop_control:
     label: "{{ item.json._key | default(item.json.title | default('service')) }}"
+  register: _cp_enable_svc
+  until: >-
+    (_cp_enable_svc.status | default(0) | int) == 200
+    or (
+      (_cp_enable_svc.status | default(0) | int) == 405
+      and (_cp_enable_svc.json.uid | default('')) != 'SI-BR_0001'
+    )
+  retries: 30
+  delay: 10
   when:
     - app_path is defined
     - services_objects is defined

@@ -1,6 +1,10 @@
 ---
 # Extract ITSI license/access apps to etc/apps on license manager
-# Runs only on role_license_manager. Notifies "Restart splunk" so the license server picks up the apps (app_path set in role main.yml).
+# Runs only on role_license_manager. Notifies "Restart splunk" so the license
+# server loads SA-ITSI-Licensechecker, then flushes that handler before later
+# content-pack API work. The Restart splunk handler when-clause requires
+# restart_splunk_direct_etc_apps or app_path == splunk_home/etc/apps; set those
+# immediately before flush so a later app's app_path cannot skip the restart.
 
 - name: "Set ITSI version check apps and base for license manager"
   tags:
@@ -52,4 +56,42 @@
   notify: "Restart splunk"
   become: true
   become_user: "{{ splunk_user | default('splunk') }}"
+  when: apps_itsi_update_needed | default(true)
+
+- name: "Set app_path and restart flag so license manager Restart splunk handler runs"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.set_fact:
+    app_path: "{{ splunk_home }}/etc/apps"
+    restart_splunk_direct_etc_apps: true
+  when: apps_itsi_update_needed | default(true)
+
+- name: "Flush handlers so license manager restarts after ITSI license apps"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.meta: flush_handlers
+  when: apps_itsi_update_needed | default(true)
+
+- name: "Wait for splunkd port after license manager restart"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.include_role:
+    name: splunk_common
+    tasks_from: wait_for_splunkd_port
+  when: apps_itsi_update_needed | default(true)
+
+- name: "Wait for splunkd full service after license manager restart"
+  tags:
+    - splunk
+    - splunk_apps
+    - itsi
+  ansible.builtin.include_role:
+    name: splunk_common
+    tasks_from: wait_for_splunkd_full
   when: apps_itsi_update_needed | default(true)
