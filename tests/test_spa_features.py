@@ -87,6 +87,43 @@ def test_implemented_settings_have_operator_guidance():
             assert len(item.get("when_to_use") or item.get("when_not_to_use") or "") >= 24, label
 
 
+def test_catalog_recommended_values_match_schema_type_and_allowed():
+    """CFG-CLI-007. Catalog recommended values are schema-backed, typed, and not omit-safe defaults."""
+    from spa.catalog import load_features, schema_key_details
+
+    schema = schema_key_details()
+    found = {}
+    for item in load_features(PROJECT_ROOT):
+        recommended = item.get("recommended")
+        if not recommended:
+            continue
+        assert isinstance(recommended, dict), item.get("id")
+        for path, value in recommended.items():
+            assert path not in found, path
+            found[path] = value
+            detail = schema.get(path)
+            assert detail, path
+            type_name = str(detail.get("type") or "")
+            allowed = list(detail.get("allowed") or [])
+            if type_name == "string":
+                assert isinstance(value, str), path
+            elif type_name == "integer":
+                assert type(value) is int, path
+            elif type_name.startswith("list"):
+                assert isinstance(value, list), path
+            if allowed:
+                if type_name.startswith("list"):
+                    assert all(item in allowed for item in value), path
+                else:
+                    assert value in allowed, path
+            if "default" in detail:
+                assert value != detail["default"], path
+    assert "terraform.aws.instance_type" in found
+    assert found["terraform.aws.instance_type"] == "t3.medium"
+    assert found["terraform.aws.root_volume_size"] == 50
+    assert found["os.packages"] == ["acl", "polkit"]
+
+
 def test_explain_c1():
     result = run_spa(["config", "explain", "topology.c1"])
     assert result.returncode == 0, result.stderr
@@ -161,7 +198,9 @@ def test_config_json_search():
     rows = payload["data"]["matches"]
     paths = [item["path"] for item in rows]
     assert "splunk_defaults.splunk_architecture" in paths
-    assert set(rows[0]) == {"path", "description"}
+    assert {"path", "description"} <= set(rows[0])
+    assert set(rows[0]) <= {"path", "description", "type", "default", "allowed"}
+    assert "command" not in rows[0]
 
 
 def test_config_search_os():
@@ -573,7 +612,8 @@ def test_omit_default_is_a_payload_field():
     assert shown["data"]["default"] == "splk"
     human = run_spa(["config", "explain", "splunk_defaults.splunk_env_name"])
     assert human.returncode == 0, human.stderr
-    assert 'default: "splk"' in human.stdout
+    assert "default: splk" in human.stdout
+    assert 'default: "splk"' not in human.stdout
 
 
 def test_ansible_defaults_do_not_ship_admin_or_cluster_passwords():

@@ -107,7 +107,9 @@ def test_search_returns_paths_and_one_line_without_commands():
     assert "os.packages" in paths
     assert "splunk_hosts.os.packages" in paths
     for item in data["matches"]:
-        assert set(item) == {"path", "description"}
+        assert {"path", "description"} <= set(item)
+        assert set(item) <= {"path", "description", "type", "default", "allowed"}
+        assert "command" not in item
         assert "spa config" not in item["description"]
     assert data["total_matches"] >= len(data["matches"])
     assert len(data["matches"]) <= 10
@@ -120,7 +122,9 @@ def test_search_matches_shipped_templates_by_name_and_summary():
         assert "template.remote-provider" in by_path, query
         assert "TLS" in by_path["template.remote-provider"]
         for item in data["matches"]:
-            assert set(item) == {"path", "description"}
+            assert {"path", "description"} <= set(item)
+            assert set(item) <= {"path", "description", "type", "default", "allowed"}
+            assert "command" not in item
             assert "spa config" not in item["description"]
 
 
@@ -244,3 +248,112 @@ def test_cli_explain_is_the_human_page_and_the_same_agent_data():
     assert error["ok"] is False
     assert "data" not in error
     assert "config explain" in error["error"]
+
+
+_SEARCH_HIT_FIELDS = {"path", "description", "type", "default", "allowed"}
+
+
+def test_explain_string_example_uses_unquoted_recommended_not_schema_default():
+    """CFG-CLI-005 CFG-CLI-007. Lab instance type is recommended; omit-safe default stays default."""
+    data = explain_config("terraform.aws.instance_type")
+    assert data["type"] == "string"
+    assert data["default"] == "t2.micro"
+    assert data["example"] == "spa config set terraform.aws.instance_type t3.medium"
+    assert data["command"] == data["example"]
+    human = format_explain(data)
+    assert "default: t2.micro" in human
+    assert 'default: "t2.micro"' not in human
+    assert "t3.medium" in human
+    assert "'\"t3.medium\"'" not in human
+
+
+def test_explain_list_and_integer_examples_stay_strict_json():
+    """CFG-CLI-005. Unions, lists, and integers keep JSON tokens."""
+    packages = explain_config("os.packages")
+    shown = packages.get("example") or packages["command"]
+    assert shown == "spa config set os.packages '[\"acl\", \"polkit\"]'"
+    disk = explain_config("terraform.aws.root_volume_size")
+    shown = disk.get("example") or disk["command"]
+    assert shown == "spa config set terraform.aws.root_volume_size 50"
+    license_file = explain_config("splunk_defaults.splunk_license_file")
+    assert license_file["type"] == "string | list[string]"
+    shown = license_file.get("example") or license_file.get("command") or ""
+    if "VALUE" not in shown:
+        assert json.dumps("Splunk_Enterprise.lic") in shown or json.dumps(
+            ["Splunk_Enterprise.lic"]
+        ) in shown
+
+
+def test_explain_does_not_borrow_another_feature_snippet():
+    """CFG-CLI-007. Example comes from recommended or the selected feature, not the first catalog hit."""
+    data = explain_config("terraform.aws.region")
+    shown = data.get("example") or data.get("command") or ""
+    assert "eu-central-1" not in shown
+    assert shown == "spa config set terraform.aws.region VALUE"
+
+
+def test_explain_children_carry_capped_allowed_and_default():
+    """CFG-CLI-007. Immediate children publish small allowed sets inline and default."""
+    data = explain_config("ccm")
+    by_name = {item["name"]: item for item in data["fields"]}
+    disk = by_name["disk_storage"]
+    assert disk["allowed"] == [50, 100, 200, 250, 500, 1024, 2048]
+    assert disk["default"] == 50
+    hours = by_name["operation_hours"]
+    assert hours["allowed"] == ["business_hours", "manual"]
+    assert hours["default"] == "manual"
+    purpose = by_name["business_purpose"]
+    assert purpose["allowed"] == ["DeveloperInstance", "SalesOpportunity", "SupportCase"]
+    assert purpose["default"] == "DeveloperInstance"
+    human = format_explain(data)
+    assert "<enum: 50|100|200|250|500|1024|2048>" in human
+    hosts = explain_config("splunk_hosts")
+    roles = next(item for item in hosts["fields"] if item["name"] == "roles")
+    assert "allowed" not in roles
+    assert roles["allowed_count"] > 8
+    assert "<%s: %s values>" % (roles["type"], roles["allowed_count"]) in format_explain(hosts)
+
+
+def test_search_hits_include_type_default_and_small_allowed_without_command():
+    """CFG-CLI-006. Hits stay command-free; schema paths add type, default, and small allowed."""
+    packages = search_config("os.packages")
+    hit = next(item for item in packages["matches"] if item["path"] == "os.packages")
+    assert hit["type"] == "list[string]"
+    assert hit["default"] == []
+    assert "command" not in hit
+    assert "allowed" not in hit
+    assert set(hit) <= _SEARCH_HIT_FIELDS
+    disk = search_config("disk_storage")
+    hit = next(item for item in disk["matches"] if item["path"] == "ccm.disk_storage")
+    assert hit["type"] == "enum"
+    assert hit["default"] == 50
+    assert hit["allowed"] == [50, 100, 200, 250, 500, 1024, 2048]
+    assert "command" not in hit
+    roles = search_config("roles")
+    hit = next(item for item in roles["matches"] if item["path"] == "splunk_hosts.roles")
+    assert hit["type"].startswith("list")
+    assert "allowed" not in hit
+    assert "command" not in hit
+    template = search_config("remote-provider")
+    hit = next(item for item in template["matches"] if item["path"] == "template.remote-provider")
+    assert set(hit) == {"path", "description"}
+    assert "spa config" not in hit["description"]
+
+
+def test_unknown_explain_path_names_config_search():
+    """CFG-CLI-005 CFG-CLI-006. Recovery points at spa config search QUERY plus one example."""
+    human = run_spa(["config", "explain", "not.a.path"])
+    assert human.returncode == 1
+    text = human.stderr
+    assert "Unknown config path: not.a.path" in text
+    assert "spa config search QUERY" in text
+    assert "Example: spa config search instance_type" in text
+    agent = run_spa(["--agent", "config", "explain", "not.a.path"])
+    error = json.loads(agent.stdout)
+    assert agent.returncode == 1
+    assert error["ok"] is False
+    assert "data" not in error
+    assert error["error"] == (
+        "Unknown config path: not.a.path. Find paths with: spa config search QUERY\n"
+        "Example: spa config search instance_type"
+    )

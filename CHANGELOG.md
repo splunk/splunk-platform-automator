@@ -37,6 +37,8 @@ Work on this branch is **3.0**. Linux packages and Homebrew are later, not part 
 
 ### Changed
 
+- **Config explain and search choice data**: `spa config explain` prints unquoted string examples and defaults, lists small `allowed` sets (or `allowed_count`) on children, and uses catalog `recommended` instead of the first matching snippet. Unknown paths name `spa config search QUERY`. Search hits include `type`, `default`, and a small `allowed` list, still without a command.
+
 - **Content pack API flags**: `--customize` writes `spa-app.content_pack_api` from the playbook header and reports those keys in `data.notes` (it does not enable-all). Named 5391 add asks `apps.content-pack.install` until yes, which writes `content_pack_install: true` and `content_pack_api.install_all: true` together; remaining API questions (`enabled`, `saved_search_action`, `backfill`, `resolution`, `prefix`) exist only after that yes. `prefix` is last and matches the ITSI GUI Prefix field; skip omits it. Pack items dump as `name`, `content_pack_install`, `content_pack_api`, `customizations`. `spa validate` requires header keys present and equal. Ansible `cp_api_enabled` stays false so `--install-all-content-packs` does not enable the whole library.
 
 - **Python and Ansible**: Python **3.9–3.14** and Ansible **2.21**. `spa venv` picks the newest usable 3.9–3.14 when `python3` is newer.

@@ -264,6 +264,9 @@ features:
       - "splunk_hosts[].terraform.aws.tags"
       - path: "splunk_hosts[].terraform.aws.ssh_username"
         note: Login user must match the AMI. Pair with spa provider aws describe-ami.
+    recommended:
+      terraform.aws.instance_type: t3.medium
+      terraform.aws.root_volume_size: 50
     snippet: |
       terraform:
         aws:
@@ -389,6 +392,8 @@ features:
       - "splunk_hosts[].os.splunk_group_create"
       - "splunk_hosts[].os.splunk_user_create"
     related: ["setting.os.ubuntu", "setting.ssh_username"]
+    recommended:
+      os.packages: [acl, polkit]
     snippet: |
       os:
         set_hostname: true

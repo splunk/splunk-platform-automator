@@ -58,6 +58,20 @@ def record_paths(item: Dict[str, Any]) -> List[str]:
     return [key_path(key) for key in item.get("keys") or [] if key_path(key)]
 
 
+def recommended_values(features: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+    """Public-path lab recommendations. First declared value wins."""
+    found: Dict[str, Any] = {}
+    for item in features:
+        recommended = item.get("recommended")
+        if not isinstance(recommended, dict):
+            continue
+        for path, value in recommended.items():
+            public = str(path).replace("[]", "")
+            if public and public not in found:
+                found[public] = value
+    return found
+
+
 def feature_class(item: Dict[str, Any]) -> str:
     """Return setting, layout, or unsupported for a catalog record."""
     if item.get("kind") == "setting" and item.get("selector"):
@@ -720,6 +734,7 @@ def validate_feature_catalog(
     schema = schema if schema is not None else schema_key_details()
     errors: List[str] = []
     seen: Dict[str, str] = {}
+    seen_recommended: Dict[str, str] = {}
     for item in items:
         ident = str(item.get("id") or "")
         if not guidance_is_useful(item):
@@ -758,6 +773,34 @@ def validate_feature_catalog(
                     errors.append("%s snippet path is not declared: %s" % (ident, path))
         elif selector:
             errors.append("%s must not publish a selector" % ident)
+        recommended = item.get("recommended")
+        if recommended is None:
+            continue
+        if not isinstance(recommended, dict):
+            errors.append("%s recommended must be a mapping of public path to value" % ident)
+            continue
+        for path, value in recommended.items():
+            public = str(path).replace("[]", "")
+            if not public:
+                errors.append("%s recommended has an empty path" % ident)
+                continue
+            if public in seen_recommended:
+                errors.append(
+                    "duplicate recommended path %s (%s, %s)"
+                    % (public, seen_recommended[public], ident)
+                )
+                continue
+            seen_recommended[public] = ident
+            if _is_secret_path(public):
+                errors.append("%s recommended secret path %s" % (ident, public))
+                continue
+            detail = schema.get(public) or schema.get(str(path))
+            if not detail:
+                errors.append("%s recommended path is not schema-backed: %s" % (ident, public))
+                continue
+            mismatch = _recommended_schema_error(value, detail)
+            if mismatch:
+                errors.append("%s recommended %s %s" % (ident, public, mismatch))
     described = {
         path: public_key_description(path, schema.get(path) or {"path": path}, items, schema)
         for path in schema
@@ -767,6 +810,39 @@ def validate_feature_catalog(
             errors.append("schema key lacks a useful description: %s" % path)
     if errors:
         raise ValueError("feature catalog: " + "; ".join(errors))
+
+
+def _recommended_schema_error(value: Any, detail: Dict[str, Any]) -> Optional[str]:
+    type_name = str(detail.get("type") or "")
+    allowed = list(detail.get("allowed") or [])
+    if type_name == "string":
+        if not isinstance(value, str):
+            return "must be a string"
+    elif type_name == "integer":
+        if type(value) is not int:
+            return "must be an integer"
+    elif type_name == "boolean":
+        if type(value) is not bool:
+            return "must be a boolean"
+    elif type_name.startswith("list"):
+        if not isinstance(value, list):
+            return "must be a list"
+        if "string" in type_name and not all(isinstance(item, str) for item in value):
+            return "must be a list of strings"
+    elif type_name.startswith("map") and not isinstance(value, dict):
+        return "must be a map"
+    if allowed:
+        if type_name.startswith("list"):
+            if not isinstance(value, list):
+                return "must be a list"
+            for item in value:
+                if item not in allowed:
+                    return "value %r is not allowed" % (item,)
+        elif value not in allowed:
+            return "value %r is not allowed" % (value,)
+    if detail.get("default") is not None and value == detail["default"]:
+        return "equals the omit-safe default"
+    return None
 
 
 def public_feature(

@@ -697,7 +697,14 @@ class LocalSpaSession:
                     )
                 return CommandResult(ok=True, data=config_schema_payload(self.paths.spa_home))
         except KeyError:
-            return CommandResult(ok=False, error="Unknown config path: %s" % target, code=1)
+            return CommandResult(
+                ok=False,
+                error=(
+                    "Unknown config path: %s. Find paths with: spa config search QUERY\n"
+                    "Example: spa config search instance_type" % target
+                ),
+                code=1,
+            )
         except (OSError, ValueError) as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
         return CommandResult(ok=False, error="Unknown spa config action: %s" % action, code=2)
