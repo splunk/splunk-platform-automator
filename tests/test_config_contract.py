@@ -1874,6 +1874,83 @@ splunk_hosts:
         assert nxt
         assert nxt[0]["id"] == "splunk_defaults.splunk_admin_password"
 
+    def test_validate_os_packages_next_is_aws_only(self):
+        """CFG-CLI-002. os.packages next is only for terraform.aws configs."""
+        from spa.next_steps import validate_guidance_next
+
+        virtualbox = validate_guidance_next(
+            {
+                "virtualbox": {"box": "almalinux/9"},
+                "splunk_hosts": [{"name": "sh", "roles": ["search_head"]}],
+            }
+        )
+        assert "os.packages" not in [row["id"] for row in virtualbox]
+
+        aws = validate_guidance_next(
+            {
+                "terraform": {
+                    "aws": {
+                        "region": "eu-central-1",
+                        "ami_id": "ami-0123456789abcdef0",
+                        "ssh_username": "ec2-user",
+                    }
+                },
+                "splunk_hosts": [{"name": "sh", "roles": ["search_head"]}],
+            }
+        )
+        assert [row["id"] for row in aws] == ["os.packages"]
+
+    def test_validate_skips_per_host_ssh_username_and_os_packages(self):
+        """CFG-CLI-002. Per-host ssh_username and os.packages on every host settle those next items."""
+        from spa.next_steps import validate_guidance_next
+
+        ssh = validate_guidance_next(
+            {
+                "terraform": {
+                    "aws": {"region": "eu-central-1", "ami_id": "ami-0123456789abcdef0"}
+                },
+                "os": {"packages": ["acl", "polkit"]},
+                "splunk_hosts": [
+                    {
+                        "name": "sh",
+                        "roles": ["search_head"],
+                        "terraform": {"aws": {"ssh_username": "ec2-user"}},
+                    },
+                    {
+                        "name": "idx",
+                        "roles": ["indexer"],
+                        "terraform": {"aws": {"ssh_username": "ec2-user"}},
+                    },
+                ],
+            }
+        )
+        assert ssh == []
+
+        packages = validate_guidance_next(
+            {
+                "terraform": {
+                    "aws": {
+                        "region": "eu-central-1",
+                        "ami_id": "ami-0123456789abcdef0",
+                        "ssh_username": "ec2-user",
+                    }
+                },
+                "splunk_hosts": [
+                    {
+                        "name": "sh",
+                        "roles": ["search_head"],
+                        "os": {"packages": ["acl", "polkit"]},
+                    },
+                    {
+                        "name": "idx",
+                        "roles": ["indexer"],
+                        "os": {"packages": ["acl", "polkit"]},
+                    },
+                ],
+            }
+        )
+        assert packages == []
+
     def test_agent_get_without_path_is_outline_not_document(self, tmp_path):
         """CFG-CLI-004 CFG-PATH-005."""
         env_dir = write_min_env(tmp_path / "env")
@@ -2220,6 +2297,10 @@ class TestExplainContract:
         )
         assert instance["data"]["example"] == "spa config set terraform.aws.instance_type t3.medium"
         assert instance["data"]["default"] == "t2.micro"
+        assert instance["data"]["recommended"] == "t3.medium"
+        human_instance = run_spa(["config", "explain", "terraform.aws.instance_type"])
+        assert "default: t2.micro" in human_instance.stdout
+        assert "recommended: t3.medium" in human_instance.stdout
         hosts = json.loads(run_spa(["--agent", "config", "explain", "splunk_hosts"]).stdout)
         roles = next(item for item in hosts["data"]["fields"] if item["name"] == "roles")
         assert "allowed" not in roles
@@ -2246,7 +2327,8 @@ class TestExplainContract:
         assert {"id", "ask", "required"} <= set(row)
         assert "command" in row
         assert row["command"] != data["command"]
-        assert "--agent" not in row["command"]
+        assert row["command"].startswith("spa --agent ")
+        assert row["argv"][:2] == ["spa", "--agent"]
         human = run_spa(["config", "explain", "terraform.aws.instance_type"])
         assert human.returncode == 0, human.stderr
         assert "DISCOVER:" in human.stdout
@@ -2262,7 +2344,7 @@ class TestExplainContract:
         schema = json.loads(run_spa(["--agent", "agent", "schema"]).stdout)
         explain = next(item for item in schema["data"]["commands"] if item["name"] == "config explain")
         summary = explain["summary"]
-        for field in ("discover", "related", "from", "next"):
+        for field in ("recommended", "discover", "related", "from", "next"):
             assert field in summary, field
 
     def test_string_lookalike_examples_round_trip_as_strings(self, tmp_path):

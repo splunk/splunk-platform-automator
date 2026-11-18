@@ -718,6 +718,8 @@ def test_config_editing_names_templates_list_search_and_merge():
     assert "data.next" in cli002
     assert "latest-ami" in cli002
     assert "validate" in cli002
+    assert "terraform.aws" in cli002
+    assert "os.packages" in cli002
     cli005 = section("### CFG-CLI-005")
     assert "unquoted" in cli005.lower()
     cli006 = section("### CFG-CLI-006")
@@ -727,10 +729,13 @@ def test_config_editing_names_templates_list_search_and_merge():
     cli007 = section("### CFG-CLI-007")
     assert "allowed_count" in cli007
     assert "recommended" in cli007
+    assert "recommended: t3.medium" in cli007
     assert "discover" in cli007
     assert "related" in cli007
     assert "`from`" in cli007 or " from " in cli007
     assert "next" in cli007
+    assert "--agent" in cli007
+    assert "instance-types list" in cli007
     merge001 = section("### CFG-MERGE-001")
     assert "templates list" in merge001
 
@@ -823,9 +828,9 @@ class TestConfigMarkdown:
         assert result.stdout == committed
 
     def test_generated_intro_describes_explain_guidance_fields(self):
-        """CFG-CLI-007. config schema --markdown names discover, related, from, and next."""
+        """CFG-CLI-007. config schema --markdown names recommended, discover, related, from, and next."""
         intro = format_config_markdown(PROJECT_ROOT).split("## Identity", 1)[0]
-        for field in ("discover", "related", "from", "next"):
+        for field in ("recommended", "discover", "related", "from", "next"):
             assert field in intro, field
 
     def test_generated_descriptions_hide_internal_ids(self):

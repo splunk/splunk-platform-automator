@@ -43,6 +43,9 @@ exit 1, `error` naming the unmet requirements, and `data` with `ready: false`,
 planned operations, and the redacted diff so the agent can retry with
 `--resolve`. `spa validate` may include `data.next` for missing required keys
 and known catalog gaps only, not for every Ansible or schema error.
+`os.packages` is a catalog gap only on configs with `terraform.aws`.
+`os.packages` and `terraform.aws.ssh_username` are settled when every host
+under `splunk_hosts[]` sets them per-host.
 
 ### CFG-CLI-003 — confirmation boundary
 
@@ -229,20 +232,26 @@ instead of `allowed`. The human field line inlines a small allowed set in the
 type qualifier (`disk_storage <enum: 50|100|200|250|500|1024|2048>`). Catalog
 records may publish `recommended` keyed by public path, only where the lab
 value differs from the omit-safe default. Those values must validate against
-the schema type and `allowed` set. Explain `example` uses `recommended` when
-present, otherwise the selected feature's own snippet, and never an arbitrary
-other feature's snippet. Catalog `discover` is a list of human `spa` commands
-that find live values; explain prints them and does not call AWS or CCM.
-`related` is public paths from the catalog (never internal `setting.*` ids).
-Leaves inherit only `discover`, `related`, and `from` from the nearest parent
-setting or provider layout. Full `WHEN` / `WHEN NOT` stays on that parent.
-Explain attaches `data.next` only when the selected node has `allowed` or
-`discover`, using the next-item shape (`id`, `ask`, `command`, `argv`,
-`choice.allowed`, `required`). That next `command` is not the mutation
-`command` already on the node. Humans see `RELATED:` and `DISCOVER:` on the
-page and `Next:` on stderr. Secret paths never get `recommended`, `example`, or
-`default`, including when they inherit other guidance. `spa --agent schema` and
-`config schema --markdown` describe these fields.
+the schema type and `allowed` set. The selected explain node includes
+`recommended` when the catalog publishes one for that path; the human page
+prints `recommended: t3.medium` under `default:`. Explain `example` uses
+`recommended` when present, otherwise the selected feature's own snippet, and
+never an arbitrary other feature's snippet. Catalog `discover` is a list of
+human `spa` commands that find live values; explain prints them and does not
+call AWS or CCM. `related` is public paths from the catalog (never internal
+`setting.*` ids). Leaves inherit only `discover`, `related`, and `from` from
+the nearest parent setting or provider layout. Full `WHEN` / `WHEN NOT` stays
+on that parent. Explain attaches `data.next` only when the selected node has
+`allowed` or `discover`, using the next-item shape (`id`, `ask`, `command`,
+`argv`, `choice.allowed`, `required`). That next `command` is not the mutation
+`command` already on the node. The next `command` and `argv` insert `--agent`
+after `spa`; catalog `discover` stays a human `spa` command. Inherited leaves
+pick the discover command whose own words name the leaf (`instance_type` →
+`instance-types list`, `ami_id` → `latest-ami`), otherwise the first command.
+Humans see `RELATED:` and `DISCOVER:` on the page and `Next:` on stderr.
+Secret paths never get `recommended`, `example`, or `default`, including when
+they inherit other guidance. `spa --agent schema` and `config schema
+--markdown` describe these fields.
 
 ## Fragment merge
 

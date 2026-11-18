@@ -6,7 +6,7 @@ import json
 import re
 import shlex
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from spa.apps import CONTENT_LIBRARY_ID, ES_ID, ITSI_ID
 
@@ -575,6 +575,29 @@ def ccm_hardware_next() -> List[Dict[str, Any]]:
     ]
 
 
+def _agent_form(command: str) -> str:
+    text = str(command or "").strip()
+    if text.startswith("spa --agent ") or text == "spa --agent":
+        return text
+    if text.startswith("spa "):
+        return "spa --agent " + text[4:]
+    return text
+
+
+def _discover_command_for_path(path: str, commands: Sequence[str]) -> str:
+    leaf = str(path or "").rsplit(".", 1)[-1].lower().replace("_", "-")
+    tokens = [part for part in leaf.split("-") if len(part) >= 3]
+    for command in commands:
+        for word in command.lower().split()[1:]:
+            normalized = word.replace("_", "-")
+            if leaf and (leaf in normalized or (len(normalized) >= 3 and normalized in leaf)):
+                return command
+            word_parts = [part for part in normalized.split("-") if len(part) >= 3]
+            if tokens and any(token in word_parts for token in tokens):
+                return command
+    return commands[0]
+
+
 def explain_choice_next(
     *,
     path: str,
@@ -585,11 +608,11 @@ def explain_choice_next(
     """One follow-up when explain has a closed set or a discovery command."""
     commands = [str(command).strip() for command in (discover or []) if str(command).strip()]
     if commands:
-        command = commands[0]
+        command = _discover_command_for_path(path, commands)
         if command == mutation_command:
             return []
         ident = ".".join(part for part in command.split()[1:] if part) or "discover"
-        return [item(ident, "Find live values?", command)]
+        return [item(ident, "Find live values?", _agent_form(command))]
     if allowed:
         return [item(path, "Choose a value?", choice={"allowed": list(allowed)})]
     return []
@@ -606,8 +629,6 @@ def _write_path(path: str) -> str:
     marker = "].terraform.aws."
     if marker in text:
         return "terraform.aws." + text.split(marker, 1)[1]
-    if text.startswith("terraform.aws."):
-        return text
     return text
 
 
@@ -723,6 +744,31 @@ def os_packages_next() -> Dict[str, Any]:
     )
 
 
+def _hosts(config: Mapping[str, Any]) -> List[Mapping[str, Any]]:
+    hosts = config.get("splunk_hosts")
+    if not isinstance(hosts, list):
+        return []
+    return [host for host in hosts if isinstance(host, Mapping)]
+
+
+def _every_host_has(
+    config: Mapping[str, Any], predicate: Callable[[Mapping[str, Any]], bool]
+) -> bool:
+    hosts = _hosts(config)
+    return bool(hosts) and all(predicate(host) for host in hosts)
+
+
+def _host_ssh_username(host: Mapping[str, Any]) -> bool:
+    terraform = host.get("terraform")
+    aws = terraform.get("aws") if isinstance(terraform, Mapping) else None
+    return isinstance(aws, Mapping) and bool(aws.get("ssh_username"))
+
+
+def _host_os_packages(host: Mapping[str, Any]) -> bool:
+    os_cfg = host.get("os")
+    return isinstance(os_cfg, Mapping) and bool(os_cfg.get("packages"))
+
+
 def validate_guidance_next(
     config: Optional[Mapping[str, Any]] = None,
     error: Optional[str] = None,
@@ -733,11 +779,21 @@ def validate_guidance_next(
     if not isinstance(config, Mapping):
         return rows
     aws = _aws_block(config)
-    if aws and not aws.get("ssh_username") and "terraform.aws.ssh_username" not in seen:
+    if (
+        aws
+        and not aws.get("ssh_username")
+        and not _every_host_has(config, _host_ssh_username)
+        and "terraform.aws.ssh_username" not in seen
+    ):
         rows.append(ssh_username_next())
         seen.add("terraform.aws.ssh_username")
     os_cfg = config.get("os") if isinstance(config.get("os"), Mapping) else {}
-    if not (os_cfg or {}).get("packages") and "os.packages" not in seen:
+    if (
+        aws
+        and not (os_cfg or {}).get("packages")
+        and not _every_host_has(config, _host_os_packages)
+        and "os.packages" not in seen
+    ):
         rows.append(os_packages_next())
     return rows
 

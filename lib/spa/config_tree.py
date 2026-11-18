@@ -185,6 +185,11 @@ def format_explain(data: Dict[str, Any]) -> str:
         lines.append("allowed: %s" % ", ".join(str(item) for item in data["allowed"]))
     if "default" in data:
         lines.append("default: %s" % _example_token(data["default"], str(data.get("type") or "")))
+    if "recommended" in data:
+        lines.append(
+            "recommended: %s"
+            % _example_token(data["recommended"], str(data.get("type") or ""))
+        )
     identity = (data.get("identity") or {}).get("one_of") or []
     if identity:
         lines.append("")
@@ -455,6 +460,10 @@ def _node(canonical: str, schema: Dict[str, Dict[str, Any]], features: List[Dict
         data["allowed"] = list(detail["allowed"])
     if detail.get("default") is not None and not _is_secret(canonical):
         data["default"] = detail["default"]
+    if not _is_secret(canonical) and not _is_secret(shown):
+        recommended = recommended_values(features).get(shown)
+        if recommended is not None:
+            data["recommended"] = recommended
     if detail.get("constraints"):
         data["constraints"] = detail["constraints"]
     if feature:

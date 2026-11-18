@@ -180,7 +180,7 @@ COMMAND_SCHEMA = {
         },
         {
             "name": "config explain",
-            "summary": "Describe one config path and its immediate fields. Leaves may include discover, related, and from the parent setting or provider. data.next is present when allowed or discover exists. A deeper level is a longer path. The same data is the future GUI payload.",
+            "summary": "Describe one config path and its immediate fields. Leaves may include recommended, discover, related, and from the parent setting or provider. data.next is present when allowed or discover exists. A deeper level is a longer path. The same data is the future GUI payload.",
             "read_only": True,
             "positionals": [{"name": "PATH", "required": False, "help": "User path such as splunk_hosts or os.packages"}],
             "example": "spa --agent config explain splunk_hosts",

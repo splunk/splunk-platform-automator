@@ -167,18 +167,27 @@ def _explain_inventory_paths():
     ids=lambda value: value or "<root>",
 )
 def test_explain_commands_are_human_spelling_on_every_page(path):
-    """CFG-CLI-005. Explain command/example never includes --agent, including templates."""
+    """CFG-CLI-005. Explain command/example/discover never includes --agent, including templates."""
     try:
         data = explain_config(path)
     except (KeyError, TypeError):
         return
-    blob = json.dumps(data)
     label = path or "<root>"
-    assert "--agent" not in blob, label
-    assert "--agent" not in format_explain(data), label
     command = data.get("command")
     if command:
+        assert "--agent" not in command, label
         assert str(command).startswith("spa "), (path, command)
+    example = data.get("example")
+    if example:
+        assert "--agent" not in example, label
+    for entry in data.get("discover") or []:
+        assert "--agent" not in entry, label
+    assert "--agent" not in format_explain(data), label
+    for row in data.get("next") or []:
+        if "command" not in row:
+            continue
+        assert str(row["command"]).startswith("spa --agent "), label
+        assert row.get("argv", [])[:2] == ["spa", "--agent"], label
 
 
 def test_explain_inventory_includes_canonical_human_commands():
@@ -265,6 +274,16 @@ def test_explain_string_example_uses_unquoted_recommended_not_schema_default():
     assert 'default: "t2.micro"' not in human
     assert "t3.medium" in human
     assert "'\"t3.medium\"'" not in human
+
+
+def test_explain_publishes_catalog_recommended_under_default():
+    """CFG-CLI-007. Catalog recommended is on the explain node and under default on the page."""
+    data = explain_config("terraform.aws.instance_type")
+    assert data["recommended"] == "t3.medium"
+    human = format_explain(data)
+    assert "default: t2.micro" in human
+    assert "recommended: t3.medium" in human
+    assert human.index("default: t2.micro") < human.index("recommended: t3.medium")
 
 
 def test_explain_list_and_integer_examples_stay_strict_json():
@@ -365,9 +384,9 @@ def _assert_next_item(row):
     assert isinstance(row["ask"], str) and row["ask"]
     assert row["required"] is False
     if "command" in row:
-        assert str(row["command"]).startswith("spa ")
-        assert "--agent" not in row["command"]
+        assert str(row["command"]).startswith("spa --agent ")
         assert row.get("argv")
+        assert row["argv"][:2] == ["spa", "--agent"]
     if "choice" in row:
         assert "allowed" in row["choice"]
         assert row["choice"]["allowed"]
@@ -416,7 +435,8 @@ def test_explain_next_only_when_allowed_or_discover():
     assert len(leaf["next"]) == 1
     row = leaf["next"][0]
     _assert_next_item(row)
-    assert row["command"] in leaf["discover"]
+    human_next = row["command"].replace("spa --agent ", "spa ", 1)
+    assert human_next in leaf["discover"]
     assert row["command"] != leaf["command"]
     assert "choice" not in row
 
@@ -438,6 +458,36 @@ def test_explain_next_only_when_allowed_or_discover():
     timezone = explain_config("os.time_zone")
     assert timezone.get("from") == "os"
     assert "next" not in timezone
+
+
+def test_explain_next_uses_agent_form_and_keeps_human_discover():
+    """CFG-CLI-007. next command/argv is spa --agent; catalog discover stays human."""
+    data = explain_config("terraform.aws.region")
+    assert data["discover"] == [
+        "spa provider aws survey",
+        "spa provider aws latest-ami",
+        "spa provider aws instance-types list",
+    ]
+    assert all("--agent" not in command for command in data["discover"])
+    row = data["next"][0]
+    assert row["argv"][:2] == ["spa", "--agent"]
+    assert row["command"].startswith("spa --agent ")
+    assert row["command"] == "spa --agent provider aws survey"
+
+
+def test_explain_next_picks_the_discover_command_that_names_the_leaf():
+    """CFG-CLI-007. Inherited AWS leaves pick the discover command that names the leaf."""
+    instance = explain_config("terraform.aws.instance_type")
+    assert instance["discover"][0] == "spa provider aws survey"
+    row = instance["next"][0]
+    assert row["command"] == "spa --agent provider aws instance-types list"
+    assert row["argv"] == ["spa", "--agent", "provider", "aws", "instance-types", "list"]
+
+    ami = explain_config("terraform.aws.ami_id")
+    assert ami["discover"] == instance["discover"]
+    row = ami["next"][0]
+    assert row["command"] == "spa --agent provider aws latest-ami"
+    assert row["argv"] == ["spa", "--agent", "provider", "aws", "latest-ami"]
 
 
 def test_explain_secret_omits_recommended_example_and_default():
@@ -463,6 +513,7 @@ def test_human_explain_prints_related_and_next():
     assert human.returncode == 0, human.stderr
     assert "DISCOVER:" in human.stdout
     assert "spa provider aws survey" in human.stdout
+    assert "--agent" not in human.stdout
     assert "from: provider.aws" in human.stdout
     assert "Next:" in human.stderr
     assert "spa provider aws survey" in human.stderr or "instance-types list" in human.stderr
