@@ -574,6 +574,26 @@ def ccm_hardware_next() -> List[Dict[str, Any]]:
     ]
 
 
+def explain_choice_next(
+    *,
+    path: str,
+    allowed: Optional[Sequence[Any]] = None,
+    discover: Optional[Sequence[str]] = None,
+    mutation_command: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """One follow-up when explain has a closed set or a discovery command."""
+    commands = [str(command).strip() for command in (discover or []) if str(command).strip()]
+    if commands:
+        command = commands[0]
+        if command == mutation_command:
+            return []
+        ident = ".".join(part for part in command.split()[1:] if part) or "discover"
+        return [item(ident, "Find live values?", command)]
+    if allowed:
+        return [item(path, "Choose a value?", choice={"allowed": list(allowed)})]
+    return []
+
+
 def remaining_next(remaining: Iterable[str]) -> List[Dict[str, Any]]:
     mapping = {
         "apps": item("apps.search", "Add apps?", "spa --agent apps search QUERY"),

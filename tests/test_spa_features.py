@@ -124,6 +124,37 @@ def test_catalog_recommended_values_match_schema_type_and_allowed():
     assert found["os.packages"] == ["acl", "polkit"]
 
 
+def test_catalog_discover_is_human_spa_commands():
+    """CFG-CLI-007. Catalog discover is a list of human spa commands, never executed."""
+    from spa.catalog import load_features, public_feature, validate_feature_catalog
+
+    features = load_features(PROJECT_ROOT)
+    validate_feature_catalog(features)
+    aws = next(item for item in features if item.get("id") == "provider.aws")
+    ccm = next(item for item in features if item.get("id") == "provider.ccm")
+    assert aws["discover"] == [
+        "spa provider aws survey",
+        "spa provider aws latest-ami",
+        "spa provider aws instance-types list",
+    ]
+    assert ccm["discover"] == ["spa provider ccm survey"]
+    for item in features:
+        discover = item.get("discover")
+        if not discover:
+            continue
+        assert isinstance(discover, list), item.get("id")
+        for command in discover:
+            assert isinstance(command, str) and command.startswith("spa "), command
+            assert "--agent" not in command
+        public = public_feature(item, features)
+        assert public.get("discover") == discover
+        assert all(not str(rel).startswith("setting.") for rel in public.get("related") or [])
+    bad = dict(aws)
+    bad["discover"] = ["curl https://example.invalid"]
+    with pytest.raises(ValueError, match="discover"):
+        validate_feature_catalog([bad])
+
+
 def test_explain_c1():
     result = run_spa(["config", "explain", "topology.c1"])
     assert result.returncode == 0, result.stderr

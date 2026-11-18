@@ -357,3 +357,123 @@ def test_unknown_explain_path_names_config_search():
         "Unknown config path: not.a.path. Find paths with: spa config search QUERY\n"
         "Example: spa config search instance_type"
     )
+
+
+def _assert_next_item(row):
+    assert {"id", "ask", "required"} <= set(row)
+    assert isinstance(row["id"], str) and row["id"]
+    assert isinstance(row["ask"], str) and row["ask"]
+    assert row["required"] is False
+    if "command" in row:
+        assert str(row["command"]).startswith("spa ")
+        assert "--agent" not in row["command"]
+        assert row.get("argv")
+    if "choice" in row:
+        assert "allowed" in row["choice"]
+        assert row["choice"]["allowed"]
+
+
+def test_explain_leaf_inherits_discover_related_and_from():
+    """CFG-CLI-007. Leaves inherit discover, related, and from; WHEN stays on the parent."""
+    parent = explain_config("provider.aws")
+    assert "EC2" in parent["when_to_use"]
+    assert "spa provider aws survey" in parent["discover"]
+    assert "spa provider aws latest-ami" in parent["discover"]
+    assert "spa provider aws instance-types list" in parent["discover"]
+    assert "from" not in parent
+    assert all(not str(item).startswith("setting.") for item in parent.get("related") or [])
+
+    leaf = explain_config("terraform.aws.instance_type")
+    assert "when_to_use" not in leaf
+    assert "when_not_to_use" not in leaf
+    assert leaf["from"] == "provider.aws"
+    assert leaf["discover"] == parent["discover"]
+    assert leaf.get("related") == parent.get("related")
+    assert all(not str(item).startswith("setting.") for item in leaf.get("related") or [])
+    human = format_explain(leaf)
+    assert "RELATED:" in human or not leaf.get("related")
+    assert "DISCOVER:" in human
+    assert "spa provider aws instance-types list" in human
+    assert "WHEN:" not in human
+
+    packages = explain_config("os.packages")
+    assert "when_to_use" not in packages
+    assert packages["from"] == "os"
+    assert "os.disable_apparmor" in packages["related"]
+    assert "terraform.aws.ssh_username" in packages["related"]
+    assert all(not str(item).startswith(("setting.", "#")) for item in packages["related"])
+    assert "discover" not in packages
+    os_page = explain_config("os")
+    assert "when_to_use" in os_page
+    assert "from" not in os_page
+    assert os_page["related"] == packages["related"]
+
+
+def test_explain_next_only_when_allowed_or_discover():
+    """CFG-CLI-007. data.next uses the next_steps item shape only when allowed or discover exists."""
+    leaf = explain_config("terraform.aws.instance_type")
+    assert leaf["next"]
+    assert len(leaf["next"]) == 1
+    row = leaf["next"][0]
+    _assert_next_item(row)
+    assert row["command"] in leaf["discover"]
+    assert row["command"] != leaf["command"]
+    assert "choice" not in row
+
+    roles = explain_config("splunk_hosts.roles")
+    assert "discover" not in roles
+    assert roles["allowed"]
+    assert roles["next"]
+    assert len(roles["next"]) == 1
+    choice = roles["next"][0]
+    _assert_next_item(choice)
+    assert "command" not in choice
+    assert choice["choice"]["allowed"] == roles["allowed"]
+
+    plugin = explain_config("plugin")
+    assert "allowed" not in plugin
+    assert "discover" not in plugin
+    assert "next" not in plugin
+
+    timezone = explain_config("os.time_zone")
+    assert timezone.get("from") == "os"
+    assert "next" not in timezone
+
+
+def test_explain_secret_omits_recommended_example_and_default():
+    """CFG-CLI-007. Secret paths never publish recommended, example, or default, including inherited."""
+    for path in (
+        "splunk_defaults.splunk_admin_password",
+        "splunk_hosts.splunk_admin_password",
+        "splunk_app_deployment.splunkbase_password",
+    ):
+        data = explain_config(path)
+        assert "--from-env" in data["command"], path
+        assert "example" not in data, path
+        assert "default" not in data, path
+        assert "recommended" not in data, path
+        blob = json.dumps(data)
+        assert "t3.medium" not in blob, path
+        assert "BEGIN" not in blob, path
+
+
+def test_human_explain_prints_related_and_next():
+    """CFG-CLI-007. Humans see RELATED: on the page and Next: from data.next on stderr."""
+    human = run_spa(["config", "explain", "terraform.aws.instance_type"])
+    assert human.returncode == 0, human.stderr
+    assert "DISCOVER:" in human.stdout
+    assert "spa provider aws survey" in human.stdout
+    assert "from: provider.aws" in human.stdout
+    assert "Next:" in human.stderr
+    assert "spa provider aws survey" in human.stderr or "instance-types list" in human.stderr
+    assert "--agent" not in human.stderr
+    agent = run_spa(["--agent", "config", "explain", "terraform.aws.instance_type"])
+    assert agent.returncode == 0, agent.stderr
+    assert not agent.stderr.strip()
+    payload = json.loads(agent.stdout)
+    assert payload["ok"] is True
+    data = payload["data"]
+    assert data["from"] == "provider.aws"
+    assert data["discover"]
+    assert data["next"]
+    _assert_next_item(data["next"][0])

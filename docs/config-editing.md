@@ -227,7 +227,18 @@ records may publish `recommended` keyed by public path, only where the lab
 value differs from the omit-safe default. Those values must validate against
 the schema type and `allowed` set. Explain `example` uses `recommended` when
 present, otherwise the selected feature's own snippet, and never an arbitrary
-other feature's snippet.
+other feature's snippet. Catalog `discover` is a list of human `spa` commands
+that find live values; explain prints them and does not call AWS or CCM.
+`related` is public paths from the catalog (never internal `setting.*` ids).
+Leaves inherit only `discover`, `related`, and `from` from the nearest parent
+setting or provider layout. Full `WHEN` / `WHEN NOT` stays on that parent.
+Explain attaches `data.next` only when the selected node has `allowed` or
+`discover`, using the next-item shape (`id`, `ask`, `command`, `argv`,
+`choice.allowed`, `required`). That next `command` is not the mutation
+`command` already on the node. Humans see `RELATED:` and `DISCOVER:` on the
+page and `Next:` on stderr. Secret paths never get `recommended`, `example`, or
+`default`, including when they inherit other guidance. `spa --agent schema` and
+`config schema --markdown` describe these fields.
 
 ## Fragment merge
 

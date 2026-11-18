@@ -2085,6 +2085,40 @@ class TestExplainContract:
         assert hit["allowed"] == [50, 100, 200, 250, 500, 1024, 2048]
         assert "command" not in hit
 
+    def test_explain_inherits_guidance_and_emits_next(self):
+        """CFG-CLI-007."""
+        instance = json.loads(
+            run_spa(["--agent", "config", "explain", "terraform.aws.instance_type"]).stdout
+        )
+        data = instance["data"]
+        assert "when_to_use" not in data
+        assert data["from"] == "provider.aws"
+        assert "spa provider aws survey" in data["discover"]
+        assert all(not str(item).startswith("setting.") for item in data.get("related") or [])
+        assert data["next"]
+        row = data["next"][0]
+        assert {"id", "ask", "required"} <= set(row)
+        assert "command" in row
+        assert row["command"] != data["command"]
+        assert "--agent" not in row["command"]
+        human = run_spa(["config", "explain", "terraform.aws.instance_type"])
+        assert human.returncode == 0, human.stderr
+        assert "DISCOVER:" in human.stdout
+        assert "from: provider.aws" in human.stdout
+        assert "Next:" in human.stderr
+        secret = json.loads(
+            run_spa(["--agent", "config", "explain", "splunk_hosts.splunk_admin_password"]).stdout
+        )["data"]
+        assert "example" not in secret
+        assert "default" not in secret
+        assert "recommended" not in secret
+        assert "--from-env" in secret["command"]
+        schema = json.loads(run_spa(["--agent", "agent", "schema"]).stdout)
+        explain = next(item for item in schema["data"]["commands"] if item["name"] == "config explain")
+        summary = explain["summary"]
+        for field in ("discover", "related", "from", "next"):
+            assert field in summary, field
+
     def test_string_lookalike_examples_round_trip_as_strings(self, tmp_path):
         """CFG-CLI-005. Unquoted string examples that look like JSON store as strings."""
         example = json.loads(

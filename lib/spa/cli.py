@@ -3385,6 +3385,7 @@ def _run(argv: Sequence[str]) -> int:
             from spa.config_tree import format_explain
 
             sys.stdout.write(format_explain(data))
+            _print_next(data)
             return 0
         if action == "search":
             matches = data.get("matches") or []

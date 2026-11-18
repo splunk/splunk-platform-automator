@@ -96,7 +96,7 @@ A **layout** is an SVA topology (`topology.s1`, `topology.d1`, `topology.d11`, `
 
 Do not add a record with no schema paths. Those rows are unsupported and `spa config explain` is only for settings and layouts that can be written. Command help that is not a config key belongs in the operator docs (`docs/apps.md` for `spa apps`).
 
-Guidance, notes, and snippets must not contain internal ids (`setting.`, `topology.`, `provider.`). Search does not index those ids either. `related` may cite `#NN` issues or another catalog id; a missing id is skipped, so delete the link when you delete the record.
+Guidance, notes, and snippets must not contain internal ids (`setting.`, `topology.`, `provider.`). Search does not index those ids either. `related` may cite `#NN` issues or another catalog id; a missing id is skipped, so delete the link when you delete the record. `discover` is a list of human `spa` commands (`spa provider aws survey`); explain prints them and never executes them. Do not parse discovery commands out of `when_to_use` prose.
 
 A new top-level schema root needs an entry in `CONFIG_AREAS` in `lib/spa/catalog.py`, in config-writing order: Identity, General, OS, Provider, Defaults, Hosts, Apps, Clustering. An unknown root lands in an "Other" section, which the settings dump must not have.
 

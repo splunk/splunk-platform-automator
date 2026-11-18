@@ -36,6 +36,7 @@ _PUBLIC_FIELDS = (
     "constraints",
     "search_terms",
     "template",
+    "discover",
 )
 
 
@@ -70,6 +71,16 @@ def recommended_values(features: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
             if public and public not in found:
                 found[public] = value
     return found
+
+
+def catalog_discover(item: Dict[str, Any]) -> List[str]:
+    """Human spa commands that find live values. Never executed from explain."""
+    raw = item.get("discover")
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list):
+        return []
+    return [str(command).strip() for command in raw if str(command).strip()]
 
 
 def feature_class(item: Dict[str, Any]) -> str:
@@ -774,33 +785,43 @@ def validate_feature_catalog(
         elif selector:
             errors.append("%s must not publish a selector" % ident)
         recommended = item.get("recommended")
-        if recommended is None:
-            continue
-        if not isinstance(recommended, dict):
-            errors.append("%s recommended must be a mapping of public path to value" % ident)
-            continue
-        for path, value in recommended.items():
-            public = str(path).replace("[]", "")
-            if not public:
-                errors.append("%s recommended has an empty path" % ident)
-                continue
-            if public in seen_recommended:
-                errors.append(
-                    "duplicate recommended path %s (%s, %s)"
-                    % (public, seen_recommended[public], ident)
-                )
-                continue
-            seen_recommended[public] = ident
-            if _is_secret_path(public):
-                errors.append("%s recommended secret path %s" % (ident, public))
-                continue
-            detail = schema.get(public) or schema.get(str(path))
-            if not detail:
-                errors.append("%s recommended path is not schema-backed: %s" % (ident, public))
-                continue
-            mismatch = _recommended_schema_error(value, detail)
-            if mismatch:
-                errors.append("%s recommended %s %s" % (ident, public, mismatch))
+        if recommended is not None:
+            if not isinstance(recommended, dict):
+                errors.append("%s recommended must be a mapping of public path to value" % ident)
+            else:
+                for path, value in recommended.items():
+                    public = str(path).replace("[]", "")
+                    if not public:
+                        errors.append("%s recommended has an empty path" % ident)
+                        continue
+                    if public in seen_recommended:
+                        errors.append(
+                            "duplicate recommended path %s (%s, %s)"
+                            % (public, seen_recommended[public], ident)
+                        )
+                        continue
+                    seen_recommended[public] = ident
+                    if _is_secret_path(public):
+                        errors.append("%s recommended secret path %s" % (ident, public))
+                        continue
+                    detail = schema.get(public) or schema.get(str(path))
+                    if not detail:
+                        errors.append("%s recommended path is not schema-backed: %s" % (ident, public))
+                        continue
+                    mismatch = _recommended_schema_error(value, detail)
+                    if mismatch:
+                        errors.append("%s recommended %s %s" % (ident, public, mismatch))
+        discover = item.get("discover")
+        if discover is not None:
+            if not isinstance(discover, list) or not all(isinstance(command, str) for command in discover):
+                errors.append("%s discover must be a list of spa commands" % ident)
+            else:
+                for command in discover:
+                    text = command.strip()
+                    if not text.startswith("spa ") or "--agent" in text.split():
+                        errors.append("%s discover must be a human spa command: %s" % (ident, command))
+                    if _INTERNAL_ID.search(text):
+                        errors.append("%s discover leaks an internal id" % ident)
     described = {
         path: public_key_description(path, schema.get(path) or {"path": path}, items, schema)
         for path in schema
@@ -1315,14 +1336,16 @@ def config_schema_payload(spa_home: Path) -> Dict[str, Any]:
             continue
         seen_selectors.add(selector)
         area_id = _area_id_for_path(selector)
-        buckets[area_id]["snippets"].append(
-            {
-                "selector": selector,
-                "title": str(feature.get("title") or ""),
-                "guidance": decision_guidance(feature),
-                "yaml": snippet,
-            }
-        )
+        row = {
+            "selector": selector,
+            "title": str(feature.get("title") or ""),
+            "guidance": decision_guidance(feature),
+            "yaml": snippet,
+        }
+        discovered = catalog_discover(feature)
+        if discovered:
+            row["discover"] = discovered
+        buckets[area_id]["snippets"].append(row)
     for area_id, area in buckets.items():
         roots = root_order[area_id]
         area["snippets"].sort(key=lambda item, roots=roots: _path_rank(item["selector"], roots))
@@ -1354,6 +1377,7 @@ def format_config_markdown(spa_home: Path) -> str:
         "Do not edit this file; regenerate with",
         "`spa --no-agent config schema --markdown`.",
         "Concise lookup is `spa config search QUERY`, then `spa config explain PATH`.",
+        "`spa config explain` may include discover, related, from, and next when allowed or discover exists.",
         "CLI flags stay in [commands.md](commands.md).",
         "",
     ]
@@ -1387,6 +1411,9 @@ def format_config_markdown(spa_home: Path) -> str:
                 lines.append("")
                 if item.get("guidance"):
                     lines.append(item["guidance"])
+                    lines.append("")
+                if item.get("discover"):
+                    lines.append("Discover: %s" % ", ".join(item["discover"]))
                     lines.append("")
                 lines.append("```yaml")
                 lines.append(item["yaml"])
