@@ -7,7 +7,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import threading
 from functools import lru_cache
 from importlib.util import find_spec
 from pathlib import Path
@@ -356,10 +355,12 @@ def run_venv_script(
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
     env["PIP_PROGRESS_BAR"] = "off"
+    # One pipe so progress (stderr) cannot overtake the ready line (stdout)
+    # under load: a two-pipe reader raced in CI (seen[0] was the ready line).
     proc = subprocess.Popen(
         list(cmd),
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
         env=env,
         bufsize=1,
@@ -367,32 +368,22 @@ def run_venv_script(
     log_chunks: List[str] = []
     stdout_chunks: List[str] = []
     progress: List[str] = []
-    lock = threading.Lock()
 
-    def _handle(line: str, from_stdout: bool) -> None:
-        with lock:
-            log_chunks.append(line)
-            text = line.strip()
-            if from_stdout and text and (
-                text.startswith("Virtual environment ready:") or " " not in text
-            ):
-                stdout_chunks.append(line)
-            step = venv_progress_line(line)
-            if step and step not in progress:
-                progress.append(step)
-                if on_step is not None:
-                    on_step(step)
+    def _handle(line: str) -> None:
+        log_chunks.append(line)
+        text = line.strip()
+        if text and (
+            text.startswith("Virtual environment ready:") or " " not in text
+        ):
+            stdout_chunks.append(line)
+        step = venv_progress_line(line)
+        if step and step not in progress:
+            progress.append(step)
+            if on_step is not None:
+                on_step(step)
 
-    def _read_stderr() -> None:
-        assert proc.stderr is not None
-        for line in proc.stderr:
-            _handle(line, False)
-
-    reader = threading.Thread(target=_read_stderr)
-    reader.start()
     assert proc.stdout is not None
     for line in proc.stdout:
-        _handle(line, True)
-    reader.join()
+        _handle(line)
     code = proc.wait()
     return code, "".join(stdout_chunks), "".join(log_chunks), progress
