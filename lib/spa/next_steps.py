@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
@@ -594,8 +595,170 @@ def explain_choice_next(
     return []
 
 
+def _aws_block(config: Optional[Mapping[str, Any]]) -> Mapping[str, Any]:
+    terraform = config.get("terraform") if isinstance(config, Mapping) else None
+    aws = terraform.get("aws") if isinstance(terraform, Mapping) else None
+    return aws if isinstance(aws, Mapping) else {}
+
+
+def _write_path(path: str) -> str:
+    text = str(path or "")
+    marker = "].terraform.aws."
+    if marker in text:
+        return "terraform.aws." + text.split(marker, 1)[1]
+    if text.startswith("terraform.aws."):
+        return text
+    return text
+
+
+def latest_ami_next() -> Dict[str, Any]:
+    return item(
+        "provider.aws.latest-ami",
+        "Find a current AMI for this region?",
+        "spa --agent provider aws latest-ami",
+    )
+
+
+def ssh_username_next() -> Dict[str, Any]:
+    return item(
+        "terraform.aws.ssh_username",
+        "Set terraform.aws.ssh_username to match the AMI?",
+        "spa --agent config set terraform.aws.ssh_username USER --yes",
+    )
+
+
+def config_write_next(
+    operations: Sequence[Mapping[str, Any]],
+    document: Optional[Mapping[str, Any]] = None,
+    *,
+    command: str = "",
+) -> List[Dict[str, Any]]:
+    """One related follow-up after a successful config set / add / provider."""
+    if command == "config provider":
+        if _aws_block(document):
+            return [latest_ami_next()]
+        if isinstance(document, Mapping) and isinstance(document.get("ccm"), Mapping):
+            settled = document["ccm"]
+            for row in ccm_hardware_next():
+                ident = str(row.get("id") or "")
+                leaf = ident.rsplit(".", 1)[-1]
+                if leaf and not settled.get(leaf):
+                    return [row]
+        return []
+    paths = {
+        _write_path(str(row.get("path") or ""))
+        for row in operations
+        if isinstance(row, Mapping) and row.get("op") in {"set", "add"}
+    }
+    if "terraform.aws.region" in paths:
+        return [latest_ami_next()]
+    if "terraform.aws.ami_id" in paths:
+        if not _aws_block(document).get("ssh_username"):
+            return [ssh_username_next()]
+        return []
+    return []
+
+
+_REQUIRED_PATH = re.compile(
+    r"\b([A-Za-z][\w]*(?:\.[A-Za-z][\w]*)+)\s+is required\b"
+)
+_REQUIRED_FIELD = re.compile(r"(?:Value error, )?([A-Za-z][\w]*) is required\b")
+_SECRET_LEAF = re.compile(r"password|secret|token|private_key", re.IGNORECASE)
+
+
+def _required_paths(error: Optional[str]) -> List[str]:
+    found: List[str] = []
+    for line in str(error or "").splitlines():
+        if "is required" not in line:
+            continue
+        dotted = _REQUIRED_PATH.search(line)
+        if dotted:
+            path = dotted.group(1)
+            if path not in found:
+                found.append(path)
+            continue
+        if ":" not in line:
+            continue
+        loc_part, msg = line.split(":", 1)
+        field = _REQUIRED_FIELD.search(msg)
+        if not field:
+            continue
+        parts = [
+            part.strip()
+            for part in loc_part.lstrip(" -").split("->")
+            if part.strip() and not part.strip().isdigit()
+        ]
+        parts.append(field.group(1))
+        path = ".".join(part for part in parts if part)
+        if path and path not in found:
+            found.append(path)
+    return found
+
+
+def _required_next(path: str) -> Dict[str, Any]:
+    if _SECRET_LEAF.search(path):
+        env_name = (
+            "SPLUNK_ADMIN_PASSWORD" if path.endswith("splunk_admin_password") else "NAME"
+        )
+        return item(
+            path,
+            "Set required %s from the environment?" % path,
+            "spa --agent config set %s --from-env %s --yes" % (path, env_name),
+            required=True,
+        )
+    return item(
+        path,
+        "Set required %s?" % path,
+        "spa --agent config set %s VALUE --yes" % path,
+        required=True,
+    )
+
+
+def os_packages_next() -> Dict[str, Any]:
+    listed = json.dumps(["acl", "polkit"], separators=(",", ":"))
+    return item(
+        "os.packages",
+        "Set guest OS packages (acl and polkit/policykit-1)?",
+        "spa --agent config set os.packages '%s' --yes" % listed,
+    )
+
+
+def validate_guidance_next(
+    config: Optional[Mapping[str, Any]] = None,
+    error: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Missing required keys and known catalog gaps. Not Ansible or other schema errors."""
+    rows = [_required_next(path) for path in _required_paths(error)]
+    seen = {row["id"] for row in rows}
+    if not isinstance(config, Mapping):
+        return rows
+    aws = _aws_block(config)
+    if aws and not aws.get("ssh_username") and "terraform.aws.ssh_username" not in seen:
+        rows.append(ssh_username_next())
+        seen.add("terraform.aws.ssh_username")
+    os_cfg = config.get("os") if isinstance(config.get("os"), Mapping) else {}
+    if not (os_cfg or {}).get("packages") and "os.packages" not in seen:
+        rows.append(os_packages_next())
+    return rows
+
+
 def remaining_next(remaining: Iterable[str]) -> List[Dict[str, Any]]:
     mapping = {
+        "hardware": item(
+            "hardware",
+            "Set instance size?",
+            "spa --agent config search instance_type",
+        ),
+        "os": item(
+            "os",
+            "Set guest OS packages?",
+            "spa --agent config explain os",
+        ),
+        "aws": item(
+            "aws",
+            "Find a current AMI and SSH user for this region?",
+            "spa --agent provider aws latest-ami",
+        ),
         "apps": item("apps.search", "Add apps?", "spa --agent apps search QUERY"),
         "licenses": item(
             "licenses.list",

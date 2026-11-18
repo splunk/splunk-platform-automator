@@ -417,16 +417,58 @@ def _has_license_file(config: Mapping[str, Any]) -> bool:
     return False
 
 
+def _mapping_at(config: Optional[Mapping[str, Any]], *keys: str) -> Mapping[str, Any]:
+    node: Any = config
+    for key in keys:
+        if not isinstance(node, Mapping):
+            return {}
+        node = node.get(key)
+    return node if isinstance(node, Mapping) else {}
+
+
+def _hardware_settled(config: Optional[Mapping[str, Any]]) -> bool:
+    if _mapping_at(config, "terraform", "aws").get("instance_type"):
+        return True
+    if _mapping_at(config, "ccm").get("instance_type"):
+        return True
+    virtualbox = _mapping_at(config, "virtualbox")
+    return bool(virtualbox.get("memory") or virtualbox.get("cpus") or virtualbox.get("box"))
+
+
+def _os_settled(config: Optional[Mapping[str, Any]]) -> bool:
+    packages = _mapping_at(config, "os").get("packages") or []
+    return bool(packages)
+
+
+def _aws_settled(config: Optional[Mapping[str, Any]]) -> bool:
+    aws = _mapping_at(config, "terraform", "aws")
+    return bool(aws.get("region") and aws.get("ami_id"))
+
+
+def _apps_settled(config: Optional[Mapping[str, Any]]) -> bool:
+    apps = _mapping_at(config, "splunk_app_deployment").get("apps") or []
+    return any(
+        isinstance(app, Mapping) and str(app.get("state") or "installed") != "absent"
+        for app in apps
+    )
+
+
 def remaining_questions(
     config: Optional[Mapping[str, Any]] = None, *, has_provider: bool = False
 ) -> List[str]:
     remaining: List[str] = []
     if not has_provider:
         remaining.append("provider")
-    remaining.extend(["hardware", "os"])
-    if config and (config.get("terraform") or {}).get("aws"):
+    if not _hardware_settled(config):
+        remaining.append("hardware")
+    if not _os_settled(config):
+        remaining.append("os")
+    if _mapping_at(config, "terraform", "aws") and not _aws_settled(config):
         remaining.append("aws")
-    remaining.extend(["apps", "licenses"])
+    if not _apps_settled(config):
+        remaining.append("apps")
+    if not (config and _has_license_file(config)):
+        remaining.append("licenses")
     return remaining
 
 
@@ -608,7 +650,7 @@ def apply_architecture_document(
     data["placement"] = report.get("placement") or []
     data["skipped"] = list(SKIPPED_FIELDS)
     data["skipped_app_folders"] = list(parsed.get("apps_by_role_folders") or [])
-    data["remaining"] = remaining or remaining_questions(None, has_provider=True)
+    data["remaining"] = remaining
     if any(item.get("deferred") for item in data.get("placement") or []):
         if "license_manager" not in data["remaining"]:
             data["remaining"].append("license_manager")

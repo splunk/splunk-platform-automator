@@ -714,6 +714,10 @@ def test_config_editing_names_templates_list_search_and_merge():
     cli001 = section("### CFG-CLI-001")
     assert "templates list" in cli001
     assert "migrate" in cli001
+    cli002 = section("### CFG-CLI-002")
+    assert "data.next" in cli002
+    assert "latest-ami" in cli002
+    assert "validate" in cli002
     cli005 = section("### CFG-CLI-005")
     assert "unquoted" in cli005.lower()
     cli006 = section("### CFG-CLI-006")

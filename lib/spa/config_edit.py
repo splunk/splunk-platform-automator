@@ -748,6 +748,16 @@ def _transact(
 
         def finish(payload: Dict[str, Any]) -> Dict[str, Any]:
             attach_license_file_next(payload)
+            if payload.get("ready") and not payload.get("next"):
+                from spa.next_steps import config_write_next
+
+                follow = config_write_next(
+                    payload.get("operations") or [],
+                    document,
+                    command=command,
+                )
+                if follow:
+                    payload["next"] = follow[:1]
             return payload
 
         document = _ordered(document)

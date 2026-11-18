@@ -14,6 +14,24 @@ from spa.executil import ToolNotFound, apply_paths_env, tool_path
 from spa.paths import SpaPaths, resolve_spa_paths
 
 
+def _with_validate_next(result: CommandResult, loaded: Any) -> CommandResult:
+    if not isinstance(loaded, dict):
+        return result
+    from spa.next_steps import validate_guidance_next
+
+    data = dict(result.data or {})
+    follow = validate_guidance_next(loaded, None if result.ok else result.error)
+    if not follow:
+        return result
+    existing = list(data.get("next") or [])
+    seen = {row.get("id") for row in existing if isinstance(row, dict)}
+    for row in follow:
+        if row.get("id") not in seen:
+            existing.append(row)
+    data["next"] = existing
+    return CommandResult(ok=result.ok, error=result.error, data=data, code=result.code)
+
+
 ProgressCallback = Callable[[Dict[str, Any]], None]
 
 
@@ -248,12 +266,16 @@ def validate_env(
         loaded = load_config_mapping(config_path)
     except Exception:
         loaded = None
+
+    def finish(result: CommandResult) -> CommandResult:
+        return _with_validate_next(result, loaded)
+
     if loaded is not None:
         env_error = unresolved_env_message(loaded)
         if env_error:
             data["env_lookups"] = env_lookup_readiness(loaded)
             steps.append({"id": "env_lookups", "ok": False, "message": env_error})
-            return CommandResult(ok=False, error=env_error, data=data, code=1)
+            return finish(CommandResult(ok=False, error=env_error, data=data, code=1))
 
     if loaded is not None and isinstance(loaded.get("ccm"), dict):
         from spa.providers.ccm import validate_ccm
@@ -261,11 +283,13 @@ def validate_env(
         ccm_result = validate_ccm(paths, loaded.get("ccm") or {})
         if not ccm_result.ok:
             steps.append({"id": "ccm", "ok": False, "message": ccm_result.error})
-            return CommandResult(
-                ok=False,
-                error=ccm_result.error,
-                data=data,
-                code=ccm_result.code or 1,
+            return finish(
+                CommandResult(
+                    ok=False,
+                    error=ccm_result.error,
+                    data=data,
+                    code=ccm_result.code or 1,
+                )
             )
         steps.append({"id": "ccm", "ok": True, "message": "CCM validation OK"})
 
@@ -304,7 +328,7 @@ except ConfigValidationError as e:
     steps.append({"id": "schema", "ok": rc.returncode == 0, "message": schema_msg})
     if rc.returncode != 0:
         err = (rc.stderr or rc.stdout or "Schema validation failed").strip()
-        return CommandResult(ok=False, error=err, data=data, code=rc.returncode)
+        return finish(CommandResult(ok=False, error=err, data=data, code=rc.returncode))
     if loaded is not None:
         from spa.app_playbooks import content_pack_header_errors
 
@@ -312,12 +336,12 @@ except ConfigValidationError as e:
         if header_errors:
             err = "\n".join(header_errors)
             steps[-1] = {"id": "schema", "ok": False, "message": err}
-            return CommandResult(ok=False, error=err, data=data, code=1)
+            return finish(CommandResult(ok=False, error=err, data=data, code=1))
     stamp = require_authored_schema_version(config_path)
     if stamp is not None:
         if agent:
             return stamp
-        return CommandResult(ok=False, error=SCHEMA_STAMP_ERROR, data=data, code=1)
+        return finish(CommandResult(ok=False, error=SCHEMA_STAMP_ERROR, data=data, code=1))
 
     _note(
         on_progress,
@@ -344,12 +368,12 @@ except ConfigValidationError as e:
         msg = controller_data_error(controller)
         data["controller_data"] = detail
         steps.append({"id": "controller_data", "ok": False, "message": msg})
-        return CommandResult(ok=False, error=msg, data=data, code=1)
+        return finish(CommandResult(ok=False, error=msg, data=data, code=1))
     if any(not row["ok"] for row in playbook_dirs):
         msg = custom_playbook_dirs_error(playbook_dirs, paths.spa_env_dir)
         data["controller_data"] = detail
         steps.append({"id": "controller_data", "ok": False, "message": msg})
-        return CommandResult(ok=False, error=msg, data=data, code=1)
+        return finish(CommandResult(ok=False, error=msg, data=data, code=1))
     steps.append(
         {
             "id": "controller_data",
@@ -369,7 +393,7 @@ except ConfigValidationError as e:
         inventory_bin = tool_path(paths, "ansible-inventory")
     except ToolNotFound as exc:
         steps.append({"id": "inventory", "ok": False, "message": str(exc)})
-        return CommandResult(ok=False, error=str(exc), data=data, code=1)
+        return finish(CommandResult(ok=False, error=str(exc), data=data, code=1))
     rc = subprocess.run(
         [inventory_bin, "--list"],
         cwd=str(paths.spa_home),
@@ -387,11 +411,13 @@ except ConfigValidationError as e:
         }
     )
     if not inv_ok:
-        return CommandResult(
-            ok=False,
-            error=(rc.stderr or "Inventory failed").strip(),
-            data=data,
-            code=rc.returncode,
+        return finish(
+            CommandResult(
+                ok=False,
+                error=(rc.stderr or "Inventory failed").strip(),
+                data=data,
+                code=rc.returncode,
+            )
         )
 
     _note(
@@ -415,7 +441,7 @@ except ConfigValidationError as e:
         attach_license_file_next(data)
     if not role["ok"]:
         steps.append({"id": "license_role", "ok": False, "message": role["message"]})
-        return CommandResult(ok=False, error=role["message"], data=data, code=1)
+        return finish(CommandResult(ok=False, error=role["message"], data=data, code=1))
     steps.append({"id": "license_role", "ok": True, "message": role["message"]})
 
     _note(
@@ -436,7 +462,7 @@ except ConfigValidationError as e:
         if rc.returncode != 0:
             err = (rc.stderr or rc.stdout or "Playbook syntax-check failed").strip()
             steps.append({"id": "syntax", "ok": False, "message": err, "playbook": pb})
-            return CommandResult(ok=False, error=err, data=data, code=rc.returncode)
+            return finish(CommandResult(ok=False, error=err, data=data, code=rc.returncode))
     steps.append({"id": "syntax", "ok": True, "message": "Playbook syntax OK"})
 
     if check_licenses:
@@ -446,7 +472,7 @@ except ConfigValidationError as e:
         if errors:
             msg = "; ".join(str(item) for item in errors)
             steps.append({"id": "license_files", "ok": False, "message": msg})
-            return CommandResult(ok=False, error=msg, data=data, code=1)
+            return finish(CommandResult(ok=False, error=msg, data=data, code=1))
         steps.append({"id": "license_files", "ok": True, "message": "License check OK"})
 
     if splunk_config == "aws":
@@ -455,7 +481,7 @@ except ConfigValidationError as e:
         except ImportError:
             msg = "PyYAML required for AWS validate"
             steps.append({"id": "aws", "ok": False, "message": msg})
-            return CommandResult(ok=False, error=msg, data=data, code=1)
+            return finish(CommandResult(ok=False, error=msg, data=data, code=1))
         with config_path.open() as handle:
             cfg = yaml.safe_load(handle) or {}
         aws = (cfg.get("terraform") or {}).get("aws") or {}
@@ -476,15 +502,17 @@ except ConfigValidationError as e:
                 steps.append(
                     {"id": "aws", "ok": False, "message": aws_result.error or "AWS validation failed"}
                 )
-                return CommandResult(
-                    ok=False,
-                    error=aws_result.error or "AWS validation failed",
-                    data=data,
-                    code=aws_result.code,
+                return finish(
+                    CommandResult(
+                        ok=False,
+                        error=aws_result.error or "AWS validation failed",
+                        data=data,
+                        code=aws_result.code,
+                    )
                 )
             steps.append({"id": "aws", "ok": True, "message": "AWS validation OK"})
 
-    return CommandResult(ok=True, data=data)
+    return finish(CommandResult(ok=True, data=data))
 
 
 def format_validate_text(result: CommandResult) -> str:

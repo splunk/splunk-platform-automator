@@ -35,10 +35,14 @@ Success exits 0. Agent mode emits one compact JSON object. Usage and runtime
 failures have `ok`, `schema_version`, and `error`, and no `data`. Successful
 mutations report `changed`, revisions, redacted operations, warnings, omitted
 defaults, and validation readiness; they never include the configuration body
-or rendered snippets. An unresolved mutation is not success: `ok: false`,
+or rendered snippets. A successful `config set`, `add`, or `provider` write may
+include a single `data.next` item for the related setting or discovery command
+(region → `latest-ami` → `ssh_username`). The envelope stays compact. An
+unresolved mutation is not success: `ok: false`,
 exit 1, `error` naming the unmet requirements, and `data` with `ready: false`,
 planned operations, and the redacted diff so the agent can retry with
-`--resolve`.
+`--resolve`. `spa validate` may include `data.next` for missing required keys
+and known catalog gaps only, not for every Ansible or schema error.
 
 ### CFG-CLI-003 — confirmation boundary
 

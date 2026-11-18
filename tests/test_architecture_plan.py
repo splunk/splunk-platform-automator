@@ -79,6 +79,48 @@ def test_c3_example_plans_ok_and_scales_indexers():
     assert "apps.by_role" in plan["skipped"]
     assert plan.get("skipped_app_folders") == []
     assert "provider" in plan["remaining"]
+    for name in ("hardware", "os", "apps", "licenses"):
+        assert name in plan["remaining"]
+    assert "aws" not in plan["remaining"]
+
+
+def test_remaining_questions_skips_settled_hardware_os_aws_apps_licenses():
+    from spa.architecture import remaining_questions
+
+    unset = remaining_questions(None, has_provider=True)
+    assert unset == ["hardware", "os", "apps", "licenses"]
+    assert remaining_questions(None, has_provider=False)[0] == "provider"
+
+    aws = {
+        "terraform": {
+            "aws": {
+                "region": "eu-central-1",
+                "ami_id": "ami-0123456789abcdef0",
+                "instance_type": "t3.medium",
+            }
+        },
+        "os": {"packages": ["acl", "polkit"]},
+        "splunk_defaults": {"splunk_license_file": "Splunk_Enterprise.lic"},
+        "splunk_app_deployment": {
+            "apps": [{"app_id": 833, "name": "Splunk_TA_nix", "target_roles": ["universal_forwarder"]}]
+        },
+    }
+    assert remaining_questions(aws, has_provider=True) == []
+
+    aws_only = {"terraform": {"aws": {"region": "eu-central-1", "ami_id": "ami-0123456789abcdef0"}}}
+    assert remaining_questions(aws_only, has_provider=True) == ["hardware", "os", "apps", "licenses"]
+    unfinished_aws = {"terraform": {"aws": {"region": "eu-central-1", "instance_type": "t3.medium"}}}
+    remaining = remaining_questions(unfinished_aws, has_provider=True)
+    assert "aws" in remaining
+    assert "hardware" not in remaining
+
+
+def test_remaining_next_follows_real_remaining_gaps():
+    from spa.next_steps import remaining_next
+
+    ids = [row["id"] for row in remaining_next(["hardware", "os", "aws", "apps", "licenses"])]
+    assert ids == ["hardware", "os", "aws", "apps.search", "licenses.list"]
+    assert remaining_next([]) == []
 
 
 def test_plan_lists_skipped_app_folder_names(tmp_path):

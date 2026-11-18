@@ -16,6 +16,7 @@ from ruamel.yaml import YAML
 
 from spa.config_edit import (
     ConfigEditError,
+    config_add,
     config_app_add,
     config_app_remove,
     config_get,
@@ -1726,7 +1727,152 @@ splunk_hosts:
         assert result.returncode == 0
         assert payload["ok"] is True and payload["data"]["changed"] is True
         assert "authored" not in payload["data"]
+        assert "next" not in payload["data"]
         assert _load(path)["os"]["time_zone"] == "UTC"
+
+    def test_successful_set_attaches_one_related_next(self, tmp_path):
+        """CFG-CLI-002. Optional single next after a successful write: region → latest-ami."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+terraform:
+  aws:
+    region: us-east-1
+    ami_id: ami-0123456789abcdef0
+""",
+        )
+        result = config_set(path, PROJECT_ROOT, "terraform.aws.region", "eu-central-1")
+        assert result["ready"] is True and result["changed"] is True
+        nxt = result["next"]
+        assert len(nxt) == 1
+        row = nxt[0]
+        assert row["id"] == "provider.aws.latest-ami"
+        assert "latest-ami" in row["command"]
+        assert row["required"] is False
+        ami = config_set(path, PROJECT_ROOT, "terraform.aws.ami_id", "ami-0abc123def4567890")
+        assert len(ami["next"]) == 1
+        assert ami["next"][0]["id"] == "terraform.aws.ssh_username"
+        assert "ssh_username" in ami["next"][0]["command"]
+        named = config_set(path, PROJECT_ROOT, "terraform.aws.ssh_username", "ec2-user")
+        assert "next" not in named
+        added = config_add(
+            path,
+            PROJECT_ROOT,
+            "splunk_hosts[name=idx]",
+            '{"roles":["indexer"]}',
+        )
+        assert added["ready"] is True and added["changed"] is True
+        assert "next" not in added
+        provider = config_provider(path, PROJECT_ROOT, "aws")
+        assert provider["ready"] is True and provider["changed"] is True
+        assert len(provider["next"]) == 1
+        assert provider["next"][0]["id"] == "provider.aws.latest-ami"
+
+    def test_unresolved_write_keeps_requirements_without_write_next(self, tmp_path):
+        """CFG-CLI-002. Unresolved --resolve stays the not-ready model."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: dep
+    roles: [indexer]
+""",
+        )
+        result = config_set(
+            path,
+            PROJECT_ROOT,
+            "splunk_hosts[name=dep].roles",
+            '["deployer"]',
+        )
+        assert result["ready"] is False
+        assert result.get("requirements")
+        assert "next" not in result
+
+    def test_validate_emits_next_for_required_keys_and_catalog_gaps_only(self, tmp_path):
+        """CFG-CLI-002. spa validate next is missing required keys and known catalog gaps only."""
+        from spa.next_steps import validate_guidance_next
+
+        password_error = (
+            "Configuration validation failed:\n"
+            "  - : Value error, splunk_defaults.splunk_admin_password is required. "
+            "Set a literal password or an env lookup."
+        )
+        required = validate_guidance_next(
+            {"os": {"packages": ["acl"]}, "splunk_hosts": []},
+            error=password_error,
+        )
+        assert len(required) == 1
+        assert required[0]["id"] == "splunk_defaults.splunk_admin_password"
+        assert "--from-env" in required[0]["command"]
+        assert "SPLUNK_ADMIN_PASSWORD" in required[0]["command"]
+
+        aws_gap = validate_guidance_next(
+            {
+                "terraform": {"aws": {"region": "eu-central-1", "ami_id": "ami-0123456789abcdef0"}},
+                "os": {"packages": ["acl", "polkit"]},
+            }
+        )
+        assert [row["id"] for row in aws_gap] == ["terraform.aws.ssh_username"]
+
+        inventory = validate_guidance_next(
+            {
+                "os": {"packages": ["acl", "polkit"]},
+                "terraform": {
+                    "aws": {
+                        "region": "eu-central-1",
+                        "ami_id": "ami-0123456789abcdef0",
+                        "ssh_username": "ec2-user",
+                    }
+                },
+            },
+            error="Inventory failed: ansible-inventory returned 1",
+        )
+        assert inventory == []
+
+        cluster = validate_guidance_next(
+            {
+                "os": {"packages": ["acl"]},
+                "splunk_hosts": [{"name": "dep", "roles": ["deployer"]}],
+            },
+            error=(
+                "Configuration validation failed:\n"
+                "  - splunk_hosts -> 0: Value error, 'shcluster' must be specified "
+                "for hosts with role 'deployer'"
+            ),
+        )
+        assert cluster == []
+
+        env_dir = write_min_env(tmp_path / "env")
+        _config(
+            env_dir,
+            """\
+plugin: splunk-platform-automator
+schema_version: 1
+splunk_defaults: {}
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        result = run_spa(
+            ["--agent", "--start-dir", str(env_dir), "validate"],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 1
+        assert payload["ok"] is False
+        nxt = payload["data"]["next"]
+        assert nxt
+        assert nxt[0]["id"] == "splunk_defaults.splunk_admin_password"
 
     def test_agent_get_without_path_is_outline_not_document(self, tmp_path):
         """CFG-CLI-004 CFG-PATH-005."""
