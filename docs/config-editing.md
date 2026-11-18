@@ -35,10 +35,17 @@ Success exits 0. Agent mode emits one compact JSON object. Usage and runtime
 failures have `ok`, `schema_version`, and `error`, and no `data`. Successful
 mutations report `changed`, revisions, redacted operations, warnings, omitted
 defaults, and validation readiness; they never include the configuration body
-or rendered snippets. An unresolved mutation is not success: `ok: false`,
+or rendered snippets. A successful `config set`, `add`, or `provider` write may
+include a single `data.next` item for the related setting or discovery command
+(region → `latest-ami` → `ssh_username`). The envelope stays compact. An
+unresolved mutation is not success: `ok: false`,
 exit 1, `error` naming the unmet requirements, and `data` with `ready: false`,
 planned operations, and the redacted diff so the agent can retry with
-`--resolve`.
+`--resolve`. `spa validate` may include `data.next` for missing required keys
+and known catalog gaps only, not for every Ansible or schema error.
+`os.packages` is a catalog gap only on configs with `terraform.aws`.
+`os.packages` and `terraform.aws.ssh_username` are settled when every host
+under `splunk_hosts[]` sets them per-host.
 
 ### CFG-CLI-003 — confirmation boundary
 
@@ -198,17 +205,53 @@ host. A setting with no counterpart omits `SCOPE`. An immediate field line
 names the other path in one clause. The selected node may include one command
 and one example. That command is the human spelling (`spa config …` or
 `spa apps …`) and does not include `--agent`. Secrets use `--from-env` and
-have no literal example. Agent
+have no literal example. A string-typed example and command value is unquoted
+text (`spa config set terraform.aws.instance_type t3.medium`). Unions, integer
+enums, booleans, lists, and maps stay strict JSON. The human renderer prints a
+string `default` unquoted (`default: t2.micro`). An unknown path names
+`spa config search QUERY` and one example. Agent
 JSON is that structure with empty values omitted. `schema --markdown` is
 rejected in agent mode.
 
 ### CFG-CLI-006 — path search
 
 `spa config search QUERY` returns paths and a one-line description. It does
-not return a command. Search also matches shipped fragments as `template.NAME`.
+not return a command. Schema hits also include `type`, `default` when published,
+and `allowed` when that set has 8 values or fewer. Search also matches shipped
+fragments as `template.NAME`.
 When a counterpart exists, that line says `All hosts` or `Per-host` and names
 the other path. Agent results contain at most 10 matches plus `total_matches`
 and `truncated`. `spa config explain template.NAME` returns the merge command.
+
+### CFG-CLI-007 — choice data on explain nodes and children
+
+`spa config explain PATH` includes `allowed` on a selected leaf when the schema
+has a closed set. Each immediate child includes `default` when published and
+`allowed` when that set has 8 values or fewer; a larger set is `allowed_count`
+instead of `allowed`. The human field line inlines a small allowed set in the
+type qualifier (`disk_storage <enum: 50|100|200|250|500|1024|2048>`). Catalog
+records may publish `recommended` keyed by public path, only where the lab
+value differs from the omit-safe default. Those values must validate against
+the schema type and `allowed` set. The selected explain node includes
+`recommended` when the catalog publishes one for that path; the human page
+prints `recommended: t3.medium` under `default:`. Explain `example` uses
+`recommended` when present, otherwise the selected feature's own snippet, and
+never an arbitrary other feature's snippet. Catalog `discover` is a list of
+human `spa` commands that find live values; explain prints them and does not
+call AWS or CCM. `related` is public paths from the catalog (never internal
+`setting.*` ids). Leaves inherit only `discover`, `related`, and `from` from
+the nearest parent setting or provider layout. Full `WHEN` / `WHEN NOT` stays
+on that parent. Explain attaches `data.next` only when the selected node has
+`allowed` or `discover`, using the next-item shape (`id`, `ask`, `command`,
+`argv`, `choice.allowed`, `required`). That next `command` is not the mutation
+`command` already on the node. The next `command` and `argv` insert `--agent`
+after `spa`; catalog `discover` stays a human `spa` command. Inherited leaves
+pick the discover command whose own words name the leaf (`instance_type` →
+`instance-types list`, `ami_id` → `latest-ami`), otherwise the first command.
+Humans see `RELATED:` and `DISCOVER:` on the page and `Next:` on stderr.
+Secret paths never get `recommended`, `example`, or `default`, including when
+they inherit other guidance. `spa --agent schema` and `config schema
+--markdown` describe these fields.
 
 ## Fragment merge
 
@@ -571,6 +614,7 @@ Each contract ID maps to executable behavioral evidence:
 - `CFG-MIGRATE-001`: `tests/test_config_contract.py::TestMigrateContract::test_unstamped_migrate_inserts_schema_version_1_only`
 - `CFG-CLI-005`: `tests/test_config_contract.py::TestExplainContract::test_explain_is_one_level_for_humans_and_agents`
 - `CFG-CLI-006`: `tests/test_config_contract.py::TestExplainContract::test_search_returns_paths_without_commands`
+- `CFG-CLI-007`: `tests/test_config_contract.py::TestExplainContract::test_explain_children_and_search_carry_choice_data`
 - `CFG-PATH-001`: `tests/test_config_contract.py::TestPathContract::test_set_requires_strict_json_for_list`
 - `CFG-PATH-002`: `tests/test_config_contract.py::TestPathContract::test_bare_or_missing_selector_is_rejected_without_write`
 - `CFG-PATH-003`: `tests/test_config_contract.py::TestPathContract::test_set_preserves_comments_and_changes_only_the_path`

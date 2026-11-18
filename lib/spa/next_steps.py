@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from spa.apps import CONTENT_LIBRARY_ID, ES_ID, ITSI_ID
 
@@ -515,6 +516,38 @@ def provision_next(env_name: Optional[str] = None) -> List[Dict[str, Any]]:
     ]
 
 
+def _provider_choice_allowed(
+    environ: Optional[Mapping[str, str]] = None,
+) -> List[str]:
+    from spa.providers import provider_ids
+    from spa.providers.ccm import token_present
+
+    allowed = list(provider_ids())
+    if not token_present(environ):
+        return [name for name in allowed if name != "ccm"]
+    return allowed
+
+
+def init_list_next(
+    *,
+    environ: Optional[Mapping[str, str]] = None,
+) -> List[Dict[str, Any]]:
+    """Path A: topology from the catalog, then provider. No init command."""
+    return [
+        item(
+            "topology",
+            "Which topology example?",
+            required=True,
+        ),
+        item(
+            "provider",
+            "Which provider?",
+            choice={"allowed": _provider_choice_allowed(environ)},
+            required=True,
+        ),
+    ]
+
+
 def architecture_plan_next(
     plan: Mapping[str, Any],
     *,
@@ -522,12 +555,6 @@ def architecture_plan_next(
     environ: Optional[Mapping[str, str]] = None,
 ) -> List[Dict[str, Any]]:
     """Path B: the architecture file is the plan (write mode), then provider."""
-    from spa.providers import provider_ids
-    from spa.providers.ccm import token_present
-
-    allowed = list(provider_ids())
-    if not token_present(environ):
-        allowed = [name for name in allowed if name != "ccm"]
     init = (
         "spa --agent environment init PARENT/NAME --architecture %s --provider"
         % architecture_file
@@ -544,7 +571,7 @@ def architecture_plan_next(
         item(
             "provider",
             "Which provider?",
-            choice={"allowed": allowed},
+            choice={"allowed": _provider_choice_allowed(environ)},
             required=True,
         ),
     ]
@@ -574,8 +601,259 @@ def ccm_hardware_next() -> List[Dict[str, Any]]:
     ]
 
 
+def _agent_form(command: str) -> str:
+    text = str(command or "").strip()
+    if text.startswith("spa --agent ") or text == "spa --agent":
+        return text
+    if text.startswith("spa "):
+        return "spa --agent " + text[4:]
+    return text
+
+
+def _discover_command_for_path(path: str, commands: Sequence[str]) -> str:
+    leaf = str(path or "").rsplit(".", 1)[-1].lower().replace("_", "-")
+    tokens = [part for part in leaf.split("-") if len(part) >= 3]
+    split = [command.lower().split() for command in commands]
+    shared = 0
+    while all(len(words) > shared + 1 for words in split) and len(
+        {words[shared] for words in split}
+    ) == 1:
+        shared += 1
+    for command, words in zip(commands, split):
+        for word in words[max(shared, 1):]:
+            normalized = word.replace("_", "-")
+            if leaf and (leaf in normalized or (len(normalized) >= 3 and normalized in leaf)):
+                return command
+            word_parts = [part for part in normalized.split("-") if len(part) >= 3]
+            if tokens and any(token in word_parts for token in tokens):
+                return command
+    return commands[0]
+
+
+def explain_choice_next(
+    *,
+    path: str,
+    allowed: Optional[Sequence[Any]] = None,
+    discover: Optional[Sequence[str]] = None,
+    mutation_command: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """One follow-up when explain has a closed set or a discovery command."""
+    commands = [str(command).strip() for command in (discover or []) if str(command).strip()]
+    if commands:
+        command = _discover_command_for_path(path, commands)
+        if command == mutation_command:
+            return []
+        ident = ".".join(part for part in command.split()[1:] if part) or "discover"
+        return [item(ident, "Find live values?", _agent_form(command))]
+    if allowed:
+        return [item(path, "Choose a value?", choice={"allowed": list(allowed)})]
+    return []
+
+
+def _aws_block(config: Optional[Mapping[str, Any]]) -> Mapping[str, Any]:
+    terraform = config.get("terraform") if isinstance(config, Mapping) else None
+    aws = terraform.get("aws") if isinstance(terraform, Mapping) else None
+    return aws if isinstance(aws, Mapping) else {}
+
+
+def _write_path(path: str) -> str:
+    text = str(path or "")
+    marker = "].terraform.aws."
+    if marker in text:
+        return "terraform.aws." + text.split(marker, 1)[1]
+    return text
+
+
+def latest_ami_next() -> Dict[str, Any]:
+    return item(
+        "provider.aws.latest-ami",
+        "Find a current AMI for this region?",
+        "spa --agent provider aws latest-ami",
+    )
+
+
+def ssh_username_next() -> Dict[str, Any]:
+    return item(
+        "terraform.aws.ssh_username",
+        "Set terraform.aws.ssh_username to match the AMI?",
+        "spa --agent config set terraform.aws.ssh_username USER --yes",
+    )
+
+
+def config_write_next(
+    operations: Sequence[Mapping[str, Any]],
+    document: Optional[Mapping[str, Any]] = None,
+    *,
+    command: str = "",
+) -> List[Dict[str, Any]]:
+    """One related follow-up after a successful config set / add / provider."""
+    if command == "config provider":
+        if _aws_block(document):
+            return [latest_ami_next()]
+        if isinstance(document, Mapping) and isinstance(document.get("ccm"), Mapping):
+            settled = document["ccm"]
+            for row in ccm_hardware_next():
+                ident = str(row.get("id") or "")
+                leaf = ident.rsplit(".", 1)[-1]
+                if leaf and not settled.get(leaf):
+                    return [row]
+        return []
+    paths = {
+        _write_path(str(row.get("path") or ""))
+        for row in operations
+        if isinstance(row, Mapping) and row.get("op") in {"set", "add"}
+    }
+    if "terraform.aws.region" in paths:
+        return [latest_ami_next()]
+    if "terraform.aws.ami_id" in paths:
+        if not _aws_block(document).get("ssh_username"):
+            return [ssh_username_next()]
+        return []
+    return []
+
+
+_REQUIRED_PATH = re.compile(
+    r"\b([A-Za-z][\w]*(?:\.[A-Za-z][\w]*)+)\s+is required\b"
+)
+_REQUIRED_FIELD = re.compile(r"(?:Value error, )?([A-Za-z][\w]*) is required\b")
+_SECRET_LEAF = re.compile(r"password|secret|token|private_key", re.IGNORECASE)
+
+
+def _required_paths(error: Optional[str]) -> List[str]:
+    found: List[str] = []
+    for line in str(error or "").splitlines():
+        if "is required" not in line:
+            continue
+        dotted = _REQUIRED_PATH.search(line)
+        if dotted:
+            path = dotted.group(1)
+            if path not in found:
+                found.append(path)
+            continue
+        if ":" not in line:
+            continue
+        loc_part, msg = line.split(":", 1)
+        field = _REQUIRED_FIELD.search(msg)
+        if not field:
+            continue
+        parts = [
+            part.strip()
+            for part in loc_part.lstrip(" -").split("->")
+            if part.strip() and not part.strip().isdigit()
+        ]
+        parts.append(field.group(1))
+        path = ".".join(part for part in parts if part)
+        if path and path not in found:
+            found.append(path)
+    return found
+
+
+def _required_next(path: str) -> Dict[str, Any]:
+    if _SECRET_LEAF.search(path):
+        env_name = (
+            "SPLUNK_ADMIN_PASSWORD" if path.endswith("splunk_admin_password") else "NAME"
+        )
+        return item(
+            path,
+            "Set required %s from the environment?" % path,
+            "spa --agent config set %s --from-env %s --yes" % (path, env_name),
+            required=True,
+        )
+    return item(
+        path,
+        "Set required %s?" % path,
+        "spa --agent config set %s VALUE --yes" % path,
+        required=True,
+    )
+
+
+def os_packages_next() -> Dict[str, Any]:
+    listed = json.dumps(["acl", "polkit"], separators=(",", ":"))
+    return item(
+        "os.packages",
+        "Set guest OS packages (acl and polkit/policykit-1)?",
+        "spa --agent config set os.packages '%s' --yes" % listed,
+    )
+
+
+def _hosts(config: Mapping[str, Any]) -> List[Mapping[str, Any]]:
+    hosts = config.get("splunk_hosts")
+    if not isinstance(hosts, list):
+        return []
+    return [host for host in hosts if isinstance(host, Mapping)]
+
+
+def _every_host_has(
+    config: Mapping[str, Any], predicate: Callable[[Mapping[str, Any]], bool]
+) -> bool:
+    hosts = _hosts(config)
+    return bool(hosts) and all(predicate(host) for host in hosts)
+
+
+def _host_ssh_username(host: Mapping[str, Any]) -> bool:
+    terraform = host.get("terraform")
+    aws = terraform.get("aws") if isinstance(terraform, Mapping) else None
+    return isinstance(aws, Mapping) and bool(aws.get("ssh_username"))
+
+
+def _host_os_packages(host: Mapping[str, Any]) -> bool:
+    os_cfg = host.get("os")
+    return isinstance(os_cfg, Mapping) and bool(os_cfg.get("packages"))
+
+
+def validate_guidance_next(
+    config: Optional[Mapping[str, Any]] = None,
+    error: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Missing required keys and known catalog gaps. Not Ansible or other schema errors."""
+    rows = [_required_next(path) for path in _required_paths(error)]
+    seen = {row["id"] for row in rows}
+    if not isinstance(config, Mapping):
+        return rows
+    aws = _aws_block(config)
+    if (
+        aws
+        and not aws.get("ssh_username")
+        and not _every_host_has(config, _host_ssh_username)
+        and "terraform.aws.ssh_username" not in seen
+    ):
+        rows.append(ssh_username_next())
+        seen.add("terraform.aws.ssh_username")
+    os_cfg = config.get("os") if isinstance(config.get("os"), Mapping) else {}
+    if (
+        aws
+        and not (os_cfg or {}).get("packages")
+        and not _every_host_has(config, _host_os_packages)
+        and "os.packages" not in seen
+    ):
+        rows.append(os_packages_next())
+    return rows
+
+
 def remaining_next(remaining: Iterable[str]) -> List[Dict[str, Any]]:
-    mapping = {
+    mapping: Dict[str, Any] = {
+        "hardware": item(
+            "hardware",
+            "Set instance size?",
+            "spa --agent config search instance_type",
+        ),
+        "os": item(
+            "os",
+            "Set guest OS packages?",
+            "spa --agent config explain os",
+        ),
+        "aws": [
+            item(
+                "aws.region",
+                "Which AWS region for these hosts?",
+                "spa --agent provider aws regions list",
+            ),
+            item(
+                "aws",
+                "Find a current AMI and SSH user for this region?",
+                "spa --agent provider aws latest-ami",
+            ),
+        ],
         "apps": item("apps.search", "Add apps?", "spa --agent apps search QUERY"),
         "licenses": item(
             "licenses.list",
@@ -590,4 +868,11 @@ def remaining_next(remaining: Iterable[str]) -> List[Dict[str, Any]]:
             '\'{"roles":["monitoring_console","license_manager"]}\' --yes',
         ),
     }
-    return [mapping[name] for name in remaining if name in mapping]
+    rows: List[Dict[str, Any]] = []
+    for name in remaining:
+        found = mapping.get(name)
+        if isinstance(found, list):
+            rows.extend(found)
+        elif found:
+            rows.append(found)
+    return rows

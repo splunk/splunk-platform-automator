@@ -42,14 +42,14 @@ Interactive workflow for `config/splunk_config.yml` on AWS, VirtualBox, external
 
 Use this skill for a new environment or a change to an existing config. Load [/spa](../spa/SKILL.md) for lifecycle (init, validate, spa deploy, destroy). Route tree: [workflow-decision-tree.md](references/workflow-decision-tree.md).
 
-- **Brand new environment** ("I need a Splunk lab or environment..."): start here at Phase 1, even when registered environments already exist. A new-environment request never selects an existing environment. Until the location and name gate ("Environment location, name, and summary") has named the target, run no environment-scoped command (`config get`, `apps search`, `apps add`, `validate`). Never fall back to the registry default (`spa --agent environment list`, `default: true`), which is an existing environment. The plan-or-write mode is asked at the gate, after the minimum requirements. Nothing writes until the gate passes (see the write barrier in the gate). Write mode then inits. Plan mode inits at Phase 12. Then the config writes, validate, and hand off to `/spa`.
+- **Brand new environment** ("I need a Splunk lab or environment..."): start here with `spa init list` and follow `data.next`, even when registered environments already exist. Phases 1–2 (intent/requirements) are optional header input, not blockers before that list. A new-environment request never selects an existing environment. Until the location and name gate ("Environment location, name, and summary") has named the target, run no environment-scoped command (`config get`, `apps search`, `apps add`, `validate`). Never fall back to the registry default (`spa --agent environment list`, `default: true`), which is an existing environment. The plan-or-write mode is asked at the gate, after topology and provider from `spa init list`. Nothing writes until the gate passes (see the write barrier in the gate). Write mode then inits. Plan mode inits at Phase 12 and follows remaining after that. Then validate and hand off to `/spa`.
 - **Modify existing config** ("add ITSI", "change the OS"): skip the greenfield phases and use "Add / change a setting" below. Name the target environment before any write. If the operator did not name one, ask which registered environment to change (AskQuestion), and show its path.
 - **Lifecycle** ("destroy", "status", "deploy", "logs"): load `/spa` directly. No design is needed.
 - **Apps** ("add a TA", "install a content pack"): load `/spa-apps`.
 
-The design phases exist so the first `--example` template is not accepted blindly: intent (1), requirements (2), topology (3), sizing (4), OS (5), AWS (6), counts and placement (7, 8), apps and licenses (9, 10), plan (11), write (12), validate (13), handoff (14).
+The design phases exist so remaining questions after `--example` are answered from spa envelopes, not a duplicated catalog: optional header (1–2), topology and provider from `spa init list` (3), gate, init, then remaining as the envelope directs (typically sizing/OS/AWS/apps/licenses), plan (11), write (12), validate (13), handoff (14).
 
-**Provider:** `spa init` requires `--provider` unless the operator has saved a default with `spa environment set --provider NAME`. Ask the operator which provider to use before any init (AskQuestion ids in the order spa prints: `spa init --help` / `spa init list` Providers; do not hardcode the names). Include CCM (employee-only Corporate Cloud Manager). Report `CCM_TOKEN` as set / not set (never the value). Do not hide CCM when the token is unset; `spa validate` and `spa doctor` name a missing token the same way they name missing AWS credentials. If they chose CCM and the token is not set, tell them to mint a PAT and SSH key at https://ccm.splunkits.io/ and export `CCM_TOKEN`. Do not probe the network to decide. When CCM is in play: compose with `--provider ccm`. `spa config provider ccm` writes the YAML block; `spa provider ccm` is discovery (`survey` and the list commands). See [config-header-best-practices.md](references/config-header-best-practices.md).
+**Provider:** `spa init` requires `--provider` unless the operator has saved a default with `spa environment set --provider NAME`. Ask the operator which provider to use before any init: AskQuestion over the provider `choice.allowed` from `spa init list` (or `spa architecture plan FILE`) `data.next`, in that order; do not hardcode the names. spa lists CCM (employee-only Corporate Cloud Manager) only when `CCM_TOKEN` is set. Report `CCM_TOKEN` as set / not set (never the value). If the operator asks for CCM and the token is not set, tell them to mint a PAT and SSH key at https://ccm.splunkits.io/, export `CCM_TOKEN`, and rerun the list. Do not probe the network to decide. When CCM is in play: compose with `--provider ccm`. `spa config provider ccm` writes the YAML block; `spa provider ccm` is discovery (`survey` and the list commands). See [config-header-best-practices.md](references/config-header-best-practices.md).
 
 ## Never edit by hand (mandatory)
     
@@ -62,22 +62,22 @@ App entries go to [spa-apps](../spa-apps/SKILL.md) (`spa --agent apps add`). Val
 
 ## Phase Sequencing & Guardrails (mandatory)
 
-Write mode: **1 → 2 → 3 → 4 → 5 → gate → init → 6–10 → reconfirm → 12–14**. Plan mode: **1 → 2 → 3 → 4 → 5 → gate (location/name only, no init) → 6–10 (record, no writes) → 11 → reconfirm → Phase 12 init then writes → 13–14**. Path B skips 2 and 3 (`sva.code` selects the topology at init).
+Write mode: **init list → optional 1–2 → 3 → gate → init → remaining as the envelope directs → reconfirm → 12–14**. Plan mode: **init list → optional 1–2 → 3 → gate (location/name only, no init) → 11 → reconfirm → Phase 12 init → remaining as the envelope directs → writes → 13–14**. Plan mode has no `remaining` before init, so it does not pre-ask sizing, OS, AWS, apps, or licenses. Path B skips 2 and 3 (`sva.code` selects the topology at init). Path A runs Phases 7–8 only when the operator asked for counts or roles that differ from the example; remaining never lists them.
 
-- **Before the gate:** Path A: Phases 1, 2, 3, and 5 plus provider. Path B: follow `data.next` from `spa architecture plan FILE` (`mode.write`, then provider). Sizing (Phase 4) does not block the name. Do not skip to init without that yes.
-- **No environment-scoped commands before init:** Do not run `spa init`, `spa --env NAME`, `spa config set`, `spa config add`, `spa config move`, `spa apps add`, or `spa validate` until the gate has been passed and init is confirmed. `spa architecture plan FILE` is read-only and needs no environment.
+- **Before the gate:** Path A: follow `data.next` from `spa init list` (topology, then provider). Path B: follow `data.next` from `spa architecture plan FILE` (`mode.write`, then provider). Sizing and OS are remaining after init. Do not skip to init without that yes.
+- **No environment-scoped commands before init:** Do not run `spa init`, `spa --env NAME`, `spa config set`, `spa config add`, `spa config move`, `spa apps add`, or `spa validate` until the gate has been passed and init is confirmed. `spa architecture plan FILE` is read-only and needs no environment. `spa init list` is a catalog and needs no environment.
 - **Architecture file (optional):** Do not parse the file. Follow [architecture-input.md](references/architecture-input.md). Path B check is required before validate.
-- **Phase 9 (apps) is mandatory:** Always run Phase 9, even when the user did not mention apps. Always ask "Do you want to add apps?" with two clear options: "Yes, add apps" or "No, trial-only". Record the choice and proceed accordingly.
-- **Follow `data.next`:** After `architecture plan`, `apps add`, `licenses list`, and CCM `survey` / `instance-types list`, AskQuestion each `ask` then run `command` in order. Prefer `argv` when present; if a shell is used, copy `command` verbatim. Do not invent follow-ups the envelope omitted. Path B: when next includes `mode.write`, do not AskQuestion plan vs write. For a normal app, if add returns `ready: false` with a roles choice, ask over `allowed` (pre-check `suggested`) and retry with `--roles`. Do not guess. SPA places TAs by role, not by host.
+- **Phase 9 (apps):** If remaining includes apps, AskQuestion that item (that is the mandatory ask) with "Yes, add apps" or "No, trial-only". If remaining omitted apps because the config already settled them, do not re-ask.
+- **Follow `data.next`:** After `spa init list`, `architecture plan`, init remaining, `apps add`, `licenses list`, and CCM `survey` / `instance-types list`, AskQuestion each `ask` then run `command` in order. Prefer `argv` when present; if a shell is used, copy `command` verbatim. Do not invent follow-ups the envelope omitted. Path B: when next includes `mode.write`, do not AskQuestion plan vs write. For a normal app, if add returns `ready: false` with a roles choice, ask over `allowed` (pre-check `suggested`) and retry with `--roles`. Do not guess. SPA places TAs by role, not by host.
 - **Values:** pass string scalars unquoted (`eu-central-1`, not `"eu-central-1"`). Use JSON only for lists and maps.
 - **ITSI follow-ups follow the envelope:** After ITSI (1841), follow `data.next` in order: Java 21 on search-head hosts (`os.java.search_heads`; not global `os.packages`), then licenses, then content packs (`none` / `list` / `name`). AskQuestion those three pack choices. On `list`, run `spa --agent apps content-packs list 5391` and present each pack `name` / `title` (and `spa_automation` when present), then pick packs. On `name`, wait for folder names. On `none`, skip. Do not hide the names behind "there are 26 packs." Do not guess pack names or IDs.
-- **Do not combine Phases 4–10.** One phase, then the next.
+- **Do not combine remaining items.** One envelope item, then the next.
 - **New host:** `spa --env NAME config add 'splunk_hosts[name=NAME]' '{"roles":[...]}' --yes`. Never `config add splunk_hosts`. Never a file edit.
 - **OS keys:** set leaf paths only. Never `config set os '{whole map}'`. Author only non-default keys (`os.packages`, `os.set_hostname` if chosen).
-- **No writes until Phase 12 in plan mode:** record all decisions but run no `spa init`, `spa environment init`, `spa config set`, `add`, `unset`, `merge`, `move`, or `apps add` until the reconfirmation yes and Phase 12 begins.
+- **No writes until Phase 12 in plan mode:** record the pre-gate decisions but run no `spa init`, `spa environment init`, `spa config set`, `add`, `unset`, `merge`, `move`, or `apps add` until the reconfirmation yes and Phase 12 begins.
 
 **Guardrail enforcement for the agent:**
-1. If you complete Phase 1/2 but the user asks to proceed to init before path A has topology, provider, and OS, respond: "Path A still needs topology, provider, and OS before init. Let me ask..." Then ask them. Path B needs only the acknowledged architecture plan and the provider.
+1. If you complete Phase 1/2 but the user asks to proceed to init before path A has topology and provider from `spa init list`, respond: "Path A still needs topology and provider from spa init list before init. Let me ask..." Then follow `data.next`. Path B needs only the acknowledged architecture plan and the provider.
 2. If a user tries to modify the config with a file editor, IDE, or manual YAML, stop immediately and say: "I detected a hand edit to `splunk_config.yml`. This violates the SPA hard rule. Let me redo this with the correct `spa config` command instead." Then recover using `spa config get` to see the current state and `spa config set/add/unset` to make the change.
 3. If you are about to write the config file directly (using Write, shell redirects, etc.), stop and ask: "Should I use `spa config set/add/merge` instead?"
 4. If a phase is skipped (e.g., jumping from Step 0 to init), backtrack explicitly: "I skipped phases X, Y, Z. Let me go back and collect those decisions properly before proceeding."
@@ -152,11 +152,11 @@ Load one section from [phases.md](references/phases.md) at a time. Do not load t
 | Checkpoint | User input classification |
 | 1 | Deployment intent |
 | 2 | Architecture requirements |
-| 3 | Topology path |
-| 4 | Sizing tier |
-| 5 | Linux OS |
+| 3 | Topology path (`spa init list`) |
 | Gate | Environment location, name, and summary (before init) |
-| 6 | AWS settings |
+| 4 | Sizing tier (remaining) |
+| 5 | Linux OS (remaining) |
+| 6 | AWS settings (remaining) |
 | 7 | Topology counts |
 | 8 | Role placement |
 | 9 | Apps (mandatory reconfirmation) |

@@ -46,7 +46,7 @@ spa --agent config explain
 
 ## `config explain`
 
-Describe one config path and its immediate fields. A deeper level is a longer path. The same data is the future GUI payload.
+Describe one config path and its immediate fields. Leaves may include recommended, discover, related, and from the parent setting or provider. data.next is present when allowed or discover exists. A deeper level is a longer path. The same data is the future GUI payload.
 
 | Argument | Required | Description |
 | --- | --- | --- |

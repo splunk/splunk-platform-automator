@@ -13,8 +13,12 @@ User message
 │     │     → spa architecture check FILE → spa validate (Phase 13)
 │     │     → /spa handoff for spa deploy (creates hosts if needed; only after your explicit yes)
 │     └─ No architecture file
-│           → /spa-create-config path A, Phases 1–14, plan mode
-│           → plan approved → environment gate (if not passed) → spa init --example --provider → write config (Phase 12) → spa validate (Phase 13)
+│           → /spa-create-config path A
+│           → spa init list → follow data.next (topology, then provider)
+│           → location/name gate (plan vs write)
+│           → write: spa environment init --example --provider → follow remaining
+│           → plan: design summary (no remaining yet) → approved → init at Phase 12 → follow remaining
+│           → spa validate (Phase 13)
 │           → /spa handoff for spa deploy (creates hosts if needed; only after your explicit yes)
 ├─ Change an existing config ("add ITSI", "change the OS")
 │     → /spa-create-config, "Add / change a setting" (skip greenfield phases)
@@ -32,7 +36,7 @@ Rules that apply on every branch:
 
 - Config is changed only with `spa config` commands, never by hand.
 - App entries are added only with `spa apps` commands.
-- `spa init` runs once per new environment, after the location, name, and summary gate. In write mode the gate runs after Phase 5; in plan mode it runs at the start of Phase 12. It does not run on the first message.
+- `spa init` runs once per new environment, after the location, name, and summary gate. Path A: topology and provider from `spa init list` `data.next` before the gate. In write mode the gate runs after that next; in plan mode init waits for Phase 12. It does not run on the first message.
 - Nothing writes before the gate passes. Every write names its target environment and checks the `resolved_env_name` in the response.
 - A new-environment request never writes to an existing environment. Change one only when the operator names it.
 - Provision, deploy, destroy, suspend, resume, environment remove, and environment cleanup wait for your yes in chat.

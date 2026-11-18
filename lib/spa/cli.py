@@ -1253,6 +1253,7 @@ def _run_init(args, session, as_agent: bool) -> int:
         from spa.init import format_example_list
 
         print(format_example_list(result.data or {}))
+        _print_next(result.data if isinstance(result.data, dict) else {})
         return 0
     from spa.registry import RegistryError, resolve_init_dest
 
@@ -3385,6 +3386,7 @@ def _run(argv: Sequence[str]) -> int:
             from spa.config_tree import format_explain
 
             sys.stdout.write(format_explain(data))
+            _print_next(data)
             return 0
         if action == "search":
             matches = data.get("matches") or []

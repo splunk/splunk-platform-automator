@@ -87,6 +87,74 @@ def test_implemented_settings_have_operator_guidance():
             assert len(item.get("when_to_use") or item.get("when_not_to_use") or "") >= 24, label
 
 
+def test_catalog_recommended_values_match_schema_type_and_allowed():
+    """CFG-CLI-007. Catalog recommended values are schema-backed, typed, and not omit-safe defaults."""
+    from spa.catalog import load_features, schema_key_details
+
+    schema = schema_key_details()
+    found = {}
+    for item in load_features(PROJECT_ROOT):
+        recommended = item.get("recommended")
+        if not recommended:
+            continue
+        assert isinstance(recommended, dict), item.get("id")
+        for path, value in recommended.items():
+            assert path not in found, path
+            found[path] = value
+            detail = schema.get(path)
+            assert detail, path
+            type_name = str(detail.get("type") or "")
+            allowed = list(detail.get("allowed") or [])
+            if type_name == "string":
+                assert isinstance(value, str), path
+            elif type_name == "integer":
+                assert type(value) is int, path
+            elif type_name.startswith("list"):
+                assert isinstance(value, list), path
+            if allowed:
+                if type_name.startswith("list"):
+                    assert all(item in allowed for item in value), path
+                else:
+                    assert value in allowed, path
+            if "default" in detail:
+                assert value != detail["default"], path
+    assert "terraform.aws.instance_type" in found
+    assert found["terraform.aws.instance_type"] == "t3.medium"
+    assert found["terraform.aws.root_volume_size"] == 50
+    assert found["os.packages"] == ["acl", "polkit"]
+
+
+def test_catalog_discover_is_human_spa_commands():
+    """CFG-CLI-007. Catalog discover is a list of human spa commands, never executed."""
+    from spa.catalog import load_features, public_feature, validate_feature_catalog
+
+    features = load_features(PROJECT_ROOT)
+    validate_feature_catalog(features)
+    aws = next(item for item in features if item.get("id") == "provider.aws")
+    ccm = next(item for item in features if item.get("id") == "provider.ccm")
+    assert aws["discover"] == [
+        "spa provider aws survey",
+        "spa provider aws latest-ami",
+        "spa provider aws instance-types list",
+    ]
+    assert ccm["discover"] == ["spa provider ccm survey"]
+    for item in features:
+        discover = item.get("discover")
+        if not discover:
+            continue
+        assert isinstance(discover, list), item.get("id")
+        for command in discover:
+            assert isinstance(command, str) and command.startswith("spa "), command
+            assert "--agent" not in command
+        public = public_feature(item, features)
+        assert public.get("discover") == discover
+        assert all(not str(rel).startswith("setting.") for rel in public.get("related") or [])
+    bad = dict(aws)
+    bad["discover"] = ["curl https://example.invalid"]
+    with pytest.raises(ValueError, match="discover"):
+        validate_feature_catalog([bad])
+
+
 def test_explain_c1():
     result = run_spa(["config", "explain", "topology.c1"])
     assert result.returncode == 0, result.stderr
@@ -161,7 +229,9 @@ def test_config_json_search():
     rows = payload["data"]["matches"]
     paths = [item["path"] for item in rows]
     assert "splunk_defaults.splunk_architecture" in paths
-    assert set(rows[0]) == {"path", "description"}
+    assert {"path", "description"} <= set(rows[0])
+    assert set(rows[0]) <= {"path", "description", "type", "default", "allowed"}
+    assert "command" not in rows[0]
 
 
 def test_config_search_os():
@@ -573,7 +643,8 @@ def test_omit_default_is_a_payload_field():
     assert shown["data"]["default"] == "splk"
     human = run_spa(["config", "explain", "splunk_defaults.splunk_env_name"])
     assert human.returncode == 0, human.stderr
-    assert 'default: "splk"' in human.stdout
+    assert "default: splk" in human.stdout
+    assert 'default: "splk"' not in human.stdout
 
 
 def test_ansible_defaults_do_not_ship_admin_or_cluster_passwords():

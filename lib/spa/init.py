@@ -947,6 +947,8 @@ def write_composed_config(
     architecture: Optional[Mapping[str, Any]] = None,
     architecture_report: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, str]:
+    from spa.architecture import remaining_questions
+
     topology_id, provider_id = resolve_example_pair(spa_home, example, provider)
     composed = compose_example_config(spa_home, topology_id, provider_id)
     if architecture:
@@ -954,7 +956,6 @@ def write_composed_config(
             SKIPPED_FIELDS,
             check_mismatch_warnings,
             overlay_architecture,
-            remaining_questions,
         )
 
         warnings: List[str] = []
@@ -962,6 +963,9 @@ def write_composed_config(
             composed, architecture, warnings, apply_schema=True
         )
         warnings.extend(check_mismatch_warnings(composed, architecture, spa_home))
+        remaining = remaining_questions(composed, has_provider=True)
+        if any(item.get("deferred") for item in report.get("placement") or []):
+            remaining.append("license_manager")
         if architecture_report is not None:
             existing = list(architecture_report.get("warnings") or [])
             architecture_report.update(report)
@@ -974,12 +978,12 @@ def write_composed_config(
             architecture_report["skipped_app_folders"] = list(
                 architecture.get("apps_by_role_folders") or []
             )
-            remaining = remaining_questions(composed, has_provider=True)
-            if any(item.get("deferred") for item in report.get("placement") or []):
-                remaining.append("license_manager")
-            architecture_report["remaining"] = remaining
             architecture_report["topology"] = example
             architecture_report["topology_id"] = topology_id
+    else:
+        remaining = remaining_questions(composed, has_provider=True)
+    if architecture_report is not None:
+        architecture_report["remaining"] = remaining
     text = dump_splunk_config(composed)
     provider_path = Path(spa_home) / "examples" / "providers" / ("%s.yml" % provider_id)
     if provider_path.is_file():

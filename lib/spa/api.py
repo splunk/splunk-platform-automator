@@ -658,8 +658,13 @@ class LocalSpaSession:
 
     def list_examples(self) -> CommandResult:
         from spa.init import list_examples
+        from spa.next_steps import init_list_next
 
-        return CommandResult(ok=True, data=list_examples(self.paths.spa_home))
+        data = list_examples(self.paths.spa_home)
+        follow = init_list_next()
+        if follow:
+            data["next"] = follow
+        return CommandResult(ok=True, data=data)
 
     def _config_discovery(
         self,
@@ -697,7 +702,14 @@ class LocalSpaSession:
                     )
                 return CommandResult(ok=True, data=config_schema_payload(self.paths.spa_home))
         except KeyError:
-            return CommandResult(ok=False, error="Unknown config path: %s" % target, code=1)
+            return CommandResult(
+                ok=False,
+                error=(
+                    "Unknown config path: %s. Find paths with: spa config search QUERY\n"
+                    "Example: spa config search instance_type" % target
+                ),
+                code=1,
+            )
         except (OSError, ValueError) as exc:
             return CommandResult(ok=False, error=str(exc), code=1)
         return CommandResult(ok=False, error="Unknown spa config action: %s" % action, code=2)
@@ -1452,7 +1464,16 @@ class LocalSpaSession:
             "name": registry_name or Path(env_dir).name,
             "messages": messages,
         }
-        if report:
+        if rc == 0:
+            remaining = list(report.get("remaining") or [])
+            if remaining:
+                from spa.next_steps import remaining_next
+
+                data["remaining"] = remaining
+                follow = remaining_next(remaining)
+                if follow:
+                    data["next"] = follow
+        if architecture and report:
             data["architecture"] = report
         return CommandResult(
             ok=rc == 0,

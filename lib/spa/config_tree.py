@@ -11,17 +11,24 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import yaml
 
 from spa.catalog import (
+    catalog_discover,
     feature_command,
     key_path,
     load_features,
     public_key_description,
+    public_label,
+    record_paths,
+    recommended_values,
     schema_key_details,
     snippet_is_safe,
+    translate_related,
 )
+from spa.next_steps import explain_choice_next
 from spa.config_edit import _ONE_OF, _is_secret, config_templates
 
 _ROOT_DESCRIPTION = "Configurable sections of splunk_config.yml."
 _SEARCH_LIMIT = 10
+_ALLOWED_INLINE = 8
 _LIST_NOTE = "several explicit hostnames have no selector; author that form with spa config merge"
 # Roots that exist both at the top of splunk_config.yml and under splunk_hosts.
 _SCOPED_ROOTS = ("os", "virtualbox", "terraform", "custom")
@@ -38,7 +45,7 @@ def explain_config(path: str = "") -> Dict[str, Any]:
     features = load_features(_spa_home())
     target = (path or "").strip()
     if target in _layout_index(features):
-        return _layout_node(target, features[ _layout_index(features)[target] ])
+        return _layout_node(target, features[_layout_index(features)[target]], features)
     template = _template_node(target)
     if template is not None:
         return template
@@ -51,7 +58,7 @@ def explain_config(path: str = "") -> Dict[str, Any]:
 
 
 def search_config(query: str) -> Dict[str, Any]:
-    """Rank user paths. Each hit is only a path and a one-line description."""
+    """Rank user paths. Hits never include a command."""
     schema = schema_key_details()
     features = load_features(_spa_home())
     needles = [part.lower() for part in query.split() if part.strip()]
@@ -73,7 +80,7 @@ def search_config(query: str) -> Dict[str, Any]:
         if needles and not all(needle in blob for needle in needles):
             continue
         rank = 0 if shown.lower() == query.lower() else 1 if shown.lower().endswith(query.lower()) else 2
-        rows.append((rank, shown, {"path": user_path(shown), "description": description}))
+        rows.append((rank, shown, _search_hit(shown, description, schema)))
     from spa.catalog import app_entry_child_names, app_entry_field_names
 
     for name in app_entry_field_names():
@@ -81,14 +88,14 @@ def search_config(query: str) -> Dict[str, Any]:
         description = _one_line("App entry field %s." % name)
         blob = "%s %s" % (shown.lower(), description.lower())
         if not needles or all(needle in blob for needle in needles):
-            rows.append((2, shown, {"path": shown, "description": description}))
+            rows.append((2, shown, _search_hit(shown, description, schema)))
     for parent in ("content_pack_api", "customizations"):
         for name in app_entry_child_names(parent):
             shown = "splunk_app_deployment.apps.%s.%s" % (parent, name)
             description = _one_line("App entry field %s." % shown)
             blob = shown.lower() + " " + description.lower()
             if not needles or all(needle in blob for needle in needles):
-                rows.append((2, shown, {"path": shown, "description": description}))
+                rows.append((2, shown, _search_hit(shown, description, schema)))
     for ident, item in _layout_index(features).items():
         feature = features[item]
         description = _one_line(_decision_line(feature) or str(feature.get("title") or ""))
@@ -158,19 +165,37 @@ def format_explain(data: Dict[str, Any]) -> str:
             lines.append("")
             lines.append("%s:" % key.upper())
             lines.append("    %s" % data[key])
+    if data.get("from"):
+        lines.append("")
+        lines.append("from: %s" % data["from"])
+    if data.get("discover"):
+        lines.append("")
+        lines.append("DISCOVER:")
+        for command in data["discover"]:
+            lines.append("    %s" % command)
+    if data.get("related"):
+        lines.append("")
+        lines.append("RELATED:")
+        for path in data["related"]:
+            lines.append("    %s" % path)
     if data.get("scope"):
         lines.extend(_format_scope(data["scope"]))
     if data.get("allowed"):
         lines.append("")
         lines.append("allowed: %s" % ", ".join(str(item) for item in data["allowed"]))
     if "default" in data:
-        lines.append("default: %s" % json.dumps(data["default"]))
+        lines.append("default: %s" % _example_token(data["default"], str(data.get("type") or "")))
+    if "recommended" in data:
+        lines.append(
+            "recommended: %s"
+            % _example_token(data["recommended"], str(data.get("type") or ""))
+        )
     identity = (data.get("identity") or {}).get("one_of") or []
     if identity:
         lines.append("")
         lines.append("IDENTITY (choose exactly one):")
         for item in identity:
-            lines.append("  %s   <%s>" % (item["name"], item.get("type") or "string"))
+            lines.append("  %s   <%s>" % (item["name"], _field_type_label(item)))
             if item.get("description"):
                 lines.append("    %s" % item["description"])
             if item.get("selector"):
@@ -182,7 +207,7 @@ def format_explain(data: Dict[str, Any]) -> str:
         width = max(len(item["name"]) for item in fields)
         for item in fields:
             flag = "; required" if item.get("required") else ""
-            lines.append("  %s <%s>%s" % (item["name"].ljust(width), item.get("type") or "object", flag))
+            lines.append("  %s <%s>%s" % (item["name"].ljust(width), _field_type_label(item), flag))
             if item.get("description"):
                 lines.append("    %s" % item["description"])
     layouts = data.get("layouts") or []
@@ -435,12 +460,17 @@ def _node(canonical: str, schema: Dict[str, Dict[str, Any]], features: List[Dict
         data["allowed"] = list(detail["allowed"])
     if detail.get("default") is not None and not _is_secret(canonical):
         data["default"] = detail["default"]
+    if not _is_secret(canonical) and not _is_secret(shown):
+        recommended = recommended_values(features).get(shown)
+        if recommended is not None:
+            data["recommended"] = recommended
     if detail.get("constraints"):
         data["constraints"] = detail["constraints"]
     if feature:
         for key in ("when_to_use", "when_not_to_use", "suggest"):
             if feature.get(key):
                 data[key] = str(feature[key]).strip()
+    _apply_guidance(data, shown, canonical, schema, features, feature)
     names = _list_names(canonical)
     identity_names = _ONE_OF.get(names) if names else None
     children = _children(canonical, schema)
@@ -460,7 +490,7 @@ def _node(canonical: str, schema: Dict[str, Dict[str, Any]], features: List[Dict
         data["identity"] = {"one_of": identity}
     if fields:
         data["fields"] = fields
-    command, example = _commands(canonical, shown, feature, features)
+    command, example = _commands(canonical, shown, feature, features, str(detail.get("type") or ""))
     if command:
         data["command"] = command
     if example:
@@ -470,6 +500,14 @@ def _node(canonical: str, schema: Dict[str, Dict[str, Any]], features: List[Dict
     scope = setting_scope(shown, schema)
     if scope:
         data["scope"] = scope
+    nxt = explain_choice_next(
+        path=shown,
+        allowed=data.get("allowed"),
+        discover=data.get("discover"),
+        mutation_command=data.get("command"),
+    )
+    if nxt:
+        data["next"] = nxt
     return {key: value for key, value in data.items() if value not in (None, "", [], {})}
 
 
@@ -478,8 +516,7 @@ def _has_children(canonical: str, schema: Dict[str, Dict[str, Any]]) -> bool:
 
 
 def _child(name: str, canonical: str, detail: Dict[str, Any], features: List[Dict[str, Any]], schema: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    if not detail:
-        detail = _detail(canonical, schema)
+    detail = _detail(canonical, schema) or detail
     item: Dict[str, Any] = {"name": name, "type": detail.get("type") or "object"}
     if detail.get("required"):
         item["required"] = True
@@ -489,8 +526,7 @@ def _child(name: str, canonical: str, detail: Dict[str, Any], features: List[Dic
         text = "%s%s" % (text, hint) if text else hint.lstrip()
     if text:
         item["description"] = text
-    if detail.get("default") is not None and not _is_secret(canonical):
-        item["default"] = detail["default"]
+    item.update(_choice_payload(detail, canonical, "child"))
     return item
 
 
@@ -560,16 +596,99 @@ def _template_node(target: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def _layout_node(ident: str, item: Dict[str, Any]) -> Dict[str, Any]:
+def _layout_node(ident: str, item: Dict[str, Any], features: List[Dict[str, Any]]) -> Dict[str, Any]:
     data: Dict[str, Any] = {"path": ident, "type": str(item.get("kind") or "layout"), "description": str(item.get("title") or ident)}
     for key in ("when_to_use", "when_not_to_use", "suggest"):
         if item.get(key):
             data[key] = str(item[key]).strip()
+    _copy_discover_related(data, item, features, ident)
     command = feature_command(item)
     if command and command.get("command"):
         data["command"] = command["command"]
         data["example"] = command["command"]
+    nxt = explain_choice_next(
+        path=ident,
+        discover=data.get("discover"),
+        mutation_command=data.get("command"),
+    )
+    if nxt:
+        data["next"] = nxt
     return data
+
+
+def _is_exact_selector(feature: Optional[Dict[str, Any]], shown: str) -> bool:
+    if not feature:
+        return False
+    selector = user_path(str(feature.get("selector") or ""))
+    return bool(selector) and selector == shown
+
+
+def _apply_guidance(
+    data: Dict[str, Any],
+    shown: str,
+    canonical: str,
+    schema: Dict[str, Dict[str, Any]],
+    features: List[Dict[str, Any]],
+    feature: Optional[Dict[str, Any]],
+) -> None:
+    if _is_exact_selector(feature, shown):
+        _copy_discover_related(data, feature, features, shown)
+        return
+    if _has_children(canonical, schema):
+        return
+    parent, inherited_from = _parent_guidance(shown, features)
+    if not parent:
+        return
+    _copy_discover_related(data, parent, features, shown)
+    if inherited_from:
+        data["from"] = inherited_from
+    for key in ("when_to_use", "when_not_to_use", "suggest"):
+        data.pop(key, None)
+
+
+def _copy_discover_related(
+    data: Dict[str, Any],
+    item: Optional[Dict[str, Any]],
+    features: List[Dict[str, Any]],
+    shown: str,
+) -> None:
+    if not item:
+        return
+    related = [
+        path
+        for path in translate_related(item, features)
+        if path and path != shown and not str(path).startswith("#")
+    ]
+    if related:
+        data["related"] = related
+    discover = catalog_discover(item)
+    if discover:
+        data["discover"] = discover
+
+
+def _parent_guidance(
+    shown: str, features: List[Dict[str, Any]]
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    parts = shown.split(".")
+    for index in range(len(parts) - 1, 0, -1):
+        ancestor = ".".join(parts[:index])
+        for item in features:
+            if item.get("kind") == "setting" and user_path(str(item.get("selector") or "")) == ancestor:
+                return item, ancestor
+    best: Optional[Dict[str, Any]] = None
+    best_from: Optional[str] = None
+    best_len = -1
+    for item in features:
+        if item.get("kind") != "provider":
+            continue
+        for path in record_paths(item):
+            public = user_path(path)
+            if shown == public or shown.startswith(public + "."):
+                if len(public) > best_len:
+                    best = item
+                    best_from = public_label(item)
+                    best_len = len(public)
+    return best, best_from
 
 
 def _commands(
@@ -577,19 +696,20 @@ def _commands(
     shown: str,
     feature: Optional[Dict[str, Any]],
     features: List[Dict[str, Any]],
+    type_name: str = "",
 ) -> Tuple[Optional[str], Optional[str]]:
     if _is_secret(canonical) or _is_secret(shown):
         quoted = _quote(shown)
         return "spa config set %s --from-env NAME" % quoted, None
     if canonical.endswith("[]"):
         return _add_commands(canonical, feature)
-    value = _snippet_value(shown, feature, features)
+    value = _example_value(shown, feature, features)
     quoted = _quote(_filled(canonical))
     template = "spa config set %s VALUE" % quoted
     if value is None:
         command = feature_command(feature) if feature else None
         return (command or {}).get("command") or template, None
-    example = "spa config set %s %s" % (quoted, _quote(json.dumps(value)))
+    example = "spa config set %s %s" % (quoted, _quote(_example_token(value, type_name)))
     return example, example
 
 
@@ -620,23 +740,74 @@ def _add_commands(canonical: str, feature: Optional[Dict[str, Any]]) -> Tuple[Op
     return template, example
 
 
-def _snippet_value(shown: str, feature: Optional[Dict[str, Any]], features: List[Dict[str, Any]]) -> Any:
-    candidates = [feature] if feature else []
-    candidates.extend(features)
-    for item in candidates:
-        if not item:
-            continue
-        snippet = str(item.get("snippet") or "")
-        if not snippet or not snippet_is_safe(snippet):
-            continue
-        try:
-            loaded = yaml.safe_load(snippet)
-        except yaml.YAMLError:
-            continue
-        found = _dig(loaded, shown.split("."))
-        if found not in (None, {}, []):
-            return found
+def _example_value(shown: str, feature: Optional[Dict[str, Any]], features: List[Dict[str, Any]]) -> Any:
+    if _is_secret(shown):
+        return None
+    recommended = recommended_values(features)
+    if shown in recommended:
+        return recommended[shown]
+    return _snippet_value(shown, feature)
+
+
+def _snippet_value(shown: str, feature: Optional[Dict[str, Any]]) -> Any:
+    if not feature:
+        return None
+    snippet = str(feature.get("snippet") or "")
+    if not snippet or not snippet_is_safe(snippet):
+        return None
+    try:
+        loaded = yaml.safe_load(snippet)
+    except yaml.YAMLError:
+        return None
+    found = _dig(loaded, shown.split("."))
+    if found not in (None, {}, []):
+        return found
     return None
+
+
+def _example_token(value: Any, type_name: str) -> str:
+    """Unquote only exact string schema types. Unions and other types stay JSON."""
+    if type_name == "string" and isinstance(value, str):
+        return value
+    return json.dumps(value)
+
+
+def _choice_payload(detail: Dict[str, Any], canonical: str, mode: str) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {}
+    secret = _is_secret(canonical) or _is_secret(user_path(canonical))
+    if detail.get("default") is not None and not secret:
+        payload["default"] = detail["default"]
+    allowed = list(detail.get("allowed") or [])
+    if not allowed:
+        return payload
+    if mode == "node" or len(allowed) <= _ALLOWED_INLINE:
+        payload["allowed"] = allowed
+    elif mode == "child":
+        payload["allowed_count"] = len(allowed)
+    return payload
+
+
+def _search_hit(shown: str, description: str, schema: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    hit: Dict[str, Any] = {"path": user_path(shown), "description": description}
+    canonical = _canonical(user_path(shown), schema)
+    if canonical is None:
+        return hit
+    detail = _detail(canonical, schema)
+    if not detail:
+        return hit
+    if detail.get("type"):
+        hit["type"] = detail["type"]
+    hit.update(_choice_payload(detail, canonical, "search"))
+    return hit
+
+
+def _field_type_label(item: Dict[str, Any]) -> str:
+    type_name = str(item.get("type") or "object")
+    if item.get("allowed"):
+        return "%s: %s" % (type_name, "|".join(str(value) for value in item["allowed"]))
+    if item.get("allowed_count"):
+        return "%s: %s values" % (type_name, item["allowed_count"])
+    return type_name
 
 
 def _dig(node: Any, parts: List[str]) -> Any:

@@ -195,6 +195,8 @@ features:
       Public aws, virtualbox, or external labs. Do not use a CCM Splunk install
       (type=splunk); SPA keeps topology and the Splunk install.
     suggest: spa init --example TOPOLOGY --provider ccm ENV
+    discover:
+      - spa provider ccm survey
     keys:
       - ccm
       - ccm.name
@@ -232,6 +234,10 @@ features:
     when_to_use: EC2 via terraform.aws. Pick region, AMI, instance type, and related live values with spa provider aws survey, spa provider aws latest-ami, spa provider aws instance-types list, and spa provider aws validate; do not copy a hardcoded cloud catalog.
     when_not_to_use: "Local VirtualBox."
     suggest: spa init --example TOPOLOGY --provider aws ENV
+    discover:
+      - spa provider aws survey
+      - spa provider aws latest-ami
+      - spa provider aws instance-types list
     keys:
       - terraform
       - terraform.aws
@@ -264,6 +270,9 @@ features:
       - "splunk_hosts[].terraform.aws.tags"
       - path: "splunk_hosts[].terraform.aws.ssh_username"
         note: Login user must match the AMI. Pair with spa provider aws describe-ami.
+    recommended:
+      terraform.aws.instance_type: t3.medium
+      terraform.aws.root_volume_size: 50
     snippet: |
       terraform:
         aws:
@@ -389,6 +398,8 @@ features:
       - "splunk_hosts[].os.splunk_group_create"
       - "splunk_hosts[].os.splunk_user_create"
     related: ["setting.os.ubuntu", "setting.ssh_username"]
+    recommended:
+      os.packages: [acl, polkit]
     snippet: |
       os:
         set_hostname: true
@@ -416,6 +427,8 @@ features:
       Login user Terraform and Ansible use on the EC2 AMI. Must match the image (ec2-user on
       Amazon Linux and RHEL, ubuntu on Ubuntu, admin on Debian). Discover with
       spa provider aws describe-ami / latest-ami. Always set it explicitly for AWS labs.
+    discover:
+      - spa provider aws latest-ami
     keys:
       - path: terraform.aws.ssh_username
         note: Login user must match the AMI (for example ec2-user, ubuntu, or admin). Pair with spa provider aws describe-ami.

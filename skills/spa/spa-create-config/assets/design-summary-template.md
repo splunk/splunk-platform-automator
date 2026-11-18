@@ -1,6 +1,6 @@
 # Design summary template
 
-Use in **plan mode** after Phases 1–10. Present in chat; optionally write to `docs/plans/<short-name>-design-summary.md` when the user wants a file.
+Use in **plan mode** after the phases that ran before the gate. Path A has no `remaining` before init: write `after init (remaining)` for OS, region, AMI, instance size, apps, and licenses instead of guessing. Present in chat; optionally write to `docs/plans/<short-name>-design-summary.md` when the user wants a file.
 
 This is the skill's write-preview, not `spa architecture plan FILE`.
 
