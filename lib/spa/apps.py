@@ -335,9 +335,6 @@ def format_snippet_yaml(
             body.append("  path: %s" % path)
         body += [
             "  itsi_content_pack: true",
-            "  content_pack_api:",
-            "    install_all: true",
-            "    enabled: true",
         ]
     elif kind == "es_not_premium":
         extra.insert(0, "Enterprise Security is not premium_app: es yet (#60). TA-shaped snippet only.")
@@ -531,12 +528,18 @@ def _customizations_from_playbooks(
     return yaml.safe_load(rendered)[0].get("customizations"), lines
 
 
-def _enable_pack_api(target: Dict[str, Any]) -> None:
-    api = target.get("content_pack_api")
-    if not isinstance(api, dict):
-        api = {}
-        target["content_pack_api"] = api
-    api["enabled"] = True
+def _apply_playbook_content_pack_api(
+    target: Dict[str, Any],
+    rows: Sequence[Dict[str, Any]],
+    notes: List[str],
+    *,
+    write_install: bool = True,
+) -> None:
+    from spa.app_playbooks import apply_content_pack_api
+
+    notes.extend(
+        apply_content_pack_api(target, rows, write_install=write_install)
+    )
 
 
 def _assign_set_field(target: Dict[str, Any], field: str, value: Any) -> None:
@@ -643,7 +646,6 @@ def build_entry(
             ]
     elif kind == "itsi_content_pack_single":
         entry["itsi_content_pack"] = True
-        entry["content_pack_api"] = {"install_all": True, "enabled": True}
     else:
         entry["target_roles"] = list(roles or [])
 
@@ -730,9 +732,13 @@ def build_entry(
                     attached, lines = _customizations_from_playbooks(matches)
                     customization_lines.extend(lines)
                     target = items.get(pack_name)
-                    if attached is not None and target is not None:
-                        target["customizations"] = attached
-                        _enable_pack_api(target)
+                    if target is not None:
+                        _apply_playbook_content_pack_api(target, matches, notes)
+                        if attached is not None:
+                            target["customizations"] = attached
+                        from spa.app_playbooks import order_content_pack_item
+
+                        order_content_pack_item(target)
             elif related:
                 notes.extend(advertise_notes(related))
         else:
@@ -741,10 +747,12 @@ def build_entry(
             )
             if related and customize:
                 attached, customization_lines = _customizations_from_playbooks(related)
+                if kind == "itsi_content_pack_single":
+                    _apply_playbook_content_pack_api(
+                        entry, related, notes, write_install=False
+                    )
                 if attached is not None:
                     entry["customizations"] = attached
-                    if kind == "itsi_content_pack_single":
-                        _enable_pack_api(entry)
             elif related:
                 notes.extend(advertise_notes(related))
 

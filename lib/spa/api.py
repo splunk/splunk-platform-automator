@@ -1131,6 +1131,13 @@ class LocalSpaSession:
                         "omitted_defaults": built.get("omitted_defaults") or [],
                     }
                 )
+                notes = [
+                    str(note)
+                    for note in (built.get("_notes") or [])
+                    if str(note).strip()
+                ]
+                if notes:
+                    data["notes"] = notes
                 from spa.next_steps import apps_add_next
 
                 follow = apps_add_next(

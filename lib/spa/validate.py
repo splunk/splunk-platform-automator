@@ -305,6 +305,14 @@ except ConfigValidationError as e:
     if rc.returncode != 0:
         err = (rc.stderr or rc.stdout or "Schema validation failed").strip()
         return CommandResult(ok=False, error=err, data=data, code=rc.returncode)
+    if loaded is not None:
+        from spa.app_playbooks import content_pack_header_errors
+
+        header_errors = content_pack_header_errors(loaded, Path(paths.spa_home))
+        if header_errors:
+            err = "\n".join(header_errors)
+            steps[-1] = {"id": "schema", "ok": False, "message": err}
+            return CommandResult(ok=False, error=err, data=data, code=1)
     stamp = require_authored_schema_version(config_path)
     if stamp is not None:
         if agent:

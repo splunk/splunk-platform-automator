@@ -1087,7 +1087,7 @@ features:
         note: When true, install all objects in the pack.
       - path: splunk_app_deployment.apps[].content_pack_apps[].content_pack_api.enabled
         type: boolean
-        note: Default false. Omit the key to leave objects disabled. Configure playbooks require true.
+        note: Default false. Omit the key to leave objects disabled. Configure playbooks may declare false in their spa-app header.
       - path: splunk_app_deployment.apps[].content_pack_apps[].content_pack_api.saved_search_action
         type: string
         note: For example disable or enable saved searches in the pack.
@@ -1125,7 +1125,7 @@ features:
                 content_pack_install: true
                 content_pack_api:
                   install_all: true
-                  enabled: true
+                  enabled: false
                   saved_search_action: disable
                   backfill: false
                   resolution: overwrite
@@ -1135,7 +1135,8 @@ features:
               - name: DA-ITSI-CP-nix
                 content_pack_install: true
                 content_pack_api:
-                  enabled: true
+                  install_all: true
+                  enabled: false
                 customizations:
                   run_playbook_after_restart: ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml
                   force_run_playbook_after_restart: false
@@ -1167,7 +1168,7 @@ features:
         type: boolean
       - path: splunk_app_deployment.apps[].content_pack_api.enabled
         type: boolean
-        note: Default false. Omit the key to leave objects disabled. Configure playbooks require true.
+        note: Default false. Omit the key to leave objects disabled. Configure playbooks may declare false in their spa-app header.
       - path: splunk_app_deployment.apps[].customizations
         type: object
         note: Top-level for single-app packs only.

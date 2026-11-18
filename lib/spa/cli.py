@@ -1156,6 +1156,10 @@ def _destroy_summary(data: Dict[str, Any], env_name: str) -> str:
 
 
 def _print_next(data: Optional[Dict[str, Any]]) -> None:
+    for note in (data or {}).get("notes") or []:
+        text = str(note).strip()
+        if text:
+            print("Note: %s" % text, file=sys.stderr)
     items = (data or {}).get("next") or []
     if not items:
         return
