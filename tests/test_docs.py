@@ -99,12 +99,39 @@ def _markdown_for_links() -> list[Path]:
     return paths
 
 
+def _changelog_current_notes() -> str:
+    """Unreleased notes, or the latest version section after a bump empties Unreleased."""
+    text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    after = text.split("## [Unreleased]", 1)[1]
+    unreleased, _, rest = after.partition("\n## ")
+    if unreleased.strip():
+        return unreleased
+    latest, _, _ = rest.partition("\n## ")
+    return latest
+
+
 def _link_target(raw: str) -> str | None:
     dest = raw.strip().strip("<>").split()[0]
     if dest.startswith(("http://", "https://", "mailto:", "file:")):
         return None
     path = dest.split("#", 1)[0]
     return path or None
+
+
+def test_changelog_current_notes_falls_back_to_latest_version(tmp_path, monkeypatch):
+    """A bump empties Unreleased; shipped notes stay findable in the version heading."""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        "## [Unreleased]\n\n"
+        "## [3.0.0] - 2026-11-18\n\n"
+        "- shipped note\n\n"
+        "## [2.5.2] - 2026-09-10\n\n"
+        "- old note\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("test_docs.PROJECT_ROOT", tmp_path)
+    assert "shipped note" in _changelog_current_notes()
+    assert "old note" not in _changelog_current_notes()
 
 
 def test_agents_md_points_at_command_authoring():
@@ -326,11 +353,10 @@ def test_init_detects_existing_env_without_provider():
     assert "spa env init NAME" in paths
     assert "--force" in paths
     assert "--reset-paths" in paths
-    changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    unreleased = changelog.split("## [Unreleased]", 1)[1].split("\n## ", 1)[0]
-    assert "spa init DEST" in unreleased
-    assert "--provider" in unreleased
-    assert "already registered" in unreleased.lower()
+    notes = _changelog_current_notes()
+    assert "spa init DEST" in notes
+    assert "--provider" in notes
+    assert "already registered" in notes.lower()
     migrate = (_docs_dir() / "migrate.md").read_text(encoding="utf-8")
     assert "spa env init NAME --force` registers that directory" not in migrate
     assert "spa env init NAME" in migrate
@@ -353,9 +379,8 @@ def test_init_reset_paths_is_documented():
     assert "spa init --force --reset-paths" in guide
     migrate = (_docs_dir() / "migrate.md").read_text(encoding="utf-8")
     assert "--reset-paths" in migrate
-    changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    unreleased = changelog.split("## [Unreleased]", 1)[1].split("\n## ", 1)[0]
-    assert "--reset-paths" in unreleased
+    notes = _changelog_current_notes()
+    assert "--reset-paths" in notes
     dirs = (PROJECT_ROOT / "examples" / "catalog" / "features.yml").read_text(encoding="utf-8")
     assert "existing .spa.yml unless --reset-paths" in dirs
     config = format_config_markdown(PROJECT_ROOT)
@@ -1324,10 +1349,9 @@ class TestSpaSkill:
         assert "optional header" in combined.lower()
         assert "remaining 4–10" not in create
         assert "as the envelope directs" in create.lower()
-        changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-        unreleased = changelog.split("## [Unreleased]", 1)[1].split("\n## ", 1)[0]
-        assert "Create-config Path A follows spa envelopes" in unreleased
-        assert "No `spa config wizard`" in unreleased
+        notes = _changelog_current_notes()
+        assert "Create-config Path A follows spa envelopes" in notes
+        assert "No `spa config wizard`" in notes
 
     def test_create_config_reasks_apps_licenses_only_when_remaining_lists_them(self):
         skill_dir = _create_config_dir()
@@ -1875,10 +1899,9 @@ def test_user_guide_path_a_follows_init_list_and_remaining_next():
     assert "SSH user" in path_a
     assert "ssh_username" in path_a
     assert "spa config wizard" not in configure
-    changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    unreleased = changelog.split("## [Unreleased]", 1)[1].split("\n## ", 1)[0]
-    assert "spa init list" in unreleased
-    assert "remaining" in unreleased.lower()
+    notes = _changelog_current_notes()
+    assert "spa init list" in notes
+    assert "remaining" in notes.lower()
 
 
 def test_user_guide_teaches_adding_a_host_then_deploy():
@@ -2221,10 +2244,8 @@ def test_quick_start_is_the_linear_first_run():
     positions = [text.index(needles[name]) for name in ids]
     assert positions == sorted(positions)
 
-    unreleased = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split(
-        "## [Unreleased]", 1
-    )[1].split("\n## ", 1)[0]
-    assert "docs/quick-start.md" in unreleased
+    notes = _changelog_current_notes()
+    assert "docs/quick-start.md" in notes
 
 
 def test_quick_start_runs_provider_after_init_steps_before_validate():
