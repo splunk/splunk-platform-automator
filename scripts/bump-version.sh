@@ -97,9 +97,13 @@ echo "  Updated CHANGELOG.md (promoted [Unreleased] to [${NEW_VERSION}])"
 
 cd "$PROJECT_ROOT"
 echo "  Regenerating docs/commands.md"
-"$PROJECT_ROOT/bin/spa" --no-agent agent schema --markdown > "$PROJECT_ROOT/docs/commands.md"
+commands_tmp="$(mktemp)"
+"$PROJECT_ROOT/bin/spa" --no-agent agent schema --markdown > "$commands_tmp"
+mv "$commands_tmp" "$PROJECT_ROOT/docs/commands.md"
 echo "  Regenerating docs/config.md"
-"$PROJECT_ROOT/bin/spa" --no-agent features schema --markdown > "$PROJECT_ROOT/docs/config.md"
+config_tmp="$(mktemp)"
+"$PROJECT_ROOT/bin/spa" --no-agent config schema --markdown > "$config_tmp"
+mv "$config_tmp" "$PROJECT_ROOT/docs/config.md"
 
 git add VERSION CHANGELOG.md docs/commands.md docs/config.md
 git commit -m "$(cat <<EOF

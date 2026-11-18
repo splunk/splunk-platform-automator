@@ -2292,3 +2292,10 @@ def test_operator_entry_pages_link_to_quick_start():
     )
     assert "Human loop" in agents_contract
     assert "docs/quick-start.md" in agents_contract
+
+
+def test_bump_version_regenerates_config_md_with_config_schema():
+    """spa features was removed; the bump must use spa config schema --markdown."""
+    text = (PROJECT_ROOT / "scripts" / "bump-version.sh").read_text(encoding="utf-8")
+    assert "config schema --markdown" in text
+    assert "features schema" not in text
