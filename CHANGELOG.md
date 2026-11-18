@@ -43,6 +43,8 @@ Work on this branch is **3.0**. Linux packages and Homebrew are later, not part 
 
 - **Init list and remaining next**: `spa init list` attaches `data.next` (topology, then provider; `ccm` is omitted until `CCM_TOKEN` is set) and prints the same `Next:` for humans. Successful `spa environment init --example` / `--architecture` attaches `remaining` and `data.next` from that list. AWS remaining requires `ssh_username`, so a composed `aws.yml` env still asks `spa provider aws latest-ami` (keep the example AMI or replace it).
 
+- **Create-config Path A follows spa envelopes**: `/spa-create-config` AskQuestions `data.next` from `spa init list`, then init `remaining` (explain, latest-ami, apps, licenses). It does not duplicate Phase 4–6 catalogs or re-ask apps and licenses when remaining omitted them. No `spa config wizard`.
+
 - **Content pack API flags**: `--customize` writes `spa-app.content_pack_api` from the playbook header and reports those keys in `data.notes` (it does not enable-all). Named 5391 add asks `apps.content-pack.install` until yes, which writes `content_pack_install: true` and `content_pack_api.install_all: true` together; remaining API questions (`enabled`, `saved_search_action`, `backfill`, `resolution`, `prefix`) exist only after that yes. `prefix` is last and matches the ITSI GUI Prefix field; skip omits it. Pack items dump as `name`, `content_pack_install`, `content_pack_api`, `customizations`. `spa validate` requires header keys present and equal. Ansible `cp_api_enabled` stays false so `--install-all-content-packs` does not enable the whole library.
 
 - **Python and Ansible**: Python **3.9–3.14** and Ansible **2.21**. `spa venv` picks the newest usable 3.9–3.14 when `python3` is newer.

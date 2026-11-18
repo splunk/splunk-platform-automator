@@ -1085,28 +1085,27 @@ class TestSpaSkill:
         gate_heading = "## Environment location, name, and summary (mandatory before init)"
         assert gate_heading in text
         gate_start = text.index(gate_heading)
-        phase1 = text.index("## Phase 3 — Topology path")
-        phase3 = text.index("## Phase 5 — Linux OS")
-        phase4 = text.index("## Phase 6 — AWS settings")
-        assert phase1 < phase3 < gate_start < phase4, (
-            "the gate comes after topology and OS are chosen, and before init and AWS settings"
+        phase3 = text.index("## Phase 3 — Topology path")
+        phase4 = text.index("## Phase 4 — Sizing tier")
+        assert phase3 < gate_start < phase4, (
+            "the gate comes after topology and provider from init list, and before remaining sizing/OS/AWS"
         )
-        assert "spa environment init" not in text[phase1:phase3], "topology and OS must not run init"
+        assert "spa environment init" not in text[phase3:gate_start], "topology must not run init"
         gate = text[gate_start:phase4]
         # Location: current directory is the recommended default; registered environments are alternatives.
         assert "current directory" in gate
         assert "spa --agent environment list" in gate
         assert "AskQuestion" in gate
-        # Name: one recommended name, derived from topology and OS (both chosen before the gate), checked against the registry.
+        # Name: one recommended name, derived from topology and provider (both chosen before the gate), checked against the registry.
         assert "recommend" in gate.lower()
-        assert "topology and OS" in gate
+        assert "topology and provider" in gate
         # Summary and explicit yes before the init command runs.
         assert "summary" in gate.lower()
         assert "PARENT/NAME" in gate and "--example" in gate
         assert "--name" in gate  # optional: only when the registry name differs from the folder
         assert "wait" in gate.lower()
-        # After init, the flow continues with the AWS settings, which set values with spa config set.
-        assert "Phase 6" in gate
+        # After init, the flow follows remaining (Phases 4–10 as the envelope directs).
+        assert "remaining" in gate.lower()
 
     def test_create_config_phase7_sets_header_by_command(self):
         text = _create_config_workflow()
@@ -1140,9 +1139,9 @@ class TestSpaSkill:
         step0_end = text.index("## Phase 1 — Deployment intent")
         assert text.index("## Step 0") < text.index("## Pre-Phase Checkpoint") < step0_end
         block = text[text.index("## Pre-Phase Checkpoint"):step0_end]
-        assert "| User Specified | Can Skip | Must Reconfirm |" in block
+        assert "| User Specified | Can Skip | Reconfirm when remaining lists them |" in block
         assert "9, 10" in block
-        assert "MANDATORY" in block
+        assert "MANDATORY" not in block
 
     def test_create_config_asks_mode_only_after_minimum_requirements(self):
         text = _create_config_workflow()
@@ -1250,7 +1249,8 @@ class TestSpaSkill:
         assert "```json" not in contract
         assert "examples/architectures/c3.json" in contract
         assert "architecture check" in contract.lower()
-        assert "still asked" in contract.lower()
+        assert "If remaining omitted" in contract
+        assert "If remaining includes" in contract
         assert "secret" in contract.lower()
         assert "docs/user-guide.md#configure-an-environment" in contract
         assert "ignores `apps.by_role`" in contract
@@ -1292,21 +1292,85 @@ class TestSpaSkill:
         assert "ccm.operating_system" in phases
         assert "ccm.disk_storage" in phases
 
+    def test_create_config_path_a_follows_init_list_remaining_next(self):
+        skill_dir = _create_config_dir()
+        create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+        phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
+        arch = (skill_dir / "references" / "architecture-input.md").read_text(
+            encoding="utf-8"
+        )
+        tree = (skill_dir / "references" / "workflow-decision-tree.md").read_text(
+            encoding="utf-8"
+        )
+        path_a = arch[arch.index("## Path A") : arch.index("## Path B")]
+        assert "spa init list" in path_a
+        assert "`data.next`" in path_a
+        assert "plan vs write" in path_a.lower()
+        assert "spa environment init" in path_a and "--example" in path_a
+        assert "remaining" in path_a.lower()
+        assert "do not invent" in path_a.lower()
+        assert "spa validate" in path_a
+        assert "No `spa config wizard`" in path_a
+        assert "Keep the existing questionnaire" not in path_a
+        assert "spa architecture plan" not in path_a
+        tree_a = tree[tree.index("No architecture file") :]
+        assert "spa init list" in tree_a
+        assert "data.next" in tree_a
+        assert "remaining" in tree_a.lower()
+        combined = create + "\n" + phases
+        assert "spa init list" in combined
+        assert "follow `data.next`" in combined.lower()
+        assert "spa config wizard" not in combined.replace("No `spa config wizard`", "")
+        assert "optional header" in combined.lower()
+        assert "remaining 4–10" not in create
+        assert "as the envelope directs" in create.lower()
+        changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        unreleased = changelog.split("## [Unreleased]", 1)[1].split("\n## ", 1)[0]
+        assert "Create-config Path A follows spa envelopes" in unreleased
+        assert "No `spa config wizard`" in unreleased
+
+    def test_create_config_reasks_apps_licenses_only_when_remaining_lists_them(self):
+        skill_dir = _create_config_dir()
+        create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+        phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
+        arch = (skill_dir / "references" / "architecture-input.md").read_text(
+            encoding="utf-8"
+        )
+        combined = "\n".join((create, phases, arch))
+        for phrase in (
+            "Always run Phase 9",
+            "always ask Phase 9",
+            "Phases 9 and 10 are always asked",
+            "Phases 9 and 10 (apps and licenses) are still asked",
+            "Always ask, even when the user did not mention apps",
+        ):
+            assert phrase not in combined, phrase
+        assert "If remaining omitted" in combined
+        assert "If remaining includes" in combined
+        assert "do not re-ask" in combined.lower()
+
     def test_create_config_region_question_puts_aws_config_region_first(self):
-        text = _create_config_workflow()
-        phase4 = text[text.index("## Phase 6 — AWS settings"):text.index("## Phase 7 — Topology counts")]
-        assert "spa --agent provider aws regions list" in phase4
-        assert "spa aws --json" not in phase4
-        assert "aws_config_region" in phase4
-        assert "aws_config_profile" in phase4
-        assert "first" in phase4.lower()
-        assert "from AWS config" in phase4
-        assert "AskQuestion" in phase4
-        assert "scaffold" in phase4
-        assert "`selected`" in phase4
-        assert "`region`" in phase4 or "`region_source`" in phase4
-        assert "us-east-1" in phase4
-        assert "exactly" in phase4
+        without = (
+            _create_config_dir() / "references" / "aws-without-credentials.md"
+        ).read_text(encoding="utf-8")
+        phase6 = _create_config_workflow()
+        phase6 = phase6[
+            phase6.index("## Phase 6 — AWS settings") : phase6.index(
+                "## Phase 7 — Topology counts"
+            )
+        ]
+        assert "aws-without-credentials.md" in phase6
+        assert "spa --agent provider aws regions list" in without
+        assert "spa aws --json" not in without
+        assert "aws_config_region" in without
+        assert "aws_config_profile" in without
+        assert "first" in without.lower() or "option 1" in without.lower()
+        assert "from AWS config" in without
+        assert "AskQuestion" in without
+        assert "`selected`" in without
+        assert "`region`" in without or "`region_source`" in without
+        assert "us-east-1" in without
+        assert "exactly" in without
 
     def test_create_config_aws_validate_success_skips_listings(self):
         text = _create_config_workflow()
@@ -1315,13 +1379,12 @@ class TestSpaSkill:
         ]
         assert "spa --agent provider aws latest-ami" in phase6
         assert "spa aws --latest-ami" not in phase6
-        assert "spa validate --splunk-config aws" in phase6
-        assert "When that validate succeeds, skip region, key, security-group, and instance-type listings" in phase6
-        assert "On failure" in phase6
-        assert "spa --agent provider aws regions list" in phase6
-        assert "spa --agent provider aws key-pairs list" in phase6
-        assert "spa --agent provider aws security-groups list" in phase6
-        assert "spa --agent provider aws instance-types list" in phase6
+        assert "remaining" in phase6.lower() or "data.next" in phase6
+        assert "When that validate succeeds, skip region, key, security-group, and instance-type listings" not in phase6
+        assert "spa --agent provider aws key-pairs list" not in phase6
+        assert "spa --agent provider aws security-groups list" not in phase6
+        assert "spa --agent provider aws instance-types list" not in phase6
+        assert "aws-without-credentials.md" in phase6
         assert "spa config header set" in text
         assert "spa --agent config explain" in text
         validation = (_create_config_dir() / "references" / "validation.md").read_text(
@@ -1345,7 +1408,7 @@ class TestSpaSkill:
         text = _create_config_workflow()
         gate = text[
             text.index("## Environment location, name, and summary (mandatory before init)")
-            : text.index("## Phase 6 — AWS settings")
+            : text.index("## Phase 4 — Sizing tier")
         ]
         assert "Do **not** run step 6" in gate or "do **not** run step 6" in gate
         assert "Phase 12" in gate
@@ -1444,10 +1507,11 @@ class TestSpaSkill:
     def test_region_default_never_comes_from_agent_knowledge(self):
         skills = PROJECT_ROOT / "skills" / "spa" / "spa-create-config"
         create = _create_config_workflow()
-        phase4 = create[create.index("## Phase 6 — AWS settings"):create.index("## Phase 7 — Topology counts")]
-        assert "from your own knowledge" in phase4
-        assert "null" in phase4
+        phase6 = create[create.index("## Phase 6 — AWS settings"):create.index("## Phase 7 — Topology counts")]
+        assert "aws-without-credentials.md" in phase6
         without_creds = (skills / "references" / "aws-without-credentials.md").read_text(encoding="utf-8")
+        assert "from your own knowledge" in without_creds or "from memory" in without_creds
+        assert "null" in without_creds
         assert "do not call `spa aws regions list`" not in without_creds
         assert "spa --agent provider aws regions list" in without_creds
         assert "aws_config_region" in without_creds

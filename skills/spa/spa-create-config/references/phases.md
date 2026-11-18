@@ -9,7 +9,7 @@ Load one section at a time from this file. Hard rules stay in [SKILL.md](../SKIL
 **Actions:**
 
 1. Confirm **project root** (contains `ansible.cfg`, `bin/`).
-2. **Mode** — not asked here on Path A. The plan-or-write question is asked in the gate, after the minimum requirements (topology, provider, OS) are defined and before init. If the user already stated intent, note it now and confirm it at the gate:
+2. **Mode** — not asked here on Path A. The plan-or-write question is asked in the gate, after topology and provider from `spa init list` `data.next` and before init. If the user already stated intent, note it now and confirm it at the gate:
    - **plan** — Phases 1–10 + design summary; **no** `splunk_config.yml` write until user approves.
    - **write** — Full flow through Phase 12–14 (or continue after approved plan).
    Infer **plan** from phrases like “design”, “discuss”, “plan architecture”; infer **write** from “create config”, “write yaml”, “approve and write”.
@@ -17,28 +17,30 @@ Load one section at a time from this file. Hard rules stay in [SKILL.md](../SKIL
 3. Target: the environment chosen at the gate, or the named existing environment under "Add / change a setting". Its config is `<env path>/config/splunk_config.yml`. Never assume the current directory or the registry default is the target.
 4. If the target config already exists and **mode=write** (or approving plan): **merge vs overwrite** — AskQuestion if available, otherwise ask in chat, before any write. Skip in **plan** mode until Phase 12.
 5. **Provider, then AWS if aws.** Report `CCM_TOKEN` as set / not set (never the value). AskQuestion ids in the order spa prints, including CCM; do not hide CCM when the token is unset. When CCM is in play, skip the AWS API probe. Otherwise run `spa --agent provider aws check-auth` (needs `boto3`; no region required). Read `ok` and `data.account`. Record result:
-   - **Available** → Phase 6 uses latest-ami then `spa validate --splunk-config aws`; listings only if that fails.
+   - **Available** → Phase 6 follows remaining / write `data.next` (`spa --agent provider aws latest-ami --region REGION`).
    - **Unavailable** → create IAM access keys at https://console.aws.amazon.com/iam/ or use `AWS_PROFILE`; follow [aws-without-credentials.md](aws-without-credentials.md); do not block the workflow. Do not run `spa provider ccm` unless CCM is in play.
 6. Read existing config if merging or revising an existing plan from prior config.
 7. Licenses are not scanned here. Phase 10 scans the Software directory once, after the apps decision.
-8. **Architecture input (optional).** Two entry points: [architecture-input.md](architecture-input.md). **Path A (no file):** keep this questionnaire and `spa init --example TOPOLOGY --provider` (write mode at the gate; plan mode at Phase 12). **Path B (confirmed schema 1 file):** skip the SVA questionnaire; run `spa architecture plan FILE` and follow `data.next` (write mode; do not ask plan vs write), then the location/name gate and init, place/size with `spa config move`, then **`spa architecture check FILE` before validate**. Phases 9 and 10 are always asked, even when `confirmed` is true. SPA ignores `apps.by_role`; it installs PS baseconfigs internally. Do not import those folders as local apps.
+8. **Architecture input (optional).** Two entry points: [architecture-input.md](architecture-input.md). **Path A (no file):** `spa init list`, follow `data.next`, then the location/name gate and `spa environment init --example TOPOLOGY --provider` (write mode at the gate; plan mode at Phase 12). Phases 1–2 are optional header input, not blockers before `spa init list`. **Path B (confirmed schema 1 file):** skip the SVA questionnaire; run `spa architecture plan FILE` and follow `data.next` (write mode; do not ask plan vs write), then the location/name gate and init, place/size with `spa config move`, then **`spa architecture check FILE` before validate**. If remaining omitted apps or licenses, do not re-ask. If remaining includes them, AskQuestion those items. SPA ignores `apps.by_role`; it installs PS baseconfigs internally. Do not import those folders as local apps.
 
 **Exit:** Intent noted (mode is confirmed at the gate); target path known; merge policy clear when applicable; **AWS API status recorded**; if a file was given, `spa architecture plan FILE` has been run (the skill does not parse the JSON).
 
 ## Pre-Phase Checkpoint — user input classification
 
-After Step 0, classify what the user has already specified. Phases marked "Can skip" need no question when the value is clear. Phases marked "Must reconfirm" are always asked.
+After Step 0, classify what the user has already specified. Phases marked "Can skip" need no question when the value is clear. Apps and licenses are asked only when `remaining` lists them.
 
-| User Specified | Can Skip | Must Reconfirm |
+| User Specified | Can Skip | Reconfirm when remaining lists them |
 |---|---|---|
 | Topology only | 2, 8 | 9, 10 |
 | Topology + OS | 2, 5, 8 | 9, 10 |
 | Topology + OS + sizing | 2, 4, 5, 8 | 9, 10 |
-| All four (topology, OS, sizing, provider) | 2, 4, 5, 6, 8 | **9, 10 (MANDATORY)** |
+| All four (topology, OS, sizing, provider) | 2, 4, 5, 6, 8 | 9, 10 |
 
-**MANDATORY:** Phase 9 (apps) and Phase 10 (licenses) are asked every time before Phase 12. Skipping a phase is recorded in the reconfirmation table before Phase 12.
+If remaining omitted apps or licenses, do not re-ask. If remaining includes them, AskQuestion those items before Phase 12. Skipping a phase is recorded in the reconfirmation table before Phase 12.
 
 ## Phase 1 — Deployment intent
+
+Optional header input. Do not block `spa init list` on this phase.
 
 Ask: *What are you proving with this environment?*
 
@@ -54,6 +56,8 @@ See [architecture-requirements.md](architecture-requirements.md).
 
 ## Phase 2 — Architecture requirements
 
+Optional header input. Do not block `spa init list` on this phase.
+
 Gather workload, DR, data path, retention (light touch). Feed into SVA path; do not duplicate blindly.
 
 Ask scale-out vs scale-up; default **scale out** for Splunk.
@@ -62,47 +66,24 @@ Ask scale-out vs scale-up; default **scale out** for Splunk.
 
 ## Phase 3 — Topology path
 
-**Entry:** Requirements known or skipped for config-test. Path B (confirmed architecture file): skip this questionnaire; `sva.code` selects the topology at init.
+**Default:** `spa init list`. Follow `data.next` (topology from the catalog, then provider). Do not dump every stem as `choice.allowed`. Path B (confirmed architecture file): skip this questionnaire; `sva.code` selects the topology at init.
 
 | Path | Action |
 |------|--------|
-| User knows SVA code | Confirm code → [sva-topology-map.md](sva-topology-map.md) → record the topology id. Init runs at the location, name, and summary gate after Phase 5. |
-| Needs help | [sva-questionnaire.md](sva-questionnaire.md) then `spa --agent config search` |
-| Config test only | Minimal topology (`single_node` or `cm_2idxc_sh`) |
+| Default | `spa init list` → AskQuestion topology, then provider |
+| User knows SVA code | Confirm code → [sva-topology-map.md](sva-topology-map.md) → record the topology id, then `spa init list` |
+| Needs help | [sva-questionnaire.md](sva-questionnaire.md) then `spa init list` |
+| Config test only | Minimal topology (`single_node` or `cm_2idxc_sh`) from the catalog |
 
-**Exit:** SVA code or lab compromise; topology id from `spa init list` (not a mixed `_aws` file).
-
-## Phase 4 — Sizing tier
-
-| Purpose | Default |
-|---------|---------|
-| Config test | `t3.medium`, 50 GB global `terraform.aws` |
-| App lab | Larger SH if needed; ITSI Java 21 |
-| Production-like | Document overrides |
-
-If the provider is `ccm` (only when CCM is in play), size from `spa provider ccm survey` and the list commands, not this AWS `t3.medium` catalog. Follow `data.next`: set `ccm.instance_type` and `ccm.disk_storage` once for all hosts; do not ask per role. CCM has no per-host instance type.
-
-**Exit:** Default instance type and volume size for global block.
-
-## Phase 5 — Linux OS
-
-Pick OS via `spa --agent config search os`, then `spa --agent config explain os`, `os.packages`, or `terraform.aws.ssh_username`. Author each chosen leaf with `spa --agent config set`; never `config set os '{whole map}'`. Omit schema-default booleans. Do not pass OS through `spa init`.
-
-**Recommended:** Amazon Linux 2023, RHEL 10, or Ubuntu 24.04 LTS (latest AMI in region).
-
-Set `os.packages` (acl plus **polkit** on AL/RHEL or `policykit-1` on Ubuntu), `os.set_hostname` if chosen, and `terraform.aws.ssh_username`.
-
-If the provider is `ccm` (only when CCM is in play): pick `ccm.operating_system` from `spa provider ccm survey` / `operating-systems list`. One OS for all hosts; do not ask per role. `ccm.ssh_username` is always `splunker`. Do not use AMI ids or `terraform.aws.ssh_username`.
-
-**Exit:** OS family chosen; `os:` template ready.
+**Exit:** topology id and provider from `spa init list` `data.next` (not a mixed `_aws` file). Init runs at the location, name, and summary gate.
 
 ## Environment location, name, and summary (mandatory before init)
 
 Run this before the first `spa init` or `spa environment init` for a new environment. Skip it when the operator names an existing environment to change (see "Add / change a setting").
 
-**Minimum requirements first:** Path A: the topology (Phase 3), the provider, and the OS (Phase 5) must be chosen before this gate. Path B: `spa architecture plan FILE` acknowledged and the provider chosen; OS and sizing come after init. AWS settings (Phase 6) are set after init with `spa config set`, so they do not block the name.
+**Minimum requirements first:** Path A: topology and provider from `spa init list` `data.next` must be chosen before this gate. Path B: `spa architecture plan FILE` acknowledged and the provider chosen; OS and sizing come after init as remaining. Remaining (hardware, OS, AWS, apps, licenses) is followed after init, so it does not block the name.
 
-1. **Mode** — Path A: ask plan or write (see Step 0, item 2). Use AskQuestion if available, otherwise ask in chat, unless the user already chose one. Do not ask this before the minimum requirements above are defined. **Plan:** collect location and name (steps 2–5). Do **not** run step 6 (`spa init`). Phases 6–10 become recorded values. Init and every `spa config` / `spa apps add` run at Phase 12 after the plan is approved. **Write:** continue with steps 2–6 now, including init after the step-5 yes. Path B: `data.next` already chose `mode.write`; skip this question.
+1. **Mode** — Path A: ask plan or write (see Step 0, item 2). Use AskQuestion if available, otherwise ask in chat, unless the user already chose one. Do not ask this before the minimum requirements above are defined. **Plan:** collect location and name (steps 2–5). Do **not** run step 6 (`spa init`). Remaining Phases 4–10 become recorded values. Init and every `spa config` / `spa apps add` run at Phase 12 after the plan is approved. **Write:** continue with steps 2–6 now, including init after the step-5 yes. Path B: `data.next` already chose `mode.write`; skip this question.
 
 2. **Gather facts (read-only).**
    - Current directory: `pwd`.
@@ -115,50 +96,53 @@ Run this before the first `spa init` or `spa environment init` for a new environ
    - The parent folder of each registered environment whose `exists` is true. Show each parent once, with its path.
    - A new path that the operator types.
 
-4. **Recommend a name.** Path A: derive one name from topology and OS, for example `rhel10-single`, `cm-2idx-sh-aws`, or `itsi-lab-vbox`. Path B: prefer `environment.name` from `spa architecture plan`. Use lowercase letters, digits, and hyphens. The folder name is the registry name by default. Use `--name` only when the operator wants a registry name that differs from the folder. The name must not match a `name` in `spa environment list`; if it does, add a suffix. Ask the operator to accept it or type another name.
+4. **Recommend a name.** Path A: derive one name from topology and provider, for example `single-aws`, `cm-2idx-sh-vbox`, or `itsi-lab-ccm`. Path B: prefer `environment.name` from `spa architecture plan`. Use lowercase letters, digits, and hyphens. The folder name is the registry name by default. Use `--name` only when the operator wants a registry name that differs from the folder. The name must not match a `name` in `spa environment list`; if it does, add a suffix. Ask the operator to accept it or type another name.
 
 5. **Summarize and wait for yes.** Show exactly what will run:
-   - Name, full path (parent plus name), provider, topology example, OS, and whether the parent is already registered.
+   - Name, full path (parent plus name), provider, topology example, and whether the parent is already registered.
    - The command: path A `spa environment init PARENT/NAME --example TOPOLOGY --provider PROVIDER`; path B `spa environment init PARENT/NAME --architecture FILE --provider PROVIDER`. `--architecture` and `--example` are exclusive. Add `--name REGISTRY_NAME` only when the registry name differs from the folder name.
    - What it does: creates the folder, scaffolds `config/splunk_config.yml`, and registers the name. Every later write goes to this environment only.
    - Wait for an explicit yes in chat. A request in the same message is not the yes.
 
-6. **Run init only after the yes, and only in write mode.** Plan mode skips this step; Phase 12 runs it. Write mode then continues with Phase 6 (AWS settings) and the later config steps, and the app step (Phase 9).
+6. **Run init only after the yes, and only in write mode.** Plan mode skips this step; Phase 12 runs it. Write mode then follows init `data.next` / `remaining` as the envelope directs.
 
-**Write barrier.** Until step 6 has run, no writing command runs: no `spa init`, `spa environment init`, `spa architecture apply`, `spa config set|add|unset|merge|move|topology|provider|header set`, or `spa apps add|remove`. These stay allowed: `spa architecture plan`, `spa --agent config search|explain|get`, `spa provider aws ...`, `spa --agent environment list`, `spa --agent licenses list`, and `spa --agent apps search|snippet`. `spa provider ccm ...` is allowed only when CCM is in play.
+**Write barrier.** Until step 6 has run, no writing command runs: no `spa init`, `spa environment init`, `spa architecture apply`, `spa config set|add|unset|merge|move|topology|provider|header set`, or `spa apps add|remove`. These stay allowed: `spa init list`, `spa architecture plan`, `spa --agent config search|explain|get`, `spa provider aws ...`, `spa --agent environment list`, `spa --agent licenses list`, and `spa --agent apps search|snippet`. `spa provider ccm ...` is allowed only when CCM is in play.
 
 **Target check (every write).** Pass `--env NAME` on each write, or run it from the target directory. Config and apps success envelopes include `resolved_env_name`, `env_dir`, and `config_file`. After each write, confirm they match the step 5 target. If they do not, stop, report the mismatch, and do not run another write. Never write to the registry default by accident.
 
+## Phase 4 — Sizing tier
+
+Follow remaining. When remaining includes `hardware`, AskQuestion that `ask` and run `command` (`spa --agent config explain` / catalog `recommended`). Do not invent `t3.medium` / 50 GB; those come from the catalog `recommended` and explain.
+
+If remaining omitted hardware (the example already set instance type), do not re-ask.
+
+If the provider is `ccm` (only when CCM is in play), size from `spa provider ccm survey` and the list commands, not an AWS catalog. Follow `data.next`: set `ccm.instance_type` and `ccm.disk_storage` once for all hosts; do not ask per role. CCM has no per-host instance type.
+
+**Exit:** Instance type from remaining, catalog `recommended`, or skipped because remaining omitted hardware.
+
+## Phase 5 — Linux OS
+
+Follow remaining. When remaining includes `os`, AskQuestion that item and run `spa --agent config explain os` (and `discover`). Author each chosen leaf with `spa --agent config set`; never `config set os '{whole map}'`. Omit schema-default booleans. Do not pass OS through `spa init`. Do not treat a skill-owned OS recommendation list as the source of truth.
+
+If remaining omitted `os`, do not re-ask.
+
+If the provider is `ccm` (only when CCM is in play): pick `ccm.operating_system` from `spa provider ccm survey` / `operating-systems list`. One OS for all hosts; do not ask per role. `ccm.ssh_username` is always `splunker`. Do not use AMI ids or `terraform.aws.ssh_username`.
+
+**Exit:** OS from remaining / explain, or skipped because remaining omitted `os`.
+
 ## Phase 6 — AWS settings
 
-**With creds:** After `spa init --example TOPOLOGY --provider aws`, the write path already has `terraform.aws` from the provider example. Shorten to `spa config header set` (Phase 12), `spa --agent provider aws latest-ami --region REGION`, `spa config set`, `spa validate --splunk-config aws`, then one `spa config explain` per authored path (Phase 12). See [aws-baseline.md](aws-baseline.md). Read `data.*` from the envelope.
+Follow remaining / write `data.next` (region → `spa --agent provider aws latest-ami --region REGION` → `ssh_username`). Do not invent region, instance-type, or AMI listings the envelope omitted.
 
-1. AMI — `spa --agent provider aws latest-ami --region REGION --os <rhel|ubuntu|amazon_linux|debian>` or `spa --agent provider aws survey --region REGION` → user picks from `data.recommended_amis` (preference: RHEL first). REGION is the example's `terraform.aws.region`; every AMI lookup names it. Then `spa config set` for `terraform.aws.ami_id`.
-2. `ssh_username` (`spa --agent provider aws describe-ami --region REGION --ami-id AMI_ID`) then `spa config set`.
-3. `spa validate --splunk-config aws`. When that validate succeeds, skip region, key, security-group, and instance-type listings.
-4. **On failure,** keep today's listings. Run named `spa --agent provider aws` actions:
-
-   1. **Region.** Run `spa --agent provider aws regions list` immediately before AskQuestion. Option 1 is **only** `data.aws_config_region`, first, marked as the default, labelled exactly ``<region> (from AWS config, profile <aws_config_profile>)``.
-      - Do not use `selected`, `region`, or `region_source`. Those can be `AWS_REGION` or scaffold `terraform.aws.region` (`eu-central-1` in `examples/providers/aws.yml`), not a choice.
-      - Never mark `us-east-1` as default unless `data.aws_config_region` is exactly `us-east-1`. No city names. If `data.aws_config_region` is null, show no default. Never choose a default from your own knowledge.
-      - Then up to four other names from `data.items`, common regions first (`us-east-1`, `us-west-2`, `eu-central-1`, `ap-southeast-1` when present), and "Other: type a region".
-      - If `ok` is false, `data.items` is empty. Still show option 1 from `data.aws_config_region`, and offer "Other".
-      - Use the "Recommended" label only on option 1, and only when it came from `data.aws_config_region`.
-   2. Instance type (`spa --agent provider aws instance-types list --family t3`; suggest `t3.medium` for config tests)
-   3. Key pair (`spa --agent provider aws key-pairs list`)
-   4. Security groups (`spa --agent provider aws security-groups list`)
-   5. Local: `ssh_private_key_file`, tags, volume size
-   6. `spa --agent provider aws validate` before write
-
-**Without creds:** [aws-without-credentials.md](aws-without-credentials.md) — static matrix, example AMIs, user-supplied key/SG names; **warn AMIs may be stale**; header note `AWS API: not available`. Do **not** run `spa validate --splunk-config aws`.
-
-Cap displayed API results (~10–15 AMIs, ~5 instance types).
+**Without creds:** [aws-without-credentials.md](aws-without-credentials.md) — `spa --agent provider aws regions list` still runs (option 1 is `data.aws_config_region`). Static matrix, example AMIs, user-supplied key/SG names; **warn AMIs may be stale**; header note `AWS API: not available`. Do **not** run `spa validate --splunk-config aws`.
 
 **CCM (only when CCM is in play):** skip the AWS AMI path. Write YAML with `spa config provider ccm`. Discover live values with `spa provider ccm survey` (and `operating-systems list` / `instance-types list` / `disk-storage list` / `ssh-keys list`). Follow `data.next`: set `ccm.operating_system`, `ccm.instance_type`, and `ccm.disk_storage` once for all hosts; do not ask per role. Never print PEM or `CCM_TOKEN`. Auth is `CCM_TOKEN` (set / not set). Fresh `spa init --provider ccm` already merges remote-provider defaults and reports the token as set / not set. For an existing env, `spa config merge remote-provider --yes` after explicit yes.
 
-**Exit:** All `terraform.aws` fields chosen (API-validated if creds available, else documented as unverified), or CCM knobs chosen from live survey.
+**Exit:** Remaining AWS items asked, or skipped because remaining omitted them; or CCM knobs chosen from live survey.
 
 ## Phase 7 — Topology counts
+
+Path A: if remaining omitted counts, do not re-ask; the example already has hosts. Path B uses this phase after the overlay.
 
 Determine roles and node counts (not host mapping yet):
 
@@ -173,6 +157,8 @@ Start from the example chosen at Phase 3 (path A) or from `spa architecture plan
 
 ## Phase 8 — Role placement
 
+Path A: if remaining omitted placement, do not re-ask. Path B: host ↔ role map; `spa config move role` / `config add` as answered.
+
 [role-placement.md](role-placement.md) — strategy: SVA-aligned, lab-minimal, hybrid, or user-defined.
 
 Enforce SPA hard constraints (CM+idxcluster, deployer+shcluster, LM+license file, etc.).
@@ -181,11 +167,11 @@ Summarize hosts before YAML write.
 
 **Exit:** Host ↔ role map; strategy for header.
 
-**Next:** Phase 9 (apps). Do not skip to 10, 11, or 12 until Phase 9 has an answer, even when the user did not mention apps.
+**Next:** follow remaining. If remaining includes apps, run Phase 9. If remaining omitted apps, do not re-ask.
 
 ## Phase 9 — Apps (mandatory reconfirmation)
 
-Always ask, even when the user did not mention apps. Use AskQuestion if available, otherwise ask in chat:
+If remaining omitted apps because the config already settled them, do not re-ask. If remaining includes apps (`apps.search`), AskQuestion that item (that is the mandatory ask). Use AskQuestion if available, otherwise ask in chat:
 
 - **Yes, add apps:** ask the [apps-questionnaire.md](apps-questionnaire.md) sections in order, one AskQuestion each, using [/spa-apps](../../spa-apps/SKILL.md): (a) Premium ITSI (section 5); (b) ITSI content packs (section 6), only if ITSI is yes; (c) technical add-ons (section 7): ask which technologies, such as Windows, Linux, Cisco, or AWS, then run `spa --agent apps search TECHNOLOGY` for each and offer only the apps those searches return; (d) local org apps (section 8). Never offer an app from memory or with a generic query such as "common". Each `spa --agent apps add` uses the `app_id` from a search result.
 - **No, trial-only:** reconfirm once: "Confirmed: no apps for this environment. Continue?" Leave out `splunk_app_deployment` only after that yes.
@@ -204,7 +190,7 @@ The loop ends only when the operator answers no. Apps added in this session go i
 
 ## Phase 10 — Licenses
 
-[licenses.md](licenses.md). Run **after Phase 9** so ITSI detection is accurate. Always ask, even when no license file is found: a trial-only decision is reconfirmed before Phase 12.
+[licenses.md](licenses.md). Run **after Phase 9** so ITSI detection is accurate. If remaining omitted licenses, do not re-ask. If remaining includes licenses (`licenses.list`), AskQuestion that item (that is the mandatory ask). When asking, a trial-only decision is reconfirmed before Phase 12.
 
 ```bash
 spa --env NAME --agent licenses list
